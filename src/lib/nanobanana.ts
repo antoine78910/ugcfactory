@@ -117,6 +117,8 @@ export type NanoBananaTaskResponse =
         response?: {
           originImageUrl?: string;
           resultImageUrl?: string | string[];
+          // Some responses use `resultUrls` instead.
+          resultUrls?: string[];
         };
       };
     }
@@ -162,6 +164,7 @@ export async function nanoBananaGetTask(taskId: string) {
     response?: {
       originImageUrl?: string;
       resultImageUrl?: string | string[];
+      resultUrls?: string[];
     };
   };
 }

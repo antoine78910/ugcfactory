@@ -10,7 +10,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 
 type WizardStep = "url" | "analysis" | "quiz" | "image" | "video";
@@ -103,6 +102,7 @@ export default function AppBrandWizard() {
   const [isQuizAutofilling, setIsQuizAutofilling] = useState(false);
 
   const [isClassifyingImages, setIsClassifyingImages] = useState(false);
+  const [hasClassifiedImages, setHasClassifiedImages] = useState(false);
   const [productOnlyCandidates, setProductOnlyCandidates] = useState<
     Array<{ url: string; reason?: string }>
   >([]);
@@ -111,11 +111,14 @@ export default function AppBrandWizard() {
   const [nanoModel, setNanoModel] = useState<NanoModel>("nano");
   const [imagePrompt, setImagePrompt] = useState<string>("");
   const [negativePrompt, setNegativePrompt] = useState<string>("");
+  const [isCreatingPerfectImagePrompt, setIsCreatingPerfectImagePrompt] =
+    useState(false);
   const [imageGen, setImageGen] = useState<ImageGenState>({ kind: "idle" });
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
 
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateId>("template1");
   const [videoPrompt, setVideoPrompt] = useState<string>("");
+  const [isBuildingVideoPrompt, setIsBuildingVideoPrompt] = useState(false);
   const [videoGen, setVideoGen] = useState<VideoGenState>({ kind: "idle" });
 
   const currentProductName = useMemo(() => {
@@ -253,6 +256,7 @@ export default function AppBrandWizard() {
   async function onFindProductOnlyImages() {
     if (!extracted?.images?.length) return;
     setIsClassifyingImages(true);
+    setHasClassifiedImages(true);
     setProductOnlyCandidates([]);
     setSelectedProductImageUrls([]);
     try {
@@ -267,17 +271,28 @@ export default function AppBrandWizard() {
       const json = (await res.json()) as { error?: string; data?: any };
       if (!res.ok || !json.data) throw new Error(json.error || "Image classify failed");
       const candidates = Array.isArray(json.data.productOnlyUrls) ? json.data.productOnlyUrls : [];
-      setProductOnlyCandidates(
-        candidates
-          .filter((x: any) => typeof x?.url === "string")
-          .map((x: any) => ({ url: String(x.url), reason: x.reason ? String(x.reason) : undefined })),
-      );
+      const normalizedCandidates = candidates
+        .filter((x: any) => typeof x?.url === "string")
+        .map((x: any) => ({
+          url: String(x.url),
+          reason: x.reason ? String(x.reason) : undefined,
+        }));
+      setProductOnlyCandidates(normalizedCandidates);
       const defaults = candidates
         .filter((x: any) => typeof x?.url === "string")
         .slice(0, 2)
         .map((x: any) => String(x.url));
       setSelectedProductImageUrls(defaults);
-      toast.success("Images produit seul détectées");
+      if (normalizedCandidates.length === 0) {
+        toast.message("Aucune image “produit seul” détectée", {
+          description:
+            "Le site n’a peut-être pas de packshots propres. Tu peux continuer avec les images extraites.",
+        });
+      } else {
+        toast.success("Images produit seul détectées", {
+          description: `${normalizedCandidates.length} candidate(s)`,
+        });
+      }
     } catch (err) {
       toast.error("Image classify error", {
         description: err instanceof Error ? err.message : "Unknown error",
@@ -298,6 +313,7 @@ export default function AppBrandWizard() {
 
   async function onGenerateImagePrompt() {
     if (!extracted || !analysis) return;
+    setIsCreatingPerfectImagePrompt(true);
     try {
       const res = await fetch("/api/gpt/image-prompt", {
         method: "POST",
@@ -319,6 +335,9 @@ export default function AppBrandWizard() {
       toast.error("Image prompt error", {
         description: err instanceof Error ? err.message : "Unknown error",
       });
+    }
+    finally {
+      setIsCreatingPerfectImagePrompt(false);
     }
   }
 
@@ -344,6 +363,7 @@ export default function AppBrandWizard() {
               ? selectedProductImageUrls.slice(0, 2)
               : extracted.images.slice(0, 2),
           numImages: 1,
+          imageSize: "9:16",
           aspectRatio: "9:16",
           resolution: "2K",
         }),
@@ -378,10 +398,20 @@ export default function AppBrandWizard() {
         const s = json.data.successFlag ?? 0;
         if (s === 0) return;
         if (s === 1) {
-          const urls = (Array.isArray(json.data.response?.resultUrls)
-            ? json.data.response.resultUrls
-            : []) as string[];
-          if (!urls?.length) throw new Error("Image succeeded but resultUrls missing.");
+          const resp = json.data.response ?? {};
+          const candidates: unknown[] = [
+            (resp as any).resultImageUrl,
+            (resp as any).resultUrls,
+            (resp as any).resultUrl,
+            (resp as any).result_url,
+            (resp as any).resultImageUrls,
+          ];
+          const urls = candidates.flatMap((v) => {
+            if (Array.isArray(v)) return v.filter((x) => typeof x === "string") as string[];
+            if (typeof v === "string") return [v];
+            return [];
+          });
+          if (!urls?.length) throw new Error("Image succeeded but result image URL is missing.");
           setImageGen({ kind: "success", urls });
           setSelectedImageUrl(urls[0]);
           if (interval) clearInterval(interval);
@@ -412,6 +442,7 @@ export default function AppBrandWizard() {
       return;
     }
 
+    setIsBuildingVideoPrompt(true);
     try {
       const res = await fetch("/api/gpt/video-template", {
         method: "POST",
@@ -432,6 +463,9 @@ export default function AppBrandWizard() {
       toast.error("Template error", {
         description: err instanceof Error ? err.message : "Unknown error",
       });
+    }
+    finally {
+      setIsBuildingVideoPrompt(false);
     }
   }
 
@@ -534,333 +568,172 @@ export default function AppBrandWizard() {
 
         <Separator className="my-6" />
 
-        <div className="grid gap-6 md:grid-cols-[420px_1fr]">
-          <Card className="shadow-sm">
+        <div className="grid gap-6 md:grid-cols-[260px_1fr]">
+          <Card className="shadow-sm h-fit">
             <CardHeader>
-              <CardTitle className="text-base">Workflow</CardTitle>
+              <CardTitle className="text-base">Historique</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-5">
-              <div className="space-y-2">
-                <Label>Store URL</Label>
-                <Input
-                  value={storeUrl}
-                  onChange={(e) => setStoreUrl(e.target.value)}
-                  placeholder="https://..."
-                />
-                <div className="flex gap-2">
-                  <Button onClick={onExtract} disabled={isExtracting}>
-                    {isExtracting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Extract
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    onClick={onAnalyze}
-                    disabled={!extracted || isAnalyzing}
-                  >
-                    {isAnalyzing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Run GPT analysis (1→9)
-                  </Button>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <Badge variant="secondary">step: {step}</Badge>
-                {extracted?.title && <Badge variant="outline">{extracted.title.slice(0, 42)}</Badge>}
-              </div>
-
-              <Separator />
-
-              <div className="space-y-2">
-                <Label>Mini quiz</Label>
-                <p className="text-xs text-muted-foreground">
-                  Certaines réponses sont pré-remplies depuis l’analyse pour économiser des tokens.
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    variant="secondary"
-                    onClick={onAutoFillQuiz}
-                    disabled={!extracted || isQuizAutofilling}
-                  >
-                    {isQuizAutofilling && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Auto-répondre (depuis l’URL)
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {quizPrecisionNote ||
-                    "Auto-répondre aide à démarrer, mais ce sera plus précis si vous le rentrez vous-même."}
-                </p>
-                <Textarea
-                  value={quiz.aboutProduct}
-                  onChange={(e) => setQuiz((q) => ({ ...q, aboutProduct: e.target.value }))}
-                  rows={4}
-                  placeholder="1) Parle-nous de ton produit..."
-                />
-                <Textarea
-                  value={quiz.problems}
-                  onChange={(e) => setQuiz((q) => ({ ...q, problems: e.target.value }))}
-                  rows={3}
-                  placeholder="2) Quel(s) problème(s) ton produit résout ?"
-                />
-                <Textarea
-                  value={quiz.promises}
-                  onChange={(e) => setQuiz((q) => ({ ...q, promises: e.target.value }))}
-                  rows={3}
-                  placeholder="3) Quelles sont ses promesses principales ?"
-                />
-                <Textarea
-                  value={quiz.persona}
-                  onChange={(e) => setQuiz((q) => ({ ...q, persona: e.target.value }))}
-                  rows={4}
-                  placeholder="4) Décris ton persona type (âge, situation, désir...)"
-                />
-                <Textarea
-                  value={quiz.angles}
-                  onChange={(e) => setQuiz((q) => ({ ...q, angles: e.target.value }))}
-                  rows={3}
-                  placeholder="5) Tes principaux angles marketing ?"
-                />
-                <Textarea
-                  value={quiz.offers}
-                  onChange={(e) => setQuiz((q) => ({ ...q, offers: e.target.value }))}
-                  rows={3}
-                  placeholder="6) Tes offres actuelles (promo, bundle, garantie, livraison...)"
-                />
-                <div className="space-y-2">
-                  <Label>7) Durée souhaitée vidéos</Label>
-                  <Select
-                    value={quiz.videoDurationPreference}
-                    onValueChange={(v) =>
-                      setQuiz((q) => ({
-                        ...q,
-                        videoDurationPreference:
-                          v === "20s" || v === "30s" ? v : "15s",
-                      }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="15s">15s</SelectItem>
-                      <SelectItem value="20s">20s</SelectItem>
-                      <SelectItem value="30s">30s</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    Note: Veo 3.1 sort ~8s par clip. Pour 15/20/30s, il faut enchaîner plusieurs clips ou utiliser “extend”.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="secondary"
-                  onClick={() => {
-                    setStep("image");
-                  }}
-                  disabled={!analysis}
+            <CardContent className="space-y-2">
+              {(
+                [
+                  {
+                    id: "url",
+                    label: "1) URL & extraction",
+                    done: Boolean(extracted),
+                    note: extracted?.title ?? (storeUrl ? storeUrl : ""),
+                  },
+                  {
+                    id: "analysis",
+                    label: "2) Analyse GPT (1→9)",
+                    done: Boolean(analysis),
+                    note: analysis ? safeString(analysis.step2_positioning, "").slice(0, 90) : "",
+                  },
+                  {
+                    id: "quiz",
+                    label: "3) Mini-quiz",
+                    done: Boolean(analysis) && (quiz.persona.trim().length > 0 || quiz.aboutProduct.trim().length > 0),
+                    note: quiz.persona ? quiz.persona.slice(0, 90) : "",
+                  },
+                  {
+                    id: "image",
+                    label: "4) Prompt → image (NanoBanana)",
+                    done: imageGen.kind === "success",
+                    note: imagePrompt ? imagePrompt.slice(0, 90) : "",
+                  },
+                  {
+                    id: "video",
+                    label: "5) Template → vidéo (Kling 3.0 Std)",
+                    done: videoGen.kind === "success",
+                    note: videoPrompt ? videoPrompt.slice(0, 90) : "",
+                  },
+                ] as Array<{
+                  id: WizardStep;
+                  label: string;
+                  done: boolean;
+                  note: string;
+                }>
+              ).map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => setStep(s.id)}
+                  className={`w-full rounded-md border px-3 py-2 text-left transition-colors hover:bg-muted/40 ${
+                    step === s.id ? "bg-muted/30" : ""
+                  }`}
                 >
-                  Next → Image
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={() => setStep("video")}
-                  disabled={!selectedImageUrl}
-                >
-                  Next → Video
-                </Button>
-              </div>
-
-              <Separator />
-
-              <div className="space-y-2">
-                <Label>Image generation</Label>
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    variant="secondary"
-                    onClick={onFindProductOnlyImages}
-                    disabled={!extracted?.images?.length || isClassifyingImages}
-                  >
-                    {isClassifyingImages && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Trouver images “produit seul” (AI)
-                  </Button>
-                </div>
-                {productOnlyCandidates.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-xs text-muted-foreground">
-                      Sélectionne 1–2 images packshot pour aider NanoBanana à garder le produit réaliste.
-                    </p>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      {productOnlyCandidates.slice(0, 6).map((c) => {
-                        const selected = selectedProductImageUrls.includes(c.url);
-                        return (
-                          <button
-                            key={c.url}
-                            className={`rounded-md border overflow-hidden text-left ${
-                              selected ? "ring-2 ring-primary" : ""
-                            }`}
-                            onClick={() => {
-                              setSelectedProductImageUrls((prev) => {
-                                const has = prev.includes(c.url);
-                                if (has) return prev.filter((u) => u !== c.url);
-                                if (prev.length >= 2) return [prev[1], c.url];
-                                return [...prev, c.url];
-                              });
-                            }}
-                          >
-                            <img src={c.url} alt="Product-only candidate" className="h-44 w-full object-cover" />
-                            <div className="p-2 text-xs text-muted-foreground">
-                              {c.reason ? c.reason : "Packshot candidate"}
-                            </div>
-                          </button>
-                        );
-                      })}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-sm font-medium">{s.label}</div>
+                    <Badge variant={s.done ? "secondary" : "outline"}>{s.done ? "OK" : "—"}</Badge>
+                  </div>
+                  {s.note ? (
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {s.note.length > 120 ? `${s.note.slice(0, 120)}…` : s.note}
                     </div>
-                  </div>
-                )}
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label className="text-xs">NanoBanana model</Label>
-                    <Select value={nanoModel} onValueChange={(v) => setNanoModel(v as NanoModel)}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="nano">NanoBanana</SelectItem>
-                        <SelectItem value="pro">NanoBanana Pro</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button variant="secondary" onClick={onGenerateImagePrompt} disabled={!analysis || !extracted}>
-                    Create “perfect” image prompt
-                  </Button>
-                  <Button onClick={onGenerateImage} disabled={!extracted || imageGen.kind === "submitting" || imageGen.kind === "polling"}>
-                    {imageGen.kind === "submitting" || imageGen.kind === "polling" ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : null}
-                    Generate image (NanoBanana)
-                  </Button>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Video generation</Label>
-                <p className="text-xs text-muted-foreground">
-                  Provider: <span className="font-medium">Kling 3.0 Standard</span> (KIE Market), aspect 9:16. (15s max.)
-                </p>
-
-                <div className="space-y-2">
-                  <Label className="text-xs">Template</Label>
-                  <Select value={selectedTemplate} onValueChange={(v) => setSelectedTemplate(v as TemplateId)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {TEMPLATES.map((t) => (
-                        <SelectItem key={t.id} value={t.id}>
-                          {t.title}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    Best for: {TEMPLATES.find((t) => t.id === selectedTemplate)?.bestFor}
-                  </p>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <Button variant="secondary" onClick={onBuildVideoPrompt} disabled={!analysis || !selectedImageUrl}>
-                    Build UGC prompt from template
-                  </Button>
-                  <Button onClick={onGenerateVideo} disabled={!selectedImageUrl || videoGen.kind === "submitting" || videoGen.kind === "polling"}>
-                    {videoGen.kind === "submitting" || videoGen.kind === "polling" ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : null}
-                    Generate the UGC video
-                  </Button>
-                </div>
+                  ) : null}
+                </button>
+              ))}
+              <div className="pt-2 text-xs text-muted-foreground">
+                Astuce: tu peux cliquer sur une étape pour revenir en arrière.
               </div>
             </CardContent>
           </Card>
 
-          <Card className="shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-base">Output</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Tabs defaultValue="extract">
-                <TabsList>
-                  <TabsTrigger value="extract">Extract</TabsTrigger>
-                  <TabsTrigger value="analysis">Analysis</TabsTrigger>
-                  <TabsTrigger value="image">Image</TabsTrigger>
-                  <TabsTrigger value="video">Video</TabsTrigger>
-                  <TabsTrigger value="debug">Debug</TabsTrigger>
-                </TabsList>
+          <div className="space-y-6">
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="secondary">step: {step}</Badge>
+              {extracted?.title ? <Badge variant="outline">{extracted.title.slice(0, 42)}</Badge> : null}
+              {nanoModel === "pro" ? <Badge variant="outline">NanoBanana Pro</Badge> : null}
+            </div>
 
-                <TabsContent value="extract" className="space-y-3">
+            {step === "url" && (
+              <Card className="shadow-sm">
+                <CardHeader>
+                  <CardTitle className="text-base">1) URL & extraction</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Store URL</Label>
+                    <Input value={storeUrl} onChange={(e) => setStoreUrl(e.target.value)} placeholder="https://..." />
+                    <Button onClick={onExtract} disabled={isExtracting}>
+                      {isExtracting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                      Extract
+                    </Button>
+                  </div>
+
                   {!extracted ? (
                     <div className="rounded-md border bg-background/30 p-4 text-sm text-muted-foreground">
                       Colle une URL puis clique Extract.
                     </div>
                   ) : (
-                    <div className="space-y-2 text-sm">
+                    <div className="space-y-3">
                       <div className="rounded-md border bg-background/30 p-3">
                         <div className="font-medium">{extracted.title ?? "—"}</div>
-                        <div className="text-muted-foreground">{extracted.description ?? "—"}</div>
+                        <div className="text-sm text-muted-foreground">{extracted.description ?? "—"}</div>
                         <div className="mt-2 text-xs text-muted-foreground break-all">{extracted.url}</div>
                       </div>
-                      {extracted.images?.[0] && (
-                        <img
-                          src={extracted.images[0]}
-                          alt="Product"
-                          className="w-full rounded-md border object-contain"
-                        />
-                      )}
-                      <div className="rounded-md border bg-background/30 p-3">
-                        <div className="text-xs font-medium mb-2">Snippets (keywords)</div>
-                        <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
-                          {extracted.snippets.slice(0, 6).map((s, i) => (
-                            <li key={i}>{s.slice(0, 220)}{s.length > 220 ? "…" : ""}</li>
-                          ))}
-                        </ul>
+                      <div className="flex flex-wrap gap-2">
+                        <Button variant="secondary" onClick={() => setStep("analysis")} disabled={!extracted}>
+                          Next → Analyse
+                        </Button>
                       </div>
+                      {extracted.images?.length ? (
+                        <div className="space-y-2">
+                          <div className="text-xs text-muted-foreground">
+                            Images trouvées: <span className="font-medium">{extracted.images.length}</span>
+                          </div>
+                          <div className="grid gap-3 sm:grid-cols-3">
+                            {extracted.images.slice(0, 6).map((u) => (
+                              <img
+                                key={u}
+                                src={u}
+                                alt="Extracted"
+                                className="h-28 w-full rounded-md border object-cover"
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
                   )}
-                </TabsContent>
+                </CardContent>
+              </Card>
+            )}
 
-                <TabsContent value="analysis" className="space-y-3">
+            {step === "analysis" && (
+              <Card className="shadow-sm">
+                <CardHeader>
+                  <CardTitle className="text-base">2) Analyse GPT (1→9)</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex flex-wrap gap-2">
+                    <Button variant="secondary" onClick={onAnalyze} disabled={!extracted || isAnalyzing}>
+                      {isAnalyzing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                      Run GPT analysis (1→9)
+                    </Button>
+                    <Button variant="secondary" onClick={() => setStep("quiz")} disabled={!analysis}>
+                      Next → Quiz
+                    </Button>
+                  </div>
+
                   {!analysis ? (
                     <div className="rounded-md border bg-background/30 p-4 text-sm text-muted-foreground">
                       Clique “Run GPT analysis”.
                     </div>
                   ) : (
                     <div className="space-y-3">
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        variant="secondary"
-                        onClick={() =>
-                          copyToClipboard(
-                            "GPT analysis (JSON)",
-                            JSON.stringify(analysis, null, 2),
-                          )
-                        }
-                      >
-                        Copy GPT JSON
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        onClick={() =>
-                          copyToClipboard(
-                            "Step 1 raw sheet",
-                            safeString(analysis.step1_rawSheet, ""),
-                          )
-                        }
-                      >
-                        Copy Step 1
-                      </Button>
-                    </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          variant="secondary"
+                          onClick={() => copyToClipboard("GPT analysis (JSON)", JSON.stringify(analysis, null, 2))}
+                        >
+                          Copy GPT JSON
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          onClick={() => copyToClipboard("Step 1 raw sheet", safeString(analysis.step1_rawSheet, ""))}
+                        >
+                          Copy Step 1
+                        </Button>
+                      </div>
                       <div className="rounded-md border bg-background/30 p-3 text-sm whitespace-pre-wrap">
                         {safeString(analysis.step1_rawSheet, "")}
                       </div>
@@ -868,7 +741,7 @@ export default function AppBrandWizard() {
                         <div className="font-medium mb-1">Positioning</div>
                         <div className="text-muted-foreground">{safeString(analysis.step2_positioning, "—")}</div>
                       </div>
-                      {researchNotes.length > 0 && (
+                      {researchNotes.length > 0 ? (
                         <div className="rounded-md border bg-background/30 p-3 text-sm">
                           <div className="font-medium mb-1">GPT research notes</div>
                           <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
@@ -877,67 +750,289 @@ export default function AppBrandWizard() {
                             ))}
                           </ul>
                         </div>
-                      )}
-                      <div className="rounded-md border bg-background/30 p-3 text-sm text-muted-foreground">
-                        (Les étapes 3→9 sont stockées et utilisées pour le prompt image + templates vidéo.)
-                      </div>
+                      ) : null}
                     </div>
                   )}
-                </TabsContent>
+                </CardContent>
+              </Card>
+            )}
 
-                <TabsContent value="image" className="space-y-3">
+            {step === "quiz" && (
+              <Card className="shadow-sm">
+                <CardHeader>
+                  <CardTitle className="text-base">3) Mini-quiz (pré-rempli)</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex flex-wrap gap-2">
+                    <Button variant="secondary" onClick={onAutoFillQuiz} disabled={!extracted || isQuizAutofilling}>
+                      {isQuizAutofilling ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                      Auto-répondre (depuis l’URL)
+                    </Button>
+                    <Button variant="secondary" onClick={() => setStep("image")} disabled={!analysis}>
+                      Next → Image
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {quizPrecisionNote ||
+                      "Auto-répondre aide à démarrer, mais ce sera plus précis si vous le rentrez vous-même."}
+                  </p>
+
+                  <div className="grid gap-3">
+                    <Textarea
+                      value={quiz.aboutProduct}
+                      onChange={(e) => setQuiz((q) => ({ ...q, aboutProduct: e.target.value }))}
+                      rows={4}
+                      placeholder="1) Parle-nous de ton produit..."
+                    />
+                    <Textarea
+                      value={quiz.problems}
+                      onChange={(e) => setQuiz((q) => ({ ...q, problems: e.target.value }))}
+                      rows={3}
+                      placeholder="2) Quel(s) problème(s) ton produit résout ?"
+                    />
+                    <Textarea
+                      value={quiz.promises}
+                      onChange={(e) => setQuiz((q) => ({ ...q, promises: e.target.value }))}
+                      rows={3}
+                      placeholder="3) Quelles sont ses promesses principales ?"
+                    />
+                    <Textarea
+                      value={quiz.persona}
+                      onChange={(e) => setQuiz((q) => ({ ...q, persona: e.target.value }))}
+                      rows={4}
+                      placeholder="4) Décris ton persona type (âge, situation, désir...)"
+                    />
+                    <Textarea
+                      value={quiz.angles}
+                      onChange={(e) => setQuiz((q) => ({ ...q, angles: e.target.value }))}
+                      rows={3}
+                      placeholder="5) Tes principaux angles marketing ?"
+                    />
+                    <Textarea
+                      value={quiz.offers}
+                      onChange={(e) => setQuiz((q) => ({ ...q, offers: e.target.value }))}
+                      rows={3}
+                      placeholder="6) Tes offres actuelles (promo, bundle, garantie, livraison...)"
+                    />
+                    <div className="space-y-2">
+                      <Label>7) Durée souhaitée vidéos</Label>
+                      <Select
+                        value={quiz.videoDurationPreference}
+                        onValueChange={(v) =>
+                          setQuiz((q) => ({
+                            ...q,
+                            videoDurationPreference: v === "20s" || v === "30s" ? v : "15s",
+                          }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="15s">15s</SelectItem>
+                          <SelectItem value="20s">20s</SelectItem>
+                          <SelectItem value="30s">30s</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {step === "image" && (
+              <Card className="shadow-sm">
+                <CardHeader>
+                  <CardTitle className="text-base">4) Prompt → image (NanoBanana)</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="secondary"
+                      onClick={onFindProductOnlyImages}
+                      disabled={!extracted?.images?.length || isClassifyingImages}
+                    >
+                      {isClassifyingImages ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                      Trouver images “produit seul” (AI)
+                    </Button>
+                    <Select value={nanoModel} onValueChange={(v) => setNanoModel(v as NanoModel)}>
+                      <SelectTrigger className="w-[220px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="nano">NanoBanana</SelectItem>
+                        <SelectItem value="pro">NanoBanana Pro</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {productOnlyCandidates.length > 0 ? (
+                    <div className="space-y-2">
+                      <p className="text-xs text-muted-foreground">
+                        Sélectionne 1–2 images packshot pour aider NanoBanana à garder le produit réaliste.
+                      </p>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {productOnlyCandidates.slice(0, 6).map((c) => {
+                          const selected = selectedProductImageUrls.includes(c.url);
+                          return (
+                            <button
+                              key={c.url}
+                              className={`rounded-md border overflow-hidden text-left transition ${
+                                selected ? "ring-2 ring-primary" : "hover:bg-muted/30"
+                              }`}
+                              onClick={() => {
+                                setSelectedProductImageUrls((prev) => {
+                                  const has = prev.includes(c.url);
+                                  if (has) return prev.filter((u) => u !== c.url);
+                                  if (prev.length >= 2) return [prev[1], c.url];
+                                  return [...prev, c.url];
+                                });
+                              }}
+                            >
+                              <img src={c.url} alt="Product-only candidate" className="h-44 w-full object-cover" />
+                              <div className="p-2 text-xs text-muted-foreground">
+                                <div className="font-medium text-foreground/90">
+                                  {c.reason ? c.reason : "Packshot candidate"}
+                                </div>
+                                <div className="mt-1 break-all opacity-80">{c.url}</div>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : hasClassifiedImages && !isClassifyingImages ? (
+                    <div className="rounded-md border bg-background/30 p-3 text-sm text-muted-foreground">
+                      Aucun packshot “produit seul” détecté sur cette page. Tu peux continuer quand même.
+                    </div>
+                  ) : null}
+
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="secondary"
+                      onClick={onGenerateImagePrompt}
+                      disabled={!analysis || !extracted || isCreatingPerfectImagePrompt}
+                    >
+                      {isCreatingPerfectImagePrompt ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                      Create “perfect” image prompt
+                    </Button>
+                    <Button
+                      onClick={onGenerateImage}
+                      disabled={!extracted || imageGen.kind === "submitting" || imageGen.kind === "polling"}
+                    >
+                      {imageGen.kind === "submitting" || imageGen.kind === "polling" ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : null}
+                      Generate image (NanoBanana)
+                    </Button>
+                    <Button variant="secondary" onClick={() => setStep("video")} disabled={!selectedImageUrl}>
+                      Next → Video
+                    </Button>
+                  </div>
+
                   <div className="rounded-md border bg-background/30 p-3 text-sm">
                     <div className="font-medium mb-2">Image prompt</div>
                     <div className="whitespace-pre-wrap text-muted-foreground">
                       {imagePrompt || "— (clique “Create perfect image prompt”) —"}
                     </div>
-                    {negativePrompt && (
+                    {negativePrompt ? (
                       <div className="mt-3">
                         <div className="font-medium mb-1">Negative</div>
                         <div className="whitespace-pre-wrap text-muted-foreground">{negativePrompt}</div>
                       </div>
-                    )}
+                    ) : null}
                   </div>
 
-                  {imageGen.kind === "success" && (
+                  {imageGen.kind === "success" ? (
                     <div className="grid gap-3 sm:grid-cols-2">
                       {imageGen.urls.map((u) => (
                         <button
                           key={u}
-                          className={`rounded-md border overflow-hidden text-left ${selectedImageUrl === u ? "ring-2 ring-primary" : ""}`}
+                          className={`rounded-md border overflow-hidden text-left ${
+                            selectedImageUrl === u ? "ring-2 ring-primary" : ""
+                          }`}
                           onClick={() => setSelectedImageUrl(u)}
                         >
                           <img src={u} alt="Generated" className="h-64 w-full object-cover" />
                         </button>
                       ))}
                     </div>
-                  )}
+                  ) : null}
 
-                  {selectedImageUrl && (
+                  {selectedImageUrl ? (
                     <div className="rounded-md border bg-background/30 p-3 text-xs text-muted-foreground break-all">
                       Selected: {selectedImageUrl}
                     </div>
-                  )}
+                  ) : null}
 
-                  {imageGen.kind === "error" && (
+                  {imageGen.kind === "error" ? (
                     <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
                       {imageGen.message}
                     </div>
-                  )}
-                </TabsContent>
+                  ) : null}
+                </CardContent>
+              </Card>
+            )}
 
-                <TabsContent value="video" className="space-y-3">
+            {step === "video" && (
+              <Card className="shadow-sm">
+                <CardHeader>
+                  <CardTitle className="text-base">5) Template → vidéo (Kling 3.0 Standard)</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="text-xs text-muted-foreground">
+                    Provider: <span className="font-medium">Kling 3.0 Standard</span> (KIE Market), aspect 9:16. (15s
+                    max.)
+                  </p>
+
+                  <div className="space-y-2">
+                    <Label className="text-xs">Template</Label>
+                    <Select value={selectedTemplate} onValueChange={(v) => setSelectedTemplate(v as TemplateId)}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {TEMPLATES.map((t) => (
+                          <SelectItem key={t.id} value={t.id}>
+                            {t.title}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Best for: {TEMPLATES.find((t) => t.id === selectedTemplate)?.bestFor}
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="secondary"
+                      onClick={onBuildVideoPrompt}
+                      disabled={!analysis || !selectedImageUrl || isBuildingVideoPrompt}
+                    >
+                      {isBuildingVideoPrompt ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                      Build UGC prompt from template
+                    </Button>
+                    <Button
+                      onClick={onGenerateVideo}
+                      disabled={!selectedImageUrl || videoGen.kind === "submitting" || videoGen.kind === "polling"}
+                    >
+                      {videoGen.kind === "submitting" || videoGen.kind === "polling" ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : null}
+                      Generate the UGC video
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      onClick={() => copyToClipboard("Video prompt", videoPrompt)}
+                      disabled={!videoPrompt.trim()}
+                    >
+                      Copy video prompt
+                    </Button>
+                  </div>
+
                   <div className="rounded-md border bg-background/30 p-3 text-sm">
                     <div className="font-medium mb-2">UGC video prompt (template)</div>
-                    <div className="flex flex-wrap gap-2 mb-2">
-                      <Button
-                        variant="secondary"
-                        onClick={() => copyToClipboard("Video prompt", videoPrompt)}
-                        disabled={!videoPrompt.trim()}
-                      >
-                        Copy video prompt
-                      </Button>
-                    </div>
                     <Textarea
                       value={videoPrompt}
                       onChange={(e) => setVideoPrompt(e.target.value)}
@@ -946,28 +1041,26 @@ export default function AppBrandWizard() {
                     />
                   </div>
 
-                  {videoGen.kind === "success" && (
+                  {videoGen.kind === "success" ? (
                     <div className="space-y-3">
                       <div className="rounded-md border bg-background/30 p-3 text-xs text-muted-foreground break-all">
                         Video: {videoGen.url}
                       </div>
                       <video src={videoGen.url} controls playsInline className="w-full rounded-md border bg-black" />
-                      {videoDownloadHref && (
+                      {videoDownloadHref ? (
                         <Button asChild variant="secondary">
                           <a href={videoDownloadHref}>Download</a>
                         </Button>
-                      )}
+                      ) : null}
                     </div>
-                  )}
+                  ) : null}
 
-                  {videoGen.kind === "error" && (
+                  {videoGen.kind === "error" ? (
                     <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
                       {videoGen.message}
                     </div>
-                  )}
-                </TabsContent>
+                  ) : null}
 
-                <TabsContent value="debug" className="space-y-3">
                   <div className="rounded-md border bg-background/30 p-3 text-xs whitespace-pre-wrap text-muted-foreground">
                     <div className="font-medium text-sm mb-2">Debug context</div>
                     {JSON.stringify(
@@ -989,10 +1082,10 @@ export default function AppBrandWizard() {
                       2,
                     )}
                   </div>
-                </TabsContent>
-              </Tabs>
-            </CardContent>
-          </Card>
+                </CardContent>
+              </Card>
+            )}
+          </div>
         </div>
       </main>
     </div>
