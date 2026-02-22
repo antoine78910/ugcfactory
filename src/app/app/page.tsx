@@ -1,269 +1,291 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, Upload } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 
-type EngineId =
-  | "kling-3.0/video"
-  | "bytedance/seedance-2-image-to-video"
-  | "bytedance/seedance-1.5-pro"
-  | "veo3_fast"
-  | "veo3";
-type KlingMode = "pro" | "std";
-type AspectRatio = "9:16" | "16:9" | "1:1" | "Auto";
+type WizardStep = "url" | "analysis" | "quiz" | "image" | "video";
 
-const ENGINES: Array<{
-  id: EngineId;
-  label: string;
-  provider: "market" | "veo";
-  note?: string;
-}> = [
-  { id: "kling-3.0/video", label: "Kling 3.0 (KIE Market)", provider: "market" },
-  {
-    id: "bytedance/seedance-2-image-to-video",
-    label: "Seedance 2.0 (KIE Market) — image→video",
-    provider: "market",
-    note: "Pas encore documenté dans docs.kie.ai → peut échouer selon accès/KIE.",
-  },
-  {
-    id: "bytedance/seedance-1.5-pro",
-    label: "Seedance 1.5 Pro (KIE Market) — image→video",
-    provider: "market",
-    note: "Documenté (durées 4/8/12).",
-  },
-  { id: "veo3_fast", label: "Veo 3.1 Fast (KIE)", provider: "veo" },
-  { id: "veo3", label: "Veo 3.1 Quality (KIE)", provider: "veo" },
-];
+type Extracted = {
+  url: string;
+  canonical: string | null;
+  title: string | null;
+  description: string | null;
+  images: string[];
+  excerpt: string;
+  snippets: string[];
+  signals: { prices: string[]; textLength: number };
+};
 
-const RATIOS_MARKET: Array<{ id: AspectRatio; label: string }> = [
-  { id: "9:16", label: "9:16 (default)" },
-  { id: "16:9", label: "16:9" },
-  { id: "1:1", label: "1:1" },
-];
+type AnalyzeResult = any;
 
-const RATIOS_VEO: Array<{ id: AspectRatio; label: string }> = [
-  { id: "9:16", label: "9:16 (default)" },
-  { id: "16:9", label: "16:9" },
-  { id: "Auto", label: "Auto" },
-];
+type Quiz = {
+  aboutProduct: string;
+  problems: string;
+  promises: string;
+  persona: string;
+  angles: string;
+  offers: string;
+  videoDurationPreference: "15s" | "20s" | "30s";
+};
 
-const KLING_MODES: Array<{ id: KlingMode; label: string }> = [
-  { id: "pro", label: "Pro" },
-  { id: "std", label: "Std" },
-];
+type NanoModel = "nano" | "pro";
 
-type Status =
+type ImageGenState =
   | { kind: "idle" }
-  | { kind: "uploading" }
-  | { kind: "generating"; taskId: string; provider: "market" | "veo" }
-  | { kind: "success"; taskId: string; videoUrl: string }
+  | { kind: "submitting" }
+  | { kind: "polling"; taskId: string }
+  | { kind: "success"; urls: string[] }
   | { kind: "error"; message: string };
 
-export default function AppI2V() {
-  const [prompt, setPrompt] = useState("");
-  const [file, setFile] = useState<File | null>(null);
+type VideoGenState =
+  | { kind: "idle" }
+  | { kind: "submitting" }
+  | { kind: "polling"; taskId: string }
+  | { kind: "success"; url: string }
+  | { kind: "error"; message: string };
 
-  const [engineId, setEngineId] = useState<EngineId>("kling-3.0/video");
-  const [klingMode, setKlingMode] = useState<KlingMode>("pro");
-  const [aspectRatio, setAspectRatio] = useState<AspectRatio>("9:16");
-  const [duration, setDuration] = useState<number>(10);
-  const [sound, setSound] = useState(true); // default ON
+const TEMPLATES = [
+  {
+    id: "template1",
+    title: "Template 1 — UGC Smartphone authentique (POV/Selfie)",
+    bestFor: "beauté / boisson / food / fashion / gadget",
+  },
+  {
+    id: "template2",
+    title: "Template 2 — Beauty/Wellness cinematic UGC",
+    bestFor: "skincare / makeup / supplement / self-care",
+  },
+  {
+    id: "template3",
+    title: "Template 3 — Storytelling problem-solution UGC",
+    bestFor: "gadget / douleur / complément / niche émotionnelle",
+  },
+] as const;
 
-  const [status, setStatus] = useState<Status>({ kind: "idle" });
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isVideoLoading, setIsVideoLoading] = useState(false);
+type TemplateId = (typeof TEMPLATES)[number]["id"];
 
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+function safeString(x: unknown, fallback = ""): string {
+  return typeof x === "string" ? x : fallback;
+}
 
-  const taskId = status.kind === "generating" || status.kind === "success" ? status.taskId : null;
-  const videoUrl = status.kind === "success" ? status.videoUrl : null;
+export default function AppBrandWizard() {
+  const [step, setStep] = useState<WizardStep>("url");
 
-  const engineMeta = useMemo(
-    () => ENGINES.find((m) => m.id === engineId) ?? ENGINES[0],
-    [engineId],
-  );
+  const [storeUrl, setStoreUrl] = useState("");
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [extracted, setExtracted] = useState<Extracted | null>(null);
 
-  const ratioOptions = useMemo(
-    () => (engineMeta.provider === "veo" ? RATIOS_VEO : RATIOS_MARKET),
-    [engineMeta.provider],
-  );
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysis, setAnalysis] = useState<AnalyzeResult | null>(null);
+  const [researchNotes, setResearchNotes] = useState<string[]>([]);
 
-  const durationOptions = useMemo(() => {
-    if (engineMeta.provider === "veo") return [8];
-    if (engineId === "bytedance/seedance-1.5-pro") return [4, 8, 12];
-    if (engineId === "bytedance/seedance-2-image-to-video")
-      return Array.from({ length: 12 }, (_, i) => i + 4); // 4..15
-    return Array.from({ length: 13 }, (_, i) => i + 3); // 3..15 (Kling 3.0)
-  }, [engineId, engineMeta.provider]);
+  const [quiz, setQuiz] = useState<Quiz>({
+    aboutProduct: "",
+    problems: "",
+    promises: "",
+    persona: "",
+    angles: "",
+    offers: "",
+    videoDurationPreference: "15s",
+  });
 
-  const downloadHref = useMemo(() => {
-    if (!videoUrl) return null;
-    return `/api/download?url=${encodeURIComponent(videoUrl)}`;
-  }, [videoUrl]);
+  const [nanoModel, setNanoModel] = useState<NanoModel>("nano");
+  const [imagePrompt, setImagePrompt] = useState<string>("");
+  const [negativePrompt, setNegativePrompt] = useState<string>("");
+  const [imageGen, setImageGen] = useState<ImageGenState>({ kind: "idle" });
+  const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!file) {
-      setPreviewUrl(null);
-      return;
-    }
-    const u = URL.createObjectURL(file);
-    setPreviewUrl(u);
-    return () => URL.revokeObjectURL(u);
-  }, [file]);
+  const [selectedTemplate, setSelectedTemplate] = useState<TemplateId>("template1");
+  const [videoPrompt, setVideoPrompt] = useState<string>("");
+  const [videoGen, setVideoGen] = useState<VideoGenState>({ kind: "idle" });
 
-  useEffect(() => {
-    // keep duration valid when switching models
-    if (!durationOptions.includes(duration)) setDuration(durationOptions[0] ?? 10);
-  }, [duration, durationOptions]);
+  const currentProductName = useMemo(() => {
+    const fromAnalysis = safeString(analysis?.step1_rawSheet ?? "");
+    if (extracted?.title) return extracted.title;
+    if (fromAnalysis) return fromAnalysis.split("\n")[0]?.slice(0, 120) ?? null;
+    return null;
+  }, [analysis, extracted?.title]);
 
-  useEffect(() => {
-    const allowed = new Set(ratioOptions.map((r) => r.id));
-    if (!allowed.has(aspectRatio)) setAspectRatio("9:16");
-  }, [aspectRatio, ratioOptions]);
-
-  async function uploadImage(currentFile: File): Promise<string> {
-    const fd = new FormData();
-    fd.append("file", currentFile);
-
-    const res = await fetch("/api/uploads", { method: "POST", body: fd });
-    const json = (await res.json()) as { url?: string; error?: string };
-    if (!res.ok || !json.url) throw new Error(json.error || "Upload failed");
-    return json.url;
-  }
-
-  async function onGenerate() {
-    const p = prompt.trim();
-    if (!p) {
-      toast.error("Ajoute un prompt.");
-      return;
-    }
-    if (!file) {
-      toast.error("Ajoute une image.");
+  async function onExtract() {
+    const url = storeUrl.trim();
+    if (!url) {
+      toast.error("Colle l’URL d’un store / page produit.");
       return;
     }
 
-    setIsSubmitting(true);
-    setIsVideoLoading(false);
-    setStatus({ kind: "uploading" });
+    setIsExtracting(true);
+    setExtracted(null);
+    setAnalysis(null);
+    setResearchNotes([]);
 
     try {
-      const imageUrl = await uploadImage(file);
+      const res = await fetch("/api/store/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      const json = (await res.json()) as { error?: string } & Partial<Extracted>;
+      if (!res.ok) throw new Error(json.error || "Extract failed");
+      setExtracted(json as Extracted);
+      setStep("analysis");
+      toast.success("Extraction OK");
+    } catch (err) {
+      toast.error("Extraction error", {
+        description: err instanceof Error ? err.message : "Unknown error",
+      });
+    } finally {
+      setIsExtracting(false);
+    }
+  }
 
-      const res =
-        engineMeta.provider === "veo"
-          ? await fetch("/api/kie/veo/generate", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                prompt: p,
-                model: engineId, // veo3_fast | veo3
-                aspectRatio: aspectRatio === "1:1" ? "Auto" : aspectRatio,
-                generationType: "FIRST_AND_LAST_FRAMES_2_VIDEO",
-                imageUrls: [imageUrl],
-              }),
-            })
-          : await fetch("/api/kling/generate", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                marketModel: engineId,
-                prompt: p,
-                imageUrl,
-                aspectRatio: aspectRatio === "Auto" ? "9:16" : aspectRatio,
-                duration,
-                sound,
-                mode: klingMode,
-              }),
-            });
+  async function onAnalyze() {
+    if (!extracted) return;
+    setIsAnalyzing(true);
+    setAnalysis(null);
+    setResearchNotes([]);
 
+    try {
+      const res = await fetch("/api/gpt/brand-analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(extracted),
+      });
+      const json = (await res.json()) as { error?: string; data?: any };
+      if (!res.ok || !json.data) throw new Error(json.error || "Analyze failed");
+      setAnalysis(json.data);
+
+      const rn = json.data?.researchNotes;
+      if (Array.isArray(rn)) setResearchNotes(rn.map((x: any) => String(x)));
+
+      const pre = json.data?.quizPrefill ?? {};
+      setQuiz((q) => ({
+        ...q,
+        aboutProduct: safeString(pre.aboutProduct, q.aboutProduct),
+        problems: safeString(pre.problems, q.problems),
+        promises: safeString(pre.promises, q.promises),
+        persona: safeString(pre.persona, q.persona),
+        angles: safeString(pre.angles, q.angles),
+        offers: safeString(pre.offers, q.offers),
+        videoDurationPreference:
+          pre.videoDurationPreference === "20s" || pre.videoDurationPreference === "30s"
+            ? pre.videoDurationPreference
+            : "15s",
+      }));
+
+      setStep("quiz");
+      toast.success("Analyse OK");
+    } catch (err) {
+      toast.error("Analyse error", {
+        description: err instanceof Error ? err.message : "Unknown error",
+      });
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }
+
+  async function onGenerateImagePrompt() {
+    if (!extracted || !analysis) return;
+    try {
+      const res = await fetch("/api/gpt/image-prompt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: extracted.url,
+          analysis,
+          productName: extracted.title,
+          productImages: extracted.images,
+          quiz: { persona: quiz.persona, videoDurationPreference: quiz.videoDurationPreference },
+        }),
+      });
+      const json = (await res.json()) as { error?: string; data?: any };
+      if (!res.ok || !json.data) throw new Error(json.error || "Image prompt failed");
+      setImagePrompt(String(json.data.imagePrompt ?? ""));
+      setNegativePrompt(String(json.data.negativePrompt ?? ""));
+      toast.success("Image prompt prêt");
+    } catch (err) {
+      toast.error("Image prompt error", {
+        description: err instanceof Error ? err.message : "Unknown error",
+      });
+    }
+  }
+
+  async function onGenerateImage() {
+    if (!extracted) return;
+    if (!imagePrompt.trim()) {
+      toast.error("Génère le prompt image d’abord.");
+      return;
+    }
+
+    setImageGen({ kind: "submitting" });
+    setSelectedImageUrl(null);
+
+    try {
+      const res = await fetch("/api/nanobanana/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: nanoModel,
+          prompt: imagePrompt,
+          imageUrls: extracted.images.slice(0, 2),
+          numImages: 1,
+          aspectRatio: "9:16",
+          resolution: "2K",
+        }),
+      });
       const json = (await res.json()) as { taskId?: string; error?: string };
-      if (!res.ok || !json.taskId) throw new Error(json.error || "Generate failed");
-
-      setStatus({ kind: "generating", taskId: json.taskId, provider: engineMeta.provider });
-      toast.success("Vidéo lancée", { description: json.taskId });
+      if (!res.ok || !json.taskId) throw new Error(json.error || "NanoBanana generate failed");
+      setImageGen({ kind: "polling", taskId: json.taskId });
+      toast.success("Image task créée", { description: json.taskId });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error.";
-      setStatus({ kind: "error", message });
-      toast.error("Erreur", { description: message });
-    } finally {
-      setIsSubmitting(false);
+      setImageGen({ kind: "error", message });
+      toast.error("Image error", { description: message });
     }
   }
 
   useEffect(() => {
-    if (status.kind !== "generating") return;
-    const currentTaskId = status.taskId;
-    const provider = status.provider;
-
+    if (imageGen.kind !== "polling") return;
+    const taskId = imageGen.taskId;
     let cancelled = false;
     let interval: ReturnType<typeof setInterval> | null = null;
 
     async function tick() {
       try {
-        if (provider === "veo") {
-          const res = await fetch(
-            `/api/kie/veo/status?taskId=${encodeURIComponent(currentTaskId)}`,
-            { method: "GET", cache: "no-store" },
-          );
-          const json = (await res.json()) as {
-            data?: {
-              successFlag?: 0 | 1 | 2 | 3;
-              errorMessage?: string | null;
-              response?: { resultUrls?: string[] };
-            };
-            error?: string;
-          };
-          if (!res.ok || !json.data) throw new Error(json.error || "Polling failed");
-          if (cancelled) return;
+        const res = await fetch(`/api/nanobanana/task?taskId=${encodeURIComponent(taskId)}`, {
+          method: "GET",
+          cache: "no-store",
+        });
+        const json = (await res.json()) as any;
+        if (!res.ok || !json.data) throw new Error(json.error || "Polling failed");
+        if (cancelled) return;
 
-          const s = json.data.successFlag ?? 0;
-          if (s === 0) return;
-          if (s === 1) {
-            const url = json.data.response?.resultUrls?.[0];
-            if (!url) throw new Error("Video succeeded but resultUrls[0] is missing.");
-            setIsVideoLoading(true);
-            setStatus({ kind: "success", taskId: currentTaskId, videoUrl: url });
-            if (interval) clearInterval(interval);
-            interval = null;
-            return;
-          }
-          throw new Error(json.data.errorMessage || `Video failed: ${String(s)}`);
-        } else {
-          const res = await fetch(
-            `/api/kling/status?taskId=${encodeURIComponent(currentTaskId)}`,
-            { method: "GET", cache: "no-store" },
-          );
-          const json = (await res.json()) as {
-            data?: { status?: string; response?: string[]; error_message?: string | null };
-            error?: string;
-          };
-          if (!res.ok || !json.data) throw new Error(json.error || "Polling failed");
-          if (cancelled) return;
-
-          const s = json.data.status ?? "IN_PROGRESS";
-          if (s === "IN_PROGRESS") return;
-          if (s === "SUCCESS") {
-            const url = json.data.response?.[0];
-            if (!url) throw new Error("Video succeeded but response[0] is missing.");
-            setIsVideoLoading(true);
-            setStatus({ kind: "success", taskId: currentTaskId, videoUrl: url });
-            if (interval) clearInterval(interval);
-            interval = null;
-            return;
-          }
-          throw new Error(json.data.error_message || `Video failed: ${s}`);
+        const s = json.data.successFlag ?? 0;
+        if (s === 0) return;
+        if (s === 1) {
+          const urls = (Array.isArray(json.data.response?.resultUrls)
+            ? json.data.response.resultUrls
+            : []) as string[];
+          if (!urls?.length) throw new Error("Image succeeded but resultUrls missing.");
+          setImageGen({ kind: "success", urls });
+          setSelectedImageUrl(urls[0]);
+          if (interval) clearInterval(interval);
+          interval = null;
+          return;
         }
+        throw new Error(json.data.errorMessage || `Image failed: ${String(s)}`);
       } catch (err) {
         if (cancelled) return;
-        setStatus({ kind: "error", message: err instanceof Error ? err.message : "Unknown error." });
+        setImageGen({ kind: "error", message: err instanceof Error ? err.message : "Unknown error." });
         if (interval) clearInterval(interval);
         interval = null;
       }
@@ -271,259 +293,508 @@ export default function AppI2V() {
 
     tick();
     interval = setInterval(tick, 4000);
-
     return () => {
       cancelled = true;
       if (interval) clearInterval(interval);
     };
-  }, [status]);
+  }, [imageGen]);
+
+  async function onBuildVideoPrompt() {
+    if (!extracted || !analysis) return;
+    if (!selectedImageUrl) {
+      toast.error("Sélectionne d’abord l’image générée.");
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/gpt/video-template", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: extracted.url,
+          analysis,
+          quiz,
+          templateId: selectedTemplate,
+          productName: extracted.title,
+        }),
+      });
+      const json = (await res.json()) as { error?: string; data?: any };
+      if (!res.ok || !json.data) throw new Error(json.error || "Template fill failed");
+      setVideoPrompt(String(json.data.filledPrompt ?? ""));
+      toast.success("Template rempli");
+    } catch (err) {
+      toast.error("Template error", {
+        description: err instanceof Error ? err.message : "Unknown error",
+      });
+    }
+  }
+
+  async function onGenerateVideo() {
+    if (!selectedImageUrl) return;
+    if (!videoPrompt.trim()) {
+      toast.error("Génère le prompt vidéo (template) d’abord.");
+      return;
+    }
+
+    setVideoGen({ kind: "submitting" });
+    try {
+      // Force Kling 3.0 Standard per user request. Kling supports up to 15s.
+      const duration =
+        quiz.videoDurationPreference === "15s"
+          ? 15
+          : quiz.videoDurationPreference === "20s"
+            ? 15
+            : 15;
+      const res = await fetch("/api/kling/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          marketModel: "kling-3.0/video",
+          prompt: videoPrompt,
+          imageUrl: selectedImageUrl,
+          duration,
+          mode: "std",
+          sound: false,
+        }),
+      });
+      const json = (await res.json()) as { taskId?: string; error?: string };
+      if (!res.ok || !json.taskId) throw new Error(json.error || "Video generate failed");
+      setVideoGen({ kind: "polling", taskId: json.taskId });
+      toast.success("Vidéo task créée", { description: json.taskId });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error.";
+      setVideoGen({ kind: "error", message });
+      toast.error("Video error", { description: message });
+    }
+  }
+
+  useEffect(() => {
+    if (videoGen.kind !== "polling") return;
+    const taskId = videoGen.taskId;
+    let cancelled = false;
+    let interval: ReturnType<typeof setInterval> | null = null;
+
+    async function tick() {
+      try {
+        const res = await fetch(`/api/kling/status?taskId=${encodeURIComponent(taskId)}`, {
+          method: "GET",
+          cache: "no-store",
+        });
+        const json = (await res.json()) as any;
+        if (!res.ok || !json.data) throw new Error(json.error || "Polling failed");
+        if (cancelled) return;
+
+        const s = json.data.status ?? "IN_PROGRESS";
+        if (s === "IN_PROGRESS") return;
+        if (s === "SUCCESS") {
+          const url = json.data.response?.[0];
+          if (!url) throw new Error("Video succeeded but response[0] missing.");
+          setVideoGen({ kind: "success", url });
+          if (interval) clearInterval(interval);
+          interval = null;
+          return;
+        }
+        throw new Error(json.data.error_message || `Video failed: ${String(s)}`);
+      } catch (err) {
+        if (cancelled) return;
+        setVideoGen({ kind: "error", message: err instanceof Error ? err.message : "Unknown error." });
+        if (interval) clearInterval(interval);
+        interval = null;
+      }
+    }
+
+    tick();
+    interval = setInterval(tick, 4000);
+    return () => {
+      cancelled = true;
+      if (interval) clearInterval(interval);
+    };
+  }, [videoGen]);
+
+  const videoDownloadHref = useMemo(() => {
+    if (videoGen.kind !== "success") return null;
+    return `/api/download?url=${encodeURIComponent(videoGen.url)}`;
+  }, [videoGen]);
 
   return (
     <div className="dark min-h-screen bg-background text-foreground">
       <main className="mx-auto max-w-6xl px-4 py-8">
-        <div className="mb-6 flex items-end justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Image → Vidéo</h1>
-            <p className="text-sm text-muted-foreground">
-              Upload une image + écris un prompt → génération vidéo. Default: 9:16, audio ON, 1 génération.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="secondary">task: {taskId ?? "—"}</Badge>
-            {status.kind === "idle" && <Badge variant="outline">IDLE</Badge>}
-            {(status.kind === "uploading" || status.kind === "generating") && (
-              <Badge className="bg-blue-600 text-white hover:bg-blue-600">GENERATING</Badge>
-            )}
-            {status.kind === "success" && (
-              <Badge className="bg-emerald-600 text-white hover:bg-emerald-600">SUCCESS</Badge>
-            )}
-            {status.kind === "error" && (
-              <Badge className="bg-red-600 text-white hover:bg-red-600">ERROR</Badge>
-            )}
-          </div>
+        <div className="space-y-2">
+          <h1 className="text-2xl font-semibold tracking-tight">UGC Factory — Brand Analyzer → Image → Video</h1>
+          <p className="text-sm text-muted-foreground">
+            Colle l’URL du store, on analyse (étapes 1→9), mini quiz, puis génération image NanoBanana et vidéo UGC.
+          </p>
         </div>
+
+        <Separator className="my-6" />
 
         <div className="grid gap-6 md:grid-cols-[420px_1fr]">
           <Card className="shadow-sm">
             <CardHeader>
-              <CardTitle className="text-base">Paramètres</CardTitle>
+              <CardTitle className="text-base">Workflow</CardTitle>
             </CardHeader>
             <CardContent className="space-y-5">
               <div className="space-y-2">
-                <Label>Image</Label>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                <Label>Store URL</Label>
+                <Input
+                  value={storeUrl}
+                  onChange={(e) => setStoreUrl(e.target.value)}
+                  placeholder="https://..."
                 />
-                <div className="flex items-center gap-2">
+                <div className="flex gap-2">
+                  <Button onClick={onExtract} disabled={isExtracting}>
+                    {isExtracting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Extract
+                  </Button>
                   <Button
-                    type="button"
                     variant="secondary"
-                    className="w-full justify-center transition-colors"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={isSubmitting || status.kind === "generating" || status.kind === "uploading"}
+                    onClick={onAnalyze}
+                    disabled={!extracted || isAnalyzing}
                   >
-                    <Upload className="mr-2 h-4 w-4" />
-                    {file ? "Changer l’image" : "Upload image"}
+                    {isAnalyzing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Run GPT analysis (1→9)
                   </Button>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  PNG/JPG/WebP. (L’image est uploadée via `/api/uploads`.)
-                </p>
-                {previewUrl && (
-                  <div className="overflow-hidden rounded-md border bg-background/30">
-                    <img src={previewUrl} alt="Preview upload" className="h-44 w-full object-contain" />
-                  </div>
-                )}
               </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="secondary">step: {step}</Badge>
+                {extracted?.title && <Badge variant="outline">{extracted.title.slice(0, 42)}</Badge>}
+              </div>
+
+              <Separator />
 
               <div className="space-y-2">
-                <Label>Prompt</Label>
+                <Label>Mini quiz</Label>
+                <p className="text-xs text-muted-foreground">
+                  Certaines réponses sont pré-remplies depuis l’analyse pour économiser des tokens.
+                </p>
                 <Textarea
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  rows={6}
-                  placeholder="Ex: Style UGC TikTok, caméra smartphone, lumière naturelle, la personne tourne le produit..."
-                  className="bg-background/30 text-foreground placeholder:text-muted-foreground"
+                  value={quiz.aboutProduct}
+                  onChange={(e) => setQuiz((q) => ({ ...q, aboutProduct: e.target.value }))}
+                  rows={4}
+                  placeholder="1) Parle-nous de ton produit..."
                 />
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2">
+                <Textarea
+                  value={quiz.problems}
+                  onChange={(e) => setQuiz((q) => ({ ...q, problems: e.target.value }))}
+                  rows={3}
+                  placeholder="2) Quel(s) problème(s) ton produit résout ?"
+                />
+                <Textarea
+                  value={quiz.promises}
+                  onChange={(e) => setQuiz((q) => ({ ...q, promises: e.target.value }))}
+                  rows={3}
+                  placeholder="3) Quelles sont ses promesses principales ?"
+                />
+                <Textarea
+                  value={quiz.persona}
+                  onChange={(e) => setQuiz((q) => ({ ...q, persona: e.target.value }))}
+                  rows={4}
+                  placeholder="4) Décris ton persona type (âge, situation, désir...)"
+                />
+                <Textarea
+                  value={quiz.angles}
+                  onChange={(e) => setQuiz((q) => ({ ...q, angles: e.target.value }))}
+                  rows={3}
+                  placeholder="5) Tes principaux angles marketing ?"
+                />
+                <Textarea
+                  value={quiz.offers}
+                  onChange={(e) => setQuiz((q) => ({ ...q, offers: e.target.value }))}
+                  rows={3}
+                  placeholder="6) Tes offres actuelles (promo, bundle, garantie, livraison...)"
+                />
                 <div className="space-y-2">
-                  <Label>Modèle</Label>
-                  <Select value={engineId} onValueChange={(v) => setEngineId(v as EngineId)}>
-                    <SelectTrigger className="bg-background/30 text-foreground">
+                  <Label>7) Durée souhaitée vidéos</Label>
+                  <Select
+                    value={quiz.videoDurationPreference}
+                    onValueChange={(v) =>
+                      setQuiz((q) => ({
+                        ...q,
+                        videoDurationPreference:
+                          v === "20s" || v === "30s" ? v : "15s",
+                      }))
+                    }
+                  >
+                    <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent className="border-border bg-popover text-popover-foreground">
-                      {ENGINES.map((m) => (
-                        <SelectItem key={m.id} value={m.id}>
-                          {m.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {engineMeta.note && <p className="text-xs text-muted-foreground">{engineMeta.note}</p>}
-                  {engineMeta.provider === "veo" && (
-                    <p className="text-xs text-muted-foreground">
-                      Veo 3.1: clips limités à 8s (doc KIE). Audio expérimental, pas de switch dans l’API.
-                    </p>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Format</Label>
-                  <Select value={aspectRatio} onValueChange={(v) => setAspectRatio(v as AspectRatio)}>
-                    <SelectTrigger className="bg-background/30 text-foreground">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="border-border bg-popover text-popover-foreground">
-                      {ratioOptions.map((r) => (
-                        <SelectItem key={r.id} value={r.id}>
-                          {r.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {engineId === "kling-3.0/video" && (
-                <div className="space-y-2">
-                  <Label>Qualité (Kling)</Label>
-                  <Select value={klingMode} onValueChange={(v) => setKlingMode(v as KlingMode)}>
-                    <SelectTrigger className="bg-background/30 text-foreground">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="border-border bg-popover text-popover-foreground">
-                      {KLING_MODES.map((m) => (
-                        <SelectItem key={m.id} value={m.id}>
-                          {m.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>Durée</Label>
-                  <Select value={String(duration)} onValueChange={(v) => setDuration(Number(v))}>
-                    <SelectTrigger className="bg-background/30 text-foreground" disabled={engineMeta.provider === "veo"}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="border-border bg-popover text-popover-foreground">
-                      {durationOptions.map((d) => (
-                        <SelectItem key={d} value={String(d)}>
-                          {d}s
-                        </SelectItem>
-                      ))}
+                    <SelectContent>
+                      <SelectItem value="15s">15s</SelectItem>
+                      <SelectItem value="20s">20s</SelectItem>
+                      <SelectItem value="30s">30s</SelectItem>
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    {engineMeta.provider === "veo"
-                      ? "Veo 3.1: durée fixe 8s."
-                      : engineId === "bytedance/seedance-1.5-pro"
-                        ? "Seedance 1.5 Pro: 4 / 8 / 12s (doc KIE)."
-                        : engineId.startsWith("bytedance/seedance-2")
-                          ? "Seedance 2.0: 4–15s (selon KIE)."
-                          : "Kling 3.0: 3–15s."}
+                    Note: Veo 3.1 sort ~8s par clip. Pour 15/20/30s, il faut enchaîner plusieurs clips ou utiliser “extend”.
                   </p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Audio</Label>
-                  <Button
-                    type="button"
-                    variant={sound ? "default" : "secondary"}
-                    onClick={() => setSound((v) => !v)}
-                    className="w-full transition-colors"
-                    disabled={engineMeta.provider === "veo"}
-                  >
-                    {sound ? "Audio ON" : "Audio OFF"}
-                  </Button>
-                </div>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>Génération</Label>
-                  <div className="flex items-center gap-2">
-                    <Badge className="w-full justify-center bg-background/30 text-foreground hover:bg-background/30">
-                      1 vidéo
-                    </Badge>
-                  </div>
                 </div>
               </div>
 
               <div className="flex flex-wrap gap-2">
                 <Button
-                  onClick={onGenerate}
-                  disabled={
-                    isSubmitting ||
-                    status.kind === "generating" ||
-                    status.kind === "uploading" ||
-                    !file
-                  }
-                  className="transition-colors"
+                  variant="secondary"
+                  onClick={() => {
+                    setStep("image");
+                  }}
+                  disabled={!analysis}
                 >
-                  {(isSubmitting || status.kind === "uploading") && (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  )}
-                  Générer
+                  Next → Image
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => setStep("video")}
+                  disabled={!selectedImageUrl}
+                >
+                  Next → Video
                 </Button>
               </div>
 
-              {status.kind === "error" && (
-                <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-foreground">
-                  {status.message}
+              <Separator />
+
+              <div className="space-y-2">
+                <Label>Image generation</Label>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label className="text-xs">NanoBanana model</Label>
+                    <Select value={nanoModel} onValueChange={(v) => setNanoModel(v as NanoModel)}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="nano">NanoBanana</SelectItem>
+                        <SelectItem value="pro">NanoBanana Pro</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
-              )}
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="secondary" onClick={onGenerateImagePrompt} disabled={!analysis || !extracted}>
+                    Create “perfect” image prompt
+                  </Button>
+                  <Button onClick={onGenerateImage} disabled={!extracted || imageGen.kind === "submitting" || imageGen.kind === "polling"}>
+                    {imageGen.kind === "submitting" || imageGen.kind === "polling" ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : null}
+                    Generate image (NanoBanana)
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Video generation</Label>
+                <p className="text-xs text-muted-foreground">
+                  Provider: <span className="font-medium">Kling 3.0 Standard</span> (KIE Market), aspect 9:16. (15s max.)
+                </p>
+
+                <div className="space-y-2">
+                  <Label className="text-xs">Template</Label>
+                  <Select value={selectedTemplate} onValueChange={(v) => setSelectedTemplate(v as TemplateId)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TEMPLATES.map((t) => (
+                        <SelectItem key={t.id} value={t.id}>
+                          {t.title}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Best for: {TEMPLATES.find((t) => t.id === selectedTemplate)?.bestFor}
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="secondary" onClick={onBuildVideoPrompt} disabled={!analysis || !selectedImageUrl}>
+                    Build UGC prompt from template
+                  </Button>
+                  <Button onClick={onGenerateVideo} disabled={!selectedImageUrl || videoGen.kind === "submitting" || videoGen.kind === "polling"}>
+                    {videoGen.kind === "submitting" || videoGen.kind === "polling" ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : null}
+                    Generate the UGC video
+                  </Button>
+                </div>
+              </div>
             </CardContent>
           </Card>
 
           <Card className="shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader>
               <CardTitle className="text-base">Output</CardTitle>
-              {downloadHref && (
-                <Button asChild variant="secondary">
-                  <a href={downloadHref}>Télécharger</a>
-                </Button>
-              )}
             </CardHeader>
             <CardContent className="space-y-4">
-              {!videoUrl && (
-                <div className="flex min-h-[360px] items-center justify-center rounded-md border border-dashed bg-background/30 text-sm text-muted-foreground">
-                  {status.kind === "uploading" || status.kind === "generating"
-                    ? "Génération en cours…"
-                    : "La vidéo apparaîtra ici après génération."}
-                </div>
-              )}
+              <Tabs defaultValue="extract">
+                <TabsList>
+                  <TabsTrigger value="extract">Extract</TabsTrigger>
+                  <TabsTrigger value="analysis">Analysis</TabsTrigger>
+                  <TabsTrigger value="image">Image</TabsTrigger>
+                  <TabsTrigger value="video">Video</TabsTrigger>
+                  <TabsTrigger value="debug">Debug</TabsTrigger>
+                </TabsList>
 
-              {videoUrl && (
-                <div className="relative overflow-hidden rounded-md border bg-black">
-                  {isVideoLoading && (
-                    <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/60">
-                      <div className="flex items-center gap-3 text-sm text-zinc-200">
-                        <Loader2 className="h-5 w-5 animate-spin" />
-                        Chargement de la vidéo…
+                <TabsContent value="extract" className="space-y-3">
+                  {!extracted ? (
+                    <div className="rounded-md border bg-background/30 p-4 text-sm text-muted-foreground">
+                      Colle une URL puis clique Extract.
+                    </div>
+                  ) : (
+                    <div className="space-y-2 text-sm">
+                      <div className="rounded-md border bg-background/30 p-3">
+                        <div className="font-medium">{extracted.title ?? "—"}</div>
+                        <div className="text-muted-foreground">{extracted.description ?? "—"}</div>
+                        <div className="mt-2 text-xs text-muted-foreground break-all">{extracted.url}</div>
+                      </div>
+                      {extracted.images?.[0] && (
+                        <img
+                          src={extracted.images[0]}
+                          alt="Product"
+                          className="w-full rounded-md border object-contain"
+                        />
+                      )}
+                      <div className="rounded-md border bg-background/30 p-3">
+                        <div className="text-xs font-medium mb-2">Snippets (keywords)</div>
+                        <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
+                          {extracted.snippets.slice(0, 6).map((s, i) => (
+                            <li key={i}>{s.slice(0, 220)}{s.length > 220 ? "…" : ""}</li>
+                          ))}
+                        </ul>
                       </div>
                     </div>
                   )}
-                  <video
-                    src={videoUrl}
-                    controls
-                    playsInline
-                    className="h-[520px] w-full object-contain"
-                    onLoadedData={() => setIsVideoLoading(false)}
-                    onError={() => setIsVideoLoading(false)}
-                  />
-                </div>
-              )}
+                </TabsContent>
+
+                <TabsContent value="analysis" className="space-y-3">
+                  {!analysis ? (
+                    <div className="rounded-md border bg-background/30 p-4 text-sm text-muted-foreground">
+                      Clique “Run GPT analysis”.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="rounded-md border bg-background/30 p-3 text-sm whitespace-pre-wrap">
+                        {safeString(analysis.step1_rawSheet, "")}
+                      </div>
+                      <div className="rounded-md border bg-background/30 p-3 text-sm">
+                        <div className="font-medium mb-1">Positioning</div>
+                        <div className="text-muted-foreground">{safeString(analysis.step2_positioning, "—")}</div>
+                      </div>
+                      {researchNotes.length > 0 && (
+                        <div className="rounded-md border bg-background/30 p-3 text-sm">
+                          <div className="font-medium mb-1">GPT research notes</div>
+                          <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
+                            {researchNotes.slice(0, 8).map((n, i) => (
+                              <li key={i}>{n}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      <div className="rounded-md border bg-background/30 p-3 text-sm text-muted-foreground">
+                        (Les étapes 3→9 sont stockées et utilisées pour le prompt image + templates vidéo.)
+                      </div>
+                    </div>
+                  )}
+                </TabsContent>
+
+                <TabsContent value="image" className="space-y-3">
+                  <div className="rounded-md border bg-background/30 p-3 text-sm">
+                    <div className="font-medium mb-2">Image prompt</div>
+                    <div className="whitespace-pre-wrap text-muted-foreground">
+                      {imagePrompt || "— (clique “Create perfect image prompt”) —"}
+                    </div>
+                    {negativePrompt && (
+                      <div className="mt-3">
+                        <div className="font-medium mb-1">Negative</div>
+                        <div className="whitespace-pre-wrap text-muted-foreground">{negativePrompt}</div>
+                      </div>
+                    )}
+                  </div>
+
+                  {imageGen.kind === "success" && (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {imageGen.urls.map((u) => (
+                        <button
+                          key={u}
+                          className={`rounded-md border overflow-hidden text-left ${selectedImageUrl === u ? "ring-2 ring-primary" : ""}`}
+                          onClick={() => setSelectedImageUrl(u)}
+                        >
+                          <img src={u} alt="Generated" className="h-64 w-full object-cover" />
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {selectedImageUrl && (
+                    <div className="rounded-md border bg-background/30 p-3 text-xs text-muted-foreground break-all">
+                      Selected: {selectedImageUrl}
+                    </div>
+                  )}
+
+                  {imageGen.kind === "error" && (
+                    <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
+                      {imageGen.message}
+                    </div>
+                  )}
+                </TabsContent>
+
+                <TabsContent value="video" className="space-y-3">
+                  <div className="rounded-md border bg-background/30 p-3 text-sm">
+                    <div className="font-medium mb-2">UGC video prompt (template)</div>
+                    <Textarea
+                      value={videoPrompt}
+                      onChange={(e) => setVideoPrompt(e.target.value)}
+                      rows={10}
+                      placeholder="Clique “Build UGC prompt from template”…"
+                    />
+                  </div>
+
+                  {videoGen.kind === "success" && (
+                    <div className="space-y-3">
+                      <div className="rounded-md border bg-background/30 p-3 text-xs text-muted-foreground break-all">
+                        Video: {videoGen.url}
+                      </div>
+                      <video src={videoGen.url} controls playsInline className="w-full rounded-md border bg-black" />
+                      {videoDownloadHref && (
+                        <Button asChild variant="secondary">
+                          <a href={videoDownloadHref}>Download</a>
+                        </Button>
+                      )}
+                    </div>
+                  )}
+
+                  {videoGen.kind === "error" && (
+                    <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
+                      {videoGen.message}
+                    </div>
+                  )}
+                </TabsContent>
+
+                <TabsContent value="debug" className="space-y-3">
+                  <div className="rounded-md border bg-background/30 p-3 text-xs whitespace-pre-wrap text-muted-foreground">
+                    <div className="font-medium text-sm mb-2">Debug context</div>
+                    {JSON.stringify(
+                      {
+                        step,
+                        extracted: extracted
+                          ? {
+                              url: extracted.url,
+                              title: extracted.title,
+                              images: extracted.images.slice(0, 3),
+                              prices: extracted.signals.prices.slice(0, 6),
+                            }
+                          : null,
+                        productName: currentProductName,
+                        imageGen,
+                        videoGen,
+                      },
+                      null,
+                      2,
+                    )}
+                  </div>
+                </TabsContent>
+              </Tabs>
             </CardContent>
           </Card>
         </div>
