@@ -25,6 +25,70 @@ function uniqKeepOrder(items: string[]) {
   return out;
 }
 
+function parseSrcsetUrls(srcset: string | undefined, baseUrl: string): string[] {
+  if (!srcset) return [];
+  const parts = srcset
+    .split(",")
+    .map((p) => p.trim())
+    .filter(Boolean);
+  const urls: string[] = [];
+  for (const part of parts) {
+    const [u] = part.split(/\s+/);
+    if (!u) continue;
+    if (u.startsWith("data:")) continue;
+    try {
+      urls.push(new URL(u, baseUrl).toString());
+    } catch {
+      // ignore
+    }
+  }
+  return urls;
+}
+
+function extractStyleUrls(style: string | undefined, baseUrl: string): string[] {
+  if (!style) return [];
+  const out: string[] = [];
+  const re = /url\((['"]?)(.*?)\1\)/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(style))) {
+    const raw = m[2]?.trim();
+    if (!raw) continue;
+    if (raw.startsWith("data:")) continue;
+    try {
+      out.push(new URL(raw, baseUrl).toString());
+    } catch {
+      // ignore
+    }
+  }
+  return out;
+}
+
+function tryParseJsonLdProducts($: cheerio.CheerioAPI) {
+  const products: Array<{ name?: string; image?: string | string[]; offers?: unknown }> = [];
+  $('script[type="application/ld+json"]').each((_, el) => {
+    const raw = $(el).text();
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw);
+      const nodes = Array.isArray(parsed) ? parsed : [parsed];
+      for (const node of nodes) {
+        const t = (node as any)?.["@type"];
+        if (t === "Product") products.push(node);
+        // Some sites nest Product inside @graph
+        const graph = (node as any)?.["@graph"];
+        if (Array.isArray(graph)) {
+          for (const g of graph) {
+            if ((g as any)?.["@type"] === "Product") products.push(g);
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+  });
+  return products;
+}
+
 function pickAround(text: string, keyword: string, windowChars = 900) {
   const idx = text.toLowerCase().indexOf(keyword.toLowerCase());
   if (idx === -1) return null;
@@ -84,8 +148,30 @@ export async function POST(req: Request) {
   if (ogImage) images.push(ogImage);
   const twitterImage = $('meta[name="twitter:image"]').attr("content");
   if (twitterImage) images.push(twitterImage);
+
+  // preload images
+  $('link[rel="preload"][as="image"]').each((_, el) => {
+    const href = $(el).attr("href");
+    if (!href) return;
+    try {
+      images.push(new URL(href, url).toString());
+    } catch {
+      // ignore
+    }
+  });
+
+  // picture/source srcset
+  $("source").each((_, el) => {
+    const ss = $(el).attr("srcset") || $(el).attr("data-srcset");
+    images.push(...parseSrcsetUrls(ss, url));
+  });
+
   $("img").each((_, el) => {
-    const src = $(el).attr("src") || $(el).attr("data-src") || $(el).attr("data-original");
+    const src =
+      $(el).attr("src") ||
+      $(el).attr("data-src") ||
+      $(el).attr("data-original") ||
+      $(el).attr("data-lazy-src");
     if (!src) return;
     if (src.startsWith("data:")) return;
     try {
@@ -93,7 +179,38 @@ export async function POST(req: Request) {
     } catch {
       // ignore
     }
+
+    const srcset = $(el).attr("srcset") || $(el).attr("data-srcset");
+    images.push(...parseSrcsetUrls(srcset, url));
   });
+
+  // inline styles background-image
+  $("[style]").each((_, el) => {
+    const style = $(el).attr("style");
+    images.push(...extractStyleUrls(style, url));
+  });
+
+  // JSON-LD Product images (often best packshots)
+  const ldProducts = tryParseJsonLdProducts($);
+  for (const p of ldProducts) {
+    const img = (p as any)?.image;
+    if (typeof img === "string") {
+      try {
+        images.push(new URL(img, url).toString());
+      } catch {
+        images.push(img);
+      }
+    } else if (Array.isArray(img)) {
+      for (const i of img) {
+        if (typeof i !== "string") continue;
+        try {
+          images.push(new URL(i, url).toString());
+        } catch {
+          images.push(i);
+        }
+      }
+    }
+  }
 
   const bodyText = cleanText($("body").text());
   const excerpt = bodyText.slice(0, 9000);
@@ -131,12 +248,21 @@ export async function POST(req: Request) {
     canonical: canonical ? (() => { try { return new URL(canonical, url).toString(); } catch { return canonical; } })() : null,
     title: ogTitle || title || null,
     description: ogDesc || metaDesc || null,
-    images: uniqKeepOrder(images).slice(0, 20),
+    images: uniqKeepOrder(images).slice(0, 80),
     excerpt,
     snippets,
     signals: {
       prices,
       textLength: bodyText.length,
+    },
+    structured: {
+      jsonLdProducts: ldProducts
+        .map((p) => ({
+          name: (p as any)?.name,
+          image: (p as any)?.image,
+          offers: (p as any)?.offers,
+        }))
+        .slice(0, 3),
     },
   });
 }

@@ -24,6 +24,7 @@ type Extracted = {
   excerpt: string;
   snippets: string[];
   signals: { prices: string[]; textLength: number };
+  structured?: { jsonLdProducts?: any[] };
 };
 
 type AnalyzeResult = any;
@@ -98,6 +99,14 @@ export default function AppBrandWizard() {
     offers: "",
     videoDurationPreference: "15s",
   });
+  const [quizPrecisionNote, setQuizPrecisionNote] = useState<string>("");
+  const [isQuizAutofilling, setIsQuizAutofilling] = useState(false);
+
+  const [isClassifyingImages, setIsClassifyingImages] = useState(false);
+  const [productOnlyCandidates, setProductOnlyCandidates] = useState<
+    Array<{ url: string; reason?: string }>
+  >([]);
+  const [selectedProductImageUrls, setSelectedProductImageUrls] = useState<string[]>([]);
 
   const [nanoModel, setNanoModel] = useState<NanoModel>("nano");
   const [imagePrompt, setImagePrompt] = useState<string>("");
@@ -193,6 +202,100 @@ export default function AppBrandWizard() {
     }
   }
 
+  async function onAutoFillQuiz() {
+    if (!extracted) return;
+    setIsQuizAutofilling(true);
+    setQuizPrecisionNote("");
+    try {
+      const res = await fetch("/api/gpt/quiz-autofill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: extracted.url,
+          title: extracted.title,
+          description: extracted.description,
+          snippets: extracted.snippets,
+          signals: extracted.signals,
+          excerpt: extracted.excerpt,
+        }),
+      });
+      const json = (await res.json()) as { error?: string; data?: any };
+      if (!res.ok || !json.data) throw new Error(json.error || "Autofill failed");
+      setQuiz((q) => ({
+        ...q,
+        aboutProduct: String(json.data.aboutProduct ?? q.aboutProduct),
+        problems: String(json.data.problems ?? q.problems),
+        promises: String(json.data.promises ?? q.promises),
+        persona: String(json.data.persona ?? q.persona),
+        angles: String(json.data.angles ?? q.angles),
+        offers: String(json.data.offers ?? q.offers),
+        videoDurationPreference:
+          json.data.videoDurationPreference === "20s" || json.data.videoDurationPreference === "30s"
+            ? json.data.videoDurationPreference
+            : "15s",
+      }));
+      setQuizPrecisionNote(
+        String(
+          json.data.precisionNote ??
+            "Auto-fill from URL is helpful, but it will be more precise if you write it yourself.",
+        ),
+      );
+      toast.success("Quiz auto-rempli");
+    } catch (err) {
+      toast.error("Quiz autofill error", {
+        description: err instanceof Error ? err.message : "Unknown error",
+      });
+    } finally {
+      setIsQuizAutofilling(false);
+    }
+  }
+
+  async function onFindProductOnlyImages() {
+    if (!extracted?.images?.length) return;
+    setIsClassifyingImages(true);
+    setProductOnlyCandidates([]);
+    setSelectedProductImageUrls([]);
+    try {
+      const res = await fetch("/api/gpt/images-classify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pageUrl: extracted.url,
+          imageUrls: extracted.images,
+        }),
+      });
+      const json = (await res.json()) as { error?: string; data?: any };
+      if (!res.ok || !json.data) throw new Error(json.error || "Image classify failed");
+      const candidates = Array.isArray(json.data.productOnlyUrls) ? json.data.productOnlyUrls : [];
+      setProductOnlyCandidates(
+        candidates
+          .filter((x: any) => typeof x?.url === "string")
+          .map((x: any) => ({ url: String(x.url), reason: x.reason ? String(x.reason) : undefined })),
+      );
+      const defaults = candidates
+        .filter((x: any) => typeof x?.url === "string")
+        .slice(0, 2)
+        .map((x: any) => String(x.url));
+      setSelectedProductImageUrls(defaults);
+      toast.success("Images produit seul détectées");
+    } catch (err) {
+      toast.error("Image classify error", {
+        description: err instanceof Error ? err.message : "Unknown error",
+      });
+    } finally {
+      setIsClassifyingImages(false);
+    }
+  }
+
+  async function copyToClipboard(label: string, text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success(`${label} copied`);
+    } catch (err) {
+      toast.error("Copy failed", { description: err instanceof Error ? err.message : "Unknown error" });
+    }
+  }
+
   async function onGenerateImagePrompt() {
     if (!extracted || !analysis) return;
     try {
@@ -236,7 +339,10 @@ export default function AppBrandWizard() {
         body: JSON.stringify({
           model: nanoModel,
           prompt: imagePrompt,
-          imageUrls: extracted.images.slice(0, 2),
+          imageUrls:
+            selectedProductImageUrls.length > 0
+              ? selectedProductImageUrls.slice(0, 2)
+              : extracted.images.slice(0, 2),
           numImages: 1,
           aspectRatio: "9:16",
           resolution: "2K",
@@ -469,6 +575,20 @@ export default function AppBrandWizard() {
                 <p className="text-xs text-muted-foreground">
                   Certaines réponses sont pré-remplies depuis l’analyse pour économiser des tokens.
                 </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="secondary"
+                    onClick={onAutoFillQuiz}
+                    disabled={!extracted || isQuizAutofilling}
+                  >
+                    {isQuizAutofilling && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Auto-répondre (depuis l’URL)
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {quizPrecisionNote ||
+                    "Auto-répondre aide à démarrer, mais ce sera plus précis si vous le rentrez vous-même."}
+                </p>
                 <Textarea
                   value={quiz.aboutProduct}
                   onChange={(e) => setQuiz((q) => ({ ...q, aboutProduct: e.target.value }))}
@@ -555,6 +675,49 @@ export default function AppBrandWizard() {
 
               <div className="space-y-2">
                 <Label>Image generation</Label>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="secondary"
+                    onClick={onFindProductOnlyImages}
+                    disabled={!extracted?.images?.length || isClassifyingImages}
+                  >
+                    {isClassifyingImages && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Trouver images “produit seul” (AI)
+                  </Button>
+                </div>
+                {productOnlyCandidates.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs text-muted-foreground">
+                      Sélectionne 1–2 images packshot pour aider NanoBanana à garder le produit réaliste.
+                    </p>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {productOnlyCandidates.slice(0, 6).map((c) => {
+                        const selected = selectedProductImageUrls.includes(c.url);
+                        return (
+                          <button
+                            key={c.url}
+                            className={`rounded-md border overflow-hidden text-left ${
+                              selected ? "ring-2 ring-primary" : ""
+                            }`}
+                            onClick={() => {
+                              setSelectedProductImageUrls((prev) => {
+                                const has = prev.includes(c.url);
+                                if (has) return prev.filter((u) => u !== c.url);
+                                if (prev.length >= 2) return [prev[1], c.url];
+                                return [...prev, c.url];
+                              });
+                            }}
+                          >
+                            <img src={c.url} alt="Product-only candidate" className="h-44 w-full object-cover" />
+                            <div className="p-2 text-xs text-muted-foreground">
+                              {c.reason ? c.reason : "Packshot candidate"}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
                 <div className="grid gap-2 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label className="text-xs">NanoBanana model</Label>
@@ -674,6 +837,30 @@ export default function AppBrandWizard() {
                     </div>
                   ) : (
                     <div className="space-y-3">
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="secondary"
+                        onClick={() =>
+                          copyToClipboard(
+                            "GPT analysis (JSON)",
+                            JSON.stringify(analysis, null, 2),
+                          )
+                        }
+                      >
+                        Copy GPT JSON
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={() =>
+                          copyToClipboard(
+                            "Step 1 raw sheet",
+                            safeString(analysis.step1_rawSheet, ""),
+                          )
+                        }
+                      >
+                        Copy Step 1
+                      </Button>
+                    </div>
                       <div className="rounded-md border bg-background/30 p-3 text-sm whitespace-pre-wrap">
                         {safeString(analysis.step1_rawSheet, "")}
                       </div>
@@ -742,6 +929,15 @@ export default function AppBrandWizard() {
                 <TabsContent value="video" className="space-y-3">
                   <div className="rounded-md border bg-background/30 p-3 text-sm">
                     <div className="font-medium mb-2">UGC video prompt (template)</div>
+                    <div className="flex flex-wrap gap-2 mb-2">
+                      <Button
+                        variant="secondary"
+                        onClick={() => copyToClipboard("Video prompt", videoPrompt)}
+                        disabled={!videoPrompt.trim()}
+                      >
+                        Copy video prompt
+                      </Button>
+                    </div>
                     <Textarea
                       value={videoPrompt}
                       onChange={(e) => setVideoPrompt(e.target.value)}
