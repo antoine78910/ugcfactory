@@ -21,6 +21,10 @@
 /public/uploads/
 /.data/
 
+# local tools / binaries
+/tools/cloudflared/
+/tools/ngrok/
+
 # production
 /build
 
