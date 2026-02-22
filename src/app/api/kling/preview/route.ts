@@ -25,11 +25,11 @@ export async function POST(req: Request) {
     taskMode: imageUrl ? "image-to-video" : "text-to-video",
     duration: body?.duration ?? 5,
     aspect_ratio: body?.aspectRatio ?? "16:9",
-    sound: body?.sound ?? false,
+    sound: body?.sound ?? true,
     input: {
       prompt: body?.prompt ?? "",
       image_urls: imageUrl ? [imageUrl] : undefined,
-      sound: body?.sound ?? false,
+      sound: body?.sound ?? true,
       duration: String(body?.duration ?? 5),
       aspect_ratio: imageUrl ? undefined : body?.aspectRatio,
       mode,

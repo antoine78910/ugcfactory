@@ -74,7 +74,7 @@ export async function POST(req: Request) {
     if (model === "kling-3.0/video") {
       input = {
         prompt,
-        sound: body.sound ?? false,
+        sound: body.sound ?? true,
         duration: String(body.duration ?? 5),
         mode,
         multi_shots: false,

@@ -77,6 +77,23 @@ function safeString(x: unknown, fallback = ""): string {
   return typeof x === "string" ? x : fallback;
 }
 
+function withAudioHint(prompt: string) {
+  const p = prompt.trim();
+  if (!p) return p;
+  const lower = p.toLowerCase();
+  const mentionsAudio =
+    lower.includes("audio") ||
+    lower.includes("sound") ||
+    lower.includes("voice") ||
+    lower.includes("voix") ||
+    lower.includes("voiceover") ||
+    lower.includes("narration") ||
+    lower.includes("asr") ||
+    lower.includes("dialogue");
+  if (mentionsAudio) return p;
+  return `${p}\n\nAudio: ON. Include natural spoken voice and subtle ambient sound.`;
+}
+
 export default function AppBrandWizard() {
   const [step, setStep] = useState<WizardStep>("url");
 
@@ -535,16 +552,17 @@ export default function AppBrandWizard() {
           : quiz.videoDurationPreference === "20s"
             ? 15
             : 15;
+      const promptWithAudio = withAudioHint(videoPrompt);
       const res = await fetch("/api/kling/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           marketModel: "kling-3.0/video",
-          prompt: videoPrompt,
+          prompt: promptWithAudio,
           imageUrl: selectedImageUrl,
           duration,
           mode: "std",
-          sound: false,
+          sound: true,
         }),
       });
       const json = (await res.json()) as { taskId?: string; error?: string };
