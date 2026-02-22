@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { CheckCircle2, Circle, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -107,6 +106,7 @@ export default function AppBrandWizard() {
     Array<{ url: string; reason?: string }>
   >([]);
   const [selectedProductImageUrls, setSelectedProductImageUrls] = useState<string[]>([]);
+  const [isUploadingPackshots, setIsUploadingPackshots] = useState(false);
 
   const [nanoModel, setNanoModel] = useState<NanoModel>("nano");
   const [imagePrompt, setImagePrompt] = useState<string>("");
@@ -121,12 +121,18 @@ export default function AppBrandWizard() {
   const [isBuildingVideoPrompt, setIsBuildingVideoPrompt] = useState(false);
   const [videoGen, setVideoGen] = useState<VideoGenState>({ kind: "idle" });
 
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+
   const currentProductName = useMemo(() => {
     const fromAnalysis = safeString(analysis?.step1_rawSheet ?? "");
     if (extracted?.title) return extracted.title;
     if (fromAnalysis) return fromAnalysis.split("\n")[0]?.slice(0, 120) ?? null;
     return null;
   }, [analysis, extracted?.title]);
+
+  const packshotUrls = useMemo(() => {
+    return selectedProductImageUrls;
+  }, [selectedProductImageUrls]);
 
   async function onExtract() {
     const url = storeUrl.trim();
@@ -302,6 +308,38 @@ export default function AppBrandWizard() {
     }
   }
 
+  async function onUploadPackshots(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    setIsUploadingPackshots(true);
+    try {
+      const urls: string[] = [];
+      for (const f of Array.from(files).slice(0, 8)) {
+        const fd = new FormData();
+        fd.set("file", f);
+        const res = await fetch("/api/uploads", { method: "POST", body: fd });
+        const json = (await res.json()) as { error?: string; url?: string };
+        if (!res.ok || !json.url) {
+          throw new Error(json.error || `Upload failed for ${f.name}`);
+        }
+        urls.push(json.url);
+      }
+      setSelectedProductImageUrls((prev) => {
+        const merged = [...prev];
+        for (const u of urls) {
+          if (!merged.includes(u)) merged.push(u);
+        }
+        return merged.slice(0, 8);
+      });
+      toast.success("Packshots uploadés", { description: `${urls.length} image(s)` });
+    } catch (err) {
+      toast.error("Upload error", {
+        description: err instanceof Error ? err.message : "Unknown error",
+      });
+    } finally {
+      setIsUploadingPackshots(false);
+    }
+  }
+
   async function copyToClipboard(label: string, text: string) {
     try {
       await navigator.clipboard.writeText(text);
@@ -313,6 +351,13 @@ export default function AppBrandWizard() {
 
   async function onGenerateImagePrompt() {
     if (!extracted || !analysis) return;
+    if (packshotUrls.length === 0) {
+      toast.error("Ajoute au moins 1 image produit seul (packshot).", {
+        description:
+          "Si l’IA ne trouve rien, uploade 2–4 angles du produit (face, profil, dos) pour un meilleur résultat.",
+      });
+      return;
+    }
     setIsCreatingPerfectImagePrompt(true);
     try {
       const res = await fetch("/api/gpt/image-prompt", {
@@ -322,7 +367,7 @@ export default function AppBrandWizard() {
           url: extracted.url,
           analysis,
           productName: extracted.title,
-          productImages: extracted.images,
+          productImages: packshotUrls.length > 0 ? packshotUrls : extracted.images,
           quiz: { persona: quiz.persona, videoDurationPreference: quiz.videoDurationPreference },
         }),
       });
@@ -347,6 +392,13 @@ export default function AppBrandWizard() {
       toast.error("Génère le prompt image d’abord.");
       return;
     }
+    if (packshotUrls.length === 0) {
+      toast.error("Il manque des images “produit seul” (packshots).", {
+        description:
+          "Uploade 2–4 angles du produit (face, profil, dos) puis relance la génération.",
+      });
+      return;
+    }
 
     setImageGen({ kind: "submitting" });
     setSelectedImageUrl(null);
@@ -359,9 +411,7 @@ export default function AppBrandWizard() {
           model: nanoModel,
           prompt: imagePrompt,
           imageUrls:
-            selectedProductImageUrls.length > 0
-              ? selectedProductImageUrls.slice(0, 2)
-              : extracted.images.slice(0, 2),
+            packshotUrls.length > 0 ? packshotUrls.slice(0, 4) : extracted.images.slice(0, 2),
           numImages: 1,
           imageSize: "9:16",
           aspectRatio: "9:16",
@@ -622,7 +672,11 @@ export default function AppBrandWizard() {
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="text-sm font-medium">{s.label}</div>
-                    <Badge variant={s.done ? "secondary" : "outline"}>{s.done ? "OK" : "—"}</Badge>
+                    {s.done ? (
+                      <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                    ) : (
+                      <Circle className="h-4 w-4 text-muted-foreground/60" />
+                    )}
                   </div>
                   {s.note ? (
                     <div className="mt-1 text-xs text-muted-foreground">
@@ -639,9 +693,19 @@ export default function AppBrandWizard() {
 
           <div className="space-y-6">
             <div className="flex flex-wrap gap-2">
-              <Badge variant="secondary">step: {step}</Badge>
-              {extracted?.title ? <Badge variant="outline">{extracted.title.slice(0, 42)}</Badge> : null}
-              {nanoModel === "pro" ? <Badge variant="outline">NanoBanana Pro</Badge> : null}
+              <div className="text-xs text-muted-foreground">
+                step: <span className="font-medium text-foreground">{step}</span>
+              </div>
+              {extracted?.title ? (
+                <div className="text-xs text-muted-foreground">
+                  produit: <span className="font-medium text-foreground">{extracted.title.slice(0, 60)}</span>
+                </div>
+              ) : null}
+              {nanoModel === "pro" ? (
+                <div className="text-xs text-muted-foreground">
+                  modèle: <span className="font-medium text-foreground">NanoBanana Pro</span>
+                </div>
+              ) : null}
             </div>
 
             {step === "url" && (
@@ -869,7 +933,7 @@ export default function AppBrandWizard() {
                   {productOnlyCandidates.length > 0 ? (
                     <div className="space-y-2">
                       <p className="text-xs text-muted-foreground">
-                        Sélectionne 1–2 images packshot pour aider NanoBanana à garder le produit réaliste.
+                        Sélectionne 1–4 images packshot (multi-angles) pour aider NanoBanana à garder le produit réaliste.
                       </p>
                       <div className="grid gap-3 sm:grid-cols-2">
                         {productOnlyCandidates.slice(0, 6).map((c) => {
@@ -884,7 +948,7 @@ export default function AppBrandWizard() {
                                 setSelectedProductImageUrls((prev) => {
                                   const has = prev.includes(c.url);
                                   if (has) return prev.filter((u) => u !== c.url);
-                                  if (prev.length >= 2) return [prev[1], c.url];
+                                  if (prev.length >= 4) return [...prev.slice(1), c.url];
                                   return [...prev, c.url];
                                 });
                               }}
@@ -903,9 +967,61 @@ export default function AppBrandWizard() {
                     </div>
                   ) : hasClassifiedImages && !isClassifyingImages ? (
                     <div className="rounded-md border bg-background/30 p-3 text-sm text-muted-foreground">
-                      Aucun packshot “produit seul” détecté sur cette page. Tu peux continuer quand même.
+                      Aucun packshot “produit seul” détecté sur cette page.
+                      <div className="mt-2 text-xs">
+                        Pour de meilleurs résultats, uploade 2–4 images du produit seul (face, profil, dos, détail).
+                      </div>
                     </div>
                   ) : null}
+
+                  <div className="rounded-md border bg-background/30 p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-medium">Upload packshots (produit seul)</div>
+                        <div className="text-xs text-muted-foreground">
+                          Idéal: 2–4 angles. Formats: jpg/png/webp.
+                        </div>
+                      </div>
+                      <label className={`text-sm ${isUploadingPackshots ? "opacity-60" : "cursor-pointer"}`}>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          className="hidden"
+                          disabled={isUploadingPackshots}
+                          onChange={(e) => onUploadPackshots(e.currentTarget.files)}
+                        />
+                        <Button type="button" variant="secondary" disabled={isUploadingPackshots}>
+                          {isUploadingPackshots ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                          Upload images
+                        </Button>
+                      </label>
+                    </div>
+
+                    {packshotUrls.length > 0 ? (
+                      <div className="mt-3">
+                        <div className="text-xs text-muted-foreground mb-2">
+                          Packshots sélectionnés: <span className="font-medium">{packshotUrls.length}</span>
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-4">
+                          {packshotUrls.slice(0, 8).map((u) => (
+                            <button
+                              key={u}
+                              className="rounded-md border overflow-hidden hover:opacity-90"
+                              onClick={() => setLightboxUrl(u)}
+                              title="Clique pour agrandir"
+                            >
+                              <img src={u} alt="Packshot" className="h-24 w-full object-cover" />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="mt-3 text-xs text-muted-foreground">
+                        Aucun packshot sélectionné pour l’instant.
+                      </div>
+                    )}
+                  </div>
 
                   <div className="flex flex-wrap gap-2">
                     <Button
@@ -951,7 +1067,11 @@ export default function AppBrandWizard() {
                           className={`rounded-md border overflow-hidden text-left ${
                             selectedImageUrl === u ? "ring-2 ring-primary" : ""
                           }`}
-                          onClick={() => setSelectedImageUrl(u)}
+                          onClick={() => {
+                            setSelectedImageUrl(u);
+                            setLightboxUrl(u);
+                          }}
+                          title="Clique pour agrandir"
                         >
                           <img src={u} alt="Generated" className="h-64 w-full object-cover" />
                         </button>
@@ -1088,6 +1208,36 @@ export default function AppBrandWizard() {
           </div>
         </div>
       </main>
+
+      {lightboxUrl ? (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm"
+          onClick={() => setLightboxUrl(null)}
+          role="button"
+          tabIndex={0}
+        >
+          <div className="absolute right-4 top-4">
+            <Button
+              variant="secondary"
+              size="icon"
+              onClick={(e) => {
+                e.stopPropagation();
+                setLightboxUrl(null);
+              }}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="mx-auto flex h-full max-w-5xl items-center justify-center px-4">
+            <img
+              src={lightboxUrl}
+              alt="Preview"
+              className="max-h-[90vh] w-auto max-w-full rounded-md border bg-black object-contain"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
