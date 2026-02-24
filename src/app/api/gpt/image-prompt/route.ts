@@ -73,26 +73,6 @@ export async function POST(req: Request) {
   ].join("\n");
 
   try {
-    const cacheKey = makeCacheKey({
-      v: 1,
-      url: body.url,
-      productName: body.productName ?? null,
-      productImages: Array.isArray(body.productImages) ? body.productImages.slice(0, 6) : [],
-      quiz: body.quiz ?? null,
-      analysis: body.analysis,
-    });
-    try {
-      const { data: hit } = await supabase
-        .from("gpt_cache")
-        .select("output")
-        .eq("kind", "image_prompt")
-        .eq("cache_key", cacheKey)
-        .maybeSingle();
-      if (hit?.output) return NextResponse.json({ data: hit.output, cached: true });
-    } catch {
-      // ignore cache failures
-    }
-
     const { text } = await openaiResponsesText({ developer, user: userPrompt });
 
     let parsed: any;
@@ -108,15 +88,6 @@ export async function POST(req: Request) {
       negativePrompt: "",
       recommendedAspectRatio: String(parsed?.recommendedAspectRatio ?? "9:16"),
     };
-
-    try {
-      await supabase
-        .from("gpt_cache")
-        .insert({ user_id: authUser.id, kind: "image_prompt", cache_key: cacheKey, output: data })
-        .throwOnError();
-    } catch {
-      // ignore cache insert failures
-    }
 
     return NextResponse.json({ data });
   } catch (err) {
