@@ -590,7 +590,13 @@ export default function AppBrandWizard() {
         const fd = new FormData();
         fd.set("file", f);
         const res = await fetch("/api/uploads", { method: "POST", body: fd });
-        const json = (await res.json()) as { error?: string; url?: string };
+        const raw = await res.text();
+        let json: { error?: string; url?: string } = {};
+        try {
+          if (raw.length > 0) json = JSON.parse(raw) as { error?: string; url?: string };
+        } catch {
+          throw new Error(res.ok ? "Réponse serveur invalide" : `Upload échoué (${res.status}): ${raw.slice(0, 200)}`);
+        }
         if (!res.ok || !json.url) {
           throw new Error(json.error || `Upload failed for ${f.name}`);
         }
