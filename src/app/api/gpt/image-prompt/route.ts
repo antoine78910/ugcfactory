@@ -49,6 +49,7 @@ export async function POST(req: Request) {
     "- Short, natural description (similar length to the examples above).",
     "- Plain text, 1 simple block (no bullet points, no numbered lists, no sections).",
     "- Use the strongest angles, benefits, problems, promises and persona from the analysis/quiz to choose the scene, pose, expression and details — but do NOT mention words like “angle”, “benefit”, “persona” in the text.",
+    "- Always keep the face and hair realistic: add small imperfections like uneven beard growth, slight frizz or flyaway strands, subtle skin texture, pores, fine lines, light under-eye shadows, small blemishes or redness. Never describe perfect plastic beauty-filter skin or perfectly airbrushed hair.",
     "- The prompt should read like you’re briefly describing the final image to a designer or photographer.",
     "- Do NOT include any separate “Negative” part or negative prompt.",
   ].join("\n");
