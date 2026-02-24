@@ -55,6 +55,8 @@ type VideoGenState =
   | { kind: "success"; url: string }
   | { kind: "error"; message: string };
 
+const UGC_CURRENT_RUN_KEY = "ugc_current_run_id";
+
 const TEMPLATES = [
   {
     id: "template1",
@@ -218,6 +220,7 @@ export default function AppBrandWizard() {
       const json = (await res.json()) as { runId?: string; error?: string };
       if (!res.ok || !json.runId) throw new Error(json.error || "Save failed");
       if (!runId) setRunId(json.runId);
+      if (json.runId) localStorage.setItem(UGC_CURRENT_RUN_KEY, json.runId);
     } catch (err) {
       // don't block the flow if saving fails
       const message = err instanceof Error ? err.message : "Unknown error";
@@ -232,6 +235,7 @@ export default function AppBrandWizard() {
       if (!res.ok || !json.data) throw new Error(json.error || "Load run failed");
       const r = json.data;
       setRunId(r.id);
+      localStorage.setItem(UGC_CURRENT_RUN_KEY, r.id);
       setStoreUrl(r.store_url ?? "");
       setExtracted(r.extracted ?? null);
       setAnalysis(r.analysis ?? null);
@@ -259,6 +263,7 @@ export default function AppBrandWizard() {
       setStep(r.video_url ? "video" : r.selected_image_url ? "image" : r.analysis ? "quiz" : "url");
       toast.success("Run chargé");
     } catch (err) {
+      localStorage.removeItem(UGC_CURRENT_RUN_KEY);
       toast.error("Load error", { description: err instanceof Error ? err.message : "Unknown error" });
     }
   }
@@ -274,9 +279,18 @@ export default function AppBrandWizard() {
   }
 
   useEffect(() => {
+    const savedRunId = typeof localStorage !== "undefined" ? localStorage.getItem(UGC_CURRENT_RUN_KEY) : null;
+    if (savedRunId?.trim()) {
+      void loadRun(savedRunId.trim());
+    }
     void refreshMeAndRuns();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (runId) localStorage.setItem(UGC_CURRENT_RUN_KEY, runId);
+    else if (typeof localStorage !== "undefined") localStorage.removeItem(UGC_CURRENT_RUN_KEY);
+  }, [runId]);
 
   async function onExtract() {
     const url = storeUrl.trim();
@@ -302,6 +316,7 @@ export default function AppBrandWizard() {
       setStep("analysis");
       toast.success("Extraction OK");
       setRunId(null);
+      if (typeof localStorage !== "undefined") localStorage.removeItem(UGC_CURRENT_RUN_KEY);
       await saveRun({
         storeUrl: url,
         title: (json as any)?.title ?? null,

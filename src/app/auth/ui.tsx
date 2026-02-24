@@ -10,11 +10,45 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { getEnv } from "@/lib/env";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+
+const SUPABASE_URL = typeof process !== "undefined" ? getEnv("NEXT_PUBLIC_SUPABASE_URL") : undefined;
+const SUPABASE_ANON_KEY = typeof process !== "undefined" ? getEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY") : undefined;
+const HAS_SUPABASE_ENV = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 
 export default function AuthClient() {
   const router = useRouter();
-  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+  const supabase = useMemo(() => (HAS_SUPABASE_ENV ? createSupabaseBrowserClient() : null), []);
+
+  if (!HAS_SUPABASE_ENV) {
+    return (
+      <div className="dark min-h-screen bg-background text-foreground">
+        <main className="mx-auto max-w-md px-4 py-12">
+          <Card className="shadow-sm border-amber-500/50">
+            <CardHeader>
+              <CardTitle className="text-base">Configuration manquante</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm text-muted-foreground">
+              <p>
+                Les variables <code className="rounded bg-muted px-1">NEXT_PUBLIC_SUPABASE_URL</code> et{" "}
+                <code className="rounded bg-muted px-1">NEXT_PUBLIC_SUPABASE_ANON_KEY</code> ne sont pas définies (ou pas encore prises en compte).
+              </p>
+              <p className="font-medium text-foreground">Sur Vercel :</p>
+              <ol className="list-decimal list-inside space-y-1">
+                <li>Ouvre le projet → Settings → Environment Variables</li>
+                <li>Ajoute <code className="rounded bg-muted px-1">NEXT_PUBLIC_SUPABASE_URL</code> et <code className="rounded bg-muted px-1">NEXT_PUBLIC_SUPABASE_ANON_KEY</code> pour l’environnement Production</li>
+                <li>Redéploie le projet (Deployments → … → Redeploy)</li>
+              </ol>
+              <p>Les variables <code>NEXT_PUBLIC_*</code> sont injectées au build : un simple save ne suffit pas, il faut un nouveau déploiement.</p>
+            </CardContent>
+          </Card>
+        </main>
+      </div>
+    );
+  }
+
+  if (!supabase) return null;
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
