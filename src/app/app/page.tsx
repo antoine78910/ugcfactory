@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Circle, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
@@ -174,6 +174,7 @@ export default function AppBrandWizard() {
   const [videoGen, setVideoGen] = useState<VideoGenState>({ kind: "idle" });
 
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const packshotFileInputRef = useRef<HTMLInputElement>(null);
 
   const currentProductName = useMemo(() => {
     const fromAnalysis = safeString(analysis?.step1_rawSheet ?? "");
@@ -974,7 +975,8 @@ export default function AppBrandWizard() {
                         <button
                           key={proj.normalizedUrl}
                           onClick={() => loadRun(latestRun.id)}
-                          className={`w-full rounded-md border px-2 py-2 text-left hover:bg-muted/40 ${
+                          type="button"
+                          className={`w-full rounded-md border px-2 py-2 text-left cursor-pointer hover:bg-muted/40 ${
                             isActive ? "bg-muted/30" : ""
                           }`}
                           title={`Ouvrir le projet (${proj.runs.length} génération(s))`}
@@ -1006,7 +1008,8 @@ export default function AppBrandWizard() {
                         <button
                           key={r.id}
                           onClick={() => loadRun(r.id)}
-                          className="w-full rounded-md border p-2 text-left hover:bg-muted/40 flex items-center gap-2"
+                          type="button"
+                          className="w-full rounded-md border p-2 text-left cursor-pointer hover:bg-muted/40 flex items-center gap-2"
                           title="Charger cette génération"
                         >
                           {thumb ? (
@@ -1075,7 +1078,8 @@ export default function AppBrandWizard() {
                 <button
                   key={s.id}
                   onClick={() => setStep(s.id)}
-                  className={`w-full rounded-md border px-3 py-2 text-left transition-colors hover:bg-muted/40 ${
+                  type="button"
+                  className={`w-full rounded-md border px-3 py-2 text-left transition-colors cursor-pointer hover:bg-muted/40 ${
                     step === s.id ? "bg-muted/30" : ""
                   }`}
                 >
@@ -1350,7 +1354,8 @@ export default function AppBrandWizard() {
                           return (
                             <button
                               key={c.url}
-                              className={`rounded-md border overflow-hidden text-left transition ${
+                              type="button"
+                              className={`rounded-md border overflow-hidden text-left transition cursor-pointer ${
                                 selected ? "ring-2 ring-primary" : "hover:bg-muted/30"
                               }`}
                               onClick={() => {
@@ -1391,20 +1396,28 @@ export default function AppBrandWizard() {
                           Idéal: 2–4 angles. Formats: jpg/png/webp.
                         </div>
                       </div>
-                      <label className={`text-sm ${isUploadingPackshots ? "opacity-60" : "cursor-pointer"}`}>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          multiple
-                          className="hidden"
-                          disabled={isUploadingPackshots}
-                          onChange={(e) => onUploadPackshots(e.currentTarget.files)}
-                        />
-                        <Button type="button" variant="secondary" disabled={isUploadingPackshots}>
-                          {isUploadingPackshots ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                          Upload images
-                        </Button>
-                      </label>
+                      <input
+                        ref={packshotFileInputRef}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/*"
+                        multiple
+                        className="sr-only"
+                        disabled={isUploadingPackshots}
+                        onChange={(e) => {
+                          onUploadPackshots(e.target.files);
+                          e.target.value = "";
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        disabled={isUploadingPackshots}
+                        onClick={() => packshotFileInputRef.current?.click()}
+                        className="cursor-pointer"
+                      >
+                        {isUploadingPackshots ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                        Upload images
+                      </Button>
                     </div>
 
                     {packshotUrls.length > 0 ? (
@@ -1416,7 +1429,8 @@ export default function AppBrandWizard() {
                           {packshotUrls.slice(0, 8).map((u) => (
                             <button
                               key={u}
-                              className="rounded-md border overflow-hidden hover:opacity-90"
+                              type="button"
+                              className="rounded-md border overflow-hidden cursor-pointer hover:opacity-90"
                               onClick={() => setLightboxUrl(u)}
                               title="Clique pour agrandir"
                             >
@@ -1489,7 +1503,8 @@ export default function AppBrandWizard() {
                       {imageGen.urls.map((u) => (
                         <button
                           key={u}
-                          className={`rounded-md border overflow-hidden text-left ${
+                          type="button"
+                          className={`rounded-md border overflow-hidden text-left cursor-pointer hover:opacity-90 ${
                             selectedImageUrl === u ? "ring-2 ring-primary" : ""
                           }`}
                           onClick={() => {
