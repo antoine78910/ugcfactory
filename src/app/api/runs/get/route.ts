@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 
 export async function GET(req: Request) {
-  const { supabase, response } = await requireSupabaseUser();
+  const { supabase, user, response } = await requireSupabaseUser();
   if (response) return response;
 
   const { searchParams } = new URL(req.url);
@@ -12,7 +12,12 @@ export async function GET(req: Request) {
   if (!runId) return NextResponse.json({ error: "Missing `runId`." }, { status: 400 });
 
   try {
-    const { data, error } = await supabase.from("ugc_runs").select("*").eq("id", runId).single();
+    const { data, error } = await supabase
+      .from("ugc_runs")
+      .select("*")
+      .eq("id", runId)
+      .eq("user_id", user.id)
+      .single();
     if (error) throw error;
     return NextResponse.json({ data });
   } catch (err) {

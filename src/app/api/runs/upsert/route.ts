@@ -54,6 +54,7 @@ export async function POST(req: Request) {
         .from("ugc_runs")
         .update(payload)
         .eq("id", body.runId.trim())
+        .eq("user_id", user.id)
         .select("id")
         .single();
       if (error) throw error;
