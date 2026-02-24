@@ -27,29 +27,22 @@ export async function POST(req: Request) {
 
   const developer = [
     "You are an expert prompt engineer for photorealistic UGC-style product imagery.",
-    "Return STRICT JSON only. Output JSON with: { imagePrompt, negativePrompt, recommendedAspectRatio }",
+    "Return STRICT JSON only. Output JSON with: { imagePrompt, recommendedAspectRatio }",
     "",
-    "PROMPT STRUCTURE (follow this order exactly for imagePrompt):",
-    "1. Opening line: 'Ultra-realistic UGC style image.' or 'Ultra-realistic lifestyle image.'",
-    "2. Subject & setting: Age, gender, location (e.g. modern bathroom, minimalist bedroom, kitchen), time of day (e.g. morning). Natural daylight coming from a side window, soft and diffused. Realistic lighting, not studio light.",
-    "3. Appearance: Hair (short, well-groomed, etc.), beard/stubble if relevant. Natural skin texture with subtle imperfections, fine lines if age-appropriate. No artificial smoothing.",
-    "4. Clothing: Precise description (e.g. simple neutral t-shirt, fitted navy dress shirt, soft beige bathrobe)—fabric, fit, how it looks on the body.",
-    "5. Pose & expression: Where they stand (e.g. in front of mirror facing camera, three-quarter angle). Relaxed posture. Calm, confident expression. What they do with hands if relevant.",
-    "6. Product (if any): How they hold it (e.g. at chest level, one hand). Logo clearly visible and readable. Product realistic, correct lighting and shadows. If bulky, place next to person.",
-    "7. Background: Modern clean setting, simple elements visible. Not overly staged. Slight depth of field but realistic.",
-    "8. Closing quality lines (include these or similar):",
-    "   - Natural UGC aesthetic. / Authentic UGC aesthetic.",
-    "   - No artificial blur on skin.",
-    "   - No glamour effect. / No studio glamour lighting.",
-    "   - No fashion photoshoot vibe. (if relevant)",
-    "   - Realistic shadows and fabric texture.",
-    "   - 4K photorealistic. (optional)",
-    "Write the entire imagePrompt in ENGLISH. Keep negativePrompt short (unwanted styles, cartoon, blur, etc.).",
+    "Goal: write a SHORT, natural image prompt in ENGLISH that looks like a real UGC / lifestyle description, similar in style and length to this kind of prompt:",
+    "Example:",
+    "Ultra-realistic UGC style image. A 28-year-old man standing in a modern bathroom in the morning. Natural daylight coming from a side window, soft and diffused. He has short dark hair and natural beard growth with slight patchiness visible, natural skin texture with subtle imperfections. He is wearing a simple neutral t-shirt. He stands in front of a bathroom mirror but is facing the camera directly, relaxed posture, calm confident expression with a slight natural smile. He holds a product labeled “Regrowave” naturally at chest level with one hand, logo clearly visible and readable. Modern clean bathroom background, simple sink and mirror visible, not overly staged, slight realistic depth of field.",
+    "",
+    "Requirements for imagePrompt:",
+    "- 1–2 short paragraphs, 3–7 sentences total (roughly 40–120 words).",
+    "- Natural language, no numbered lists or bullet points.",
+    "- Describe: subject, setting, clothing, pose/expression, product placement, background, and optionally 1–2 quality phrases like “Ultra-realistic UGC style image.” or “Natural UGC aesthetic. No studio glamour lighting.”",
+    "- Do NOT include a separate “Negative” section or any negative prompt text.",
   ].join("\n");
 
   const userPrompt = [
-    "Create an image prompt based on this analysis and optional product images.",
-    "Follow the PROMPT STRUCTURE exactly: opening line, subject & setting with natural daylight, appearance with natural skin texture, clothing details, pose & expression, product placement if any, background, then closing quality lines (Natural UGC aesthetic, No artificial blur, No glamour, etc.).",
+    "Create a concise image prompt based on this analysis and optional product images.",
+    "Follow the style of the Example above: short UGC-style description in 1–2 paragraphs (3–7 sentences), not a long over-engineered prompt.",
     "",
     "Context:",
     JSON.stringify(
@@ -97,7 +90,8 @@ export async function POST(req: Request) {
 
     const data = {
       imagePrompt: String(parsed?.imagePrompt ?? ""),
-      negativePrompt: String(parsed?.negativePrompt ?? ""),
+      // Keep negativePrompt empty on purpose: we now generate only a single, short positive prompt.
+      negativePrompt: "",
       recommendedAspectRatio: String(parsed?.recommendedAspectRatio ?? "9:16"),
     };
 
