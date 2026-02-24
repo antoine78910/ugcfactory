@@ -46,6 +46,16 @@ Set:
 - In Supabase SQL editor, run `supabase/schema.sql`
 - Enable Auth providers you want (Email / Magic link)
 
+### 2c) Upload d’images en production (Vercel / serverless)
+
+En local, les images sont enregistrées dans `public/uploads/`. Sur Vercel le disque est en lecture seule, il faut utiliser **Supabase Storage** :
+
+1. Dans Supabase : **Storage** → **New bucket** → nom `ugc-uploads` → cocher **Public** → Create.
+2. Dans ton projet : **Settings** → **API** → copie la clé **service_role** (secret).
+3. Définis la variable d’environnement `SUPABASE_SERVICE_ROLE_KEY` (Vercel et/ou `.env.local`). Ne l’expose jamais côté client.
+
+Une fois configuré, les packshots sont uploadés dans le bucket et tout reste sauvegardé par projet.
+
 ### 3) Run the dev server
 
 ```bash
@@ -65,7 +75,7 @@ UI lives in `src/app/page.tsx`.
 ## Notes
 
 - Image editing mode (`IMAGETOIAMGE`) requires **publicly accessible** `imageUrl` (and callback URL).
-- This MVP stores uploaded files under `public/uploads/`. For production, replace with S3/Cloudinary.
+- En local, les uploads vont dans `public/uploads/`. En production (ex. Vercel), configure Supabase Storage (bucket public `ugc-uploads` + `SUPABASE_SERVICE_ROLE_KEY`) pour que les packshots soient stockés et sauvegardés par projet.
 
 ## Learn More
 

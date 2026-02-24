@@ -5,10 +5,13 @@ import path from "path";
 import { mkdir, writeFile } from "fs/promises";
 import { getAppUrl } from "@/lib/env";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
+import { createSupabaseServiceClient } from "@/lib/supabase/admin";
+
+const STORAGE_BUCKET = "ugc-uploads";
 
 export async function POST(req: Request) {
   try {
-    const { response } = await requireSupabaseUser();
+    const { user, response } = await requireSupabaseUser();
     if (response) return response;
 
     const form = await req.formData();
@@ -46,6 +49,37 @@ export async function POST(req: Request) {
     const ext = extFromName || extFromType || "";
     const filename = `${crypto.randomUUID()}${ext}`;
 
+    const supabaseAdmin = createSupabaseServiceClient();
+    if (supabaseAdmin) {
+      const storagePath = `${user.id}/${filename}`;
+      const { data, error } = await supabaseAdmin.storage
+        .from(STORAGE_BUCKET)
+        .upload(storagePath, buffer, {
+          contentType: file.type || undefined,
+          upsert: false,
+        });
+      if (error) {
+        return NextResponse.json(
+          {
+            error:
+              error.message === "Bucket not found"
+                ? "Crée un bucket public « ugc-uploads » dans Supabase (Storage)."
+                : error.message,
+          },
+          { status: 502 },
+        );
+      }
+      const {
+        data: { publicUrl },
+      } = supabaseAdmin.storage.from(STORAGE_BUCKET).getPublicUrl(data.path);
+      return NextResponse.json({
+        url: publicUrl,
+        filename: data.path,
+        contentType: file.type,
+        size: file.size,
+      });
+    }
+
     const uploadDir = path.join(process.cwd(), "public", "uploads");
     await mkdir(uploadDir, { recursive: true });
     await writeFile(path.join(uploadDir, filename), buffer);
@@ -63,7 +97,7 @@ export async function POST(req: Request) {
     const msg = err instanceof Error ? err.message : "Upload failed";
     const isFsError = /EACCES|EPERM|READONLY|ENOENT|EROFS/i.test(msg);
     const error = isFsError
-      ? "Upload impossible sur cet hébergement (disque non writable). Utilise le projet en local ou configure un stockage (ex. Supabase Storage)."
+      ? "Upload impossible sur cet hébergement (disque non writable). Ajoute SUPABASE_SERVICE_ROLE_KEY et un bucket « ugc-uploads » (Supabase Storage) ou lance en local."
       : msg;
     return NextResponse.json({ error }, { status: 502 });
   }
