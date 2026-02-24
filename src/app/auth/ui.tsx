@@ -10,11 +10,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { getEnv } from "@/lib/env";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
-const SUPABASE_URL = typeof process !== "undefined" ? getEnv("NEXT_PUBLIC_SUPABASE_URL") : undefined;
-const SUPABASE_ANON_KEY = typeof process !== "undefined" ? getEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY") : undefined;
+// For NEXT_PUBLIC_* vars, Next.js inlines them at build time into process.env on the client.
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const HAS_SUPABASE_ENV = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 
 export default function AuthClient() {
