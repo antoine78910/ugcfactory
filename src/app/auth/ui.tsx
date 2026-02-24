@@ -20,6 +20,9 @@ const HAS_SUPABASE_ENV = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 export default function AuthClient() {
   const router = useRouter();
   const supabase = useMemo(() => (HAS_SUPABASE_ENV ? createSupabaseBrowserClient() : null), []);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
   if (!HAS_SUPABASE_ENV) {
     return (
@@ -50,14 +53,12 @@ export default function AuthClient() {
 
   if (!supabase) return null;
 
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const client = supabase;
 
   async function onSignUp() {
     setIsLoading(true);
     try {
-      const { error } = await supabase.auth.signUp({
+      const { error } = await client.auth.signUp({
         email: email.trim(),
         password,
       });
@@ -79,7 +80,7 @@ export default function AuthClient() {
   async function onSignIn() {
     setIsLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { error } = await client.auth.signInWithPassword({
         email: email.trim(),
         password,
       });
@@ -99,7 +100,7 @@ export default function AuthClient() {
   async function onMagicLink() {
     setIsLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithOtp({
+      const { error } = await client.auth.signInWithOtp({
         email: email.trim(),
         options: {
           emailRedirectTo: `${window.location.origin}/app`,
