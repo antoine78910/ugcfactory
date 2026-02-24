@@ -57,6 +57,20 @@ type VideoGenState =
 
 const UGC_CURRENT_RUN_KEY = "ugc_current_run_id";
 
+function normalizeUrl(url: string): string {
+  try {
+    const u = new URL(url.trim());
+    u.hash = "";
+    u.search = "";
+    const href = u.toString();
+    return href.endsWith("/") ? href.slice(0, -1) : href;
+  } catch {
+    const t = url.trim();
+    const noSlash = t.endsWith("/") ? t.slice(0, -1) : t;
+    return noSlash.toLowerCase();
+  }
+}
+
 const TEMPLATES = [
   {
     id: "template1",
@@ -112,6 +126,7 @@ export default function AppBrandWizard() {
       title: string | null;
       selected_image_url: string | null;
       video_url: string | null;
+      generated_image_urls?: string[] | null;
     }>
   >([]);
   const [runId, setRunId] = useState<string | null>(null);
@@ -170,6 +185,56 @@ export default function AppBrandWizard() {
   const packshotUrls = useMemo(() => {
     return selectedProductImageUrls;
   }, [selectedProductImageUrls]);
+
+  // Group runs by product URL = "projects". One project = one store URL with all its runs (datas + generations).
+  const projects = useMemo(() => {
+    const byUrl = new Map<
+      string,
+      { storeUrl: string; title: string | null; runs: (typeof savedRuns)[number][] }
+    >();
+    for (const r of savedRuns) {
+      const url = typeof r.store_url === "string" ? normalizeUrl(r.store_url) : "";
+      if (!url) continue;
+      const existing = byUrl.get(url);
+      const runEntry = {
+        ...r,
+        store_url: r.store_url,
+      };
+      if (existing) {
+        existing.runs.push(runEntry);
+      } else {
+        byUrl.set(url, {
+          storeUrl: r.store_url,
+          title: r.title ?? null,
+          runs: [runEntry],
+        });
+      }
+    }
+    // Sort runs inside each project by created_at desc (newest first)
+    const out: Array<{ storeUrl: string; normalizedUrl: string; title: string | null; runs: (typeof savedRuns)[number][] }> = [];
+    byUrl.forEach((v, normalizedUrl) => {
+      const runs = [...v.runs].sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+      );
+      out.push({
+        storeUrl: v.storeUrl,
+        normalizedUrl,
+        title: v.title,
+        runs,
+      });
+    });
+    out.sort((a, b) => new Date(b.runs[0].created_at).getTime() - new Date(a.runs[0].created_at).getTime());
+    return out;
+  }, [savedRuns]);
+
+  // Other runs for the same product (current project) = "anciennes générations"
+  const otherRunsForCurrentProduct = useMemo(() => {
+    if (!runId || !storeUrl.trim()) return [];
+    const norm = normalizeUrl(storeUrl);
+    return savedRuns.filter(
+      (r) => r.id !== runId && typeof r.store_url === "string" && normalizeUrl(r.store_url) === norm,
+    );
+  }, [runId, storeUrl, savedRuns]);
 
   async function refreshMeAndRuns() {
     setIsLoadingRuns(true);
@@ -297,6 +362,24 @@ export default function AppBrandWizard() {
     if (!url) {
       toast.error("Colle l’URL d’un store / page produit.");
       return;
+    }
+
+    // Fast path: if we already have a saved run for this product URL, reuse it
+    // to avoid re-scraping / re-analyzing and speed up UGC creation.
+    if (savedRuns.length > 0) {
+      const target = normalizeUrl(url);
+      const existing = savedRuns
+        .filter((r) => typeof r.store_url === "string" && normalizeUrl(r.store_url) === target)
+        .sort(
+          (a, b) =>
+            new Date(b.created_at).getTime() -
+            new Date(a.created_at).getTime(),
+        )[0];
+      if (existing) {
+        await loadRun(existing.id);
+        toast.success("Produit déjà analysé chargé depuis l’historique");
+        return;
+      }
     }
 
     setIsExtracting(true);
@@ -869,44 +952,86 @@ export default function AppBrandWizard() {
             <CardContent className="space-y-2">
               <div className="rounded-md border bg-background/30 p-3">
                 <div className="flex items-center justify-between">
-                  <div className="text-sm font-medium">Mes runs</div>
-                  <div className="text-xs text-muted-foreground">{savedRuns.length}</div>
+                  <div className="text-sm font-medium">Mes projets</div>
+                  <div className="text-xs text-muted-foreground">{projects.length}</div>
                 </div>
                 <Button variant="ghost" size="sm" className="mt-2 w-full" onClick={refreshMeAndRuns} disabled={isLoadingRuns}>
                   {isLoadingRuns ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   Refresh
                 </Button>
-                {savedRuns.length === 0 ? (
+                {projects.length === 0 ? (
                   <div className="mt-2 text-xs text-muted-foreground">
-                    Aucun run sauvegardé pour l’instant.
+                    Aucun projet. Colle une URL et lance l’extraction pour en créer un.
                   </div>
                 ) : (
                   <div className="mt-2 space-y-2">
-                    {savedRuns.slice(0, 6).map((r) => (
-                      <button
-                        key={r.id}
-                        onClick={() => loadRun(r.id)}
-                        className={`w-full rounded-md border px-2 py-2 text-left hover:bg-muted/40 ${
-                          runId === r.id ? "bg-muted/30" : ""
-                        }`}
-                        title="Charger ce run"
-                      >
-                        <div className="text-xs text-muted-foreground">
-                          {new Date(r.created_at).toLocaleString()}
-                        </div>
-                        <div className="text-sm font-medium">
-                          {r.title ? r.title.slice(0, 50) : r.store_url.slice(0, 50)}
-                        </div>
-                        <div className="mt-1 flex gap-2 text-xs text-muted-foreground">
-                          <span>{r.selected_image_url ? "image" : "—"}</span>
-                          <span>·</span>
-                          <span>{r.video_url ? "video" : "—"}</span>
-                        </div>
-                      </button>
-                    ))}
+                    {projects.slice(0, 10).map((proj) => {
+                      const latestRun = proj.runs[0];
+                      const isActive =
+                        runId === latestRun.id ||
+                        (storeUrl.trim() && normalizeUrl(storeUrl) === proj.normalizedUrl);
+                      return (
+                        <button
+                          key={proj.normalizedUrl}
+                          onClick={() => loadRun(latestRun.id)}
+                          className={`w-full rounded-md border px-2 py-2 text-left hover:bg-muted/40 ${
+                            isActive ? "bg-muted/30" : ""
+                          }`}
+                          title={`Ouvrir le projet (${proj.runs.length} génération(s))`}
+                        >
+                          <div className="text-sm font-medium truncate">
+                            {proj.title ? proj.title.slice(0, 45) : proj.storeUrl.slice(0, 45)}
+                            {(proj.title && proj.title.length > 45) || proj.storeUrl.length > 45 ? "…" : ""}
+                          </div>
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            {proj.runs.length} run{proj.runs.length > 1 ? "s" : ""} · {latestRun.selected_image_url ? "img" : "—"} · {latestRun.video_url ? "vidéo" : "—"}
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
               </div>
+
+              {otherRunsForCurrentProduct.length > 0 ? (
+                <div className="rounded-md border bg-background/30 p-3">
+                  <div className="text-sm font-medium">Anciennes générations (ce produit)</div>
+                  <div className="mt-2 space-y-2">
+                    {otherRunsForCurrentProduct.slice(0, 5).map((r) => {
+                      const thumb =
+                        r.selected_image_url ||
+                        (Array.isArray(r.generated_image_urls) && r.generated_image_urls[0]) ||
+                        null;
+                      return (
+                        <button
+                          key={r.id}
+                          onClick={() => loadRun(r.id)}
+                          className="w-full rounded-md border p-2 text-left hover:bg-muted/40 flex items-center gap-2"
+                          title="Charger cette génération"
+                        >
+                          {thumb ? (
+                            <img
+                              src={thumb}
+                              alt=""
+                              className="h-10 w-10 shrink-0 rounded object-cover"
+                            />
+                          ) : (
+                            <div className="h-10 w-10 shrink-0 rounded bg-muted flex items-center justify-center text-xs">—</div>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <div className="text-xs text-muted-foreground">
+                              {new Date(r.created_at).toLocaleString()}
+                            </div>
+                            <div className="text-xs">
+                              {r.video_url ? "Vidéo" : r.selected_image_url ? "Image" : "Brouillon"}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
 
               {(
                 [
