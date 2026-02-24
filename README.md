@@ -50,11 +50,18 @@ Set:
 
 En local, les images sont enregistrées dans `public/uploads/`. Sur Vercel le disque est en lecture seule, il faut utiliser **Supabase Storage** :
 
-1. Dans Supabase : **Storage** → **New bucket** → nom `ugc-uploads` → cocher **Public** → Create.
-2. Dans ton projet : **Settings** → **API** → copie la clé **service_role** (secret).
-3. Définis la variable d’environnement `SUPABASE_SERVICE_ROLE_KEY` (Vercel et/ou `.env.local`). Ne l’expose jamais côté client.
+1. Dans Supabase : **Storage** → **New bucket** → nom `ugc-uploads` → cocher **Public** (ou **Private** pour plus de sécurité) → Create.
+2. Exécute `supabase/storage-policies.sql` dans le SQL Editor pour que chaque user n’accède qu’à son dossier (RLS Storage).
+3. Dans ton projet : **Settings** → **API** → copie la clé **service_role** (secret).
+4. Définis la variable d’environnement `SUPABASE_SERVICE_ROLE_KEY` (Vercel et/ou `.env.local`). Ne l’expose jamais côté client.
 
 Une fois configuré, les packshots sont uploadés dans le bucket et tout reste sauvegardé par projet.
+
+### 2d) Sessions et isolation des données
+
+- Chaque utilisateur a **sa propre session** (Supabase Auth, cookie/JWT). Les données ne se mélangent pas.
+- **Runs et cache GPT** : RLS en base garantit que chaque user ne voit que ses lignes (`user_id`). Les APIs filtrent aussi explicitement par `user_id`.
+- **Storage** : les fichiers sont stockés sous `{user_id}/{filename}` ; les policies Storage limitent l’accès au dossier du user connecté.
 
 ### 3) Run the dev server
 
