@@ -4,8 +4,12 @@ import { NextResponse } from "next/server";
 import path from "path";
 import { mkdir, writeFile } from "fs/promises";
 import { getAppUrl } from "@/lib/env";
+import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 
 export async function POST(req: Request) {
+  const { response } = await requireSupabaseUser();
+  if (response) return response;
+
   const form = await req.formData();
   const file = form.get("file");
 

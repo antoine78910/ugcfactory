@@ -2,6 +2,8 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import { openaiResponsesText } from "@/lib/openaiResponses";
+import { requireSupabaseUser } from "@/lib/supabase/requireUser";
+import { makeCacheKey } from "@/lib/gptCache";
 
 type TemplateId = "template1" | "template2" | "template3";
 
@@ -14,6 +16,9 @@ type Body = {
 };
 
 export async function POST(req: Request) {
+  const { supabase, user: authUser, response } = await requireSupabaseUser();
+  if (response) return response;
+
   const body = (await req.json().catch(() => null)) as Body | null;
   if (!body?.url || !body.analysis || !body.quiz || !body.templateId) {
     return NextResponse.json({ error: "Missing required fields." }, { status: 400 });
@@ -132,7 +137,7 @@ No subtitles. No music. Natural ambience only.`;
     "Output: { filledPrompt, filledFields, recommendedTemplateReason }",
   ].join("\n");
 
-  const user = [
+  const userPrompt = [
     "Fill this template for a UGC video.",
     "",
     "Template:",
@@ -153,7 +158,27 @@ No subtitles. No music. Natural ambience only.`;
   ].join("\n");
 
   try {
-    const { text } = await openaiResponsesText({ developer, user });
+    const cacheKey = makeCacheKey({
+      v: 1,
+      url: body.url,
+      productName: body.productName ?? null,
+      templateId: body.templateId,
+      quiz: body.quiz,
+      analysis: body.analysis,
+    });
+    try {
+      const { data: hit } = await supabase
+        .from("gpt_cache")
+        .select("output")
+        .eq("kind", "video_template")
+        .eq("cache_key", cacheKey)
+        .maybeSingle();
+      if (hit?.output) return NextResponse.json({ data: hit.output, cached: true });
+    } catch {
+      // ignore cache failures
+    }
+
+    const { text } = await openaiResponsesText({ developer, user: userPrompt });
 
     let parsed: any;
     try {
@@ -162,13 +187,22 @@ No subtitles. No music. Natural ambience only.`;
       return NextResponse.json({ error: "Model returned non-JSON.", raw: text }, { status: 502 });
     }
 
-    return NextResponse.json({
-      data: {
-        filledPrompt: String(parsed?.filledPrompt ?? ""),
-        filledFields: parsed?.filledFields ?? {},
-        recommendedTemplateReason: String(parsed?.recommendedTemplateReason ?? ""),
-      },
-    });
+    const data = {
+      filledPrompt: String(parsed?.filledPrompt ?? ""),
+      filledFields: parsed?.filledFields ?? {},
+      recommendedTemplateReason: String(parsed?.recommendedTemplateReason ?? ""),
+    };
+
+    try {
+      await supabase
+        .from("gpt_cache")
+        .insert({ user_id: authUser.id, kind: "video_template", cache_key: cacheKey, output: data })
+        .throwOnError();
+    } catch {
+      // ignore cache insert failures
+    }
+
+    return NextResponse.json({ data });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error.";
     return NextResponse.json({ error: message }, { status: 502 });

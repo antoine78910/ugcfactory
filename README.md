@@ -33,9 +33,18 @@ Set:
 
 - `NANOBANANA_API_KEY` (server-only)
 - `KIE_API_KEY` (server-only)
+- `OPENAI_API_KEY` (server-only)
 - `APP_URL`
   - For **local dev**, NanoBanana cannot call `localhost`.
   - Use a public tunnel (e.g. ngrok) and set `APP_URL` to that public HTTPS URL.
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+
+### 2b) Supabase setup (Auth + save history + GPT cache)
+
+- Create a Supabase project
+- In Supabase SQL editor, run `supabase/schema.sql`
+- Enable Auth providers you want (Email / Magic link)
 
 ### 3) Run the dev server
 

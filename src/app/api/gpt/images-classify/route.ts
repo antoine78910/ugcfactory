@@ -2,6 +2,8 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import { openaiResponsesTextWithImages } from "@/lib/openaiResponses";
+import { requireSupabaseUser } from "@/lib/supabase/requireUser";
+import { makeCacheKey } from "@/lib/gptCache";
 
 type Body = {
   pageUrl: string;
@@ -22,6 +24,9 @@ function scoreUrl(u: string) {
 }
 
 export async function POST(req: Request) {
+  const { supabase, user, response } = await requireSupabaseUser();
+  if (response) return response;
+
   const body = (await req.json().catch(() => null)) as Body | null;
   const urls = Array.isArray(body?.imageUrls) ? body!.imageUrls!.filter((x) => typeof x === "string") : [];
   if (!body?.pageUrl || urls.length === 0) {
@@ -50,6 +55,19 @@ export async function POST(req: Request) {
   ].join("\n");
 
   try {
+    const cacheKey = makeCacheKey({ v: 1, pageUrl: body.pageUrl, ranked });
+    try {
+      const { data: hit } = await supabase
+        .from("gpt_cache")
+        .select("output")
+        .eq("kind", "images_classify")
+        .eq("cache_key", cacheKey)
+        .maybeSingle();
+      if (hit?.output) return NextResponse.json({ data: hit.output, cached: true });
+    } catch {
+      // ignore cache failures
+    }
+
     const { text } = await openaiResponsesTextWithImages({
       developer,
       userText,
@@ -63,14 +81,23 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Model returned non-JSON.", raw: text }, { status: 502 });
     }
 
-    return NextResponse.json({
-      data: {
-        ranked,
-        productOnlyUrls: Array.isArray(parsed?.productOnlyUrls) ? parsed.productOnlyUrls : [],
-        otherUrls: Array.isArray(parsed?.otherUrls) ? parsed.otherUrls : [],
-        confidence: String(parsed?.confidence ?? "low"),
-      },
-    });
+    const data = {
+      ranked,
+      productOnlyUrls: Array.isArray(parsed?.productOnlyUrls) ? parsed.productOnlyUrls : [],
+      otherUrls: Array.isArray(parsed?.otherUrls) ? parsed.otherUrls : [],
+      confidence: String(parsed?.confidence ?? "low"),
+    };
+
+    try {
+      await supabase
+        .from("gpt_cache")
+        .insert({ user_id: user.id, kind: "images_classify", cache_key: cacheKey, output: data })
+        .throwOnError();
+    } catch {
+      // ignore cache insert failures
+    }
+
+    return NextResponse.json({ data });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error.";
     return NextResponse.json({ error: message }, { status: 502 });

@@ -2,6 +2,8 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import { openaiResponsesText } from "@/lib/openaiResponses";
+import { requireSupabaseUser } from "@/lib/supabase/requireUser";
+import { makeCacheKey } from "@/lib/gptCache";
 
 type Body = {
   url: string;
@@ -13,6 +15,9 @@ type Body = {
 };
 
 export async function POST(req: Request) {
+  const { supabase, user: authUser, response } = await requireSupabaseUser();
+  if (response) return response;
+
   const body = (await req.json().catch(() => null)) as Body | null;
   if (!body?.url) return NextResponse.json({ error: "Missing `url`." }, { status: 400 });
 
@@ -24,7 +29,7 @@ export async function POST(req: Request) {
     "Always add a field `precisionNote` telling the user it's more accurate if they fill it themselves.",
   ].join("\n");
 
-  const user = [
+  const userPrompt = [
     "Auto-fill this quiz from the page context.",
     "Return JSON with keys:",
     "{ aboutProduct, problems, promises, persona, angles, offers, videoDurationPreference, precisionNote }",
@@ -46,7 +51,20 @@ export async function POST(req: Request) {
   ].join("\n");
 
   try {
-    const { text } = await openaiResponsesText({ developer, user });
+    const cacheKey = makeCacheKey({ v: 1, body });
+    try {
+      const { data: hit } = await supabase
+        .from("gpt_cache")
+        .select("output")
+        .eq("kind", "quiz_autofill")
+        .eq("cache_key", cacheKey)
+        .maybeSingle();
+      if (hit?.output) return NextResponse.json({ data: hit.output, cached: true });
+    } catch {
+      // ignore cache failures
+    }
+
+    const { text } = await openaiResponsesText({ developer, user: userPrompt });
     let parsed: any;
     try {
       parsed = JSON.parse(text);
@@ -54,24 +72,33 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Model returned non-JSON.", raw: text }, { status: 502 });
     }
 
-    return NextResponse.json({
-      data: {
-        aboutProduct: String(parsed?.aboutProduct ?? ""),
-        problems: String(parsed?.problems ?? ""),
-        promises: String(parsed?.promises ?? ""),
-        persona: String(parsed?.persona ?? ""),
-        angles: String(parsed?.angles ?? ""),
-        offers: String(parsed?.offers ?? ""),
-        videoDurationPreference:
-          parsed?.videoDurationPreference === "20s" || parsed?.videoDurationPreference === "30s"
-            ? parsed.videoDurationPreference
-            : "15s",
-        precisionNote: String(
-          parsed?.precisionNote ??
-            "Auto-fill from URL is helpful, but it will be more precise if you write it yourself.",
-        ),
-      },
-    });
+    const data = {
+      aboutProduct: String(parsed?.aboutProduct ?? ""),
+      problems: String(parsed?.problems ?? ""),
+      promises: String(parsed?.promises ?? ""),
+      persona: String(parsed?.persona ?? ""),
+      angles: String(parsed?.angles ?? ""),
+      offers: String(parsed?.offers ?? ""),
+      videoDurationPreference:
+        parsed?.videoDurationPreference === "20s" || parsed?.videoDurationPreference === "30s"
+          ? parsed.videoDurationPreference
+          : "15s",
+      precisionNote: String(
+        parsed?.precisionNote ??
+          "Auto-fill from URL is helpful, but it will be more precise if you write it yourself.",
+      ),
+    };
+
+    try {
+      await supabase
+        .from("gpt_cache")
+        .insert({ user_id: authUser.id, kind: "quiz_autofill", cache_key: cacheKey, output: data })
+        .throwOnError();
+    } catch {
+      // ignore cache insert failures
+    }
+
+    return NextResponse.json({ data });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error.";
     return NextResponse.json({ error: message }, { status: 502 });

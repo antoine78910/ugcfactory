@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { CheckCircle2, Circle, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -10,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type WizardStep = "url" | "analysis" | "quiz" | "image" | "video";
 
@@ -95,7 +97,23 @@ function withAudioHint(prompt: string) {
 }
 
 export default function AppBrandWizard() {
+  const router = useRouter();
+
   const [step, setStep] = useState<WizardStep>("url");
+
+  const [meEmail, setMeEmail] = useState<string>("");
+  const [savedRuns, setSavedRuns] = useState<
+    Array<{
+      id: string;
+      created_at: string;
+      store_url: string;
+      title: string | null;
+      selected_image_url: string | null;
+      video_url: string | null;
+    }>
+  >([]);
+  const [runId, setRunId] = useState<string | null>(null);
+  const [isLoadingRuns, setIsLoadingRuns] = useState(false);
 
   const [storeUrl, setStoreUrl] = useState("");
   const [isExtracting, setIsExtracting] = useState(false);
@@ -151,6 +169,115 @@ export default function AppBrandWizard() {
     return selectedProductImageUrls;
   }, [selectedProductImageUrls]);
 
+  async function refreshMeAndRuns() {
+    setIsLoadingRuns(true);
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      setMeEmail(user?.email ?? "");
+
+      const res = await fetch("/api/runs/list", { method: "GET", cache: "no-store" });
+      const json = (await res.json()) as { data?: any; error?: string };
+      if (!res.ok) throw new Error(json.error || "List runs failed");
+      setSavedRuns(Array.isArray(json.data) ? json.data : []);
+    } catch (err) {
+      // keep UI usable even if Supabase tables aren't created yet
+      const message = err instanceof Error ? err.message : "Unknown error";
+      toast.message("Runs non disponibles", { description: message });
+    } finally {
+      setIsLoadingRuns(false);
+    }
+  }
+
+  async function saveRun(partial: {
+    storeUrl?: string;
+    title?: string | null;
+    extracted?: unknown;
+    analysis?: unknown;
+    quiz?: unknown;
+    packshotUrls?: string[];
+    imagePrompt?: string;
+    negativePrompt?: string;
+    generatedImageUrls?: string[];
+    selectedImageUrl?: string | null;
+    videoTemplateId?: string | null;
+    videoPrompt?: string;
+    videoUrl?: string | null;
+  }) {
+    try {
+      const res = await fetch("/api/runs/upsert", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          runId: runId ?? undefined,
+          ...partial,
+        }),
+      });
+      const json = (await res.json()) as { runId?: string; error?: string };
+      if (!res.ok || !json.runId) throw new Error(json.error || "Save failed");
+      if (!runId) setRunId(json.runId);
+    } catch (err) {
+      // don't block the flow if saving fails
+      const message = err instanceof Error ? err.message : "Unknown error";
+      toast.message("Sauvegarde impossible", { description: message });
+    }
+  }
+
+  async function loadRun(id: string) {
+    try {
+      const res = await fetch(`/api/runs/get?runId=${encodeURIComponent(id)}`, { cache: "no-store" });
+      const json = (await res.json()) as { data?: any; error?: string };
+      if (!res.ok || !json.data) throw new Error(json.error || "Load run failed");
+      const r = json.data;
+      setRunId(r.id);
+      setStoreUrl(r.store_url ?? "");
+      setExtracted(r.extracted ?? null);
+      setAnalysis(r.analysis ?? null);
+      setQuiz((q) => ({
+        ...q,
+        ...(r.quiz ?? {}),
+      }));
+      setSelectedProductImageUrls(Array.isArray(r.packshot_urls) ? r.packshot_urls : []);
+      setImagePrompt(r.image_prompt ?? "");
+      setNegativePrompt(r.negative_prompt ?? "");
+      if (Array.isArray(r.generated_image_urls) && r.generated_image_urls.length > 0) {
+        setImageGen({ kind: "success", urls: r.generated_image_urls });
+      } else {
+        setImageGen({ kind: "idle" });
+      }
+      setSelectedImageUrl(r.selected_image_url ?? null);
+      setSelectedTemplate((r.video_template_id as any) ?? "template1");
+      setVideoPrompt(r.video_prompt ?? "");
+      if (typeof r.video_url === "string" && r.video_url.length > 0) {
+        setVideoGen({ kind: "success", url: r.video_url });
+      } else {
+        setVideoGen({ kind: "idle" });
+      }
+
+      setStep(r.video_url ? "video" : r.selected_image_url ? "image" : r.analysis ? "quiz" : "url");
+      toast.success("Run chargé");
+    } catch (err) {
+      toast.error("Load error", { description: err instanceof Error ? err.message : "Unknown error" });
+    }
+  }
+
+  async function onSignOut() {
+    try {
+      const supabase = createSupabaseBrowserClient();
+      await supabase.auth.signOut();
+    } finally {
+      router.push("/auth");
+      router.refresh();
+    }
+  }
+
+  useEffect(() => {
+    void refreshMeAndRuns();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function onExtract() {
     const url = storeUrl.trim();
     if (!url) {
@@ -174,6 +301,13 @@ export default function AppBrandWizard() {
       setExtracted(json as Extracted);
       setStep("analysis");
       toast.success("Extraction OK");
+      setRunId(null);
+      await saveRun({
+        storeUrl: url,
+        title: (json as any)?.title ?? null,
+        extracted: json,
+      });
+      void refreshMeAndRuns();
     } catch (err) {
       toast.error("Extraction error", {
         description: err instanceof Error ? err.message : "Unknown error",
@@ -219,6 +353,25 @@ export default function AppBrandWizard() {
 
       setStep("quiz");
       toast.success("Analyse OK");
+      await saveRun({
+        storeUrl: extracted.url,
+        title: extracted.title,
+        extracted,
+        analysis: json.data,
+        quiz: {
+          aboutProduct: safeString(pre.aboutProduct, quiz.aboutProduct),
+          problems: safeString(pre.problems, quiz.problems),
+          promises: safeString(pre.promises, quiz.promises),
+          persona: safeString(pre.persona, quiz.persona),
+          angles: safeString(pre.angles, quiz.angles),
+          offers: safeString(pre.offers, quiz.offers),
+          videoDurationPreference:
+            pre.videoDurationPreference === "20s" || pre.videoDurationPreference === "30s"
+              ? pre.videoDurationPreference
+              : "15s",
+        },
+      });
+      void refreshMeAndRuns();
     } catch (err) {
       toast.error("Analyse error", {
         description: err instanceof Error ? err.message : "Unknown error",
@@ -267,6 +420,8 @@ export default function AppBrandWizard() {
         ),
       );
       toast.success("Quiz auto-rempli");
+      await saveRun({ quiz: { ...quiz, ...(json.data ?? {}) } });
+      void refreshMeAndRuns();
     } catch (err) {
       toast.error("Quiz autofill error", {
         description: err instanceof Error ? err.message : "Unknown error",
@@ -306,6 +461,8 @@ export default function AppBrandWizard() {
         .slice(0, 2)
         .map((x: any) => String(x.url));
       setSelectedProductImageUrls(defaults);
+      await saveRun({ packshotUrls: defaults });
+      void refreshMeAndRuns();
       if (normalizedCandidates.length === 0) {
         toast.message("Aucune image “produit seul” détectée", {
           description:
@@ -348,6 +505,8 @@ export default function AppBrandWizard() {
         return merged.slice(0, 8);
       });
       toast.success("Packshots uploadés", { description: `${urls.length} image(s)` });
+      await saveRun({ packshotUrls: [...packshotUrls, ...urls].slice(0, 8) });
+      void refreshMeAndRuns();
     } catch (err) {
       toast.error("Upload error", {
         description: err instanceof Error ? err.message : "Unknown error",
@@ -393,6 +552,12 @@ export default function AppBrandWizard() {
       setImagePrompt(String(json.data.imagePrompt ?? ""));
       setNegativePrompt(String(json.data.negativePrompt ?? ""));
       toast.success("Image prompt prêt");
+      await saveRun({
+        packshotUrls,
+        imagePrompt: String(json.data.imagePrompt ?? ""),
+        negativePrompt: String(json.data.negativePrompt ?? ""),
+      });
+      void refreshMeAndRuns();
     } catch (err) {
       toast.error("Image prompt error", {
         description: err instanceof Error ? err.message : "Unknown error",
@@ -416,6 +581,17 @@ export default function AppBrandWizard() {
       });
       return;
     }
+
+    await saveRun({
+      storeUrl: extracted.url,
+      title: extracted.title ?? null,
+      extracted,
+      analysis,
+      quiz,
+      packshotUrls,
+      imagePrompt,
+      negativePrompt,
+    });
 
     setImageGen({ kind: "submitting" });
     setSelectedImageUrl(null);
@@ -481,6 +657,8 @@ export default function AppBrandWizard() {
           if (!urls?.length) throw new Error("Image succeeded but result image URL is missing.");
           setImageGen({ kind: "success", urls });
           setSelectedImageUrl(urls[0]);
+          void saveRun({ generatedImageUrls: urls, selectedImageUrl: urls[0] });
+          void refreshMeAndRuns();
           if (interval) clearInterval(interval);
           interval = null;
           return;
@@ -526,6 +704,11 @@ export default function AppBrandWizard() {
       if (!res.ok || !json.data) throw new Error(json.error || "Template fill failed");
       setVideoPrompt(String(json.data.filledPrompt ?? ""));
       toast.success("Template rempli");
+      await saveRun({
+        videoTemplateId: selectedTemplate,
+        videoPrompt: String(json.data.filledPrompt ?? ""),
+      });
+      void refreshMeAndRuns();
     } catch (err) {
       toast.error("Template error", {
         description: err instanceof Error ? err.message : "Unknown error",
@@ -542,6 +725,21 @@ export default function AppBrandWizard() {
       toast.error("Génère le prompt vidéo (template) d’abord.");
       return;
     }
+
+    await saveRun({
+      storeUrl: extracted?.url,
+      title: extracted?.title ?? null,
+      extracted,
+      analysis,
+      quiz,
+      packshotUrls,
+      imagePrompt,
+      negativePrompt,
+      generatedImageUrls: imageGen.kind === "success" ? imageGen.urls : undefined,
+      selectedImageUrl,
+      videoTemplateId: selectedTemplate,
+      videoPrompt,
+    });
 
     setVideoGen({ kind: "submitting" });
     try {
@@ -598,6 +796,8 @@ export default function AppBrandWizard() {
           const url = json.data.response?.[0];
           if (!url) throw new Error("Video succeeded but response[0] missing.");
           setVideoGen({ kind: "success", url });
+          void saveRun({ videoUrl: url });
+          void refreshMeAndRuns();
           if (interval) clearInterval(interval);
           interval = null;
           return;
@@ -627,12 +827,22 @@ export default function AppBrandWizard() {
   return (
     <div className="dark min-h-screen bg-background text-foreground">
       <main className="mx-auto max-w-6xl px-4 py-8">
-        <div className="space-y-2">
-          <h1 className="text-2xl font-semibold tracking-tight">UGC Factory — Brand Analyzer → Image → Video</h1>
-          <p className="text-sm text-muted-foreground">
+        <header className="flex flex-wrap items-center justify-between gap-4 mb-6">
+          <div className="space-y-1">
+            <h1 className="text-2xl font-semibold tracking-tight">UGC Factory — Brand Analyzer → Image → Video</h1>
+            <p className="text-sm text-muted-foreground">
             Colle l’URL du store, on analyse (étapes 1→9), mini quiz, puis génération image NanoBanana et vidéo UGC.
-          </p>
-        </div>
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-muted-foreground truncate max-w-[220px] sm:max-w-[320px]" title={meEmail || undefined}>
+              {meEmail || "—"}
+            </span>
+            <Button variant="secondary" size="sm" onClick={onSignOut}>
+              Logout
+            </Button>
+          </div>
+        </header>
 
         <Separator className="my-6" />
 
@@ -642,6 +852,47 @@ export default function AppBrandWizard() {
               <CardTitle className="text-base">Historique</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
+              <div className="rounded-md border bg-background/30 p-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-medium">Mes runs</div>
+                  <div className="text-xs text-muted-foreground">{savedRuns.length}</div>
+                </div>
+                <Button variant="ghost" size="sm" className="mt-2 w-full" onClick={refreshMeAndRuns} disabled={isLoadingRuns}>
+                  {isLoadingRuns ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Refresh
+                </Button>
+                {savedRuns.length === 0 ? (
+                  <div className="mt-2 text-xs text-muted-foreground">
+                    Aucun run sauvegardé pour l’instant.
+                  </div>
+                ) : (
+                  <div className="mt-2 space-y-2">
+                    {savedRuns.slice(0, 6).map((r) => (
+                      <button
+                        key={r.id}
+                        onClick={() => loadRun(r.id)}
+                        className={`w-full rounded-md border px-2 py-2 text-left hover:bg-muted/40 ${
+                          runId === r.id ? "bg-muted/30" : ""
+                        }`}
+                        title="Charger ce run"
+                      >
+                        <div className="text-xs text-muted-foreground">
+                          {new Date(r.created_at).toLocaleString()}
+                        </div>
+                        <div className="text-sm font-medium">
+                          {r.title ? r.title.slice(0, 50) : r.store_url.slice(0, 50)}
+                        </div>
+                        <div className="mt-1 flex gap-2 text-xs text-muted-foreground">
+                          <span>{r.selected_image_url ? "image" : "—"}</span>
+                          <span>·</span>
+                          <span>{r.video_url ? "video" : "—"}</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {(
                 [
                   {
@@ -1045,11 +1296,27 @@ export default function AppBrandWizard() {
                     <Button
                       variant="secondary"
                       onClick={onGenerateImagePrompt}
-                      disabled={!analysis || !extracted || isCreatingPerfectImagePrompt}
+                      disabled={
+                        !analysis ||
+                        !extracted ||
+                        isCreatingPerfectImagePrompt ||
+                        (imagePrompt.trim().length > 0 && negativePrompt.trim().length > 0)
+                      }
                     >
                       {isCreatingPerfectImagePrompt ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                      Create “perfect” image prompt
+                      {imagePrompt.trim().length > 0 ? "Prompt déjà généré" : "Create “perfect” image prompt"}
                     </Button>
+                    {imagePrompt.trim().length > 0 ? (
+                      <Button
+                        variant="secondary"
+                        onClick={() => {
+                          setImagePrompt("");
+                          setNegativePrompt("");
+                        }}
+                      >
+                        Regenerate
+                      </Button>
+                    ) : null}
                     <Button
                       onClick={onGenerateImage}
                       disabled={!extracted || imageGen.kind === "submitting" || imageGen.kind === "polling"}
@@ -1146,11 +1413,26 @@ export default function AppBrandWizard() {
                     <Button
                       variant="secondary"
                       onClick={onBuildVideoPrompt}
-                      disabled={!analysis || !selectedImageUrl || isBuildingVideoPrompt}
+                      disabled={
+                        !analysis ||
+                        !selectedImageUrl ||
+                        isBuildingVideoPrompt ||
+                        (videoPrompt.trim().length > 0 && videoGen.kind !== "error")
+                      }
                     >
                       {isBuildingVideoPrompt ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                      Build UGC prompt from template
+                      {videoPrompt.trim().length > 0 ? "Prompt déjà généré" : "Build UGC prompt from template"}
                     </Button>
+                    {videoPrompt.trim().length > 0 ? (
+                      <Button
+                        variant="secondary"
+                        onClick={() => {
+                          setVideoPrompt("");
+                        }}
+                      >
+                        Regenerate
+                      </Button>
+                    ) : null}
                     <Button
                       onClick={onGenerateVideo}
                       disabled={!selectedImageUrl || videoGen.kind === "submitting" || videoGen.kind === "polling"}

@@ -2,6 +2,8 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import { openaiResponsesText } from "@/lib/openaiResponses";
+import { requireSupabaseUser } from "@/lib/supabase/requireUser";
+import { makeCacheKey } from "@/lib/gptCache";
 
 type Body = {
   url: string;
@@ -19,6 +21,9 @@ function safeSlice(s: string, max = 12000) {
 }
 
 export async function POST(req: Request) {
+  const { supabase, user: authUser, response } = await requireSupabaseUser();
+  if (response) return response;
+
   const body = (await req.json().catch(() => null)) as Body | null;
   if (!body?.url) return NextResponse.json({ error: "Missing `url`." }, { status: 400 });
 
@@ -41,7 +46,7 @@ export async function POST(req: Request) {
     "For Step 7, output MAX 5 angles, and make them strategic (no random angles).",
   ].join("\n");
 
-  const user = [
+  const userPrompt = [
     "Analyze this product page context and produce the full brand analysis.",
     "",
     "Process steps to output in JSON:",
@@ -65,7 +70,20 @@ export async function POST(req: Request) {
   ].join("\n");
 
   try {
-    const { text } = await openaiResponsesText({ developer, user });
+    const cacheKey = makeCacheKey({ v: 1, context });
+    try {
+      const { data: hit } = await supabase
+        .from("gpt_cache")
+        .select("output")
+        .eq("kind", "brand_analyze")
+        .eq("cache_key", cacheKey)
+        .maybeSingle();
+      if (hit?.output) return NextResponse.json({ data: hit.output, cached: true });
+    } catch {
+      // ignore cache failures (e.g. table not created yet)
+    }
+
+    const { text } = await openaiResponsesText({ developer, user: userPrompt });
 
     let parsed: unknown;
     try {
@@ -75,6 +93,20 @@ export async function POST(req: Request) {
         { error: "Model returned non-JSON.", raw: text.slice(0, 4000) },
         { status: 502 },
       );
+    }
+
+    try {
+      await supabase
+        .from("gpt_cache")
+        .insert({
+          user_id: authUser.id,
+          kind: "brand_analyze",
+          cache_key: cacheKey,
+          output: parsed,
+        })
+        .throwOnError();
+    } catch {
+      // ignore cache insert failures
     }
 
     return NextResponse.json({ data: parsed });
