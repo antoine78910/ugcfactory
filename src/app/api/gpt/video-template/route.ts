@@ -3,7 +3,6 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import { openaiResponsesText } from "@/lib/openaiResponses";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
-import { makeCacheKey } from "@/lib/gptCache";
 
 type TemplateId = "template1" | "template2" | "template3";
 
@@ -24,126 +23,52 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Missing required fields." }, { status: 400 });
   }
 
-  const template = (() => {
+  // Template style = global style / angle, not placeholder-based anymore.
+  const templateStyle = (() => {
     switch (body.templateId) {
       case "template1":
-        return `TEMPLATE 1 — UGC SMARTPHONE AUTHENTIQUE (POV / SELFIE)
-Handheld, front-facing smartphone shot.
-Slight natural shake, authentic phone camera vibe.
-Eye-level angle.
-Natural daylight coming from a nearby window.
-Background: {location_type}, slightly lived-in but realistic.
-
-A {persona_age} {persona_gender} wearing {outfit_style}.
-Natural skin texture, realistic details, no heavy smoothing.
-
-At the beginning, {character_action_before_speaking}.
-
-With a {emotion_tone} tone, they say:
-
-“{hook_line}”
-
-They slightly move closer to the camera, maintaining eye contact.
-They lift {product_name} naturally toward the lens. The logo is visible but not forced.
-They continue speaking naturally:
-
-“{problem_statement}”
-
-While saying this, they {gesture_linked_to_problem}.
-
-They shift tone slightly, more confident:
-“{key_benefit_1}. {key_benefit_2}.”
-They demonstrate physically by {gesture_linked_to_benefit}.
-
-Very subtle micro push-in camera movement.
-They finish with a relaxed smile:
-“{cta_line}”
-
-No subtitles. No music. Natural ambient sound only.`;
+        return "Template 1 — UGC smartphone authentique (POV / selfie), handheld front camera, face-to-camera, direct talk, simple background.";
       case "template2":
-        return `TEMPLATE 2 — BEAUTY / WELLNESS CINEMATIC UGC
-Medium close-up, eye-level.
-Soft natural daylight from a side window.
-Shallow depth of field isolating the subject.
-Warm neutral color palette.
-Background: clean {location_type}, minimal and elegant.
-
-A {persona_age} {persona_gender} with natural skin texture and subtle imperfections visible. Wearing {outfit_style}.
-
-At the start, they {subtle_expressive_movement}. Small facial expression matching {emotion_tone}.
-They say softly:
-“{hook_line}”
-
-Brief pause.
-They continue, sincere tone:
-“{problem_statement}”
-They gently touch {face_or_body_area} while speaking.
-
-They pick up {product_name}, holding it at chest level. The logo faces the camera naturally.
-They say:
-“{key_benefit_1}. {key_benefit_2}. {key_benefit_3}.”
-
-While explaining, they demonstrate physically:
-{physical_demonstration_of_product}.
-
-Very subtle dolly-in.
-They end with calm confidence:
-“{cta_line}”
-
-Realistic texture, no blur filter. No subtitles. No music. Soft natural ambience.`;
+        return "Template 2 — Beauty / wellness cinematic UGC, medium close-up, soft natural light, elegant minimal background, gentle movements.";
       case "template3":
-        return `TEMPLATE 3 — STORYTELLING / PROBLEM-SOLUTION UGC
-Medium shot, eye-level.
-Subtle handheld realism.
-Lighting: {lighting_type} (morning soft daylight / warm bedside lamp / neutral indoor light).
-Background: {location_type}, realistic and relatable.
-
-A {persona_age} {persona_gender} sitting naturally. Wearing {outfit_style}.
-Natural skin detail, no perfection filter.
-
-They take a small breath before speaking. Their posture shows {emotion_tone}.
-They say:
-“{hook_line}”
-
-Short pause. Eye contact steady.
-They continue, honest tone:
-“{problem_statement}”
-They physically demonstrate the problem by {gesture_linked_to_problem}.
-
-They slowly pick up {product_name}. The movement is deliberate and calm.
-They say:
-“{discovery_line}”
-
-They demonstrate the product:
-{physical_product_usage}.
-
-Close-up moment on the product briefly.
-They look back at the camera, relief visible:
-“{result_statement}”
-
-Small exhale or soft smile.
-They finish naturally:
-“{cta_line}”
-
-No subtitles. No music. Natural ambience only.`;
+        return "Template 3 — Storytelling / problem-solution UGC, medium shot, small story arc (before/after), honest tone, natural gestures.";
     }
   })();
 
   const developer = [
     "You are a UGC scriptwriter and prompt engineer for video generation models.",
-    "Fill the chosen template placeholders using ONLY the given analysis + quiz.",
-    "Return STRICT JSON only.",
-    "Keep the script natural, credible, non-hypey. Avoid unverifiable claims; stay aligned with the page claims.",
-    "Output: { filledPrompt, filledFields, recommendedTemplateReason }",
+    "Return STRICT JSON only. Output JSON with: { filledPrompt, recommendedTemplateReason }",
+    "",
+    "Goal: based on the product analysis + quiz (angles, benefits, problems, promises, persona, offers, etc.), create ONE short UGC video prompt/script inspired by the style examples below.",
+    "",
+    "VERY IMPORTANT:",
+    "- ALWAYS write the filledPrompt in ENGLISH, as a natural spoken script, even if the input/context is in French.",
+    "- The filledPrompt should describe the camera, shots, actions and EXACT spoken lines (in English).",
+    "- It should read like one of these examples (but adapted to the specific product, angles and persona):",
+    "",
+    "Example 1:",
+    "A close-up, eye-level shot of a woman in a bright, modern bathroom with natural daylight. She wears a beige headband and a neutral t-shirt. Her skin looks fresh and hydrated. She looks into the camera with a relaxed smile and casually says: “Okay guys, I’ve been getting so many questions about the face cream I’m using lately…” The camera shifts to a shallow depth-of-field shot as she holds the Enjoy face cream close to the lens, the logo clearly visible. Her face stays softly blurred in the background as she continues: “It’s this one, the Enjoy face cream. It hydrates really well and just makes my skin look healthier.” The scene transitions to a medium shot in front of the bathroom mirror where she applies a small amount of the cream, gently massaging it in, then smiles at her reflection and adds: “I use it every day, and honestly, my skin has never felt this good.” She looks back at the camera, confident and satisfied. POV shot, handheld, subtle movement, natural daylight, no subtitles, no music.",
+    "",
+    "Example 2:",
+    "POV shot, eye-level, handheld very subtle. A charming brunette woman with a beautiful face, light freckles, realistic skin texture and natural facial details. She is wearing a tailored suit and high heels. She looks directly into the camera and says confidently: “Guys, I have incredible news for you.” Natural daylight, intimate and engaging tone. The camera moves in front of her and follows her smoothly, maintaining eye contact. A subtle pan and close-up framing as she speaks while walking: “In 2026, you no longer need to pay UGC creators, thanks to AI.” Clean, cinematic, professional atmosphere. Medium close-up, eye-level, tracking shot. The woman stops, faces the camera, a calm confident smile appears and she says clearly: “If you want to know more, send a DM to Paul Yanis.”",
+    "",
+    "Example 3:",
+    "A realistic, cinematic bathroom scene with soft natural daylight reflecting on tiled walls. The camera starts slightly above and behind the woman’s shoulder, framing her reflection in the mirror. She is standing relaxed at the sink, holding a skincare cream tube, looking at herself with calm confidence, her facial expressions clearly visible in the mirror as she says in English: “Since I started using this cream, my acne has completely disappeared.” The camera then moves smoothly to the front into a medium shot as she raises the cream toward the camera, making sure the label is visible. She continues: “That’s why, girls, you should all start using it.” The camera moves back behind her shoulder to the original mirror perspective as she smiles at her reflection, visibly happy and confident. The video ends naturally on her smiling at herself in the mirror.",
+    "",
+    "Requirements for filledPrompt:",
+    "- Plain text script, 1–3 short paragraphs, no bullet points, no placeholders, no variable names.",
+    "- Use the strongest angles/benefits/persona from the context to decide what is said and how it’s shown.",
+    "- Match the chosen template style (POV selfie / cinematic beauty / storytelling) described separately.",
+    "- Do NOT write in French; always output English spoken lines.",
   ].join("\n");
 
   const userPrompt = [
-    "Fill this template for a UGC video.",
+    "Create a single UGC video prompt/script (filledPrompt) in ENGLISH, inspired by the style examples and using the context below.",
     "",
-    "Template:",
-    template,
+    "Template style (high-level):",
+    templateStyle,
     "",
-    "Context JSON:",
+    "Context JSON (product, analysis, quiz with angles/benefits/problems/persona/offers, etc.):",
     JSON.stringify(
       {
         url: body.url,
@@ -158,26 +83,6 @@ No subtitles. No music. Natural ambience only.`;
   ].join("\n");
 
   try {
-    const cacheKey = makeCacheKey({
-      v: 1,
-      url: body.url,
-      productName: body.productName ?? null,
-      templateId: body.templateId,
-      quiz: body.quiz,
-      analysis: body.analysis,
-    });
-    try {
-      const { data: hit } = await supabase
-        .from("gpt_cache")
-        .select("output")
-        .eq("kind", "video_template")
-        .eq("cache_key", cacheKey)
-        .maybeSingle();
-      if (hit?.output) return NextResponse.json({ data: hit.output, cached: true });
-    } catch {
-      // ignore cache failures
-    }
-
     const { text } = await openaiResponsesText({ developer, user: userPrompt });
 
     let parsed: any;
@@ -189,18 +94,8 @@ No subtitles. No music. Natural ambience only.`;
 
     const data = {
       filledPrompt: String(parsed?.filledPrompt ?? ""),
-      filledFields: parsed?.filledFields ?? {},
       recommendedTemplateReason: String(parsed?.recommendedTemplateReason ?? ""),
     };
-
-    try {
-      await supabase
-        .from("gpt_cache")
-        .insert({ user_id: authUser.id, kind: "video_template", cache_key: cacheKey, output: data })
-        .throwOnError();
-    } catch {
-      // ignore cache insert failures
-    }
 
     return NextResponse.json({ data });
   } catch (err) {
