@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { CheckCircle2, Circle, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -114,6 +114,8 @@ function withAudioHint(prompt: string) {
 
 export default function AppBrandWizard() {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   const [step, setStep] = useState<WizardStep>("url");
 
@@ -401,9 +403,11 @@ export default function AppBrandWizard() {
   }
 
   useEffect(() => {
+    const runIdFromUrl = searchParams.get("project");
     const savedRunId = typeof localStorage !== "undefined" ? localStorage.getItem(UGC_CURRENT_RUN_KEY) : null;
-    if (savedRunId?.trim()) {
-      void loadRun(savedRunId.trim());
+    const initialRunId = (runIdFromUrl && runIdFromUrl.trim()) || (savedRunId && savedRunId.trim()) || null;
+    if (initialRunId) {
+      void loadRun(initialRunId);
     }
     void refreshMeAndRuns();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -413,6 +417,17 @@ export default function AppBrandWizard() {
     if (runId) localStorage.setItem(UGC_CURRENT_RUN_KEY, runId);
     else if (typeof localStorage !== "undefined") localStorage.removeItem(UGC_CURRENT_RUN_KEY);
   }, [runId]);
+
+  useEffect(() => {
+    const current = searchParams.get("project");
+    if (runId && current !== runId) {
+      router.replace(`${pathname}?project=${encodeURIComponent(runId)}`);
+      return;
+    }
+    if (!runId && current) {
+      router.replace(pathname);
+    }
+  }, [runId, pathname, router, searchParams]);
 
   async function onExtract() {
     const url = storeUrl.trim();
@@ -1007,10 +1022,11 @@ export default function AppBrandWizard() {
 
         <Separator className="my-6" />
 
-        <div className="grid gap-6 md:grid-cols-[260px_1fr]">
-          <Card className="shadow-sm h-fit">
+        <div className="grid gap-6 md:grid-cols-[300px_1fr] xl:grid-cols-[320px_1fr]">
+          <aside className="space-y-4">
+            <Card className="shadow-sm h-fit">
             <CardHeader>
-              <CardTitle className="text-base">Historique</CardTitle>
+              <CardTitle className="text-base">Menu</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
               <div className="rounded-md border bg-background/30 p-3">
@@ -1225,6 +1241,8 @@ export default function AppBrandWizard() {
               </div>
             </CardContent>
           </Card>
+
+          </aside>
 
           <div className="space-y-6">
             <div className="flex flex-wrap gap-2">
