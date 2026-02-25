@@ -175,6 +175,7 @@ export default function AppBrandWizard() {
 
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const packshotFileInputRef = useRef<HTMLInputElement>(null);
+  const [sidebarTab, setSidebarTab] = useState<"projects" | "settings">("projects");
 
   const currentProductName = useMemo(() => {
     const fromAnalysis = safeString(analysis?.step1_rawSheet ?? "");
@@ -236,6 +237,61 @@ export default function AppBrandWizard() {
       (r) => r.id !== runId && typeof r.store_url === "string" && normalizeUrl(r.store_url) === norm,
     );
   }, [runId, storeUrl, savedRuns]);
+
+  function resetForNewProject() {
+    setStep("url");
+    setRunId(null);
+    if (typeof localStorage !== "undefined") localStorage.removeItem(UGC_CURRENT_RUN_KEY);
+    setStoreUrl("");
+    setExtracted(null);
+    setAnalysis(null);
+    setResearchNotes([]);
+    setQuiz({
+      aboutProduct: "",
+      problems: "",
+      promises: "",
+      persona: "",
+      angles: "",
+      offers: "",
+      videoDurationPreference: "15s",
+    });
+    setSelectedProductImageUrls([]);
+    setNanoModel("nano");
+    setImagePrompt("");
+    setNegativePrompt("");
+    setImageGen({ kind: "idle" });
+    setSelectedImageUrl(null);
+    setSelectedTemplate("template1");
+    setVideoPrompt("");
+    setIsBuildingVideoPrompt(false);
+    setVideoGen({ kind: "idle" });
+    setLightboxUrl(null);
+  }
+
+  async function onManualSaveProject() {
+    const url = storeUrl.trim();
+    if (!url) {
+      toast.error("Colle l’URL d’un store / page produit avant de sauvegarder.");
+      return;
+    }
+    await saveRun({
+      storeUrl: url,
+      title: extracted?.title ?? null,
+      extracted,
+      analysis,
+      quiz,
+      packshotUrls,
+      imagePrompt,
+      negativePrompt,
+      generatedImageUrls: imageGen.kind === "success" ? imageGen.urls : undefined,
+      selectedImageUrl,
+      videoTemplateId: selectedTemplate,
+      videoPrompt,
+      videoUrl: videoGen.kind === "success" ? videoGen.url : null,
+    });
+    void refreshMeAndRuns();
+    toast.success("Projet sauvegardé");
+  }
 
   async function refreshMeAndRuns() {
     setIsLoadingRuns(true);
@@ -958,89 +1014,141 @@ export default function AppBrandWizard() {
             </CardHeader>
             <CardContent className="space-y-2">
               <div className="rounded-md border bg-background/30 p-3">
-                <div className="flex items-center justify-between">
-                  <div className="text-sm font-medium">Mes projets</div>
-                  <div className="text-xs text-muted-foreground">{projects.length}</div>
-                </div>
-                <Button variant="ghost" size="sm" className="mt-2 w-full" onClick={refreshMeAndRuns} disabled={isLoadingRuns}>
-                  {isLoadingRuns ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                  Refresh
-                </Button>
-                {projects.length === 0 ? (
-                  <div className="mt-2 text-xs text-muted-foreground">
-                    Aucun projet. Colle une URL et lance l’extraction pour en créer un.
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex gap-1 text-xs">
+                    <Button
+                      type="button"
+                      size="xs"
+                      variant={sidebarTab === "projects" ? "default" : "secondary"}
+                      onClick={() => setSidebarTab("projects")}
+                    >
+                      Projects
+                    </Button>
+                    <Button
+                      type="button"
+                      size="xs"
+                      variant={sidebarTab === "settings" ? "default" : "secondary"}
+                      onClick={() => setSidebarTab("settings")}
+                    >
+                      Settings
+                    </Button>
                   </div>
+                  <div className="flex gap-1">
+                    <Button type="button" size="xs" variant="secondary" onClick={resetForNewProject}>
+                      New
+                    </Button>
+                    <Button type="button" size="xs" onClick={onManualSaveProject}>
+                      Save
+                    </Button>
+                  </div>
+                </div>
+
+                {sidebarTab === "projects" ? (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm font-medium">Mes projets</div>
+                      <div className="text-xs text-muted-foreground">{projects.length}</div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="mt-2 w-full"
+                      onClick={refreshMeAndRuns}
+                      disabled={isLoadingRuns}
+                    >
+                      {isLoadingRuns ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                      Refresh
+                    </Button>
+                    {projects.length === 0 ? (
+                      <div className="mt-2 text-xs text-muted-foreground">
+                        Aucun projet. Colle une URL et lance l’extraction pour en créer un.
+                      </div>
+                    ) : (
+                      <div className="mt-2 space-y-2">
+                        {projects.slice(0, 10).map((proj) => {
+                          const latestRun = proj.runs[0];
+                          const isActive =
+                            runId === latestRun.id ||
+                            (storeUrl.trim() && normalizeUrl(storeUrl) === proj.normalizedUrl);
+                          return (
+                            <button
+                              key={proj.normalizedUrl}
+                              onClick={() => loadRun(latestRun.id)}
+                              type="button"
+                              className={`w-full rounded-md border px-2 py-2 text-left cursor-pointer hover:bg-muted/40 ${
+                                isActive ? "bg-muted/30" : ""
+                              }`}
+                              title={`Ouvrir le projet (${proj.runs.length} génération(s))`}
+                            >
+                              <div className="text-sm font-medium truncate">
+                                {proj.title ? proj.title.slice(0, 45) : proj.storeUrl.slice(0, 45)}
+                                {(proj.title && proj.title.length > 45) || proj.storeUrl.length > 45 ? "…" : ""}
+                              </div>
+                              <div className="mt-1 text-xs text-muted-foreground">
+                                {proj.runs.length} run{proj.runs.length > 1 ? "s" : ""} ·{" "}
+                                {latestRun.selected_image_url ? "img" : "—"} ·{" "}
+                                {latestRun.video_url ? "vidéo" : "—"}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {otherRunsForCurrentProduct.length > 0 ? (
+                      <div className="mt-3 rounded-md border bg-background/30 p-3">
+                        <div className="text-sm font-medium">Anciennes générations (ce produit)</div>
+                        <div className="mt-2 space-y-2">
+                          {otherRunsForCurrentProduct.slice(0, 5).map((r) => {
+                            const thumb =
+                              r.selected_image_url ||
+                              (Array.isArray(r.generated_image_urls) && r.generated_image_urls[0]) ||
+                              null;
+                            return (
+                              <button
+                                key={r.id}
+                                onClick={() => loadRun(r.id)}
+                                type="button"
+                                className="w-full rounded-md border p-2 text-left cursor-pointer hover:bg-muted/40 flex items-center gap-2"
+                                title="Charger cette génération"
+                              >
+                                {thumb ? (
+                                  <img
+                                    src={thumb}
+                                    alt=""
+                                    className="h-10 w-10 shrink-0 rounded object-cover"
+                                  />
+                                ) : (
+                                  <div className="h-10 w-10 shrink-0 rounded bg-muted flex items-center justify-center text-xs">
+                                    —
+                                  </div>
+                                )}
+                                <div className="min-w-0 flex-1">
+                                  <div className="text-xs text-muted-foreground">
+                                    {new Date(r.created_at).toLocaleString()}
+                                  </div>
+                                  <div className="text-xs">
+                                    {r.video_url ? "Vidéo" : r.selected_image_url ? "Image" : "Brouillon"}
+                                  </div>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : null}
+                  </>
                 ) : (
-                  <div className="mt-2 space-y-2">
-                    {projects.slice(0, 10).map((proj) => {
-                      const latestRun = proj.runs[0];
-                      const isActive =
-                        runId === latestRun.id ||
-                        (storeUrl.trim() && normalizeUrl(storeUrl) === proj.normalizedUrl);
-                      return (
-                        <button
-                          key={proj.normalizedUrl}
-                          onClick={() => loadRun(latestRun.id)}
-                          type="button"
-                          className={`w-full rounded-md border px-2 py-2 text-left cursor-pointer hover:bg-muted/40 ${
-                            isActive ? "bg-muted/30" : ""
-                          }`}
-                          title={`Ouvrir le projet (${proj.runs.length} génération(s))`}
-                        >
-                          <div className="text-sm font-medium truncate">
-                            {proj.title ? proj.title.slice(0, 45) : proj.storeUrl.slice(0, 45)}
-                            {(proj.title && proj.title.length > 45) || proj.storeUrl.length > 45 ? "…" : ""}
-                          </div>
-                          <div className="mt-1 text-xs text-muted-foreground">
-                            {proj.runs.length} run{proj.runs.length > 1 ? "s" : ""} · {latestRun.selected_image_url ? "img" : "—"} · {latestRun.video_url ? "vidéo" : "—"}
-                          </div>
-                        </button>
-                      );
-                    })}
+                  <div className="text-xs text-muted-foreground space-y-2 mt-2">
+                    <div className="font-medium text-sm">Settings (projet)</div>
+                    <p>
+                      Ici tu pourras plus tard configurer des options globales (durée par défaut, modèle, langues,
+                      etc.). Pour l’instant, utilise le bouton <span className="font-medium">Save</span> pour figer
+                      l’état actuel du projet et <span className="font-medium">New</span> pour repartir de zéro.
+                    </p>
                   </div>
                 )}
               </div>
-
-              {otherRunsForCurrentProduct.length > 0 ? (
-                <div className="rounded-md border bg-background/30 p-3">
-                  <div className="text-sm font-medium">Anciennes générations (ce produit)</div>
-                  <div className="mt-2 space-y-2">
-                    {otherRunsForCurrentProduct.slice(0, 5).map((r) => {
-                      const thumb =
-                        r.selected_image_url ||
-                        (Array.isArray(r.generated_image_urls) && r.generated_image_urls[0]) ||
-                        null;
-                      return (
-                        <button
-                          key={r.id}
-                          onClick={() => loadRun(r.id)}
-                          type="button"
-                          className="w-full rounded-md border p-2 text-left cursor-pointer hover:bg-muted/40 flex items-center gap-2"
-                          title="Charger cette génération"
-                        >
-                          {thumb ? (
-                            <img
-                              src={thumb}
-                              alt=""
-                              className="h-10 w-10 shrink-0 rounded object-cover"
-                            />
-                          ) : (
-                            <div className="h-10 w-10 shrink-0 rounded bg-muted flex items-center justify-center text-xs">—</div>
-                          )}
-                          <div className="min-w-0 flex-1">
-                            <div className="text-xs text-muted-foreground">
-                              {new Date(r.created_at).toLocaleString()}
-                            </div>
-                            <div className="text-xs">
-                              {r.video_url ? "Vidéo" : r.selected_image_url ? "Image" : "Brouillon"}
-                            </div>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ) : null}
 
               {(
                 [
