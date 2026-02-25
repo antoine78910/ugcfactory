@@ -173,6 +173,9 @@ export default function AppBrandWizard() {
   const [isBuildingVideoPrompt, setIsBuildingVideoPrompt] = useState(false);
   const [videoGen, setVideoGen] = useState<VideoGenState>({ kind: "idle" });
 
+  const [klingQuality, setKlingQuality] = useState<"std" | "pro">("std");
+  const [klingSound, setKlingSound] = useState(true);
+
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const packshotFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -848,14 +851,14 @@ export default function AppBrandWizard() {
 
     setVideoGen({ kind: "submitting" });
     try {
-      // Force Kling 3.0 Standard per user request. Kling supports up to 15s.
+      // Kling 3.0 supports up to 15s. We normalize quiz preference to max 15s.
       const duration =
         quiz.videoDurationPreference === "15s"
           ? 15
           : quiz.videoDurationPreference === "20s"
             ? 15
             : 15;
-      const promptWithAudio = withAudioHint(videoPrompt);
+      const promptWithAudio = klingSound ? withAudioHint(videoPrompt) : videoPrompt;
       const res = await fetch("/api/kling/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -864,8 +867,8 @@ export default function AppBrandWizard() {
           prompt: promptWithAudio,
           imageUrl: selectedImageUrl,
           duration,
-          mode: "std",
-          sound: true,
+          mode: klingQuality,
+          sound: klingSound,
         }),
       });
       const json = (await res.json()) as { taskId?: string; error?: string };
@@ -1550,6 +1553,35 @@ export default function AppBrandWizard() {
                     Provider: <span className="font-medium">Kling 3.0 Standard</span> (KIE Market), aspect 9:16. (15s
                     max.)
                   </p>
+
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="text-muted-foreground">Qualité :</span>
+                <Button
+                  type="button"
+                  variant={klingQuality === "std" ? "default" : "secondary"}
+                  size="xs"
+                  onClick={() => setKlingQuality("std")}
+                >
+                  720p Std (moins de crédits)
+                </Button>
+                <Button
+                  type="button"
+                  variant={klingQuality === "pro" ? "default" : "secondary"}
+                  size="xs"
+                  onClick={() => setKlingQuality("pro")}
+                >
+                  1080p Pro (plus de crédits)
+                </Button>
+                <span className="ml-2 text-muted-foreground">Audio :</span>
+                <Button
+                  type="button"
+                  variant={klingSound ? "default" : "secondary"}
+                  size="xs"
+                  onClick={() => setKlingSound((v) => !v)}
+                >
+                  {klingSound ? "ON (voix native)" : "OFF (silencieux)"}
+                </Button>
+              </div>
 
                   <div className="space-y-2">
                     <Label className="text-xs">Template</Label>
