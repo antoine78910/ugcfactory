@@ -23,6 +23,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Missing required fields." }, { status: 400 });
   }
 
+  // Kling is currently fixed to 15s in the generation step.
+  // We still read quiz preference so GPT can keep spoken lines short enough.
+  const preferredDuration = String(body.quiz?.videoDurationPreference ?? "15s");
+  const targetDurationSec =
+    preferredDuration === "20s" || preferredDuration === "30s" ? 15 : 15;
+
   // Template style = global style / angle, not placeholder-based anymore.
   const templateStyle = (() => {
     switch (body.templateId) {
@@ -63,6 +69,13 @@ export async function POST(req: Request) {
     "- Use the strongest angles/benefits/persona from the context to decide what is said and how it’s shown.",
     "- Match the chosen template style (POV selfie / cinematic beauty / storytelling) described separately.",
     "- Do NOT write in French; always output English spoken lines.",
+    "",
+    "Timing constraint (very important):",
+    "- The spoken dialogue MUST realistically fit inside the target video duration.",
+    "- Keep lines short and easy to say at natural speed.",
+    "- For a 15s video: aim around 25–40 spoken words total, max 2–3 short spoken lines.",
+    "- Prioritize one strong hook + one key benefit + one short CTA.",
+    "- Avoid long technical explanations that cannot be finished in time.",
   ].join("\n");
 
   const userPrompt = [
@@ -70,6 +83,9 @@ export async function POST(req: Request) {
     "",
     "Template style (high-level):",
     templateStyle,
+    "",
+    `Target video duration: ${targetDurationSec}s`,
+    "Generate a script that can be fully spoken within this duration at normal pace.",
     "",
     "Context JSON (product, analysis, quiz with angles/benefits/problems/persona/offers, etc.):",
     JSON.stringify(
