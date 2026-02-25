@@ -1150,6 +1150,14 @@ export default function AppBrandWizard() {
                 )}
               </div>
 
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-sm h-fit">
+            <CardHeader>
+              <CardTitle className="text-base">Navigation étapes</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
               {(
                 [
                   {
