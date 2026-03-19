@@ -147,6 +147,49 @@ function RevealSlide({
 
 export default function LandingPage() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const carouselTrackRef = useRef<HTMLDivElement>(null);
+  const carouselSetRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const trackEl = carouselTrackRef.current;
+    const setEl = carouselSetRef.current;
+    if (!trackEl || !setEl) return;
+
+    let rafId = 0;
+    let lastTs = performance.now();
+    let setWidth = 0;
+    let offset = 0;
+    const speedPxPerSec = 70;
+
+    function measure() {
+      setWidth = setEl!.getBoundingClientRect().width;
+      if (setWidth <= 0) return;
+      // Rightward movement with a seamless wrap point.
+      trackEl!.style.transform = `translate3d(${(-setWidth + offset).toFixed(2)}px, 0, 0)`;
+    }
+
+    function tick(ts: number) {
+      const dt = (ts - lastTs) / 1000;
+      lastTs = ts;
+      if (setWidth > 0) {
+        offset = (offset + speedPxPerSec * dt) % setWidth;
+        trackEl!.style.transform = `translate3d(${(-setWidth + offset).toFixed(2)}px, 0, 0)`;
+      }
+      rafId = requestAnimationFrame(tick);
+    }
+
+    measure();
+    const resizeObserver = new ResizeObserver(measure);
+    resizeObserver.observe(setEl!);
+    window.addEventListener("resize", measure);
+    rafId = requestAnimationFrame(tick);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#050507] text-white selection:bg-violet-500/30">
@@ -330,19 +373,30 @@ export default function LandingPage() {
           <div className="pointer-events-none absolute inset-y-0 left-1/2 z-20 w-14 -translate-x-1/2 bg-gradient-to-r from-transparent via-violet-500/25 to-transparent blur-md" />
 
           <div
-            className="flex animate-marquee-right items-center gap-4 py-2 will-change-transform md:gap-8"
+            ref={carouselTrackRef}
+            className="flex items-center gap-4 py-2 will-change-transform md:gap-8"
             style={{ width: "max-content" }}
           >
-            {[...PAIRED_CAROUSEL_ITEMS, ...PAIRED_CAROUSEL_ITEMS].map(
-              (item, i) => (
+            <div ref={carouselSetRef} className="flex items-center gap-4 md:gap-8">
+              {PAIRED_CAROUSEL_ITEMS.map((item, i) => (
                 <RevealSlide
-                  key={`reveal-${i}`}
+                  key={`reveal-a-${i}`}
                   imageSrc={item.product.src}
                   videoSrc={item.slide.src}
                   imageAlt={item.product.alt}
                 />
-              )
-            )}
+              ))}
+            </div>
+            <div aria-hidden="true" className="flex items-center gap-4 md:gap-8">
+              {PAIRED_CAROUSEL_ITEMS.map((item, i) => (
+                <RevealSlide
+                  key={`reveal-b-${i}`}
+                  imageSrc={item.product.src}
+                  videoSrc={item.slide.src}
+                  imageAlt={item.product.alt}
+                />
+              ))}
+            </div>
           </div>
         </div>
       </section>
