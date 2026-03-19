@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
-import { CheckCircle2, Circle, Loader2, X } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type WizardStep = "url" | "analysis" | "quiz" | "image" | "video";
-type AppSection = "link_to_ad" | "motion_control" | "models";
+type AppSection = "link_to_ad" | "motion_control" | "models" | "projects";
 
 type Extracted = {
   url: string;
@@ -179,7 +179,6 @@ export default function AppBrandWizard() {
 
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const packshotFileInputRef = useRef<HTMLInputElement>(null);
-  const [sidebarTab, setSidebarTab] = useState<"projects" | "settings">("projects");
 
   const currentProductName = useMemo(() => {
     const fromAnalysis = safeString(analysis?.step1_rawSheet ?? "");
@@ -232,15 +231,6 @@ export default function AppBrandWizard() {
     out.sort((a, b) => new Date(b.runs[0].created_at).getTime() - new Date(a.runs[0].created_at).getTime());
     return out;
   }, [savedRuns]);
-
-  // Other runs for the same product (current project) = "anciennes générations"
-  const otherRunsForCurrentProduct = useMemo(() => {
-    if (!runId || !storeUrl.trim()) return [];
-    const norm = normalizeUrl(storeUrl);
-    return savedRuns.filter(
-      (r) => r.id !== runId && typeof r.store_url === "string" && normalizeUrl(r.store_url) === norm,
-    );
-  }, [runId, storeUrl, savedRuns]);
 
   function resetForNewProject() {
     setStep("url");
@@ -1054,268 +1044,18 @@ export default function AppBrandWizard() {
               >
                 Models
               </button>
+              <button
+                type="button"
+                className={`w-full rounded-md px-3 py-2 text-left text-sm transition ${
+                  appSection === "projects"
+                    ? "bg-violet-400 text-black"
+                    : "border border-white/10 bg-white/5 text-white hover:bg-white/10"
+                }`}
+                onClick={() => setAppSection("projects")}
+              >
+                Projects
+              </button>
             </div>
-          </div>
-
-          <div className="space-y-4">
-            <Card className="h-fit border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
-            <CardHeader>
-              <CardTitle className="text-base">Menu</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <div className="rounded-md border border-white/10 bg-[#120d1f]/70 p-3">
-                <div className="mb-3 space-y-2">
-                  <Button
-                    type="button"
-                    className={`w-full justify-start ${
-                      appSection === "link_to_ad"
-                        ? "bg-violet-400 text-black hover:bg-violet-300"
-                        : "border border-white/10 bg-white/5 text-white hover:bg-white/10"
-                    }`}
-                    onClick={() => setAppSection("link_to_ad")}
-                  >
-                    Link to Ad
-                  </Button>
-                  <Button
-                    type="button"
-                    className={`w-full justify-start ${
-                      appSection === "motion_control"
-                        ? "bg-violet-400 text-black hover:bg-violet-300"
-                        : "border border-white/10 bg-white/5 text-white hover:bg-white/10"
-                    }`}
-                    onClick={() => setAppSection("motion_control")}
-                  >
-                    Motion Control
-                  </Button>
-                  <Button
-                    type="button"
-                    className={`w-full justify-start ${
-                      appSection === "models"
-                        ? "bg-violet-400 text-black hover:bg-violet-300"
-                        : "border border-white/10 bg-white/5 text-white hover:bg-white/10"
-                    }`}
-                    onClick={() => setAppSection("models")}
-                  >
-                    Models
-                  </Button>
-                </div>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex gap-1 text-xs">
-                    <Button
-                      type="button"
-                      size="xs"
-                      variant={sidebarTab === "projects" ? "default" : "secondary"}
-                      onClick={() => setSidebarTab("projects")}
-                    >
-                      Projects
-                    </Button>
-                    <Button
-                      type="button"
-                      size="xs"
-                      variant={sidebarTab === "settings" ? "default" : "secondary"}
-                      onClick={() => setSidebarTab("settings")}
-                    >
-                      Settings
-                    </Button>
-                  </div>
-                  <div className="flex gap-1">
-                    <Button type="button" size="xs" variant="secondary" onClick={resetForNewProject}>
-                      New
-                    </Button>
-                    <Button type="button" size="xs" onClick={onManualSaveProject}>
-                      Save
-                    </Button>
-                  </div>
-                </div>
-
-                {sidebarTab === "projects" ? (
-                  <>
-                    <div className="flex items-center justify-between">
-                      <div className="text-sm font-medium">Mes projets</div>
-                      <div className="text-xs text-muted-foreground">{projects.length}</div>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="mt-2 w-full"
-                      onClick={refreshMeAndRuns}
-                      disabled={isLoadingRuns}
-                    >
-                      {isLoadingRuns ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                      Refresh
-                    </Button>
-                    {projects.length === 0 ? (
-                      <div className="mt-2 text-xs text-muted-foreground">
-                        Aucun projet. Colle une URL et lance l’extraction pour en créer un.
-                      </div>
-                    ) : (
-                      <div className="mt-2 space-y-2">
-                        {projects.slice(0, 10).map((proj) => {
-                          const latestRun = proj.runs[0];
-                          const isActive =
-                            runId === latestRun.id ||
-                            (storeUrl.trim() && normalizeUrl(storeUrl) === proj.normalizedUrl);
-                          return (
-                            <button
-                              key={proj.normalizedUrl}
-                              onClick={() => loadRun(latestRun.id)}
-                              type="button"
-                              className={`w-full rounded-md border px-2 py-2 text-left cursor-pointer hover:bg-muted/40 ${
-                                isActive ? "bg-muted/30" : ""
-                              }`}
-                              title={`Ouvrir le projet (${proj.runs.length} génération(s))`}
-                            >
-                              <div className="text-sm font-medium truncate">
-                                {proj.title ? proj.title.slice(0, 45) : proj.storeUrl.slice(0, 45)}
-                                {(proj.title && proj.title.length > 45) || proj.storeUrl.length > 45 ? "…" : ""}
-                              </div>
-                              <div className="mt-1 text-xs text-muted-foreground">
-                                {proj.runs.length} run{proj.runs.length > 1 ? "s" : ""} ·{" "}
-                                {latestRun.selected_image_url ? "img" : "—"} ·{" "}
-                                {latestRun.video_url ? "vidéo" : "—"}
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {otherRunsForCurrentProduct.length > 0 ? (
-                      <div className="mt-3 rounded-md border bg-background/30 p-3">
-                        <div className="text-sm font-medium">Anciennes générations (ce produit)</div>
-                        <div className="mt-2 space-y-2">
-                          {otherRunsForCurrentProduct.slice(0, 5).map((r) => {
-                            const thumb =
-                              r.selected_image_url ||
-                              (Array.isArray(r.generated_image_urls) && r.generated_image_urls[0]) ||
-                              null;
-                            return (
-                              <button
-                                key={r.id}
-                                onClick={() => loadRun(r.id)}
-                                type="button"
-                                className="w-full rounded-md border p-2 text-left cursor-pointer hover:bg-muted/40 flex items-center gap-2"
-                                title="Charger cette génération"
-                              >
-                                {thumb ? (
-                                  <img
-                                    src={thumb}
-                                    alt=""
-                                    className="h-10 w-10 shrink-0 rounded object-cover"
-                                  />
-                                ) : (
-                                  <div className="h-10 w-10 shrink-0 rounded bg-muted flex items-center justify-center text-xs">
-                                    —
-                                  </div>
-                                )}
-                                <div className="min-w-0 flex-1">
-                                  <div className="text-xs text-muted-foreground">
-                                    {new Date(r.created_at).toLocaleString()}
-                                  </div>
-                                  <div className="text-xs">
-                                    {r.video_url ? "Vidéo" : r.selected_image_url ? "Image" : "Brouillon"}
-                                  </div>
-                                </div>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ) : null}
-                  </>
-                ) : (
-                  <div className="text-xs text-muted-foreground space-y-2 mt-2">
-                    <div className="font-medium text-sm">Settings (projet)</div>
-                    <p>
-                      Support:{" "}
-                      <a href="mailto:app@youry.io" className="font-medium text-foreground underline underline-offset-2">
-                        app@youry.io
-                      </a>
-                    </p>
-                    <p>
-                      Ici tu pourras plus tard configurer des options globales (durée par défaut, modèle, langues,
-                      etc.). Pour l’instant, utilise le bouton <span className="font-medium">Save</span> pour figer
-                      l’état actuel du projet et <span className="font-medium">New</span> pour repartir de zéro.
-                    </p>
-                  </div>
-                )}
-              </div>
-
-            </CardContent>
-          </Card>
-
-          <Card className="h-fit border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
-            <CardHeader>
-              <CardTitle className="text-base">Navigation étapes</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {(
-                [
-                  {
-                    id: "url",
-                    label: "1) URL & extraction",
-                    done: Boolean(extracted),
-                    note: extracted?.title ?? (storeUrl ? storeUrl : ""),
-                  },
-                  {
-                    id: "analysis",
-                    label: "2) Analyse GPT (1→9)",
-                    done: Boolean(analysis),
-                    note: analysis ? safeString(analysis.step2_positioning, "").slice(0, 90) : "",
-                  },
-                  {
-                    id: "quiz",
-                    label: "3) Mini-quiz",
-                    done: Boolean(analysis) && (quiz.persona.trim().length > 0 || quiz.aboutProduct.trim().length > 0),
-                    note: quiz.persona ? quiz.persona.slice(0, 90) : "",
-                  },
-                  {
-                    id: "image",
-                    label: "4) Prompt → image (NanoBanana)",
-                    done: imageGen.kind === "success",
-                    note: imagePrompt ? imagePrompt.slice(0, 90) : "",
-                  },
-                  {
-                    id: "video",
-                    label: "5) Template → vidéo (Kling 3.0 Std)",
-                    done: videoGen.kind === "success",
-                    note: videoPrompt ? videoPrompt.slice(0, 90) : "",
-                  },
-                ] as Array<{
-                  id: WizardStep;
-                  label: string;
-                  done: boolean;
-                  note: string;
-                }>
-              ).map((s) => (
-                <button
-                  key={s.id}
-                  onClick={() => setStep(s.id)}
-                  type="button"
-                  className={`w-full rounded-md border px-3 py-2 text-left transition-colors cursor-pointer hover:bg-muted/40 ${
-                    step === s.id ? "bg-muted/30" : ""
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="text-sm font-medium">{s.label}</div>
-                    {s.done ? (
-                      <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                    ) : (
-                      <Circle className="h-4 w-4 text-muted-foreground/60" />
-                    )}
-                  </div>
-                  {s.note ? (
-                    <div className="mt-1 text-xs text-muted-foreground">
-                      {s.note.length > 120 ? `${s.note.slice(0, 120)}…` : s.note}
-                    </div>
-                  ) : null}
-                </button>
-              ))}
-              <div className="pt-2 text-xs text-muted-foreground">
-                Astuce: tu peux cliquer sur une étape pour revenir en arrière.
-              </div>
-            </CardContent>
-          </Card>
           </div>
         </aside>
 
@@ -1342,6 +1082,88 @@ export default function AppBrandWizard() {
           </header>
 
           <div className="space-y-6">
+            {appSection === "projects" ? (
+              <Card className="border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
+                <CardHeader>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <CardTitle className="text-base">Projects</CardTitle>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="border border-white/10 bg-white/5 text-white hover:bg-white/10"
+                        onClick={refreshMeAndRuns}
+                        disabled={isLoadingRuns}
+                      >
+                        {isLoadingRuns ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                        Refresh
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="border border-white/10 bg-white/5 text-white hover:bg-white/10"
+                        onClick={resetForNewProject}
+                      >
+                        New
+                      </Button>
+                      <Button type="button" size="sm" onClick={onManualSaveProject}>
+                        Save
+                      </Button>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {projects.length === 0 ? (
+                    <div className="rounded-md border border-white/10 bg-white/5 p-4 text-sm text-white/65">
+                      Aucun projet pour l&apos;instant. Lance un run pour créer ton premier projet.
+                    </div>
+                  ) : (
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                      {projects.map((proj) => {
+                        const latestRun = proj.runs[0];
+                        const isActive =
+                          runId === latestRun.id ||
+                          (storeUrl.trim() && normalizeUrl(storeUrl) === proj.normalizedUrl);
+                        const thumb =
+                          latestRun.selected_image_url ||
+                          (Array.isArray(latestRun.generated_image_urls) ? latestRun.generated_image_urls[0] : null) ||
+                          null;
+                        return (
+                          <button
+                            key={proj.normalizedUrl}
+                            type="button"
+                            onClick={() => loadRun(latestRun.id)}
+                            className={`overflow-hidden rounded-xl border text-left transition ${
+                              isActive
+                                ? "border-violet-400/70 bg-violet-500/10"
+                                : "border-white/10 bg-white/5 hover:bg-white/10"
+                            }`}
+                          >
+                            {thumb ? (
+                              <img src={thumb} alt="" className="h-32 w-full object-cover" />
+                            ) : (
+                              <div className="flex h-32 w-full items-center justify-center bg-[#100d17] text-white/35">
+                                No preview
+                              </div>
+                            )}
+                            <div className="p-3">
+                              <div className="truncate text-sm font-medium">
+                                {proj.title ? proj.title : proj.storeUrl}
+                              </div>
+                              <div className="mt-1 text-xs text-white/55">
+                                {proj.runs.length} run{proj.runs.length > 1 ? "s" : ""} ·{" "}
+                                {latestRun.video_url ? "video" : latestRun.selected_image_url ? "image" : "draft"}
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ) : null}
+
             {appSection === "motion_control" ? (
               <Card className="border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
                 <CardHeader>
