@@ -134,7 +134,13 @@ export default function LandingPage() {
           </p>
 
           <div className="mx-auto mt-10 max-w-xl">
-            <div className="relative flex items-center gap-2 overflow-hidden rounded-full bg-white/[0.04] px-2 py-1.5 ring-1 ring-violet-500/30 shadow-[0_0_50px_rgba(139,92,246,0.12)]">
+            <p className="mb-3 text-sm text-white/55">
+              We analyze your site like a top-tier media buyer, and turn it into
+              high-converting ads 👇
+            </p>
+            <div className="relative">
+              <div className="pointer-events-none absolute -inset-6 rounded-full bg-violet-600/20 blur-2xl" />
+              <div className="relative flex items-center gap-2 overflow-hidden rounded-full bg-white/[0.05] px-2 py-1.5 ring-1 ring-violet-500/40 shadow-[0_0_70px_rgba(139,92,246,0.22)]">
               <Input
                 type="url"
                 placeholder="https://your-product-page.com"
@@ -149,6 +155,7 @@ export default function LandingPage() {
                   <Sparkles className="ml-1.5 h-4 w-4" />
                 </Link>
               </Button>
+            </div>
             </div>
           </div>
         </div>
