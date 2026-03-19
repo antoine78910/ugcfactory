@@ -1028,81 +1028,61 @@ export default function AppBrandWizard() {
             <span className="text-sm text-muted-foreground truncate max-w-[220px] sm:max-w-[320px]" title={meEmail || undefined}>
               {meEmail || "—"}
             </span>
-            <Button variant="secondary" size="sm" onClick={onSignOut}>
+            <Button
+              size="sm"
+              onClick={onSignOut}
+              className="border border-white/10 bg-white/5 text-white hover:bg-white/10"
+            >
               Logout
             </Button>
           </div>
         </header>
 
-        <Separator className="my-6" />
+        <Separator className="my-6 bg-violet-400/20" />
 
-        <div className="mb-6 rounded-xl border bg-background/40 p-2">
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-            <Button
-              type="button"
-              variant={appSection === "link_to_ad" ? "default" : "secondary"}
-              onClick={() => setAppSection("link_to_ad")}
-            >
-              Link to Ad
-            </Button>
-            <Button
-              type="button"
-              variant={appSection === "motion_control" ? "default" : "secondary"}
-              onClick={() => setAppSection("motion_control")}
-            >
-              Motion Control
-            </Button>
-            <Button
-              type="button"
-              variant={appSection === "models" ? "default" : "secondary"}
-              onClick={() => setAppSection("models")}
-            >
-              Models
-            </Button>
-          </div>
-        </div>
-
-        {appSection === "motion_control" ? (
-          <Card className="shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-base">Motion Control</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm text-muted-foreground">
-              <p>
-                This section is reserved for advanced motion choreography (camera path, gesture timing, and shot
-                transitions).
-              </p>
-              <p>Next step: connect this panel to your template engine and shot-level controls.</p>
-            </CardContent>
-          </Card>
-        ) : null}
-
-        {appSection === "models" ? (
-          <Card className="shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-base">Models</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm text-muted-foreground">
-              <p>Model access hub for generation engines:</p>
-              <ul className="list-disc pl-5 space-y-1">
-                <li>Kling 3.0</li>
-                <li>Veo 3</li>
-                <li>Sora</li>
-                <li>Sora 2</li>
-              </ul>
-            </CardContent>
-          </Card>
-        ) : null}
-
-        {appSection === "link_to_ad" ? (
         <div className="grid gap-6 md:grid-cols-[300px_1fr] xl:grid-cols-[320px_1fr]">
           <aside className="space-y-4">
-            <Card className="shadow-sm h-fit">
+            <Card className="h-fit border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
             <CardHeader>
               <CardTitle className="text-base">Menu</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              <div className="rounded-md border bg-background/30 p-3">
+              <div className="rounded-md border border-white/10 bg-[#120d1f]/70 p-3">
+                <div className="mb-3 space-y-2">
+                  <Button
+                    type="button"
+                    className={`w-full justify-start ${
+                      appSection === "link_to_ad"
+                        ? "bg-violet-400 text-black hover:bg-violet-300"
+                        : "border border-white/10 bg-white/5 text-white hover:bg-white/10"
+                    }`}
+                    onClick={() => setAppSection("link_to_ad")}
+                  >
+                    Link to Ad
+                  </Button>
+                  <Button
+                    type="button"
+                    className={`w-full justify-start ${
+                      appSection === "motion_control"
+                        ? "bg-violet-400 text-black hover:bg-violet-300"
+                        : "border border-white/10 bg-white/5 text-white hover:bg-white/10"
+                    }`}
+                    onClick={() => setAppSection("motion_control")}
+                  >
+                    Motion Control
+                  </Button>
+                  <Button
+                    type="button"
+                    className={`w-full justify-start ${
+                      appSection === "models"
+                        ? "bg-violet-400 text-black hover:bg-violet-300"
+                        : "border border-white/10 bg-white/5 text-white hover:bg-white/10"
+                    }`}
+                    onClick={() => setAppSection("models")}
+                  >
+                    Models
+                  </Button>
+                </div>
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex gap-1 text-xs">
                     <Button
@@ -1248,7 +1228,7 @@ export default function AppBrandWizard() {
             </CardContent>
           </Card>
 
-          <Card className="shadow-sm h-fit">
+            <Card className="h-fit border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
             <CardHeader>
               <CardTitle className="text-base">Navigation étapes</CardTitle>
             </CardHeader>
@@ -1324,6 +1304,37 @@ export default function AppBrandWizard() {
           </aside>
 
           <div className="space-y-6">
+            {appSection === "motion_control" ? (
+              <Card className="border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
+                <CardHeader>
+                  <CardTitle className="text-base">Motion Control</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2 text-sm text-white/70">
+                  <p>
+                    This section is reserved for advanced motion choreography (camera path, gesture timing, and shot
+                    transitions).
+                  </p>
+                  <p>Next step: connect this panel to your template engine and shot-level controls.</p>
+                </CardContent>
+              </Card>
+            ) : null}
+
+            {appSection === "models" ? (
+              <Card className="border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
+                <CardHeader>
+                  <CardTitle className="text-base">Models</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2 text-sm text-white/70">
+                  <p>Model access hub for generation engines:</p>
+                  <ul className="list-disc pl-5 space-y-1">
+                    <li>Kling 3.0</li>
+                    <li>Veo 3</li>
+                    <li>Sora</li>
+                    <li>Sora 2</li>
+                  </ul>
+                </CardContent>
+              </Card>
+            ) : null}
             <div className="flex flex-wrap gap-2">
               <div className="text-xs text-muted-foreground">
                 step: <span className="font-medium text-foreground">{step}</span>
@@ -1340,8 +1351,8 @@ export default function AppBrandWizard() {
               ) : null}
             </div>
 
-            {step === "url" && (
-              <Card className="shadow-sm">
+            {appSection === "link_to_ad" && step === "url" && (
+              <Card className="border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
                 <CardHeader>
                   <CardTitle className="text-base">1) URL & extraction</CardTitle>
                 </CardHeader>
@@ -1394,8 +1405,8 @@ export default function AppBrandWizard() {
               </Card>
             )}
 
-            {step === "analysis" && (
-              <Card className="shadow-sm">
+            {appSection === "link_to_ad" && step === "analysis" && (
+              <Card className="border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
                 <CardHeader>
                   <CardTitle className="text-base">2) Analyse GPT (1→9)</CardTitle>
                 </CardHeader>
@@ -1453,8 +1464,8 @@ export default function AppBrandWizard() {
               </Card>
             )}
 
-            {step === "quiz" && (
-              <Card className="shadow-sm">
+            {appSection === "link_to_ad" && step === "quiz" && (
+              <Card className="border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
                 <CardHeader>
                   <CardTitle className="text-base">3) Mini-quiz (pré-rempli)</CardTitle>
                 </CardHeader>
@@ -1536,8 +1547,8 @@ export default function AppBrandWizard() {
               </Card>
             )}
 
-            {step === "image" && (
-              <Card className="shadow-sm">
+            {appSection === "link_to_ad" && step === "image" && (
+              <Card className="border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
                 <CardHeader>
                   <CardTitle className="text-base">4) Prompt → image (NanoBanana)</CardTitle>
                 </CardHeader>
@@ -1753,8 +1764,8 @@ export default function AppBrandWizard() {
               </Card>
             )}
 
-            {step === "video" && (
-              <Card className="shadow-sm">
+            {appSection === "link_to_ad" && step === "video" && (
+              <Card className="border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
                 <CardHeader>
                   <CardTitle className="text-base">5) Template → vidéo (Kling 3.0 Standard)</CardTitle>
                 </CardHeader>
@@ -1881,7 +1892,6 @@ export default function AppBrandWizard() {
             )}
           </div>
         </div>
-        ) : null}
       </main>
 
       {lightboxUrl ? (
