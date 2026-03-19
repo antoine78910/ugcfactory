@@ -41,14 +41,14 @@ const PRODUCTS = [
   { src: "/carousel/product-7.png", alt: "Pure Serum" },
 ];
 
-const UGC_SLOTS = [
-  { src: "/carousel/ugc-1.mp4", poster: "/carousel/ugc-1.jpg" },
-  { src: "/carousel/ugc-2.mp4", poster: "/carousel/ugc-2.jpg" },
-  { src: "/carousel/ugc-3.mp4", poster: "/carousel/ugc-3.jpg" },
-  { src: "/carousel/ugc-4.mp4", poster: "/carousel/ugc-4.jpg" },
-  { src: "/carousel/ugc-5.mp4", poster: "/carousel/ugc-5.jpg" },
-  { src: "/carousel/ugc-6.mp4", poster: "/carousel/ugc-6.jpg" },
-  { src: "/carousel/ugc-7.mp4", poster: "/carousel/ugc-7.jpg" },
+const UGC_SLIDES = [
+  { src: "/carousel/slide-1.mp4" },
+  { src: "/carousel/slide-2.mp4" },
+  { src: "/carousel/slide-3.mp4" },
+  { src: "/carousel/slide-4.mp4" },
+  { src: "/carousel/slide-5.mp4" },
+  { src: "/carousel/slide-6.mp4" },
+  { src: "/carousel/slide-7.mp4" },
 ];
 
 const FAQ_ITEMS = [
@@ -202,23 +202,27 @@ export default function LandingPage() {
           </h2>
         </div>
 
-        <div className="space-y-4">
-          {/* Row 1: Products scrolling left */}
+        <div className="space-y-5">
+          {/* Row 1: Products scrolling left — 4 visible at once */}
           <div className="relative overflow-hidden">
-            <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-24 bg-gradient-to-r from-[#050507] to-transparent" />
-            <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-24 bg-gradient-to-l from-[#050507] to-transparent" />
-            <div className="flex animate-marquee-left gap-4" style={{ width: "max-content" }}>
+            <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-32 bg-gradient-to-r from-[#050507] to-transparent" />
+            <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-32 bg-gradient-to-l from-[#050507] to-transparent" />
+            <div
+              className="flex animate-marquee-left gap-5"
+              style={{ width: "max-content" }}
+            >
               {[...PRODUCTS, ...PRODUCTS].map((p, i) => (
                 <div
                   key={i}
-                  className="relative h-72 w-44 shrink-0 overflow-hidden rounded-2xl bg-white shadow-lg sm:h-80 sm:w-52"
+                  className="relative w-[calc(25vw-2rem)] max-w-[320px] min-w-[200px] shrink-0 overflow-hidden rounded-2xl bg-white shadow-xl"
+                  style={{ aspectRatio: "3/4" }}
                 >
                   <Image
                     src={p.src}
                     alt={p.alt}
                     fill
                     className="object-cover"
-                    sizes="220px"
+                    sizes="(max-width:768px) 50vw, 25vw"
                   />
                 </div>
               ))}
@@ -226,30 +230,34 @@ export default function LandingPage() {
           </div>
 
           {/* Electric violet divider */}
-          <div className="relative mx-auto h-2 max-w-3xl">
+          <div className="relative mx-auto h-2.5 max-w-4xl">
             <div className="absolute inset-0 rounded-full bg-gradient-to-r from-transparent via-violet-500 to-transparent" />
             <div className="absolute inset-0 rounded-full bg-gradient-to-r from-transparent via-violet-500 to-transparent blur-lg" />
             <div className="absolute inset-0 rounded-full bg-gradient-to-r from-transparent via-violet-400 to-transparent blur-2xl opacity-60" />
           </div>
 
-          {/* Row 2: UGC videos scrolling right */}
+          {/* Row 2: UGC videos scrolling right — 4 visible at once */}
           <div className="relative overflow-hidden">
-            <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-24 bg-gradient-to-r from-[#050507] to-transparent" />
-            <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-24 bg-gradient-to-l from-[#050507] to-transparent" />
-            <div className="flex animate-marquee-right gap-4" style={{ width: "max-content" }}>
-              {[...UGC_SLOTS, ...UGC_SLOTS].map((u, i) => (
+            <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-32 bg-gradient-to-r from-[#050507] to-transparent" />
+            <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-32 bg-gradient-to-l from-[#050507] to-transparent" />
+            <div
+              className="flex animate-marquee-right gap-5"
+              style={{ width: "max-content" }}
+            >
+              {[...UGC_SLIDES, ...UGC_SLIDES].map((u, i) => (
                 <div
                   key={i}
-                  className="relative flex h-72 w-44 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/[0.06] bg-slate-900/80 sm:h-80 sm:w-52"
+                  className="relative w-[calc(25vw-2rem)] max-w-[320px] min-w-[200px] shrink-0 overflow-hidden rounded-2xl border border-white/[0.08] bg-black shadow-xl"
+                  style={{ aspectRatio: "3/4" }}
                 >
-                  <div className="text-center">
-                    <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-violet-600/15 ring-1 ring-violet-500/20">
-                      <Play className="h-6 w-6 text-violet-400" />
-                    </div>
-                    <p className="mt-3 text-[11px] font-medium text-white/30">
-                      UGC Video
-                    </p>
-                  </div>
+                  <video
+                    src={u.src}
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    className="absolute inset-0 h-full w-full object-cover"
+                  />
                 </div>
               ))}
             </div>
