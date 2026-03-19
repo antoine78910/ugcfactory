@@ -209,64 +209,62 @@ export default function LandingPage() {
           </h2>
         </div>
 
-        <div className="space-y-5">
-          {/* Row 1: Products scrolling left — 4 visible at once */}
-          <div className="relative overflow-hidden">
-            <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-32 bg-gradient-to-r from-[#050507] to-transparent" />
-            <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-32 bg-gradient-to-l from-[#050507] to-transparent" />
-            <div
-              className="flex animate-marquee-left gap-5"
-              style={{ width: "max-content" }}
-            >
-              {[...PRODUCTS, ...PRODUCTS].map((p, i) => (
-                <div
-                  key={i}
-                  className="relative w-[calc(25vw-2rem)] max-w-[320px] min-w-[200px] shrink-0 overflow-hidden rounded-2xl bg-white shadow-xl"
-                  style={{ aspectRatio: "3/4" }}
-                >
-                  <Image
-                    src={p.src}
-                    alt={p.alt}
-                    fill
-                    className="object-cover"
-                    sizes="(max-width:768px) 50vw, 25vw"
-                  />
-                </div>
-              ))}
-            </div>
+        {/* Single line: products (white) → electric vertical bar → video outputs */}
+        <div className="relative mx-auto max-w-6xl px-5">
+          <div className="pointer-events-none absolute inset-y-0 left-0 z-20 w-24 bg-gradient-to-r from-[#050507] to-transparent sm:w-40" />
+          <div className="pointer-events-none absolute inset-y-0 right-0 z-20 w-24 bg-gradient-to-l from-[#050507] to-transparent sm:w-40" />
+
+          {/* Static electric divider in the middle (overlay) */}
+          <div className="pointer-events-none absolute inset-y-0 left-1/2 z-30 hidden w-14 -translate-x-1/2 sm:block">
+            <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-[#050507] via-violet-500 to-[#050507]" />
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(139,92,246,0.65)_0%,transparent_70%)]" />
+            <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-gradient-to-b from-transparent via-violet-200 to-transparent shadow-[0_0_28px_10px_rgba(139,92,246,0.55)]" />
+            <div className="absolute inset-0 blur-xl opacity-70 bg-violet-500/40" />
           </div>
 
-          {/* Electric violet divider */}
-          <div className="relative mx-auto h-2.5 max-w-4xl">
-            <div className="absolute inset-0 rounded-full bg-gradient-to-r from-transparent via-violet-500 to-transparent" />
-            <div className="absolute inset-0 rounded-full bg-gradient-to-r from-transparent via-violet-500 to-transparent blur-lg" />
-            <div className="absolute inset-0 rounded-full bg-gradient-to-r from-transparent via-violet-400 to-transparent blur-2xl opacity-60" />
-          </div>
-
-          {/* Row 2: UGC videos scrolling right — 4 visible at once */}
           <div className="relative overflow-hidden">
-            <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-32 bg-gradient-to-r from-[#050507] to-transparent" />
-            <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-32 bg-gradient-to-l from-[#050507] to-transparent" />
             <div
-              className="flex animate-marquee-right gap-5"
+              className="flex animate-marquee-track gap-5 py-2"
               style={{ width: "max-content" }}
             >
-              {[...UGC_SLIDES, ...UGC_SLIDES].map((u, i) => (
-                <div
-                  key={i}
-                  className="relative w-[calc(25vw-2rem)] max-w-[320px] min-w-[200px] shrink-0 overflow-hidden rounded-2xl border border-white/[0.08] bg-black shadow-xl"
-                  style={{ aspectRatio: "3/4" }}
-                >
-                  <video
-                    src={u.src}
-                    autoPlay
-                    loop
-                    muted
-                    playsInline
-                    className="absolute inset-0 h-full w-full object-cover"
-                  />
-                </div>
-              ))}
+              {[
+                ...PRODUCTS.map((p, idx) => ({ kind: "product" as const, ...p, idx })),
+                ...UGC_SLIDES.map((u, idx) => ({ kind: "video" as const, ...u, idx })),
+                ...PRODUCTS.map((p, idx) => ({ kind: "product" as const, ...p, idx: idx + 100 })),
+                ...UGC_SLIDES.map((u, idx) => ({ kind: "video" as const, ...u, idx: idx + 100 })),
+              ].map((item, i) => {
+                const isProduct = item.kind === "product";
+                return (
+                  <div
+                    key={`${item.kind}-${item.idx}-${i}`}
+                    className={[
+                      "relative shrink-0 overflow-hidden rounded-2xl shadow-xl",
+                      "w-[calc(25vw-2rem)] max-w-[320px] min-w-[200px]",
+                      isProduct ? "bg-white" : "bg-black border border-white/[0.08]",
+                    ].join(" ")}
+                    style={{ aspectRatio: "3/4" }}
+                  >
+                    {isProduct ? (
+                      <Image
+                        src={(item as any).src}
+                        alt={(item as any).alt ?? "Product"}
+                        fill
+                        className="object-cover"
+                        sizes="(max-width:768px) 50vw, 25vw"
+                      />
+                    ) : (
+                      <video
+                        src={(item as any).src}
+                        autoPlay
+                        loop
+                        muted
+                        playsInline
+                        className="absolute inset-0 h-full w-full object-cover"
+                      />
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
