@@ -218,25 +218,13 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
 
               <Button
                 type="button"
-                variant="secondary"
-                className="h-11 w-full rounded-full bg-white/10 text-white hover:bg-white/15"
+                className={primaryBtnClass}
                 onClick={onGoogle}
                 disabled={isLoading}
               >
                 {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                 <span className="mr-1 text-sm font-semibold">G</span>
                 Continue with Google
-              </Button>
-
-              <Button
-                type="button"
-                variant="secondary"
-                className="h-11 w-full rounded-full bg-white/10 text-white hover:bg-white/15"
-                onClick={onMagicLink}
-                disabled={isLoading}
-              >
-                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Magic link
               </Button>
             </div>
 
