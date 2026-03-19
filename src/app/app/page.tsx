@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type WizardStep = "url" | "analysis" | "quiz" | "image" | "video";
+type AppSection = "link_to_ad" | "motion_control" | "models";
 
 type Extracted = {
   url: string;
@@ -118,6 +119,7 @@ export default function AppBrandWizard() {
   const searchParams = useSearchParams();
 
   const [step, setStep] = useState<WizardStep>("url");
+  const [appSection, setAppSection] = useState<AppSection>("link_to_ad");
 
   const [meEmail, setMeEmail] = useState<string>("");
   const [savedRuns, setSavedRuns] = useState<
@@ -1005,9 +1007,9 @@ export default function AppBrandWizard() {
       <main className="mx-auto max-w-6xl px-4 py-8">
         <header className="flex flex-wrap items-center justify-between gap-4 mb-6">
           <div className="space-y-1">
-            <h1 className="text-2xl font-semibold tracking-tight">UGC Factory — Brand Analyzer → Image → Video</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">Youry Studio</h1>
             <p className="text-sm text-muted-foreground">
-            Colle l’URL du store, on analyse (étapes 1→9), mini quiz, puis génération image NanoBanana et vidéo UGC.
+              Build AI ads faster: Link to Ad, Motion Control, and Models.
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -1022,6 +1024,65 @@ export default function AppBrandWizard() {
 
         <Separator className="my-6" />
 
+        <div className="mb-6 rounded-xl border bg-background/40 p-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <Button
+              type="button"
+              variant={appSection === "link_to_ad" ? "default" : "secondary"}
+              onClick={() => setAppSection("link_to_ad")}
+            >
+              Link to Ad
+            </Button>
+            <Button
+              type="button"
+              variant={appSection === "motion_control" ? "default" : "secondary"}
+              onClick={() => setAppSection("motion_control")}
+            >
+              Motion Control
+            </Button>
+            <Button
+              type="button"
+              variant={appSection === "models" ? "default" : "secondary"}
+              onClick={() => setAppSection("models")}
+            >
+              Models
+            </Button>
+          </div>
+        </div>
+
+        {appSection === "motion_control" ? (
+          <Card className="shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-base">Motion Control</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm text-muted-foreground">
+              <p>
+                This section is reserved for advanced motion choreography (camera path, gesture timing, and shot
+                transitions).
+              </p>
+              <p>Next step: connect this panel to your template engine and shot-level controls.</p>
+            </CardContent>
+          </Card>
+        ) : null}
+
+        {appSection === "models" ? (
+          <Card className="shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-base">Models</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm text-muted-foreground">
+              <p>Model access hub for generation engines:</p>
+              <ul className="list-disc pl-5 space-y-1">
+                <li>Kling 3.0</li>
+                <li>Veo 3</li>
+                <li>Sora</li>
+                <li>Sora 2</li>
+              </ul>
+            </CardContent>
+          </Card>
+        ) : null
+
+        {appSection === "link_to_ad" ? (
         <div className="grid gap-6 md:grid-cols-[300px_1fr] xl:grid-cols-[320px_1fr]">
           <aside className="space-y-4">
             <Card className="shadow-sm h-fit">
@@ -1802,6 +1863,7 @@ export default function AppBrandWizard() {
             )}
           </div>
         </div>
+        ) : null}
       </main>
 
       {lightboxUrl ? (
