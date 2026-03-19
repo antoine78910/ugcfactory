@@ -17,6 +17,11 @@ export const metadata: Metadata = {
   title: "Youry — Turn Any Product Into A Video Ad",
   description:
     "Paste a product URL and we'll create a scroll-stopping video ad with AI avatars and voiceover in minutes.",
+  icons: {
+    icon: "/icon.png",
+    shortcut: "/icon.png",
+    apple: "/icon.png",
+  },
 };
 
 export default function RootLayout({
