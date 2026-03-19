@@ -223,59 +223,59 @@ export default function LandingPage() {
           </h2>
         </div>
 
-        {/* Single line: product on left -> thin electric bar -> matched video on right */}
-        <div className="relative mx-auto max-w-6xl px-5">
-          <div className="pointer-events-none absolute inset-y-0 left-0 z-20 w-24 bg-gradient-to-r from-[#050507] to-transparent sm:w-40" />
-          <div className="pointer-events-none absolute inset-y-0 right-0 z-20 w-24 bg-gradient-to-l from-[#050507] to-transparent sm:w-40" />
+        {/* Two overlapping lanes: products LEFT, videos RIGHT, electric line CENTER */}
+        <div className="relative h-[420px] sm:h-[480px]">
+          {/* Edge fades */}
+          <div className="pointer-events-none absolute inset-y-0 left-0 z-20 w-20 bg-gradient-to-r from-[#050507] to-transparent sm:w-32" />
+          <div className="pointer-events-none absolute inset-y-0 right-0 z-20 w-20 bg-gradient-to-l from-[#050507] to-transparent sm:w-32" />
 
-          <div className="relative overflow-hidden">
-            <div
-              className="flex animate-marquee-right gap-5 py-2"
-              style={{ width: "max-content" }}
-            >
-              {[
-                ...PAIRED_CAROUSEL_ITEMS,
-                ...PAIRED_CAROUSEL_ITEMS,
-              ].map((item, i) => {
-                return (
-                  <div
-                    key={`paired-${i}`}
-                    className="relative shrink-0 overflow-hidden rounded-2xl border border-white/[0.08] bg-black shadow-xl"
-                    style={{ width: "min(42vw, 520px)", aspectRatio: "16/9" }}
-                  >
-                    {/* Left side: BEFORE (product image) */}
-                    <div className="absolute inset-y-0 left-0 w-1/2 overflow-hidden bg-white">
-                      <Image
-                        src={item.product.src}
-                        alt={item.product.alt}
-                        fill
-                        className="object-cover"
-                        sizes="(max-width:768px) 50vw, 21vw"
-                      />
-                    </div>
-
-                    {/* Right side: AFTER (generated video) */}
-                    <div className="absolute inset-y-0 right-0 w-1/2 overflow-hidden bg-black">
-                      <video
-                        src={item.slide.src}
-                        autoPlay
-                        loop
-                        muted
-                        playsInline
-                        className="absolute inset-0 h-full w-full object-cover"
-                      />
-                    </div>
-
-                    {/* Thin electric separator inside the same card */}
-                    <div className="pointer-events-none absolute inset-y-0 left-1/2 z-10 w-[8px] -translate-x-1/2 overflow-hidden rounded-full">
-                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-violet-500 to-transparent" />
-                      <div className="absolute inset-0 bg-violet-500/70 blur-sm" />
-                      <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-violet-100 shadow-[0_0_10px_3px_rgba(139,92,246,0.95)]" />
-                    </div>
-                  </div>
-                );
-              })}
+          {/* Left half: product images scrolling right-to-left */}
+          <div className="absolute inset-y-0 left-0 w-1/2 overflow-hidden">
+            <div className="flex h-full animate-marquee-left items-center gap-4 py-2" style={{ width: "max-content" }}>
+              {[...PRODUCTS, ...PRODUCTS].map((p, i) => (
+                <div
+                  key={`p-${i}`}
+                  className="relative h-[380px] w-[220px] shrink-0 overflow-hidden rounded-2xl bg-white shadow-xl sm:h-[440px] sm:w-[260px]"
+                >
+                  <Image
+                    src={p.src}
+                    alt={p.alt}
+                    fill
+                    className="object-cover"
+                    sizes="260px"
+                  />
+                </div>
+              ))}
             </div>
+          </div>
+
+          {/* Right half: UGC videos scrolling left-to-right */}
+          <div className="absolute inset-y-0 right-0 w-1/2 overflow-hidden">
+            <div className="flex h-full animate-marquee-right items-center gap-4 py-2" style={{ width: "max-content" }}>
+              {[...UGC_SLIDES, ...UGC_SLIDES].map((u, i) => (
+                <div
+                  key={`v-${i}`}
+                  className="relative h-[380px] w-[220px] shrink-0 overflow-hidden rounded-2xl border border-white/[0.08] bg-black shadow-xl sm:h-[440px] sm:w-[260px]"
+                >
+                  <video
+                    src={u.src}
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    className="absolute inset-0 h-full w-full object-cover"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Fixed electric line in the center */}
+          <div className="pointer-events-none absolute inset-y-0 left-1/2 z-30 w-[6px] -translate-x-1/2">
+            <div className="absolute inset-0 bg-violet-500" />
+            <div className="absolute inset-0 bg-violet-400 blur-md" />
+            <div className="absolute inset-0 bg-violet-300/40 blur-xl" />
+            <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-white/80 shadow-[0_0_12px_4px_rgba(139,92,246,0.9)]" />
           </div>
         </div>
       </section>
