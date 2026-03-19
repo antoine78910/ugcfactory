@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createServerClient } from "@supabase/ssr";
+import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/supabase/env";
 
 export async function GET(req: NextRequest) {
   const url = req.nextUrl;
@@ -15,11 +16,30 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(target, 302);
   }
 
+  // Build a mutable response to capture auth cookies set by Supabase.
+  const cookieCaptureResponse = NextResponse.next();
+  const supabase = createServerClient(getSupabaseUrl(), getSupabaseAnonKey(), {
+    cookies: {
+      getAll() {
+        return req.cookies.getAll();
+      },
+      setAll(cookiesToSet) {
+        for (const { name, value, options } of cookiesToSet) {
+          cookieCaptureResponse.cookies.set(name, value, options);
+        }
+      },
+    },
+  });
+
   if (code) {
-    const supabase = await createSupabaseServerClient();
     const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
     if (!exchangeError) {
-      return NextResponse.redirect(new URL("/app", url.origin), 302);
+      const target = new URL("/dashboard", url.origin);
+      const redirectResponse = NextResponse.redirect(target, 302);
+      for (const cookie of cookieCaptureResponse.cookies.getAll()) {
+        redirectResponse.cookies.set(cookie);
+      }
+      return redirectResponse;
     }
   }
 
