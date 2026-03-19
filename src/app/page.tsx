@@ -275,7 +275,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── 3 Steps ── */}
-      <section className="mx-auto max-w-6xl px-5 py-24">
+      <section className="mx-auto max-w-6xl px-5 py-24 bg-gradient-to-b from-transparent via-[#0c0a14]/25 to-[#0c0a14]/35">
         <div className="mb-14 text-center">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-violet-400">
             How it works
@@ -312,7 +312,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── Carousel: Product → Electric Band → UGC ── */}
-      <section className="overflow-hidden pt-24 pb-10">
+      <section className="overflow-hidden -mt-8 pt-24 pb-10 bg-gradient-to-b from-[#0c0a14]/35 via-[#09080f]/20 to-transparent">
         <div className="mx-auto max-w-6xl px-5 mb-14 text-center">
           <h2 className="text-3xl font-bold tracking-tight sm:text-4xl md:text-5xl">
             MAKE YOUR PRODUCTS{" "}

@@ -146,8 +146,3 @@
 .animate-marquee-track {
   animation: marquee-track 38s linear infinite;
 }
-.animate-marquee-left:hover,
-.animate-marquee-right:hover,
-.animate-marquee-track:hover {
-  animation-play-state: paused;
-}
