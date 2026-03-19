@@ -103,6 +103,24 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
     }
   }
 
+  async function onGoogle() {
+    setIsLoading(true);
+    try {
+      const { error } = await client.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/app`,
+        },
+      });
+      if (error) throw error;
+    } catch (err) {
+      toast.error("Google sign-in error", {
+        description: err instanceof Error ? err.message : "Unknown error",
+      });
+      setIsLoading(false);
+    }
+  }
+
   const isSignIn = mode === "signin";
 
   return (
@@ -177,6 +195,25 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
                   Create account
                 </Button>
               )}
+
+              <div className="relative py-1">
+                <div className="h-px w-full bg-white/15" />
+                <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#050507] px-2 text-[11px] uppercase tracking-[0.16em] text-white/40">
+                  or
+                </span>
+              </div>
+
+              <Button
+                type="button"
+                variant="secondary"
+                className="h-11 w-full rounded-full bg-white/10 text-white hover:bg-white/15"
+                onClick={onGoogle}
+                disabled={isLoading}
+              >
+                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                <span className="mr-1 text-sm font-semibold">G</span>
+                Continue with Google
+              </Button>
 
               <Button
                 type="button"
