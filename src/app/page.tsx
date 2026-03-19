@@ -241,26 +241,22 @@ export default function LandingPage() {
                 return (
                   <div
                     key={`paired-${i}`}
-                    className="grid shrink-0 grid-cols-[minmax(170px,1fr)_12px_minmax(170px,1fr)] gap-2"
-                    style={{ width: "min(44vw, 560px)" }}
+                    className="relative shrink-0 overflow-hidden rounded-2xl border border-white/[0.08] bg-black shadow-xl"
+                    style={{ width: "min(42vw, 520px)", aspectRatio: "16/9" }}
                   >
-                    <div className="relative overflow-hidden rounded-2xl bg-white shadow-xl" style={{ aspectRatio: "3/4" }}>
+                    {/* Left side: BEFORE (product image) */}
+                    <div className="absolute inset-y-0 left-0 w-1/2 overflow-hidden bg-white">
                       <Image
                         src={item.product.src}
                         alt={item.product.alt}
                         fill
                         className="object-cover"
-                        sizes="(max-width:768px) 50vw, 20vw"
+                        sizes="(max-width:768px) 50vw, 21vw"
                       />
                     </div>
 
-                    <div className="relative overflow-hidden rounded-full">
-                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-violet-500 to-transparent" />
-                      <div className="absolute inset-0 blur-sm bg-violet-500/70" />
-                      <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-violet-100 shadow-[0_0_10px_3px_rgba(139,92,246,0.9)]" />
-                    </div>
-
-                    <div className="relative overflow-hidden rounded-2xl border border-white/[0.08] bg-black shadow-xl" style={{ aspectRatio: "3/4" }}>
+                    {/* Right side: AFTER (generated video) */}
+                    <div className="absolute inset-y-0 right-0 w-1/2 overflow-hidden bg-black">
                       <video
                         src={item.slide.src}
                         autoPlay
@@ -269,6 +265,13 @@ export default function LandingPage() {
                         playsInline
                         className="absolute inset-0 h-full w-full object-cover"
                       />
+                    </div>
+
+                    {/* Thin electric separator inside the same card */}
+                    <div className="pointer-events-none absolute inset-y-0 left-1/2 z-10 w-[8px] -translate-x-1/2 overflow-hidden rounded-full">
+                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-violet-500 to-transparent" />
+                      <div className="absolute inset-0 bg-violet-500/70 blur-sm" />
+                      <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-violet-100 shadow-[0_0_10px_3px_rgba(139,92,246,0.95)]" />
                     </div>
                   </div>
                 );
