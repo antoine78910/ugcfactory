@@ -1219,6 +1219,12 @@ export default function AppBrandWizard() {
                   <div className="text-xs text-muted-foreground space-y-2 mt-2">
                     <div className="font-medium text-sm">Settings (projet)</div>
                     <p>
+                      Support:{" "}
+                      <a href="mailto:app@youry.io" className="font-medium text-foreground underline underline-offset-2">
+                        app@youry.io
+                      </a>
+                    </p>
+                    <p>
                       Ici tu pourras plus tard configurer des options globales (durée par défaut, modèle, langues,
                       etc.). Pour l’instant, utilise le bouton <span className="font-medium">Save</span> pour figer
                       l’état actuel du projet et <span className="font-medium">New</span> pour repartir de zéro.
