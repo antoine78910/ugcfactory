@@ -175,7 +175,7 @@ export default function LandingPage() {
               alt="Youry"
               width={174}
               height={52}
-              className="h-9 w-auto sm:h-10"
+              className="h-9 w-auto mix-blend-screen sm:h-10"
               priority
             />
           </Link>
@@ -330,7 +330,7 @@ export default function LandingPage() {
           <div className="pointer-events-none absolute inset-y-0 left-1/2 z-20 w-14 -translate-x-1/2 bg-gradient-to-r from-transparent via-violet-500/25 to-transparent blur-md" />
 
           <div
-            className="flex animate-marquee-right items-center gap-4 px-4 py-2 md:gap-8"
+            className="flex animate-marquee-right items-center gap-4 py-2 will-change-transform md:gap-8"
             style={{ width: "max-content" }}
           >
             {[...PAIRED_CAROUSEL_ITEMS, ...PAIRED_CAROUSEL_ITEMS].map(
@@ -449,7 +449,7 @@ export default function LandingPage() {
               alt="Youry"
               width={174}
               height={52}
-              className="h-8 w-auto opacity-90"
+              className="h-8 w-auto opacity-90 mix-blend-screen"
             />
           </Link>
           <p className="text-xs text-white/25">
