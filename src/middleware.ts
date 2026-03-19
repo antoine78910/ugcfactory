@@ -8,6 +8,13 @@ export function middleware(req: NextRequest) {
   const url = req.nextUrl.clone();
   const host = (req.headers.get("host") ?? "").split(":")[0].toLowerCase();
   const { pathname } = url;
+  const hasAuthParams =
+    url.searchParams.has("code") ||
+    url.searchParams.has("error") ||
+    url.searchParams.has("access_token") ||
+    url.searchParams.has("refresh_token") ||
+    url.searchParams.has("token_hash") ||
+    url.searchParams.has("type");
 
   // On app.youry.io, serve the app from "/" (rewrite -> /app).
   if (host === APP_HOST) {
@@ -24,6 +31,14 @@ export function middleware(req: NextRequest) {
     target.protocol = "https";
     target.host = APP_HOST;
     target.pathname = pathname === "/app" ? "/" : pathname.replace(/^\/app/, "");
+    return NextResponse.redirect(target, 308);
+  }
+
+  // OAuth fallback: if auth params land on main domain root, forward to app subdomain.
+  if (MAIN_HOSTS.has(host) && hasAuthParams) {
+    const target = req.nextUrl.clone();
+    target.protocol = "https";
+    target.host = APP_HOST;
     return NextResponse.redirect(target, 308);
   }
 
