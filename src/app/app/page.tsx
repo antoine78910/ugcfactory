@@ -1003,7 +1003,7 @@ export default function AppBrandWizard() {
               alt="Youry"
               width={174}
               height={52}
-              className="h-8 w-auto mix-blend-screen"
+              className="h-8 w-auto"
               priority
             />
           </div>

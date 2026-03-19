@@ -218,7 +218,7 @@ export default function LandingPage() {
               alt="Youry"
               width={174}
               height={52}
-              className="h-9 w-auto mix-blend-screen sm:h-10"
+              className="h-9 w-auto sm:h-10"
               priority
             />
           </Link>
@@ -503,7 +503,7 @@ export default function LandingPage() {
               alt="Youry"
               width={174}
               height={52}
-              className="h-8 w-auto opacity-90 mix-blend-screen"
+              className="h-8 w-auto opacity-90"
             />
           </Link>
           <p className="text-xs text-white/25">
