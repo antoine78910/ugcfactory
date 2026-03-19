@@ -14,8 +14,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "UGC Automation",
-  description: "Automatiser la production d'UGC IA (NanoBanana)",
+  title: "Youry — Turn Any Product Into A Video Ad",
+  description:
+    "Paste a product URL and we'll create a scroll-stopping video ad with AI avatars and voiceover in minutes.",
 };
 
 export default function RootLayout({
@@ -24,7 +25,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="fr">
+    <html lang="en">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
