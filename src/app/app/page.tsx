@@ -10,7 +10,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -1006,42 +1005,59 @@ export default function AppBrandWizard() {
   return (
     <div className="dark min-h-screen bg-[#050507] text-white">
       <div className="pointer-events-none fixed left-1/2 top-0 -z-0 h-[520px] w-[1000px] -translate-x-1/2 rounded-full bg-violet-600/15 blur-[150px]" />
-      <main className="relative z-10 mx-auto max-w-6xl px-4 py-8">
-        <header className="flex flex-wrap items-center justify-between gap-4 mb-6">
-          <div className="space-y-1">
-            <div className="inline-flex items-center">
-              <Image
-                src="/youry-logo.png"
-                alt="Youry"
-                width={174}
-                height={52}
-                className="h-9 w-auto mix-blend-screen sm:h-10"
-                priority
-              />
+      <main className="relative z-10 grid min-h-screen grid-cols-[250px_1fr]">
+        <aside className="space-y-4 border-r border-white/10 bg-[#06070d] px-3 py-4">
+          <div className="px-2 pb-2">
+            <Image
+              src="/youry-logo.png"
+              alt="Youry"
+              width={174}
+              height={52}
+              className="h-8 w-auto mix-blend-screen"
+              priority
+            />
+          </div>
+
+          <div className="rounded-xl border border-white/10 bg-[#0b0912]/85 p-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/45">Overview</p>
+            <div className="mt-2 space-y-1">
+              <button
+                type="button"
+                className={`w-full rounded-md px-3 py-2 text-left text-sm transition ${
+                  appSection === "link_to_ad"
+                    ? "bg-violet-400 text-black"
+                    : "border border-white/10 bg-white/5 text-white hover:bg-white/10"
+                }`}
+                onClick={() => setAppSection("link_to_ad")}
+              >
+                Link to Ad
+              </button>
+              <button
+                type="button"
+                className={`w-full rounded-md px-3 py-2 text-left text-sm transition ${
+                  appSection === "motion_control"
+                    ? "bg-violet-400 text-black"
+                    : "border border-white/10 bg-white/5 text-white hover:bg-white/10"
+                }`}
+                onClick={() => setAppSection("motion_control")}
+              >
+                Motion Control
+              </button>
+              <button
+                type="button"
+                className={`w-full rounded-md px-3 py-2 text-left text-sm transition ${
+                  appSection === "models"
+                    ? "bg-violet-400 text-black"
+                    : "border border-white/10 bg-white/5 text-white hover:bg-white/10"
+                }`}
+                onClick={() => setAppSection("models")}
+              >
+                Models
+              </button>
             </div>
-            <h1 className="text-2xl font-semibold tracking-tight">Studio</h1>
-            <p className="text-sm text-muted-foreground">
-              Build AI ads faster: Link to Ad, Motion Control, and Models.
-            </p>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-muted-foreground truncate max-w-[220px] sm:max-w-[320px]" title={meEmail || undefined}>
-              {meEmail || "—"}
-            </span>
-            <Button
-              size="sm"
-              onClick={onSignOut}
-              className="border border-white/10 bg-white/5 text-white hover:bg-white/10"
-            >
-              Logout
-            </Button>
-          </div>
-        </header>
 
-        <Separator className="my-6 bg-violet-400/20" />
-
-        <div className="grid gap-6 md:grid-cols-[300px_1fr] xl:grid-cols-[320px_1fr]">
-          <aside className="space-y-4">
+          <div className="space-y-4">
             <Card className="h-fit border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
             <CardHeader>
               <CardTitle className="text-base">Menu</CardTitle>
@@ -1228,7 +1244,7 @@ export default function AppBrandWizard() {
             </CardContent>
           </Card>
 
-            <Card className="h-fit border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
+          <Card className="h-fit border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
             <CardHeader>
               <CardTitle className="text-base">Navigation étapes</CardTitle>
             </CardHeader>
@@ -1300,8 +1316,30 @@ export default function AppBrandWizard() {
               </div>
             </CardContent>
           </Card>
+          </div>
+        </aside>
 
-          </aside>
+        <section className="space-y-6 px-6 py-6 md:px-8">
+          <header className="flex items-center justify-between gap-3 border-b border-white/10 pb-4">
+            <div>
+              <h1 className="text-2xl font-semibold tracking-tight">Studio</h1>
+              <p className="text-sm text-white/55">
+                Build AI ads faster: Link to Ad, Motion Control, and Models.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="max-w-[280px] truncate text-sm text-white/55" title={meEmail || undefined}>
+                {meEmail || "—"}
+              </span>
+              <Button
+                size="sm"
+                onClick={onSignOut}
+                className="border border-white/10 bg-white/5 text-white hover:bg-white/10"
+              >
+                Logout
+              </Button>
+            </div>
+          </header>
 
           <div className="space-y-6">
             {appSection === "motion_control" ? (
@@ -1891,7 +1929,7 @@ export default function AppBrandWizard() {
               </Card>
             )}
           </div>
-        </div>
+        </section>
       </main>
 
       {lightboxUrl ? (
