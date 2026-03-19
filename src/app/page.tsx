@@ -220,7 +220,7 @@ export default function LandingPage() {
             into realistic
             <br />
             <RotatingText
-              texts={["Ads", "AI Ugc", "Reels", "Stories"]}
+              texts={["AI Ads", "AI Ugc", "AI Reels", "AI Stories"]}
               mainClassName="mx-2 inline-flex bg-violet-500/90 text-black overflow-hidden px-2 sm:px-2 md:px-3 py-1 sm:py-1.5 justify-center rounded-xl shadow-[0_0_22px_rgba(139,92,246,0.35)]"
               staggerFrom={"last"}
               initial={{ y: "100%" }}
