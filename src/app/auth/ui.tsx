@@ -15,6 +15,9 @@ type AuthMode = "signin" | "signup";
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const HAS_SUPABASE_ENV = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
+const APP_REDIRECT_BASE =
+  (process.env.NEXT_PUBLIC_APP_URL && process.env.NEXT_PUBLIC_APP_URL.trim()) ||
+  "https://app.youry.io";
 
 export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
   const router = useRouter();
@@ -90,7 +93,7 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
     try {
       const { error } = await client.auth.signInWithOtp({
         email: email.trim(),
-        options: { emailRedirectTo: `${window.location.origin}/app` },
+        options: { emailRedirectTo: `${APP_REDIRECT_BASE.replace(/\/+$/, "")}/` },
       });
       if (error) throw error;
       toast.success("Magic link sent", { description: "Check your email inbox." });
@@ -109,7 +112,7 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
       const { error } = await client.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/app`,
+          redirectTo: `${APP_REDIRECT_BASE.replace(/\/+$/, "")}/`,
         },
       });
       if (error) throw error;
