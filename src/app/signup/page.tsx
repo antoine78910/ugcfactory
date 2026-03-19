@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+﻿import { redirect } from "next/navigation";
 import AuthClient from "@/app/auth/ui";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -12,3 +12,4 @@ export default async function SignUpPage() {
 
   return <AuthClient mode="signup" />;
 }
+

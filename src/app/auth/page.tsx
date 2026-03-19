@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+﻿import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export default async function AuthPage() {
@@ -10,4 +10,5 @@ export default async function AuthPage() {
   if (user) redirect("/app");
   redirect("/signin");
 }
+
 

@@ -1,4 +1,4 @@
-"use client";
+ï»¿"use client";
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
@@ -150,7 +150,7 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   type="password"
-                  placeholder="••••••••"
+                  placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
                   className="h-11 border-white/15 bg-white/[0.03] text-white placeholder:text-white/30"
                 />
               </div>
@@ -204,3 +204,4 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
     </div>
   );
 }
+
