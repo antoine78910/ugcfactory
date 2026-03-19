@@ -168,10 +168,16 @@ export default function LandingPage() {
         <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4">
           <Link
             href="/"
-            className="flex items-center gap-1 text-lg font-bold tracking-tight"
+            className="flex items-center"
           >
-            Youry
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-violet-500" />
+            <Image
+              src="/youry-logo.png"
+              alt="Youry"
+              width={174}
+              height={52}
+              className="h-9 w-auto sm:h-10"
+              priority
+            />
           </Link>
 
           <div className="flex items-center gap-3">
@@ -186,9 +192,10 @@ export default function LandingPage() {
             <Button
               asChild
               size="sm"
-              className="rounded-full bg-violet-600 px-5 text-white hover:bg-violet-500 shadow-[0_0_16px_rgba(139,92,246,0.25)]"
+              className="rounded-2xl bg-violet-400 px-5 text-black font-semibold border border-violet-200/40 shadow-[0_6px_0_0_rgba(76,29,149,0.9)] transition-all hover:-translate-y-[1px] hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9)]"
             >
               <Link href="/signup">
+                <Sparkles className="mr-1 h-3.5 w-3.5" />
                 Get started
                 <ArrowRight className="ml-1 h-3.5 w-3.5" />
               </Link>
@@ -254,11 +261,11 @@ export default function LandingPage() {
               />
               <Button
                 asChild
-                className="h-10 shrink-0 rounded-full bg-violet-600 px-6 text-sm font-semibold text-white hover:bg-violet-500 shadow-[0_0_24px_rgba(139,92,246,0.35)]"
+                className="h-10 shrink-0 rounded-2xl bg-violet-400 px-6 text-sm font-semibold text-black border border-violet-200/40 shadow-[0_6px_0_0_rgba(76,29,149,0.9)] transition-all hover:-translate-y-[1px] hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9)]"
               >
                 <Link href="/signup">
+                  <Sparkles className="mr-1 h-4 w-4" />
                   Generate
-                  <Sparkles className="ml-1.5 h-4 w-4" />
                 </Link>
               </Button>
             </div>
@@ -348,9 +355,10 @@ export default function LandingPage() {
         </p>
         <Button
           asChild
-          className="mt-7 h-12 rounded-full bg-violet-600 px-8 text-base font-semibold text-white hover:bg-violet-500 shadow-[0_0_30px_rgba(139,92,246,0.3)]"
+          className="mt-7 h-12 rounded-2xl bg-violet-400 px-8 text-base font-semibold text-black border border-violet-200/40 shadow-[0_7px_0_0_rgba(76,29,149,0.9)] transition-all hover:-translate-y-[1px] hover:bg-violet-300 hover:shadow-[0_9px_0_0_rgba(76,29,149,0.9)]"
         >
           <Link href="/signup">
+            <Sparkles className="mr-2 h-4 w-4" />
             Try it yourself
             <ArrowRight className="ml-2 h-4 w-4" />
           </Link>
@@ -372,9 +380,12 @@ export default function LandingPage() {
           </p>
           <Button
             asChild
-            className="relative mt-8 h-11 rounded-full bg-violet-500 px-7 text-sm font-semibold text-white hover:bg-violet-400 shadow-[0_0_24px_rgba(139,92,246,0.35)]"
+            className="relative mt-8 h-11 rounded-2xl bg-violet-400 px-7 text-sm font-semibold text-black border border-violet-200/40 shadow-[0_6px_0_0_rgba(76,29,149,0.9)] transition-all hover:-translate-y-[1px] hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9)]"
           >
-            <Link href="/signup">Generate your ad</Link>
+            <Link href="/signup">
+              <Sparkles className="mr-1.5 h-4 w-4" />
+              Generate your ad
+            </Link>
           </Button>
         </div>
       </section>
