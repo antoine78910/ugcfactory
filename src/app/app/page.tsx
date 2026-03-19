@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import Image from "next/image";
 import { CheckCircle2, Circle, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -1003,11 +1004,22 @@ export default function AppBrandWizard() {
   }, [videoGen]);
 
   return (
-    <div className="dark min-h-screen bg-background text-foreground">
-      <main className="mx-auto max-w-6xl px-4 py-8">
+    <div className="dark min-h-screen bg-[#050507] text-white">
+      <div className="pointer-events-none fixed left-1/2 top-0 -z-0 h-[520px] w-[1000px] -translate-x-1/2 rounded-full bg-violet-600/15 blur-[150px]" />
+      <main className="relative z-10 mx-auto max-w-6xl px-4 py-8">
         <header className="flex flex-wrap items-center justify-between gap-4 mb-6">
           <div className="space-y-1">
-            <h1 className="text-2xl font-semibold tracking-tight">Youry Studio</h1>
+            <div className="inline-flex items-center">
+              <Image
+                src="/youry-logo.png"
+                alt="Youry"
+                width={174}
+                height={52}
+                className="h-9 w-auto sm:h-10"
+                priority
+              />
+            </div>
+            <h1 className="text-2xl font-semibold tracking-tight">Studio</h1>
             <p className="text-sm text-muted-foreground">
               Build AI ads faster: Link to Ad, Motion Control, and Models.
             </p>

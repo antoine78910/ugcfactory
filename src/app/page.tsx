@@ -442,13 +442,18 @@ export default function LandingPage() {
         <div className="mx-auto flex max-w-6xl flex-col gap-4 px-5 sm:flex-row sm:items-center sm:justify-between">
           <Link
             href="/"
-            className="flex items-center gap-1 text-sm font-bold tracking-tight text-white/50"
+            className="inline-flex items-center"
           >
-            Youry
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-violet-500" />
+            <Image
+              src="/youry-logo.png"
+              alt="Youry"
+              width={174}
+              height={52}
+              className="h-8 w-auto opacity-90"
+            />
           </Link>
           <p className="text-xs text-white/25">
-            &copy; {new Date().getFullYear()} Youry. All rights reserved.
+            &copy; {new Date().getFullYear()} All rights reserved.
           </p>
         </div>
       </footer>

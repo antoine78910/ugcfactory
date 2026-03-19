@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
@@ -125,6 +126,8 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
   }
 
   const isSignIn = mode === "signin";
+  const primaryBtnClass =
+    "h-11 w-full rounded-2xl bg-violet-400 text-black font-semibold border border-violet-200/40 shadow-[0_6px_0_0_rgba(76,29,149,0.9)] transition-all hover:-translate-y-[1px] hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9)] active:translate-y-[6px] active:shadow-[0_0_0_0_rgba(76,29,149,0.9)]";
 
   return (
     <div className="min-h-screen bg-[#050507] text-white">
@@ -133,9 +136,15 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
       <main className="relative z-10 mx-auto flex min-h-screen max-w-6xl items-center justify-center px-5 py-14">
         <div className="grid w-full max-w-5xl overflow-hidden rounded-3xl border border-white/10 bg-white/[0.02] backdrop-blur-xl md:grid-cols-[1.05fr_1fr]">
           <div className="border-b border-white/10 p-8 md:border-b-0 md:border-r">
-            <Link href="/" className="inline-flex items-center gap-1 text-lg font-bold tracking-tight">
-              Youry
-              <span className="h-1.5 w-1.5 rounded-full bg-violet-500" />
+            <Link href="/" className="inline-flex items-center">
+              <Image
+                src="/youry-logo.png"
+                alt="Youry"
+                width={174}
+                height={52}
+                className="h-9 w-auto sm:h-10"
+                priority
+              />
             </Link>
 
             <h1 className="mt-8 text-3xl font-extrabold tracking-tight sm:text-4xl">
@@ -180,7 +189,7 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
               {isSignIn ? (
                 <Button
                   type="button"
-                  className="mt-2 h-11 w-full rounded-full bg-violet-600 text-white hover:bg-violet-500 shadow-[0_0_24px_rgba(139,92,246,0.35)]"
+                  className={`mt-2 ${primaryBtnClass}`}
                   onClick={onSignIn}
                   disabled={isLoading}
                 >
@@ -190,7 +199,7 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
               ) : (
                 <Button
                   type="button"
-                  className="mt-2 h-11 w-full rounded-full bg-violet-600 text-white hover:bg-violet-500 shadow-[0_0_24px_rgba(139,92,246,0.35)]"
+                  className={`mt-2 ${primaryBtnClass}`}
                   onClick={onSignUp}
                   disabled={isLoading}
                 >
