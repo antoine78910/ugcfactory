@@ -124,12 +124,11 @@ export default function LandingPage() {
         <div className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 h-[700px] w-[1000px] rounded-full bg-violet-600/[0.12] blur-[140px]" />
 
         <div className="relative mx-auto max-w-4xl px-5 pt-28 pb-24 text-center">
-          <h1 className="text-4xl font-extrabold tracking-tight leading-[1.08] sm:text-5xl md:text-6xl lg:text-7xl">
-            TURN ANY PRODUCT
+          <h1 className="mx-auto max-w-3xl px-4 sm:px-8 text-3xl font-extrabold tracking-tight leading-[1.12] sm:text-5xl md:text-6xl">
+            Turn any product into a realistic
             <br />
-            INTO REALISTIC{" "}
             <RotatingText
-              texts={["UGC", "ADS", "PRODUCT", "Testimonials"]}
+              texts={["UGC", "ADS", "PRODUCT", "TESTIMONIALS"]}
               mainClassName="mx-2 inline-flex bg-violet-500/90 text-black overflow-hidden px-2 sm:px-2 md:px-3 py-1 sm:py-1.5 justify-center rounded-xl shadow-[0_0_22px_rgba(139,92,246,0.35)]"
               staggerFrom={"last"}
               initial={{ y: "100%" }}
@@ -140,7 +139,7 @@ export default function LandingPage() {
               transition={{ type: "spring", damping: 30, stiffness: 400 }}
               rotationInterval={2000}
             />{" "}
-            VIDEOS
+            videos
           </h1>
 
           <p className="mx-auto mt-6 max-w-2xl text-base text-white/55 sm:text-lg leading-relaxed">
