@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import RotatingText from "./RotatingText";
 import { ArrowRight, ChevronDown, Play, Sparkles } from "lucide-react";
 
 const STEPS = [
@@ -126,11 +127,20 @@ export default function LandingPage() {
           <h1 className="text-4xl font-extrabold tracking-tight leading-[1.08] sm:text-5xl md:text-6xl lg:text-7xl">
             TURN ANY PRODUCT
             <br />
-            INTO A{" "}
-            <span className="bg-gradient-to-r from-violet-400 via-violet-500 to-fuchsia-500 bg-clip-text text-transparent">
-              video
-            </span>{" "}
-            AD
+            INTO REALISTIC{" "}
+            <RotatingText
+              texts={["UGC", "ADS", "PRODUCT", "Testimonials"]}
+              mainClassName="mx-2 inline-flex bg-violet-500/90 text-black overflow-hidden px-2 sm:px-2 md:px-3 py-1 sm:py-1.5 justify-center rounded-xl shadow-[0_0_22px_rgba(139,92,246,0.35)]"
+              staggerFrom={"last"}
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "-120%" }}
+              staggerDuration={0.025}
+              splitLevelClassName="overflow-hidden pb-0.5 sm:pb-1"
+              transition={{ type: "spring", damping: 30, stiffness: 400 }}
+              rotationInterval={2000}
+            />{" "}
+            VIDEOS
           </h1>
 
           <p className="mx-auto mt-6 max-w-2xl text-base text-white/55 sm:text-lg leading-relaxed">
