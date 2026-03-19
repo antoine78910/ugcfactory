@@ -152,6 +152,19 @@ export default function LandingPage() {
     <div className="min-h-screen bg-[#050507] text-white selection:bg-violet-500/30">
       {/* ── Header ── */}
       <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-[#050507]/80 backdrop-blur-xl">
+        <div className="relative border-b border-white/10 bg-[#0f0f14] px-4 py-1.5 text-center">
+          <p className="text-[11px] font-medium text-white/80 sm:text-xs">
+            Nano Banana 2 UNLIMITED. Kling 3.0 & Motion Control Available.
+            Special 73% OFF
+          </p>
+          <button
+            type="button"
+            aria-label="Close announcement"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-white/60 transition-colors hover:text-white"
+          >
+            ×
+          </button>
+        </div>
         <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4">
           <Link
             href="/"
@@ -204,10 +217,10 @@ export default function LandingPage() {
           <h1 className="mx-auto max-w-3xl px-4 sm:px-8 text-3xl font-extrabold tracking-tight leading-[1.12] sm:text-5xl md:text-6xl">
             Turn any product
             <br />
-            into a realistic
+            into realistic
             <br />
             <RotatingText
-              texts={["Ads", "UGC", "Reels", "Stories"]}
+              texts={["Ads", "AI Ugc", "Reels", "Stories"]}
               mainClassName="mx-2 inline-flex bg-violet-500/90 text-black overflow-hidden px-2 sm:px-2 md:px-3 py-1 sm:py-1.5 justify-center rounded-xl shadow-[0_0_22px_rgba(139,92,246,0.35)]"
               staggerFrom={"last"}
               initial={{ y: "100%" }}
@@ -217,8 +230,7 @@ export default function LandingPage() {
               splitLevelClassName="overflow-hidden pb-0.5 sm:pb-1"
               transition={{ type: "spring", damping: 30, stiffness: 400 }}
               rotationInterval={2000}
-            />{" "}
-            videos
+            />
           </h1>
 
           <p className="mx-auto mt-6 max-w-2xl text-base text-white/55 sm:text-lg leading-relaxed">
@@ -233,7 +245,7 @@ export default function LandingPage() {
             </p>
             <div className="relative">
               <div className="pointer-events-none absolute -inset-6 rounded-full bg-violet-600/20 blur-2xl" />
-              <div className="relative flex items-center gap-2 overflow-hidden rounded-full bg-white/[0.05] px-2 py-1.5 ring-1 ring-violet-500/40 shadow-[0_0_70px_rgba(139,92,246,0.22)]">
+              <div className="relative flex items-center gap-2 overflow-hidden rounded-full bg-white/[0.05] px-2 py-1.5 ring-1 ring-violet-500/40 shadow-[0_0_70px_rgba(139,92,246,0.22)] transition-all duration-300 ease-out focus-within:ring-2 focus-within:ring-violet-400 focus-within:shadow-[0_0_90px_rgba(139,92,246,0.55)]">
               <Input
                 type="url"
                 placeholder="https://your-product-page.com"
@@ -306,9 +318,11 @@ export default function LandingPage() {
         <div className="relative overflow-hidden">
           <div className="pointer-events-none absolute inset-y-0 left-0 z-20 w-16 bg-gradient-to-r from-[#050507] to-transparent sm:w-28" />
           <div className="pointer-events-none absolute inset-y-0 right-0 z-20 w-16 bg-gradient-to-l from-[#050507] to-transparent sm:w-28" />
+          <div className="pointer-events-none absolute inset-y-0 left-1/2 z-30 w-[3px] -translate-x-1/2 bg-violet-400/90 shadow-[0_0_14px_4px_rgba(139,92,246,0.95)]" />
+          <div className="pointer-events-none absolute inset-y-0 left-1/2 z-20 w-14 -translate-x-1/2 bg-gradient-to-r from-transparent via-violet-500/25 to-transparent blur-md" />
 
           <div
-            className="flex animate-marquee-left items-center gap-4 px-4 py-2 md:gap-8"
+            className="flex animate-marquee-right items-center gap-4 px-4 py-2 md:gap-8"
             style={{ width: "max-content" }}
           >
             {[...PAIRED_CAROUSEL_ITEMS, ...PAIRED_CAROUSEL_ITEMS].map(
