@@ -31,12 +31,24 @@ const STEPS = [
   },
 ];
 
-const CAROUSEL_SLOTS = [
-  { type: "product" as const, src: "/carousel/product-1.png" },
-  { type: "product" as const, src: "/carousel/product-2.png" },
-  { type: "divider" as const, src: "" },
-  { type: "ugc" as const, src: "/carousel/ugc-1.png" },
-  { type: "ugc" as const, src: "/carousel/ugc-2.png" },
+const PRODUCTS = [
+  { src: "/carousel/product-1.png", alt: "Roast & Ritual Coffee" },
+  { src: "/carousel/product-2.png", alt: "Lumina Radiance Elixir" },
+  { src: "/carousel/product-3.png", alt: "Aqua Luxe Bottle" },
+  { src: "/carousel/product-4.png", alt: "Aurelion Luminous Serum" },
+  { src: "/carousel/product-5.png", alt: "Designer Perfume" },
+  { src: "/carousel/product-6.png", alt: "Volcanic Heat Chips" },
+  { src: "/carousel/product-7.png", alt: "Pure Serum" },
+];
+
+const UGC_SLOTS = [
+  { src: "/carousel/ugc-1.mp4", poster: "/carousel/ugc-1.jpg" },
+  { src: "/carousel/ugc-2.mp4", poster: "/carousel/ugc-2.jpg" },
+  { src: "/carousel/ugc-3.mp4", poster: "/carousel/ugc-3.jpg" },
+  { src: "/carousel/ugc-4.mp4", poster: "/carousel/ugc-4.jpg" },
+  { src: "/carousel/ugc-5.mp4", poster: "/carousel/ugc-5.jpg" },
+  { src: "/carousel/ugc-6.mp4", poster: "/carousel/ugc-6.jpg" },
+  { src: "/carousel/ugc-7.mp4", poster: "/carousel/ugc-7.jpg" },
 ];
 
 const FAQ_ITEMS = [
@@ -190,60 +202,57 @@ export default function LandingPage() {
           </h2>
         </div>
 
-        <div className="mx-auto max-w-5xl px-5">
-          <div className="flex items-stretch justify-center gap-3">
-            {CAROUSEL_SLOTS.map((slot, i) => {
-              if (slot.type === "divider") {
-                return (
-                  <div
-                    key={i}
-                    className="relative hidden w-48 shrink-0 overflow-hidden rounded-2xl sm:block"
-                  >
-                    <div className="absolute inset-0 bg-gradient-to-r from-white/90 via-violet-500 to-[#050507]" />
-                    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(139,92,246,0.5)_0%,transparent_70%)]" />
-                    <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-gradient-to-b from-transparent via-violet-300 to-transparent shadow-[0_0_30px_10px_rgba(139,92,246,0.5)]" />
-                    <div className="absolute inset-0 h-full min-h-[320px]" />
-                  </div>
-                );
-              }
-
-              const isProduct = slot.type === "product";
-              return (
+        <div className="space-y-4">
+          {/* Row 1: Products scrolling left */}
+          <div className="relative overflow-hidden">
+            <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-24 bg-gradient-to-r from-[#050507] to-transparent" />
+            <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-24 bg-gradient-to-l from-[#050507] to-transparent" />
+            <div className="flex animate-marquee-left gap-4" style={{ width: "max-content" }}>
+              {[...PRODUCTS, ...PRODUCTS].map((p, i) => (
                 <div
                   key={i}
-                  className={`relative w-40 shrink-0 overflow-hidden rounded-2xl sm:w-48 ${
-                    isProduct ? "bg-white" : "bg-slate-900"
-                  }`}
-                  style={{ minHeight: 320 }}
+                  className="relative h-72 w-44 shrink-0 overflow-hidden rounded-2xl bg-white shadow-lg sm:h-80 sm:w-52"
                 >
                   <Image
-                    src={slot.src}
-                    alt={isProduct ? "Product shot" : "UGC video"}
+                    src={p.src}
+                    alt={p.alt}
                     fill
                     className="object-cover"
-                    sizes="200px"
+                    sizes="220px"
                   />
-                  {/* Fallback when image hasn't been uploaded yet */}
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    {isProduct ? (
-                      <div className="text-center">
-                        <div className="mx-auto h-20 w-20 rounded-lg bg-gray-100" />
-                        <p className="mt-2 text-[10px] text-gray-300">
-                          Product
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="text-center">
-                        <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-violet-600/20">
-                          <Play className="h-4 w-4 text-violet-400" />
-                        </div>
-                        <p className="mt-2 text-[10px] text-white/30">UGC</p>
-                      </div>
-                    )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Electric violet divider */}
+          <div className="relative mx-auto h-2 max-w-3xl">
+            <div className="absolute inset-0 rounded-full bg-gradient-to-r from-transparent via-violet-500 to-transparent" />
+            <div className="absolute inset-0 rounded-full bg-gradient-to-r from-transparent via-violet-500 to-transparent blur-lg" />
+            <div className="absolute inset-0 rounded-full bg-gradient-to-r from-transparent via-violet-400 to-transparent blur-2xl opacity-60" />
+          </div>
+
+          {/* Row 2: UGC videos scrolling right */}
+          <div className="relative overflow-hidden">
+            <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-24 bg-gradient-to-r from-[#050507] to-transparent" />
+            <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-24 bg-gradient-to-l from-[#050507] to-transparent" />
+            <div className="flex animate-marquee-right gap-4" style={{ width: "max-content" }}>
+              {[...UGC_SLOTS, ...UGC_SLOTS].map((u, i) => (
+                <div
+                  key={i}
+                  className="relative flex h-72 w-44 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/[0.06] bg-slate-900/80 sm:h-80 sm:w-52"
+                >
+                  <div className="text-center">
+                    <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-violet-600/15 ring-1 ring-violet-500/20">
+                      <Play className="h-6 w-6 text-violet-400" />
+                    </div>
+                    <p className="mt-3 text-[11px] font-medium text-white/30">
+                      UGC Video
+                    </p>
                   </div>
                 </div>
-              );
-            })}
+              ))}
+            </div>
           </div>
         </div>
       </section>
