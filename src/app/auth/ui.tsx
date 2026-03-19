@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
@@ -41,11 +41,12 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
   }
 
   if (!supabase) return null;
+  const client = supabase;
 
   async function onSignIn() {
     setIsLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { error } = await client.auth.signInWithPassword({
         email: email.trim(),
         password,
       });
@@ -65,7 +66,7 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
   async function onSignUp() {
     setIsLoading(true);
     try {
-      const { error } = await supabase.auth.signUp({
+      const { error } = await client.auth.signUp({
         email: email.trim(),
         password,
       });
@@ -87,7 +88,7 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
   async function onMagicLink() {
     setIsLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithOtp({
+      const { error } = await client.auth.signInWithOtp({
         email: email.trim(),
         options: { emailRedirectTo: `${window.location.origin}/app` },
       });
