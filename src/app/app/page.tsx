@@ -1080,7 +1080,7 @@ export default function AppBrandWizard() {
               </ul>
             </CardContent>
           </Card>
-        ) : null
+        ) : null}
 
         {appSection === "link_to_ad" ? (
         <div className="grid gap-6 md:grid-cols-[300px_1fr] xl:grid-cols-[320px_1fr]">
