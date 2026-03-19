@@ -1,51 +1,40 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
-// For NEXT_PUBLIC_* vars, Next.js inlines them at build time into process.env on the client.
+type AuthMode = "signin" | "signup";
+
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const HAS_SUPABASE_ENV = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 
-export default function AuthClient() {
+export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
   const router = useRouter();
   const supabase = useMemo(() => (HAS_SUPABASE_ENV ? createSupabaseBrowserClient() : null), []);
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
   if (!HAS_SUPABASE_ENV) {
     return (
-      <div className="dark min-h-screen bg-background text-foreground">
-        <main className="mx-auto max-w-md px-4 py-12">
-          <Card className="shadow-sm border-amber-500/50">
-            <CardHeader>
-              <CardTitle className="text-base">Configuration manquante</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm text-muted-foreground">
-              <p>
-                Les variables <code className="rounded bg-muted px-1">NEXT_PUBLIC_SUPABASE_URL</code> et{" "}
-                <code className="rounded bg-muted px-1">NEXT_PUBLIC_SUPABASE_ANON_KEY</code> ne sont pas définies (ou pas encore prises en compte).
-              </p>
-              <p className="font-medium text-foreground">Sur Vercel :</p>
-              <ol className="list-decimal list-inside space-y-1">
-                <li>Ouvre le projet → Settings → Environment Variables</li>
-                <li>Ajoute <code className="rounded bg-muted px-1">NEXT_PUBLIC_SUPABASE_URL</code> et <code className="rounded bg-muted px-1">NEXT_PUBLIC_SUPABASE_ANON_KEY</code> pour l’environnement Production</li>
-                <li>Redéploie le projet (Deployments → … → Redeploy)</li>
-              </ol>
-              <p>Les variables <code>NEXT_PUBLIC_*</code> sont injectées au build : un simple save ne suffit pas, il faut un nouveau déploiement.</p>
-            </CardContent>
-          </Card>
+      <div className="min-h-screen bg-[#050507] text-white">
+        <main className="mx-auto max-w-xl px-5 py-16">
+          <div className="rounded-2xl border border-amber-400/40 bg-amber-500/5 p-6 text-sm text-white/80">
+            <p className="font-semibold text-amber-300">Missing Supabase config</p>
+            <p className="mt-3">
+              Define <code className="rounded bg-white/10 px-1">NEXT_PUBLIC_SUPABASE_URL</code> and{" "}
+              <code className="rounded bg-white/10 px-1">NEXT_PUBLIC_SUPABASE_ANON_KEY</code> in Vercel, then redeploy.
+            </p>
+          </div>
         </main>
       </div>
     );
@@ -53,23 +42,19 @@ export default function AuthClient() {
 
   if (!supabase) return null;
 
-  const client = supabase;
-
-  async function onSignUp() {
+  async function onSignIn() {
     setIsLoading(true);
     try {
-      const { error } = await client.auth.signUp({
+      const { error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
       });
       if (error) throw error;
-      toast.success("Compte créé", {
-        description: "Si Supabase demande une confirmation email, vérifie ta boîte mail.",
-      });
+      toast.success("Signed in");
       router.push("/app");
       router.refresh();
     } catch (err) {
-      toast.error("Signup error", {
+      toast.error("Sign in error", {
         description: err instanceof Error ? err.message : "Unknown error",
       });
     } finally {
@@ -77,19 +62,21 @@ export default function AuthClient() {
     }
   }
 
-  async function onSignIn() {
+  async function onSignUp() {
     setIsLoading(true);
     try {
-      const { error } = await client.auth.signInWithPassword({
+      const { error } = await supabase.auth.signUp({
         email: email.trim(),
         password,
       });
       if (error) throw error;
-      toast.success("Connecté");
+      toast.success("Account created", {
+        description: "If email confirmation is enabled, check your inbox.",
+      });
       router.push("/app");
       router.refresh();
     } catch (err) {
-      toast.error("Login error", {
+      toast.error("Sign up error", {
         description: err instanceof Error ? err.message : "Unknown error",
       });
     } finally {
@@ -100,14 +87,12 @@ export default function AuthClient() {
   async function onMagicLink() {
     setIsLoading(true);
     try {
-      const { error } = await client.auth.signInWithOtp({
+      const { error } = await supabase.auth.signInWithOtp({
         email: email.trim(),
-        options: {
-          emailRedirectTo: `${window.location.origin}/app`,
-        },
+        options: { emailRedirectTo: `${window.location.origin}/app` },
       });
       if (error) throw error;
-      toast.success("Magic link envoyé", { description: "Check ton email." });
+      toast.success("Magic link sent", { description: "Check your email inbox." });
     } catch (err) {
       toast.error("Magic link error", {
         description: err instanceof Error ? err.message : "Unknown error",
@@ -117,59 +102,105 @@ export default function AuthClient() {
     }
   }
 
+  const isSignIn = mode === "signin";
+
   return (
-    <div className="dark min-h-screen bg-background text-foreground">
-      <main className="mx-auto max-w-md px-4 py-12">
-        <Card className="shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-base">UGC Factory — Connexion</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>Email</Label>
-              <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@domain.com" />
+    <div className="min-h-screen bg-[#050507] text-white">
+      <div className="pointer-events-none absolute left-1/2 top-0 -z-0 h-[520px] w-[900px] -translate-x-1/2 rounded-full bg-violet-600/15 blur-[140px]" />
+
+      <main className="relative z-10 mx-auto flex min-h-screen max-w-6xl items-center justify-center px-5 py-14">
+        <div className="grid w-full max-w-5xl overflow-hidden rounded-3xl border border-white/10 bg-white/[0.02] backdrop-blur-xl md:grid-cols-[1.05fr_1fr]">
+          <div className="border-b border-white/10 p-8 md:border-b-0 md:border-r">
+            <Link href="/" className="inline-flex items-center gap-1 text-lg font-bold tracking-tight">
+              Youry
+              <span className="h-1.5 w-1.5 rounded-full bg-violet-500" />
+            </Link>
+
+            <h1 className="mt-8 text-3xl font-extrabold tracking-tight sm:text-4xl">
+              {isSignIn ? "Welcome back" : "Create your account"}
+            </h1>
+            <p className="mt-3 max-w-sm text-sm text-white/55">
+              {isSignIn
+                ? "Sign in to continue building high-converting video ads in minutes."
+                : "Sign up and start turning product pages into scroll-stopping video ads."}
+            </p>
+
+            <div className="mt-10 space-y-3 text-sm text-white/60">
+              <p>AI product analysis in seconds</p>
+              <p>Angle-driven scripts and prompts</p>
+              <p>Kling-ready video generation flow</p>
             </div>
-            <div className="space-y-2">
-              <Label>Mot de passe</Label>
-              <Input
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                type="password"
-                placeholder="••••••••"
-              />
+          </div>
+
+          <div className="p-8">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label className="text-white/80">Email</Label>
+                <Input
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@domain.com"
+                  className="h-11 border-white/15 bg-white/[0.03] text-white placeholder:text-white/30"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-white/80">Password</Label>
+                <Input
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  type="password"
+                  placeholder="��������"
+                  className="h-11 border-white/15 bg-white/[0.03] text-white placeholder:text-white/30"
+                />
+              </div>
+
+              {isSignIn ? (
+                <Button
+                  type="button"
+                  className="mt-2 h-11 w-full rounded-full bg-violet-600 text-white hover:bg-violet-500 shadow-[0_0_24px_rgba(139,92,246,0.35)]"
+                  onClick={onSignIn}
+                  disabled={isLoading}
+                >
+                  {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Sign in
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  className="mt-2 h-11 w-full rounded-full bg-violet-600 text-white hover:bg-violet-500 shadow-[0_0_24px_rgba(139,92,246,0.35)]"
+                  onClick={onSignUp}
+                  disabled={isLoading}
+                >
+                  {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Create account
+                </Button>
+              )}
+
+              <Button
+                type="button"
+                variant="secondary"
+                className="h-11 w-full rounded-full bg-white/10 text-white hover:bg-white/15"
+                onClick={onMagicLink}
+                disabled={isLoading}
+              >
+                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Magic link
+              </Button>
             </div>
 
-            <Tabs defaultValue="login">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="login">Login</TabsTrigger>
-                <TabsTrigger value="signup">Signup</TabsTrigger>
-              </TabsList>
-              <TabsContent value="login" className="space-y-2">
-                <Button className="w-full" onClick={onSignIn} disabled={isLoading}>
-                  {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                  Se connecter
-                </Button>
-                <div className="text-center text-xs text-muted-foreground">ou</div>
-                <Button className="w-full" variant="secondary" onClick={onMagicLink} disabled={isLoading}>
-                  {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                  Magic link (email)
-                </Button>
-              </TabsContent>
-              <TabsContent value="signup" className="space-y-2">
-                <Button className="w-full" onClick={onSignUp} disabled={isLoading}>
-                  {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                  Créer un compte
-                </Button>
-                <Separator className="my-2" />
-                <div className="text-xs text-muted-foreground">
-                  Tu pourras sauvegarder tes anciennes images, prompts, scripts et vidéos.
-                </div>
-              </TabsContent>
-            </Tabs>
-          </CardContent>
-        </Card>
+            <p className="mt-6 text-center text-sm text-white/50">
+              {isSignIn ? "No account yet?" : "Already have an account?"} {" "}
+              <Link
+                href={isSignIn ? "/signup" : "/signin"}
+                className="text-violet-400 hover:text-violet-300"
+              >
+                {isSignIn ? "Create one" : "Sign in"}
+              </Link>
+            </p>
+          </div>
+        </div>
       </main>
     </div>
   );
 }
-

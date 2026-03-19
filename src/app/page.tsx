@@ -51,6 +51,11 @@ const UGC_SLIDES = [
   { src: "/carousel/slide-7.mp4" },
 ];
 
+const PAIRED_CAROUSEL_ITEMS = PRODUCTS.map((product, index) => ({
+  product,
+  slide: UGC_SLIDES[index],
+}));
+
 const FAQ_ITEMS = [
   {
     q: "What kind of products work best?",
@@ -97,14 +102,14 @@ export default function LandingPage() {
               size="sm"
               className="text-white/60 hover:text-white hover:bg-white/5"
             >
-              <Link href="/auth">Log in</Link>
+              <Link href="/signin">Log in</Link>
             </Button>
             <Button
               asChild
               size="sm"
               className="rounded-full bg-violet-600 px-5 text-white hover:bg-violet-500 shadow-[0_0_16px_rgba(139,92,246,0.25)]"
             >
-              <Link href="/auth">
+              <Link href="/signup">
                 Get started
                 <ArrowRight className="ml-1 h-3.5 w-3.5" />
               </Link>
@@ -150,7 +155,7 @@ export default function LandingPage() {
                 asChild
                 className="h-10 shrink-0 rounded-full bg-violet-600 px-6 text-sm font-semibold text-white hover:bg-violet-500 shadow-[0_0_24px_rgba(139,92,246,0.35)]"
               >
-                <Link href="/auth">
+                <Link href="/signup">
                   Generate
                   <Sparkles className="ml-1.5 h-4 w-4" />
                 </Link>
@@ -209,59 +214,52 @@ export default function LandingPage() {
           </h2>
         </div>
 
-        {/* Single line: products (white) → electric vertical bar → video outputs */}
+        {/* Single line: product on left -> thin electric bar -> matched video on right */}
         <div className="relative mx-auto max-w-6xl px-5">
           <div className="pointer-events-none absolute inset-y-0 left-0 z-20 w-24 bg-gradient-to-r from-[#050507] to-transparent sm:w-40" />
           <div className="pointer-events-none absolute inset-y-0 right-0 z-20 w-24 bg-gradient-to-l from-[#050507] to-transparent sm:w-40" />
 
-          {/* Static electric divider in the middle (overlay) */}
-          <div className="pointer-events-none absolute inset-y-0 left-1/2 z-30 hidden w-14 -translate-x-1/2 sm:block">
-            <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-[#050507] via-violet-500 to-[#050507]" />
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(139,92,246,0.65)_0%,transparent_70%)]" />
-            <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-gradient-to-b from-transparent via-violet-200 to-transparent shadow-[0_0_28px_10px_rgba(139,92,246,0.55)]" />
-            <div className="absolute inset-0 blur-xl opacity-70 bg-violet-500/40" />
-          </div>
-
           <div className="relative overflow-hidden">
             <div
-              className="flex animate-marquee-track gap-5 py-2"
+              className="flex animate-marquee-right gap-5 py-2"
               style={{ width: "max-content" }}
             >
               {[
-                ...PRODUCTS.map((p, idx) => ({ kind: "product" as const, ...p, idx })),
-                ...UGC_SLIDES.map((u, idx) => ({ kind: "video" as const, ...u, idx })),
-                ...PRODUCTS.map((p, idx) => ({ kind: "product" as const, ...p, idx: idx + 100 })),
-                ...UGC_SLIDES.map((u, idx) => ({ kind: "video" as const, ...u, idx: idx + 100 })),
+                ...PAIRED_CAROUSEL_ITEMS,
+                ...PAIRED_CAROUSEL_ITEMS,
               ].map((item, i) => {
-                const isProduct = item.kind === "product";
                 return (
                   <div
-                    key={`${item.kind}-${item.idx}-${i}`}
-                    className={[
-                      "relative shrink-0 overflow-hidden rounded-2xl shadow-xl",
-                      "w-[calc(25vw-2rem)] max-w-[320px] min-w-[200px]",
-                      isProduct ? "bg-white" : "bg-black border border-white/[0.08]",
-                    ].join(" ")}
-                    style={{ aspectRatio: "3/4" }}
+                    key={`paired-${i}`}
+                    className="grid shrink-0 grid-cols-[minmax(170px,1fr)_12px_minmax(170px,1fr)] gap-2"
+                    style={{ width: "min(44vw, 560px)" }}
                   >
-                    {isProduct ? (
+                    <div className="relative overflow-hidden rounded-2xl bg-white shadow-xl" style={{ aspectRatio: "3/4" }}>
                       <Image
-                        src={(item as any).src}
-                        alt={(item as any).alt ?? "Product"}
+                        src={item.product.src}
+                        alt={item.product.alt}
                         fill
                         className="object-cover"
-                        sizes="(max-width:768px) 50vw, 25vw"
+                        sizes="(max-width:768px) 50vw, 20vw"
                       />
-                    ) : (
+                    </div>
+
+                    <div className="relative overflow-hidden rounded-full">
+                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-violet-500 to-transparent" />
+                      <div className="absolute inset-0 blur-sm bg-violet-500/70" />
+                      <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-violet-100 shadow-[0_0_10px_3px_rgba(139,92,246,0.9)]" />
+                    </div>
+
+                    <div className="relative overflow-hidden rounded-2xl border border-white/[0.08] bg-black shadow-xl" style={{ aspectRatio: "3/4" }}>
                       <video
-                        src={(item as any).src}
+                        src={item.slide.src}
                         autoPlay
                         loop
                         muted
                         playsInline
                         className="absolute inset-0 h-full w-full object-cover"
                       />
-                    )}
+                    </div>
                   </div>
                 );
               })}
@@ -280,7 +278,7 @@ export default function LandingPage() {
           asChild
           className="mt-10 h-12 rounded-full bg-violet-600 px-8 text-base font-semibold text-white hover:bg-violet-500 shadow-[0_0_30px_rgba(139,92,246,0.3)]"
         >
-          <Link href="/auth">
+          <Link href="/signup">
             Try it yourself
             <ArrowRight className="ml-2 h-4 w-4" />
           </Link>
@@ -304,7 +302,7 @@ export default function LandingPage() {
             asChild
             className="relative mt-8 h-11 rounded-full bg-violet-500 px-7 text-sm font-semibold text-white hover:bg-violet-400 shadow-[0_0_24px_rgba(139,92,246,0.35)]"
           >
-            <Link href="/auth">Generate your ad</Link>
+            <Link href="/signup">Generate your ad</Link>
           </Button>
         </div>
       </section>
