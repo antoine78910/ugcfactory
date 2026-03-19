@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
@@ -79,6 +79,83 @@ const FAQ_ITEMS = [
     a: "All videos are generated in 9:16 vertical format, optimized for TikTok, Instagram Reels, YouTube Shorts, and Facebook Stories.",
   },
 ];
+
+function RevealSlide({
+  imageSrc,
+  videoSrc,
+  imageAlt,
+}: {
+  imageSrc: string;
+  videoSrc: string;
+  imageAlt: string;
+}) {
+  const cardRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLDivElement>(null);
+  const lineRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let rafId: number;
+    function update() {
+      const card = cardRef.current;
+      const overlay = videoRef.current;
+      const line = lineRef.current;
+      if (card && overlay && line) {
+        const rect = card.getBoundingClientRect();
+        const vw = window.innerWidth;
+        const center = rect.left + rect.width / 2;
+        const pct = Math.max(0, Math.min(100, (center / vw) * 100));
+
+        overlay.style.clipPath = `inset(0 0 0 ${pct}%)`;
+        line.style.left = `${pct}%`;
+        const lineOpacity =
+          pct > 3 && pct < 97 ? Math.min(pct, 100 - pct) / 20 : 0;
+        line.style.opacity = String(Math.min(lineOpacity, 1));
+      }
+      rafId = requestAnimationFrame(update);
+    }
+    rafId = requestAnimationFrame(update);
+    return () => cancelAnimationFrame(rafId);
+  }, []);
+
+  return (
+    <div
+      ref={cardRef}
+      className="relative shrink-0 overflow-hidden rounded-3xl"
+      style={{ width: "min(90vw, 25rem)", aspectRatio: "0.64" }}
+    >
+      <Image
+        src={imageSrc}
+        alt={imageAlt}
+        fill
+        className="object-cover"
+        sizes="(max-width:768px) 90vw, 400px"
+      />
+      <div
+        ref={videoRef}
+        className="absolute inset-0"
+        style={{ clipPath: "inset(0 0 0 100%)" }}
+      >
+        <video
+          src={videoSrc}
+          autoPlay
+          loop
+          muted
+          playsInline
+          className="h-full w-full object-cover"
+        />
+      </div>
+      <div
+        ref={lineRef}
+        className="pointer-events-none absolute inset-y-0 z-10 w-[3px] -translate-x-1/2 bg-violet-400"
+        style={{
+          left: "100%",
+          opacity: 0,
+          boxShadow: "0 0 10px 5px rgba(139,92,246,0.9)",
+        }}
+      />
+    </div>
+  );
+}
 
 export default function LandingPage() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
@@ -223,59 +300,25 @@ export default function LandingPage() {
           </h2>
         </div>
 
-        {/* Two overlapping lanes: products LEFT, videos RIGHT, electric line CENTER */}
-        <div className="relative h-[420px] sm:h-[480px]">
-          {/* Edge fades */}
-          <div className="pointer-events-none absolute inset-y-0 left-0 z-20 w-20 bg-gradient-to-r from-[#050507] to-transparent sm:w-32" />
-          <div className="pointer-events-none absolute inset-y-0 right-0 z-20 w-20 bg-gradient-to-l from-[#050507] to-transparent sm:w-32" />
+        {/* Scrolling reveal carousel: image → video wipe per card */}
+        <div className="relative overflow-hidden">
+          <div className="pointer-events-none absolute inset-y-0 left-0 z-20 w-16 bg-gradient-to-r from-[#050507] to-transparent sm:w-28" />
+          <div className="pointer-events-none absolute inset-y-0 right-0 z-20 w-16 bg-gradient-to-l from-[#050507] to-transparent sm:w-28" />
 
-          {/* Left half: product images scrolling right-to-left */}
-          <div className="absolute inset-y-0 left-0 w-1/2 overflow-hidden">
-            <div className="flex h-full animate-marquee-left items-center gap-4 py-2" style={{ width: "max-content" }}>
-              {[...PRODUCTS, ...PRODUCTS].map((p, i) => (
-                <div
-                  key={`p-${i}`}
-                  className="relative h-[380px] w-[220px] shrink-0 overflow-hidden rounded-2xl bg-white shadow-xl sm:h-[440px] sm:w-[260px]"
-                >
-                  <Image
-                    src={p.src}
-                    alt={p.alt}
-                    fill
-                    className="object-cover"
-                    sizes="260px"
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Right half: UGC videos scrolling left-to-right */}
-          <div className="absolute inset-y-0 right-0 w-1/2 overflow-hidden">
-            <div className="flex h-full animate-marquee-right items-center gap-4 py-2" style={{ width: "max-content" }}>
-              {[...UGC_SLIDES, ...UGC_SLIDES].map((u, i) => (
-                <div
-                  key={`v-${i}`}
-                  className="relative h-[380px] w-[220px] shrink-0 overflow-hidden rounded-2xl border border-white/[0.08] bg-black shadow-xl sm:h-[440px] sm:w-[260px]"
-                >
-                  <video
-                    src={u.src}
-                    autoPlay
-                    loop
-                    muted
-                    playsInline
-                    className="absolute inset-0 h-full w-full object-cover"
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Fixed electric line in the center */}
-          <div className="pointer-events-none absolute inset-y-0 left-1/2 z-30 w-[6px] -translate-x-1/2">
-            <div className="absolute inset-0 bg-violet-500" />
-            <div className="absolute inset-0 bg-violet-400 blur-md" />
-            <div className="absolute inset-0 bg-violet-300/40 blur-xl" />
-            <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-white/80 shadow-[0_0_12px_4px_rgba(139,92,246,0.9)]" />
+          <div
+            className="flex animate-marquee-left items-center gap-4 px-4 py-2 md:gap-8"
+            style={{ width: "max-content" }}
+          >
+            {[...PAIRED_CAROUSEL_ITEMS, ...PAIRED_CAROUSEL_ITEMS].map(
+              (item, i) => (
+                <RevealSlide
+                  key={`reveal-${i}`}
+                  imageSrc={item.product.src}
+                  videoSrc={item.slide.src}
+                  imageAlt={item.product.alt}
+                />
+              )
+            )}
           </div>
         </div>
       </section>
