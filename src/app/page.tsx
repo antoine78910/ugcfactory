@@ -6,6 +6,7 @@ import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import RotatingText from "./RotatingText";
+import ShapeGrid from "./ShapeGrid";
 import { ArrowRight, ChevronDown, Play, Sparkles } from "lucide-react";
 
 const STEPS = [
@@ -91,25 +92,21 @@ function RevealSlide({
 }) {
   const cardRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLDivElement>(null);
-  const lineRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let rafId: number;
     function update() {
       const card = cardRef.current;
       const overlay = videoRef.current;
-      const line = lineRef.current;
-      if (card && overlay && line) {
+      if (card && overlay) {
         const rect = card.getBoundingClientRect();
-        const vw = window.innerWidth;
-        const center = rect.left + rect.width / 2;
-        const pct = Math.max(0, Math.min(100, (center / vw) * 100));
-
-        overlay.style.clipPath = `inset(0 0 0 ${pct}%)`;
-        line.style.left = `${pct}%`;
-        const lineOpacity =
-          pct > 3 && pct < 97 ? Math.min(pct, 100 - pct) / 20 : 0;
-        line.style.opacity = String(Math.min(lineOpacity, 1));
+        const viewportCenter = window.innerWidth / 2;
+        // % of card to the LEFT of the center line = image. The rest = video.
+        const splitPct = Math.max(
+          0,
+          Math.min(100, ((viewportCenter - rect.left) / rect.width) * 100)
+        );
+        overlay.style.clipPath = `inset(0 0 0 ${splitPct}%)`;
       }
       rafId = requestAnimationFrame(update);
     }
@@ -144,15 +141,6 @@ function RevealSlide({
           className="h-full w-full object-cover"
         />
       </div>
-      <div
-        ref={lineRef}
-        className="pointer-events-none absolute inset-y-0 z-10 w-[3px] -translate-x-1/2 bg-violet-400"
-        style={{
-          left: "100%",
-          opacity: 0,
-          boxShadow: "0 0 10px 5px rgba(139,92,246,0.9)",
-        }}
-      />
     </div>
   );
 }
@@ -198,14 +186,28 @@ export default function LandingPage() {
 
       {/* ── Hero ── */}
       <section className="relative overflow-hidden">
+        <div className="absolute inset-0 z-0 opacity-70">
+          <ShapeGrid
+            speed={0.5}
+            squareSize={40}
+            direction="diagonal"
+            borderColor="#271E37"
+            hoverFillColor="#222222"
+            shape="square"
+            hoverTrailAmount={0}
+          />
+        </div>
+        <div className="pointer-events-none absolute inset-0 z-0 bg-gradient-to-b from-[#050507]/30 via-[#050507]/55 to-[#050507]" />
         <div className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 h-[700px] w-[1000px] rounded-full bg-violet-600/[0.12] blur-[140px]" />
 
-        <div className="relative mx-auto max-w-4xl px-5 pt-28 pb-24 text-center">
+        <div className="relative z-10 mx-auto max-w-4xl px-5 pt-28 pb-24 text-center">
           <h1 className="mx-auto max-w-3xl px-4 sm:px-8 text-3xl font-extrabold tracking-tight leading-[1.12] sm:text-5xl md:text-6xl">
-            Turn any product into a realistic
+            Turn any product
+            <br />
+            into a realistic
             <br />
             <RotatingText
-              texts={["UGC", "ADS", "PRODUCT", "TESTIMONIALS"]}
+              texts={["Ads", "UGC", "Reels", "Stories"]}
               mainClassName="mx-2 inline-flex bg-violet-500/90 text-black overflow-hidden px-2 sm:px-2 md:px-3 py-1 sm:py-1.5 justify-center rounded-xl shadow-[0_0_22px_rgba(139,92,246,0.35)]"
               staggerFrom={"last"}
               initial={{ y: "100%" }}
