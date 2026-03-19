@@ -204,7 +204,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── Carousel: Product → Electric Band → UGC ── */}
-      <section className="overflow-hidden py-24">
+      <section className="overflow-hidden pt-24 pb-10">
         <div className="mx-auto max-w-6xl px-5 mb-14 text-center">
           <h2 className="text-3xl font-bold tracking-tight sm:text-4xl md:text-5xl">
             MAKE YOUR PRODUCTS{" "}
@@ -269,14 +269,14 @@ export default function LandingPage() {
       </section>
 
       {/* ── CTA text + button ── */}
-      <section className="mx-auto max-w-4xl px-5 py-20 text-center">
+      <section className="mx-auto max-w-4xl px-5 pt-10 pb-18 text-center">
         <p className="mx-auto max-w-3xl text-lg leading-relaxed text-white/55 sm:text-xl">
           Instantly turn flat product shots into dynamic video ads with AI
           avatars and voiceovers that demand attention and drive sales.
         </p>
         <Button
           asChild
-          className="mt-10 h-12 rounded-full bg-violet-600 px-8 text-base font-semibold text-white hover:bg-violet-500 shadow-[0_0_30px_rgba(139,92,246,0.3)]"
+          className="mt-7 h-12 rounded-full bg-violet-600 px-8 text-base font-semibold text-white hover:bg-violet-500 shadow-[0_0_30px_rgba(139,92,246,0.3)]"
         >
           <Link href="/signup">
             Try it yourself
