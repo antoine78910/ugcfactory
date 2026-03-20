@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
 import { ChevronDown, DollarSign, HelpCircle, LogOut, Settings, User } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -27,11 +26,6 @@ export default function SidebarAccountMenu({ email, onLogout, planLabel = "Free"
 
   const display = email.trim() || "—";
   const truncated = display.length > 24 ? `${display.slice(0, 21)}…` : display;
-
-  function comingSoon(label: string) {
-    toast.message(label, { description: "Coming soon." });
-    setOpen(false);
-  }
 
   return (
     <div className="relative" ref={rootRef}>
@@ -78,7 +72,10 @@ export default function SidebarAccountMenu({ email, onLogout, planLabel = "Free"
             type="button"
             role="menuitem"
             className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm text-white/90 transition-colors hover:bg-white/[0.06]"
-            onClick={() => comingSoon("Subscription")}
+            onClick={() => {
+              setOpen(false);
+              router.push("/subscription");
+            }}
           >
             <Settings className="h-4 w-4 shrink-0 text-white/70" strokeWidth={1.75} />
             Subscription
@@ -87,7 +84,10 @@ export default function SidebarAccountMenu({ email, onLogout, planLabel = "Free"
             type="button"
             role="menuitem"
             className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm text-white/90 transition-colors hover:bg-white/[0.06]"
-            onClick={() => comingSoon("Support")}
+            onClick={() => {
+              setOpen(false);
+              router.push("/support");
+            }}
           >
             <HelpCircle className="h-4 w-4 shrink-0 text-white/70" strokeWidth={1.75} />
             Support

@@ -9,10 +9,33 @@ type Body = {
   storeUrl?: string;
   productTitle?: string | null;
   brandBrief: string;
+  /** @deprecated Prefer `productImageUrls`; kept for older clients */
   productImageUrl?: string | null;
+  /** Up to 3 HTTPS product references (multi-angle) for GPT vision */
+  productImageUrls?: string[] | null;
   /** 8 | 15 | 30 — drives max word count per script */
   videoDurationSeconds?: 8 | 15 | 30;
 };
+
+function collectHttpsProductImageUrls(body: Body): string[] {
+  const raw: string[] = [];
+  if (Array.isArray(body.productImageUrls)) {
+    for (const x of body.productImageUrls) {
+      if (typeof x === "string" && x.trim()) raw.push(x.trim());
+    }
+  }
+  const single = body.productImageUrl?.trim();
+  if (single) raw.push(single);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const r of raw) {
+    if (!/^https?:\/\//i.test(r) || seen.has(r)) continue;
+    seen.add(r);
+    out.push(r);
+    if (out.length >= 3) break;
+  }
+  return out;
+}
 
 const UGC_SCRIPT_INSTRUCTIONS = `
 Instructions du GPT pour les scripts:
@@ -187,13 +210,8 @@ export async function POST(req: Request) {
 
   const storeUrl = body?.storeUrl?.trim() ?? "";
   const productTitle = body?.productTitle?.trim() || null;
-  const rawImg = body?.productImageUrl?.trim() || null;
-  const imageUrl =
-    rawImg && /^https:\/\//i.test(rawImg)
-      ? rawImg
-      : rawImg && /^http:\/\//i.test(rawImg)
-        ? rawImg
-        : null;
+  const imageUrls = collectHttpsProductImageUrls(body ?? ({} as Body));
+  const imageUrl = imageUrls[0] ?? null;
 
   const videoDurationSeconds: 8 | 15 | 30 =
     body?.videoDurationSeconds === 8 || body?.videoDurationSeconds === 30
@@ -210,6 +228,13 @@ export async function POST(req: Request) {
     UGC_SCRIPT_INSTRUCTIONS.trim(),
   ].join("\n");
 
+  const imageNote =
+    imageUrls.length === 0
+      ? "No product image is attached; rely on the brand brief text only."
+      : imageUrls.length > 1
+        ? `I am attaching ${String(imageUrls.length)} product reference images (different angles when available) so you understand shape, branding, and packaging.`
+        : "I am also attaching the product image for reference.";
+
   const userPayload = [
     "Create 3 UGC video scripts for this product.",
     "",
@@ -222,7 +247,7 @@ export async function POST(req: Request) {
     "The scripts must follow the UGC AI script structure.",
     "Test 3 different marketing angles.",
     "",
-    "I am also attaching the product image for reference.",
+    imageNote,
   ].join("\n");
 
   try {
@@ -230,7 +255,7 @@ export async function POST(req: Request) {
       v: 1,
       kind: "ugc_scripts_from_brief",
       brandBrief,
-      imageUrl: imageUrl ?? "",
+      imageUrlsJoined: imageUrls.join("|"),
       videoDurationSeconds,
       storeUrl,
       productTitle,
@@ -253,13 +278,14 @@ export async function POST(req: Request) {
       // ignore cache read errors
     }
 
-    const { text } = imageUrl
-      ? await openaiResponsesTextWithImages({
-          developer,
-          userText: userPayload,
-          imageUrls: [imageUrl],
-        })
-      : await openaiResponsesText({ developer, user: userPayload });
+    const { text } =
+      imageUrls.length > 0
+        ? await openaiResponsesTextWithImages({
+            developer,
+            userText: userPayload,
+            imageUrls: imageUrls,
+          })
+        : await openaiResponsesText({ developer, user: userPayload });
 
     try {
       await supabase

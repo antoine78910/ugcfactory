@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import Image from "next/image";
 import { Loader2, Play, Sparkles, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -11,9 +10,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import LinkToAdUniverse from "@/app/_components/LinkToAdUniverse";
-import SidebarAccountMenu from "@/app/_components/SidebarAccountMenu";
+import StudioShell from "@/app/_components/StudioShell";
+import { packshotUrlsForGpt, pickPackshotForNanoBanana } from "@/lib/productReferenceImages";
 
 type WizardStep = "url" | "analysis" | "quiz" | "image" | "video";
 type AppSection = "link_to_ad" | "motion_control" | "models" | "projects";
@@ -146,7 +145,6 @@ export default function AppBrandWizard() {
   const [step, setStep] = useState<WizardStep>("url");
   const [appSection, setAppSection] = useState<AppSection>("link_to_ad");
 
-  const [meEmail, setMeEmail] = useState<string>("");
   const [savedRuns, setSavedRuns] = useState<
     Array<{
       id: string;
@@ -338,12 +336,6 @@ export default function AppBrandWizard() {
   async function refreshMeAndRuns() {
     setIsLoadingRuns(true);
     try {
-      const supabase = createSupabaseBrowserClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      setMeEmail(user?.email ?? "");
-
       const res = await fetch("/api/runs/list", { method: "GET", cache: "no-store" });
       const json = (await res.json()) as { data?: any; error?: string };
       if (!res.ok) throw new Error(json.error || "List runs failed");
@@ -455,16 +447,6 @@ export default function AppBrandWizard() {
     }
   }
 
-  async function onSignOut() {
-    try {
-      const supabase = createSupabaseBrowserClient();
-      await supabase.auth.signOut();
-    } finally {
-      router.push("/auth");
-      router.refresh();
-    }
-  }
-
   useEffect(() => {
     const runIdFromUrl = searchParams.get("project");
     const savedRunId = typeof localStorage !== "undefined" ? localStorage.getItem(UGC_CURRENT_RUN_KEY) : null;
@@ -481,16 +463,26 @@ export default function AppBrandWizard() {
     else if (typeof localStorage !== "undefined") localStorage.removeItem(UGC_CURRENT_RUN_KEY);
   }, [runId]);
 
+  useLayoutEffect(() => {
+    const sec = searchParams.get("section");
+    const validSections: AppSection[] = ["link_to_ad", "motion_control", "models", "projects"];
+    if (sec && validSections.includes(sec as AppSection)) {
+      setAppSection(sec as AppSection);
+    }
+  }, [searchParams]);
+
   useEffect(() => {
-    const current = searchParams.get("project");
-    if (runId && current !== runId) {
-      router.replace(`${pathname}?project=${encodeURIComponent(runId)}`);
-      return;
+    if (pathname !== "/app") return;
+    const curProject = searchParams.get("project") ?? "";
+    const curSection = searchParams.get("section") || "link_to_ad";
+    const wantProject = runId ?? "";
+    if (wantProject !== curProject || appSection !== curSection) {
+      const p = new URLSearchParams();
+      if (runId) p.set("project", runId);
+      p.set("section", appSection);
+      router.replace(`/app?${p.toString()}`);
     }
-    if (!runId && current) {
-      router.replace(pathname);
-    }
-  }, [runId, pathname, router, searchParams]);
+  }, [runId, appSection, pathname, router, searchParams]);
 
   async function onExtract() {
     const url = storeUrl.trim();
@@ -777,6 +769,11 @@ export default function AppBrandWizard() {
     }
     setIsCreatingPerfectImagePrompt(true);
     try {
+      const productImagesForGpt = packshotUrlsForGpt(
+        extracted.url,
+        packshotUrls,
+        Array.isArray(extracted.images) && typeof extracted.images[0] === "string" ? extracted.images[0] : null,
+      );
       const res = await fetch("/api/gpt/image-prompt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -784,7 +781,12 @@ export default function AppBrandWizard() {
           url: extracted.url,
           analysis,
           productName: extracted.title,
-          productImages: packshotUrls.length > 0 ? packshotUrls : extracted.images,
+          productImages:
+            productImagesForGpt.length > 0
+              ? productImagesForGpt
+              : packshotUrls.length > 0
+                ? packshotUrls
+                : extracted.images,
           quiz: { persona: quiz.persona, videoDurationPreference: quiz.videoDurationPreference },
         }),
       });
@@ -838,14 +840,23 @@ export default function AppBrandWizard() {
     setSelectedImageUrl(null);
 
     try {
+      const nanoRefUrl = pickPackshotForNanoBanana(
+        extracted.url,
+        packshotUrls,
+        Array.isArray(extracted.images) && typeof extracted.images[0] === "string" ? extracted.images[0] : null,
+      );
+      if (!nanoRefUrl) {
+        toast.error("Aucune image produit HTTPS valide pour NanoBanana (packshot requis).");
+        setImageGen({ kind: "idle" });
+        return;
+      }
       const res = await fetch("/api/nanobanana/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model: nanoModel,
           prompt: imagePrompt,
-          imageUrls:
-            packshotUrls.length > 0 ? packshotUrls.slice(0, 4) : extracted.images.slice(0, 2),
+          imageUrls: [nanoRefUrl],
           numImages: 1,
           imageSize: "9:16",
           aspectRatio: "9:16",
@@ -1066,78 +1077,12 @@ export default function AppBrandWizard() {
   }, [videoGen]);
 
   return (
-    <div className="dark min-h-screen bg-[#050507] text-white">
-      <div className="pointer-events-none fixed left-1/2 top-0 -z-0 h-[520px] w-[1000px] -translate-x-1/2 rounded-full bg-violet-600/15 blur-[150px]" />
-      <main className="relative z-10 grid min-h-screen grid-cols-[250px_1fr] items-start">
-        <aside className="sticky top-0 flex h-screen flex-col overflow-hidden border-r border-white/10 bg-[#06070d] px-3 py-4">
-          <div className="shrink-0 px-2 pb-2">
-            <Image
-              src="/youry-logo.png"
-              alt="Youry"
-              width={174}
-              height={52}
-              className="h-8 w-auto"
-              priority
-            />
-          </div>
-
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
-          <div className="rounded-xl border border-white/10 bg-[#0b0912]/85 p-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/45">Overview</p>
-            <div className="mt-2 space-y-1">
-              <button
-                type="button"
-                className={`w-full rounded-xl px-3 py-2 text-left text-sm font-semibold transition-all cursor-pointer ${
-                  appSection === "link_to_ad"
-                    ? "bg-violet-400 text-black shadow-[0_7px_0_0_rgba(76,29,149,0.95)] hover:bg-violet-300 hover:shadow-[0_9px_0_0_rgba(76,29,149,0.95)] active:translate-y-[6px]"
-                    : "border border-white/10 bg-white/5 text-white hover:bg-white/10 hover:border-violet-400/40 shadow-[0_0_22px_rgba(139,92,246,0.12)] hover:shadow-[0_0_36px_rgba(139,92,246,0.22)]"
-                }`}
-                onClick={() => setAppSection("link_to_ad")}
-              >
-                Link to Ad
-              </button>
-              <button
-                type="button"
-                className={`w-full rounded-xl px-3 py-2 text-left text-sm font-semibold transition-all cursor-pointer ${
-                  appSection === "motion_control"
-                    ? "bg-violet-400 text-black shadow-[0_7px_0_0_rgba(76,29,149,0.95)] hover:bg-violet-300 hover:shadow-[0_9px_0_0_rgba(76,29,149,0.95)] active:translate-y-[6px]"
-                    : "border border-white/10 bg-white/5 text-white hover:bg-white/10 hover:border-violet-400/40 shadow-[0_0_22px_rgba(139,92,246,0.12)] hover:shadow-[0_0_36px_rgba(139,92,246,0.22)]"
-                }`}
-                onClick={() => setAppSection("motion_control")}
-              >
-                Motion Control
-              </button>
-              <button
-                type="button"
-                className={`w-full rounded-xl px-3 py-2 text-left text-sm font-semibold transition-all cursor-pointer ${
-                  appSection === "models"
-                    ? "bg-violet-400 text-black shadow-[0_7px_0_0_rgba(76,29,149,0.95)] hover:bg-violet-300 hover:shadow-[0_9px_0_0_rgba(76,29,149,0.95)] active:translate-y-[6px]"
-                    : "border border-white/10 bg-white/5 text-white hover:bg-white/10 hover:border-violet-400/40 shadow-[0_0_22px_rgba(139,92,246,0.12)] hover:shadow-[0_0_36px_rgba(139,92,246,0.22)]"
-                }`}
-                onClick={() => setAppSection("models")}
-              >
-                Models
-              </button>
-              <button
-                type="button"
-                className={`w-full rounded-xl px-3 py-2 text-left text-sm font-semibold transition-all cursor-pointer ${
-                  appSection === "projects"
-                    ? "bg-violet-400 text-black shadow-[0_7px_0_0_rgba(76,29,149,0.95)] hover:bg-violet-300 hover:shadow-[0_9px_0_0_rgba(76,29,149,0.95)] active:translate-y-[6px]"
-                    : "border border-white/10 bg-white/5 text-white hover:bg-white/10 hover:border-violet-400/40 shadow-[0_0_22px_rgba(139,92,246,0.12)] hover:shadow-[0_0_36px_rgba(139,92,246,0.22)]"
-                }`}
-                onClick={() => setAppSection("projects")}
-              >
-                Projects
-              </button>
-            </div>
-          </div>
-          </div>
-
-          <div className="mt-auto shrink-0 border-t border-white/10 pt-3">
-            <SidebarAccountMenu email={meEmail} onLogout={onSignOut} planLabel="Free" />
-          </div>
-        </aside>
-
+    <>
+      <StudioShell
+        studioSection={appSection}
+        onStudioSectionChange={setAppSection}
+        studioProjectId={runId}
+      >
         <section className="space-y-6 px-6 py-6 md:px-8">
           <header className="border-b border-white/10 pb-4">
             <h1 className="text-2xl font-semibold tracking-tight">Studio</h1>
@@ -2119,7 +2064,7 @@ export default function AppBrandWizard() {
             )}
           </div>
         </section>
-      </main>
+      </StudioShell>
 
       {lightboxUrl ? (
         <div
@@ -2150,7 +2095,7 @@ export default function AppBrandWizard() {
           </div>
         </div>
       ) : null}
-    </div>
+    </>
   );
 }
 

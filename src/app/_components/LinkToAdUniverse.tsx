@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { absolutizeImageUrl } from "@/lib/imageUrl";
+import { pickBestProductUrlForNanoBanana, productUrlsForGpt } from "@/lib/productReferenceImages";
 import {
   deriveAngleLabelsFromScripts,
   parseThreeLabeledPrompts,
@@ -69,6 +70,10 @@ function readUniverseFromExtracted(extracted: unknown): LinkToAdUniverseSnapshot
     fallbackImageUrl: typeof o.fallbackImageUrl === "string" ? o.fallbackImageUrl : null,
     confidence: typeof o.confidence === "string" ? o.confidence : o.confidence != null ? String(o.confidence) : null,
     neutralUploadUrl: typeof o.neutralUploadUrl === "string" ? o.neutralUploadUrl : null,
+    productOnlyImageUrls:
+      Array.isArray(o.productOnlyImageUrls) && o.productOnlyImageUrls.every((x) => typeof x === "string")
+        ? (o.productOnlyImageUrls as string[])
+        : null,
     summaryText: typeof o.summaryText === "string" ? o.summaryText : "",
     scriptsText: typeof o.scriptsText === "string" ? o.scriptsText : "",
     angleLabels:
@@ -146,6 +151,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const [fallbackImageUrl, setFallbackImageUrl] = useState<string | null>(null);
   const [confidence, setConfidence] = useState<string | null>(null);
   const [neutralUploadUrl, setNeutralUploadUrl] = useState<string | null>(null);
+  /** URLs classified as product-only (multi-angle); used for GPT vision + Nano single pick. */
+  const [productOnlyImageUrls, setProductOnlyImageUrls] = useState<string[]>([]);
   const [imgError, setImgError] = useState(false);
 
   const [summaryText, setSummaryText] = useState<string>("");
@@ -195,6 +202,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       fallbackImageUrl,
       confidence,
       neutralUploadUrl,
+      productOnlyImageUrls: productOnlyImageUrls.length ? productOnlyImageUrls : undefined,
       summaryText,
       scriptsText,
       angleLabels,
@@ -214,6 +222,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     fallbackImageUrl,
     confidence,
     neutralUploadUrl,
+    productOnlyImageUrls,
     summaryText,
     scriptsText,
     angleLabels,
@@ -264,6 +273,13 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       setFallbackImageUrl(snap.fallbackImageUrl);
       setConfidence(snap.confidence);
       setNeutralUploadUrl(snap.neutralUploadUrl);
+      setProductOnlyImageUrls(
+        snap.productOnlyImageUrls && snap.productOnlyImageUrls.length > 0
+          ? snap.productOnlyImageUrls
+          : snap.cleanCandidate?.url
+            ? [snap.cleanCandidate.url]
+            : [],
+      );
       setSummaryText(snap.summaryText);
       setScriptsText(snap.scriptsText);
       setAngleLabels(
@@ -431,8 +447,26 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   }
 
   function packshotsForSave(): string[] {
+    const pageUrl = storeUrl.trim();
+    if (!pageUrl) {
+      const u = resolvedPreviewUrl;
+      return u && /^https?:\/\//i.test(u) ? [u] : [];
+    }
+    const candidates =
+      productOnlyImageUrls.length > 0
+        ? productOnlyImageUrls
+        : cleanCandidate?.url
+          ? [cleanCandidate.url]
+          : [];
+    const gpt = productUrlsForGpt({
+      pageUrl,
+      neutralUploadUrl,
+      candidateUrls: candidates,
+      fallbackUrl: fallbackImageUrl,
+    });
+    if (gpt.length > 0) return gpt;
     const u = resolvedPreviewUrl;
-    return u ? [u] : [];
+    return u && /^https?:\/\//i.test(u) ? [u] : [];
   }
 
   /** Resume after a save stopped at brand brief (scripts step failed or interrupted). */
@@ -446,13 +480,18 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     const titleForScripts = extractedTitle;
     const summaryStr = summaryText;
     const base = lastExtractedJson;
-    const pickedImage = userUploadedImageUrl ?? cleanCandidate?.url ?? fallbackImageUrl ?? null;
-    let imageForGpt: string | null = null;
-    if (pickedImage) {
-      imageForGpt = /^https?:\/\//i.test(pickedImage)
-        ? pickedImage
-        : absolutizeImageUrl(pickedImage, url) ?? pickedImage;
-    }
+    const candidates =
+      productOnlyImageUrls.length > 0
+        ? productOnlyImageUrls
+        : cleanCandidate?.url
+          ? [cleanCandidate.url]
+          : [];
+    const gptImages = productUrlsForGpt({
+      pageUrl: url,
+      neutralUploadUrl: userUploadedImageUrl,
+      candidateUrls: candidates,
+      fallbackUrl: fallbackImageUrl,
+    });
 
     let activeRunId = universeRunId;
     setIsWorking(true);
@@ -465,7 +504,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           storeUrl: url,
           productTitle: titleForScripts,
           brandBrief: summaryStr,
-          productImageUrl: imageForGpt,
+          productImageUrl: gptImages[0] ?? null,
+          productImageUrls: gptImages,
           videoDurationSeconds: 15,
         }),
       });
@@ -498,13 +538,14 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         fallbackImageUrl,
         confidence,
         neutralUploadUrl: userUploadedImageUrl,
+        productOnlyImageUrls: candidates.length ? candidates : undefined,
         summaryText: summaryStr,
         scriptsText: scriptsStr,
         angleLabels: labels,
         selectedAngleIndex: null,
         ...PIPELINE_CLEAR,
       };
-      const shots = imageForGpt ? [imageForGpt] : [];
+      const shots = gptImages.length > 0 ? gptImages : [];
       await persistUniverse(activeRunId, url, titleForScripts, base, snapAfterScripts, shots);
       setStage("ready");
       toast.success("3 UGC scripts ready");
@@ -556,6 +597,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     setCleanCandidate(null);
     setFallbackImageUrl(null);
     setConfidence(null);
+    setProductOnlyImageUrls([]);
     setImgError(false);
     setNanoBananaPromptsRaw("");
     setNanoBananaSelectedPromptIndex(0);
@@ -640,6 +682,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       const firstCandidate = validCandidates[0];
       const cleanUrl = firstCandidate?.url ?? null;
       const reason = firstCandidate?.reason;
+      const urlsOnly = validCandidates.map((c) => c.url).filter((x) => x.length > 0);
+      setProductOnlyImageUrls(urlsOnly);
 
       const otherUrlsRaw: unknown[] = Array.isArray(classifyObj.data?.otherUrls)
         ? (classifyObj.data!.otherUrls as unknown[])
@@ -673,14 +717,12 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       setSummaryText(summaryStr);
 
       const titleForScripts = typeof extractedObj.title === "string" ? extractedObj.title : null;
-      const pickedImage =
-        userUploadedImageUrl ?? cleanUrl ?? firstOther?.trim() ?? images[0] ?? null;
-      let imageForGpt: string | null = null;
-      if (pickedImage) {
-        imageForGpt = /^https?:\/\//i.test(pickedImage)
-          ? pickedImage
-          : absolutizeImageUrl(pickedImage, url) ?? pickedImage;
-      }
+      const gptImages = productUrlsForGpt({
+        pageUrl: url,
+        neutralUploadUrl: userUploadedImageUrl,
+        candidateUrls: urlsOnly,
+        fallbackUrl: firstOther?.trim() || images[0] || null,
+      });
 
       const snapAfterSummary: LinkToAdUniverseSnapshotV1 = {
         v: 1,
@@ -690,6 +732,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         confidence:
           typeof confidenceVal === "string" ? confidenceVal : confidenceVal != null ? String(confidenceVal) : "low",
         neutralUploadUrl: userUploadedImageUrl,
+        productOnlyImageUrls: urlsOnly.length ? urlsOnly : undefined,
         summaryText: summaryStr,
         scriptsText: "",
         angleLabels: ["", "", ""],
@@ -697,7 +740,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         ...PIPELINE_CLEAR,
       };
       try {
-        const shots = imageForGpt ? [imageForGpt] : [];
+        const shots = gptImages.length > 0 ? gptImages : [];
         activeRunId = await persistUniverse(activeRunId, url, titleForScripts, base, snapAfterSummary, shots);
         toast.success("Project saved (image + brief)");
       } catch (e) {
@@ -715,7 +758,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
             storeUrl: url,
             productTitle: titleForScripts,
             brandBrief: summaryStr,
-            productImageUrl: imageForGpt,
+            productImageUrl: gptImages[0] ?? null,
+            productImageUrls: gptImages,
             videoDurationSeconds: 15,
           }),
         });
@@ -745,6 +789,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           confidence:
             typeof confidenceVal === "string" ? confidenceVal : confidenceVal != null ? String(confidenceVal) : "low",
           neutralUploadUrl: userUploadedImageUrl,
+          productOnlyImageUrls: urlsOnly.length ? urlsOnly : undefined,
           summaryText: summaryStr,
           scriptsText: scriptsStr,
           angleLabels: labels,
@@ -752,7 +797,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           ...PIPELINE_CLEAR,
         };
         try {
-          const shots = imageForGpt ? [imageForGpt] : [];
+          const shots = gptImages.length > 0 ? gptImages : [];
           activeRunId = await persistUniverse(activeRunId, url, titleForScripts, base, snapAfterScripts, shots);
         } catch {
           /* ignore */
@@ -773,7 +818,18 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   async function onGenerateNanoBananaPrompts() {
     const url = storeUrl.trim();
     const script = selectedAngleScript(scriptsText, selectedAngleIndex);
-    const img = resolvedPreviewUrl;
+    const candidates =
+      productOnlyImageUrls.length > 0
+        ? productOnlyImageUrls
+        : cleanCandidate?.url
+          ? [cleanCandidate.url]
+          : [];
+    const img = pickBestProductUrlForNanoBanana({
+      pageUrl: url,
+      neutralUploadUrl,
+      candidateUrls: candidates,
+      fallbackUrl: fallbackImageUrl,
+    });
     if (!url || !lastExtractedJson || selectedAngleIndex === null || !script.trim()) {
       toast.error("Pick an angle and make sure the script is ready.");
       return;
@@ -839,7 +895,18 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
 
   async function onGenerateNanoBananaImage() {
     const url = storeUrl.trim();
-    const img = resolvedPreviewUrl;
+    const candidates =
+      productOnlyImageUrls.length > 0
+        ? productOnlyImageUrls
+        : cleanCandidate?.url
+          ? [cleanCandidate.url]
+          : [];
+    const img = pickBestProductUrlForNanoBanana({
+      pageUrl: url,
+      neutralUploadUrl,
+      candidateUrls: candidates,
+      fallbackUrl: fallbackImageUrl,
+    });
     const prompt = parsedNanoPrompts[nanoBananaSelectedPromptIndex]?.trim();
     if (!url || !lastExtractedJson || !prompt) {
       toast.error("Generate the 3 GPT prompts first, then choose a valid prompt.");
@@ -934,7 +1001,18 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
 
   async function onGenerateNanoBananaImagesFromAllPrompts() {
     const url = storeUrl.trim();
-    const img = resolvedPreviewUrl;
+    const candidates =
+      productOnlyImageUrls.length > 0
+        ? productOnlyImageUrls
+        : cleanCandidate?.url
+          ? [cleanCandidate.url]
+          : [];
+    const img = pickBestProductUrlForNanoBanana({
+      pageUrl: url,
+      neutralUploadUrl,
+      candidateUrls: candidates,
+      fallbackUrl: fallbackImageUrl,
+    });
     if (!url || !lastExtractedJson || selectedAngleIndex === null) {
       toast.error("Project not ready to generate images.");
       return;

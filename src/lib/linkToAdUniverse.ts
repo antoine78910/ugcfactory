@@ -6,6 +6,8 @@ export type LinkToAdUniverseSnapshotV1 = {
   fallbackImageUrl: string | null;
   confidence: string | null;
   neutralUploadUrl: string | null;
+  /** Packshot URLs from images-classify (product-only), best first — used to rebuild multi-angle GPT context. */
+  productOnlyImageUrls?: string[] | null;
   summaryText: string;
   scriptsText: string;
   angleLabels: [string, string, string];

@@ -1,15 +1,17 @@
 import OpenAI from "openai";
 import { requireEnv } from "@/lib/env";
 
+/** Default for all `/api/gpt/*` routes unless `opts.model` or `OPENAI_MODEL` overrides. */
+export const OPENAI_DEFAULT_MODEL = "gpt-5.2";
+
 function getOpenAiApiKey() {
   return requireEnv("OPENAI_API_KEY");
 }
 
 function getOpenAiModel() {
-  // user requested GPT-5.2 "normal"
   return process.env.OPENAI_MODEL && process.env.OPENAI_MODEL.length > 0
     ? process.env.OPENAI_MODEL
-    : "gpt-5.2";
+    : OPENAI_DEFAULT_MODEL;
 }
 
 export async function openaiResponsesText(opts: {

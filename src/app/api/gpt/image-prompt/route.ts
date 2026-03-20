@@ -63,7 +63,7 @@ export async function POST(req: Request) {
       {
         url: body.url,
         productName: body.productName ?? null,
-        productImages: Array.isArray(body.productImages) ? body.productImages.slice(0, 6) : [],
+        productImages: Array.isArray(body.productImages) ? body.productImages.slice(0, 3) : [],
         quiz: body.quiz ?? null,
         analysis: body.analysis,
       },
