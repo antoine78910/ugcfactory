@@ -293,7 +293,7 @@ export default function AppBrandWizard() {
   async function onManualSaveProject() {
     const url = storeUrl.trim();
     if (!url) {
-      toast.error("Colle l’URL d’un store / page produit avant de sauvegarder.");
+      toast.error("Paste the store URL / product page URL before saving.");
       return;
     }
     await saveRun({
@@ -312,7 +312,7 @@ export default function AppBrandWizard() {
       videoUrl: videoGen.kind === "success" ? videoGen.url : null,
     });
     void refreshMeAndRuns();
-    toast.success("Projet sauvegardé");
+    toast.success("Project saved");
   }
 
   async function refreshMeAndRuns() {
@@ -331,14 +331,14 @@ export default function AppBrandWizard() {
     } catch (err) {
       // keep UI usable even if Supabase tables aren't created yet
       const message = err instanceof Error ? err.message : "Unknown error";
-      toast.message("Runs non disponibles", { description: message });
+      toast.message("Runs unavailable", { description: message });
     } finally {
       setIsLoadingRuns(false);
     }
   }
 
   async function deleteProjectByStoreUrl(storeUrl: string, runIdsInProject: string[]) {
-    if (!confirm("Supprimer ce projet ? Tous les runs liés à cette URL seront effacés.")) return;
+    if (!confirm("Delete this project? All runs linked to this URL will be removed.")) return;
     try {
       const res = await fetch("/api/runs/delete-project", {
         method: "POST",
@@ -347,15 +347,15 @@ export default function AppBrandWizard() {
       });
       const json = (await res.json()) as { deleted?: number; error?: string };
       if (!res.ok) throw new Error(json.error || "Delete failed");
-      toast.success(`Projet supprimé (${json.deleted ?? 0} run(s))`);
+      toast.success(`Project deleted (${json.deleted ?? 0} run(s))`);
       if (runId && runIdsInProject.includes(runId)) {
         setRunId(null);
         if (typeof localStorage !== "undefined") localStorage.removeItem(UGC_CURRENT_RUN_KEY);
       }
       void refreshMeAndRuns();
     } catch (err) {
-      toast.error("Suppression impossible", {
-        description: err instanceof Error ? err.message : "Erreur",
+      toast.error("Deletion failed", {
+        description: err instanceof Error ? err.message : "Unknown error",
       });
     }
   }
@@ -391,7 +391,7 @@ export default function AppBrandWizard() {
     } catch (err) {
       // don't block the flow if saving fails
       const message = err instanceof Error ? err.message : "Unknown error";
-      toast.message("Sauvegarde impossible", { description: message });
+      toast.message("Save failed", { description: message });
     }
   }
 
@@ -428,7 +428,7 @@ export default function AppBrandWizard() {
       }
 
       setStep(r.video_url ? "video" : r.selected_image_url ? "image" : r.analysis ? "quiz" : "url");
-      toast.success("Run chargé");
+      toast.success("Run loaded");
     } catch (err) {
       localStorage.removeItem(UGC_CURRENT_RUN_KEY);
       toast.error("Load error", { description: err instanceof Error ? err.message : "Unknown error" });
@@ -475,7 +475,7 @@ export default function AppBrandWizard() {
   async function onExtract() {
     const url = storeUrl.trim();
     if (!url) {
-      toast.error("Colle l’URL d’un store / page produit.");
+      toast.error("Paste a store URL / product page URL.");
       return;
     }
 
@@ -492,7 +492,7 @@ export default function AppBrandWizard() {
         )[0];
       if (existing) {
         await loadRun(existing.id);
-        toast.success("Produit déjà analysé chargé depuis l’historique");
+        toast.success("Product already analyzed loaded from history");
         return;
       }
     }
@@ -677,12 +677,12 @@ export default function AppBrandWizard() {
       await saveRun({ packshotUrls: defaults });
       void refreshMeAndRuns();
       if (normalizedCandidates.length === 0) {
-        toast.message("Aucune image “produit seul” détectée", {
+        toast.message("No product-only images detected", {
           description:
-            "Le site n’a peut-être pas de packshots propres. Tu peux continuer avec les images extraites.",
+            "The site may not have clean packshots. You can continue with the extracted images.",
         });
       } else {
-        toast.success("Images produit seul détectées", {
+        toast.success("Product-only images detected", {
           description: `${normalizedCandidates.length} candidate(s)`,
         });
       }
@@ -709,7 +709,9 @@ export default function AppBrandWizard() {
         try {
           if (raw.length > 0) json = JSON.parse(raw) as { error?: string; url?: string };
         } catch {
-          throw new Error(res.ok ? "Réponse serveur invalide" : `Upload échoué (${res.status}): ${raw.slice(0, 200)}`);
+          throw new Error(
+            res.ok ? "Invalid server response" : `Upload failed (${res.status}): ${raw.slice(0, 200)}`,
+          );
         }
         if (!res.ok || !json.url) {
           throw new Error(json.error || `Upload failed for ${f.name}`);
@@ -723,7 +725,7 @@ export default function AppBrandWizard() {
         }
         return merged.slice(0, 8);
       });
-      toast.success("Packshots uploadés", { description: `${urls.length} image(s)` });
+      toast.success("Packshots uploaded", { description: `${urls.length} image(s)` });
       await saveRun({ packshotUrls: [...packshotUrls, ...urls].slice(0, 8) });
       void refreshMeAndRuns();
     } catch (err) {
@@ -747,9 +749,9 @@ export default function AppBrandWizard() {
   async function onGenerateImagePrompt() {
     if (!extracted || !analysis) return;
     if (packshotUrls.length === 0) {
-      toast.error("Ajoute au moins 1 image produit seul (packshot).", {
+      toast.error("Add at least 1 product-only image (packshot).", {
         description:
-          "Si l’IA ne trouve rien, uploade 2–4 angles du produit (face, profil, dos) pour un meilleur résultat.",
+          "If the AI finds nothing, upload 2–4 product angles (front, side, back) for better results.",
       });
       return;
     }
@@ -770,7 +772,7 @@ export default function AppBrandWizard() {
       if (!res.ok || !json.data) throw new Error(json.error || "Image prompt failed");
       setImagePrompt(String(json.data.imagePrompt ?? ""));
       setNegativePrompt(String(json.data.negativePrompt ?? ""));
-      toast.success("Image prompt prêt");
+      toast.success("Image prompt ready");
       await saveRun({
         packshotUrls,
         imagePrompt: String(json.data.imagePrompt ?? ""),
@@ -790,13 +792,13 @@ export default function AppBrandWizard() {
   async function onGenerateImage() {
     if (!extracted) return;
     if (!imagePrompt.trim()) {
-      toast.error("Génère le prompt image d’abord.");
+      toast.error("Generate the image prompt first.");
       return;
     }
     if (packshotUrls.length === 0) {
-      toast.error("Il manque des images “produit seul” (packshots).", {
+      toast.error("Missing product-only images (packshots).", {
         description:
-          "Uploade 2–4 angles du produit (face, profil, dos) puis relance la génération.",
+          "Upload 2–4 product-only angles (front, side, back) and retry generation.",
       });
       return;
     }
@@ -833,7 +835,7 @@ export default function AppBrandWizard() {
       const json = (await res.json()) as { taskId?: string; error?: string };
       if (!res.ok || !json.taskId) throw new Error(json.error || "NanoBanana generate failed");
       setImageGen({ kind: "polling", taskId: json.taskId });
-      toast.success("Image task créée", { description: json.taskId });
+      toast.success("Image task created", { description: json.taskId });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error.";
       setImageGen({ kind: "error", message });
@@ -902,7 +904,7 @@ export default function AppBrandWizard() {
   async function onBuildVideoPrompt() {
     if (!extracted || !analysis) return;
     if (!selectedImageUrl) {
-      toast.error("Sélectionne d’abord l’image générée.");
+      toast.error("Select the generated image first.");
       return;
     }
 
@@ -922,7 +924,7 @@ export default function AppBrandWizard() {
       const json = (await res.json()) as { error?: string; data?: any };
       if (!res.ok || !json.data) throw new Error(json.error || "Template fill failed");
       setVideoPrompt(String(json.data.filledPrompt ?? ""));
-      toast.success("Template rempli");
+      toast.success("Template filled");
       await saveRun({
         videoTemplateId: selectedTemplate,
         videoPrompt: String(json.data.filledPrompt ?? ""),
@@ -941,7 +943,7 @@ export default function AppBrandWizard() {
   async function onGenerateVideo() {
     if (!selectedImageUrl) return;
     if (!videoPrompt.trim()) {
-      toast.error("Génère le prompt vidéo (template) d’abord.");
+      toast.error("Generate the video prompt (template) first.");
       return;
     }
 
@@ -985,7 +987,7 @@ export default function AppBrandWizard() {
       const json = (await res.json()) as { taskId?: string; error?: string };
       if (!res.ok || !json.taskId) throw new Error(json.error || "Video generate failed");
       setVideoGen({ kind: "polling", taskId: json.taskId });
-      toast.success("Vidéo task créée", { description: json.taskId });
+      toast.success("Video task created", { description: json.taskId });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error.";
       setVideoGen({ kind: "error", message });
@@ -1158,7 +1160,7 @@ export default function AppBrandWizard() {
                 <CardContent>
                   {projects.length === 0 ? (
                     <div className="rounded-md border border-white/10 bg-white/5 p-4 text-sm text-white/65">
-                      Aucun projet pour l&apos;instant. Lance un run pour créer ton premier projet.
+                      No projects yet. Start a run to create your first project.
                     </div>
                   ) : (
                     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -1221,7 +1223,7 @@ export default function AppBrandWizard() {
                               size="icon"
                               variant="secondary"
                               className="absolute right-2 top-2 h-8 w-8 border border-white/15 bg-black/70 text-white/80 opacity-0 transition hover:bg-destructive/90 hover:text-white group-hover:opacity-100"
-                              title="Supprimer le projet"
+                              title="Delete project"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 void deleteProjectByStoreUrl(proj.storeUrl, runIdsInProject);
@@ -1276,13 +1278,13 @@ export default function AppBrandWizard() {
                 </div>
                 {extracted?.title ? (
                   <div className="text-xs text-muted-foreground">
-                    produit:{" "}
+                    product:{" "}
                     <span className="font-medium text-foreground">{extracted?.title?.slice(0, 60)}</span>
                   </div>
                 ) : null}
                 {nanoModel === "pro" ? (
                   <div className="text-xs text-muted-foreground">
-                    modèle: <span className="font-medium text-foreground">NanoBanana Pro</span>
+                    model: <span className="font-medium text-foreground">NanoBanana Pro</span>
                   </div>
                 ) : null}
               </div>

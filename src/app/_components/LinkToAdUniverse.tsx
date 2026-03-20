@@ -254,7 +254,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     }) => {
       const snap = readUniverseFromExtracted(run.extracted);
       if (!snap) {
-        toast.error("Ce run n’a pas de données Link to Ad Universe.");
+        toast.error("This run has no Link to Ad Universe data.");
         return;
       }
       setUniverseRunId(run.id);
@@ -297,7 +297,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       setLastExtractedJson(cloneExtractedBase(run.extracted));
       setStage("ready");
       setImgError(false);
-      toast.success("Projet repris");
+      toast.success("Project resumed");
     },
     [],
   );
@@ -312,8 +312,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         if (!res.ok || !json.data) throw new Error(json.error || "Load failed");
         if (!cancelled) hydrateFromRun(json.data);
       } catch (e) {
-        toast.error("Impossible de charger le projet", {
-          description: e instanceof Error ? e.message : "Erreur",
+        toast.error("Unable to load the project", {
+          description: e instanceof Error ? e.message : "Unknown error",
         });
       } finally {
         if (!cancelled) onResumeConsumed?.();
@@ -439,7 +439,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   async function onContinueScripts() {
     const url = storeUrl.trim();
     if (!url || !lastExtractedJson || !summaryText.trim()) {
-      toast.error("Données incomplètes pour générer les scripts.");
+      toast.error("Incomplete data to generate scripts.");
       return;
     }
     const userUploadedImageUrl = neutralUploadUrl;
@@ -507,10 +507,10 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       const shots = imageForGpt ? [imageForGpt] : [];
       await persistUniverse(activeRunId, url, titleForScripts, base, snapAfterScripts, shots);
       setStage("ready");
-      toast.success("3 scripts UGC prêts");
+      toast.success("3 UGC scripts ready");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Scripts step failed";
-      toast.warning("Échec génération scripts", { description: msg });
+      toast.warning("Script generation failed", { description: msg });
       setStage("ready");
     } finally {
       setIsWorking(false);
@@ -699,9 +699,9 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       try {
         const shots = imageForGpt ? [imageForGpt] : [];
         activeRunId = await persistUniverse(activeRunId, url, titleForScripts, base, snapAfterSummary, shots);
-        toast.success("Projet sauvegardé (image + brief)");
+        toast.success("Project saved (image + brief)");
       } catch (e) {
-        toast.message("Sauvegarde projet échouée", { description: e instanceof Error ? e.message : "" });
+        toast.message("Project save failed", { description: e instanceof Error ? e.message : "" });
       }
 
       setStage("writing_scripts");
@@ -775,11 +775,11 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     const script = selectedAngleScript(scriptsText, selectedAngleIndex);
     const img = resolvedPreviewUrl;
     if (!url || !lastExtractedJson || selectedAngleIndex === null || !script.trim()) {
-      toast.error("Choisis un angle et assure-toi que le script est prêt.");
+      toast.error("Pick an angle and make sure the script is ready.");
       return;
     }
     if (!img || !/^https?:\/\//i.test(img)) {
-      toast.error("Image produit HTTPS requise pour GPT (aperçu manquant ou URL relative).");
+      toast.error("HTTPS product image is required for GPT (missing preview or relative URL).");
       return;
     }
     setIsNanoPromptsLoading(true);
@@ -815,9 +815,9 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           imagePrompt: text,
         });
       }
-      toast.success("3 prompts image sauvegardés (projet)");
+      toast.success("3 image prompts saved (project)");
     } catch (e) {
-      toast.error("Prompts NanoBanana", { description: e instanceof Error ? e.message : "Erreur" });
+      toast.error("NanoBanana prompts", { description: e instanceof Error ? e.message : "Unknown error" });
     } finally {
       setIsNanoPromptsLoading(false);
     }
@@ -842,7 +842,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     const img = resolvedPreviewUrl;
     const prompt = parsedNanoPrompts[nanoBananaSelectedPromptIndex]?.trim();
     if (!url || !lastExtractedJson || !prompt) {
-      toast.error("Génère d’abord les 3 prompts GPT puis choisis un prompt valide.");
+      toast.error("Generate the 3 GPT prompts first, then choose a valid prompt.");
       return;
     }
     if (!img || !/^https?:\/\//i.test(img)) {
@@ -881,9 +881,11 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           imagePrompt: prompt,
         });
       }
-      toast.success("NanoBanana Pro — tâche lancée");
+      toast.success("NanoBanana Pro task started");
     } catch (e) {
-      toast.error("NanoBanana Pro", { description: e instanceof Error ? e.message : "Erreur" });
+      toast.error("NanoBanana Pro", {
+        description: e instanceof Error ? e.message : "Unknown error",
+      });
     } finally {
       setIsNanoImageSubmitting(false);
     }
@@ -934,20 +936,20 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     const url = storeUrl.trim();
     const img = resolvedPreviewUrl;
     if (!url || !lastExtractedJson || selectedAngleIndex === null) {
-      toast.error("Projet pas prêt pour générer les images.");
+      toast.error("Project not ready to generate images.");
       return;
     }
     if (!img || !/^https?:\/\//i.test(img)) {
-      toast.error("Image produit HTTPS requise pour générer les images NanoBanana.");
+      toast.error("HTTPS product image is required to generate NanoBanana images.");
       return;
     }
     if (!nanoBananaPromptsRaw.trim()) {
-      toast.error("Génère d’abord les 3 prompts GPT.");
+      toast.error("Generate the 3 GPT prompts first.");
       return;
     }
     const prompts = parsedNanoPrompts.map((p) => p.trim());
     if (!prompts[0] || !prompts[1] || !prompts[2]) {
-      toast.error("Certains prompts GPT sont manquants.");
+      toast.error("Some GPT prompts are missing.");
       return;
     }
 
@@ -1005,9 +1007,11 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         });
       }
 
-      toast.success("NanoBanana Pro — 3 images générées");
+      toast.success("NanoBanana Pro — 3 images generated");
     } catch (e) {
-      toast.error("NanoBanana Pro (3 images)", { description: e instanceof Error ? e.message : "Erreur" });
+      toast.error("NanoBanana Pro (3 images)", {
+        description: e instanceof Error ? e.message : "Unknown error",
+      });
     } finally {
       setIsNanoAllImagesSubmitting(false);
     }
@@ -1101,12 +1105,12 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                 generatedImageUrls: urls.slice(0, 8),
               });
             } catch (e) {
-              toast.error("Sauvegarde NanoBanana échouée", {
-                description: e instanceof Error ? e.message : "Erreur",
+              toast.error("NanoBanana save failed", {
+                description: e instanceof Error ? e.message : "Unknown error",
               });
             }
           }
-          toast.success("Image NanoBanana Pro enregistrée");
+          toast.success("NanoBanana Pro image saved");
           if (interval) clearInterval(interval);
           interval = null;
           return;
@@ -1114,7 +1118,9 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         throw new Error(json.data.errorMessage || `NanoBanana failed: ${String(s)}`);
       } catch (err) {
         if (cancelled) return;
-        toast.error("NanoBanana poll", { description: err instanceof Error ? err.message : "Erreur" });
+        toast.error("NanoBanana polling failed", {
+          description: err instanceof Error ? err.message : "Unknown error",
+        });
         setNanoPollTaskId(null);
         if (interval) clearInterval(interval);
         interval = null;
@@ -1155,9 +1161,9 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           videoPrompt: text,
         });
       }
-      toast.success("Prompt vidéo sauvegardé");
+      toast.success("Video prompt saved");
     } catch (e) {
-      toast.error("Prompt vidéo GPT", { description: e instanceof Error ? e.message : "Erreur" });
+      toast.error("Video prompt GPT", { description: e instanceof Error ? e.message : "Unknown error" });
     } finally {
       setIsVideoPromptLoading(false);
     }
@@ -1168,7 +1174,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     const img = nanoBananaImageUrl;
     const prompt = ugcVideoPromptGpt.trim();
     if (!url || !lastExtractedJson || !img || !prompt) {
-      toast.error("Image NanoBanana + prompt vidéo requis.");
+      toast.error("NanoBanana image + video prompt are required.");
       return;
     }
     setIsKlingSubmitting(true);
@@ -1198,9 +1204,9 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           videoPrompt: klingPrompt,
         });
       }
-      toast.success("Kling 3.0 (12s · 720p) — tâche lancée");
+      toast.success("Kling 3.0 (12s · 720p) — task started");
     } catch (e) {
-      toast.error("Kling", { description: e instanceof Error ? e.message : "Erreur" });
+      toast.error("Kling", { description: e instanceof Error ? e.message : "Unknown error" });
     } finally {
       setIsKlingSubmitting(false);
     }
@@ -1225,7 +1231,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         if (s === "IN_PROGRESS") return;
         if (s === "SUCCESS") {
           const vUrl = json.data.response?.[0];
-          if (!vUrl) throw new Error("Vidéo OK mais URL manquante.");
+          if (!vUrl) throw new Error("Video OK but URL missing.");
           setKlingVideoUrl(vUrl);
           setKlingPollTaskId(null);
           const url0 = storeUrl.trim();
@@ -1238,12 +1244,12 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                 videoPrompt: lastKlingVideoPromptRef.current || undefined,
               });
             } catch (e) {
-              toast.error("Sauvegarde vidéo Kling échouée", {
-                description: e instanceof Error ? e.message : "Erreur",
+              toast.error("Kling video save failed", {
+                description: e instanceof Error ? e.message : "Unknown error",
               });
             }
           }
-          toast.success("Vidéo Kling enregistrée dans le projet");
+          toast.success("Kling video saved in the project");
           if (interval) clearInterval(interval);
           interval = null;
           return;
@@ -1251,7 +1257,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         throw new Error(json.data.error_message || `Kling failed: ${String(s)}`);
       } catch (err) {
         if (cancelled) return;
-        toast.error("Kling poll", { description: err instanceof Error ? err.message : "Erreur" });
+        toast.error("Kling polling failed", { description: err instanceof Error ? err.message : "Unknown error" });
         setKlingPollTaskId(null);
         if (interval) clearInterval(interval);
         interval = null;
@@ -1453,10 +1459,10 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           {showContinueScripts ? (
             <div className="mt-4">
               <Button type="button" onClick={() => void onContinueScripts()} className={primaryBtnClass}>
-                Générer les 3 scripts UGC
+                Generate 3 UGC scripts
               </Button>
               <p className="mt-2 text-xs text-white/40">
-                Le brief est déjà sauvegardé — lance uniquement la génération des 3 angles.
+                The brief is already saved — generate the 3 angles only.
               </p>
             </div>
           ) : null}
@@ -1516,8 +1522,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
             <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/[0.06] p-4">
               <p className="text-sm font-semibold text-white/90">Step 3 — Prompts image (GPT) → NanoBanana Pro</p>
               <p className="mt-1 text-xs text-white/45">
-                Envoie le script de l’angle choisi + l’image produit à GPT, puis génère l’image de référence (2K, 9:16).
-                Chaque étape est sauvegardée dans le projet.
+                Send the chosen angle script + the product image to GPT, then generate the reference image (2K, 9:16).
+                Each step is saved in the project.
               </p>
               <div className="mt-4 flex flex-wrap gap-2">
                 <Button
@@ -1527,19 +1533,19 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                   onClick={() => void onGenerateNanoBananaPrompts()}
                 >
                   {isNanoPromptsLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                  Générer 3 prompts image (GPT)
+                  Generate 3 image prompts (GPT)
                 </Button>
                 {nanoPollTaskId ? (
                   <span className="flex items-center gap-2 text-xs text-emerald-300">
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    NanoBanana Pro en cours…
+                    NanoBanana Pro in progress…
                   </span>
                 ) : null}
               </div>
 
               {nanoBananaPromptsRaw ? (
                 <div className="mt-4 space-y-3">
-                  <p className="text-xs font-medium text-white/55">Choisis le prompt à envoyer à NanoBanana Pro</p>
+                  <p className="text-xs font-medium text-white/55">Choose the prompt to send to NanoBanana Pro</p>
                   <div className="grid gap-2 sm:grid-cols-3">
                     {([0, 1, 2] as const).map((i) => (
                       <button
@@ -1567,7 +1573,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                     onClick={() => void onGenerateNanoBananaImagesFromAllPrompts()}
                   >
                     {isNanoAllImagesSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                    Générer 3 images NanoBanana Pro
+                  Generate 3 NanoBanana Pro images
                   </Button>
 
                   <Button
@@ -1583,51 +1589,50 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                     onClick={() => void onGenerateNanoBananaImage()}
                   >
                     {isNanoImageSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                    Générer image NanoBanana Pro
+                    Generate NanoBanana Pro image
                   </Button>
 
                   {nanoHasThreeImages ? (
-                    <div className="mt-2 rounded-lg border border-white/10 bg-black/25 p-3">
-                      <p className="text-xs font-medium text-white/60">Choisis l’image de référence</p>
-                      <div className="mt-2 grid gap-2 sm:grid-cols-3">
-                        {([0, 1, 2] as const).map((i) => (
+                    <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                      {([0, 1, 2] as const).map((i) => {
+                        const selected = nanoBananaSelectedImageIndex === i;
+                        return (
                           <button
                             key={i}
                             type="button"
+                            aria-pressed={selected}
                             onClick={() => void onSelectNanoBananaImage(i)}
-                            className={`overflow-hidden rounded-md border ${
-                              nanoBananaSelectedImageIndex === i
-                                ? "border-emerald-400/70"
-                                : "border-white/10 hover:border-emerald-400/30"
-                            } bg-white/[0.03]`}
+                            className={`relative overflow-hidden rounded-lg border bg-white/[0.03] transition-all active:scale-[0.99] hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 ${
+                              selected
+                                ? "border-violet-400/90 shadow-[0_0_0_1px_rgba(76,29,149,0.25)]"
+                                : "border-white/10 hover:border-violet-400/35"
+                            }`}
                           >
                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={nanoBananaImageUrls[i]} alt="" className="h-24 w-full object-cover" />
+                            <img
+                              src={nanoBananaImageUrls[i]}
+                              alt=""
+                              className="h-24 w-full object-cover sm:h-28"
+                              loading="lazy"
+                            />
+                            {selected ? (
+                              <span className="absolute right-2 top-2 inline-flex h-6 w-6 items-center justify-center rounded-full bg-violet-400/90 text-black shadow">
+                                <Check className="h-4 w-4" aria-hidden />
+                              </span>
+                            ) : null}
                           </button>
-                        ))}
-                      </div>
+                        );
+                      })}
                     </div>
                   ) : null}
-                </div>
-              ) : null}
-
-              {nanoBananaImageUrl ? (
-                <div className="mt-4 rounded-lg border border-white/10 bg-black/30 p-3">
-                  <p className="text-xs font-medium text-white/60">Image de référence</p>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={nanoBananaImageUrl}
-                    alt="NanoBanana Pro"
-                    className="mt-2 max-h-80 w-full rounded-md object-contain"
-                  />
                 </div>
               ) : null}
             </div>
 
             <div className="rounded-xl border border-sky-500/25 bg-sky-500/[0.06] p-4">
-              <p className="text-sm font-semibold text-white/90">Step 4 — Prompt vidéo (GPT)</p>
+              <p className="text-sm font-semibold text-white/90">Step 4 — Video Prompt (GPT)</p>
               <p className="mt-1 text-xs text-white/45">
-                À partir du même script d’angle, génère le prompt image-to-video (Kling / Veo style).
+                Using the same angle script, generate the image-to-video prompt (Kling / Veo style).
               </p>
               <Button
                 type="button"
@@ -1636,7 +1641,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                 onClick={() => void onGenerateUgcVideoPrompt()}
               >
                 {isVideoPromptLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Générer prompt vidéo
+                Generate video prompt
               </Button>
               {ugcVideoPromptGpt ? (
                 <pre className="mt-3 max-h-[220px] overflow-auto whitespace-pre-wrap rounded-lg border border-white/10 bg-black/30 p-3 text-xs text-white/75">
@@ -1646,9 +1651,9 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
             </div>
 
             <div className="rounded-xl border border-orange-500/25 bg-orange-500/[0.06] p-4">
-              <p className="text-sm font-semibold text-white/90">Step 5 — Vidéo Kling 3.0 (12s · 720p Standard)</p>
+              <p className="text-sm font-semibold text-white/90">Step 5 — Kling 3.0 Video (12s · 720p Standard)</p>
               <p className="mt-1 text-xs text-white/45">
-                Image NanoBanana + prompt vidéo. Audio natif activé (hint lipsync).
+                NanoBanana image + video prompt. Native audio enabled (lipsync hint).
               </p>
               <Button
                 type="button"
@@ -1657,12 +1662,12 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                 onClick={() => void onGenerateKlingVideo()}
               >
                 {isKlingSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Lancer Kling 3.0
+                Run Kling 3.0
               </Button>
               {klingPollTaskId ? (
                 <p className="mt-2 flex items-center gap-2 text-xs text-orange-200">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  Génération vidéo…
+                  Generating video…
                 </p>
               ) : null}
               {klingVideoUrl ? (
@@ -1672,7 +1677,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                     href={`/api/download?url=${encodeURIComponent(klingVideoUrl)}`}
                     className="text-xs font-medium text-orange-300 underline underline-offset-2"
                   >
-                    Télécharger la vidéo
+                    Download video
                   </a>
                 </div>
               ) : null}
