@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MutableRefObject } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
@@ -58,6 +58,13 @@ const PAIRED_CAROUSEL_ITEMS = PRODUCTS.map((product, index) => ({
   slide: UGC_SLIDES[index],
 }));
 
+const REVEAL_SLIDE_TOTAL = PAIRED_CAROUSEL_ITEMS.length * 2;
+
+type RevealRegistryEntry = {
+  card: HTMLDivElement;
+  overlay: HTMLDivElement;
+};
+
 const FAQ_ITEMS = [
   {
     q: "What kind of products work best?",
@@ -85,39 +92,33 @@ function RevealSlide({
   imageSrc,
   videoSrc,
   imageAlt,
+  slideIndex,
+  registryRef,
 }: {
   imageSrc: string;
   videoSrc: string;
   imageAlt: string;
+  slideIndex: number;
+  registryRef: MutableRefObject<(RevealRegistryEntry | null)[]>;
 }) {
   const cardRef = useRef<HTMLDivElement>(null);
-  const videoRef = useRef<HTMLDivElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    let rafId: number;
-    function update() {
-      const card = cardRef.current;
-      const overlay = videoRef.current;
-      if (card && overlay) {
-        const rect = card.getBoundingClientRect();
-        const viewportCenter = window.innerWidth / 2;
-        // % of card to the LEFT of the center line = image. The rest = video.
-        const splitPct = Math.max(
-          0,
-          Math.min(100, ((viewportCenter - rect.left) / rect.width) * 100)
-        );
-        overlay.style.clipPath = `inset(0 0 0 ${splitPct}%)`;
-      }
-      rafId = requestAnimationFrame(update);
-    }
-    rafId = requestAnimationFrame(update);
-    return () => cancelAnimationFrame(rafId);
-  }, []);
+    const card = cardRef.current;
+    const overlay = overlayRef.current;
+    const reg = registryRef.current;
+    if (!card || !overlay || slideIndex < 0 || slideIndex >= reg.length) return;
+    reg[slideIndex] = { card, overlay };
+    return () => {
+      reg[slideIndex] = null;
+    };
+  }, [slideIndex, registryRef]);
 
   return (
     <div
       ref={cardRef}
-      className="relative shrink-0 overflow-hidden rounded-3xl"
+      className="relative z-10 isolate shrink-0 overflow-hidden rounded-3xl bg-[#0a0a0c]"
       style={{ width: "min(90vw, 25rem)", aspectRatio: "0.64" }}
     >
       <Image
@@ -126,11 +127,16 @@ function RevealSlide({
         fill
         className="object-cover"
         sizes="(max-width:768px) 90vw, 400px"
+        priority={slideIndex === 0}
       />
       <div
-        ref={videoRef}
-        className="absolute inset-0"
-        style={{ clipPath: "inset(0 0 0 100%)" }}
+        ref={overlayRef}
+        className="absolute inset-0 z-[1] will-change-[clip-path]"
+        style={{
+          clipPath: "inset(0 0 0 100%)",
+          backfaceVisibility: "hidden",
+          WebkitBackfaceVisibility: "hidden",
+        }}
       >
         <video
           src={videoSrc}
@@ -149,6 +155,36 @@ export default function LandingPage() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const carouselTrackRef = useRef<HTMLDivElement>(null);
   const carouselSetRef = useRef<HTMLDivElement>(null);
+  const revealRegistryRef = useRef<(RevealRegistryEntry | null)[]>(
+    Array.from({ length: REVEAL_SLIDE_TOTAL }, () => null),
+  );
+
+  // Single RAF for all reveal slides — avoids desync / invalid clip-path when width≈0 (fixes video bleeding or missing video).
+  useEffect(() => {
+    let rafId = 0;
+    function tick() {
+      const cx = window.innerWidth * 0.5;
+      const reg = revealRegistryRef.current;
+      for (let i = 0; i < reg.length; i++) {
+        const entry = reg[i];
+        if (!entry) continue;
+        const { card, overlay } = entry;
+        const rect = card.getBoundingClientRect();
+        const w = rect.width;
+        if (!Number.isFinite(w) || w < 0.5) {
+          overlay.style.clipPath = "inset(0 0 0 100%)";
+          continue;
+        }
+        let splitPct = ((cx - rect.left) / w) * 100;
+        if (!Number.isFinite(splitPct)) splitPct = 100;
+        splitPct = Math.max(0, Math.min(100, splitPct));
+        overlay.style.clipPath = `inset(0 0 0 ${splitPct.toFixed(3)}%)`;
+      }
+      rafId = requestAnimationFrame(tick);
+    }
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, []);
 
   useEffect(() => {
     const trackEl = carouselTrackRef.current;
@@ -369,17 +405,23 @@ export default function LandingPage() {
         <div className="relative overflow-hidden">
           <div className="pointer-events-none absolute inset-y-0 left-0 z-20 w-16 bg-gradient-to-r from-[#050507] to-transparent sm:w-28" />
           <div className="pointer-events-none absolute inset-y-0 right-0 z-20 w-16 bg-gradient-to-l from-[#050507] to-transparent sm:w-28" />
-          {/* No center "scan line" overlay — it drew a violet seam through cards (e.g. product-1) while scrolling. */}
+          {/* Thin center marker (no heavy glow) — marks the reveal axis */}
+          <div
+            className="pointer-events-none absolute inset-y-0 left-1/2 z-[15] w-px -translate-x-1/2 bg-violet-400/80"
+            aria-hidden
+          />
 
           <div
             ref={carouselTrackRef}
-            className="flex items-center gap-4 py-2 will-change-transform md:gap-8"
+            className="relative z-[12] flex items-center gap-4 py-2 will-change-transform md:gap-8"
             style={{ width: "max-content" }}
           >
             <div ref={carouselSetRef} className="flex items-center gap-4 md:gap-8">
               {PAIRED_CAROUSEL_ITEMS.map((item, i) => (
                 <RevealSlide
                   key={`reveal-a-${i}`}
+                  slideIndex={i}
+                  registryRef={revealRegistryRef}
                   imageSrc={item.product.src}
                   videoSrc={item.slide.src}
                   imageAlt={item.product.alt}
@@ -390,6 +432,8 @@ export default function LandingPage() {
               {PAIRED_CAROUSEL_ITEMS.map((item, i) => (
                 <RevealSlide
                   key={`reveal-b-${i}`}
+                  slideIndex={i + PAIRED_CAROUSEL_ITEMS.length}
+                  registryRef={revealRegistryRef}
                   imageSrc={item.product.src}
                   videoSrc={item.slide.src}
                   imageAlt={item.product.alt}
