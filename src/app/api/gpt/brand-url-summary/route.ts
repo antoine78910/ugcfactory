@@ -18,32 +18,40 @@ export async function POST(req: Request) {
   if (!url) return NextResponse.json({ error: "Missing `url`." }, { status: 400 });
 
   const developer = [
-    "You are a senior direct-response marketer and brand analyst.",
-    "Return ONLY the requested Brand brief in English.",
-    "Output MUST follow the exact structure/form of the example.",
-    "Do NOT add extra headings, bullets, lists, or sections.",
-    "Do NOT add line breaks besides what is necessary after the initial 'Brand brief:' label.",
-    "Length constraint: keep it under 500 words (target ~380 words like the example).",
+    "Tu es un expert senior en marketing direct-response et analyse marque / produit.",
+    "Réponds UNIQUEMENT par le brand brief demandé, en français.",
+    "La sortie DOIT suivre exactement la forme et la structure de l’exemple fourni dans le message utilisateur.",
+    "Pas de titres supplémentaires, pas de listes à puces, pas de sections structurées : un seul flux de texte après le label initial.",
+    "Reste concis et clair, ne diverge pas du modèle (longueur comparable à l’exemple, cible ~380 mots, plafond ~500 mots).",
   ].join("\n");
 
-  // User-provided prompt requirement: we send the URL to GPT with this exact intent.
+  const EXAMPLE_SKULT =
+    "Skult Men est une marque de skincare masculine qui propose des produits destinés à améliorer l’apparence du visage et à donner une mâchoire plus définie et un visage plus sculpté. Le produit principal, le Collagen Face Sculpt Wrap, est un masque facial conçu pour aider à raffermir la peau, améliorer l’élasticité et donner l’apparence d’un visage plus tonique et plus structuré. Le problème principal que le produit adresse est l’insatisfaction liée à la définition du visage chez les hommes, notamment un manque de jawline marquée, un visage perçu comme trop rond ou relâché, ou encore une perte de fermeté de la peau. Cette problématique peut affecter la perception de masculinité, l’attractivité et la confiance en soi. La promesse centrale du produit est d’aider à raffermir et sculpter visuellement le visage grâce au collagène et à un effet tenseur, afin d’obtenir une mâchoire plus définie et un visage plus net. La transformation vendue est le passage d’un visage plus mou ou moins défini à un visage plus sculpté, plus masculin et plus structuré. La cible principale est un homme entre 20 et 40 ans, sensible à son apparence, intéressé par le grooming et l’optimisation de son physique, et influencé par les standards esthétiques modernes (jawline marquée, visage structuré). Ses douleurs principales sont un manque de définition du visage, un visage jugé trop rond ou fatigué, et une envie d’améliorer son apparence sans procédures invasives. Ses désirs sont d’avoir une jawline plus nette, un visage plus masculin, recevoir des compliments et se sentir plus confiant dans son apparence. Les principales objections peuvent être : est-ce que le produit fonctionne vraiment, combien de temps avant de voir les résultats, est-ce que l’effet est durable, et est-ce adapté à tous les types de peau. Les angles marketing les plus exploitables pour cette marque sont : l’angle transformation (avant/après jawline), l’angle masculinité (visage plus structuré et viril), l’angle solution simple (un masque facile à utiliser à la maison), l’angle confiance (améliorer l’apparence et la présence), et l’angle preuve sociale (témoignages et résultats visibles). Globalement, Skult Men se positionne comme une marque de grooming masculine qui promet une amélioration visible de la définition du visage et vend principalement l’idée d’un visage plus sculpté, plus masculin et plus confiant grâce à une solution simple et accessible.";
+
   const userPrompt = [
-    "Thank to this url analyse in deepness the brand and give me a detailed summarize like this one:",
-    "Brand brief:",
-    "Skult Men est une marque de skincare masculine qui propose des produits destinés à améliorer l’apparence du visage et à donner une mâchoire plus définie et un visage plus sculpté. Le produit principal, le Collagen Face Sculpt Wrap, est un masque facial conçu pour aider à raffermir la peau, améliorer l’élasticité et donner l’apparence d’un visage plus tonique et plus structuré. Le problème principal que le produit adresse est l’insatisfaction liée à la définition du visage chez les hommes, notamment un manque de jawline marquée, un visage perçu comme trop rond ou relâché, ou encore une perte de fermeté de la peau. Cette problématique peut affecter la perception de masculinité, l’attractivité et la confiance en soi. La promesse centrale du produit est d’aider à raffermir et sculpter visuellement le visage grâce au collagène et à un effet tenseur, afin d’obtenir une mâchoire plus définie et un visage plus net. La transformation vendue est le passage d’un visage plus mou ou moins défini à un visage plus sculpté, plus masculin et plus structuré. La cible principale est un homme entre 20 et 40 ans, sensible à son apparence, intéressé par le grooming et l’optimisation de son physique, et influencé par les standards esthétiques modernes (jawline marquée, visage structuré). Ses douleurs principales sont un manque de définition du visage, un visage jugé trop rond ou fatigué, et une envie d’améliorer son apparence sans procédures invasives. Ses désirs sont d’avoir une jawline plus nette, un visage plus masculin, recevoir des compliments et se sentir plus confiant dans son apparence. Les principales objections peuvent être : est-ce que le produit fonctionne vraiment, combien de temps avant de voir les résultats, est-ce que l’effet est durable, et est-ce adapté à tous les types de peau. Les angles marketing les plus exploitables pour cette marque sont : l’angle transformation (avant/après jawline), l’angle masculinité (visage plus structuré et viril), l’angle solution simple (un masque facile à utiliser à la maison), l’angle confiance (améliorer l’apparence et la présence), et l’angle preuve sociale (témoignages et résultats visibles). Globalement, Skult Men se positionne comme une marque de grooming masculine qui promet une amélioration visible de la définition du visage et vend principalement l’idée d’un visage plus sculpté, plus masculin et plus confiant grâce à une solution simple et accessible.",
-    "but in english",
-    "Now generate the Brand brief for the provided URL.",
-    "Rules for formatting:",
-    "- Start your output exactly with: `Brand brief:`",
-    "- Then write ONE single continuous paragraph in English.",
-    "- Keep the same order and flow as the example (background, product, problem, promise, target, objections, angles, overall positioning).",
-    "- Do not exceed 500 words.",
+    "D’après cette URL, je veux que tu m’indiques tous les bénéfices du produit, le problème qu’il résout, pour bien cerner et connaître le produit à 100 % : comment il s’applique et comment l’utiliser — c’est très important pour pouvoir faire des UGC réalistes.",
     "",
-    `URL: ${url}`,
+    `URL du produit : ${url}`,
+    "",
+    "Tu me donneras en sortie un brand brief détaillé. N’oublie pas de dire comment l’utiliser, assez pour que l’on comprenne comment l’UGC pourra démontrer le bénéfice du produit — mais sans t’y attarder trop longtemps.",
+    "",
+    "Tu garderas la même forme et structure que l’exemple ci-dessous (concis, clair, ne diverge pas). L’exemple illustre uniquement la structure et le ton, pas le contenu à copier pour une autre marque.",
+    "",
+    "Exemple de structure (après le préfixe « Brand brief: ») :",
+    `Brand brief: ${EXAMPLE_SKULT}`,
+    "",
+    "Règles de formatage :",
+    "- Commence exactement par : Brand brief:",
+    "- Puis un seul paragraphe continu en français.",
+    "- Même ordre et flux que l’exemple : marque / produit et bénéfices, problème résolu, promesse, transformation, cible, douleurs, désirs, objections, angles marketing, positionnement global.",
+    "- Intègre clairement les bénéfices, le problème adressé, et l’usage / application du produit (pour des UGC crédibles).",
+    "- Ne dépasse pas ~500 mots.",
+    "",
+    "Génère maintenant le brand brief pour l’URL fournie ci-dessus.",
   ].join("\n");
 
   try {
-    const cacheKey = makeCacheKey({ v: 1, url });
+    const cacheKey = makeCacheKey({ v: 2, url });
     try {
       const { data: hit } = await supabase
         .from("gpt_cache")
