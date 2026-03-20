@@ -8,14 +8,6 @@ export async function GET(req: NextRequest) {
   const error = url.searchParams.get("error");
   const errorDescription = url.searchParams.get("error_description");
 
-  if (error) {
-    const target = new URL("/signin", url.origin);
-    if (errorDescription) {
-      target.searchParams.set("error_description", errorDescription);
-    }
-    return NextResponse.redirect(target, 302);
-  }
-
   // Build a mutable response to capture auth cookies set by Supabase.
   const cookieCaptureResponse = NextResponse.next();
   const supabase = createServerClient(getSupabaseUrl(), getSupabaseAnonKey(), {
@@ -31,15 +23,51 @@ export async function GET(req: NextRequest) {
     },
   });
 
+  async function redirectToAppWithCapturedCookies() {
+    const target = new URL("/dashboard", url.origin);
+    const redirectResponse = NextResponse.redirect(target, 302);
+    for (const cookie of cookieCaptureResponse.cookies.getAll()) {
+      redirectResponse.cookies.set(cookie);
+    }
+    return redirectResponse;
+  }
+
+  async function userExists() {
+    const { data } = await supabase.auth.getUser();
+    return Boolean(data?.user);
+  }
+
+  // If OAuth returned an error but the user session already exists,
+  // we shouldn't force them back to /signin.
+  if (error) {
+    try {
+      if (await userExists()) {
+        return await redirectToAppWithCapturedCookies();
+      }
+    } catch {
+      // ignore and fall back to /signin
+    }
+
+    const target = new URL("/signin", url.origin);
+    if (errorDescription) {
+      target.searchParams.set("error_description", errorDescription);
+    }
+    return NextResponse.redirect(target, 302);
+  }
+
   if (code) {
     const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
     if (!exchangeError) {
-      const target = new URL("/dashboard", url.origin);
-      const redirectResponse = NextResponse.redirect(target, 302);
-      for (const cookie of cookieCaptureResponse.cookies.getAll()) {
-        redirectResponse.cookies.set(cookie);
+      return await redirectToAppWithCapturedCookies();
+    }
+
+    // Some OAuth errors (ex: already authenticated) shouldn't block the redirect.
+    try {
+      if (await userExists()) {
+        return await redirectToAppWithCapturedCookies();
       }
-      return redirectResponse;
+    } catch {
+      // ignore
     }
   }
 
