@@ -38,7 +38,10 @@ export default function LinkToAdUniverse() {
   const [imgError, setImgError] = useState(false);
 
   const [summaryText, setSummaryText] = useState<string>("");
-  const [stage, setStage] = useState<"idle" | "scanning" | "finding_image" | "summarizing" | "ready" | "error">("idle");
+  const [scriptsText, setScriptsText] = useState<string>("");
+  const [stage, setStage] = useState<
+    "idle" | "scanning" | "finding_image" | "summarizing" | "writing_scripts" | "ready" | "error"
+  >("idle");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -90,12 +93,14 @@ export default function LinkToAdUniverse() {
       return;
     }
 
+    const userUploadedImageUrl = neutralUploadUrl;
+
     setIsWorking(true);
     setSummaryText("");
+    setScriptsText("");
     setExtractedTitle(null);
     setCleanCandidate(null);
     setFallbackImageUrl(null);
-    setNeutralUploadUrl(null);
     setConfidence(null);
     setImgError(false);
 
@@ -198,10 +203,54 @@ export default function LinkToAdUniverse() {
         throw new Error(`Brand summary failed: HTTP ${summaryRes.status} ${raw.slice(0, 250)}`);
       }
       const summaryJson = (await summaryRes.json()) as { data?: string };
-      setSummaryText(String(summaryJson?.data ?? ""));
+      const summaryStr = String(summaryJson?.data ?? "");
+      setSummaryText(summaryStr);
+
+      // Step 2: 3 UGC scripts from brand brief + product image (same GPT instructions as product / SaaS spec)
+      const titleForScripts = typeof extractedObj.title === "string" ? extractedObj.title : null;
+      const pickedImage =
+        userUploadedImageUrl ??
+        cleanUrl ??
+        firstOther?.trim() ??
+        images[0] ??
+        null;
+      let imageForGpt: string | null = null;
+      if (pickedImage) {
+        imageForGpt = /^https?:\/\//i.test(pickedImage)
+          ? pickedImage
+          : absolutizeImageUrl(pickedImage, url) ?? pickedImage;
+      }
+
+      setStage("writing_scripts");
+      let scriptsStepOk = false;
+      try {
+        const scriptsRes = await fetch("/api/gpt/ugc-scripts-from-brief", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            storeUrl: url,
+            productTitle: titleForScripts,
+            brandBrief: summaryStr,
+            productImageUrl: imageForGpt,
+            videoDurationSeconds: 15,
+          }),
+        });
+        if (!scriptsRes.ok) {
+          const raw = await scriptsRes.text().catch(() => "");
+          throw new Error(`UGC scripts failed: HTTP ${scriptsRes.status} ${raw.slice(0, 250)}`);
+        }
+        const scriptsJson = (await scriptsRes.json()) as { data?: string; error?: string };
+        if (scriptsJson.error) throw new Error(scriptsJson.error);
+        setScriptsText(String(scriptsJson?.data ?? ""));
+        scriptsStepOk = true;
+      } catch (scriptErr) {
+        const msg = scriptErr instanceof Error ? scriptErr.message : "Scripts step failed";
+        setScriptsText("");
+        toast.warning("Brand brief OK — scripts step failed", { description: msg });
+      }
 
       setStage("ready");
-      toast.success("Universe scan complete");
+      if (scriptsStepOk) toast.success("Brief + 3 UGC scripts ready");
     } catch (err) {
       setStage("error");
       const message = err instanceof Error ? err.message : "Unknown error";
@@ -220,7 +269,7 @@ export default function LinkToAdUniverse() {
           <div>
             <CardTitle className="text-base">Link to Ad Universe</CardTitle>
             <p className="mt-1 text-sm text-white/55">
-              Scan your store, extract a clean product image, then generate an English brand brief.
+              Step 1: scan URL, product image, English brand brief. Step 2: three UGC scripts (3 angles) for AI video.
             </p>
           </div>
           <div className="flex items-center gap-2 text-xs text-white/45">
@@ -250,7 +299,11 @@ export default function LinkToAdUniverse() {
               className="h-11 rounded-2xl bg-violet-400 px-6 text-black border border-violet-200/40 shadow-[0_6px_0_0_rgba(76,29,149,0.9)] transition-all hover:-translate-y-[1px] hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9)] active:translate-y-[6px]"
             >
               {isWorking ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {isWorking ? "Scanning..." : "Generate"}
+              {isWorking
+                ? stage === "writing_scripts"
+                  ? "Writing scripts..."
+                  : "Scanning..."
+                : "Generate"}
             </Button>
           </div>
         </div>
@@ -359,6 +412,36 @@ export default function LinkToAdUniverse() {
                 )}
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* Step 2 — UGC scripts (after brief + image) */}
+        <div className="rounded-xl border border-violet-500/25 bg-violet-500/[0.06] p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-semibold text-white/90">Step 2 — UGC scripts (3 angles)</p>
+            {isWorking && stage === "writing_scripts" ? (
+              <span className="flex items-center gap-2 text-xs text-violet-300">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Generating with GPT…
+              </span>
+            ) : null}
+          </div>
+          <p className="mt-1 text-xs text-white/45">
+            Optimized for lipsync, shot segmentation, and image-to-video (15s word limits). Uses your brief + product
+            image.
+          </p>
+          <div className="mt-3 min-h-[120px]">
+            {scriptsText ? (
+              <pre className="max-h-[480px] overflow-auto whitespace-pre-wrap text-xs text-white/75 leading-relaxed">
+                {scriptsText}
+              </pre>
+            ) : (
+              <div className="flex min-h-[120px] items-center justify-center rounded-lg border border-white/10 bg-black/20 px-4 text-center text-sm text-white/35">
+                {isWorking && stage === "writing_scripts"
+                  ? "Writing SCRIPT OPTION 1–3…"
+                  : "Run Generate after step 1 to produce three scripts here."}
+              </div>
+            )}
           </div>
         </div>
       </CardContent>
