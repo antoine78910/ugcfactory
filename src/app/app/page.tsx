@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
-import { Loader2, X } from "lucide-react";
+import { Loader2, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -74,6 +74,29 @@ function normalizeUrl(url: string): string {
   }
 }
 
+/** Link to Ad Universe snapshot stored under `extracted.__universe`. */
+function runHasLinkToAdUniverse(extracted: unknown): boolean {
+  if (!extracted || typeof extracted !== "object") return false;
+  const u = (extracted as Record<string, unknown>).__universe;
+  if (!u || typeof u !== "object") return false;
+  return (u as { v?: unknown }).v === 1;
+}
+
+function universeThumbFromExtracted(extracted: unknown): string | null {
+  if (!extracted || typeof extracted !== "object") return null;
+  const u = (extracted as Record<string, unknown>).__universe;
+  if (!u || typeof u !== "object") return null;
+  const o = u as Record<string, unknown>;
+  if (typeof o.neutralUploadUrl === "string" && o.neutralUploadUrl.trim()) return o.neutralUploadUrl.trim();
+  const cc = o.cleanCandidate;
+  if (cc && typeof cc === "object" && typeof (cc as { url?: string }).url === "string") {
+    const url = (cc as { url: string }).url.trim();
+    if (url) return url;
+  }
+  if (typeof o.fallbackImageUrl === "string" && o.fallbackImageUrl.trim()) return o.fallbackImageUrl.trim();
+  return null;
+}
+
 const TEMPLATES = [
   {
     id: "template1",
@@ -133,8 +156,11 @@ export default function AppBrandWizard() {
       selected_image_url: string | null;
       video_url: string | null;
       generated_image_urls?: string[] | null;
+      extracted?: unknown;
     }>
   >([]);
+  /** Open Link to Ad and hydrate from this run (Projects). */
+  const [linkToAdResumeRunId, setLinkToAdResumeRunId] = useState<string | null>(null);
   const [runId, setRunId] = useState<string | null>(null);
   const [isLoadingRuns, setIsLoadingRuns] = useState(false);
 
@@ -308,6 +334,29 @@ export default function AppBrandWizard() {
       toast.message("Runs non disponibles", { description: message });
     } finally {
       setIsLoadingRuns(false);
+    }
+  }
+
+  async function deleteProjectByStoreUrl(storeUrl: string, runIdsInProject: string[]) {
+    if (!confirm("Supprimer ce projet ? Tous les runs liés à cette URL seront effacés.")) return;
+    try {
+      const res = await fetch("/api/runs/delete-project", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ storeUrl }),
+      });
+      const json = (await res.json()) as { deleted?: number; error?: string };
+      if (!res.ok) throw new Error(json.error || "Delete failed");
+      toast.success(`Projet supprimé (${json.deleted ?? 0} run(s))`);
+      if (runId && runIdsInProject.includes(runId)) {
+        setRunId(null);
+        if (typeof localStorage !== "undefined") localStorage.removeItem(UGC_CURRENT_RUN_KEY);
+      }
+      void refreshMeAndRuns();
+    } catch (err) {
+      toast.error("Suppression impossible", {
+        description: err instanceof Error ? err.message : "Erreur",
+      });
     }
   }
 
@@ -1115,41 +1164,72 @@ export default function AppBrandWizard() {
                     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                       {projects.map((proj) => {
                         const latestRun = proj.runs[0];
+                        const isUniverse = runHasLinkToAdUniverse(latestRun.extracted);
                         const isActive =
                           runId === latestRun.id ||
+                          linkToAdResumeRunId === latestRun.id ||
                           (storeUrl.trim() && normalizeUrl(storeUrl) === proj.normalizedUrl);
+                        const universeThumb = universeThumbFromExtracted(latestRun.extracted);
                         const thumb =
+                          universeThumb ||
                           latestRun.selected_image_url ||
                           (Array.isArray(latestRun.generated_image_urls) ? latestRun.generated_image_urls[0] : null) ||
                           null;
+                        const runIdsInProject = proj.runs.map((r) => r.id);
                         return (
-                          <button
+                          <div
                             key={proj.normalizedUrl}
-                            type="button"
-                            onClick={() => loadRun(latestRun.id)}
-                            className={`overflow-hidden rounded-xl border text-left transition ${
+                            className={`group relative overflow-hidden rounded-xl border text-left transition ${
                               isActive
                                 ? "border-violet-400/70 bg-violet-500/10"
                                 : "border-white/10 bg-white/5 hover:bg-white/10"
                             }`}
                           >
-                            {thumb ? (
-                              <img src={thumb} alt="" className="h-32 w-full object-cover" />
-                            ) : (
-                              <div className="flex h-32 w-full items-center justify-center bg-[#100d17] text-white/35">
-                                No preview
+                            <button
+                              type="button"
+                              className="w-full text-left"
+                              onClick={() => {
+                                if (isUniverse) {
+                                  setAppSection("link_to_ad");
+                                  setLinkToAdResumeRunId(latestRun.id);
+                                  return;
+                                }
+                                void loadRun(latestRun.id);
+                              }}
+                            >
+                              {thumb ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={thumb} alt="" className="h-32 w-full object-cover" />
+                              ) : (
+                                <div className="flex h-32 w-full items-center justify-center bg-[#100d17] text-white/35">
+                                  No preview
+                                </div>
+                              )}
+                              <div className="p-3">
+                                <div className="truncate text-sm font-medium">
+                                  {proj.title ? proj.title : proj.storeUrl}
+                                </div>
+                                <div className="mt-1 text-xs text-white/55">
+                                  {isUniverse ? "Link to Ad · " : null}
+                                  {proj.runs.length} run{proj.runs.length > 1 ? "s" : ""} ·{" "}
+                                  {latestRun.video_url ? "video" : latestRun.selected_image_url ? "image" : "draft"}
+                                </div>
                               </div>
-                            )}
-                            <div className="p-3">
-                              <div className="truncate text-sm font-medium">
-                                {proj.title ? proj.title : proj.storeUrl}
-                              </div>
-                              <div className="mt-1 text-xs text-white/55">
-                                {proj.runs.length} run{proj.runs.length > 1 ? "s" : ""} ·{" "}
-                                {latestRun.video_url ? "video" : latestRun.selected_image_url ? "image" : "draft"}
-                              </div>
-                            </div>
-                          </button>
+                            </button>
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="secondary"
+                              className="absolute right-2 top-2 h-8 w-8 border border-white/15 bg-black/70 text-white/80 opacity-0 transition hover:bg-destructive/90 hover:text-white group-hover:opacity-100"
+                              title="Supprimer le projet"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void deleteProjectByStoreUrl(proj.storeUrl, runIdsInProject);
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         );
                       })}
                     </div>
@@ -1208,7 +1288,13 @@ export default function AppBrandWizard() {
               </div>
             ) : null}
 
-            {appSection === "link_to_ad" ? <LinkToAdUniverse /> : null}
+            {appSection === "link_to_ad" ? (
+              <LinkToAdUniverse
+                resumeRunId={linkToAdResumeRunId}
+                onResumeConsumed={() => setLinkToAdResumeRunId(null)}
+                onRunsChanged={() => void refreshMeAndRuns()}
+              />
+            ) : null}
 
             {appSection === "link_to_ad" && false && step === "url" && (
               <Card className="border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.08)]">

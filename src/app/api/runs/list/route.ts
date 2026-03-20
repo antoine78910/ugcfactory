@@ -10,7 +10,7 @@ export async function GET() {
   try {
     const { data, error } = await supabase
       .from("ugc_runs")
-      .select("id, created_at, store_url, title, selected_image_url, video_url, generated_image_urls")
+      .select("id, created_at, store_url, title, selected_image_url, video_url, generated_image_urls, extracted")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(100);
