@@ -229,7 +229,7 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-[#050507] text-white selection:bg-violet-500/30">
-      {/* ── Header (textured bg + solid promo bar) ── */}
+      {/* ── Header (textured bg + semi-transparent violet promo bar) ── */}
       <header className="sticky top-0 z-50 overflow-hidden border-b-[4px] border-white/40">
         <div
           className="pointer-events-none absolute inset-0 bg-cover bg-[center_top] bg-no-repeat"
@@ -238,15 +238,15 @@ export default function LandingPage() {
         />
         <div className="pointer-events-none absolute inset-0 bg-[#050507]/45" aria-hidden />
         <div className="relative z-[1]">
-          <div className="relative border-b-[4px] border-[#0b0912] bg-[#987eee] px-4 py-1.5 text-center">
-            <p className="text-[11px] font-semibold text-[#0b0912]/90 sm:text-xs">
+          <div className="relative border-b-[4px] border-[#0b0912]/90 bg-[#987eee]/72 px-4 py-1.5 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] backdrop-blur-md">
+            <p className="text-[11px] font-semibold text-[#0b0912] sm:text-xs drop-shadow-[0_1px_0_rgba(255,255,255,0.35)]">
               Nano Banana 2 UNLIMITED. Kling 3.0 & Motion Control Available.
               Special 73% OFF
             </p>
             <button
               type="button"
               aria-label="Close announcement"
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#0b0912]/55 transition-colors hover:text-[#0b0912]"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#0b0912]/60 transition-colors hover:text-[#0b0912]"
             >
               ×
             </button>
