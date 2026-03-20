@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import LinkToAdUniverse from "@/app/_components/LinkToAdUniverse";
 
 type WizardStep = "url" | "analysis" | "quiz" | "image" | "video";
 type AppSection = "link_to_ad" | "motion_control" | "models" | "projects";
@@ -1195,23 +1196,28 @@ export default function AppBrandWizard() {
                 </CardContent>
               </Card>
             ) : null}
-            <div className="flex flex-wrap gap-2">
-              <div className="text-xs text-muted-foreground">
-                step: <span className="font-medium text-foreground">{step}</span>
+            {appSection !== "link_to_ad" ? (
+              <div className="flex flex-wrap gap-2">
+                <div className="text-xs text-muted-foreground">
+                  step: <span className="font-medium text-foreground">{step}</span>
+                </div>
+                {extracted?.title ? (
+                  <div className="text-xs text-muted-foreground">
+                    produit:{" "}
+                    <span className="font-medium text-foreground">{extracted?.title?.slice(0, 60)}</span>
+                  </div>
+                ) : null}
+                {nanoModel === "pro" ? (
+                  <div className="text-xs text-muted-foreground">
+                    modèle: <span className="font-medium text-foreground">NanoBanana Pro</span>
+                  </div>
+                ) : null}
               </div>
-              {extracted?.title ? (
-                <div className="text-xs text-muted-foreground">
-                  produit: <span className="font-medium text-foreground">{extracted.title.slice(0, 60)}</span>
-                </div>
-              ) : null}
-              {nanoModel === "pro" ? (
-                <div className="text-xs text-muted-foreground">
-                  modèle: <span className="font-medium text-foreground">NanoBanana Pro</span>
-                </div>
-              ) : null}
-            </div>
+            ) : null}
 
-            {appSection === "link_to_ad" && step === "url" && (
+            {appSection === "link_to_ad" ? <LinkToAdUniverse /> : null}
+
+            {appSection === "link_to_ad" && false && step === "url" && (
               <Card className="border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
                 <CardHeader>
                   <CardTitle className="text-base">1) URL & extraction</CardTitle>
@@ -1233,22 +1239,22 @@ export default function AppBrandWizard() {
                   ) : (
                     <div className="space-y-3">
                       <div className="rounded-md border bg-background/30 p-3">
-                        <div className="font-medium">{extracted.title ?? "—"}</div>
-                        <div className="text-sm text-muted-foreground">{extracted.description ?? "—"}</div>
-                        <div className="mt-2 text-xs text-muted-foreground break-all">{extracted.url}</div>
+                        <div className="font-medium">{extracted?.title ?? "—"}</div>
+                        <div className="text-sm text-muted-foreground">{extracted?.description ?? "—"}</div>
+                        <div className="mt-2 text-xs text-muted-foreground break-all">{extracted?.url}</div>
                       </div>
                       <div className="flex flex-wrap gap-2">
                         <Button variant="secondary" onClick={() => setStep("analysis")} disabled={!extracted}>
                           Next → Analyse
                         </Button>
                       </div>
-                      {extracted.images?.length ? (
+                      {extracted?.images?.length ? (
                         <div className="space-y-2">
                           <div className="text-xs text-muted-foreground">
-                            Images trouvées: <span className="font-medium">{extracted.images.length}</span>
+                            Images trouvées: <span className="font-medium">{extracted?.images?.length}</span>
                           </div>
                           <div className="grid gap-3 sm:grid-cols-3">
-                            {extracted.images.slice(0, 6).map((u) => (
+                            {extracted?.images?.slice(0, 6).map((u) => (
                               <img
                                 key={u}
                                 src={u}
@@ -1265,7 +1271,7 @@ export default function AppBrandWizard() {
               </Card>
             )}
 
-            {appSection === "link_to_ad" && step === "analysis" && (
+            {appSection === "link_to_ad" && false && step === "analysis" && (
               <Card className="border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
                 <CardHeader>
                   <CardTitle className="text-base">2) Analyse GPT (1→9)</CardTitle>
@@ -1324,7 +1330,7 @@ export default function AppBrandWizard() {
               </Card>
             )}
 
-            {appSection === "link_to_ad" && step === "quiz" && (
+            {appSection === "link_to_ad" && false && step === "quiz" && (
               <Card className="border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
                 <CardHeader>
                   <CardTitle className="text-base">3) Mini-quiz (pré-rempli)</CardTitle>
@@ -1407,7 +1413,7 @@ export default function AppBrandWizard() {
               </Card>
             )}
 
-            {appSection === "link_to_ad" && step === "image" && (
+            {appSection === "link_to_ad" && false && step === "image" && (
               <Card className="border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
                 <CardHeader>
                   <CardTitle className="text-base">4) Prompt → image (NanoBanana)</CardTitle>
@@ -1590,7 +1596,7 @@ export default function AppBrandWizard() {
 
                   {imageGen.kind === "success" ? (
                     <div className="grid gap-3 sm:grid-cols-2">
-                      {imageGen.urls.map((u) => (
+                      {(imageGen as Extract<ImageGenState, { kind: "success" }>).urls.map((u) => (
                         <button
                           key={u}
                           type="button"
@@ -1617,14 +1623,14 @@ export default function AppBrandWizard() {
 
                   {imageGen.kind === "error" ? (
                     <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
-                      {imageGen.message}
+                      {(imageGen as Extract<ImageGenState, { kind: "error" }>).message}
                     </div>
                   ) : null}
                 </CardContent>
               </Card>
             )}
 
-            {appSection === "link_to_ad" && step === "video" && (
+            {appSection === "link_to_ad" && false && step === "video" && (
               <Card className="border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
                 <CardHeader>
                   <CardTitle className="text-base">5) Template → vidéo (Kling 3.0 Standard)</CardTitle>
@@ -1709,12 +1715,17 @@ export default function AppBrandWizard() {
                   {videoGen.kind === "success" ? (
                     <div className="space-y-3">
                       <div className="rounded-md border bg-background/30 p-3 text-xs text-muted-foreground break-all">
-                        Video: {videoGen.url}
+                        Video: {(videoGen as Extract<VideoGenState, { kind: "success" }>).url}
                       </div>
-                      <video src={videoGen.url} controls playsInline className="w-full rounded-md border bg-black" />
+                      <video
+                        src={(videoGen as Extract<VideoGenState, { kind: "success" }>).url}
+                        controls
+                        playsInline
+                        className="w-full rounded-md border bg-black"
+                      />
                       {videoDownloadHref ? (
                         <Button asChild variant="secondary">
-                          <a href={videoDownloadHref}>Download</a>
+                        <a href={videoDownloadHref ?? undefined}>Download</a>
                         </Button>
                       ) : null}
                     </div>
@@ -1722,7 +1733,7 @@ export default function AppBrandWizard() {
 
                   {videoGen.kind === "error" ? (
                     <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
-                      {videoGen.message}
+                      {(videoGen as Extract<VideoGenState, { kind: "error" }>).message}
                     </div>
                   ) : null}
 
@@ -1733,10 +1744,10 @@ export default function AppBrandWizard() {
                         step,
                         extracted: extracted
                           ? {
-                              url: extracted.url,
-                              title: extracted.title,
-                              images: extracted.images.slice(0, 3),
-                              prices: extracted.signals.prices.slice(0, 6),
+                              url: extracted?.url,
+                              title: extracted?.title,
+                              images: extracted?.images?.slice(0, 3),
+                              prices: extracted?.signals?.prices?.slice(0, 6),
                             }
                           : null,
                         productName: currentProductName,
