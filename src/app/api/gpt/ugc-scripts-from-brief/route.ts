@@ -38,157 +38,81 @@ function collectHttpsProductImageUrls(body: Body): string[] {
 }
 
 const UGC_SCRIPT_INSTRUCTIONS = `
-GPT SCRIPT:
+GPT SCRIPT — UGC AI Script Generator Framework (SaaS) v4
 
-Tu es un expert en écriture de scripts UGC optimisés pour la génération vidéo par intelligence artificielle.
+Purpose
+1. Generate 3 UGC video scripts optimized for AI video generation (image-to-video).
+2. Scripts must be short, natural, easy to segment into shots, and optimized for realistic lipsync.
+3. Each script tests a different marketing angle while keeping the same persona.
 
-Ta mission est de générer 3 scripts UGC différents pour tester 3 angles marketing différents, tout en gardant le même persona cible.
+Inputs (this API)
+The user message includes a brand brief and optional product images. Infer from that context:
+product name/type, target audience (age, gender, lifestyle), main pain point, 2–3 key benefits,
+proof/transformation, and tone. The request also states video duration (8s, 15s, or 30s) — you MUST respect the total word cap for that duration.
 
-Les scripts doivent être optimisés pour :
+Voice Profile Structure (include at the start of each full script block, before HOOK)
+1. VOICE SIGNATURE: Gender, Age, Accent, Timbre
+2. VOICE PERFORMANCE: Tone, Energy (1–5), Pacing (wpm or qualitative), Emotion, Sales intensity
+3. Creator vibe, Sound environment, Background music
+4. Rule: voice must stay consistent across shots
 
-lipsync IA
+Script Structure (optimized for AI video)
+1. HOOK — Short attention-grabbing line.
+2. PROBLEM — User pain point.
+3. SOLUTION — Product + main benefit (must be the longest spoken line in the script).
+4. CTA — Short natural recommendation.
 
-segmentation en shots
+Word distribution per section (target ranges for spoken words; adjust if needed to stay under total cap)
+1. HOOK: 3–5 words
+2. PROBLEM: 5–7 words
+3. SOLUTION: 10–14 words (must include product name or clear product reference + main benefit)
+4. CTA: 3–4 words
 
-réalisme UGC
+Total spoken word limit by video duration (all HOOK+PROBLEM+SOLUTION+CTA combined — CRITICAL)
+1. 8 seconds → maximum 16 words total
+2. 15 seconds → maximum 30 words total
+3. 30 seconds → maximum 60 words total
+If the per-section targets would exceed the total cap, tighten each section proportionally while keeping SOLUTION the longest and preserving product + benefit in SOLUTION.
 
-génération image-to-video
+These limits keep lipsync stable and reduce hallucinations.
 
-Règles fondamentales
+Writing style
+1. Conversational English
+2. Short sentences
+3. One idea per sentence
+4. No marketing jargon
+5. Prefer shorter sentences to stay under limits
 
-Les scripts doivent toujours respecter la structure suivante :
+Gesture before speech (each section)
+1. First line: brief action/gesture in parentheses, then the spoken line in quotes.
+2. Example: (looks into camera) "I didn't expect this to work."
 
-HOOK
-PROBLEM
-SOLUTION
-CTA
+Scene context (before or after VOICE PROFILE as fits the template)
+Describe persona (age, gender, vibe, relation to product), location, time of day, mood.
 
-La phrase SOLUTION doit toujours inclure le produit et son bénéfice principal.
+Metadata for SaaS (after each script option)
+Each script option must be followed by a VIDEO_METADATA block with:
+persona, location, camera_style, props, actions, tone, energy_level
 
-La phrase SOLUTION doit être la plus longue du script.
-
-Aucune digression.
-
-Règles de longueur
-
-Selon la durée de la vidéo :
-
-8 seconds → maximum 16 words
-15 seconds → maximum 30 words
-30 seconds → maximum 60 words
-
-Ne jamais dépasser ces limites pour garder un lipsync stable et éviter les dégénérations.
-Chaque phrase doit rester courte et naturelle.
-
-Une idée par phrase.
-
-Une phrase par section.
-
-Style d'écriture
-
-Le script doit :
-
-ressembler à quelqu'un qui parle
-
-utiliser des mots simples
-
-utiliser des pauses naturelles
-
-être conversationnel
-
-éviter le jargon marketing
-
-Structure obligatoire des scènes
-
-Chaque section doit suivre la structure :
-
-(gesture/action)
-
-"spoken sentence"
-
-Le geste doit toujours venir avant la parole.
-
-Voice Profile
-
-Le script doit commencer par un bloc :
-
-VOICE PROFILE
-
-VOICE SIGNATURE
-Gender
-Age
-Accent
-Timbre
-
-VOICE PERFORMANCE
-Tone
-Energy (1–5)
-Pacing
-Emotion
-Sales intensity
-
-Creator vibe
-Sound environment
-Background music
-
-Rule: voice must remain consistent across shots.
-
-Persona
-
-Décrire :
-
-âge
-
-genre
-
-vibe
-
-relation au produit
-
-Scene Context
-
-Décrire :
-
-lieu
-
-moment de la journée
-
-ambiance
-
-Metadata pour le SaaS
-
-Chaque script doit inclure :
-
-VIDEO_METADATA
-
-persona
-location
-camera_style
-props
-actions
-tone
-energy_level
-
-Output attendu
-
-Le GPT doit générer :
-
+Output format (exact headings)
 SCRIPT OPTION 1
-(script)
+(full script: VOICE PROFILE, scene context if used, then HOOK/PROBLEM/SOLUTION/CTA each as (gesture) "line")
 
 VIDEO_METADATA
+(key: value lines or compact lines for the fields above)
 
 SCRIPT OPTION 2
-(script)
+(same structure)
 
 VIDEO_METADATA
 
 SCRIPT OPTION 3
-(script)
+(same structure)
 
 VIDEO_METADATA
 
-Chaque script doit tester un angle marketing différent.
+Each script must test a different marketing angle.
+Output plain text only.
 `.trim();
 
 function durationRules(seconds: 8 | 15 | 30) {
