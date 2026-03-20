@@ -118,8 +118,8 @@ function RevealSlide({
   return (
     <div
       ref={cardRef}
-      className="relative z-10 isolate shrink-0 overflow-hidden rounded-3xl bg-[#0a0a0c]"
-      style={{ width: "min(90vw, 25rem)", aspectRatio: "0.64" }}
+      className="relative z-10 isolate shrink-0 overflow-hidden rounded-3xl bg-[#0a0a0c] w-[70vw] max-w-[25rem] sm:w-[90vw]"
+      style={{ aspectRatio: "0.64" }}
     >
       <Image
         src={imageSrc}
@@ -305,7 +305,7 @@ export default function LandingPage() {
         <div className="pointer-events-none absolute left-1/2 top-0 z-[2] -translate-x-1/2 h-[700px] w-[1000px] rounded-full bg-violet-600/[0.12] blur-[140px]" />
 
         <div className="relative z-10 mx-auto max-w-4xl px-5 pt-28 pb-24 text-center">
-          <h1 className="mx-auto max-w-3xl px-4 sm:px-8 text-3xl font-extrabold tracking-tight leading-[1.12] sm:text-5xl md:text-6xl">
+          <h1 className="mx-auto max-w-3xl px-4 sm:px-8 text-4xl font-extrabold tracking-tight leading-[1.12] sm:text-5xl md:text-6xl">
             Turn any product
             <br />
             into realistic
@@ -325,7 +325,7 @@ export default function LandingPage() {
             />
           </h1>
 
-          <p className="mx-auto mt-6 max-w-2xl text-base text-white/55 sm:text-lg leading-relaxed">
+          <p className="mx-auto mt-6 max-w-2xl text-sm text-white/55 sm:text-lg leading-relaxed">
             Paste a product URL and we&apos;ll create a scroll-stopping video ad
             with AI avatars and voiceover in minutes.
           </p>
@@ -418,7 +418,7 @@ export default function LandingPage() {
 
           <div
             ref={carouselTrackRef}
-            className="relative z-[12] flex items-center gap-4 py-2 will-change-transform md:gap-8"
+            className="relative z-[12] flex items-center gap-3 py-2 will-change-transform md:gap-8"
             style={{ width: "max-content" }}
           >
             <div ref={carouselSetRef} className="flex items-center gap-4 md:gap-8">
