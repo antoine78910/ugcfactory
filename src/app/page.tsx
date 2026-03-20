@@ -229,29 +229,22 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-[#050507] text-white selection:bg-violet-500/30">
-      {/* ── Header (textured bg + semi-transparent violet promo bar) ── */}
-      <header className="sticky top-0 z-50 overflow-hidden border-b-[4px] border-white/40">
-        <div
-          className="pointer-events-none absolute inset-0 bg-cover bg-[center_top] bg-no-repeat"
-          style={{ backgroundImage: "url(/header-bg-texture.png)" }}
-          aria-hidden
-        />
-        <div className="pointer-events-none absolute inset-0 bg-[#050507]/45" aria-hidden />
-        <div className="relative z-[1]">
-          <div className="relative border-b-[4px] border-[#0b0912]/90 bg-[#987eee]/72 px-4 py-1.5 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] backdrop-blur-md">
-            <p className="text-[11px] font-semibold text-[#0b0912] sm:text-xs drop-shadow-[0_1px_0_rgba(255,255,255,0.35)]">
-              Nano Banana 2 UNLIMITED. Kling 3.0 & Motion Control Available.
-              Special 73% OFF
-            </p>
-            <button
-              type="button"
-              aria-label="Close announcement"
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#0b0912]/60 transition-colors hover:text-[#0b0912]"
-            >
-              ×
-            </button>
-          </div>
-          <div className="mx-auto flex max-w-6xl items-center justify-between border-t border-white/[0.06] bg-black/35 px-5 py-4 backdrop-blur-md">
+      {/* ── Sticky header: Nano Banana bar + nav (no hero texture here) ── */}
+      <header className="sticky top-0 z-50 border-b-[4px] border-white/40 bg-[#050507]/80 backdrop-blur-xl">
+        <div className="relative border-b-[4px] border-[#0b0912] bg-[#987eee] px-4 py-1.5 text-center">
+          <p className="text-[11px] font-semibold text-[#0b0912]/90 sm:text-xs">
+            Nano Banana 2 UNLIMITED. Kling 3.0 & Motion Control Available.
+            Special 73% OFF
+          </p>
+          <button
+            type="button"
+            aria-label="Close announcement"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-[#0b0912]/55 transition-colors hover:text-[#0b0912]"
+          >
+            ×
+          </button>
+        </div>
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4">
           <Link
             href="/"
             className="flex items-center"
@@ -288,12 +281,16 @@ export default function LandingPage() {
             </Button>
           </div>
         </div>
-        </div>
       </header>
 
-      {/* ── Hero ── */}
+      {/* ── Hero (texture behind headline: Turn any product / AI Reels…) ── */}
       <section className="relative overflow-hidden">
-        <div className="absolute inset-0 z-0 opacity-70">
+        <div
+          className="pointer-events-none absolute inset-0 z-0 bg-cover bg-center bg-no-repeat"
+          style={{ backgroundImage: "url(/hero-bg-texture.png)" }}
+          aria-hidden
+        />
+        <div className="absolute inset-0 z-[1] opacity-[0.45]">
           <ShapeGrid
             speed={0.5}
             squareSize={40}
@@ -304,8 +301,8 @@ export default function LandingPage() {
             hoverTrailAmount={0}
           />
         </div>
-        <div className="pointer-events-none absolute inset-0 z-0 bg-gradient-to-b from-[#050507]/30 via-[#050507]/55 to-[#050507]" />
-        <div className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 h-[700px] w-[1000px] rounded-full bg-violet-600/[0.12] blur-[140px]" />
+        <div className="pointer-events-none absolute inset-0 z-[2] bg-gradient-to-b from-[#050507]/35 via-[#050507]/50 to-[#050507]" />
+        <div className="pointer-events-none absolute left-1/2 top-0 z-[2] -translate-x-1/2 h-[700px] w-[1000px] rounded-full bg-violet-600/[0.12] blur-[140px]" />
 
         <div className="relative z-10 mx-auto max-w-4xl px-5 pt-28 pb-24 text-center">
           <h1 className="mx-auto max-w-3xl px-4 sm:px-8 text-3xl font-extrabold tracking-tight leading-[1.12] sm:text-5xl md:text-6xl">
