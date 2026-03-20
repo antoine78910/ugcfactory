@@ -145,9 +145,21 @@ export async function POST(req: Request) {
 
   const images: string[] = [];
   const ogImage = $('meta[property="og:image"]').attr("content");
-  if (ogImage) images.push(ogImage);
+  if (ogImage && !ogImage.startsWith("data:")) {
+    try {
+      images.push(new URL(ogImage.trim(), url).toString());
+    } catch {
+      images.push(ogImage);
+    }
+  }
   const twitterImage = $('meta[name="twitter:image"]').attr("content");
-  if (twitterImage) images.push(twitterImage);
+  if (twitterImage && !twitterImage.startsWith("data:")) {
+    try {
+      images.push(new URL(twitterImage.trim(), url).toString());
+    } catch {
+      images.push(twitterImage);
+    }
+  }
 
   // preload images
   $('link[rel="preload"][as="image"]').each((_, el) => {

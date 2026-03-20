@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { absolutizeImageUrl } from "@/lib/imageUrl";
 
 type ProductCandidate = { url: string; reason?: string } | string;
 
@@ -44,9 +45,18 @@ export default function LinkToAdUniverse() {
   const quality = useMemo(() => confidenceToQuality(confidence ?? undefined), [confidence]);
   const displayedProductImageUrl = neutralUploadUrl ?? cleanCandidate?.url ?? fallbackImageUrl ?? null;
 
+  /** Avoid relative URLs (e.g. /cdn/shop/...) resolving to our app origin → 404 in <img> and "Open image". */
+  const resolvedPreviewUrl = useMemo(() => {
+    if (!displayedProductImageUrl) return null;
+    if (/^https?:\/\//i.test(displayedProductImageUrl)) return displayedProductImageUrl;
+    const base = storeUrl.trim();
+    if (!base) return displayedProductImageUrl;
+    return absolutizeImageUrl(displayedProductImageUrl, base) ?? displayedProductImageUrl;
+  }, [displayedProductImageUrl, storeUrl]);
+
   useEffect(() => {
     setImgError(false);
-  }, [displayedProductImageUrl]);
+  }, [resolvedPreviewUrl]);
 
   async function uploadNeutralPhoto(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -258,11 +268,11 @@ export default function LinkToAdUniverse() {
               </div>
 
               <div className="mt-3 aspect-[4/3] w-full overflow-hidden rounded-lg border border-white/10 bg-[#050507]">
-                {displayedProductImageUrl && !imgError ? (
+                {resolvedPreviewUrl && !imgError ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    key={displayedProductImageUrl}
-                    src={displayedProductImageUrl}
+                    key={resolvedPreviewUrl}
+                    src={resolvedPreviewUrl}
                     alt="Clean product"
                     className="h-full w-full object-contain"
                     loading="eager"
@@ -271,7 +281,7 @@ export default function LinkToAdUniverse() {
                   />
                 ) : (
                   <div className="flex h-full items-center justify-center text-sm text-white/35">
-                    {displayedProductImageUrl
+                    {resolvedPreviewUrl
                       ? "Image couldn't be loaded. Check the link below."
                       : "Run the scan to see the clean product image."}
                   </div>
@@ -288,11 +298,11 @@ export default function LinkToAdUniverse() {
                 <p className="mt-2 text-xs text-white/45">Detected: {extractedTitle}</p>
               ) : null}
 
-              {imgError && displayedProductImageUrl ? (
+              {imgError && resolvedPreviewUrl ? (
                 <div className="mt-3 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
-                  Could not load the image preview.{" "}
+                  Could not load the image preview (hotlinking may block embeds).{" "}
                   <a
-                    href={displayedProductImageUrl}
+                    href={resolvedPreviewUrl}
                     target="_blank"
                     rel="noreferrer"
                     className="font-medium underline underline-offset-2"

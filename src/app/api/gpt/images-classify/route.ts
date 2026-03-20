@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { openaiResponsesTextWithImages } from "@/lib/openaiResponses";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { makeCacheKey } from "@/lib/gptCache";
+import { matchUrlToCandidates } from "@/lib/imageUrl";
 
 type Body = {
   pageUrl: string;
@@ -52,10 +53,11 @@ export async function POST(req: Request) {
     "You will be shown up to 10 images from the page.",
     "Return JSON: { productOnlyUrls: [{ url, reason }], otherUrls: [url], confidence: \"low\"|\"medium\"|\"high\" }",
     "If none are packshots, return empty productOnlyUrls.",
+    "CRITICAL: Every `url` you return MUST be copied EXACTLY from the image URLs listed in the user message (character-for-character). Do not invent, shorten, or paraphrase URLs.",
   ].join("\n");
 
   try {
-    const cacheKey = makeCacheKey({ v: 1, pageUrl: body.pageUrl, ranked });
+    const cacheKey = makeCacheKey({ v: 2, pageUrl: body.pageUrl, ranked });
     try {
       const { data: hit } = await supabase
         .from("gpt_cache")
@@ -74,18 +76,55 @@ export async function POST(req: Request) {
       imageUrls: ranked,
     });
 
-    let parsed: any;
+    let parsed: unknown;
     try {
-      parsed = JSON.parse(text);
+      parsed = JSON.parse(text) as unknown;
     } catch {
       return NextResponse.json({ error: "Model returned non-JSON.", raw: text }, { status: 502 });
     }
 
+    const p = parsed as {
+      productOnlyUrls?: unknown;
+      otherUrls?: unknown;
+      confidence?: unknown;
+    };
+    const rawProductOnly = Array.isArray(p.productOnlyUrls) ? p.productOnlyUrls : [];
+    const rawOther = Array.isArray(p.otherUrls) ? p.otherUrls : [];
+
+    type UrlEntry = { url: string; reason?: string };
+    const productOnlyUrls: UrlEntry[] = [];
+    for (const item of rawProductOnly) {
+      const obj = item as { url?: unknown; reason?: unknown };
+      const rawU = typeof obj?.url === "string" ? obj.url : typeof item === "string" ? item : "";
+      if (!rawU.trim()) continue;
+      const matched = matchUrlToCandidates(rawU, ranked, body.pageUrl);
+      if (matched) {
+        productOnlyUrls.push({
+          url: matched,
+          reason: typeof obj?.reason === "string" ? obj.reason : undefined,
+        });
+      }
+    }
+
+    if (productOnlyUrls.length === 0 && rawProductOnly.length > 0 && ranked.length > 0) {
+      productOnlyUrls.push({
+        url: ranked[0],
+        reason: "Model URL did not match the page; using the top-ranked image from extraction.",
+      });
+    }
+
+    const otherUrls: string[] = [];
+    for (const item of rawOther) {
+      if (typeof item !== "string" || !item.trim()) continue;
+      const matched = matchUrlToCandidates(item, urls, body.pageUrl);
+      if (matched) otherUrls.push(matched);
+    }
+
     const data = {
       ranked,
-      productOnlyUrls: Array.isArray(parsed?.productOnlyUrls) ? parsed.productOnlyUrls : [],
-      otherUrls: Array.isArray(parsed?.otherUrls) ? parsed.otherUrls : [],
-      confidence: String(parsed?.confidence ?? "low"),
+      productOnlyUrls,
+      otherUrls,
+      confidence: String(p.confidence ?? "low"),
     };
 
     try {
