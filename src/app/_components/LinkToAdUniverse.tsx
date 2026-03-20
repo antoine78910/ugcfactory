@@ -1281,13 +1281,19 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     if (isKlingSubmitting || klingPollTaskId) return "Generating your video…";
     if (!isWorking) return null;
     if (stage === "server_pipeline") {
-      return "Running on the server (scan → images → brief → scripts). You can switch pages — progress is saved to your project.";
+      return "Full store pass — page, images, brand brief, then script angles. You can switch pages; your project saves as we go.";
     }
-    if (stage === "scanning") return "Fetching the store page…";
-    if (stage === "finding_image") return "Picking the best product visuals…";
-    if (stage === "summarizing") return "Understanding the brand…";
+    if (stage === "scanning") {
+      return "Scanning the website — fetching the store page, structure, and visible text…";
+    }
+    if (stage === "finding_image") {
+      return "Scanning images — collecting product photos and picking the clearest preview…";
+    }
+    if (stage === "summarizing") {
+      return "Reading the brand — turning what we found into a concise brief for your ads…";
+    }
     if (stage === "writing_scripts") {
-      return "Writing 3 UGC script angles on the server… You can switch pages — we’ll save when it’s done.";
+      return "Writing 3 UGC script angles from the brief… You can switch pages — we’ll save when it’s done.";
     }
     return "Working…";
   }, [
@@ -1413,14 +1419,23 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         />
         {universeLoadingMessage ? (
           <div className="-mt-2 mb-2 flex min-h-[4.25rem] items-center gap-3 rounded-xl border border-violet-500/15 bg-violet-500/[0.06] px-3 py-3 sm:gap-4 sm:px-4">
-            {isWorking && (stage === "scanning" || stage === "finding_image" || stage === "server_pipeline") ? (
+            {isWorking &&
+            (stage === "scanning" ||
+              stage === "finding_image" ||
+              stage === "server_pipeline" ||
+              stage === "summarizing" ||
+              stage === "writing_scripts") ? (
               <WebsiteScanLoader
                 label={
-                  stage === "server_pipeline"
-                    ? "Server"
+                  stage === "scanning"
+                    ? "Scan site"
                     : stage === "finding_image"
-                      ? "Images"
-                      : "Scan"
+                      ? "Scan images"
+                      : stage === "summarizing"
+                        ? "Brand"
+                        : stage === "writing_scripts"
+                          ? "Scripts"
+                          : "Full pass"
                 }
                 subtitle={universeLoadingMessage}
               />

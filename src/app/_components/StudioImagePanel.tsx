@@ -150,56 +150,73 @@ export default function StudioImagePanel() {
     }
   };
 
+  const generateBtnClass =
+    "h-14 w-full rounded-2xl border border-violet-300/40 bg-violet-500 text-lg font-semibold text-white shadow-[0_6px_0_0_rgba(76,29,149,0.85)] transition-all hover:-translate-y-px hover:bg-violet-400 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.85)] active:translate-y-1 active:shadow-none";
+
   return (
     <div className="space-y-6">
-      <div className="rounded-[1.25rem] border border-white/10 bg-[#101014] p-4 shadow-[0_0_40px_rgba(0,0,0,0.35)]">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch lg:gap-3">
-          <div className="flex min-h-[52px] flex-1 flex-col gap-2 rounded-2xl border border-white/10 bg-[#0a0a0d] p-2 sm:flex-row sm:items-stretch">
-            <Button
-              type="button"
-              variant="secondary"
-              size="icon"
-              className="h-11 w-11 shrink-0 rounded-xl border border-white/10 bg-white/5 text-white hover:bg-white/10"
-              title="Add reference images"
-              disabled={busy}
-              onClick={onAddRefs}
-            >
-              <Plus className="h-5 w-5" />
-            </Button>
-            <Textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Describe the scene you imagine"
-              className="min-h-[52px] flex-1 resize-none border-0 bg-transparent px-2 py-3 text-sm text-white placeholder:text-white/35 focus-visible:ring-0"
-              rows={2}
-            />
+      {results.length > 0 ? (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-white/45">Recent generations</p>
+          <div className="flex flex-col gap-4">
+            {results.map((u) => (
+              <div key={u} className="overflow-hidden rounded-2xl border border-white/10 bg-black">
+                <a href={u} target="_blank" rel="noreferrer" className="block bg-[#0b0912]">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={u}
+                    alt=""
+                    className="max-h-[min(520px,70vh)] w-full object-contain object-center"
+                  />
+                </a>
+                <div className="border-t border-white/10 p-3">
+                  <a
+                    href={`/api/download?url=${encodeURIComponent(u)}`}
+                    className="text-sm font-medium text-violet-300 underline"
+                  >
+                    Download
+                  </a>
+                </div>
+              </div>
+            ))}
           </div>
+        </div>
+      ) : null}
 
+      <div className="rounded-2xl border border-white/10 bg-[#101014] p-4">
+        <div className="flex min-h-[120px] flex-col gap-2 sm:flex-row sm:items-stretch">
           <Button
             type="button"
+            variant="secondary"
+            size="icon"
+            className="h-11 w-11 shrink-0 rounded-xl border border-white/10 bg-white/5 text-white hover:bg-white/10"
+            title="Add reference images"
             disabled={busy}
-            onClick={() => void generate()}
-            className="h-auto min-h-[52px] shrink-0 rounded-2xl bg-[#c8f542] px-8 text-base font-semibold text-black shadow-none hover:bg-[#d8ff5c] lg:min-w-[200px]"
+            onClick={onAddRefs}
           >
-            {busy ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : (
-              <span className="inline-flex items-center gap-2">
-                Generate
-                <Sparkles className="h-4 w-4" />
-                <span className="rounded-md bg-white/15 px-1.5 py-0.5 text-sm tabular-nums">
-                  {CREDITS_BY_MODEL[model]}
-                </span>
-              </span>
-            )}
+            <Plus className="h-5 w-5" />
           </Button>
+          <Textarea
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            placeholder="Describe the scene you imagine."
+            className="min-h-[120px] flex-1 resize-none border-white/10 bg-[#0a0a0d] px-3 py-3 text-sm text-white placeholder:text-white/35 focus-visible:ring-0"
+            rows={5}
+          />
         </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/60">
+            ✨ Studio
+          </span>
+        </div>
+      </div>
 
-        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-white/10 pt-4">
+      <div className="rounded-2xl border border-white/10 bg-[#101014] p-4">
+        <Label className="text-xs text-white/45">Model</Label>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
           <div className="flex min-w-[200px] flex-1 items-center gap-2">
-            <Label className="sr-only">Model</Label>
             <Select value={model} onValueChange={(v) => setModel(v as NanoModel)}>
-              <SelectTrigger className="h-10 rounded-full border-white/15 bg-white/[0.06] text-white">
+              <SelectTrigger className="h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -210,7 +227,7 @@ export default function StudioImagePanel() {
           </div>
 
           <Select value={aspect} onValueChange={setAspect}>
-            <SelectTrigger className="h-10 w-[100px] rounded-xl border-white/15 bg-white/[0.06] text-white">
+            <SelectTrigger className="h-12 w-[100px] rounded-xl border-white/15 bg-[#0a0a0d] text-white">
               <SelectValue placeholder="Ratio" />
             </SelectTrigger>
             <SelectContent>
@@ -227,7 +244,7 @@ export default function StudioImagePanel() {
 
           {model === "pro" ? (
             <Select value={resolution} onValueChange={(v) => setResolution(v as (typeof PRO_RESOLUTIONS)[number])}>
-              <SelectTrigger className="h-10 w-[88px] rounded-xl border-white/15 bg-white/[0.06] text-white">
+              <SelectTrigger className="h-12 w-[88px] rounded-xl border-white/15 bg-[#0a0a0d] text-white">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -239,7 +256,7 @@ export default function StudioImagePanel() {
               </SelectContent>
             </Select>
           ) : (
-            <div className="flex items-center gap-1 rounded-xl border border-white/15 bg-white/[0.06] px-2 py-1">
+            <div className="flex h-12 items-center gap-1 rounded-xl border border-white/15 bg-[#0a0a0d] px-2">
               <Button
                 type="button"
                 variant="ghost"
@@ -266,8 +283,11 @@ export default function StudioImagePanel() {
             </div>
           )}
         </div>
+      </div>
 
-        {refUrls.length > 0 ? (
+      {refUrls.length > 0 ? (
+        <div className="rounded-2xl border border-white/10 bg-[#101014] p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-white/45">Reference images</p>
           <div className="mt-3 flex flex-wrap gap-2">
             {refUrls.map((u, i) => (
               <button
@@ -285,8 +305,20 @@ export default function StudioImagePanel() {
               </button>
             ))}
           </div>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
+
+      <Button type="button" disabled={busy} onClick={() => void generate()} className={generateBtnClass}>
+        {busy ? (
+          <Loader2 className="h-6 w-6 animate-spin" />
+        ) : (
+          <span className="inline-flex items-center gap-2">
+            Generate
+            <Sparkles className="h-5 w-5" />
+            <span className="rounded-md bg-white/15 px-2 py-0.5 text-base tabular-nums">{CREDITS_BY_MODEL[model]}</span>
+          </span>
+        )}
+      </Button>
     </div>
   );
 }
