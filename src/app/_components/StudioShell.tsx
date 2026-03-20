@@ -14,17 +14,18 @@ type Props = {
   /** Sur /app : section active et changement via boutons (préserve l’état wizard). */
   studioSection?: StudioNavSection;
   onStudioSectionChange?: (s: StudioNavSection) => void;
-  /** Pour préserver `?project=` dans les liens Overview depuis crédits / abonnement. */
+  /** Pour préserver `?project=` dans les liens CREATE depuis crédits / abonnement. */
   studioProjectId?: string | null;
 };
 
-const SECTIONS: { id: StudioNavSection; label: string }[] = [
+const CREATE_SECTIONS: { id: StudioNavSection; label: string }[] = [
   { id: "link_to_ad", label: "Link to Ad" },
   { id: "motion_control", label: "Motion Control" },
   { id: "image", label: "Image" },
   { id: "video", label: "Video" },
-  { id: "projects", label: "Projects" },
 ];
+
+const PROJECTS_NAV: { id: StudioNavSection; label: string } = { id: "projects", label: "My Projects" };
 
 function sectionHref(section: StudioNavSection, projectId: string | null | undefined): string {
   const p = new URLSearchParams();
@@ -97,11 +98,11 @@ export default function StudioShell({
             </Link>
           </div>
 
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">
             <div className="rounded-xl border border-white/10 bg-[#0b0912]/85 p-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/45">Overview</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/45">CREATE</p>
               <div className="mt-2 space-y-1">
-                {SECTIONS.map(({ id, label }) => {
+                {CREATE_SECTIONS.map(({ id, label }) => {
                   const active = controlled && activeSection === id;
                   if (controlled) {
                     return (
@@ -121,6 +122,27 @@ export default function StudioShell({
                     </Link>
                   );
                 })}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-white/10 bg-[#0b0912]/85 p-3">
+              <div className="space-y-1">
+                {controlled ? (
+                  <button
+                    type="button"
+                    className={navButtonClass(activeSection === PROJECTS_NAV.id)}
+                    onClick={() => onStudioSectionChange!(PROJECTS_NAV.id)}
+                  >
+                    {PROJECTS_NAV.label}
+                  </button>
+                ) : (
+                  <Link
+                    href={sectionHref(PROJECTS_NAV.id, studioProjectId ?? null)}
+                    className={navButtonClass(activeSection === PROJECTS_NAV.id)}
+                  >
+                    {PROJECTS_NAV.label}
+                  </Link>
+                )}
               </div>
             </div>
           </div>

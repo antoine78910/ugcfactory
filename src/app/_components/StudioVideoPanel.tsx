@@ -135,7 +135,8 @@ export default function StudioVideoPanel() {
   const [klingMode, setKlingMode] = useState<"std" | "pro">("std");
   const [veoAspect, setVeoAspect] = useState<"16:9" | "9:16" | "Auto">("9:16");
   const [busy, setBusy] = useState(false);
-  const [videoOut, setVideoOut] = useState<string | null>(null);
+  /** Newest first — shown above the form */
+  const [videoHistory, setVideoHistory] = useState<string[]>([]);
 
   const meta = MODEL_OPTIONS.find((m) => m.id === modelId)!;
 
@@ -180,7 +181,6 @@ export default function StudioVideoPanel() {
     }
     if (busy) return;
     setBusy(true);
-    setVideoOut(null);
     try {
       if (meta.family === "veo") {
         const urls = [startUrl, endUrl].filter(Boolean) as string[];
@@ -204,7 +204,7 @@ export default function StudioVideoPanel() {
         if (!res.ok || !json.taskId) throw new Error(json.error || "Veo failed");
         toast.message("Veo started", { description: "Rendering…" });
         const url = await pollVeoVideo(json.taskId);
-        setVideoOut(url);
+        setVideoHistory((h) => [url, ...h]);
         toast.success("Video ready");
         return;
       }
@@ -228,7 +228,7 @@ export default function StudioVideoPanel() {
       if (!res.ok || !json.taskId) throw new Error(json.error || "Video task failed");
       toast.message("Generation started", { description: "Polling provider…" });
       const url = await pollKlingVideo(json.taskId);
-      setVideoOut(url);
+      setVideoHistory((h) => [url, ...h]);
       toast.success("Video ready");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Error");
@@ -267,6 +267,27 @@ export default function StudioVideoPanel() {
         </div>
       ) : (
         <>
+          {videoHistory.length > 0 ? (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-white/45">Recent generations</p>
+              <div className="flex flex-col gap-4">
+                {videoHistory.map((u) => (
+                  <div key={u} className="overflow-hidden rounded-2xl border border-white/10 bg-black">
+                    <video src={u} controls className="max-h-[520px] w-full" />
+                    <div className="border-t border-white/10 p-3">
+                      <a
+                        href={`/api/download?url=${encodeURIComponent(u)}`}
+                        className="text-sm font-medium text-violet-300 underline"
+                      >
+                        Download
+                      </a>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           <div className="grid gap-3 sm:grid-cols-2">
             <FrameSlot
               label="Start frame"
@@ -421,7 +442,7 @@ export default function StudioVideoPanel() {
             type="button"
             disabled={busy}
             onClick={() => void generate()}
-            className="h-14 w-full rounded-2xl bg-[#c8f542] text-lg font-semibold text-black hover:bg-[#d8ff5c]"
+            className="h-14 w-full rounded-2xl border border-violet-300/40 bg-violet-500 text-lg font-semibold text-white shadow-[0_6px_0_0_rgba(76,29,149,0.85)] transition-all hover:-translate-y-px hover:bg-violet-400 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.85)] active:translate-y-1 active:shadow-none"
           >
             {busy ? (
               <Loader2 className="h-6 w-6 animate-spin" />
@@ -429,24 +450,10 @@ export default function StudioVideoPanel() {
               <span className="inline-flex items-center gap-2">
                 Generate
                 <Sparkles className="h-5 w-5" />
-                <span className="rounded-md bg-black/10 px-2 py-0.5 text-base tabular-nums">{CREDITS_SHOWN}</span>
+                <span className="rounded-md bg-white/15 px-2 py-0.5 text-base tabular-nums">{CREDITS_SHOWN}</span>
               </span>
             )}
           </Button>
-
-          {videoOut ? (
-            <div className="overflow-hidden rounded-2xl border border-white/10 bg-black">
-              <video src={videoOut} controls className="max-h-[520px] w-full" />
-              <div className="border-t border-white/10 p-3">
-                <a
-                  href={`/api/download?url=${encodeURIComponent(videoOut)}`}
-                  className="text-sm font-medium text-violet-300 underline"
-                >
-                  Download
-                </a>
-              </div>
-            </div>
-          ) : null}
         </>
       )}
     </div>

@@ -1284,7 +1284,7 @@ export default function AppBrandWizard() {
               <Card className="border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
                 <CardHeader>
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <CardTitle className="text-base">Projects</CardTitle>
+                    <CardTitle className="text-base">My Projects</CardTitle>
                     <div className="flex gap-2">
                       <Button
                         type="button"
@@ -1804,25 +1804,6 @@ export default function AppBrandWizard() {
                 </CardContent>
               </Card>
             ) : null}
-            {appSection !== "link_to_ad" ? (
-              <div className="flex flex-wrap gap-2">
-                <div className="text-xs text-muted-foreground">
-                  step: <span className="font-medium text-foreground">{step}</span>
-                </div>
-                {extracted?.title ? (
-                  <div className="text-xs text-muted-foreground">
-                    product:{" "}
-                    <span className="font-medium text-foreground">{extracted?.title?.slice(0, 60)}</span>
-                  </div>
-                ) : null}
-                {nanoModel === "pro" ? (
-                  <div className="text-xs text-muted-foreground">
-                    model: <span className="font-medium text-foreground">NanoBanana Pro</span>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-
             {appSection === "link_to_ad" ? (
               <LinkToAdUniverse
                 resumeRunId={linkToAdResumeRunId}

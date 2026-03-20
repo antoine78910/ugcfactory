@@ -119,7 +119,6 @@ export default function StudioImagePanel() {
     }
     if (busy) return;
     setBusy(true);
-    setResults([]);
     try {
       const body: Record<string, unknown> = {
         prompt: p,
@@ -142,7 +141,7 @@ export default function StudioImagePanel() {
       if (!res.ok || !json.taskId) throw new Error(json.error || "Generate failed");
       toast.message("Generation started", { description: "Polling NanoBanana…" });
       const urls = await pollNanoTask(json.taskId);
-      setResults(urls);
+      setResults((prev) => [...urls, ...prev]);
       toast.success("Image ready");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Error");
@@ -188,7 +187,7 @@ export default function StudioImagePanel() {
               <span className="inline-flex items-center gap-2">
                 Generate
                 <Sparkles className="h-4 w-4" />
-                <span className="rounded-md bg-black/10 px-1.5 py-0.5 text-sm tabular-nums">
+                <span className="rounded-md bg-white/15 px-1.5 py-0.5 text-sm tabular-nums">
                   {CREDITS_BY_MODEL[model]}
                 </span>
               </span>
@@ -288,23 +287,6 @@ export default function StudioImagePanel() {
           </div>
         ) : null}
       </div>
-
-      {results.length > 0 ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {results.map((u) => (
-            <a
-              key={u}
-              href={u}
-              target="_blank"
-              rel="noreferrer"
-              className="overflow-hidden rounded-xl border border-white/10 bg-[#0b0912]"
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={u} alt="" className="aspect-[3/4] w-full object-cover" />
-            </a>
-          ))}
-        </div>
-      ) : null}
     </div>
   );
 }

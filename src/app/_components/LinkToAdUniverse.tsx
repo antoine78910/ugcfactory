@@ -36,7 +36,7 @@ function confidenceToQuality(c: string | undefined) {
   if (v === "medium")
     return {
       label: "medium",
-      color: "text-amber-300",
+      color: "text-violet-300",
       help: "Image is usable but not perfect. Upload a neutral product-only photo for best results.",
     };
   return {
@@ -1575,8 +1575,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                 ) : null}
 
                 {showUploadRecommendation ? (
-                  <div className="mt-4 rounded-lg border border-amber-400/20 bg-amber-400/5 p-3">
-                    <p className="text-sm font-semibold text-amber-300">Upload recommended</p>
+                  <div className="mt-4 rounded-lg border border-violet-500/25 bg-violet-500/[0.08] p-3">
+                    <p className="text-sm font-semibold text-violet-200">Upload recommended</p>
                     <p className="mt-1 text-xs text-white/55">{quality.help}</p>
                     <div className="mt-3">
                       <input
@@ -1644,60 +1644,35 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
 
         {showI2vPipeline ? (
           <div className="space-y-4">
-            <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/[0.06] p-4">
-              <p className="text-sm font-semibold text-white/90">Choose an image to generate your UGC</p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {selectedAngleIndex !== null &&
-                !nanoBananaPromptsRaw.trim() &&
-                !isNanoPromptsLoading &&
-                !isNanoAllImagesSubmitting &&
-                !nanoPollTaskId ? (
-                  <Button
-                    type="button"
-                    disabled={!resolvedPreviewUrl}
-                    className={primaryBtnClass}
-                    onClick={() => void onGenerateNanoBananaPrompts(selectedAngleIndex as 0 | 1 | 2)}
-                  >
-                    Retry prompts &amp; 3 images
-                  </Button>
-                ) : null}
-                {nanoPollTaskId || isNanoPromptsLoading || isNanoAllImagesSubmitting ? (
-                  <span className="flex items-center gap-2 text-xs text-emerald-300">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    Generating images…
-                  </span>
-                ) : null}
-              </div>
-
-              {nanoBananaPromptsRaw ? (
-                <div className="mt-4 space-y-4">
-                  {nanoHasThreeImages ? (
-                    <>
-                      <div className="grid gap-4 sm:grid-cols-3">
-                        {([0, 1, 2] as const).map((i) => {
-                          const selected = nanoBananaSelectedImageIndex === i;
-                          return (
-                            <div
-                              key={i}
-                              role="button"
-                              tabIndex={0}
-                              aria-pressed={selected}
-                              onClick={() => void onSelectNanoBananaImage(i)}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter" || e.key === " ") {
-                                  e.preventDefault();
-                                  void onSelectNanoBananaImage(i);
-                                }
-                              }}
-                              className={`group relative flex cursor-pointer flex-col overflow-hidden rounded-2xl border bg-[#08080c] text-left transition-[transform,box-shadow,border-color] duration-200 ease-out active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0912] ${
-                                selected
-                                  ? "border-[3px] border-violet-400 shadow-[0_0_0_1px_rgba(139,92,246,0.45),0_0_28px_rgba(139,92,246,0.22),0_12px_40px_rgba(76,29,149,0.25)]"
-                                  : "border border-white/10 hover:border-violet-400/40"
-                              }`}
-                            >
-                              <span className="border-b border-white/10 px-2 py-1.5 text-center text-[10px] font-bold uppercase tracking-wide text-emerald-300/90">
-                                Image {i + 1}
-                              </span>
+            <div className="flex flex-col gap-4 rounded-xl border border-violet-500/25 bg-violet-500/[0.06] p-4">
+              {nanoBananaPromptsRaw && nanoHasThreeImages ? (
+                <div className="space-y-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-white/45">Generated images</p>
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    {([0, 1, 2] as const).map((i) => {
+                      const selected = nanoBananaSelectedImageIndex === i;
+                      return (
+                        <div
+                          key={i}
+                          role="button"
+                          tabIndex={0}
+                          aria-pressed={selected}
+                          onClick={() => void onSelectNanoBananaImage(i)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              void onSelectNanoBananaImage(i);
+                            }
+                          }}
+                          className={`group relative flex cursor-pointer flex-col overflow-hidden rounded-2xl border bg-[#08080c] text-left transition-[transform,box-shadow,border-color] duration-200 ease-out active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0912] ${
+                            selected
+                              ? "border-[3px] border-violet-400 shadow-[0_0_0_1px_rgba(139,92,246,0.45),0_0_28px_rgba(139,92,246,0.22),0_12px_40px_rgba(76,29,149,0.25)]"
+                              : "border border-white/10 hover:border-violet-400/40"
+                          }`}
+                        >
+                          <span className="border-b border-white/10 px-2 py-1.5 text-center text-[10px] font-bold uppercase tracking-wide text-violet-300/90">
+                            Image {i + 1}
+                          </span>
                               <div className="relative aspect-[3/4] w-full overflow-hidden bg-[#050507]">
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img
@@ -1729,101 +1704,71 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                           );
                         })}
                       </div>
-                      <div className="border-t border-white/10 pt-5">
-                        {nanoBananaSelectedImageIndex === null ? (
-                          <p className="text-center text-xs text-white/45">Select an image above to continue.</p>
-                        ) : (
-                          <div className="flex flex-col items-center gap-3">
-                            <Button
-                              type="button"
-                              disabled={
-                                isVideoPromptLoading || isKlingSubmitting || Boolean(klingPollTaskId) || !nanoBananaImageUrl
-                              }
-                              onClick={() => void handleGenerateVideoFromSelectedImage()}
-                              className={`${primaryBtnClass} w-full max-w-md`}
-                            >
-                              {isVideoPromptLoading || isKlingSubmitting || klingPollTaskId ? (
-                                <>
-                                  <Loader2 className="h-5 w-5 shrink-0 animate-spin" aria-hidden />
-                                  Working…
-                                </>
-                              ) : (
-                                <>
-                                  <Video className="h-5 w-5 shrink-0" aria-hidden />
-                                  Generate video from this image
-                                </>
-                              )}
-                            </Button>
-                          </div>
-                        )}
+                  <div className="border-t border-white/10 pt-5">
+                    {nanoBananaSelectedImageIndex === null ? (
+                      <p className="text-center text-xs text-white/45">
+                        Select an image, then generate your video from this section.
+                      </p>
+                    ) : (
+                      <div className="flex flex-col items-center gap-3">
+                        <Button
+                          type="button"
+                          disabled={
+                            isVideoPromptLoading || isKlingSubmitting || Boolean(klingPollTaskId) || !nanoBananaImageUrl
+                          }
+                          onClick={() => void handleGenerateVideoFromSelectedImage()}
+                          className={`${primaryBtnClass} w-full max-w-md`}
+                        >
+                          {isVideoPromptLoading || isKlingSubmitting || klingPollTaskId ? (
+                            <>
+                              <Loader2 className="h-5 w-5 shrink-0 animate-spin" aria-hidden />
+                              Working…
+                            </>
+                          ) : (
+                            <>
+                              <Video className="h-5 w-5 shrink-0" aria-hidden />
+                              Generate video from this image
+                            </>
+                          )}
+                        </Button>
                       </div>
-                    </>
-                  ) : null}
+                    )}
+                  </div>
                 </div>
               ) : null}
+
+              <div className="mt-auto shrink-0 rounded-xl border border-white/10 bg-black/25 p-4">
+                <p className="text-sm font-semibold text-white/90">Choose an image to generate your UGC</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {selectedAngleIndex !== null &&
+                  !nanoBananaPromptsRaw.trim() &&
+                  !isNanoPromptsLoading &&
+                  !isNanoAllImagesSubmitting &&
+                  !nanoPollTaskId ? (
+                    <Button
+                      type="button"
+                      disabled={!resolvedPreviewUrl}
+                      className={primaryBtnClass}
+                      onClick={() => void onGenerateNanoBananaPrompts(selectedAngleIndex as 0 | 1 | 2)}
+                    >
+                      Retry prompts &amp; 3 images
+                    </Button>
+                  ) : null}
+                  {nanoPollTaskId || isNanoPromptsLoading || isNanoAllImagesSubmitting ? (
+                    <span className="flex items-center gap-2 text-xs text-violet-200">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Generating images…
+                    </span>
+                  ) : null}
+                </div>
+              </div>
             </div>
 
             {showVideoPipelinePanels ? (
-              <div className="rounded-xl border border-violet-500/25 bg-violet-500/[0.06] p-4 space-y-6">
-                <div>
-                  <p className="text-sm font-semibold text-white/90">Video</p>
-                  <p className="mt-1 text-xs text-white/45">
-                    Motion prompt and final render. You can retry each step if something fails.
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-white/50">Prompt</p>
-                  {nanoBananaImageUrl &&
-                  userStartedVideoFromImage &&
-                  !ugcVideoPromptGpt.trim() &&
-                  !isVideoPromptLoading &&
-                  selectedAngleIndex !== null ? (
-                    <Button
-                      type="button"
-                      className={`mt-2 ${primaryBtnClass}`}
-                      onClick={() => void onGenerateUgcVideoPrompt()}
-                    >
-                      Retry video prompt
-                    </Button>
-                  ) : null}
-                  {isVideoPromptLoading ? (
-                    <div className="mt-3 flex items-center gap-2 text-xs text-violet-200">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Generating video prompt…
-                    </div>
-                  ) : null}
-                  {ugcVideoPromptGpt ? (
-                    <pre className="mt-3 max-h-[220px] overflow-auto whitespace-pre-wrap rounded-lg border border-white/10 bg-black/30 p-3 text-xs text-white/75">
-                      {ugcVideoPromptGpt}
-                    </pre>
-                  ) : null}
-                </div>
-
-                <div className="border-t border-white/10 pt-5">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-white/50">Output</p>
-                  <p className="mt-1 text-xs text-white/45">Your ad video appears here when ready.</p>
-                  {nanoBananaImageUrl &&
-                  ugcVideoPromptGpt.trim() &&
-                  !klingVideoUrl &&
-                  !klingPollTaskId &&
-                  !isKlingSubmitting ? (
-                    <Button type="button" className={`mt-3 ${primaryBtnClass}`} onClick={() => void onGenerateKlingVideo()}>
-                      Retry video render
-                    </Button>
-                  ) : null}
-                  {isKlingSubmitting ? (
-                    <div className="mt-3 flex items-center gap-2 text-xs text-violet-200">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Starting video render…
-                    </div>
-                  ) : null}
-                  {klingPollTaskId ? (
-                    <p className="mt-2 flex items-center gap-2 text-xs text-violet-200">
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      Generating video…
-                    </p>
-                  ) : null}
+              <div className="flex flex-col gap-6 rounded-xl border border-violet-500/25 bg-violet-500/[0.06] p-4">
+                <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-white/50">Your video</p>
+                  <p className="mt-1 text-xs text-white/45">Latest render appears here. Prompt and actions are below.</p>
                   {klingVideoUrl ? (
                     <div className="mt-4 space-y-2">
                       <video src={klingVideoUrl} controls className="w-full max-h-[480px] rounded-lg border border-white/10" />
@@ -1835,6 +1780,63 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                       </a>
                     </div>
                   ) : null}
+                  {nanoBananaImageUrl &&
+                  ugcVideoPromptGpt.trim() &&
+                  !klingVideoUrl &&
+                  !klingPollTaskId &&
+                  !isKlingSubmitting ? (
+                    <Button type="button" className={`mt-4 ${primaryBtnClass}`} onClick={() => void onGenerateKlingVideo()}>
+                      Retry video render
+                    </Button>
+                  ) : null}
+                  {isKlingSubmitting ? (
+                    <div className="mt-4 flex items-center gap-2 text-xs text-violet-200">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Starting video render…
+                    </div>
+                  ) : null}
+                  {klingPollTaskId ? (
+                    <p className="mt-4 flex items-center gap-2 text-xs text-violet-200">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Generating video…
+                    </p>
+                  ) : null}
+                </div>
+
+                <div className="mt-auto shrink-0 space-y-4 border-t border-white/10 pt-5">
+                  <div>
+                    <p className="text-sm font-semibold text-white/90">Video</p>
+                    <p className="mt-1 text-xs text-white/45">
+                      Motion prompt and final render. You can retry each step if something fails.
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-white/50">Prompt</p>
+                    {nanoBananaImageUrl &&
+                    userStartedVideoFromImage &&
+                    !ugcVideoPromptGpt.trim() &&
+                    !isVideoPromptLoading &&
+                    selectedAngleIndex !== null ? (
+                      <Button
+                        type="button"
+                        className={`mt-2 ${primaryBtnClass}`}
+                        onClick={() => void onGenerateUgcVideoPrompt()}
+                      >
+                        Retry video prompt
+                      </Button>
+                    ) : null}
+                    {isVideoPromptLoading ? (
+                      <div className="mt-3 flex items-center gap-2 text-xs text-violet-200">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Generating video prompt…
+                      </div>
+                    ) : null}
+                    {ugcVideoPromptGpt ? (
+                      <pre className="mt-3 max-h-[220px] overflow-auto whitespace-pre-wrap rounded-lg border border-white/10 bg-black/30 p-3 text-xs text-white/75">
+                        {ugcVideoPromptGpt}
+                      </pre>
+                    ) : null}
+                  </div>
                 </div>
               </div>
             ) : null}
