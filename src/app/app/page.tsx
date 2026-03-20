@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import LinkToAdUniverse from "@/app/_components/LinkToAdUniverse";
+import { ProjectRunBrandBriefEditor } from "@/app/_components/ProjectRunBrandBriefEditor";
 import { ProjectRunScriptsEditor } from "@/app/_components/ProjectRunScriptsEditor";
 import StudioImagePanel from "@/app/_components/StudioImagePanel";
 import StudioShell from "@/app/_components/StudioShell";
@@ -1362,24 +1363,25 @@ export default function AppBrandWizard() {
                             {isUniverse &&
                             proj.runs.some((r) => {
                               if (!runHasLinkToAdUniverse(r.extracted)) return false;
-                              const s = readUniverseFromExtracted(r.extracted)?.scriptsText?.trim();
-                              return Boolean(s);
+                              const u = readUniverseFromExtracted(r.extracted);
+                              return Boolean(u?.summaryText?.trim() || u?.scriptsText?.trim());
                             }) ? (
                               <div className="space-y-2 border-t border-white/10 px-2 pb-3 pt-3">
                                 <p className="px-1 text-[11px] font-semibold uppercase tracking-wide text-white/45">
-                                  Generations — scripts
+                                  Generations — brand brief &amp; scripts
                                 </p>
                                 <p className="px-1 text-[10px] leading-snug text-white/40">
-                                  Open a generation to work in Link to Ad, or edit scripts here and save for a sharper
-                                  brief.
+                                  Open a generation in Link to Ad, or edit the brand brief and UGC scripts here — each has
+                                  its own save button.
                                 </p>
                                 {proj.runs.map((run) => {
                                   if (!runHasLinkToAdUniverse(run.extracted)) return null;
                                   const snap = readUniverseFromExtracted(run.extracted);
-                                  if (!snap?.scriptsText?.trim()) return null;
+                                  if (!snap) return null;
+                                  if (!snap.summaryText?.trim() && !snap.scriptsText?.trim()) return null;
                                   return (
                                     <details
-                                      key={`scripts-${run.id}`}
+                                      key={`universe-edit-${run.id}`}
                                       className="rounded-lg border border-white/10 bg-black/25 [&_summary::-webkit-details-marker]:hidden"
                                     >
                                       <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2 text-left text-xs font-medium text-white/75 hover:bg-white/[0.04] hover:text-white/90">
@@ -1390,18 +1392,33 @@ export default function AppBrandWizard() {
                                           })}
                                         </span>
                                         <span className="shrink-0 text-[10px] font-normal text-violet-300/90">
-                                          Show / edit scripts
+                                          Show / edit brief &amp; scripts
                                         </span>
                                       </summary>
                                       <div className="border-t border-white/10 p-2">
-                                        <ProjectRunScriptsEditor
+                                        <ProjectRunBrandBriefEditor
                                           runId={run.id}
                                           storeUrl={run.store_url}
                                           title={run.title}
                                           extracted={run.extracted}
-                                          scriptsText={snap.scriptsText}
+                                          summaryText={snap.summaryText}
                                           onSaved={() => void refreshMeAndRuns()}
                                         />
+                                        {snap.scriptsText?.trim() ? (
+                                          <ProjectRunScriptsEditor
+                                            runId={run.id}
+                                            storeUrl={run.store_url}
+                                            title={run.title}
+                                            extracted={run.extracted}
+                                            scriptsText={snap.scriptsText}
+                                            onSaved={() => void refreshMeAndRuns()}
+                                          />
+                                        ) : (
+                                          <p className="text-[11px] text-white/40">
+                                            Scripts not generated yet for this run — continue in Link to Ad or use
+                                            Generate.
+                                          </p>
+                                        )}
                                       </div>
                                     </details>
                                   );

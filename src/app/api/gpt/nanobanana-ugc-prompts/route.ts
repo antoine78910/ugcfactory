@@ -16,8 +16,8 @@ Your goal is to generate the best possible reference images that will later be u
 
 The user will provide:
 
-• a marketing script
-• a reference image of the product
+* a marketing script
+* a reference image of the product
 
 The reference image contains the exact product that must appear in the generated scene.
 
@@ -33,12 +33,12 @@ STEP 1 — Analyze the script
 
 From the script extract:
 
-• gender
-• approximate age
-• product type
-• product usage
-• emotional tone
-• marketing angle (testimonial, discovery, demonstration, routine, recommendation)
+* gender
+* approximate age
+* product type
+* product usage
+* emotional tone
+* marketing angle (testimonial, discovery, demonstration, routine, recommendation)
 
 --------------------------------
 
@@ -48,11 +48,11 @@ Generate THREE different image prompts using THREE different UGC visual styles A
 
 Possible formats include:
 
-• Facecam testimonial
-• Handheld shot
-• Mirror scene
-• POV product use
-• Lifestyle product moment
+* Facecam testimonial
+* Handheld shot
+* Mirror scene
+* POV product use
+* Lifestyle product moment
 
 --------------------------------
 
@@ -62,18 +62,17 @@ Each prompt must use a different shot type.
 
 Available shot types:
 
-• Close-up (product detail or face reaction)
-• Medium shot (person + product visible)
-• Wide shot (environment visible)
-• Selfie / handheld smartphone shot
-• Over-the-shoulder shot
+* Close-up (product detail or face reaction)
+* Medium shot (person + product visible)
+* Wide shot (environment visible)
+* Selfie / handheld smartphone shot
+* Over-the-shoulder shot
 
 Each of the 3 prompts MUST use a different shot.
 
 --------------------------------
 
 SHOT LOGIC
-
 Close-up:
 Focus on product details or facial expression.
 
@@ -83,8 +82,10 @@ Show interaction between subject and product.
 Wide shot:
 Show environment and lifestyle context.
 
-Selfie / handheld:
-Most authentic UGC social media style.
+Selfie / handheld — TWO sub-types available, vary between them:
+  • Mirror selfie: person visible in mirror holding phone, phone visible in frame
+  • Front-facing selfie: shot from front-facing camera POV, subject looks directly into lens, no mirror, no phone visible — as if filming themselves directly. Eye contact with camera. Vertical framing.
+Use the most relevant sub-type based on script context. Never default always to mirror.
 
 Over-the-shoulder:
 Immersive perspective.
@@ -99,10 +100,10 @@ Do NOT generate similar compositions.
 
 Vary:
 
-• shot type
-• angle
-• framing
-• interaction
+* shot type
+* angle
+* framing
+* interaction
 
 --------------------------------
 
@@ -114,11 +115,11 @@ Each prompt must represent a different visual angle and camera perspective.
 
 The image must include:
 
-• a realistic human subject
-• the product visible in the scene
-• a natural environment
-• realistic lighting
-• authentic UGC composition
+* a realistic human subject
+* the product visible in the scene
+* a natural environment
+* realistic lighting
+* authentic UGC composition
 
 The subject must look natural and not like a model.
 
@@ -128,11 +129,11 @@ REALISM REQUIREMENTS
 
 Each image must include:
 
-• realistic skin texture
-• natural skin imperfections
-• natural facial features
-• natural posture
-• subtle human asymmetry
+* realistic skin texture
+* natural skin imperfections
+* natural facial features
+* natural posture
+* subtle human asymmetry
 
 Avoid overly perfect beauty.
 
@@ -142,10 +143,10 @@ CAMERA STYLE
 
 Use natural UGC camera framing such as:
 
-• handheld smartphone realism
-• natural camera perspective
-• slight framing imperfections
-• casual composition
+* handheld smartphone realism
+* natural camera perspective
+* slight framing imperfections
+* casual composition
 
 Prefer shots that allow natural future video movement (hand movement, product interaction, facial motion).
 
@@ -155,10 +156,10 @@ LIGHTING
 
 Use natural lighting that matches the environment:
 
-• window daylight
-• indoor ambient light
-• bathroom mirror lighting
-• soft lifestyle lighting
+* window daylight
+* indoor ambient light
+* bathroom mirror lighting
+* soft lifestyle lighting
 
 Avoid studio lighting unless the script explicitly implies it.
 
@@ -168,10 +169,10 @@ PRODUCT INTEGRATION
 
 The product from the reference image must:
 
-• appear clearly visible
-• look identical to the reference product
-• be naturally held or used by the subject
-• not be altered or redesigned
+* appear clearly visible
+* look identical to the reference product
+* be naturally held or used by the subject
+* not be altered or redesigned
 
 --------------------------------
 
@@ -187,14 +188,37 @@ PROMPT 3
 
 Each prompt must:
 
-• be between 90 and 140 words
-• be written as one continuous paragraph
-• avoid section titles
-• avoid bullet points
-• avoid explanations
+* be between 90 and 140 words
+* be written as one continuous paragraph
+* avoid section titles
+* avoid bullet points
+* avoid explanations
 
 Output only the three prompts.
 Do not explain your reasoning.
+
+HUMAN ANATOMY RULE (CRITICAL)
+A human has exactly TWO hands. Each hand can only hold or do ONE thing at a time.
+Before generating any prompt, mentally assign each hand a role:
+
+— If HANDHELD SHOT is chosen:
+  Hand 1 = holds the phone
+  Hand 2 = holds or interacts with the product
+  → The subject CANNOT touch their body, gesture, or do anything else with either hand.
+
+— If MIRROR SHOT is chosen:
+  Hand 1 = holds the phone toward the mirror
+  Hand 2 = holds the product OR rests on the body (choose ONE)
+  → Do not assign both actions to Hand 2.
+
+— If NO phone is visible (lifestyle, POV, close-up, wide shot):
+  Hand 1 = holds or applies the product
+  Hand 2 = can touch the body, gesture, or remain natural
+  → This is the only shot type that allows body touch + product interaction simultaneously.
+
+NEVER write a prompt where the subject holds a phone AND holds a product AND touches their body.
+That requires three hands. It is physically impossible. Do not generate it.
+Always verify hand count before finalizing any prompt.
 `.trim();
 
 export async function POST(req: Request) {
