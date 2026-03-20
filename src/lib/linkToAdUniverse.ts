@@ -10,6 +10,16 @@ export type LinkToAdUniverseSnapshotV1 = {
   scriptsText: string;
   angleLabels: [string, string, string];
   selectedAngleIndex: number | null;
+  /** GPT output: 3 NanoBanana reference prompts (PROMPT 1/2/3) */
+  nanoBananaPromptsRaw?: string;
+  /** Which of the 3 prompts is used for NanoBanana Pro */
+  nanoBananaSelectedPromptIndex?: 0 | 1 | 2 | null;
+  nanoBananaTaskId?: string | null;
+  nanoBananaImageUrl?: string | null;
+  /** GPT image-to-video prompt for Kling / Veo */
+  ugcVideoPromptGpt?: string;
+  klingTaskId?: string | null;
+  klingVideoUrl?: string | null;
 };
 
 const FALLBACK_ANGLE_LABELS: [string, string, string] = [
@@ -40,6 +50,12 @@ export function splitScriptOptions(full: string): [string, string, string] {
   return [out[0] || text, out[1] || "", out[2] || ""];
 }
 
+export function selectedAngleScript(scriptsText: string, selectedAngleIndex: number | null): string {
+  if (selectedAngleIndex == null || selectedAngleIndex < 0 || selectedAngleIndex > 2) return "";
+  const [a, b, c] = splitScriptOptions(scriptsText);
+  return [a, b, c][selectedAngleIndex] ?? "";
+}
+
 /** One-line-ish teaser from a script block: first spoken line after HOOK, else first quoted line. */
 export function teaserFromScriptBlock(block: string, index: 0 | 1 | 2): string {
   const hookSpoken = block.match(/HOOK\s*[\s\S]*?\([^)]*\)\s*\n\s*"([^"]+)"/i);
@@ -62,4 +78,43 @@ export function deriveAngleLabelsFromScripts(scriptsText: string): [string, stri
     teaserFromScriptBlock(b, 1),
     teaserFromScriptBlock(c, 2),
   ];
+}
+
+/**
+ * Parse PROMPT 1 / PROMPT 2 / PROMPT 3 blocks from GPT output.
+ */
+export function parseThreeLabeledPrompts(text: string): [string, string, string] {
+  const t = text.replace(/\r\n/g, "\n").trim();
+  if (!t) return ["", "", ""];
+
+  const headerRe = /^\s*PROMPT\s*([123])\s*$/gim;
+  const markers: { num: 1 | 2 | 3; bodyStart: number }[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = headerRe.exec(t)) !== null) {
+    const n = Number(m[1]);
+    if (n !== 1 && n !== 2 && n !== 3) continue;
+    const lineEnd = t.indexOf("\n", m.index);
+    const bodyStart = lineEnd === -1 ? t.length : lineEnd + 1;
+    markers.push({ num: n as 1 | 2 | 3, bodyStart });
+  }
+
+  if (markers.length === 0) {
+    const third = Math.max(1, Math.floor(t.length / 3));
+    return [t.slice(0, third).trim(), t.slice(third, 2 * third).trim(), t.slice(2 * third).trim()];
+  }
+
+  const byNum: Record<1 | 2 | 3, string> = { 1: "", 2: "", 3: "" };
+  for (let i = 0; i < markers.length; i++) {
+    const start = markers[i].bodyStart;
+    const end =
+      i + 1 < markers.length
+        ? (() => {
+            const sub = t.slice(start);
+            const j = sub.search(/\n\s*PROMPT\s*[123]\s*\n/i);
+            return j === -1 ? t.length : start + j;
+          })()
+        : t.length;
+    byNum[markers[i].num] = t.slice(start, end).trim();
+  }
+  return [byNum[1], byNum[2], byNum[3]];
 }

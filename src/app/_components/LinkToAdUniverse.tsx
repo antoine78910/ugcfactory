@@ -10,6 +10,8 @@ import { Label } from "@/components/ui/label";
 import { absolutizeImageUrl } from "@/lib/imageUrl";
 import {
   deriveAngleLabelsFromScripts,
+  parseThreeLabeledPrompts,
+  selectedAngleScript,
   type LinkToAdUniverseSnapshotV1,
 } from "@/lib/linkToAdUniverse";
 
@@ -74,6 +76,16 @@ function readUniverseFromExtracted(extracted: unknown): LinkToAdUniverseSnapshot
         ? [String(o.angleLabels[0]), String(o.angleLabels[1]), String(o.angleLabels[2])]
         : ["", "", ""],
     selectedAngleIndex: typeof o.selectedAngleIndex === "number" && o.selectedAngleIndex >= 0 && o.selectedAngleIndex <= 2 ? o.selectedAngleIndex : null,
+    nanoBananaPromptsRaw: typeof o.nanoBananaPromptsRaw === "string" ? o.nanoBananaPromptsRaw : undefined,
+    nanoBananaSelectedPromptIndex:
+      typeof o.nanoBananaSelectedPromptIndex === "number" && o.nanoBananaSelectedPromptIndex >= 0 && o.nanoBananaSelectedPromptIndex <= 2
+        ? (o.nanoBananaSelectedPromptIndex as 0 | 1 | 2)
+        : undefined,
+    nanoBananaTaskId: typeof o.nanoBananaTaskId === "string" ? o.nanoBananaTaskId : o.nanoBananaTaskId === null ? null : undefined,
+    nanoBananaImageUrl: typeof o.nanoBananaImageUrl === "string" ? o.nanoBananaImageUrl : o.nanoBananaImageUrl === null ? null : undefined,
+    ugcVideoPromptGpt: typeof o.ugcVideoPromptGpt === "string" ? o.ugcVideoPromptGpt : undefined,
+    klingTaskId: typeof o.klingTaskId === "string" ? o.klingTaskId : o.klingTaskId === null ? null : undefined,
+    klingVideoUrl: typeof o.klingVideoUrl === "string" ? o.klingVideoUrl : o.klingVideoUrl === null ? null : undefined,
   };
 }
 
@@ -85,6 +97,32 @@ function cloneExtractedBase(extracted: unknown): Record<string, unknown> {
   } catch {
     return {};
   }
+}
+
+const PIPELINE_CLEAR: Partial<LinkToAdUniverseSnapshotV1> = {
+  nanoBananaPromptsRaw: undefined,
+  nanoBananaSelectedPromptIndex: 0,
+  nanoBananaTaskId: null,
+  nanoBananaImageUrl: null,
+  ugcVideoPromptGpt: undefined,
+  klingTaskId: null,
+  klingVideoUrl: null,
+};
+
+function withAudioHint(prompt: string) {
+  const p = prompt.trim();
+  if (!p) return p;
+  const lower = p.toLowerCase();
+  const mentionsAudio =
+    lower.includes("audio") ||
+    lower.includes("sound") ||
+    lower.includes("voice") ||
+    lower.includes("voix") ||
+    lower.includes("voiceover") ||
+    lower.includes("narration") ||
+    lower.includes("dialogue");
+  if (mentionsAudio) return p;
+  return `${p}\n\nAudio: ON. Include natural spoken voice and subtle ambient sound.`;
 }
 
 export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRunsChanged }: LinkToAdUniverseProps) {
@@ -111,9 +149,68 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const [showFullScripts, setShowFullScripts] = useState(false);
   const [forceNewScan, setForceNewScan] = useState(false);
 
+  const [nanoBananaPromptsRaw, setNanoBananaPromptsRaw] = useState("");
+  const [nanoBananaSelectedPromptIndex, setNanoBananaSelectedPromptIndex] = useState<0 | 1 | 2>(0);
+  const [nanoBananaTaskId, setNanoBananaTaskId] = useState<string | null>(null);
+  const [nanoBananaImageUrl, setNanoBananaImageUrl] = useState<string | null>(null);
+  const [ugcVideoPromptGpt, setUgcVideoPromptGpt] = useState("");
+  const [klingTaskId, setKlingTaskId] = useState<string | null>(null);
+  const [klingVideoUrl, setKlingVideoUrl] = useState<string | null>(null);
+
+  const [isNanoPromptsLoading, setIsNanoPromptsLoading] = useState(false);
+  const [isNanoImageSubmitting, setIsNanoImageSubmitting] = useState(false);
+  const [nanoPollTaskId, setNanoPollTaskId] = useState<string | null>(null);
+  const [isVideoPromptLoading, setIsVideoPromptLoading] = useState(false);
+  const [isKlingSubmitting, setIsKlingSubmitting] = useState(false);
+  const [klingPollTaskId, setKlingPollTaskId] = useState<string | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const prevAngleRef = useRef<number | null>(null);
+  const latestSnapRef = useRef<LinkToAdUniverseSnapshotV1 | null>(null);
+  /** Prompt string sent to NanoBanana for the current task (for accurate persist after poll). */
+  const lastNanoImagePromptRef = useRef("");
+  const lastKlingVideoPromptRef = useRef("");
+
+  useEffect(() => {
+    latestSnapRef.current = {
+      v: 1,
+      phase: scriptsText ? "after_scripts" : "after_summary",
+      cleanCandidate,
+      fallbackImageUrl,
+      confidence,
+      neutralUploadUrl,
+      summaryText,
+      scriptsText,
+      angleLabels,
+      selectedAngleIndex,
+      nanoBananaPromptsRaw: nanoBananaPromptsRaw || undefined,
+      nanoBananaSelectedPromptIndex,
+      nanoBananaTaskId: nanoBananaTaskId ?? undefined,
+      nanoBananaImageUrl: nanoBananaImageUrl ?? undefined,
+      ugcVideoPromptGpt: ugcVideoPromptGpt || undefined,
+      klingTaskId: klingTaskId ?? undefined,
+      klingVideoUrl: klingVideoUrl ?? undefined,
+    };
+  }, [
+    cleanCandidate,
+    fallbackImageUrl,
+    confidence,
+    neutralUploadUrl,
+    summaryText,
+    scriptsText,
+    angleLabels,
+    selectedAngleIndex,
+    nanoBananaPromptsRaw,
+    nanoBananaSelectedPromptIndex,
+    nanoBananaTaskId,
+    nanoBananaImageUrl,
+    ugcVideoPromptGpt,
+    klingTaskId,
+    klingVideoUrl,
+  ]);
 
   const quality = useMemo(() => confidenceToQuality(confidence ?? undefined), [confidence]);
+  const parsedNanoPrompts = useMemo(() => parseThreeLabeledPrompts(nanoBananaPromptsRaw), [nanoBananaPromptsRaw]);
   const displayedProductImageUrl = neutralUploadUrl ?? cleanCandidate?.url ?? fallbackImageUrl ?? null;
 
   const resolvedPreviewUrl = useMemo(() => {
@@ -157,6 +254,20 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
             : ["", "", ""],
       );
       setSelectedAngleIndex(snap.selectedAngleIndex);
+      setNanoBananaPromptsRaw(snap.nanoBananaPromptsRaw ?? "");
+      setNanoBananaSelectedPromptIndex(
+        snap.nanoBananaSelectedPromptIndex === 0 || snap.nanoBananaSelectedPromptIndex === 1 || snap.nanoBananaSelectedPromptIndex === 2
+          ? snap.nanoBananaSelectedPromptIndex
+          : 0,
+      );
+      setNanoBananaTaskId(snap.nanoBananaTaskId ?? null);
+      setNanoBananaImageUrl(snap.nanoBananaImageUrl ?? null);
+      setUgcVideoPromptGpt(snap.ugcVideoPromptGpt ?? "");
+      setKlingTaskId(snap.klingTaskId ?? null);
+      setKlingVideoUrl(snap.klingVideoUrl ?? null);
+      setNanoPollTaskId(null);
+      setKlingPollTaskId(null);
+      prevAngleRef.current = snap.selectedAngleIndex;
       setLastExtractedJson(cloneExtractedBase(run.extracted));
       setStage("ready");
       setImgError(false);
@@ -187,6 +298,14 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     };
   }, [resumeRunId, onResumeConsumed, hydrateFromRun]);
 
+  type RunExtras = {
+    imagePrompt?: string;
+    selectedImageUrl?: string | null;
+    generatedImageUrls?: string[];
+    videoPrompt?: string;
+    videoUrl?: string | null;
+  };
+
   const persistUniverse = useCallback(
     async (
       runId: string | null,
@@ -195,6 +314,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       extractedBase: Record<string, unknown>,
       snapshot: LinkToAdUniverseSnapshotV1,
       packshotUrls: string[],
+      extras?: RunExtras,
     ): Promise<string> => {
       const extracted = { ...extractedBase, __universe: snapshot };
       const res = await fetch("/api/runs/upsert", {
@@ -206,6 +326,11 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           title,
           extracted,
           packshotUrls: packshotUrls.length ? packshotUrls.slice(0, 12) : undefined,
+          ...(extras?.imagePrompt !== undefined ? { imagePrompt: extras.imagePrompt } : {}),
+          ...(extras?.selectedImageUrl !== undefined ? { selectedImageUrl: extras.selectedImageUrl } : {}),
+          ...(extras?.generatedImageUrls !== undefined ? { generatedImageUrls: extras.generatedImageUrls } : {}),
+          ...(extras?.videoPrompt !== undefined ? { videoPrompt: extras.videoPrompt } : {}),
+          ...(extras?.videoUrl !== undefined ? { videoUrl: extras.videoUrl } : {}),
         }),
       });
       const json = (await res.json()) as { runId?: string; error?: string };
@@ -243,20 +368,32 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   }
 
   async function onSelectAngle(index: 0 | 1 | 2) {
-    setSelectedAngleIndex(index);
     const url = storeUrl.trim();
     if (!url || !lastExtractedJson) return;
+
+    const prev = prevAngleRef.current;
+    const angleChanged = prev !== null && prev !== index;
+    prevAngleRef.current = index;
+    setSelectedAngleIndex(index);
+
+    if (angleChanged) {
+      setNanoBananaPromptsRaw("");
+      setNanoBananaSelectedPromptIndex(0);
+      setNanoBananaTaskId(null);
+      setNanoBananaImageUrl(null);
+      setUgcVideoPromptGpt("");
+      setKlingTaskId(null);
+      setKlingVideoUrl(null);
+      setNanoPollTaskId(null);
+      setKlingPollTaskId(null);
+    }
+
+    const base = latestSnapRef.current;
+    if (!base) return;
     const snap: LinkToAdUniverseSnapshotV1 = {
-      v: 1,
-      phase: scriptsText ? "after_scripts" : "after_summary",
-      cleanCandidate,
-      fallbackImageUrl,
-      confidence,
-      neutralUploadUrl,
-      summaryText,
-      scriptsText,
-      angleLabels,
+      ...base,
       selectedAngleIndex: index,
+      ...(angleChanged ? PIPELINE_CLEAR : {}),
     };
     try {
       await persistUniverse(universeRunId, url, extractedTitle, lastExtractedJson, snap, packshotsForSave());
@@ -314,6 +451,16 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       setScriptsText(scriptsStr);
       const labels = deriveAngleLabelsFromScripts(scriptsStr);
       setAngleLabels(labels);
+      setNanoBananaPromptsRaw("");
+      setNanoBananaSelectedPromptIndex(0);
+      setNanoBananaTaskId(null);
+      setNanoBananaImageUrl(null);
+      setUgcVideoPromptGpt("");
+      setKlingTaskId(null);
+      setKlingVideoUrl(null);
+      setNanoPollTaskId(null);
+      setKlingPollTaskId(null);
+      prevAngleRef.current = null;
       const snapAfterScripts: LinkToAdUniverseSnapshotV1 = {
         v: 1,
         phase: "after_scripts",
@@ -325,6 +472,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         scriptsText: scriptsStr,
         angleLabels: labels,
         selectedAngleIndex: null,
+        ...PIPELINE_CLEAR,
       };
       const shots = imageForGpt ? [imageForGpt] : [];
       await persistUniverse(activeRunId, url, titleForScripts, base, snapAfterScripts, shots);
@@ -379,6 +527,16 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     setFallbackImageUrl(null);
     setConfidence(null);
     setImgError(false);
+    setNanoBananaPromptsRaw("");
+    setNanoBananaSelectedPromptIndex(0);
+    setNanoBananaTaskId(null);
+    setNanoBananaImageUrl(null);
+    setUgcVideoPromptGpt("");
+    setKlingTaskId(null);
+    setKlingVideoUrl(null);
+    setNanoPollTaskId(null);
+    setKlingPollTaskId(null);
+    prevAngleRef.current = null;
 
     try {
       setStage("scanning");
@@ -504,6 +662,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         scriptsText: "",
         angleLabels: ["", "", ""],
         selectedAngleIndex: null,
+        ...PIPELINE_CLEAR,
       };
       try {
         const shots = imageForGpt ? [imageForGpt] : [];
@@ -558,6 +717,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           scriptsText: scriptsStr,
           angleLabels: labels,
           selectedAngleIndex: null,
+          ...PIPELINE_CLEAR,
         };
         try {
           const shots = imageForGpt ? [imageForGpt] : [];
@@ -578,10 +738,326 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     }
   }
 
+  async function onGenerateNanoBananaPrompts() {
+    const url = storeUrl.trim();
+    const script = selectedAngleScript(scriptsText, selectedAngleIndex);
+    const img = resolvedPreviewUrl;
+    if (!url || !lastExtractedJson || selectedAngleIndex === null || !script.trim()) {
+      toast.error("Choisis un angle et assure-toi que le script est prêt.");
+      return;
+    }
+    if (!img || !/^https?:\/\//i.test(img)) {
+      toast.error("Image produit HTTPS requise pour GPT (aperçu manquant ou URL relative).");
+      return;
+    }
+    setIsNanoPromptsLoading(true);
+    try {
+      const res = await fetch("/api/gpt/nanobanana-ugc-prompts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ marketingScript: script, productImageUrl: img }),
+      });
+      const json = (await res.json()) as { data?: string; error?: string };
+      if (!res.ok || !json.data) throw new Error(json.error || "GPT prompts failed");
+      const text = String(json.data);
+      setNanoBananaPromptsRaw(text);
+      setNanoBananaSelectedPromptIndex(0);
+      const base = latestSnapRef.current;
+      if (base && lastExtractedJson) {
+        const snap: LinkToAdUniverseSnapshotV1 = {
+          ...base,
+          nanoBananaPromptsRaw: text,
+          nanoBananaSelectedPromptIndex: 0,
+          nanoBananaTaskId: null,
+          nanoBananaImageUrl: null,
+          ugcVideoPromptGpt: undefined,
+          klingTaskId: null,
+          klingVideoUrl: null,
+        };
+        await persistUniverse(universeRunId, url, extractedTitle, lastExtractedJson, snap, packshotsForSave(), {
+          imagePrompt: text,
+        });
+      }
+      toast.success("3 prompts image sauvegardés (projet)");
+    } catch (e) {
+      toast.error("Prompts NanoBanana", { description: e instanceof Error ? e.message : "Erreur" });
+    } finally {
+      setIsNanoPromptsLoading(false);
+    }
+  }
+
+  async function onSelectNanoPrompt(idx: 0 | 1 | 2) {
+    setNanoBananaSelectedPromptIndex(idx);
+    const url = storeUrl.trim();
+    if (!url || !lastExtractedJson) return;
+    const base = latestSnapRef.current;
+    if (!base) return;
+    const snap: LinkToAdUniverseSnapshotV1 = { ...base, nanoBananaSelectedPromptIndex: idx };
+    try {
+      await persistUniverse(universeRunId, url, extractedTitle, lastExtractedJson, snap, packshotsForSave());
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function onGenerateNanoBananaImage() {
+    const url = storeUrl.trim();
+    const img = resolvedPreviewUrl;
+    const prompt = parsedNanoPrompts[nanoBananaSelectedPromptIndex]?.trim();
+    if (!url || !lastExtractedJson || !prompt) {
+      toast.error("Génère d’abord les 3 prompts GPT puis choisis un prompt valide.");
+      return;
+    }
+    if (!img || !/^https?:\/\//i.test(img)) {
+      toast.error("Image produit manquante ou non HTTPS.");
+      return;
+    }
+    setIsNanoImageSubmitting(true);
+    lastNanoImagePromptRef.current = prompt;
+    try {
+      const res = await fetch("/api/nanobanana/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "pro",
+          prompt,
+          imageUrls: [img],
+          resolution: "2K",
+          aspectRatio: "9:16",
+        }),
+      });
+      const json = (await res.json()) as { taskId?: string; error?: string };
+      if (!res.ok || !json.taskId) throw new Error(json.error || "NanoBanana Pro failed");
+      setNanoBananaTaskId(json.taskId);
+      setNanoPollTaskId(json.taskId);
+      const base = latestSnapRef.current;
+      if (base && lastExtractedJson) {
+        const snap: LinkToAdUniverseSnapshotV1 = {
+          ...base,
+          nanoBananaTaskId: json.taskId,
+          nanoBananaImageUrl: null,
+        };
+        await persistUniverse(universeRunId, url, extractedTitle, lastExtractedJson, snap, packshotsForSave(), {
+          imagePrompt: prompt,
+        });
+      }
+      toast.success("NanoBanana Pro — tâche lancée");
+    } catch (e) {
+      toast.error("NanoBanana Pro", { description: e instanceof Error ? e.message : "Erreur" });
+    } finally {
+      setIsNanoImageSubmitting(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!nanoPollTaskId) return;
+    const taskId = nanoPollTaskId;
+    let cancelled = false;
+    let interval: ReturnType<typeof setInterval> | null = null;
+
+    async function tick() {
+      try {
+        const res = await fetch(`/api/nanobanana/task?taskId=${encodeURIComponent(taskId)}`, { cache: "no-store" });
+        const json = (await res.json()) as {
+          data?: { successFlag?: number; response?: Record<string, unknown>; errorMessage?: string };
+          error?: string;
+        };
+        if (!res.ok || !json.data) throw new Error(json.error || "Poll failed");
+        if (cancelled) return;
+        const s = json.data.successFlag ?? 0;
+        if (s === 0) return;
+        if (s === 1) {
+          const resp = json.data.response ?? {};
+          const candidates: unknown[] = [
+            (resp as { resultImageUrl?: unknown }).resultImageUrl,
+            (resp as { resultUrls?: unknown }).resultUrls,
+            (resp as { resultUrl?: unknown }).resultUrl,
+            (resp as { result_url?: unknown }).result_url,
+            (resp as { resultImageUrls?: unknown }).resultImageUrls,
+          ];
+          const urls = candidates.flatMap((v) => {
+            if (Array.isArray(v)) return v.filter((x): x is string => typeof x === "string");
+            if (typeof v === "string") return [v];
+            return [];
+          });
+          if (!urls.length) throw new Error("Image OK mais URL manquante.");
+          const first = urls[0];
+          setNanoBananaImageUrl(first);
+          setNanoPollTaskId(null);
+          const url0 = storeUrl.trim();
+          const base = latestSnapRef.current;
+          if (base && lastExtractedJson && url0) {
+            const chosen = lastNanoImagePromptRef.current.trim();
+            const snap: LinkToAdUniverseSnapshotV1 = {
+              ...base,
+              nanoBananaImageUrl: first,
+              nanoBananaTaskId: taskId,
+            };
+            void persistUniverse(universeRunId, url0, extractedTitle, lastExtractedJson, snap, packshotsForSave(), {
+              imagePrompt: chosen || undefined,
+              selectedImageUrl: first,
+              generatedImageUrls: urls.slice(0, 8),
+            });
+          }
+          toast.success("Image NanoBanana Pro enregistrée");
+          if (interval) clearInterval(interval);
+          interval = null;
+          return;
+        }
+        throw new Error(json.data.errorMessage || `NanoBanana failed: ${String(s)}`);
+      } catch (err) {
+        if (cancelled) return;
+        toast.error("NanoBanana poll", { description: err instanceof Error ? err.message : "Erreur" });
+        setNanoPollTaskId(null);
+        if (interval) clearInterval(interval);
+        interval = null;
+      }
+    }
+
+    tick();
+    interval = setInterval(tick, 4000);
+    return () => {
+      cancelled = true;
+      if (interval) clearInterval(interval);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- tick uses latest closure via refs where needed
+  }, [nanoPollTaskId]);
+
+  async function onGenerateUgcVideoPrompt() {
+    const url = storeUrl.trim();
+    const script = selectedAngleScript(scriptsText, selectedAngleIndex);
+    if (!url || !lastExtractedJson || selectedAngleIndex === null || !script.trim()) {
+      toast.error("Script d’angle manquant.");
+      return;
+    }
+    setIsVideoPromptLoading(true);
+    try {
+      const res = await fetch("/api/gpt/ugc-i2v-prompt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ angleScript: script }),
+      });
+      const json = (await res.json()) as { data?: string; error?: string };
+      if (!res.ok || !json.data) throw new Error(json.error || "Video prompt GPT failed");
+      const text = String(json.data);
+      setUgcVideoPromptGpt(text);
+      const base = latestSnapRef.current;
+      if (base && lastExtractedJson) {
+        const snap: LinkToAdUniverseSnapshotV1 = { ...base, ugcVideoPromptGpt: text };
+        await persistUniverse(universeRunId, url, extractedTitle, lastExtractedJson, snap, packshotsForSave(), {
+          videoPrompt: text,
+        });
+      }
+      toast.success("Prompt vidéo sauvegardé");
+    } catch (e) {
+      toast.error("Prompt vidéo GPT", { description: e instanceof Error ? e.message : "Erreur" });
+    } finally {
+      setIsVideoPromptLoading(false);
+    }
+  }
+
+  async function onGenerateKlingVideo() {
+    const url = storeUrl.trim();
+    const img = nanoBananaImageUrl;
+    const prompt = ugcVideoPromptGpt.trim();
+    if (!url || !lastExtractedJson || !img || !prompt) {
+      toast.error("Image NanoBanana + prompt vidéo requis.");
+      return;
+    }
+    setIsKlingSubmitting(true);
+    const klingPrompt = withAudioHint(prompt);
+    lastKlingVideoPromptRef.current = klingPrompt;
+    try {
+      const res = await fetch("/api/kling/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          marketModel: "kling-3.0/video",
+          prompt: klingPrompt,
+          imageUrl: img,
+          duration: 12,
+          mode: "std",
+          sound: true,
+        }),
+      });
+      const json = (await res.json()) as { taskId?: string; error?: string };
+      if (!res.ok || !json.taskId) throw new Error(json.error || "Kling failed");
+      setKlingTaskId(json.taskId);
+      setKlingPollTaskId(json.taskId);
+      const base = latestSnapRef.current;
+      if (base && lastExtractedJson) {
+        const snap: LinkToAdUniverseSnapshotV1 = { ...base, klingTaskId: json.taskId, klingVideoUrl: null };
+        await persistUniverse(universeRunId, url, extractedTitle, lastExtractedJson, snap, packshotsForSave(), {
+          videoPrompt: klingPrompt,
+        });
+      }
+      toast.success("Kling 3.0 (12s · 720p) — tâche lancée");
+    } catch (e) {
+      toast.error("Kling", { description: e instanceof Error ? e.message : "Erreur" });
+    } finally {
+      setIsKlingSubmitting(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!klingPollTaskId) return;
+    const taskId = klingPollTaskId;
+    let cancelled = false;
+    let interval: ReturnType<typeof setInterval> | null = null;
+
+    async function tick() {
+      try {
+        const res = await fetch(`/api/kling/status?taskId=${encodeURIComponent(taskId)}`, { cache: "no-store" });
+        const json = (await res.json()) as {
+          data?: { status?: string; response?: string[]; error_message?: string };
+          error?: string;
+        };
+        if (!res.ok || !json.data) throw new Error(json.error || "Poll failed");
+        if (cancelled) return;
+        const s = json.data.status ?? "IN_PROGRESS";
+        if (s === "IN_PROGRESS") return;
+        if (s === "SUCCESS") {
+          const vUrl = json.data.response?.[0];
+          if (!vUrl) throw new Error("Vidéo OK mais URL manquante.");
+          setKlingVideoUrl(vUrl);
+          setKlingPollTaskId(null);
+          const url0 = storeUrl.trim();
+          const base = latestSnapRef.current;
+          if (base && lastExtractedJson && url0) {
+            const snap: LinkToAdUniverseSnapshotV1 = { ...base, klingVideoUrl: vUrl, klingTaskId: taskId };
+            void persistUniverse(universeRunId, url0, extractedTitle, lastExtractedJson, snap, packshotsForSave(), {
+              videoUrl: vUrl,
+              videoPrompt: lastKlingVideoPromptRef.current || undefined,
+            });
+          }
+          toast.success("Vidéo Kling enregistrée dans le projet");
+          if (interval) clearInterval(interval);
+          interval = null;
+          return;
+        }
+        throw new Error(json.data.error_message || `Kling failed: ${String(s)}`);
+      } catch (err) {
+        if (cancelled) return;
+        toast.error("Kling poll", { description: err instanceof Error ? err.message : "Erreur" });
+        setKlingPollTaskId(null);
+        if (interval) clearInterval(interval);
+        interval = null;
+      }
+    }
+
+    tick();
+    interval = setInterval(tick, 4000);
+    return () => {
+      cancelled = true;
+      if (interval) clearInterval(interval);
+    };
+  }, [klingPollTaskId]);
+
   const showUploadRecommendation = quality.label === "medium" || quality.label === "bad";
   const showAnglePicker = Boolean(scriptsText && angleLabels[0] && angleLabels[1] && angleLabels[2]);
   const showContinueScripts =
     Boolean(summaryText.trim() && !scriptsText && lastExtractedJson && stage === "ready" && !isWorking);
+  const showI2vPipeline = selectedAngleIndex !== null && scriptsText.trim().length > 0;
 
   const primaryBtnClass =
     "h-11 rounded-2xl bg-violet-400 px-6 text-black font-semibold border border-violet-200/40 shadow-[0_6px_0_0_rgba(76,29,149,0.9)] transition-all hover:-translate-y-[1px] hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9)] active:translate-y-[6px]";
@@ -820,6 +1296,139 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
             </div>
           ) : null}
         </div>
+
+        {showI2vPipeline ? (
+          <div className="space-y-4">
+            <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/[0.06] p-4">
+              <p className="text-sm font-semibold text-white/90">Step 3 — Prompts image (GPT) → NanoBanana Pro</p>
+              <p className="mt-1 text-xs text-white/45">
+                Envoie le script de l’angle choisi + l’image produit à GPT, puis génère l’image de référence (2K, 9:16).
+                Chaque étape est sauvegardée dans le projet.
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  disabled={isNanoPromptsLoading || !resolvedPreviewUrl}
+                  className={primaryBtnClass}
+                  onClick={() => void onGenerateNanoBananaPrompts()}
+                >
+                  {isNanoPromptsLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Générer 3 prompts image (GPT)
+                </Button>
+                {nanoPollTaskId ? (
+                  <span className="flex items-center gap-2 text-xs text-emerald-300">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    NanoBanana Pro en cours…
+                  </span>
+                ) : null}
+              </div>
+
+              {nanoBananaPromptsRaw ? (
+                <div className="mt-4 space-y-3">
+                  <p className="text-xs font-medium text-white/55">Choisis le prompt à envoyer à NanoBanana Pro</p>
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    {([0, 1, 2] as const).map((i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => void onSelectNanoPrompt(i)}
+                        className={`rounded-xl border px-3 py-3 text-left text-xs leading-snug transition-all ${
+                          nanoBananaSelectedPromptIndex === i
+                            ? "border-emerald-400 bg-emerald-500/15"
+                            : "border-white/10 bg-white/[0.04] hover:border-emerald-400/40"
+                        }`}
+                      >
+                        <span className="font-bold text-emerald-300">PROMPT {i + 1}</span>
+                        <p className="mt-2 line-clamp-6 text-white/70">
+                          {parsedNanoPrompts[i] || "—"}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                  <Button
+                    type="button"
+                    disabled={
+                      isNanoImageSubmitting ||
+                      Boolean(nanoPollTaskId) ||
+                      !parsedNanoPrompts[nanoBananaSelectedPromptIndex]?.trim()
+                    }
+                    className={primaryBtnClass}
+                    onClick={() => void onGenerateNanoBananaImage()}
+                  >
+                    {isNanoImageSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                    Générer image NanoBanana Pro
+                  </Button>
+                </div>
+              ) : null}
+
+              {nanoBananaImageUrl ? (
+                <div className="mt-4 rounded-lg border border-white/10 bg-black/30 p-3">
+                  <p className="text-xs font-medium text-white/60">Image de référence</p>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={nanoBananaImageUrl}
+                    alt="NanoBanana Pro"
+                    className="mt-2 max-h-80 w-full rounded-md object-contain"
+                  />
+                </div>
+              ) : null}
+            </div>
+
+            <div className="rounded-xl border border-sky-500/25 bg-sky-500/[0.06] p-4">
+              <p className="text-sm font-semibold text-white/90">Step 4 — Prompt vidéo (GPT)</p>
+              <p className="mt-1 text-xs text-white/45">
+                À partir du même script d’angle, génère le prompt image-to-video (Kling / Veo style).
+              </p>
+              <Button
+                type="button"
+                disabled={isVideoPromptLoading}
+                className={`mt-3 ${primaryBtnClass}`}
+                onClick={() => void onGenerateUgcVideoPrompt()}
+              >
+                {isVideoPromptLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Générer prompt vidéo
+              </Button>
+              {ugcVideoPromptGpt ? (
+                <pre className="mt-3 max-h-[220px] overflow-auto whitespace-pre-wrap rounded-lg border border-white/10 bg-black/30 p-3 text-xs text-white/75">
+                  {ugcVideoPromptGpt}
+                </pre>
+              ) : null}
+            </div>
+
+            <div className="rounded-xl border border-orange-500/25 bg-orange-500/[0.06] p-4">
+              <p className="text-sm font-semibold text-white/90">Step 5 — Vidéo Kling 3.0 (12s · 720p Standard)</p>
+              <p className="mt-1 text-xs text-white/45">
+                Image NanoBanana + prompt vidéo. Audio natif activé (hint lipsync).
+              </p>
+              <Button
+                type="button"
+                disabled={isKlingSubmitting || Boolean(klingPollTaskId) || !nanoBananaImageUrl || !ugcVideoPromptGpt.trim()}
+                className={`mt-3 ${primaryBtnClass}`}
+                onClick={() => void onGenerateKlingVideo()}
+              >
+                {isKlingSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Lancer Kling 3.0
+              </Button>
+              {klingPollTaskId ? (
+                <p className="mt-2 flex items-center gap-2 text-xs text-orange-200">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Génération vidéo…
+                </p>
+              ) : null}
+              {klingVideoUrl ? (
+                <div className="mt-4 space-y-2">
+                  <video src={klingVideoUrl} controls className="w-full max-h-[480px] rounded-lg border border-white/10" />
+                  <a
+                    href={`/api/download?url=${encodeURIComponent(klingVideoUrl)}`}
+                    className="text-xs font-medium text-orange-300 underline underline-offset-2"
+                  >
+                    Télécharger la vidéo
+                  </a>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   );
