@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Check, ChevronDown, Loader2, Maximize2, X } from "lucide-react";
+import { Check, Loader2, Maximize2, Sparkles, Video, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -72,6 +72,36 @@ function withAudioHint(prompt: string) {
   return `${p}\n\nAudio: ON. Include natural spoken voice and subtle ambient sound.`;
 }
 
+function storeHostname(url: string): string | null {
+  const t = url.trim();
+  if (!t) return null;
+  try {
+    const u = new URL(/^https?:\/\//i.test(t) ? t : `https://${t}`);
+    const h = u.hostname.replace(/^www\./i, "");
+    return h || null;
+  } catch {
+    return null;
+  }
+}
+
+/** Public favicon proxy (no API key). */
+function brandFaviconUrl(hostname: string): string {
+  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(hostname)}&sz=64`;
+}
+
+/** Short teaser for UI only — full text stays in state for GPT / scripts APIs. */
+function compactBrandSummaryForUi(full: string, maxLen = 200): string {
+  const t = full.replace(/\r\n/g, "\n").trim();
+  if (!t) return "";
+  let block = t.split(/\n\s*\n/)[0]?.trim() ?? t;
+  block = block.replace(/\n+/g, " ").replace(/\s+/g, " ").trim();
+  if (block.length <= maxLen) return block;
+  const cut = block.slice(0, maxLen);
+  const lastSpace = cut.lastIndexOf(" ");
+  const base = lastSpace > 48 ? cut.slice(0, lastSpace) : cut;
+  return `${base.trimEnd()}…`;
+}
+
 export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRunsChanged }: LinkToAdUniverseProps) {
   const [storeUrl, setStoreUrl] = useState("");
   const [isWorking, setIsWorking] = useState(false);
@@ -84,6 +114,9 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   /** URLs classified as product-only (multi-angle); used for GPT vision + Nano single pick. */
   const [productOnlyImageUrls, setProductOnlyImageUrls] = useState<string[]>([]);
   const [imgError, setImgError] = useState(false);
+  const [brandFaviconFailed, setBrandFaviconFailed] = useState(false);
+  /** After user clicks "Generate video from this image", show prompt/Kling panels (incl. errors). */
+  const [userStartedVideoFromImage, setUserStartedVideoFromImage] = useState(false);
 
   const [summaryText, setSummaryText] = useState<string>("");
   const [scriptsText, setScriptsText] = useState<string>("");
@@ -95,7 +128,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const [lastExtractedJson, setLastExtractedJson] = useState<Record<string, unknown> | null>(null);
   const [angleLabels, setAngleLabels] = useState<[string, string, string]>(["", "", ""]);
   const [selectedAngleIndex, setSelectedAngleIndex] = useState<number | null>(null);
-  const [showFullScripts, setShowFullScripts] = useState(false);
 
   const [nanoBananaPromptsRaw, setNanoBananaPromptsRaw] = useState("");
   const [nanoBananaSelectedPromptIndex, setNanoBananaSelectedPromptIndex] = useState<0 | 1 | 2>(0);
@@ -125,7 +157,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const autoScanUrlAttemptedRef = useRef<string>("");
   const autoContinueScriptsFiredRef = useRef(false);
   const nanoAutoGenKeyRef = useRef<string>("");
-  const lastVideoAdKickImageRef = useRef<string>("");
   const latestSnapRef = useRef<LinkToAdUniverseSnapshotV1 | null>(null);
   /** Prompt string sent to NanoBanana for the current task (for accurate persist after poll). */
   const lastNanoImagePromptRef = useRef("");
@@ -264,6 +295,12 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       setKlingVideoUrl(snap.klingVideoUrl ?? null);
       setNanoPollTaskId(null);
       setKlingPollTaskId(null);
+      setUserStartedVideoFromImage(
+        Boolean(
+          (snap.ugcVideoPromptGpt && snap.ugcVideoPromptGpt.trim()) ||
+            (snap.klingVideoUrl && snap.klingVideoUrl.trim()),
+        ),
+      );
       prevAngleRef.current = snap.selectedAngleIndex;
       setLastExtractedJson(cloneExtractedBase(run.extracted));
       setStage("ready");
@@ -385,6 +422,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       setKlingVideoUrl(null);
       setNanoPollTaskId(null);
       setKlingPollTaskId(null);
+      setUserStartedVideoFromImage(false);
     }
 
     const base = latestSnapRef.current;
@@ -548,7 +586,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     setScriptsText("");
     setAngleLabels(["", "", ""]);
     setSelectedAngleIndex(null);
-    setShowFullScripts(false);
     if (opts?.bypassSavedProject) {
       setNeutralUploadUrl(null);
     }
@@ -572,6 +609,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     setKlingVideoUrl(null);
     setNanoPollTaskId(null);
     setKlingPollTaskId(null);
+    setUserStartedVideoFromImage(false);
     prevAngleRef.current = null;
 
     try {
@@ -704,7 +742,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       try {
         const shots = gptImages.length > 0 ? gptImages : [];
         activeRunId = await persistUniverse(activeRunId, url, titleForScripts, base, snapAfterSummary, shots);
-        toast.success("Project saved (image + brief)");
+        toast.success("Project saved");
       } catch (e) {
         toast.message("Project save failed", { description: e instanceof Error ? e.message : "" });
       }
@@ -737,7 +775,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       } catch (scriptErr) {
         const msg = scriptErr instanceof Error ? scriptErr.message : "Scripts step failed";
         setScriptsText("");
-        toast.warning("Brand brief OK — scripts step failed", { description: msg });
+        toast.warning("Scripts step failed", { description: msg });
       }
 
       if (scriptsStepOk && scriptsStr) {
@@ -767,7 +805,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       }
 
       setStage("ready");
-      if (scriptsStepOk) toast.success("Brief + 3 UGC scripts ready");
+      if (scriptsStepOk) toast.success("3 UGC scripts ready");
     } catch (err) {
       setStage("error");
       const message = err instanceof Error ? err.message : "Unknown error";
@@ -1019,24 +1057,33 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     lastTaskId: string | null,
   ) {
     setNanoBananaImageUrls(urlsByPrompt);
-    setNanoBananaSelectedImageIndex(0);
+    setNanoBananaSelectedImageIndex(null);
     setNanoBananaSelectedPromptIndex(0);
     setNanoBananaTaskId(lastTaskId);
-    setNanoBananaImageUrl(urlsByPrompt[0]);
+    setNanoBananaImageUrl(null);
+    setUgcVideoPromptGpt("");
+    setKlingVideoUrl(null);
+    setKlingTaskId(null);
+    setKlingPollTaskId(null);
+    setUserStartedVideoFromImage(false);
     const base = latestSnapRef.current;
     if (base && lastExtractedJson) {
       const snap: LinkToAdUniverseSnapshotV1 = {
         ...base,
         nanoBananaTaskId: lastTaskId,
-        nanoBananaImageUrl: urlsByPrompt[0],
+        nanoBananaImageUrl: null,
         nanoBananaImageUrls: urlsByPrompt,
-        nanoBananaSelectedImageIndex: 0,
+        nanoBananaSelectedImageIndex: null,
         nanoBananaSelectedPromptIndex: 0,
+        ugcVideoPromptGpt: undefined,
+        klingTaskId: null,
+        klingVideoUrl: null,
       };
       await persistUniverse(universeRunId, url, extractedTitle, lastExtractedJson, snap, packshotsForSave(), {
-        imagePrompt: prompts[0],
-        selectedImageUrl: urlsByPrompt[0],
+        selectedImageUrl: null,
         generatedImageUrls: urlsByPrompt,
+        videoPrompt: "",
+        videoUrl: null,
       });
     }
   }
@@ -1104,7 +1151,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     setKlingVideoUrl(null);
     setKlingTaskId(null);
     setKlingPollTaskId(null);
-    lastVideoAdKickImageRef.current = "";
+    setUserStartedVideoFromImage(false);
 
     setNanoBananaSelectedImageIndex(idx);
     setNanoBananaSelectedPromptIndex(idx);
@@ -1362,6 +1409,15 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     Boolean(summaryText.trim() && !scriptsText && lastExtractedJson && stage === "ready" && !isWorking);
   const showI2vPipeline = selectedAngleIndex !== null && scriptsText.trim().length > 0;
   const nanoHasThreeImages = nanoBananaImageUrls.length === 3;
+  const showVideoPipelinePanels = Boolean(
+    nanoBananaImageUrl?.trim() &&
+      (userStartedVideoFromImage ||
+        ugcVideoPromptGpt.trim() ||
+        isVideoPromptLoading ||
+        isKlingSubmitting ||
+        klingPollTaskId ||
+        klingVideoUrl),
+  );
 
   const step1Done = Boolean(summaryText.trim() && resolvedPreviewUrl);
   const step2Done = Boolean(scriptsText.trim() && selectedAngleIndex !== null);
@@ -1387,7 +1443,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     if (!isWorking) return null;
     if (stage === "scanning") return "Fetching the store page…";
     if (stage === "finding_image") return "Picking the best product visuals…";
-    if (stage === "summarizing") return "Writing your brand brief…";
+    if (stage === "summarizing") return "Understanding the brand…";
     if (stage === "writing_scripts") return "Writing 3 UGC script angles…";
     return "Working…";
   }, [
@@ -1453,27 +1509,67 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     nanoPollTaskId,
   ]);
 
-  useEffect(() => {
-    if (selectedAngleIndex === null) return;
-    if (!nanoBananaImageUrl?.trim() || ugcVideoPromptGpt.trim() || isVideoPromptLoading) return;
-    if (isKlingSubmitting || Boolean(klingPollTaskId)) return;
-    if (lastVideoAdKickImageRef.current === nanoBananaImageUrl) return;
-    lastVideoAdKickImageRef.current = nanoBananaImageUrl;
-    void (async () => {
-      const t = await onGenerateUgcVideoPrompt();
-      if (t?.trim()) await onGenerateKlingVideo(t.trim());
-    })();
-  }, [
-    selectedAngleIndex,
-    nanoBananaImageUrl,
-    ugcVideoPromptGpt,
-    isVideoPromptLoading,
-    isKlingSubmitting,
-    klingPollTaskId,
-  ]);
+  async function handleGenerateVideoFromSelectedImage() {
+    if (nanoBananaSelectedImageIndex === null || !nanoBananaImageUrl?.trim()) {
+      toast.error("Select a reference image first.");
+      return;
+    }
+    if (isVideoPromptLoading || isKlingSubmitting || Boolean(klingPollTaskId)) return;
+    setUserStartedVideoFromImage(true);
+    const t = await onGenerateUgcVideoPrompt();
+    if (t?.trim()) await onGenerateKlingVideo(t.trim());
+  }
 
   const primaryBtnClass =
     "h-11 rounded-2xl bg-violet-400 px-6 text-black font-semibold border border-violet-200/40 shadow-[0_6px_0_0_rgba(76,29,149,0.9)] transition-all hover:-translate-y-[1px] hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9)] active:translate-y-[6px]";
+
+  function handleGenerateFromUrl() {
+    const u = storeUrl.trim();
+    if (!u) {
+      toast.error("Enter a store URL.");
+      return;
+    }
+    if (!/^https?:\/\//i.test(u)) {
+      toast.error("URL must start with https:// (or http://).");
+      return;
+    }
+    if (isWorking) return;
+    autoScanUrlAttemptedRef.current = "";
+    void onRun();
+  }
+
+  const storeHostnameResolved = useMemo(() => storeHostname(storeUrl), [storeUrl]);
+
+  useEffect(() => {
+    setBrandFaviconFailed(false);
+  }, [storeHostnameResolved]);
+
+  const showBrandHeaderInsteadOfUrl = useMemo(
+    () =>
+      Boolean(
+        summaryText.trim() ||
+          scriptsText.trim() ||
+          (typeof resolvedPreviewUrl === "string" && resolvedPreviewUrl.length > 0),
+      ),
+    [summaryText, scriptsText, resolvedPreviewUrl],
+  );
+
+  const brandDisplayName = useMemo(() => {
+    const t = extractedTitle?.trim();
+    if (t) return t;
+    const h = storeHostnameResolved;
+    if (h) return h;
+    const u = storeUrl.trim();
+    return u || "Store";
+  }, [extractedTitle, storeHostnameResolved, storeUrl]);
+
+  const brandFaviconSrc = useMemo(() => {
+    const h = storeHostnameResolved;
+    if (!h) return null;
+    return brandFaviconUrl(h);
+  }, [storeHostnameResolved]);
+
+  const brandSummaryTeaser = useMemo(() => compactBrandSummaryForUi(summaryText), [summaryText]);
 
   return (
     <>
@@ -1517,41 +1613,94 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         ) : null}
         <div className="space-y-3">
           <div>
-            <Label className="text-base font-medium text-white/80">Store URL</Label>
-            <Input
-              value={storeUrl}
-              onChange={(e) => setStoreUrl(e.target.value)}
-              placeholder="https://..."
-              className="mt-2 h-14 min-h-[3.5rem] rounded-xl border-white/10 bg-white/[0.03] px-4 text-lg text-white placeholder:text-white/35"
-            />
-            <p className="mt-2 max-w-2xl text-sm text-white/50">
-              Paste your store URL — we scan and run steps automatically until you pick an angle, then an image, then
-              we finish the ad.
-            </p>
+            {showBrandHeaderInsteadOfUrl ? (
+              <>
+                <Label className="text-base font-medium text-white/80">Brand</Label>
+                <div className="mt-2 flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-[#0d0a14]">
+                    {brandFaviconSrc && !brandFaviconFailed ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={brandFaviconSrc}
+                        alt=""
+                        width={32}
+                        height={32}
+                        className="h-8 w-8 object-contain"
+                        referrerPolicy="no-referrer"
+                        onError={() => setBrandFaviconFailed(true)}
+                      />
+                    ) : (
+                      <span className="text-lg font-bold uppercase text-violet-300">
+                        {(brandDisplayName.slice(0, 1) || "?").toUpperCase()}
+                      </span>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-lg font-semibold leading-tight text-white">{brandDisplayName}</p>
+                    {extractedTitle?.trim() && storeHostnameResolved ? (
+                      <p className="mt-0.5 truncate text-xs text-white/40">{storeHostnameResolved}</p>
+                    ) : null}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <Label className="text-base font-medium text-white/80">Store URL</Label>
+                <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-stretch">
+                  <Input
+                    value={storeUrl}
+                    onChange={(e) => setStoreUrl(e.target.value)}
+                    placeholder="https://..."
+                    className="h-14 min-h-[3.5rem] min-w-0 flex-1 rounded-xl border-white/10 bg-white/[0.03] px-4 text-lg text-white placeholder:text-white/35"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleGenerateFromUrl();
+                      }
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    disabled={isWorking || !storeUrl.trim()}
+                    onClick={handleGenerateFromUrl}
+                    className={`${primaryBtnClass} h-14 min-h-[3.5rem] shrink-0 px-8 text-base sm:min-w-[160px]`}
+                  >
+                    {isWorking ? (
+                      <>
+                        <Loader2 className="h-5 w-5 shrink-0 animate-spin" aria-hidden />
+                        Working…
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="h-5 w-5 shrink-0" aria-hidden />
+                        Generate
+                      </>
+                    )}
+                  </Button>
+                </div>
+                <p className="mt-2 max-w-2xl text-sm text-white/50">
+                  Paste your store URL and click <span className="text-white/65">Generate</span> (or wait a moment after
+                  pasting). We scan the shop and continue until you choose an angle, then an image, then we finish the
+                  ad.
+                </p>
+              </>
+            )}
           </div>
         </div>
 
         {resolvedPreviewUrl || summaryText.trim() || (isWorking && storeUrl.trim()) ? (
-        <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
+        <div className="mx-auto w-full max-w-md">
           {resolvedPreviewUrl || (isWorking && storeUrl.trim()) ? (
           <div className="space-y-3">
             <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-semibold">Clean product image</p>
-                {quality.label === "good" ? (
-                  <span className="text-xs text-emerald-400">Quality: good</span>
-                ) : (
-                  <span className={`text-xs ${quality.color}`}>Quality: {quality.label}</span>
-                )}
-              </div>
-
-              <div className="mt-3 mx-auto w-full max-w-[min(100%,320px)] aspect-[9/16] overflow-hidden rounded-lg border border-white/10 bg-[#050507]">
+              <div className="relative mx-auto w-full max-w-[min(100%,320px)]">
+              <div className="aspect-[9/16] overflow-hidden rounded-lg border border-white/10 bg-[#050507]">
                 {resolvedPreviewUrl && !imgError ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     key={resolvedPreviewUrl}
                     src={resolvedPreviewUrl}
-                    alt="Clean product"
+                    alt="Product"
                     className="h-full w-full object-contain object-center"
                     loading="eager"
                     referrerPolicy="no-referrer"
@@ -1561,19 +1710,23 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                   <div className="flex h-full items-center justify-center text-sm text-white/35">
                     {resolvedPreviewUrl
                       ? "Image couldn't be loaded. Check the link below."
-                      : "Run the scan to see the clean product image."}
+                      : "Run the scan to see the product image."}
                   </div>
                 )}
               </div>
-
-              {cleanCandidate?.reason ? (
-                <p className="mt-3 text-xs text-white/55">
-                  Candidate reason: <span className="text-white/70">{cleanCandidate.reason}</span>
-                </p>
+              {resolvedPreviewUrl && !imgError ? (
+                <div className="pointer-events-none absolute bottom-2 right-2 rounded-md border border-white/10 bg-black/60 px-2 py-0.5 backdrop-blur-sm">
+                  {quality.label === "good" ? (
+                    <span className="text-[10px] font-medium text-emerald-400">Quality: good</span>
+                  ) : (
+                    <span className={`text-[10px] font-medium ${quality.color}`}>Quality: {quality.label}</span>
+                  )}
+                </div>
               ) : null}
+              </div>
 
-              {extractedTitle ? (
-                <p className="mt-2 text-xs text-white/45">Detected: {extractedTitle}</p>
+              {brandSummaryTeaser ? (
+                <p className="mt-3 line-clamp-3 text-center text-xs leading-snug text-white/50">{brandSummaryTeaser}</p>
               ) : null}
 
               {imgError && resolvedPreviewUrl ? (
@@ -1620,90 +1773,64 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
               ) : null}
             </div>
           </div>
-          ) : null}
-
-          {summaryText.trim() ? (
+          ) : summaryText.trim() ? (
           <div className="space-y-3">
             <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-              <p className="text-sm font-semibold">Brand brief</p>
-              <div className="mt-3 min-h-[120px]">
-                <pre className="max-h-[360px] overflow-auto whitespace-pre-wrap text-xs text-white/70 leading-relaxed">
-                  {summaryText}
-                </pre>
-              </div>
+              {brandSummaryTeaser ? (
+                <p className="line-clamp-3 text-center text-xs leading-snug text-white/50">{brandSummaryTeaser}</p>
+              ) : (
+                <p className="text-center text-xs text-white/35">…</p>
+              )}
             </div>
           </div>
           ) : null}
         </div>
         ) : null}
 
-        {(summaryText.trim() || scriptsText || showContinueScripts || (isWorking && stage === "writing_scripts")) ? (
-        <div className="rounded-xl border border-violet-500/25 bg-violet-500/[0.06] p-4">
-          {isWorking && stage === "writing_scripts" ? (
-            <div className="mb-3 flex items-center gap-2 text-xs text-violet-300">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              Generating script angles…
-            </div>
-          ) : null}
-
-          {showAnglePicker ? (
-            <div className="mt-4 grid gap-3 sm:grid-cols-3">
-              {([0, 1, 2] as const).map((i) => (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={() => void onSelectAngle(i)}
-                  className={`rounded-2xl border px-4 py-4 text-left transition-all ${
-                    selectedAngleIndex === i
-                      ? "border-violet-400 bg-violet-500/20 shadow-[0_6px_0_0_rgba(76,29,149,0.85)]"
-                      : "border-white/10 bg-white/[0.04] hover:border-violet-400/40 hover:bg-white/[0.07]"
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-bold uppercase tracking-wide text-violet-300">Angle {i + 1}</span>
-                    {selectedAngleIndex === i ? (
-                      <Check className="h-4 w-4 text-violet-300" aria-hidden />
-                    ) : null}
-                  </div>
-                  <p className="mt-2 text-sm leading-snug text-white/85">{angleLabels[i]}</p>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="mt-3 flex min-h-[80px] items-center justify-center rounded-lg border border-white/10 bg-black/20 px-4 text-center text-sm text-white/35">
-              {isWorking && stage === "writing_scripts" ? "Writing three script angles…" : "Waiting for scripts…"}
-            </div>
-          )}
-
-          {scriptsText ? (
-            <div className="mt-4">
-              <button
-                type="button"
-                onClick={() => setShowFullScripts((s) => !s)}
-                className="flex items-center gap-2 text-xs font-medium text-violet-300 hover:text-violet-200"
-              >
-                <ChevronDown className={`h-4 w-4 transition-transform ${showFullScripts ? "rotate-180" : ""}`} />
-                {showFullScripts ? "Hide full scripts" : "View full scripts (3 options)"}
-              </button>
-              {showFullScripts ? (
-                <pre className="mt-3 max-h-[480px] overflow-auto whitespace-pre-wrap rounded-lg border border-white/10 bg-black/30 p-3 text-xs text-white/75 leading-relaxed">
-                  {scriptsText}
-                </pre>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
+        {selectedAngleIndex === null &&
+        (summaryText.trim() ||
+          scriptsText.trim() ||
+          showContinueScripts ||
+          (isWorking && stage === "writing_scripts")) ? (
+          <div className="rounded-xl border border-violet-500/25 bg-violet-500/[0.06] p-4">
+            {isWorking && stage === "writing_scripts" ? (
+              <div className="flex items-center gap-2 text-xs text-violet-300">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Writing three script angles…
+              </div>
+            ) : showAnglePicker ? (
+              <div className="grid gap-3 sm:grid-cols-3">
+                {([0, 1, 2] as const).map((i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => void onSelectAngle(i)}
+                    className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-4 text-left transition-all hover:border-violet-400/40 hover:bg-white/[0.07]"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-bold uppercase tracking-wide text-violet-300">Angle {i + 1}</span>
+                    </div>
+                    <p className="mt-2 text-sm leading-snug text-white/85">{angleLabels[i]}</p>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="flex min-h-[80px] items-center justify-center rounded-lg border border-white/10 bg-black/20 px-4 text-center text-sm text-white/35">
+                Waiting for scripts…
+              </div>
+            )}
+          </div>
         ) : null}
 
         {showI2vPipeline ? (
           <div className="space-y-4">
             <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/[0.06] p-4">
               <div>
-                <p className="text-sm font-semibold text-white/90">Step 3 — Image prompts & NanoBanana Pro</p>
+                <p className="text-sm font-semibold text-white/90">Reference images</p>
               </div>
               <p className="mt-1 text-xs text-white/45">
-                Runs automatically after you pick an angle. GPT writes 3 prompts, then NanoBanana Pro renders three 2K
-                9:16 images (saved to your project).
+                Three 9:16 frames are generated from your angle. Tap one to select it, then confirm with the button
+                below — nothing starts until you do.
               </p>
               <div className="mt-4 flex flex-wrap gap-2">
                 {selectedAngleIndex !== null &&
@@ -1729,31 +1856,12 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
               </div>
 
               {nanoBananaPromptsRaw ? (
-                <div className="mt-4 space-y-3">
-                  <p className="text-xs font-medium text-white/55">GPT prompts (used automatically for the 3 renders)</p>
-                  <div className="grid gap-2 sm:grid-cols-3">
-                    {([0, 1, 2] as const).map((i) => (
-                      <div
-                        key={i}
-                        className={`rounded-xl border px-3 py-3 text-left text-xs leading-snug ${
-                          nanoBananaSelectedPromptIndex === i
-                            ? "border-emerald-400 bg-emerald-500/15"
-                            : "border-white/10 bg-white/[0.04]"
-                        }`}
-                      >
-                        <span className="font-bold text-emerald-300">PROMPT {i + 1}</span>
-                        <p className="mt-2 line-clamp-6 text-white/70">
-                          {parsedNanoPrompts[i] || "—"}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-
+                <div className="mt-4 space-y-4">
                   {nanoHasThreeImages ? (
-                    <div className="mt-4 space-y-4">
-                      <p className="text-xs font-medium text-white/45">
-                        Preview is cropped to <span className="text-white/60">3:4</span> (source is often 9:16). Use{" "}
-                        <span className="text-white/60">Full view</span> on each card to see the full frame.
+                    <>
+                      <p className="text-xs text-white/45">
+                        Preview is cropped to <span className="text-white/60">3:4</span>. Use{" "}
+                        <span className="text-white/60">Full view</span> on a card to see the full frame.
                       </p>
                       <div className="grid gap-4 sm:grid-cols-3">
                         {([0, 1, 2] as const).map((i) => {
@@ -1784,7 +1892,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img
                                   src={nanoBananaImageUrls[i]}
-                                  alt={`NanoBanana reference ${i + 1}`}
+                                  alt={`Reference ${i + 1}`}
                                   className="h-full w-full object-cover object-center"
                                   loading="lazy"
                                 />
@@ -1811,85 +1919,117 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                           );
                         })}
                       </div>
-                    </div>
+                      <div className="border-t border-white/10 pt-5">
+                        {nanoBananaSelectedImageIndex === null ? (
+                          <p className="text-center text-xs text-white/45">Select an image above to continue.</p>
+                        ) : (
+                          <div className="flex flex-col items-center gap-3">
+                            <Button
+                              type="button"
+                              disabled={
+                                isVideoPromptLoading || isKlingSubmitting || Boolean(klingPollTaskId) || !nanoBananaImageUrl
+                              }
+                              onClick={() => void handleGenerateVideoFromSelectedImage()}
+                              className={`${primaryBtnClass} w-full max-w-md`}
+                            >
+                              {isVideoPromptLoading || isKlingSubmitting || klingPollTaskId ? (
+                                <>
+                                  <Loader2 className="h-5 w-5 shrink-0 animate-spin" aria-hidden />
+                                  Working…
+                                </>
+                              ) : (
+                                <>
+                                  <Video className="h-5 w-5 shrink-0" aria-hidden />
+                                  Generate video from this image
+                                </>
+                              )}
+                            </Button>
+                            <p className="max-w-md text-center text-[11px] text-white/40">
+                              Builds the motion prompt from your angle, then starts Kling (12s). Change image anytime —
+                              video steps reset until you confirm again.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </>
                   ) : null}
                 </div>
               ) : null}
             </div>
 
-            <div className="rounded-xl border border-sky-500/25 bg-sky-500/[0.06] p-4">
-              <div>
-                <p className="text-sm font-semibold text-white/90">Step 4 — Video Prompt (GPT)</p>
-              </div>
-              <p className="mt-1 text-xs text-white/45">
-                Runs automatically after you pick a reference image. This is the image-to-video prompt for Kling / Veo
-                style models.
-              </p>
-              {nanoBananaImageUrl &&
-              !ugcVideoPromptGpt.trim() &&
-              !isVideoPromptLoading &&
-              selectedAngleIndex !== null ? (
-                <Button
-                  type="button"
-                  className={`mt-3 ${primaryBtnClass}`}
-                  onClick={() => void onGenerateUgcVideoPrompt()}
-                >
-                  Retry video prompt
-                </Button>
-              ) : null}
-              {isVideoPromptLoading ? (
-                <div className="mt-3 flex items-center gap-2 text-xs text-sky-200">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Generating video prompt…
+            {showVideoPipelinePanels ? (
+              <>
+                <div className="rounded-xl border border-sky-500/25 bg-sky-500/[0.06] p-4">
+                  <div>
+                    <p className="text-sm font-semibold text-white/90">Video prompt</p>
+                  </div>
+                  <p className="mt-1 text-xs text-white/45">Used for Kling image-to-video (you can retry if it fails).</p>
+                  {nanoBananaImageUrl &&
+                  userStartedVideoFromImage &&
+                  !ugcVideoPromptGpt.trim() &&
+                  !isVideoPromptLoading &&
+                  selectedAngleIndex !== null ? (
+                    <Button
+                      type="button"
+                      className={`mt-3 ${primaryBtnClass}`}
+                      onClick={() => void onGenerateUgcVideoPrompt()}
+                    >
+                      Retry video prompt
+                    </Button>
+                  ) : null}
+                  {isVideoPromptLoading ? (
+                    <div className="mt-3 flex items-center gap-2 text-xs text-sky-200">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Generating video prompt…
+                    </div>
+                  ) : null}
+                  {ugcVideoPromptGpt ? (
+                    <pre className="mt-3 max-h-[220px] overflow-auto whitespace-pre-wrap rounded-lg border border-white/10 bg-black/30 p-3 text-xs text-white/75">
+                      {ugcVideoPromptGpt}
+                    </pre>
+                  ) : null}
                 </div>
-              ) : null}
-              {ugcVideoPromptGpt ? (
-                <pre className="mt-3 max-h-[220px] overflow-auto whitespace-pre-wrap rounded-lg border border-white/10 bg-black/30 p-3 text-xs text-white/75">
-                  {ugcVideoPromptGpt}
-                </pre>
-              ) : null}
-            </div>
 
-            <div className="rounded-xl border border-orange-500/25 bg-orange-500/[0.06] p-4">
-              <div>
-                <p className="text-sm font-semibold text-white/90">Step 5 — Kling 3.0 Video (12s · 720p Standard)</p>
-              </div>
-              <p className="mt-1 text-xs text-white/45">
-                Starts automatically once the video prompt is ready. Native audio on (lipsync hint).
-              </p>
-              {nanoBananaImageUrl &&
-              ugcVideoPromptGpt.trim() &&
-              !klingVideoUrl &&
-              !klingPollTaskId &&
-              !isKlingSubmitting ? (
-                <Button type="button" className={`mt-3 ${primaryBtnClass}`} onClick={() => void onGenerateKlingVideo()}>
-                  Retry Kling render
-                </Button>
-              ) : null}
-              {isKlingSubmitting ? (
-                <div className="mt-3 flex items-center gap-2 text-xs text-orange-200">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Starting Kling…
+                <div className="rounded-xl border border-orange-500/25 bg-orange-500/[0.06] p-4">
+                  <div>
+                    <p className="text-sm font-semibold text-white/90">Kling 3.0 — 12s · 720p</p>
+                  </div>
+                  <p className="mt-1 text-xs text-white/45">Native audio on (lipsync hint).</p>
+                  {nanoBananaImageUrl &&
+                  ugcVideoPromptGpt.trim() &&
+                  !klingVideoUrl &&
+                  !klingPollTaskId &&
+                  !isKlingSubmitting ? (
+                    <Button type="button" className={`mt-3 ${primaryBtnClass}`} onClick={() => void onGenerateKlingVideo()}>
+                      Retry Kling render
+                    </Button>
+                  ) : null}
+                  {isKlingSubmitting ? (
+                    <div className="mt-3 flex items-center gap-2 text-xs text-orange-200">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Starting Kling…
+                    </div>
+                  ) : null}
+                  {klingPollTaskId ? (
+                    <p className="mt-2 flex items-center gap-2 text-xs text-orange-200">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Generating video…
+                    </p>
+                  ) : null}
+                  {klingVideoUrl ? (
+                    <div className="mt-4 space-y-2">
+                      <video src={klingVideoUrl} controls className="w-full max-h-[480px] rounded-lg border border-white/10" />
+                      <a
+                        href={`/api/download?url=${encodeURIComponent(klingVideoUrl)}`}
+                        className="text-xs font-medium text-orange-300 underline underline-offset-2"
+                      >
+                        Download video
+                      </a>
+                    </div>
+                  ) : null}
                 </div>
-              ) : null}
-              {klingPollTaskId ? (
-                <p className="mt-2 flex items-center gap-2 text-xs text-orange-200">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  Generating video…
-                </p>
-              ) : null}
-              {klingVideoUrl ? (
-                <div className="mt-4 space-y-2">
-                  <video src={klingVideoUrl} controls className="w-full max-h-[480px] rounded-lg border border-white/10" />
-                  <a
-                    href={`/api/download?url=${encodeURIComponent(klingVideoUrl)}`}
-                    className="text-xs font-medium text-orange-300 underline underline-offset-2"
-                  >
-                    Download video
-                  </a>
-                </div>
-              ) : null}
-            </div>
+              </>
+            ) : null}
           </div>
         ) : null}
       </CardContent>
