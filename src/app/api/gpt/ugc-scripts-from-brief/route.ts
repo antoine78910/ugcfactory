@@ -204,7 +204,7 @@ export async function POST(req: Request) {
     "You are an expert UGC scriptwriter for AI video (lipsync, shot segmentation, image-to-video).",
     "Follow EVERY rule and the exact output structure in the user message.",
     "Write all spoken script lines in English (brand brief language style: English).",
-    "Respect the word-count limit for 15 seconds — count only spoken words in HOOK, PROBLEM, SOLUTION, CTA.",
+    "Respect the word-count limit of 30 words maximum for 15 seconds — count only spoken words in HOOK, PROBLEM, SOLUTION, CTA.",
     "Output plain text only, using the section headings exactly as specified (SCRIPT OPTION 1, VIDEO_METADATA, etc.).",
     "",
     UGC_SCRIPT_INSTRUCTIONS.trim(),

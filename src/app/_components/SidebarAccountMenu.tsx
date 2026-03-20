@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ChevronDown, DollarSign, HelpCircle, LogOut, Settings, User } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 type Props = {
   email: string;
@@ -11,6 +12,7 @@ type Props = {
 };
 
 export default function SidebarAccountMenu({ email, onLogout, planLabel = "Free" }: Props) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -64,7 +66,10 @@ export default function SidebarAccountMenu({ email, onLogout, planLabel = "Free"
             type="button"
             role="menuitem"
             className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm text-white/90 transition-colors hover:bg-white/[0.06]"
-            onClick={() => comingSoon("Credits")}
+            onClick={() => {
+              setOpen(false);
+              router.push("/credits");
+            }}
           >
             <DollarSign className="h-4 w-4 shrink-0 text-white/70" strokeWidth={1.75} />
             Credits
