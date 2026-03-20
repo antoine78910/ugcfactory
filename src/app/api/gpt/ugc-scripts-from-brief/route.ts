@@ -203,28 +203,26 @@ export async function POST(req: Request) {
   const developer = [
     "You are an expert UGC scriptwriter for AI video (lipsync, shot segmentation, image-to-video).",
     "Follow EVERY rule and the exact output structure in the user message.",
-    "Write all spoken script lines in English (match the brand brief language style: the brief below is in English).",
-    "Respect the word-count limit for the chosen duration — count only spoken words in HOOK, PROBLEM, SOLUTION, CTA.",
+    "Write all spoken script lines in English (brand brief language style: English).",
+    "Respect the word-count limit for 15 seconds — count only spoken words in HOOK, PROBLEM, SOLUTION, CTA.",
     "Output plain text only, using the section headings exactly as specified (SCRIPT OPTION 1, VIDEO_METADATA, etc.).",
+    "",
+    UGC_SCRIPT_INSTRUCTIONS.trim(),
   ].join("\n");
 
   const userPayload = [
-    UGC_SCRIPT_INSTRUCTIONS,
+    "Create 3 UGC video scripts for this product.",
     "",
-    "---",
-    "RUNTIME CONSTRAINT (apply to EACH of the 3 scripts):",
-    durationRules(videoDurationSeconds),
-    "",
-    "INPUT CONTEXT",
-    `Store URL: ${storeUrl || "(not provided)"}`,
-    `Product title: ${productTitle || "(not provided)"}`,
-    "",
-    "Brand brief (English) — use as the single source of truth for brand, product, benefits, persona:",
+    "Brand brief (que l'on aura crée):",
     brandBrief,
     "",
-    imageUrl
-      ? "A reference product image is attached; align visuals, props, and actions with it when relevant."
-      : "No product image was provided; infer packshot / product appearance only from the brief.",
+    "Language: english",
+    "Video length: 15 seconds",
+    "",
+    "The scripts must follow the UGC AI script structure.",
+    "Test 3 different marketing angles.",
+    "",
+    "I am also attaching the product image for reference.",
   ].join("\n");
 
   try {
