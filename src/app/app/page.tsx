@@ -1014,10 +1014,10 @@ export default function AppBrandWizard() {
             <div className="mt-2 space-y-1">
               <button
                 type="button"
-                className={`w-full rounded-md px-3 py-2 text-left text-sm transition ${
+                className={`w-full rounded-xl px-3 py-2 text-left text-sm font-semibold transition-all cursor-pointer ${
                   appSection === "link_to_ad"
-                    ? "bg-violet-400 text-black"
-                    : "border border-white/10 bg-white/5 text-white hover:bg-white/10"
+                    ? "bg-violet-400 text-black shadow-[0_7px_0_0_rgba(76,29,149,0.95)] hover:bg-violet-300 hover:shadow-[0_9px_0_0_rgba(76,29,149,0.95)] active:translate-y-[6px]"
+                    : "border border-white/10 bg-white/5 text-white hover:bg-white/10 hover:border-violet-400/40 shadow-[0_0_22px_rgba(139,92,246,0.12)] hover:shadow-[0_0_36px_rgba(139,92,246,0.22)]"
                 }`}
                 onClick={() => setAppSection("link_to_ad")}
               >
@@ -1025,10 +1025,10 @@ export default function AppBrandWizard() {
               </button>
               <button
                 type="button"
-                className={`w-full rounded-md px-3 py-2 text-left text-sm transition ${
+                className={`w-full rounded-xl px-3 py-2 text-left text-sm font-semibold transition-all cursor-pointer ${
                   appSection === "motion_control"
-                    ? "bg-violet-400 text-black"
-                    : "border border-white/10 bg-white/5 text-white hover:bg-white/10"
+                    ? "bg-violet-400 text-black shadow-[0_7px_0_0_rgba(76,29,149,0.95)] hover:bg-violet-300 hover:shadow-[0_9px_0_0_rgba(76,29,149,0.95)] active:translate-y-[6px]"
+                    : "border border-white/10 bg-white/5 text-white hover:bg-white/10 hover:border-violet-400/40 shadow-[0_0_22px_rgba(139,92,246,0.12)] hover:shadow-[0_0_36px_rgba(139,92,246,0.22)]"
                 }`}
                 onClick={() => setAppSection("motion_control")}
               >
@@ -1036,10 +1036,10 @@ export default function AppBrandWizard() {
               </button>
               <button
                 type="button"
-                className={`w-full rounded-md px-3 py-2 text-left text-sm transition ${
+                className={`w-full rounded-xl px-3 py-2 text-left text-sm font-semibold transition-all cursor-pointer ${
                   appSection === "models"
-                    ? "bg-violet-400 text-black"
-                    : "border border-white/10 bg-white/5 text-white hover:bg-white/10"
+                    ? "bg-violet-400 text-black shadow-[0_7px_0_0_rgba(76,29,149,0.95)] hover:bg-violet-300 hover:shadow-[0_9px_0_0_rgba(76,29,149,0.95)] active:translate-y-[6px]"
+                    : "border border-white/10 bg-white/5 text-white hover:bg-white/10 hover:border-violet-400/40 shadow-[0_0_22px_rgba(139,92,246,0.12)] hover:shadow-[0_0_36px_rgba(139,92,246,0.22)]"
                 }`}
                 onClick={() => setAppSection("models")}
               >
@@ -1047,10 +1047,10 @@ export default function AppBrandWizard() {
               </button>
               <button
                 type="button"
-                className={`w-full rounded-md px-3 py-2 text-left text-sm transition ${
+                className={`w-full rounded-xl px-3 py-2 text-left text-sm font-semibold transition-all cursor-pointer ${
                   appSection === "projects"
-                    ? "bg-violet-400 text-black"
-                    : "border border-white/10 bg-white/5 text-white hover:bg-white/10"
+                    ? "bg-violet-400 text-black shadow-[0_7px_0_0_rgba(76,29,149,0.95)] hover:bg-violet-300 hover:shadow-[0_9px_0_0_rgba(76,29,149,0.95)] active:translate-y-[6px]"
+                    : "border border-white/10 bg-white/5 text-white hover:bg-white/10 hover:border-violet-400/40 shadow-[0_0_22px_rgba(139,92,246,0.12)] hover:shadow-[0_0_36px_rgba(139,92,246,0.22)]"
                 }`}
                 onClick={() => setAppSection("projects")}
               >

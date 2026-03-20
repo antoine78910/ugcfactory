@@ -194,16 +194,16 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen bg-[#050507] text-white selection:bg-violet-500/30">
       {/* ── Header ── */}
-      <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-[#050507]/80 backdrop-blur-xl">
-        <div className="relative border-b border-white/10 bg-[#0f0f14] px-4 py-1.5 text-center">
-          <p className="text-[11px] font-medium text-white/80 sm:text-xs">
+      <header className="sticky top-0 z-50 border-b-[4px] border-white/40 bg-[#050507]/80 backdrop-blur-xl">
+        <div className="relative border-b-[4px] border-[#0b0912] bg-[#987eee] px-4 py-1.5 text-center">
+          <p className="text-[11px] font-semibold text-[#0b0912]/90 sm:text-xs">
             Nano Banana 2 UNLIMITED. Kling 3.0 & Motion Control Available.
             Special 73% OFF
           </p>
           <button
             type="button"
             aria-label="Close announcement"
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-white/60 transition-colors hover:text-white"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-[#0b0912]/55 transition-colors hover:text-[#0b0912]"
           >
             ×
           </button>
