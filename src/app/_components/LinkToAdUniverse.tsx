@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Check, ChevronDown, Loader2 } from "lucide-react";
+import { Check, ChevronDown, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -1409,6 +1409,172 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const primaryBtnClass =
     "h-11 rounded-2xl bg-violet-400 px-6 text-black font-semibold border border-violet-200/40 shadow-[0_6px_0_0_rgba(76,29,149,0.9)] transition-all hover:-translate-y-[1px] hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9)] active:translate-y-[6px]";
 
+  const redoBtnClass =
+    "h-9 shrink-0 gap-1.5 rounded-xl border border-white/20 bg-white/[0.04] px-3 text-xs font-semibold text-white/85 hover:bg-white/[0.08] hover:text-white";
+
+  async function persistRedoSnapshot(snapshot: LinkToAdUniverseSnapshotV1, extras?: RunExtras) {
+    const url = storeUrl.trim();
+    if (!url || !lastExtractedJson || !universeRunId) return;
+    try {
+      await persistUniverse(universeRunId, url, extractedTitle, lastExtractedJson, snapshot, packshotsForSave(), extras);
+      onRunsChanged?.();
+    } catch (e) {
+      toast.error("Sauvegarde", { description: e instanceof Error ? e.message : "Erreur" });
+    }
+  }
+
+  /** Refaire = relancer scan + brief + scripts (comme Generate). */
+  function redoStep1FullScan() {
+    if (isWorking) return;
+    if (!storeUrl.trim()) {
+      toast.error("Indique une URL boutique.");
+      return;
+    }
+    void onRun();
+  }
+
+  /** Garde le brief, efface scripts et tout le pipeline image/vidéo. */
+  async function redoStep2Scripts() {
+    setScriptsText("");
+    setAngleLabels(["", "", ""]);
+    setSelectedAngleIndex(null);
+    setShowFullScripts(false);
+    prevAngleRef.current = null;
+    setNanoBananaPromptsRaw("");
+    setNanoBananaSelectedPromptIndex(0);
+    setNanoBananaTaskId(null);
+    setNanoBananaImageUrl(null);
+    setNanoBananaImageUrls([]);
+    setNanoBananaSelectedImageIndex(null);
+    setUgcVideoPromptGpt("");
+    setKlingTaskId(null);
+    setKlingVideoUrl(null);
+    setNanoPollTaskId(null);
+    setKlingPollTaskId(null);
+    const snap: LinkToAdUniverseSnapshotV1 = {
+      v: 1,
+      phase: "after_summary",
+      cleanCandidate,
+      fallbackImageUrl,
+      confidence,
+      neutralUploadUrl,
+      productOnlyImageUrls: productOnlyImageUrls.length ? productOnlyImageUrls : undefined,
+      summaryText,
+      scriptsText: "",
+      angleLabels: ["", "", ""],
+      selectedAngleIndex: null,
+      ...PIPELINE_CLEAR,
+    };
+    await persistRedoSnapshot(snap, {
+      imagePrompt: "",
+      selectedImageUrl: null,
+      generatedImageUrls: [],
+      videoPrompt: "",
+      videoUrl: null,
+    });
+    toast.success("Étape 2 réinitialisée — régénère les 3 scripts.");
+  }
+
+  /** Garde scripts + angle, efface prompts Nano / images / vidéo. */
+  async function redoStep3NanoPipeline() {
+    setNanoBananaPromptsRaw("");
+    setNanoBananaSelectedPromptIndex(0);
+    setNanoBananaTaskId(null);
+    setNanoBananaImageUrl(null);
+    setNanoBananaImageUrls([]);
+    setNanoBananaSelectedImageIndex(null);
+    setUgcVideoPromptGpt("");
+    setKlingTaskId(null);
+    setKlingVideoUrl(null);
+    setNanoPollTaskId(null);
+    setKlingPollTaskId(null);
+    const snap: LinkToAdUniverseSnapshotV1 = {
+      v: 1,
+      phase: "after_scripts",
+      cleanCandidate,
+      fallbackImageUrl,
+      confidence,
+      neutralUploadUrl,
+      productOnlyImageUrls: productOnlyImageUrls.length ? productOnlyImageUrls : undefined,
+      summaryText,
+      scriptsText,
+      angleLabels,
+      selectedAngleIndex,
+      ...PIPELINE_CLEAR,
+    };
+    await persistRedoSnapshot(snap, {
+      imagePrompt: "",
+      selectedImageUrl: null,
+      generatedImageUrls: [],
+      videoPrompt: "",
+      videoUrl: null,
+    });
+    toast.success("Étape 3 réinitialisée — relance prompts + images.");
+  }
+
+  /** Garde Nano, efface prompt vidéo + Kling. */
+  async function redoStep4VideoPrompt() {
+    setUgcVideoPromptGpt("");
+    setKlingTaskId(null);
+    setKlingVideoUrl(null);
+    setKlingPollTaskId(null);
+    const snap: LinkToAdUniverseSnapshotV1 = {
+      v: 1,
+      phase: "after_scripts",
+      cleanCandidate,
+      fallbackImageUrl,
+      confidence,
+      neutralUploadUrl,
+      productOnlyImageUrls: productOnlyImageUrls.length ? productOnlyImageUrls : undefined,
+      summaryText,
+      scriptsText,
+      angleLabels,
+      selectedAngleIndex,
+      nanoBananaPromptsRaw: nanoBananaPromptsRaw || undefined,
+      nanoBananaSelectedPromptIndex,
+      nanoBananaTaskId: nanoBananaTaskId ?? undefined,
+      nanoBananaImageUrl: nanoBananaImageUrl ?? undefined,
+      nanoBananaImageUrls: nanoBananaImageUrls.length ? nanoBananaImageUrls : undefined,
+      nanoBananaSelectedImageIndex: nanoBananaSelectedImageIndex ?? undefined,
+      ugcVideoPromptGpt: undefined,
+      klingTaskId: null,
+      klingVideoUrl: null,
+    };
+    await persistRedoSnapshot(snap, { videoPrompt: "", videoUrl: null });
+    toast.success("Étape 4 réinitialisée — régénère le prompt vidéo.");
+  }
+
+  /** Garde prompt vidéo, efface seulement la vidéo Kling. */
+  async function redoStep5KlingVideo() {
+    setKlingTaskId(null);
+    setKlingVideoUrl(null);
+    setKlingPollTaskId(null);
+    const snap: LinkToAdUniverseSnapshotV1 = {
+      v: 1,
+      phase: "after_scripts",
+      cleanCandidate,
+      fallbackImageUrl,
+      confidence,
+      neutralUploadUrl,
+      productOnlyImageUrls: productOnlyImageUrls.length ? productOnlyImageUrls : undefined,
+      summaryText,
+      scriptsText,
+      angleLabels,
+      selectedAngleIndex,
+      nanoBananaPromptsRaw: nanoBananaPromptsRaw || undefined,
+      nanoBananaSelectedPromptIndex,
+      nanoBananaTaskId: nanoBananaTaskId ?? undefined,
+      nanoBananaImageUrl: nanoBananaImageUrl ?? undefined,
+      nanoBananaImageUrls: nanoBananaImageUrls.length ? nanoBananaImageUrls : undefined,
+      nanoBananaSelectedImageIndex: nanoBananaSelectedImageIndex ?? undefined,
+      ugcVideoPromptGpt: ugcVideoPromptGpt || undefined,
+      klingTaskId: null,
+      klingVideoUrl: null,
+    };
+    await persistRedoSnapshot(snap, { videoUrl: null });
+    toast.success("Étape 5 réinitialisée — relance Kling.");
+  }
+
   return (
     <Card className="border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.10)]">
       <CardHeader>
@@ -1457,6 +1623,16 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                     ? "Writing scripts..."
                     : "Scanning..."
                   : "Generate"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={redoStep1FullScan}
+                disabled={isWorking || !storeUrl.trim()}
+                className={redoBtnClass}
+              >
+                <RefreshCw className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                Refaire l&apos;étape 1
               </Button>
             </div>
           </div>
@@ -1571,12 +1747,24 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         <div className="rounded-xl border border-violet-500/25 bg-violet-500/[0.06] p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm font-semibold text-white/90">Step 2 — Choose your angle</p>
-            {isWorking && stage === "writing_scripts" ? (
-              <span className="flex items-center gap-2 text-xs text-violet-300">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                Generating with GPT…
-              </span>
-            ) : null}
+            <div className="flex flex-wrap items-center gap-2">
+              {isWorking && stage === "writing_scripts" ? (
+                <span className="flex items-center gap-2 text-xs text-violet-300">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Generating with GPT…
+                </span>
+              ) : null}
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void redoStep2Scripts()}
+                disabled={isWorking || !summaryText.trim()}
+                className={redoBtnClass}
+              >
+                <RefreshCw className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                Refaire l&apos;étape 2
+              </Button>
+            </div>
           </div>
           <p className="mt-1 text-xs text-white/45">
             Three marketing angles (15s scripts). Pick the one you want to produce first — full scripts stay available
@@ -1647,7 +1835,26 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         {showI2vPipeline ? (
           <div className="space-y-4">
             <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/[0.06] p-4">
-              <p className="text-sm font-semibold text-white/90">Step 3 — Prompts image (GPT) → NanoBanana Pro</p>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-white/90">Step 3 — Prompts image (GPT) → NanoBanana Pro</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void redoStep3NanoPipeline()}
+                  disabled={
+                    isWorking ||
+                    isNanoPromptsLoading ||
+                    isNanoAllImagesSubmitting ||
+                    isNanoImageSubmitting ||
+                    Boolean(nanoPollTaskId) ||
+                    selectedAngleIndex === null
+                  }
+                  className={redoBtnClass}
+                >
+                  <RefreshCw className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  Refaire l&apos;étape 3
+                </Button>
+              </div>
               <p className="mt-1 text-xs text-white/45">
                 GPT génère 3 prompts à partir du script d’angle + l’image produit, puis les 3 images NanoBanana Pro (2K,
                 9:16) partent automatiquement. Tout est enregistré dans le projet.
@@ -1762,20 +1969,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                           );
                         })}
                       </div>
-                      {nanoBananaImageUrl ? (
-                        <div className="border-t border-white/10 pt-4">
-                          <p className="mb-2 text-xs font-medium text-white/50">Image sélectionnée pour la vidéo (grand format)</p>
-                          <div className="mx-auto aspect-[9/16] w-full max-w-md overflow-hidden rounded-xl border border-white/10 bg-[#050507]">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={nanoBananaImageUrl}
-                              alt="Référence sélectionnée"
-                              className="h-full w-full object-contain object-center"
-                              loading="lazy"
-                            />
-                          </div>
-                        </div>
-                      ) : null}
                     </div>
                   ) : null}
                 </div>
@@ -1783,7 +1976,25 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
             </div>
 
             <div className="rounded-xl border border-sky-500/25 bg-sky-500/[0.06] p-4">
-              <p className="text-sm font-semibold text-white/90">Step 4 — Video Prompt (GPT)</p>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-white/90">Step 4 — Video Prompt (GPT)</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void redoStep4VideoPrompt()}
+                  disabled={
+                    isVideoPromptLoading ||
+                    isKlingSubmitting ||
+                    Boolean(klingPollTaskId) ||
+                    selectedAngleIndex === null ||
+                    (!nanoBananaPromptsRaw.trim() && !nanoHasThreeImages && !ugcVideoPromptGpt.trim())
+                  }
+                  className={redoBtnClass}
+                >
+                  <RefreshCw className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  Refaire l&apos;étape 4
+                </Button>
+              </div>
               <p className="mt-1 text-xs text-white/45">
                 Using the same angle script, generate the image-to-video prompt (Kling / Veo style).
               </p>
@@ -1804,7 +2015,24 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
             </div>
 
             <div className="rounded-xl border border-orange-500/25 bg-orange-500/[0.06] p-4">
-              <p className="text-sm font-semibold text-white/90">Step 5 — Kling 3.0 Video (12s · 720p Standard)</p>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-white/90">Step 5 — Kling 3.0 Video (12s · 720p Standard)</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void redoStep5KlingVideo()}
+                  disabled={
+                    isKlingSubmitting ||
+                    Boolean(klingPollTaskId) ||
+                    !nanoBananaImageUrl ||
+                    !ugcVideoPromptGpt.trim()
+                  }
+                  className={redoBtnClass}
+                >
+                  <RefreshCw className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  Refaire l&apos;étape 5
+                </Button>
+              </div>
               <p className="mt-1 text-xs text-white/45">
                 NanoBanana image + video prompt. Native audio enabled (lipsync hint).
               </p>
