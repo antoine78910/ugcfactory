@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Loader2, Play, Sparkles, Trash2, X } from "lucide-react";
+import { Loader2, Play, Plus, Sparkles, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,7 +12,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import LinkToAdUniverse from "@/app/_components/LinkToAdUniverse";
 import StudioShell from "@/app/_components/StudioShell";
-import { packshotUrlsForGpt, pickPackshotForNanoBanana } from "@/lib/productReferenceImages";
+import {
+  packshotUrlsForGpt,
+  pickPackshotForNanoBanana,
+  productUrlsForGpt,
+} from "@/lib/productReferenceImages";
+import {
+  branchUniverseForNewAd,
+  cloneExtractedBase,
+  readUniverseFromExtracted,
+} from "@/lib/linkToAdUniverse";
 
 type WizardStep = "url" | "analysis" | "quiz" | "image" | "video";
 type AppSection = "link_to_ad" | "motion_control" | "models" | "projects";
@@ -96,6 +105,27 @@ function universeThumbFromExtracted(extracted: unknown): string | null {
   return null;
 }
 
+type RunGenerationPreview =
+  | { kind: "image"; url: string }
+  | { kind: "video" }
+  | null;
+
+function runGenerationPreview(run: {
+  extracted?: unknown;
+  video_url: string | null;
+  selected_image_url: string | null;
+  generated_image_urls?: string[] | null;
+}): RunGenerationPreview {
+  const img =
+    universeThumbFromExtracted(run.extracted) ||
+    run.selected_image_url ||
+    (Array.isArray(run.generated_image_urls) && run.generated_image_urls[0]) ||
+    null;
+  if (img) return { kind: "image", url: img };
+  if (run.video_url) return { kind: "video" };
+  return null;
+}
+
 const TEMPLATES = [
   {
     id: "template1",
@@ -159,6 +189,7 @@ export default function AppBrandWizard() {
   >([]);
   /** Open Link to Ad and hydrate from this run (Projects). */
   const [linkToAdResumeRunId, setLinkToAdResumeRunId] = useState<string | null>(null);
+  const [branchingNormalizedUrl, setBranchingNormalizedUrl] = useState<string | null>(null);
   const [runId, setRunId] = useState<string | null>(null);
   const [isLoadingRuns, setIsLoadingRuns] = useState(false);
 
@@ -346,6 +377,71 @@ export default function AppBrandWizard() {
       toast.message("Runs unavailable", { description: message });
     } finally {
       setIsLoadingRuns(false);
+    }
+  }
+
+  async function startNewLinkToAdFromProject(
+    proj: (typeof projects)[number],
+  ) {
+    const sourceRun =
+      proj.runs.find((r) => runHasLinkToAdUniverse(r.extracted)) ?? proj.runs[0];
+    if (!sourceRun || !runHasLinkToAdUniverse(sourceRun.extracted)) {
+      toast.error("No Link to Ad data for this project.");
+      return;
+    }
+    const snap = readUniverseFromExtracted(sourceRun.extracted);
+    if (!snap) {
+      toast.error("Could not read Link to Ad state.");
+      return;
+    }
+    if (!snap.scriptsText.trim()) {
+      toast.error("Generate scripts on an existing run first.");
+      return;
+    }
+    setBranchingNormalizedUrl(proj.normalizedUrl);
+    try {
+      const branched = branchUniverseForNewAd(snap);
+      const base = cloneExtractedBase(sourceRun.extracted);
+      const extracted = { ...base, __universe: branched };
+      const packUrls = productUrlsForGpt({
+        pageUrl: proj.storeUrl.trim(),
+        neutralUploadUrl: branched.neutralUploadUrl,
+        candidateUrls:
+          branched.productOnlyImageUrls && branched.productOnlyImageUrls.length > 0
+            ? branched.productOnlyImageUrls
+            : branched.cleanCandidate?.url
+              ? [branched.cleanCandidate.url]
+              : [],
+        fallbackUrl: branched.fallbackImageUrl,
+      });
+      const res = await fetch("/api/runs/upsert", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          storeUrl: proj.storeUrl,
+          title: proj.title ?? sourceRun.title ?? null,
+          extracted,
+          packshotUrls: packUrls.length ? packUrls.slice(0, 12) : undefined,
+          imagePrompt: "",
+          selectedImageUrl: null,
+          generatedImageUrls: [],
+          videoPrompt: "",
+          videoUrl: null,
+        }),
+      });
+      const json = (await res.json()) as { runId?: string; error?: string };
+      if (!res.ok || !json.runId) throw new Error(json.error || "Failed to create run.");
+      await refreshMeAndRuns();
+      setRunId(json.runId);
+      if (typeof localStorage !== "undefined") localStorage.setItem(UGC_CURRENT_RUN_KEY, json.runId);
+      setStoreUrl(proj.storeUrl);
+      setLinkToAdResumeRunId(json.runId);
+      setAppSection("link_to_ad");
+      toast.success("New ad — pick a marketing angle.");
+    } catch (err) {
+      toast.error("Error", { description: err instanceof Error ? err.message : "Unknown error" });
+    } finally {
+      setBranchingNormalizedUrl(null);
     }
   }
 
@@ -1121,20 +1217,15 @@ export default function AppBrandWizard() {
                       No projects yet. Start a run to create your first project.
                     </div>
                   ) : (
-                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                       {projects.map((proj) => {
                         const latestRun = proj.runs[0];
                         const isUniverse = runHasLinkToAdUniverse(latestRun.extracted);
                         const isActive =
-                          runId === latestRun.id ||
-                          linkToAdResumeRunId === latestRun.id ||
+                          proj.runs.some(
+                            (r) => runId === r.id || linkToAdResumeRunId === r.id,
+                          ) ||
                           (storeUrl.trim() && normalizeUrl(storeUrl) === proj.normalizedUrl);
-                        const universeThumb = universeThumbFromExtracted(latestRun.extracted);
-                        const thumb =
-                          universeThumb ||
-                          latestRun.selected_image_url ||
-                          (Array.isArray(latestRun.generated_image_urls) ? latestRun.generated_image_urls[0] : null) ||
-                          null;
                         const runIdsInProject = proj.runs.map((r) => r.id);
                         return (
                           <div
@@ -1145,50 +1236,99 @@ export default function AppBrandWizard() {
                                 : "border-white/10 bg-white/5 hover:bg-white/10"
                             }`}
                           >
-                            <button
-                              type="button"
-                              className="w-full text-left"
-                              onClick={() => {
-                                if (isUniverse) {
-                                  setAppSection("link_to_ad");
-                                  setLinkToAdResumeRunId(latestRun.id);
-                                  return;
-                                }
-                                void loadRun(latestRun.id);
-                              }}
-                            >
-                              {thumb ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={thumb} alt="" className="h-32 w-full object-cover" />
-                              ) : (
-                                <div className="flex h-32 w-full items-center justify-center bg-[#100d17] text-white/35">
-                                  No preview
-                                </div>
-                              )}
-                              <div className="p-3">
+                            <div className="flex items-start justify-between gap-2 border-b border-white/10 p-3">
+                              <div className="min-w-0 flex-1">
                                 <div className="truncate text-sm font-medium">
                                   {proj.title ? proj.title : proj.storeUrl}
                                 </div>
-                                <div className="mt-1 text-xs text-white/55">
-                                  {isUniverse ? "Link to Ad · " : null}
-                                  {proj.runs.length} run{proj.runs.length > 1 ? "s" : ""} ·{" "}
-                                  {latestRun.video_url ? "video" : latestRun.selected_image_url ? "image" : "draft"}
+                                <div className="mt-0.5 text-xs text-white/50">
+                                  {isUniverse ? "Link to Ad" : "Classic"} · {proj.runs.length} generation
+                                  {proj.runs.length > 1 ? "s" : ""}
                                 </div>
                               </div>
-                            </button>
-                            <Button
-                              type="button"
-                              size="icon"
-                              variant="secondary"
-                              className="absolute right-2 top-2 h-8 w-8 border border-white/15 bg-black/70 text-white/80 opacity-0 transition hover:bg-destructive/90 hover:text-white group-hover:opacity-100"
-                              title="Delete project"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                void deleteProjectByStoreUrl(proj.storeUrl, runIdsInProject);
-                              }}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                              <div className="flex shrink-0 items-center gap-1">
+                                {isUniverse ? (
+                                  <Button
+                                    type="button"
+                                    size="icon"
+                                    variant="secondary"
+                                    className="h-9 w-9 border border-violet-400/45 bg-violet-500/20 text-white hover:bg-violet-500/35"
+                                    title="New ad — marketing angles"
+                                    disabled={branchingNormalizedUrl === proj.normalizedUrl}
+                                    onClick={() => void startNewLinkToAdFromProject(proj)}
+                                  >
+                                    {branchingNormalizedUrl === proj.normalizedUrl ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <Plus className="h-5 w-5" strokeWidth={2.25} />
+                                    )}
+                                  </Button>
+                                ) : null}
+                                <Button
+                                  type="button"
+                                  size="icon"
+                                  variant="secondary"
+                                  className="h-9 w-9 border border-white/15 bg-black/60 text-white/80 hover:bg-destructive/90 hover:text-white"
+                                  title="Delete project"
+                                  onClick={() => void deleteProjectByStoreUrl(proj.storeUrl, runIdsInProject)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                            <div className="flex gap-2 overflow-x-auto p-2 pb-3 [-webkit-overflow-scrolling:touch]">
+                              {proj.runs.map((run) => {
+                                const runIsUniverse = runHasLinkToAdUniverse(run.extracted);
+                                const prev = runGenerationPreview(run);
+                                const runActive = runId === run.id || linkToAdResumeRunId === run.id;
+                                return (
+                                  <button
+                                    key={run.id}
+                                    type="button"
+                                    onClick={() => {
+                                      if (runIsUniverse) {
+                                        setAppSection("link_to_ad");
+                                        setLinkToAdResumeRunId(run.id);
+                                        return;
+                                      }
+                                      void loadRun(run.id);
+                                    }}
+                                    className={`flex w-[5.75rem] shrink-0 flex-col gap-1 rounded-lg border p-0.5 text-left transition ${
+                                      runActive
+                                        ? "border-violet-400/80 bg-violet-500/15"
+                                        : "border-white/10 bg-black/25 hover:border-white/30"
+                                    }`}
+                                  >
+                                    <div className="relative aspect-[3/4] w-full overflow-hidden rounded-md bg-[#100d17]">
+                                      {prev?.kind === "image" ? (
+                                        // eslint-disable-next-line @next/next/no-img-element
+                                        <img
+                                          src={prev.url}
+                                          alt=""
+                                          className="h-full w-full object-cover"
+                                        />
+                                      ) : prev?.kind === "video" ? (
+                                        <div className="flex h-full w-full items-center justify-center bg-gradient-to-b from-violet-950/90 to-black">
+                                          <Play className="h-7 w-7 text-white/75" fill="currentColor" />
+                                        </div>
+                                      ) : (
+                                        <div className="flex h-full items-center justify-center text-[10px] text-white/35">
+                                          Draft
+                                        </div>
+                                      )}
+                                    </div>
+                                    <span className="truncate px-0.5 text-center text-[10px] leading-tight text-white/50">
+                                      {new Date(run.created_at).toLocaleDateString(undefined, {
+                                        month: "short",
+                                        day: "numeric",
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                      })}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
                           </div>
                         );
                       })}

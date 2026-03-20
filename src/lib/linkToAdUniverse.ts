@@ -124,3 +124,90 @@ export function parseThreeLabeledPrompts(text: string): [string, string, string]
   }
   return [byNum[1], byNum[2], byNum[3]];
 }
+
+/** Clears Nano → Kling pipeline fields (keeps summary, scripts, angles text, product refs). */
+export const UNIVERSE_PIPELINE_CLEAR: Partial<LinkToAdUniverseSnapshotV1> = {
+  nanoBananaPromptsRaw: undefined,
+  nanoBananaSelectedPromptIndex: 0,
+  nanoBananaTaskId: null,
+  nanoBananaImageUrl: null,
+  nanoBananaImageUrls: undefined,
+  nanoBananaSelectedImageIndex: null,
+  ugcVideoPromptGpt: undefined,
+  klingTaskId: null,
+  klingVideoUrl: null,
+};
+
+export function readUniverseFromExtracted(extracted: unknown): LinkToAdUniverseSnapshotV1 | null {
+  if (!extracted || typeof extracted !== "object") return null;
+  const u = (extracted as Record<string, unknown>).__universe;
+  if (!u || typeof u !== "object") return null;
+  const o = u as Record<string, unknown>;
+  if (o.v !== 1) return null;
+  const clean = o.cleanCandidate;
+  return {
+    v: 1,
+    phase: o.phase === "after_scripts" ? "after_scripts" : "after_summary",
+    cleanCandidate:
+      clean && typeof clean === "object" && typeof (clean as { url?: string }).url === "string"
+        ? {
+            url: String((clean as { url: string }).url),
+            reason: typeof (clean as { reason?: string }).reason === "string" ? (clean as { reason: string }).reason : undefined,
+          }
+        : null,
+    fallbackImageUrl: typeof o.fallbackImageUrl === "string" ? o.fallbackImageUrl : null,
+    confidence: typeof o.confidence === "string" ? o.confidence : o.confidence != null ? String(o.confidence) : null,
+    neutralUploadUrl: typeof o.neutralUploadUrl === "string" ? o.neutralUploadUrl : null,
+    productOnlyImageUrls:
+      Array.isArray(o.productOnlyImageUrls) && o.productOnlyImageUrls.every((x) => typeof x === "string")
+        ? (o.productOnlyImageUrls as string[])
+        : null,
+    summaryText: typeof o.summaryText === "string" ? o.summaryText : "",
+    scriptsText: typeof o.scriptsText === "string" ? o.scriptsText : "",
+    angleLabels:
+      Array.isArray(o.angleLabels) && o.angleLabels.length >= 3
+        ? [String(o.angleLabels[0]), String(o.angleLabels[1]), String(o.angleLabels[2])]
+        : ["", "", ""],
+    selectedAngleIndex: typeof o.selectedAngleIndex === "number" && o.selectedAngleIndex >= 0 && o.selectedAngleIndex <= 2 ? o.selectedAngleIndex : null,
+    nanoBananaPromptsRaw: typeof o.nanoBananaPromptsRaw === "string" ? o.nanoBananaPromptsRaw : undefined,
+    nanoBananaSelectedPromptIndex:
+      typeof o.nanoBananaSelectedPromptIndex === "number" && o.nanoBananaSelectedPromptIndex >= 0 && o.nanoBananaSelectedPromptIndex <= 2
+        ? (o.nanoBananaSelectedPromptIndex as 0 | 1 | 2)
+        : undefined,
+    nanoBananaTaskId: typeof o.nanoBananaTaskId === "string" ? o.nanoBananaTaskId : o.nanoBananaTaskId === null ? null : undefined,
+    nanoBananaImageUrl: typeof o.nanoBananaImageUrl === "string" ? o.nanoBananaImageUrl : o.nanoBananaImageUrl === null ? null : undefined,
+    nanoBananaImageUrls:
+      Array.isArray(o.nanoBananaImageUrls) && o.nanoBananaImageUrls.every((x) => typeof x === "string")
+        ? (o.nanoBananaImageUrls as string[])
+        : o.nanoBananaImageUrls === null
+          ? null
+          : undefined,
+    nanoBananaSelectedImageIndex:
+      typeof o.nanoBananaSelectedImageIndex === "number" && o.nanoBananaSelectedImageIndex >= 0 && o.nanoBananaSelectedImageIndex <= 2
+        ? (o.nanoBananaSelectedImageIndex as 0 | 1 | 2)
+        : undefined,
+    ugcVideoPromptGpt: typeof o.ugcVideoPromptGpt === "string" ? o.ugcVideoPromptGpt : undefined,
+    klingTaskId: typeof o.klingTaskId === "string" ? o.klingTaskId : o.klingTaskId === null ? null : undefined,
+    klingVideoUrl: typeof o.klingVideoUrl === "string" ? o.klingVideoUrl : o.klingVideoUrl === null ? null : undefined,
+  };
+}
+
+export function cloneExtractedBase(extracted: unknown): Record<string, unknown> {
+  try {
+    const o = extracted && typeof extracted === "object" ? (extracted as Record<string, unknown>) : {};
+    const { __universe: _, ...rest } = o;
+    return JSON.parse(JSON.stringify(rest)) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
+/** New ad on same store: keep brief + scripts, reset angle choice and image/video pipeline. */
+export function branchUniverseForNewAd(snap: LinkToAdUniverseSnapshotV1): LinkToAdUniverseSnapshotV1 {
+  return {
+    ...snap,
+    phase: "after_scripts",
+    selectedAngleIndex: null,
+    ...UNIVERSE_PIPELINE_CLEAR,
+  };
+}

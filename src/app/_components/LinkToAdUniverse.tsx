@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Check, ChevronDown, Loader2, Maximize2, RefreshCw, X } from "lucide-react";
+import { Check, ChevronDown, Loader2, Maximize2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,9 +10,12 @@ import { Label } from "@/components/ui/label";
 import { absolutizeImageUrl } from "@/lib/imageUrl";
 import { pickBestProductUrlForNanoBanana, productUrlsForGpt } from "@/lib/productReferenceImages";
 import {
+  cloneExtractedBase,
   deriveAngleLabelsFromScripts,
   parseThreeLabeledPrompts,
+  readUniverseFromExtracted,
   selectedAngleScript,
+  UNIVERSE_PIPELINE_CLEAR,
   type LinkToAdUniverseSnapshotV1,
 } from "@/lib/linkToAdUniverse";
 import { LinkToAdUniverseStepper } from "@/app/_components/LinkToAdUniverseStepper";
@@ -52,82 +55,6 @@ function safeParseJson<T>(raw: string): { ok: true; value: T } | { ok: false; er
     return { ok: false, error: "Invalid JSON from server." };
   }
 }
-
-function readUniverseFromExtracted(extracted: unknown): LinkToAdUniverseSnapshotV1 | null {
-  if (!extracted || typeof extracted !== "object") return null;
-  const u = (extracted as Record<string, unknown>).__universe;
-  if (!u || typeof u !== "object") return null;
-  const o = u as Record<string, unknown>;
-  if (o.v !== 1) return null;
-  const clean = o.cleanCandidate;
-  return {
-    v: 1,
-    phase: o.phase === "after_scripts" ? "after_scripts" : "after_summary",
-    cleanCandidate:
-      clean && typeof clean === "object" && typeof (clean as { url?: string }).url === "string"
-        ? {
-            url: String((clean as { url: string }).url),
-            reason: typeof (clean as { reason?: string }).reason === "string" ? (clean as { reason: string }).reason : undefined,
-          }
-        : null,
-    fallbackImageUrl: typeof o.fallbackImageUrl === "string" ? o.fallbackImageUrl : null,
-    confidence: typeof o.confidence === "string" ? o.confidence : o.confidence != null ? String(o.confidence) : null,
-    neutralUploadUrl: typeof o.neutralUploadUrl === "string" ? o.neutralUploadUrl : null,
-    productOnlyImageUrls:
-      Array.isArray(o.productOnlyImageUrls) && o.productOnlyImageUrls.every((x) => typeof x === "string")
-        ? (o.productOnlyImageUrls as string[])
-        : null,
-    summaryText: typeof o.summaryText === "string" ? o.summaryText : "",
-    scriptsText: typeof o.scriptsText === "string" ? o.scriptsText : "",
-    angleLabels:
-      Array.isArray(o.angleLabels) && o.angleLabels.length >= 3
-        ? [String(o.angleLabels[0]), String(o.angleLabels[1]), String(o.angleLabels[2])]
-        : ["", "", ""],
-    selectedAngleIndex: typeof o.selectedAngleIndex === "number" && o.selectedAngleIndex >= 0 && o.selectedAngleIndex <= 2 ? o.selectedAngleIndex : null,
-    nanoBananaPromptsRaw: typeof o.nanoBananaPromptsRaw === "string" ? o.nanoBananaPromptsRaw : undefined,
-    nanoBananaSelectedPromptIndex:
-      typeof o.nanoBananaSelectedPromptIndex === "number" && o.nanoBananaSelectedPromptIndex >= 0 && o.nanoBananaSelectedPromptIndex <= 2
-        ? (o.nanoBananaSelectedPromptIndex as 0 | 1 | 2)
-        : undefined,
-    nanoBananaTaskId: typeof o.nanoBananaTaskId === "string" ? o.nanoBananaTaskId : o.nanoBananaTaskId === null ? null : undefined,
-    nanoBananaImageUrl: typeof o.nanoBananaImageUrl === "string" ? o.nanoBananaImageUrl : o.nanoBananaImageUrl === null ? null : undefined,
-    nanoBananaImageUrls:
-      Array.isArray(o.nanoBananaImageUrls) && o.nanoBananaImageUrls.every((x) => typeof x === "string")
-        ? (o.nanoBananaImageUrls as string[])
-        : o.nanoBananaImageUrls === null
-          ? null
-          : undefined,
-    nanoBananaSelectedImageIndex:
-      typeof o.nanoBananaSelectedImageIndex === "number" && o.nanoBananaSelectedImageIndex >= 0 && o.nanoBananaSelectedImageIndex <= 2
-        ? (o.nanoBananaSelectedImageIndex as 0 | 1 | 2)
-        : undefined,
-    ugcVideoPromptGpt: typeof o.ugcVideoPromptGpt === "string" ? o.ugcVideoPromptGpt : undefined,
-    klingTaskId: typeof o.klingTaskId === "string" ? o.klingTaskId : o.klingTaskId === null ? null : undefined,
-    klingVideoUrl: typeof o.klingVideoUrl === "string" ? o.klingVideoUrl : o.klingVideoUrl === null ? null : undefined,
-  };
-}
-
-function cloneExtractedBase(extracted: unknown): Record<string, unknown> {
-  try {
-    const o = extracted && typeof extracted === "object" ? (extracted as Record<string, unknown>) : {};
-    const { __universe: _, ...rest } = o;
-    return JSON.parse(JSON.stringify(rest)) as Record<string, unknown>;
-  } catch {
-    return {};
-  }
-}
-
-const PIPELINE_CLEAR: Partial<LinkToAdUniverseSnapshotV1> = {
-  nanoBananaPromptsRaw: undefined,
-  nanoBananaSelectedPromptIndex: 0,
-  nanoBananaTaskId: null,
-  nanoBananaImageUrl: null,
-  nanoBananaImageUrls: undefined,
-  nanoBananaSelectedImageIndex: null,
-  ugcVideoPromptGpt: undefined,
-  klingTaskId: null,
-  klingVideoUrl: null,
-};
 
 function withAudioHint(prompt: string) {
   const p = prompt.trim();
@@ -465,7 +392,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     const snap: LinkToAdUniverseSnapshotV1 = {
       ...base,
       selectedAngleIndex: index,
-      ...(angleChanged ? PIPELINE_CLEAR : {}),
+      ...(angleChanged ? UNIVERSE_PIPELINE_CLEAR : {}),
     };
     try {
       await persistUniverse(universeRunId, url, extractedTitle, lastExtractedJson, snap, packshotsForSave());
@@ -571,7 +498,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         scriptsText: scriptsStr,
         angleLabels: labels,
         selectedAngleIndex: null,
-        ...PIPELINE_CLEAR,
+        ...UNIVERSE_PIPELINE_CLEAR,
       };
       const shots = gptImages.length > 0 ? gptImages : [];
       await persistUniverse(activeRunId, url, titleForScripts, base, snapAfterScripts, shots);
@@ -772,7 +699,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         scriptsText: "",
         angleLabels: ["", "", ""],
         selectedAngleIndex: null,
-        ...PIPELINE_CLEAR,
+        ...UNIVERSE_PIPELINE_CLEAR,
       };
       try {
         const shots = gptImages.length > 0 ? gptImages : [];
@@ -829,7 +756,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           scriptsText: scriptsStr,
           angleLabels: labels,
           selectedAngleIndex: null,
-          ...PIPELINE_CLEAR,
+          ...UNIVERSE_PIPELINE_CLEAR,
         };
         try {
           const shots = gptImages.length > 0 ? gptImages : [];
@@ -1548,174 +1475,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const primaryBtnClass =
     "h-11 rounded-2xl bg-violet-400 px-6 text-black font-semibold border border-violet-200/40 shadow-[0_6px_0_0_rgba(76,29,149,0.9)] transition-all hover:-translate-y-[1px] hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9)] active:translate-y-[6px]";
 
-  const redoBtnClass =
-    "h-9 shrink-0 gap-1.5 rounded-xl border border-white/20 bg-white/[0.04] px-3 text-xs font-semibold text-white/85 hover:bg-white/[0.08] hover:text-white";
-
-  async function persistRedoSnapshot(snapshot: LinkToAdUniverseSnapshotV1, extras?: RunExtras) {
-    const url = storeUrl.trim();
-    if (!url || !lastExtractedJson || !universeRunId) return;
-    try {
-      await persistUniverse(universeRunId, url, extractedTitle, lastExtractedJson, snapshot, packshotsForSave(), extras);
-      onRunsChanged?.();
-    } catch (e) {
-      toast.error("Save failed", { description: e instanceof Error ? e.message : "Error" });
-    }
-  }
-
-  /** Full rescan: ignores saved project for this URL. */
-  function redoStep1FullScan() {
-    if (isWorking) return;
-    if (!storeUrl.trim()) {
-      toast.error("Enter a store URL.");
-      return;
-    }
-    autoScanUrlAttemptedRef.current = "";
-    nanoAutoGenKeyRef.current = "";
-    void onRun({ bypassSavedProject: true });
-  }
-
-  /** Garde le brief, efface scripts et tout le pipeline image/vidéo. */
-  async function redoStep2Scripts() {
-    setScriptsText("");
-    setAngleLabels(["", "", ""]);
-    setSelectedAngleIndex(null);
-    setShowFullScripts(false);
-    prevAngleRef.current = null;
-    setNanoBananaPromptsRaw("");
-    setNanoBananaSelectedPromptIndex(0);
-    setNanoBananaTaskId(null);
-    setNanoBananaImageUrl(null);
-    setNanoBananaImageUrls([]);
-    setNanoBananaSelectedImageIndex(null);
-    setUgcVideoPromptGpt("");
-    setKlingTaskId(null);
-    setKlingVideoUrl(null);
-    setNanoPollTaskId(null);
-    setKlingPollTaskId(null);
-    const snap: LinkToAdUniverseSnapshotV1 = {
-      v: 1,
-      phase: "after_summary",
-      cleanCandidate,
-      fallbackImageUrl,
-      confidence,
-      neutralUploadUrl,
-      productOnlyImageUrls: productOnlyImageUrls.length ? productOnlyImageUrls : undefined,
-      summaryText,
-      scriptsText: "",
-      angleLabels: ["", "", ""],
-      selectedAngleIndex: null,
-      ...PIPELINE_CLEAR,
-    };
-    await persistRedoSnapshot(snap, {
-      imagePrompt: "",
-      selectedImageUrl: null,
-      generatedImageUrls: [],
-      videoPrompt: "",
-      videoUrl: null,
-    });
-    toast.success("Step 2 reset — regenerate scripts from the toolbar if needed.");
-  }
-
-  /** Garde scripts + angle, efface prompts Nano / images / vidéo. */
-  async function redoStep3NanoPipeline() {
-    setNanoBananaPromptsRaw("");
-    setNanoBananaSelectedPromptIndex(0);
-    setNanoBananaTaskId(null);
-    setNanoBananaImageUrl(null);
-    setNanoBananaImageUrls([]);
-    setNanoBananaSelectedImageIndex(null);
-    setUgcVideoPromptGpt("");
-    setKlingTaskId(null);
-    setKlingVideoUrl(null);
-    setNanoPollTaskId(null);
-    setKlingPollTaskId(null);
-    const snap: LinkToAdUniverseSnapshotV1 = {
-      v: 1,
-      phase: "after_scripts",
-      cleanCandidate,
-      fallbackImageUrl,
-      confidence,
-      neutralUploadUrl,
-      productOnlyImageUrls: productOnlyImageUrls.length ? productOnlyImageUrls : undefined,
-      summaryText,
-      scriptsText,
-      angleLabels,
-      selectedAngleIndex,
-      ...PIPELINE_CLEAR,
-    };
-    await persistRedoSnapshot(snap, {
-      imagePrompt: "",
-      selectedImageUrl: null,
-      generatedImageUrls: [],
-      videoPrompt: "",
-      videoUrl: null,
-    });
-    toast.success("Step 3 reset — prompts and images cleared.");
-  }
-
-  /** Garde Nano, efface prompt vidéo + Kling. */
-  async function redoStep4VideoPrompt() {
-    setUgcVideoPromptGpt("");
-    setKlingTaskId(null);
-    setKlingVideoUrl(null);
-    setKlingPollTaskId(null);
-    const snap: LinkToAdUniverseSnapshotV1 = {
-      v: 1,
-      phase: "after_scripts",
-      cleanCandidate,
-      fallbackImageUrl,
-      confidence,
-      neutralUploadUrl,
-      productOnlyImageUrls: productOnlyImageUrls.length ? productOnlyImageUrls : undefined,
-      summaryText,
-      scriptsText,
-      angleLabels,
-      selectedAngleIndex,
-      nanoBananaPromptsRaw: nanoBananaPromptsRaw || undefined,
-      nanoBananaSelectedPromptIndex,
-      nanoBananaTaskId: nanoBananaTaskId ?? undefined,
-      nanoBananaImageUrl: nanoBananaImageUrl ?? undefined,
-      nanoBananaImageUrls: nanoBananaImageUrls.length ? nanoBananaImageUrls : undefined,
-      nanoBananaSelectedImageIndex: nanoBananaSelectedImageIndex ?? undefined,
-      ugcVideoPromptGpt: undefined,
-      klingTaskId: null,
-      klingVideoUrl: null,
-    };
-    await persistRedoSnapshot(snap, { videoPrompt: "", videoUrl: null });
-    toast.success("Step 4 reset — video prompt cleared.");
-  }
-
-  /** Garde prompt vidéo, efface seulement la vidéo Kling. */
-  async function redoStep5KlingVideo() {
-    setKlingTaskId(null);
-    setKlingVideoUrl(null);
-    setKlingPollTaskId(null);
-    const snap: LinkToAdUniverseSnapshotV1 = {
-      v: 1,
-      phase: "after_scripts",
-      cleanCandidate,
-      fallbackImageUrl,
-      confidence,
-      neutralUploadUrl,
-      productOnlyImageUrls: productOnlyImageUrls.length ? productOnlyImageUrls : undefined,
-      summaryText,
-      scriptsText,
-      angleLabels,
-      selectedAngleIndex,
-      nanoBananaPromptsRaw: nanoBananaPromptsRaw || undefined,
-      nanoBananaSelectedPromptIndex,
-      nanoBananaTaskId: nanoBananaTaskId ?? undefined,
-      nanoBananaImageUrl: nanoBananaImageUrl ?? undefined,
-      nanoBananaImageUrls: nanoBananaImageUrls.length ? nanoBananaImageUrls : undefined,
-      nanoBananaSelectedImageIndex: nanoBananaSelectedImageIndex ?? undefined,
-      ugcVideoPromptGpt: ugcVideoPromptGpt || undefined,
-      klingTaskId: null,
-      klingVideoUrl: null,
-    };
-    await persistRedoSnapshot(snap, { videoUrl: null });
-    toast.success("Step 5 reset — you can run Kling again.");
-  }
-
   return (
     <>
     <Card className="border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.10)]">
@@ -1757,32 +1516,18 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           </div>
         ) : null}
         <div className="space-y-3">
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="flex-1 min-w-[240px]">
-              <Label className="text-white/70">Store URL</Label>
-              <Input
-                value={storeUrl}
-                onChange={(e) => setStoreUrl(e.target.value)}
-                placeholder="https://..."
-                className="mt-2 border-white/10 bg-white/[0.03] text-white"
-              />
-            </div>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-              <p className="max-w-md text-xs text-white/45">
-                Paste your store URL — we scan and run steps automatically until you pick an angle, then an image,
-                then we finish the ad.
-              </p>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={redoStep1FullScan}
-                disabled={isWorking || !storeUrl.trim()}
-                className={redoBtnClass}
-              >
-                <RefreshCw className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                Redo step 1 (full rescan)
-              </Button>
-            </div>
+          <div>
+            <Label className="text-base font-medium text-white/80">Store URL</Label>
+            <Input
+              value={storeUrl}
+              onChange={(e) => setStoreUrl(e.target.value)}
+              placeholder="https://..."
+              className="mt-2 h-14 min-h-[3.5rem] rounded-xl border-white/10 bg-white/[0.03] px-4 text-lg text-white placeholder:text-white/35"
+            />
+            <p className="mt-2 max-w-2xl text-sm text-white/50">
+              Paste your store URL — we scan and run steps automatically until you pick an angle, then an image, then
+              we finish the ad.
+            </p>
           </div>
         </div>
 
@@ -1953,25 +1698,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         {showI2vPipeline ? (
           <div className="space-y-4">
             <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/[0.06] p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
                 <p className="text-sm font-semibold text-white/90">Step 3 — Image prompts & NanoBanana Pro</p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => void redoStep3NanoPipeline()}
-                  disabled={
-                    isWorking ||
-                    isNanoPromptsLoading ||
-                    isNanoAllImagesSubmitting ||
-                    isNanoImageSubmitting ||
-                    Boolean(nanoPollTaskId) ||
-                    selectedAngleIndex === null
-                  }
-                  className={redoBtnClass}
-                >
-                  <RefreshCw className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                  Redo step 3
-                </Button>
               </div>
               <p className="mt-1 text-xs text-white/45">
                 Runs automatically after you pick an angle. GPT writes 3 prompts, then NanoBanana Pro renders three 2K
@@ -2090,24 +1818,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
             </div>
 
             <div className="rounded-xl border border-sky-500/25 bg-sky-500/[0.06] p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
                 <p className="text-sm font-semibold text-white/90">Step 4 — Video Prompt (GPT)</p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => void redoStep4VideoPrompt()}
-                  disabled={
-                    isVideoPromptLoading ||
-                    isKlingSubmitting ||
-                    Boolean(klingPollTaskId) ||
-                    selectedAngleIndex === null ||
-                    (!nanoBananaPromptsRaw.trim() && !nanoHasThreeImages && !ugcVideoPromptGpt.trim())
-                  }
-                  className={redoBtnClass}
-                >
-                  <RefreshCw className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                  Redo step 4
-                </Button>
               </div>
               <p className="mt-1 text-xs text-white/45">
                 Runs automatically after you pick a reference image. This is the image-to-video prompt for Kling / Veo
@@ -2139,23 +1851,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
             </div>
 
             <div className="rounded-xl border border-orange-500/25 bg-orange-500/[0.06] p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
                 <p className="text-sm font-semibold text-white/90">Step 5 — Kling 3.0 Video (12s · 720p Standard)</p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => void redoStep5KlingVideo()}
-                  disabled={
-                    isKlingSubmitting ||
-                    Boolean(klingPollTaskId) ||
-                    !nanoBananaImageUrl ||
-                    !ugcVideoPromptGpt.trim()
-                  }
-                  className={redoBtnClass}
-                >
-                  <RefreshCw className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                  Redo step 5
-                </Button>
               </div>
               <p className="mt-1 text-xs text-white/45">
                 Starts automatically once the video prompt is ready. Native audio on (lipsync hint).
