@@ -1084,13 +1084,6 @@ export default function AppBrandWizard() {
         studioProjectId={runId}
       >
         <section className="space-y-6 px-6 py-6 md:px-8">
-          <header className="border-b border-white/10 pb-4">
-            <h1 className="text-2xl font-semibold tracking-tight">Studio</h1>
-            <p className="text-sm text-white/55">
-              Build AI ads faster: Link to Ad, Motion Control, and Models.
-            </p>
-          </header>
-
           <div className="space-y-6">
             {appSection === "projects" ? (
               <Card className="border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.08)]">

@@ -5,7 +5,7 @@ import { Check } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/lib/utils";
 
-const STEP_LABELS = ["Boutique", "Scripts", "Images", "Vidéo", "Kling"] as const;
+const STEP_LABELS = ["Store", "Scripts", "Images", "Video", "Kling"] as const;
 
 export type LinkToAdUniverseStepperProps = {
   /** 1–5 = étape en cours, 6 = tout terminé */
@@ -30,7 +30,7 @@ export function LinkToAdUniverseStepper({
   return (
     <div
       className="mb-6 rounded-2xl border border-violet-500/20 bg-gradient-to-b from-violet-500/[0.07] to-transparent px-2 py-4 sm:px-4"
-      aria-label="Progression Link to Ad"
+      aria-label="Link to Ad progress"
     >
       <div className="flex w-full items-start justify-center">
         {STEP_LABELS.map((label, i) => {
