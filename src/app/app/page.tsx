@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import LinkToAdUniverse from "@/app/_components/LinkToAdUniverse";
+import SidebarAccountMenu from "@/app/_components/SidebarAccountMenu";
 
 type WizardStep = "url" | "analysis" | "quiz" | "image" | "video";
 type AppSection = "link_to_ad" | "motion_control" | "models" | "projects";
@@ -997,8 +998,8 @@ export default function AppBrandWizard() {
     <div className="dark min-h-screen bg-[#050507] text-white">
       <div className="pointer-events-none fixed left-1/2 top-0 -z-0 h-[520px] w-[1000px] -translate-x-1/2 rounded-full bg-violet-600/15 blur-[150px]" />
       <main className="relative z-10 grid min-h-screen grid-cols-[250px_1fr]">
-        <aside className="space-y-4 border-r border-white/10 bg-[#06070d] px-3 py-4">
-          <div className="px-2 pb-2">
+        <aside className="flex min-h-screen flex-col border-r border-white/10 bg-[#06070d] px-3 py-4">
+          <div className="shrink-0 px-2 pb-2">
             <Image
               src="/youry-logo.png"
               alt="Youry"
@@ -1009,6 +1010,7 @@ export default function AppBrandWizard() {
             />
           </div>
 
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
           <div className="rounded-xl border border-white/10 bg-[#0b0912]/85 p-3">
             <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/45">Overview</p>
             <div className="mt-2 space-y-1">
@@ -1058,28 +1060,19 @@ export default function AppBrandWizard() {
               </button>
             </div>
           </div>
+          </div>
+
+          <div className="mt-auto shrink-0 border-t border-white/10 pt-3">
+            <SidebarAccountMenu email={meEmail} onLogout={onSignOut} planLabel="Free" />
+          </div>
         </aside>
 
         <section className="space-y-6 px-6 py-6 md:px-8">
-          <header className="flex items-center justify-between gap-3 border-b border-white/10 pb-4">
-            <div>
-              <h1 className="text-2xl font-semibold tracking-tight">Studio</h1>
-              <p className="text-sm text-white/55">
-                Build AI ads faster: Link to Ad, Motion Control, and Models.
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="max-w-[280px] truncate text-sm text-white/55" title={meEmail || undefined}>
-                {meEmail || "—"}
-              </span>
-              <Button
-                size="sm"
-                onClick={onSignOut}
-                className="border border-white/10 bg-white/5 text-white hover:bg-white/10"
-              >
-                Logout
-              </Button>
-            </div>
+          <header className="border-b border-white/10 pb-4">
+            <h1 className="text-2xl font-semibold tracking-tight">Studio</h1>
+            <p className="text-sm text-white/55">
+              Build AI ads faster: Link to Ad, Motion Control, and Models.
+            </p>
           </header>
 
           <div className="space-y-6">
