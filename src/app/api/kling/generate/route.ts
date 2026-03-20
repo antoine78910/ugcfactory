@@ -15,6 +15,8 @@ type Body = {
   aspectRatio?: KlingAspectRatio; // optional if image is provided
   sound?: boolean;
   mode?: KlingMode;
+  /** Kling 3.0 only — multi-shot sequencing */
+  multiShots?: boolean;
 };
 
 function validateDurationForModel(model: string, duration: number | undefined) {
@@ -77,7 +79,7 @@ export async function POST(req: Request) {
         sound: body.sound ?? true,
         duration: String(body.duration ?? 5),
         mode,
-        multi_shots: false,
+        multi_shots: Boolean(body.multiShots),
         multi_prompt: [],
       };
 

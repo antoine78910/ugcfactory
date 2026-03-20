@@ -7,7 +7,7 @@ import { usePathname } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import SidebarAccountMenu from "@/app/_components/SidebarAccountMenu";
 
-export type StudioNavSection = "link_to_ad" | "motion_control" | "models" | "projects";
+export type StudioNavSection = "link_to_ad" | "motion_control" | "image" | "video" | "projects";
 
 type Props = {
   children: React.ReactNode;
@@ -21,7 +21,8 @@ type Props = {
 const SECTIONS: { id: StudioNavSection; label: string }[] = [
   { id: "link_to_ad", label: "Link to Ad" },
   { id: "motion_control", label: "Motion Control" },
-  { id: "models", label: "Models" },
+  { id: "image", label: "Image" },
+  { id: "video", label: "Video" },
   { id: "projects", label: "Projects" },
 ];
 

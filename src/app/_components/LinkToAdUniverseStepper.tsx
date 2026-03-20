@@ -5,16 +5,15 @@ import { Check } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/lib/utils";
 
-const STEP_LABELS = ["Store", "Scripts", "Images", "Video", "Kling"] as const;
+const STEP_LABELS = ["Store", "Scripts", "Images", "Video"] as const;
 
 export type LinkToAdUniverseStepperProps = {
-  /** 1–5 = étape en cours, 6 = tout terminé */
+  /** 1–4 = étape en cours, 5 = tout terminé */
   currentStep: number;
   step1Done: boolean;
   step2Done: boolean;
   step3Done: boolean;
   step4Done: boolean;
-  step5Done: boolean;
 };
 
 export function LinkToAdUniverseStepper({
@@ -23,9 +22,8 @@ export function LinkToAdUniverseStepper({
   step2Done,
   step3Done,
   step4Done,
-  step5Done,
 }: LinkToAdUniverseStepperProps) {
-  const doneFlags = [step1Done, step2Done, step3Done, step4Done, step5Done];
+  const doneFlags = [step1Done, step2Done, step3Done, step4Done];
 
   return (
     <div

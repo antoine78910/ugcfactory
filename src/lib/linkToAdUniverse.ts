@@ -56,6 +56,21 @@ export function splitScriptOptions(full: string): [string, string, string] {
   return [out[0] || text, out[1] || "", out[2] || ""];
 }
 
+/** Strip a leading `SCRIPT OPTION n` line so we can re-wrap with {@link joinScriptOptions}. */
+function stripScriptOptionHeader(n: 1 | 2 | 3, block: string): string {
+  const t = block.trim();
+  const re = new RegExp(`^SCRIPT\\s+OPTION\\s*${n}\\b\\s*\\n+`, "i");
+  return t.replace(re, "").trim();
+}
+
+/** Rebuild full scripts text from three edited blocks (matches common GPT layout). */
+export function joinScriptOptions(parts: [string, string, string]): string {
+  const b0 = stripScriptOptionHeader(1, parts[0]);
+  const b1 = stripScriptOptionHeader(2, parts[1]);
+  const b2 = stripScriptOptionHeader(3, parts[2]);
+  return `SCRIPT OPTION 1\n\n${b0}\n\nSCRIPT OPTION 2\n\n${b1}\n\nSCRIPT OPTION 3\n\n${b2}`;
+}
+
 export function selectedAngleScript(scriptsText: string, selectedAngleIndex: number | null): string {
   if (selectedAngleIndex == null || selectedAngleIndex < 0 || selectedAngleIndex > 2) return "";
   const [a, b, c] = splitScriptOptions(scriptsText);

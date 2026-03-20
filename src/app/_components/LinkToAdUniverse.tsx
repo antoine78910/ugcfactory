@@ -22,8 +22,6 @@ import { LinkToAdUniverseStepper } from "@/app/_components/LinkToAdUniverseStepp
 import { TextShimmer } from "@/components/ui/text-shimmer";
 import { WebsiteScanLoader } from "@/app/_components/WebsiteScanLoader";
 
-type ProductCandidate = { url: string; reason?: string } | string;
-
 export type LinkToAdUniverseProps = {
   /** When set, load this run once (e.g. from Projects). */
   resumeRunId?: string | null;
@@ -115,13 +113,20 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const [productOnlyImageUrls, setProductOnlyImageUrls] = useState<string[]>([]);
   const [imgError, setImgError] = useState(false);
   const [brandFaviconFailed, setBrandFaviconFailed] = useState(false);
-  /** After user clicks "Generate video from this image", show prompt/Kling panels (incl. errors). */
+  /** After user clicks "Generate video from this image", show video prompt + output panels (incl. errors). */
   const [userStartedVideoFromImage, setUserStartedVideoFromImage] = useState(false);
 
   const [summaryText, setSummaryText] = useState<string>("");
   const [scriptsText, setScriptsText] = useState<string>("");
   const [stage, setStage] = useState<
-    "idle" | "scanning" | "finding_image" | "summarizing" | "writing_scripts" | "ready" | "error"
+    | "idle"
+    | "scanning"
+    | "finding_image"
+    | "summarizing"
+    | "writing_scripts"
+    | "server_pipeline"
+    | "ready"
+    | "error"
   >("idle");
 
   const [universeRunId, setUniverseRunId] = useState<string | null>(null);
@@ -146,19 +151,17 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const [isVideoPromptLoading, setIsVideoPromptLoading] = useState(false);
   const [isKlingSubmitting, setIsKlingSubmitting] = useState(false);
   const [klingPollTaskId, setKlingPollTaskId] = useState<string | null>(null);
-  /** Lightbox: full NanoBanana image (source is often 9:16; grid shows 3:4 crop). */
+  /** Lightbox: full reference image (source is often 9:16; grid shows 3:4 crop). */
   const [nanoImageLightboxUrl, setNanoImageLightboxUrl] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const prevAngleRef = useRef<number | null>(null);
   const summaryTextRef = useRef("");
   const isWorkingRef = useRef(false);
-  const autoScanDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const autoScanUrlAttemptedRef = useRef<string>("");
   const autoContinueScriptsFiredRef = useRef(false);
   const nanoAutoGenKeyRef = useRef<string>("");
   const latestSnapRef = useRef<LinkToAdUniverseSnapshotV1 | null>(null);
-  /** Prompt string sent to NanoBanana for the current task (for accurate persist after poll). */
+  /** Prompt string sent for the current image task (for accurate persist after poll). */
   const lastNanoImagePromptRef = useRef("");
   const lastNanoImagePromptIndexRef = useRef<0 | 1 | 2>(0);
   const lastKlingVideoPromptRef = useRef("");
@@ -241,12 +244,15 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   }, [isWorking]);
 
   const hydrateFromRun = useCallback(
-    (run: {
-      id: string;
-      store_url?: string | null;
-      title?: string | null;
-      extracted?: unknown;
-    }) => {
+    (
+      run: {
+        id: string;
+        store_url?: string | null;
+        title?: string | null;
+        extracted?: unknown;
+      },
+      opts?: { silent?: boolean },
+    ) => {
       const snap = readUniverseFromExtracted(run.extracted);
       if (!snap) {
         toast.error("This run has no Link to Ad Universe data.");
@@ -305,7 +311,9 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       setLastExtractedJson(cloneExtractedBase(run.extracted));
       setStage("ready");
       setImgError(false);
-      toast.success("Project resumed");
+      if (!opts?.silent) {
+        toast.success("Project resumed");
+      }
     },
     [],
   );
@@ -462,86 +470,42 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     return u && /^https?:\/\//i.test(u) ? [u] : [];
   }
 
-  /** Resume after a save stopped at brand brief (scripts step failed or interrupted). */
+  /** Resume after a save stopped at brand brief (scripts step failed or interrupted). Runs on the server so navigation does not cancel it. */
   async function onContinueScripts() {
     const url = storeUrl.trim();
     if (!url || !lastExtractedJson || !summaryText.trim()) {
       toast.error("Incomplete data to generate scripts.");
       return;
     }
-    const userUploadedImageUrl = neutralUploadUrl;
-    const titleForScripts = extractedTitle;
-    const summaryStr = summaryText;
-    const base = lastExtractedJson;
-    const candidates =
-      productOnlyImageUrls.length > 0
-        ? productOnlyImageUrls
-        : cleanCandidate?.url
-          ? [cleanCandidate.url]
-          : [];
-    const gptImages = productUrlsForGpt({
-      pageUrl: url,
-      neutralUploadUrl: userUploadedImageUrl,
-      candidateUrls: candidates,
-      fallbackUrl: fallbackImageUrl,
-    });
+    if (!universeRunId) {
+      toast.error("No saved project yet — run Generate from URL first.");
+      return;
+    }
 
-    let activeRunId = universeRunId;
     setIsWorking(true);
     setStage("writing_scripts");
     try {
-      const scriptsRes = await fetch("/api/gpt/ugc-scripts-from-brief", {
+      const res = await fetch("/api/link-to-ad/continue-scripts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          storeUrl: url,
-          productTitle: titleForScripts,
-          brandBrief: summaryStr,
-          productImageUrl: gptImages[0] ?? null,
-          productImageUrls: gptImages,
-          videoDurationSeconds: 15,
-        }),
+        body: JSON.stringify({ runId: universeRunId }),
       });
-      if (!scriptsRes.ok) {
-        const raw = await scriptsRes.text().catch(() => "");
-        throw new Error(`UGC scripts failed: HTTP ${scriptsRes.status} ${raw.slice(0, 250)}`);
+      const json = (await res.json()) as { runId?: string; error?: string; scriptsStepOk?: boolean };
+      if (!res.ok || !json.runId) {
+        throw new Error(json.error || "Continue scripts failed");
       }
-      const scriptsJson = (await scriptsRes.json()) as { data?: string; error?: string };
-      if (scriptsJson.error) throw new Error(scriptsJson.error);
-      const scriptsStr = String(scriptsJson?.data ?? "");
-      setScriptsText(scriptsStr);
-      const labels = deriveAngleLabelsFromScripts(scriptsStr);
-      setAngleLabels(labels);
-      setNanoBananaPromptsRaw("");
-      setNanoBananaSelectedPromptIndex(0);
-      setNanoBananaTaskId(null);
-      setNanoBananaImageUrl(null);
-      setNanoBananaImageUrls([]);
-      setNanoBananaSelectedImageIndex(null);
-      setUgcVideoPromptGpt("");
-      setKlingTaskId(null);
-      setKlingVideoUrl(null);
-      setNanoPollTaskId(null);
-      setKlingPollTaskId(null);
-      prevAngleRef.current = null;
-      const snapAfterScripts: LinkToAdUniverseSnapshotV1 = {
-        v: 1,
-        phase: "after_scripts",
-        cleanCandidate,
-        fallbackImageUrl,
-        confidence,
-        neutralUploadUrl: userUploadedImageUrl,
-        productOnlyImageUrls: candidates.length ? candidates : undefined,
-        summaryText: summaryStr,
-        scriptsText: scriptsStr,
-        angleLabels: labels,
-        selectedAngleIndex: null,
-        ...UNIVERSE_PIPELINE_CLEAR,
+      const getRes = await fetch(`/api/runs/get?runId=${encodeURIComponent(json.runId)}`, { cache: "no-store" });
+      const getJson = (await getRes.json()) as {
+        data?: { id: string; store_url?: string | null; title?: string | null; extracted?: unknown };
+        error?: string;
       };
-      const shots = gptImages.length > 0 ? gptImages : [];
-      await persistUniverse(activeRunId, url, titleForScripts, base, snapAfterScripts, shots);
+      if (!getRes.ok || !getJson.data) {
+        throw new Error(getJson.error || "Could not reload project");
+      }
+      hydrateFromRun(getJson.data, { silent: true });
       setStage("ready");
       toast.success("3 UGC scripts ready");
+      onRunsChanged?.();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Scripts step failed";
       toast.warning("Script generation failed", { description: msg });
@@ -589,7 +553,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     if (opts?.bypassSavedProject) {
       setNeutralUploadUrl(null);
     }
-    let activeRunId: string | null = null;
     setUniverseRunId(null);
     setLastExtractedJson(null);
     setExtractedTitle(null);
@@ -613,199 +576,59 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     prevAngleRef.current = null;
 
     try {
-      setStage("scanning");
-      const extractRes = await fetch("/api/store/extract", {
+      setStage("server_pipeline");
+      const pipeRes = await fetch("/api/link-to-ad/initial-pipeline", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url }),
-      });
-      if (!extractRes.ok) {
-        const raw = await extractRes.text().catch(() => "");
-        throw new Error(`Extract failed: HTTP ${extractRes.status} ${raw.slice(0, 250)}`);
-      }
-      const extracted = (await extractRes.json()) as unknown;
-      const extractedObj = extracted as { title?: unknown; images?: unknown };
-      setExtractedTitle(typeof extractedObj.title === "string" ? extractedObj.title : null);
-
-      const base = cloneExtractedBase(extracted);
-      setLastExtractedJson(base);
-
-      const images: string[] = Array.isArray(extractedObj.images)
-        ? extractedObj.images.filter((x): x is string => typeof x === "string")
-        : [];
-      if (!images.length) {
-        throw new Error("No images found on that page.");
-      }
-
-      setStage("finding_image");
-      const classifyRes = await fetch("/api/gpt/images-classify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pageUrl: url, imageUrls: images }),
-      });
-      if (!classifyRes.ok) {
-        const raw = await classifyRes.text().catch(() => "");
-        throw new Error(`Images classify failed: HTTP ${classifyRes.status} ${raw.slice(0, 250)}`);
-      }
-      const classifyJson = (await classifyRes.json()) as unknown;
-      const classifyObj = classifyJson as {
-        error?: unknown;
-        data?: {
-          productOnlyUrls?: unknown;
-          confidence?: unknown;
-          otherUrls?: unknown;
-        };
-      };
-      if (typeof classifyObj.error === "string") throw new Error(classifyObj.error);
-
-      const candidatesRaw: ProductCandidate[] = Array.isArray(classifyObj.data?.productOnlyUrls)
-        ? (classifyObj.data!.productOnlyUrls as ProductCandidate[])
-        : [];
-
-      const normalizeCandidate = (c: ProductCandidate) => {
-        if (typeof c === "string") return { url: c.trim(), reason: undefined as string | undefined };
-        const obj = c as { url?: unknown; reason?: unknown };
-        const u0 = obj?.url;
-        if (typeof u0 === "string") {
-          return {
-            url: u0.trim(),
-            reason: typeof obj.reason === "string" ? obj.reason : undefined,
-          };
-        }
-        return { url: "", reason: undefined as string | undefined };
-      };
-
-      const validCandidates = candidatesRaw
-        .map((c) => normalizeCandidate(c))
-        .filter((x) => x.url.length > 0);
-
-      const firstCandidate = validCandidates[0];
-      const cleanUrl = firstCandidate?.url ?? null;
-      const reason = firstCandidate?.reason;
-      const urlsOnly = validCandidates.map((c) => c.url).filter((x) => x.length > 0);
-      setProductOnlyImageUrls(urlsOnly);
-
-      const otherUrlsRaw: unknown[] = Array.isArray(classifyObj.data?.otherUrls)
-        ? (classifyObj.data!.otherUrls as unknown[])
-        : [];
-      const firstOther = (() => {
-        for (const x of otherUrlsRaw) {
-          if (typeof x === "string" && x.trim().length > 0) return x;
-        }
-        return undefined;
-      })();
-
-      const confidenceVal = classifyObj.data?.confidence;
-      setConfidence(
-        typeof confidenceVal === "string" ? confidenceVal : confidenceVal != null ? String(confidenceVal) : "low",
-      );
-      if (cleanUrl) setCleanCandidate({ url: cleanUrl, reason });
-      setFallbackImageUrl(firstOther?.trim() || images.find((u) => typeof u === "string" && u.trim().length > 0) || null);
-
-      setStage("summarizing");
-      const summaryRes = await fetch("/api/gpt/brand-url-summary", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url }),
-      });
-      if (!summaryRes.ok) {
-        const raw = await summaryRes.text().catch(() => "");
-        throw new Error(`Brand summary failed: HTTP ${summaryRes.status} ${raw.slice(0, 250)}`);
-      }
-      const summaryJson = (await summaryRes.json()) as { data?: string };
-      const summaryStr = String(summaryJson?.data ?? "");
-      setSummaryText(summaryStr);
-
-      const titleForScripts = typeof extractedObj.title === "string" ? extractedObj.title : null;
-      const gptImages = productUrlsForGpt({
-        pageUrl: url,
-        neutralUploadUrl: userUploadedImageUrl,
-        candidateUrls: urlsOnly,
-        fallbackUrl: firstOther?.trim() || images[0] || null,
-      });
-
-      const snapAfterSummary: LinkToAdUniverseSnapshotV1 = {
-        v: 1,
-        phase: "after_summary",
-        cleanCandidate: cleanUrl ? { url: cleanUrl, reason } : null,
-        fallbackImageUrl: firstOther?.trim() || images[0] || null,
-        confidence:
-          typeof confidenceVal === "string" ? confidenceVal : confidenceVal != null ? String(confidenceVal) : "low",
-        neutralUploadUrl: userUploadedImageUrl,
-        productOnlyImageUrls: urlsOnly.length ? urlsOnly : undefined,
-        summaryText: summaryStr,
-        scriptsText: "",
-        angleLabels: ["", "", ""],
-        selectedAngleIndex: null,
-        ...UNIVERSE_PIPELINE_CLEAR,
-      };
-      try {
-        const shots = gptImages.length > 0 ? gptImages : [];
-        activeRunId = await persistUniverse(activeRunId, url, titleForScripts, base, snapAfterSummary, shots);
-        toast.success("Project saved");
-      } catch (e) {
-        toast.message("Project save failed", { description: e instanceof Error ? e.message : "" });
-      }
-
-      setStage("writing_scripts");
-      let scriptsStepOk = false;
-      let scriptsStr = "";
-      try {
-        const scriptsRes = await fetch("/api/gpt/ugc-scripts-from-brief", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            storeUrl: url,
-            productTitle: titleForScripts,
-            brandBrief: summaryStr,
-            productImageUrl: gptImages[0] ?? null,
-            productImageUrls: gptImages,
-            videoDurationSeconds: 15,
-          }),
-        });
-        if (!scriptsRes.ok) {
-          const raw = await scriptsRes.text().catch(() => "");
-          throw new Error(`UGC scripts failed: HTTP ${scriptsRes.status} ${raw.slice(0, 250)}`);
-        }
-        const scriptsJson = (await scriptsRes.json()) as { data?: string; error?: string };
-        if (scriptsJson.error) throw new Error(scriptsJson.error);
-        scriptsStr = String(scriptsJson?.data ?? "");
-        setScriptsText(scriptsStr);
-        scriptsStepOk = true;
-      } catch (scriptErr) {
-        const msg = scriptErr instanceof Error ? scriptErr.message : "Scripts step failed";
-        setScriptsText("");
-        toast.warning("Scripts step failed", { description: msg });
-      }
-
-      if (scriptsStepOk && scriptsStr) {
-        const labels = deriveAngleLabelsFromScripts(scriptsStr);
-        setAngleLabels(labels);
-        const snapAfterScripts: LinkToAdUniverseSnapshotV1 = {
-          v: 1,
-          phase: "after_scripts",
-          cleanCandidate: cleanUrl ? { url: cleanUrl, reason } : null,
-          fallbackImageUrl: firstOther?.trim() || images[0] || null,
-          confidence:
-            typeof confidenceVal === "string" ? confidenceVal : confidenceVal != null ? String(confidenceVal) : "low",
+        body: JSON.stringify({
+          storeUrl: url,
           neutralUploadUrl: userUploadedImageUrl,
-          productOnlyImageUrls: urlsOnly.length ? urlsOnly : undefined,
-          summaryText: summaryStr,
-          scriptsText: scriptsStr,
-          angleLabels: labels,
-          selectedAngleIndex: null,
-          ...UNIVERSE_PIPELINE_CLEAR,
-        };
-        try {
-          const shots = gptImages.length > 0 ? gptImages : [];
-          activeRunId = await persistUniverse(activeRunId, url, titleForScripts, base, snapAfterScripts, shots);
-        } catch {
-          /* ignore */
+        }),
+      });
+      const pipeJson = (await pipeRes.json()) as {
+        runId?: string;
+        scriptsStepOk?: boolean;
+        scriptsError?: string;
+        error?: string;
+      };
+
+      if (!pipeRes.ok || !pipeJson.runId) {
+        if (pipeJson.runId) {
+          const getRes = await fetch(`/api/runs/get?runId=${encodeURIComponent(pipeJson.runId)}`, { cache: "no-store" });
+          const getJson = (await getRes.json()) as {
+            data?: { id: string; store_url?: string | null; title?: string | null; extracted?: unknown };
+            error?: string;
+          };
+          if (getRes.ok && getJson.data) {
+            hydrateFromRun(getJson.data, { silent: true });
+            toast.message("Pipeline stopped early", {
+              description: pipeJson.error || "Partial data was saved — check your project.",
+            });
+            setStage("ready");
+            onRunsChanged?.();
+            return;
+          }
         }
+        throw new Error(pipeJson.error || "Initial pipeline failed");
       }
 
+      const getRes = await fetch(`/api/runs/get?runId=${encodeURIComponent(pipeJson.runId)}`, { cache: "no-store" });
+      const getJson = (await getRes.json()) as {
+        data?: { id: string; store_url?: string | null; title?: string | null; extracted?: unknown };
+        error?: string;
+      };
+      if (!getRes.ok || !getJson.data) {
+        throw new Error(getJson.error || "Could not reload project after pipeline");
+      }
+      hydrateFromRun(getJson.data, { silent: true });
       setStage("ready");
-      if (scriptsStepOk) toast.success("3 UGC scripts ready");
+      toast.success("Project saved");
+      if (pipeJson.scriptsStepOk) {
+        toast.success("3 UGC scripts ready");
+      } else if (pipeJson.scriptsError) {
+        toast.warning("Scripts step failed", { description: pipeJson.scriptsError });
+      }
+      onRunsChanged?.();
     } catch (err) {
       setStage("error");
       const message = err instanceof Error ? err.message : "Unknown error";
@@ -836,7 +659,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       return;
     }
     if (!img || !/^https?:\/\//i.test(img)) {
-      toast.error("HTTPS product image is required for GPT (missing preview or relative URL).");
+      toast.error("HTTPS product image is required (missing preview or relative URL).");
       return;
     }
     setIsNanoPromptsLoading(true);
@@ -849,7 +672,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         body: JSON.stringify({ marketingScript: script, productImageUrl: img }),
       });
       const json = (await res.json()) as { data?: string; error?: string };
-      if (!res.ok || !json.data) throw new Error(json.error || "GPT prompts failed");
+      if (!res.ok || !json.data) throw new Error(json.error || "Image prompts failed");
       text = String(json.data);
       setNanoBananaPromptsRaw(text);
       setNanoBananaSelectedPromptIndex(0);
@@ -874,7 +697,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           imagePrompt: text,
         });
       }
-      toast.success("3 image prompts saved — starting NanoBanana Pro…");
+      toast.success("3 image prompts saved — starting generation…");
 
       const rawTri = parseThreeLabeledPrompts(text);
       const prompts: [string, string, string] = [rawTri[0].trim(), rawTri[1].trim(), rawTri[2].trim()];
@@ -886,28 +709,28 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       }
 
       setIsNanoAllImagesSubmitting(true);
-      toast.message("NanoBanana Pro", {
-        description: "Generating 3 images (2K, 9:16) — this may take several minutes.",
+      toast.message("Image generation", {
+        description: "Generating 3 reference frames — this may take several minutes.",
         duration: 6000,
       });
       try {
         const { urlsByPrompt, lastTaskId } = await runNanoBananaProThreeSequential(img, prompts);
         if (!urlsByPrompt[0] || !urlsByPrompt[1] || !urlsByPrompt[2]) {
-          throw new Error("NanoBanana did not return 3 images.");
+          throw new Error("Image generation did not return 3 images.");
         }
         await persistNanoThreeGeneratedImages(url, prompts, urlsByPrompt, lastTaskId);
-        toast.success("3 NanoBanana Pro images ready");
+        toast.success("3 reference images ready");
       } catch (imgErr) {
-        toast.error("NanoBanana Pro", {
+        toast.error("Image generation", {
           description:
             (imgErr instanceof Error ? imgErr.message : "Unknown error") +
-            " — GPT prompts are saved; you can retry image generation.",
+            " — Prompts are saved; you can retry.",
         });
       } finally {
         setIsNanoAllImagesSubmitting(false);
       }
     } catch (e) {
-      toast.error("NanoBanana prompts", { description: e instanceof Error ? e.message : "Unknown error" });
+      toast.error("Image prompts", { description: e instanceof Error ? e.message : "Unknown error" });
     } finally {
       setIsNanoPromptsLoading(false);
     }
@@ -929,7 +752,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     });
     const prompt = parsedNanoPrompts[nanoBananaSelectedPromptIndex]?.trim();
     if (!url || !lastExtractedJson || !prompt) {
-      toast.error("Generate the 3 GPT prompts first, then choose a valid prompt.");
+      toast.error("Generate the 3 image prompts first, then choose a valid prompt.");
       return;
     }
     if (!img || !/^https?:\/\//i.test(img)) {
@@ -952,7 +775,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         }),
       });
       const json = (await res.json()) as { taskId?: string; error?: string };
-      if (!res.ok || !json.taskId) throw new Error(json.error || "NanoBanana Pro failed");
+      if (!res.ok || !json.taskId) throw new Error(json.error || "Image generation failed");
       setNanoBananaTaskId(json.taskId);
       setNanoPollTaskId(json.taskId);
       const base = latestSnapRef.current;
@@ -968,9 +791,9 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           imagePrompt: prompt,
         });
       }
-      toast.success("NanoBanana Pro task started");
+      toast.success("Image generation started");
     } catch (e) {
-      toast.error("NanoBanana Pro", {
+      toast.error("Image generation", {
         description: e instanceof Error ? e.message : "Unknown error",
       });
     } finally {
@@ -990,7 +813,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         cache: "no-store",
       });
       const json = (await res.json()) as any;
-      if (!res.ok || !json.data) throw new Error(json.error || "NanoBanana poll failed");
+      if (!res.ok || !json.data) throw new Error(json.error || "Generation status check failed");
       const s = json.data.successFlag ?? 0;
       if (s === 0) {
         // eslint-disable-next-line no-await-in-loop
@@ -1011,12 +834,12 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           if (typeof v === "string") return [v];
           return [];
         });
-        if (!urls.length) throw new Error("NanoBanana task succeeded but image URLs are missing.");
+        if (!urls.length) throw new Error("Generation finished but image URLs are missing.");
         return urls;
       }
-      throw new Error(json.data.errorMessage || `NanoBanana failed (successFlag=${String(s)})`);
+      throw new Error(json.data.errorMessage || `Generation failed (successFlag=${String(s)})`);
     }
-    throw new Error("NanoBanana task timed out.");
+    throw new Error("Image generation timed out.");
   }
 
   /** Run 3 NanoBanana Pro jobs sequentially; returns URLs in prompt order. */
@@ -1042,7 +865,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         }),
       });
       const json = (await res.json()) as { taskId?: string; error?: string };
-      if (!res.ok || !json.taskId) throw new Error(json.error || "NanoBanana Pro failed");
+      if (!res.ok || !json.taskId) throw new Error(json.error || "Image generation failed");
       lastTaskId = json.taskId;
       const urls = await pollNanoBananaTaskForUrls(json.taskId);
       urlsByPrompt[i] = urls[0];
@@ -1107,16 +930,16 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       return;
     }
     if (!img || !/^https?:\/\//i.test(img)) {
-      toast.error("HTTPS product image is required to generate NanoBanana images.");
+      toast.error("HTTPS product image is required to generate images.");
       return;
     }
     if (!nanoBananaPromptsRaw.trim()) {
-      toast.error("Generate the 3 GPT prompts first.");
+      toast.error("Generate the 3 image prompts first.");
       return;
     }
     const prompts = parsedNanoPrompts.map((p) => p.trim());
     if (!prompts[0] || !prompts[1] || !prompts[2]) {
-      toast.error("Some GPT prompts are missing.");
+      toast.error("Some image prompts are missing.");
       return;
     }
 
@@ -1125,14 +948,14 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       const { urlsByPrompt, lastTaskId } = await runNanoBananaProThreeSequential(img, prompts as [string, string, string]);
 
       if (!urlsByPrompt[0] || !urlsByPrompt[1] || !urlsByPrompt[2]) {
-        throw new Error("NanoBanana did not produce 3 images.");
+        throw new Error("Image generation did not produce 3 images.");
       }
 
       await persistNanoThreeGeneratedImages(url, prompts as [string, string, string], urlsByPrompt, lastTaskId);
 
-      toast.success("NanoBanana Pro — 3 images generated");
+      toast.success("3 images generated");
     } catch (e) {
-      toast.error("NanoBanana Pro (3 images)", {
+      toast.error("Image generation", {
         description: e instanceof Error ? e.message : "Unknown error",
       });
     } finally {
@@ -1234,20 +1057,20 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                 generatedImageUrls: urls.slice(0, 8),
               });
             } catch (e) {
-              toast.error("NanoBanana save failed", {
+              toast.error("Save failed", {
                 description: e instanceof Error ? e.message : "Unknown error",
               });
             }
           }
-          toast.success("NanoBanana Pro image saved");
+          toast.success("Image saved");
           if (interval) clearInterval(interval);
           interval = null;
           return;
         }
-        throw new Error(json.data.errorMessage || `NanoBanana failed: ${String(s)}`);
+        throw new Error(json.data.errorMessage || `Image generation failed: ${String(s)}`);
       } catch (err) {
         if (cancelled) return;
-        toast.error("NanoBanana polling failed", {
+        toast.error("Image generation", {
           description: err instanceof Error ? err.message : "Unknown error",
         });
         setNanoPollTaskId(null);
@@ -1280,7 +1103,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         body: JSON.stringify({ angleScript: script }),
       });
       const json = (await res.json()) as { data?: string; error?: string };
-      if (!res.ok || !json.data) throw new Error(json.error || "Video prompt GPT failed");
+      if (!res.ok || !json.data) throw new Error(json.error || "Video prompt failed");
       const text = String(json.data);
       setUgcVideoPromptGpt(text);
       const base = latestSnapRef.current;
@@ -1293,7 +1116,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       toast.success("Video prompt saved");
       return text;
     } catch (e) {
-      toast.error("Video prompt GPT", { description: e instanceof Error ? e.message : "Unknown error" });
+      toast.error("Video prompt", { description: e instanceof Error ? e.message : "Unknown error" });
       return null;
     } finally {
       setIsVideoPromptLoading(false);
@@ -1305,7 +1128,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     const img = nanoBananaImageUrl;
     const prompt = (overrideVideoPrompt ?? ugcVideoPromptGpt).trim();
     if (!url || !lastExtractedJson || !img || !prompt) {
-      toast.error("NanoBanana image and video prompt are required.");
+      toast.error("Reference image and video prompt are required.");
       return;
     }
     setIsKlingSubmitting(true);
@@ -1325,7 +1148,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         }),
       });
       const json = (await res.json()) as { taskId?: string; error?: string };
-      if (!res.ok || !json.taskId) throw new Error(json.error || "Kling failed");
+      if (!res.ok || !json.taskId) throw new Error(json.error || "Video generation failed");
       setKlingTaskId(json.taskId);
       setKlingPollTaskId(json.taskId);
       const base = latestSnapRef.current;
@@ -1335,9 +1158,9 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           videoPrompt: klingPrompt,
         });
       }
-      toast.success("Kling 3.0 (12s · 720p) — task started");
+      toast.success("Video generation started");
     } catch (e) {
-      toast.error("Kling", { description: e instanceof Error ? e.message : "Unknown error" });
+      toast.error("Video", { description: e instanceof Error ? e.message : "Unknown error" });
     } finally {
       setIsKlingSubmitting(false);
     }
@@ -1375,20 +1198,20 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                 videoPrompt: lastKlingVideoPromptRef.current || undefined,
               });
             } catch (e) {
-              toast.error("Kling video save failed", {
+              toast.error("Video save failed", {
                 description: e instanceof Error ? e.message : "Unknown error",
               });
             }
           }
-          toast.success("Kling video saved in the project");
+          toast.success("Video saved in the project");
           if (interval) clearInterval(interval);
           interval = null;
           return;
         }
-        throw new Error(json.data.error_message || `Kling failed: ${String(s)}`);
+        throw new Error(json.data.error_message || `Video generation failed: ${String(s)}`);
       } catch (err) {
         if (cancelled) return;
-        toast.error("Kling polling failed", { description: err instanceof Error ? err.message : "Unknown error" });
+        toast.error("Video generation", { description: err instanceof Error ? err.message : "Unknown error" });
         setKlingPollTaskId(null);
         if (interval) clearInterval(interval);
         interval = null;
@@ -1422,29 +1245,33 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const step1Done = Boolean(summaryText.trim() && resolvedPreviewUrl);
   const step2Done = Boolean(scriptsText.trim() && selectedAngleIndex !== null);
   const step3Done = Boolean(nanoHasThreeImages && nanoBananaImageUrl);
-  const step4Done = Boolean(ugcVideoPromptGpt.trim());
-  const step5Done = Boolean(klingVideoUrl);
+  /** Step 4 = full video flow (prompt + render) until a final video exists. */
+  const step4Done = Boolean(klingVideoUrl);
 
   const universeCurrentStep = useMemo(() => {
     if (!step1Done) return 1;
     if (!step2Done) return 2;
     if (!step3Done) return 3;
     if (!step4Done) return 4;
-    if (!step5Done) return 5;
-    return 6;
-  }, [step1Done, step2Done, step3Done, step4Done, step5Done]);
+    return 5;
+  }, [step1Done, step2Done, step3Done, step4Done]);
 
   const universeLoadingMessage = useMemo(() => {
-    if (nanoPollTaskId) return "NanoBanana Pro is generating your images…";
+    if (nanoPollTaskId) return "Generating your reference images…";
     if (isNanoAllImagesSubmitting || isNanoPromptsLoading) return "Preparing image prompts and renders…";
-    if (isNanoImageSubmitting) return "NanoBanana Pro in progress…";
+    if (isNanoImageSubmitting) return "Image generation in progress…";
     if (isVideoPromptLoading) return "Generating video prompt…";
-    if (isKlingSubmitting || klingPollTaskId) return "Kling is generating your video…";
+    if (isKlingSubmitting || klingPollTaskId) return "Generating your video…";
     if (!isWorking) return null;
+    if (stage === "server_pipeline") {
+      return "Running on the server (scan → images → brief → scripts). You can switch pages — progress is saved to your project.";
+    }
     if (stage === "scanning") return "Fetching the store page…";
     if (stage === "finding_image") return "Picking the best product visuals…";
     if (stage === "summarizing") return "Understanding the brand…";
-    if (stage === "writing_scripts") return "Writing 3 UGC script angles…";
+    if (stage === "writing_scripts") {
+      return "Writing 3 UGC script angles on the server… You can switch pages — we’ll save when it’s done.";
+    }
     return "Working…";
   }, [
     nanoPollTaskId,
@@ -1457,31 +1284,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     isWorking,
     stage,
   ]);
-
-  useEffect(() => {
-    autoScanUrlAttemptedRef.current = "";
-  }, [storeUrl]);
-
-  useEffect(() => {
-    if (autoScanDebounceRef.current) {
-      clearTimeout(autoScanDebounceRef.current);
-      autoScanDebounceRef.current = null;
-    }
-    const u = storeUrl.trim();
-    if (!/^https?:\/\//i.test(u)) return;
-    autoScanDebounceRef.current = setTimeout(() => {
-      if (isWorkingRef.current || summaryTextRef.current.trim()) return;
-      if (autoScanUrlAttemptedRef.current === u) return;
-      autoScanUrlAttemptedRef.current = u;
-      void onRun();
-    }, 1200);
-    return () => {
-      if (autoScanDebounceRef.current) {
-        clearTimeout(autoScanDebounceRef.current);
-        autoScanDebounceRef.current = null;
-      }
-    };
-  }, [storeUrl]);
 
   useEffect(() => {
     if (!showContinueScripts) {
@@ -1534,7 +1336,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       return;
     }
     if (isWorking) return;
-    autoScanUrlAttemptedRef.current = "";
     void onRun();
   }
 
@@ -1592,13 +1393,18 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           step2Done={step2Done}
           step3Done={step3Done}
           step4Done={step4Done}
-          step5Done={step5Done}
         />
         {universeLoadingMessage ? (
           <div className="-mt-2 mb-2 flex min-h-[4.25rem] items-center gap-3 rounded-xl border border-violet-500/15 bg-violet-500/[0.06] px-3 py-3 sm:gap-4 sm:px-4">
-            {isWorking && (stage === "scanning" || stage === "finding_image") ? (
+            {isWorking && (stage === "scanning" || stage === "finding_image" || stage === "server_pipeline") ? (
               <WebsiteScanLoader
-                label={stage === "finding_image" ? "Images" : "Scan"}
+                label={
+                  stage === "server_pipeline"
+                    ? "Server"
+                    : stage === "finding_image"
+                      ? "Images"
+                      : "Scan"
+                }
                 subtitle={universeLoadingMessage}
               />
             ) : (
@@ -1612,179 +1418,176 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           </div>
         ) : null}
         <div className="space-y-3">
-          <div>
-            {showBrandHeaderInsteadOfUrl ? (
-              <>
-                <Label className="text-base font-medium text-white/80">Brand</Label>
-                <div className="mt-2 flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-[#0d0a14]">
-                    {brandFaviconSrc && !brandFaviconFailed ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={brandFaviconSrc}
-                        alt=""
-                        width={32}
-                        height={32}
-                        className="h-8 w-8 object-contain"
-                        referrerPolicy="no-referrer"
-                        onError={() => setBrandFaviconFailed(true)}
-                      />
-                    ) : (
-                      <span className="text-lg font-bold uppercase text-violet-300">
-                        {(brandDisplayName.slice(0, 1) || "?").toUpperCase()}
-                      </span>
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-lg font-semibold leading-tight text-white">{brandDisplayName}</p>
-                    {extractedTitle?.trim() && storeHostnameResolved ? (
-                      <p className="mt-0.5 truncate text-xs text-white/40">{storeHostnameResolved}</p>
-                    ) : null}
-                  </div>
-                </div>
-              </>
-            ) : (
-              <>
-                <Label className="text-base font-medium text-white/80">Store URL</Label>
-                <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-stretch">
-                  <Input
-                    value={storeUrl}
-                    onChange={(e) => setStoreUrl(e.target.value)}
-                    placeholder="https://..."
-                    className="h-14 min-h-[3.5rem] min-w-0 flex-1 rounded-xl border-white/10 bg-white/[0.03] px-4 text-lg text-white placeholder:text-white/35"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        handleGenerateFromUrl();
-                      }
-                    }}
-                  />
-                  <Button
-                    type="button"
-                    disabled={isWorking || !storeUrl.trim()}
-                    onClick={handleGenerateFromUrl}
-                    className={`${primaryBtnClass} h-14 min-h-[3.5rem] shrink-0 px-8 text-base sm:min-w-[160px]`}
-                  >
-                    {isWorking ? (
-                      <>
-                        <Loader2 className="h-5 w-5 shrink-0 animate-spin" aria-hidden />
-                        Working…
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="h-5 w-5 shrink-0" aria-hidden />
-                        Generate
-                      </>
-                    )}
-                  </Button>
-                </div>
-                <p className="mt-2 max-w-2xl text-sm text-white/50">
-                  Paste your store URL and click <span className="text-white/65">Generate</span> (or wait a moment after
-                  pasting). We scan the shop and continue until you choose an angle, then an image, then we finish the
-                  ad.
-                </p>
-              </>
-            )}
-          </div>
+          {!showBrandHeaderInsteadOfUrl ? (
+            <div>
+              <Label className="text-base font-medium text-white/80">Store URL</Label>
+              <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-stretch">
+                <Input
+                  value={storeUrl}
+                  onChange={(e) => setStoreUrl(e.target.value)}
+                  placeholder="https://..."
+                  className="h-14 min-h-[3.5rem] min-w-0 flex-1 rounded-xl border-white/10 bg-white/[0.03] px-4 text-lg text-white placeholder:text-white/35"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleGenerateFromUrl();
+                    }
+                  }}
+                />
+                <Button
+                  type="button"
+                  disabled={isWorking || !storeUrl.trim()}
+                  onClick={handleGenerateFromUrl}
+                  className={`${primaryBtnClass} h-14 min-h-[3.5rem] shrink-0 px-8 text-base sm:min-w-[160px]`}
+                >
+                  {isWorking ? (
+                    <>
+                      <Loader2 className="h-5 w-5 shrink-0 animate-spin" aria-hidden />
+                      Working…
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-5 w-5 shrink-0" aria-hidden />
+                      Generate
+                    </>
+                  )}
+                </Button>
+              </div>
+              <p className="mt-2 max-w-2xl text-sm text-white/50">
+                Paste your store URL and click <span className="text-white/65">Generate</span> (or press Enter). We scan
+                the shop and continue until you choose an angle, then an image, then we finish the ad.
+              </p>
+            </div>
+          ) : null}
         </div>
 
         {resolvedPreviewUrl || summaryText.trim() || (isWorking && storeUrl.trim()) ? (
-        <div className="mx-auto w-full max-w-md">
-          {resolvedPreviewUrl || (isWorking && storeUrl.trim()) ? (
-          <div className="space-y-3">
-            <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-              <div className="relative mx-auto w-full max-w-[min(100%,320px)]">
-              <div className="aspect-[9/16] overflow-hidden rounded-lg border border-white/10 bg-[#050507]">
-                {resolvedPreviewUrl && !imgError ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    key={resolvedPreviewUrl}
-                    src={resolvedPreviewUrl}
-                    alt="Product"
-                    className="h-full w-full object-contain object-center"
-                    loading="eager"
-                    referrerPolicy="no-referrer"
-                    onError={() => setImgError(true)}
-                  />
-                ) : (
-                  <div className="flex h-full items-center justify-center text-sm text-white/35">
-                    {resolvedPreviewUrl
-                      ? "Image couldn't be loaded. Check the link below."
-                      : "Run the scan to see the product image."}
+          <div className="mx-auto w-full max-w-xl">
+            <div className="space-y-3">
+              <div className="rounded-xl border border-white/10 bg-white/5 p-3 sm:p-4">
+                <div className="flex items-start gap-3">
+                  <div className="min-w-0 flex-1">
+                    {showBrandHeaderInsteadOfUrl ? (
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/10 bg-[#0d0a14]">
+                          {brandFaviconSrc && !brandFaviconFailed ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={brandFaviconSrc}
+                              alt=""
+                              width={28}
+                              height={28}
+                              className="h-7 w-7 object-contain"
+                              referrerPolicy="no-referrer"
+                              onError={() => setBrandFaviconFailed(true)}
+                            />
+                          ) : (
+                            <span className="text-sm font-bold uppercase text-violet-300">
+                              {(brandDisplayName.slice(0, 1) || "?").toUpperCase()}
+                            </span>
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold leading-tight text-white">{brandDisplayName}</p>
+                          {storeHostnameResolved ? (
+                            <p className="mt-0.5 truncate text-xs text-white/40">{storeHostnameResolved}</p>
+                          ) : null}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="min-w-0 py-0.5">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Store</p>
+                        <p className="truncate text-sm font-medium text-white/85">
+                          {storeHostnameResolved || storeUrl.trim() || "—"}
+                        </p>
+                        {isWorking ? (
+                          <p className="mt-1 text-xs text-violet-300/90">Scanning…</p>
+                        ) : null}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-              {resolvedPreviewUrl && !imgError ? (
-                <div className="pointer-events-none absolute bottom-2 right-2 rounded-md border border-white/10 bg-black/60 px-2 py-0.5 backdrop-blur-sm">
-                  {quality.label === "good" ? (
-                    <span className="text-[10px] font-medium text-emerald-400">Quality: good</span>
-                  ) : (
-                    <span className={`text-[10px] font-medium ${quality.color}`}>Quality: {quality.label}</span>
-                  )}
+                  <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-[#050507]">
+                    {resolvedPreviewUrl && !imgError ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        key={resolvedPreviewUrl}
+                        src={resolvedPreviewUrl}
+                        alt="Product"
+                        className="h-full w-full object-cover object-center"
+                        loading="eager"
+                        referrerPolicy="no-referrer"
+                        onError={() => setImgError(true)}
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center px-1 text-center text-[10px] leading-tight text-white/35">
+                        {resolvedPreviewUrl
+                          ? "Can't load"
+                          : isWorking
+                            ? "…"
+                            : "No image"}
+                      </div>
+                    )}
+                    {resolvedPreviewUrl && !imgError ? (
+                      <div className="pointer-events-none absolute bottom-0.5 right-0.5 rounded border border-white/10 bg-black/70 px-1 py-px backdrop-blur-sm">
+                        {quality.label === "good" ? (
+                          <span className="text-[8px] font-medium text-emerald-400">OK</span>
+                        ) : (
+                          <span className={`text-[8px] font-medium ${quality.color}`}>{quality.label}</span>
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
-              ) : null}
-              </div>
 
-              {brandSummaryTeaser ? (
-                <p className="mt-3 line-clamp-3 text-center text-xs leading-snug text-white/50">{brandSummaryTeaser}</p>
-              ) : null}
+                {brandSummaryTeaser ? (
+                  <p className="mt-3 line-clamp-3 text-xs leading-snug text-white/50">{brandSummaryTeaser}</p>
+                ) : null}
 
-              {imgError && resolvedPreviewUrl ? (
-                <div className="mt-3 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
-                  Could not load the image preview (hotlinking may block embeds).{" "}
-                  <a
-                    href={resolvedPreviewUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="font-medium underline underline-offset-2"
-                  >
-                    Open image
-                  </a>
-                </div>
-              ) : null}
-
-              {showUploadRecommendation ? (
-                <div className="mt-4 rounded-lg border border-amber-400/20 bg-amber-400/5 p-3">
-                  <p className="text-sm font-semibold text-amber-300">Upload recommended</p>
-                  <p className="mt-1 text-xs text-white/55">{quality.help}</p>
-                  <div className="mt-3">
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp,image/*"
-                      className="sr-only"
-                      onChange={(e) => {
-                        void uploadNeutralPhoto(e.target.files);
-                        e.currentTarget.value = "";
-                      }}
-                      disabled={isWorking}
-                    />
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      disabled={isWorking}
-                      className="w-full border border-white/10 bg-white/5 text-white hover:bg-white/10 cursor-pointer"
-                      onClick={() => fileInputRef.current?.click()}
+                {imgError && resolvedPreviewUrl ? (
+                  <div className="mt-3 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
+                    Could not load the image preview (hotlinking may block embeds).{" "}
+                    <a
+                      href={resolvedPreviewUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-medium underline underline-offset-2"
                     >
-                      Upload neutral product-only photo
-                    </Button>
+                      Open image
+                    </a>
                   </div>
-                </div>
-              ) : null}
+                ) : null}
+
+                {showUploadRecommendation ? (
+                  <div className="mt-4 rounded-lg border border-amber-400/20 bg-amber-400/5 p-3">
+                    <p className="text-sm font-semibold text-amber-300">Upload recommended</p>
+                    <p className="mt-1 text-xs text-white/55">{quality.help}</p>
+                    <div className="mt-3">
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/*"
+                        className="sr-only"
+                        onChange={(e) => {
+                          void uploadNeutralPhoto(e.target.files);
+                          e.currentTarget.value = "";
+                        }}
+                        disabled={isWorking}
+                      />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        disabled={isWorking}
+                        className="w-full border border-white/10 bg-white/5 text-white hover:bg-white/10 cursor-pointer"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        Upload neutral product-only photo
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
             </div>
           </div>
-          ) : summaryText.trim() ? (
-          <div className="space-y-3">
-            <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-              {brandSummaryTeaser ? (
-                <p className="line-clamp-3 text-center text-xs leading-snug text-white/50">{brandSummaryTeaser}</p>
-              ) : (
-                <p className="text-center text-xs text-white/35">…</p>
-              )}
-            </div>
-          </div>
-          ) : null}
-        </div>
         ) : null}
 
         {selectedAngleIndex === null &&
@@ -1850,7 +1653,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                 {nanoPollTaskId || isNanoPromptsLoading || isNanoAllImagesSubmitting ? (
                   <span className="flex items-center gap-2 text-xs text-emerald-300">
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    NanoBanana Pro in progress…
+                    Generating images…
                   </span>
                 ) : null}
               </div>
@@ -1945,7 +1748,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                               )}
                             </Button>
                             <p className="max-w-md text-center text-[11px] text-white/40">
-                              Builds the motion prompt from your angle, then starts Kling (12s). Change image anytime —
+                              Builds the motion prompt from your angle, then renders the video. Change image anytime —
                               video steps reset until you confirm again.
                             </p>
                           </div>
@@ -1958,12 +1761,16 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
             </div>
 
             {showVideoPipelinePanels ? (
-              <>
-                <div className="rounded-xl border border-sky-500/25 bg-sky-500/[0.06] p-4">
-                  <div>
-                    <p className="text-sm font-semibold text-white/90">Video prompt</p>
-                  </div>
-                  <p className="mt-1 text-xs text-white/45">Used for Kling image-to-video (you can retry if it fails).</p>
+              <div className="rounded-xl border border-violet-500/25 bg-violet-500/[0.06] p-4 space-y-6">
+                <div>
+                  <p className="text-sm font-semibold text-white/90">Video</p>
+                  <p className="mt-1 text-xs text-white/45">
+                    Motion prompt and final render. You can retry each step if something fails.
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-white/50">Prompt</p>
                   {nanoBananaImageUrl &&
                   userStartedVideoFromImage &&
                   !ugcVideoPromptGpt.trim() &&
@@ -1971,14 +1778,14 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                   selectedAngleIndex !== null ? (
                     <Button
                       type="button"
-                      className={`mt-3 ${primaryBtnClass}`}
+                      className={`mt-2 ${primaryBtnClass}`}
                       onClick={() => void onGenerateUgcVideoPrompt()}
                     >
                       Retry video prompt
                     </Button>
                   ) : null}
                   {isVideoPromptLoading ? (
-                    <div className="mt-3 flex items-center gap-2 text-xs text-sky-200">
+                    <div className="mt-3 flex items-center gap-2 text-xs text-violet-200">
                       <Loader2 className="h-4 w-4 animate-spin" />
                       Generating video prompt…
                     </div>
@@ -1990,28 +1797,26 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                   ) : null}
                 </div>
 
-                <div className="rounded-xl border border-orange-500/25 bg-orange-500/[0.06] p-4">
-                  <div>
-                    <p className="text-sm font-semibold text-white/90">Kling 3.0 — 12s · 720p</p>
-                  </div>
-                  <p className="mt-1 text-xs text-white/45">Native audio on (lipsync hint).</p>
+                <div className="border-t border-white/10 pt-5">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-white/50">Output</p>
+                  <p className="mt-1 text-xs text-white/45">Your ad video appears here when ready.</p>
                   {nanoBananaImageUrl &&
                   ugcVideoPromptGpt.trim() &&
                   !klingVideoUrl &&
                   !klingPollTaskId &&
                   !isKlingSubmitting ? (
                     <Button type="button" className={`mt-3 ${primaryBtnClass}`} onClick={() => void onGenerateKlingVideo()}>
-                      Retry Kling render
+                      Retry video render
                     </Button>
                   ) : null}
                   {isKlingSubmitting ? (
-                    <div className="mt-3 flex items-center gap-2 text-xs text-orange-200">
+                    <div className="mt-3 flex items-center gap-2 text-xs text-violet-200">
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      Starting Kling…
+                      Starting video render…
                     </div>
                   ) : null}
                   {klingPollTaskId ? (
-                    <p className="mt-2 flex items-center gap-2 text-xs text-orange-200">
+                    <p className="mt-2 flex items-center gap-2 text-xs text-violet-200">
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       Generating video…
                     </p>
@@ -2021,14 +1826,14 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                       <video src={klingVideoUrl} controls className="w-full max-h-[480px] rounded-lg border border-white/10" />
                       <a
                         href={`/api/download?url=${encodeURIComponent(klingVideoUrl)}`}
-                        className="text-xs font-medium text-orange-300 underline underline-offset-2"
+                        className="text-xs font-medium text-violet-300 underline underline-offset-2"
                       >
                         Download video
                       </a>
                     </div>
                   ) : null}
                 </div>
-              </>
+              </div>
             ) : null}
           </div>
         ) : null}
@@ -2041,7 +1846,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         onClick={() => setNanoImageLightboxUrl(null)}
         role="dialog"
         aria-modal="true"
-        aria-label="Full NanoBanana image"
+        aria-label="Full reference image"
       >
         <Button
           type="button"
@@ -2059,7 +1864,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={nanoImageLightboxUrl}
-          alt="Full NanoBanana Pro preview"
+          alt="Full reference image preview"
           className="max-h-[92vh] max-w-[min(100%,1200px)] rounded-xl border border-violet-500/20 object-contain shadow-[0_0_60px_rgba(139,92,246,0.15)]"
           onClick={(e) => e.stopPropagation()}
         />

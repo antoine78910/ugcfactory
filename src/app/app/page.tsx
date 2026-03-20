@@ -11,7 +11,10 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import LinkToAdUniverse from "@/app/_components/LinkToAdUniverse";
+import { ProjectRunScriptsEditor } from "@/app/_components/ProjectRunScriptsEditor";
+import StudioImagePanel from "@/app/_components/StudioImagePanel";
 import StudioShell from "@/app/_components/StudioShell";
+import StudioVideoPanel from "@/app/_components/StudioVideoPanel";
 import {
   packshotUrlsForGpt,
   pickPackshotForNanoBanana,
@@ -24,7 +27,7 @@ import {
 } from "@/lib/linkToAdUniverse";
 
 type WizardStep = "url" | "analysis" | "quiz" | "image" | "video";
-type AppSection = "link_to_ad" | "motion_control" | "models" | "projects";
+type AppSection = "link_to_ad" | "motion_control" | "image" | "video" | "projects";
 
 type Extracted = {
   url: string;
@@ -190,6 +193,12 @@ export default function AppBrandWizard() {
   /** Open Link to Ad and hydrate from this run (Projects). */
   const [linkToAdResumeRunId, setLinkToAdResumeRunId] = useState<string | null>(null);
   const [branchingNormalizedUrl, setBranchingNormalizedUrl] = useState<string | null>(null);
+  const [deleteProjectDialog, setDeleteProjectDialog] = useState<{
+    storeUrl: string;
+    runIds: string[];
+    label: string;
+  } | null>(null);
+  const [deleteProjectLoading, setDeleteProjectLoading] = useState(false);
   const [runId, setRunId] = useState<string | null>(null);
   const [isLoadingRuns, setIsLoadingRuns] = useState(false);
 
@@ -445,8 +454,8 @@ export default function AppBrandWizard() {
     }
   }
 
-  async function deleteProjectByStoreUrl(storeUrl: string, runIdsInProject: string[]) {
-    if (!confirm("Delete this project? All runs linked to this URL will be removed.")) return;
+  async function executeDeleteProject(storeUrl: string, runIdsInProject: string[]) {
+    setDeleteProjectLoading(true);
     try {
       const res = await fetch("/api/runs/delete-project", {
         method: "POST",
@@ -460,11 +469,17 @@ export default function AppBrandWizard() {
         setRunId(null);
         if (typeof localStorage !== "undefined") localStorage.removeItem(UGC_CURRENT_RUN_KEY);
       }
+      if (linkToAdResumeRunId && runIdsInProject.includes(linkToAdResumeRunId)) {
+        setLinkToAdResumeRunId(null);
+      }
+      setDeleteProjectDialog(null);
       void refreshMeAndRuns();
     } catch (err) {
       toast.error("Deletion failed", {
         description: err instanceof Error ? err.message : "Unknown error",
       });
+    } finally {
+      setDeleteProjectLoading(false);
     }
   }
 
@@ -561,11 +576,20 @@ export default function AppBrandWizard() {
 
   useLayoutEffect(() => {
     const sec = searchParams.get("section");
-    const validSections: AppSection[] = ["link_to_ad", "motion_control", "models", "projects"];
+    const validSections: AppSection[] = ["link_to_ad", "motion_control", "image", "video", "projects"];
     if (sec && validSections.includes(sec as AppSection)) {
       setAppSection(sec as AppSection);
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    if (!deleteProjectDialog || deleteProjectLoading) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setDeleteProjectDialog(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [deleteProjectDialog, deleteProjectLoading]);
 
   useEffect(() => {
     if (pathname !== "/app") return;
@@ -1270,7 +1294,13 @@ export default function AppBrandWizard() {
                                   variant="secondary"
                                   className="h-9 w-9 border border-white/15 bg-black/60 text-white/80 hover:bg-destructive/90 hover:text-white"
                                   title="Delete project"
-                                  onClick={() => void deleteProjectByStoreUrl(proj.storeUrl, runIdsInProject)}
+                                  onClick={() =>
+                                    setDeleteProjectDialog({
+                                      storeUrl: proj.storeUrl,
+                                      runIds: runIdsInProject,
+                                      label: proj.title ? proj.title : proj.storeUrl,
+                                    })
+                                  }
                                 >
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
@@ -1329,6 +1359,55 @@ export default function AppBrandWizard() {
                                 );
                               })}
                             </div>
+                            {isUniverse &&
+                            proj.runs.some((r) => {
+                              if (!runHasLinkToAdUniverse(r.extracted)) return false;
+                              const s = readUniverseFromExtracted(r.extracted)?.scriptsText?.trim();
+                              return Boolean(s);
+                            }) ? (
+                              <div className="space-y-2 border-t border-white/10 px-2 pb-3 pt-3">
+                                <p className="px-1 text-[11px] font-semibold uppercase tracking-wide text-white/45">
+                                  Generations — scripts
+                                </p>
+                                <p className="px-1 text-[10px] leading-snug text-white/40">
+                                  Open a generation to work in Link to Ad, or edit scripts here and save for a sharper
+                                  brief.
+                                </p>
+                                {proj.runs.map((run) => {
+                                  if (!runHasLinkToAdUniverse(run.extracted)) return null;
+                                  const snap = readUniverseFromExtracted(run.extracted);
+                                  if (!snap?.scriptsText?.trim()) return null;
+                                  return (
+                                    <details
+                                      key={`scripts-${run.id}`}
+                                      className="rounded-lg border border-white/10 bg-black/25 [&_summary::-webkit-details-marker]:hidden"
+                                    >
+                                      <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2 text-left text-xs font-medium text-white/75 hover:bg-white/[0.04] hover:text-white/90">
+                                        <span>
+                                          {new Date(run.created_at).toLocaleString(undefined, {
+                                            dateStyle: "medium",
+                                            timeStyle: "short",
+                                          })}
+                                        </span>
+                                        <span className="shrink-0 text-[10px] font-normal text-violet-300/90">
+                                          Show / edit scripts
+                                        </span>
+                                      </summary>
+                                      <div className="border-t border-white/10 p-2">
+                                        <ProjectRunScriptsEditor
+                                          runId={run.id}
+                                          storeUrl={run.store_url}
+                                          title={run.title}
+                                          extracted={run.extracted}
+                                          scriptsText={snap.scriptsText}
+                                          onSaved={() => void refreshMeAndRuns()}
+                                        />
+                                      </div>
+                                    </details>
+                                  );
+                                })}
+                              </div>
+                            ) : null}
                           </div>
                         );
                       })}
@@ -1608,19 +1687,29 @@ export default function AppBrandWizard() {
               </div>
             ) : null}
 
-            {appSection === "models" ? (
+            {appSection === "image" ? (
               <Card className="border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
                 <CardHeader>
-                  <CardTitle className="text-base">Models</CardTitle>
+                  <CardTitle className="text-base">Image</CardTitle>
+                  <p className="text-sm text-white/50">
+                    NanoBanana &amp; NanoBanana Pro — prompt, aspect ratio, resolution, batch size, reference images.
+                  </p>
                 </CardHeader>
-                <CardContent className="space-y-2 text-sm text-white/70">
-                  <p>Model access hub for generation engines:</p>
-                  <ul className="list-disc pl-5 space-y-1">
-                    <li>Kling 3.0</li>
-                    <li>Veo 3</li>
-                    <li>Sora</li>
-                    <li>Sora 2</li>
-                  </ul>
+                <CardContent>
+                  <StudioImagePanel />
+                </CardContent>
+              </Card>
+            ) : null}
+            {appSection === "video" ? (
+              <Card className="border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
+                <CardHeader>
+                  <CardTitle className="text-base">Video</CardTitle>
+                  <p className="text-sm text-white/50">
+                    Kling 3.0, Seedance, Veo — frames, prompt, duration, aspect, audio.
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <StudioVideoPanel />
                 </CardContent>
               </Card>
             ) : null}
@@ -2205,6 +2294,61 @@ export default function AppBrandWizard() {
           </div>
         </section>
       </StudioShell>
+
+      {deleteProjectDialog ? (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/75 p-4 backdrop-blur-[2px]"
+          role="presentation"
+          onClick={() => !deleteProjectLoading && setDeleteProjectDialog(null)}
+        >
+          <Card
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-project-title"
+            className="w-full max-w-md border-white/15 bg-[#0b0912] shadow-[0_0_60px_rgba(0,0,0,0.6)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <CardHeader className="space-y-1">
+              <CardTitle id="delete-project-title" className="text-lg">
+                Delete this project?
+              </CardTitle>
+              <p className="text-sm font-normal text-white/60">
+                <span className="font-medium text-white/85">{deleteProjectDialog.label}</span>
+                <br />
+                All generations linked to this store URL will be removed permanently. This cannot be undone.
+              </p>
+            </CardHeader>
+            <CardContent className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="secondary"
+                className="border border-white/15 bg-white/5 text-white hover:bg-white/10"
+                disabled={deleteProjectLoading}
+                onClick={() => setDeleteProjectDialog(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={deleteProjectLoading}
+                onClick={() =>
+                  void executeDeleteProject(deleteProjectDialog.storeUrl, deleteProjectDialog.runIds)
+                }
+              >
+                {deleteProjectLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Deleting…
+                  </>
+                ) : (
+                  "Delete project"
+                )}
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      ) : null}
 
       {lightboxUrl ? (
         <div
