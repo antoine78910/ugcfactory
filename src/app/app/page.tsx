@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
-import { Loader2, Trash2, X } from "lucide-react";
+import { Loader2, Play, Sparkles, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -207,6 +207,26 @@ export default function AppBrandWizard() {
 
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const packshotFileInputRef = useRef<HTMLInputElement>(null);
+
+  type MotionSubTab = "create" | "edit" | "control";
+  const [motionSubTab, setMotionSubTab] = useState<MotionSubTab>("control");
+  const [motionVideoRefReady, setMotionVideoRefReady] = useState(false);
+  const [motionVideoRefFileName, setMotionVideoRefFileName] = useState<string>("");
+  const [motionVideoDurationSeconds, setMotionVideoDurationSeconds] = useState<number>(12);
+  const [motionCharacterImageUrl, setMotionCharacterImageUrl] = useState<string | null>(null);
+  const [motionModel, setMotionModel] = useState<string>("kling-3.0-motion-control");
+  const [motionQuality, setMotionQuality] = useState<string>("720p");
+  const [motionIsGenerating, setMotionIsGenerating] = useState(false);
+  const motionVideoInputRef = useRef<HTMLInputElement>(null);
+  const motionCharacterInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    return () => {
+      if (motionCharacterImageUrl?.startsWith("blob:")) {
+        URL.revokeObjectURL(motionCharacterImageUrl);
+      }
+    };
+  }, [motionCharacterImageUrl]);
 
   const currentProductName = useMemo(() => {
     const fromAnalysis = safeString(analysis?.step1_rawSheet ?? "");
@@ -1048,8 +1068,8 @@ export default function AppBrandWizard() {
   return (
     <div className="dark min-h-screen bg-[#050507] text-white">
       <div className="pointer-events-none fixed left-1/2 top-0 -z-0 h-[520px] w-[1000px] -translate-x-1/2 rounded-full bg-violet-600/15 blur-[150px]" />
-      <main className="relative z-10 grid min-h-screen grid-cols-[250px_1fr]">
-        <aside className="flex min-h-screen flex-col border-r border-white/10 bg-[#06070d] px-3 py-4">
+      <main className="relative z-10 grid min-h-screen grid-cols-[250px_1fr] items-start">
+        <aside className="sticky top-0 flex h-screen flex-col overflow-hidden border-r border-white/10 bg-[#06070d] px-3 py-4">
           <div className="shrink-0 px-2 pb-2">
             <Image
               src="/youry-logo.png"
@@ -1241,18 +1261,273 @@ export default function AppBrandWizard() {
             ) : null}
 
             {appSection === "motion_control" ? (
-              <Card className="border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
-                <CardHeader>
-                  <CardTitle className="text-base">Motion Control</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2 text-sm text-white/70">
-                  <p>
-                    This section is reserved for advanced motion choreography (camera path, gesture timing, and shot
-                    transitions).
-                  </p>
-                  <p>Next step: connect this panel to your template engine and shot-level controls.</p>
-                </CardContent>
-              </Card>
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    className={`${
+                      motionSubTab === "create" ? "bg-violet-400 text-black border border-violet-200/40" : "bg-white/5 text-white"
+                    }`}
+                    onClick={() => setMotionSubTab("create")}
+                  >
+                    Create Video
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    className={`${
+                      motionSubTab === "edit" ? "bg-violet-400 text-black border border-violet-200/40" : "bg-white/5 text-white"
+                    }`}
+                    onClick={() => setMotionSubTab("edit")}
+                  >
+                    Edit Video
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    className={`${
+                      motionSubTab === "control" ? "bg-violet-400 text-black border border-violet-200/40" : "bg-white/5 text-white"
+                    }`}
+                    onClick={() => setMotionSubTab("control")}
+                  >
+                    Motion Control
+                  </Button>
+                </div>
+
+                {motionSubTab !== "control" ? (
+                  <Card className="border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
+                    <CardHeader>
+                      <CardTitle className="text-base">
+                        {motionSubTab === "create" ? "Create Video" : "Edit Video"}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="text-sm text-white/70">
+                      This tab is UI-only for now. Motion Control is implemented as the main workflow panel.
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <Card className="border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
+                    <CardHeader>
+                      <CardTitle className="text-base">Motion Control</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-violet-500/15 to-transparent p-4">
+                        <div className="grid gap-4 lg:grid-cols-[1fr_220px] lg:items-center">
+                          <div>
+                            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                              <span className="text-xs font-bold uppercase tracking-wider text-violet-300">MOTION CONTROL</span>
+                            </div>
+                            <h2 className="mt-3 text-2xl font-bold tracking-tight">Control motion with video references</h2>
+                            <p className="mt-1 text-sm text-white/60">
+                              Add a short motion reference + a character image. Then pick a model/quality and generate.
+                            </p>
+                          </div>
+
+                          <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] p-3 min-h-[140px] flex items-center justify-center">
+                            {motionCharacterImageUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={motionCharacterImageUrl}
+                                alt="Character"
+                                className="h-full w-full object-cover rounded-lg"
+                              />
+                            ) : (
+                              <div className="text-center">
+                                <div className="mx-auto mb-2 h-12 w-12 rounded-xl bg-violet-400/20 text-violet-200 flex items-center justify-center">
+                                  <Play className="h-6 w-6" />
+                                </div>
+                                <div className="text-xs text-white/55">Character image</div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2">
+                              <div className="h-10 w-10 rounded-xl bg-violet-400/20 border border-violet-400/30 flex items-center justify-center">
+                                <Play className="h-5 w-5 text-violet-200" />
+                              </div>
+                              <div>
+                                <div className="text-sm font-semibold">Add motion to copy</div>
+                                <div className="text-xs text-white/55">Video duration</div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="mt-4 space-y-3">
+                            <div className="flex items-center justify-between text-xs text-white/55">
+                              <span>3s</span>
+                              <span className="text-white/75 font-medium">{motionVideoDurationSeconds}s</span>
+                              <span>30s</span>
+                            </div>
+                            <input
+                              type="range"
+                              min={3}
+                              max={30}
+                              step={1}
+                              value={motionVideoDurationSeconds}
+                              onChange={(e) => setMotionVideoDurationSeconds(Number(e.target.value))}
+                              className="w-full accent-violet-300"
+                            />
+                            <div className="flex items-center gap-2">
+                              <input
+                                ref={motionVideoInputRef}
+                                type="file"
+                                accept="video/*"
+                                className="sr-only"
+                                onChange={(e) => {
+                                  const f = e.target.files?.[0] ?? null;
+                                  if (!f) return;
+                                  setMotionVideoRefReady(true);
+                                  setMotionVideoRefFileName(f.name);
+                                  toast.success("Video reference selected", { description: f.name });
+                                  e.currentTarget.value = "";
+                                }}
+                              />
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                className="w-full border border-white/10 bg-white/5 text-white hover:bg-white/10"
+                                onClick={() => motionVideoInputRef.current?.click()}
+                              >
+                                {motionVideoRefReady ? "Change video reference" : "Choose video reference"}
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                          <div className="text-sm font-semibold">Add your character image</div>
+                          <div className="mt-1 text-xs text-white/55">
+                            Visible face and body (so motion control matches the character).
+                          </div>
+
+                          <div className="mt-4 flex flex-col gap-3">
+                            <input
+                              ref={motionCharacterInputRef}
+                              type="file"
+                              accept="image/*"
+                              className="sr-only"
+                              onChange={(e) => {
+                                const f = e.target.files?.[0] ?? null;
+                                if (!f) return;
+                                const url = URL.createObjectURL(f);
+                                setMotionCharacterImageUrl(url);
+                                toast.success("Character image selected", { description: f.name });
+                                e.currentTarget.value = "";
+                              }}
+                            />
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              className="border border-white/10 bg-white/5 text-white hover:bg-white/10"
+                              onClick={() => motionCharacterInputRef.current?.click()}
+                            >
+                              {motionCharacterImageUrl ? "Change character image" : "Choose character image"}
+                            </Button>
+                            {motionVideoRefReady ? (
+                              <div className="rounded-xl border border-emerald-400/20 bg-emerald-400/5 p-3 text-xs text-emerald-200/90">
+                                Video selected. Duration: {motionVideoDurationSeconds}s
+                              </div>
+                            ) : null}
+                            {motionVideoRefReady && motionVideoRefFileName ? (
+                              <div className="text-xs text-white/45 break-all">Ref: {motionVideoRefFileName}</div>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid gap-4 lg:grid-cols-2">
+                        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                          <details className="group" open>
+                            <summary className="cursor-pointer list-none flex items-center justify-between gap-3">
+                              <span className="text-sm font-semibold">Model</span>
+                              <span className="text-xs text-white/55">Kling 3.0 Motion Control</span>
+                            </summary>
+                            <div className="mt-3">
+                              <Select value={motionModel} onValueChange={(v) => setMotionModel(v)}>
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="kling-3.0-motion-control">Kling 3.0 Motion Control</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </details>
+                        </div>
+
+                        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                          <details className="group" open>
+                            <summary className="cursor-pointer list-none flex items-center justify-between gap-3">
+                              <span className="text-sm font-semibold">Quality</span>
+                              <span className="text-xs text-white/55">Resolution</span>
+                            </summary>
+                            <div className="mt-3">
+                              <Select value={motionQuality} onValueChange={(v) => setMotionQuality(v)}>
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="720p">720p</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </details>
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl border border-violet-400/20 bg-violet-400/10 p-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <div className="text-sm font-semibold">Generate motion-controlled video</div>
+                            <div className="text-xs text-white/55">
+                              UI prototype (front-end only). Generation will be wired to APIs later.
+                            </div>
+                          </div>
+                          <Button
+                            type="button"
+                            disabled={motionIsGenerating}
+                            className="bg-violet-400 text-black border border-violet-200/40 shadow-[0_0_0_1px_rgba(76,29,149,0.3)] hover:bg-violet-300 h-12 px-6 rounded-2xl font-semibold inline-flex items-center gap-2"
+                            onClick={async () => {
+                              if (!motionCharacterImageUrl) {
+                                toast.error("Please choose a character image first.");
+                                return;
+                              }
+                              if (!motionVideoRefReady) {
+                                toast.error("Please choose a video reference first.");
+                                return;
+                              }
+                              if (motionIsGenerating) return;
+                              setMotionIsGenerating(true);
+                              try {
+                                await new Promise((r) => setTimeout(r, 1200));
+                                toast.success("Motion control generation queued (UI only)");
+                              } finally {
+                                setMotionIsGenerating(false);
+                              }
+                            }}
+                          >
+                            {motionIsGenerating ? (
+                              <Loader2 className="h-5 w-5 animate-spin" />
+                            ) : (
+                              <Sparkles className="h-5 w-5" />
+                            )}
+                            Generate
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
             ) : null}
 
             {appSection === "models" ? (

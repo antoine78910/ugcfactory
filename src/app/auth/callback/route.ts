@@ -8,6 +8,23 @@ export async function GET(req: NextRequest) {
   const error = url.searchParams.get("error");
   const errorDescription = url.searchParams.get("error_description");
 
+  const isAlreadyConnectedLike = (err: string | null | undefined) => {
+    if (!err) return false;
+    const s = String(err).toLowerCase();
+    return (
+      s.includes("already_connected") ||
+      s.includes("already connected") ||
+      s.includes("already authenticated") ||
+      s.includes("already_auth") ||
+      s.includes("vous êtes déjà connecté") ||
+      s.includes("vous etes deja connect") ||
+      s.includes("deja connecté") ||
+      s.includes("deja connect") ||
+      s.includes("connecté") ||
+      s.includes("connecte")
+    );
+  };
+
   // Build a mutable response to capture auth cookies set by Supabase.
   const cookieCaptureResponse = NextResponse.next();
   const supabase = createServerClient(getSupabaseUrl(), getSupabaseAnonKey(), {
@@ -46,6 +63,13 @@ export async function GET(req: NextRequest) {
       }
     } catch {
       // ignore and fall back to /signin
+    }
+
+    // Some OAuth flows return "already connected / already authenticated"
+    // even though the session is effectively usable. In that case, do not
+    // bounce the user to /signin with an error message.
+    if (isAlreadyConnectedLike(error) || isAlreadyConnectedLike(errorDescription)) {
+      return await redirectToAppWithCapturedCookies();
     }
 
     const target = new URL("/signin", url.origin);
