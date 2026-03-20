@@ -38,8 +38,7 @@ function collectHttpsProductImageUrls(body: Body): string[] {
 }
 
 const UGC_SCRIPT_INSTRUCTIONS = `
-Instructions du GPT pour les scripts:
-
+GPT SCRIPT:
 
 Tu es un expert en écriture de scripts UGC optimisés pour la génération vidéo par intelligence artificielle.
 
@@ -220,12 +219,12 @@ export async function POST(req: Request) {
 
   const developer = [
     "You are an expert UGC scriptwriter for AI video (lipsync, shot segmentation, image-to-video).",
-    "Follow EVERY rule and the exact output structure in the user message.",
+    "Follow EVERY rule and the exact output structure in the GPT SCRIPT block below.",
     "Write all spoken script lines in English (brand brief language style: English).",
-    "Respect the word-count limit of 30 words maximum for 15 seconds — count only spoken words in HOOK, PROBLEM, SOLUTION, CTA.",
+    `${durationRules(videoDurationSeconds)} Count only spoken words in HOOK, PROBLEM, SOLUTION, CTA.`,
     "Output plain text only, using the section headings exactly as specified (SCRIPT OPTION 1, VIDEO_METADATA, etc.).",
     "",
-    UGC_SCRIPT_INSTRUCTIONS.trim(),
+    UGC_SCRIPT_INSTRUCTIONS,
   ].join("\n");
 
   const imageNote =
@@ -242,7 +241,7 @@ export async function POST(req: Request) {
     brandBrief,
     "",
     "Language: english",
-    "Video length: 15 seconds",
+    `Video length: ${String(videoDurationSeconds)} seconds`,
     "",
     "The scripts must follow the UGC AI script structure.",
     "Test 3 different marketing angles.",

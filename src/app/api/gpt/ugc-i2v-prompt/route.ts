@@ -10,6 +10,8 @@ type Body = {
 };
 
 const INSTRUCTIONS = `
+GPT PROMPT VIDEO:
+
 You are an AI prompt engineer specialized in UGC image-to-video generation.
 
 Your role is to convert a UGC script and voice profile into a stable video prompt for models like VEO and Kling.
@@ -146,7 +148,7 @@ export async function POST(req: Request) {
   const developer = [
     "You output a single compact image-to-video prompt as plain text.",
     "No section headings in the output. One continuous cinematic description.",
-    "Follow every rule in the user message.",
+    "Follow every rule in the GPT PROMPT VIDEO block in the user message.",
   ].join("\n");
 
   const user = [
