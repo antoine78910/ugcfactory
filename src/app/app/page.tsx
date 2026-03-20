@@ -380,7 +380,38 @@ export default function AppBrandWizard() {
       const res = await fetch("/api/runs/list", { method: "GET", cache: "no-store" });
       const json = (await res.json()) as { data?: any; error?: string };
       if (!res.ok) throw new Error(json.error || "List runs failed");
-      setSavedRuns(Array.isArray(json.data) ? json.data : []);
+      const runs = Array.isArray(json.data) ? json.data : [];
+      setSavedRuns(runs);
+
+      const pendingKling = runs.filter((r: { id: string; extracted?: unknown }) => {
+        if (!runHasLinkToAdUniverse(r.extracted)) return false;
+        const s = readUniverseFromExtracted(r.extracted);
+        return Boolean(s?.klingTaskId?.trim() && !s?.klingVideoUrl?.trim());
+      });
+      if (pendingKling.length > 0) {
+        void (async () => {
+          for (const r of pendingKling as { id: string }[]) {
+            try {
+              await fetch("/api/runs/finalize-kling", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ runId: r.id }),
+              });
+            } catch {
+              /* ignore */
+            }
+          }
+          try {
+            const res2 = await fetch("/api/runs/list", { method: "GET", cache: "no-store" });
+            const j2 = (await res2.json()) as { data?: unknown[] };
+            if (res2.ok && Array.isArray(j2.data)) {
+              setSavedRuns(j2.data as typeof runs);
+            }
+          } catch {
+            /* ignore */
+          }
+        })();
+      }
     } catch (err) {
       // keep UI usable even if Supabase tables aren't created yet
       const message = err instanceof Error ? err.message : "Unknown error";
@@ -591,6 +622,49 @@ export default function AppBrandWizard() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [deleteProjectDialog, deleteProjectLoading]);
+
+  /** Finalize KIE/Kling videos that finished while the user was on another tab (client polling had stopped). */
+  useEffect(() => {
+    if (appSection !== "projects") return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const listRes = await fetch("/api/runs/list", { method: "GET", cache: "no-store" });
+        const json = (await listRes.json()) as {
+          data?: Array<{ id: string; extracted?: unknown }>;
+          error?: string;
+        };
+        if (!listRes.ok || !Array.isArray(json.data)) return;
+        const runs = json.data;
+        const pending = runs.filter((r) => {
+          if (!runHasLinkToAdUniverse(r.extracted)) return false;
+          const s = readUniverseFromExtracted(r.extracted);
+          return Boolean(s?.klingTaskId?.trim() && !s?.klingVideoUrl?.trim());
+        });
+        for (const r of pending) {
+          if (cancelled) return;
+          try {
+            await fetch("/api/runs/finalize-kling", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ runId: r.id }),
+            });
+          } catch {
+            /* ignore */
+          }
+        }
+        if (!cancelled) {
+          await refreshMeAndRuns();
+        }
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only when opening Projects
+  }, [appSection]);
 
   useEffect(() => {
     if (pathname !== "/app") return;

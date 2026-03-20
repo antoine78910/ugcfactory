@@ -165,6 +165,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const lastNanoImagePromptRef = useRef("");
   const lastNanoImagePromptIndexRef = useRef<0 | 1 | 2>(0);
   const lastKlingVideoPromptRef = useRef("");
+  /** Avoid infinite resume loop if KIE poll fails after returning to the page. */
+  const klingResumeAttemptedRef = useRef(false);
 
   useEffect(() => {
     latestSnapRef.current = {
@@ -1149,6 +1151,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       });
       const json = (await res.json()) as { taskId?: string; error?: string };
       if (!res.ok || !json.taskId) throw new Error(json.error || "Video generation failed");
+      setKlingVideoUrl(null);
       setKlingTaskId(json.taskId);
       setKlingPollTaskId(json.taskId);
       const base = latestSnapRef.current;
@@ -1165,6 +1168,20 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       setIsKlingSubmitting(false);
     }
   }
+
+  useEffect(() => {
+    klingResumeAttemptedRef.current = false;
+  }, [klingTaskId]);
+
+  /** Resume KIE polling if the user left during generation (task saved, poll was cancelled on unmount). */
+  useEffect(() => {
+    if (!klingTaskId?.trim()) return;
+    if (klingVideoUrl?.trim()) return;
+    if (klingPollTaskId) return;
+    if (klingResumeAttemptedRef.current) return;
+    klingResumeAttemptedRef.current = true;
+    setKlingPollTaskId(klingTaskId);
+  }, [klingTaskId, klingVideoUrl, klingPollTaskId]);
 
   useEffect(() => {
     if (!klingPollTaskId) return;
@@ -1628,13 +1645,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         {showI2vPipeline ? (
           <div className="space-y-4">
             <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/[0.06] p-4">
-              <div>
-                <p className="text-sm font-semibold text-white/90">Reference images</p>
-              </div>
-              <p className="mt-1 text-xs text-white/45">
-                Three 9:16 frames are generated from your angle. Tap one to select it, then confirm with the button
-                below — nothing starts until you do.
-              </p>
+              <p className="text-sm font-semibold text-white/90">Choose an image to generate your UGC</p>
               <div className="mt-4 flex flex-wrap gap-2">
                 {selectedAngleIndex !== null &&
                 !nanoBananaPromptsRaw.trim() &&
@@ -1662,10 +1673,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                 <div className="mt-4 space-y-4">
                   {nanoHasThreeImages ? (
                     <>
-                      <p className="text-xs text-white/45">
-                        Preview is cropped to <span className="text-white/60">3:4</span>. Use{" "}
-                        <span className="text-white/60">Full view</span> on a card to see the full frame.
-                      </p>
                       <div className="grid gap-4 sm:grid-cols-3">
                         {([0, 1, 2] as const).map((i) => {
                           const selected = nanoBananaSelectedImageIndex === i;
@@ -1747,10 +1754,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                                 </>
                               )}
                             </Button>
-                            <p className="max-w-md text-center text-[11px] text-white/40">
-                              Builds the motion prompt from your angle, then renders the video. Change image anytime —
-                              video steps reset until you confirm again.
-                            </p>
                           </div>
                         )}
                       </div>
