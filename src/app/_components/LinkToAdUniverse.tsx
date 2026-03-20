@@ -558,16 +558,20 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     }
   }
 
-  async function onRun() {
+  async function onRun(opts?: { bypassSavedProject?: boolean }) {
     const url = storeUrl.trim();
     if (!url) {
       toast.error("Missing URL");
       return;
     }
 
-    const userUploadedImageUrl = neutralUploadUrl;
+    /** Refaire l’étape 1 : ne pas réutiliser l’upload neutre (l’UI doit se vider comme le brief). */
+    const userUploadedImageUrl = opts?.bypassSavedProject ? null : neutralUploadUrl;
 
-    if (!forceNewScan) {
+    /** Sans ça, un run déjà sauvé pour cette URL recharge l’ancien état (photo + brief) au lieu de rescanner. */
+    const tryHydrateFromSavedRun = !forceNewScan && !opts?.bypassSavedProject;
+
+    if (tryHydrateFromSavedRun) {
       try {
         const findRes = await fetch(`/api/runs/find-by-store-url?url=${encodeURIComponent(url)}`, { cache: "no-store" });
         const findJson = (await findRes.json()) as { data?: { id: string; store_url?: string; title?: string | null; extracted?: unknown } };
@@ -590,6 +594,9 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     setAngleLabels(["", "", ""]);
     setSelectedAngleIndex(null);
     setShowFullScripts(false);
+    if (opts?.bypassSavedProject) {
+      setNeutralUploadUrl(null);
+    }
     let activeRunId: string | null = null;
     setUniverseRunId(null);
     setLastExtractedJson(null);
@@ -1423,14 +1430,14 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     }
   }
 
-  /** Refaire = relancer scan + brief + scripts (comme Generate). */
+  /** Refaire = nouveau scan + brief (ignore le projet déjà enregistré pour cette URL). */
   function redoStep1FullScan() {
     if (isWorking) return;
     if (!storeUrl.trim()) {
       toast.error("Indique une URL boutique.");
       return;
     }
-    void onRun();
+    void onRun({ bypassSavedProject: true });
   }
 
   /** Garde le brief, efface scripts et tout le pipeline image/vidéo. */
@@ -1616,7 +1623,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                 />
                 Force new scan
               </label>
-              <Button type="button" onClick={onRun} disabled={isWorking} className={primaryBtnClass}>
+              <Button type="button" onClick={() => void onRun()} disabled={isWorking} className={primaryBtnClass}>
                 {isWorking ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                 {isWorking
                   ? stage === "writing_scripts"
