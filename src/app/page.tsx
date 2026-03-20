@@ -244,10 +244,10 @@ export default function LandingPage() {
             ×
           </button>
         </div>
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4">
+        <div className="mx-auto flex max-w-6xl items-center px-5 py-4">
           <Link
             href="/"
-            className="flex items-center"
+            className="flex items-center flex-shrink-0"
           >
             <Image
               src="/youry-logo.png"
@@ -259,7 +259,7 @@ export default function LandingPage() {
             />
           </Link>
 
-          <div className="flex items-center gap-3">
+          <div className="ml-auto flex items-center gap-3">
             <Button
               asChild
               variant="ghost"
