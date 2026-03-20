@@ -15,6 +15,9 @@ import {
   selectedAngleScript,
   type LinkToAdUniverseSnapshotV1,
 } from "@/lib/linkToAdUniverse";
+import { LinkToAdUniverseStepper } from "@/app/_components/LinkToAdUniverseStepper";
+import { TextShimmer } from "@/components/ui/text-shimmer";
+import { WebsiteScanLoader } from "@/app/_components/WebsiteScanLoader";
 
 type ProductCandidate = { url: string; reason?: string } | string;
 
@@ -1424,6 +1427,45 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const showI2vPipeline = selectedAngleIndex !== null && scriptsText.trim().length > 0;
   const nanoHasThreeImages = nanoBananaImageUrls.length === 3;
 
+  const step1Done = Boolean(summaryText.trim() && resolvedPreviewUrl);
+  const step2Done = Boolean(scriptsText.trim() && selectedAngleIndex !== null);
+  const step3Done = Boolean(nanoHasThreeImages && nanoBananaImageUrl);
+  const step4Done = Boolean(ugcVideoPromptGpt.trim());
+  const step5Done = Boolean(klingVideoUrl);
+
+  const universeCurrentStep = useMemo(() => {
+    if (!step1Done) return 1;
+    if (!step2Done) return 2;
+    if (!step3Done) return 3;
+    if (!step4Done) return 4;
+    if (!step5Done) return 5;
+    return 6;
+  }, [step1Done, step2Done, step3Done, step4Done, step5Done]);
+
+  const universeLoadingMessage = useMemo(() => {
+    if (nanoPollTaskId) return "NanoBanana Pro génère tes images…";
+    if (isNanoAllImagesSubmitting || isNanoPromptsLoading) return "Préparation des prompts & images…";
+    if (isNanoImageSubmitting) return "NanoBanana Pro en cours…";
+    if (isVideoPromptLoading) return "Génération du prompt vidéo…";
+    if (isKlingSubmitting || klingPollTaskId) return "Kling génère la vidéo…";
+    if (!isWorking) return null;
+    if (stage === "scanning") return "Extraction de la page boutique…";
+    if (stage === "finding_image") return "Analyse des visuels produit…";
+    if (stage === "summarizing") return "Rédaction du brief marque…";
+    if (stage === "writing_scripts") return "Écriture des 3 scripts UGC…";
+    return "Traitement en cours…";
+  }, [
+    nanoPollTaskId,
+    isNanoAllImagesSubmitting,
+    isNanoPromptsLoading,
+    isNanoImageSubmitting,
+    isVideoPromptLoading,
+    isKlingSubmitting,
+    klingPollTaskId,
+    isWorking,
+    stage,
+  ]);
+
   const primaryBtnClass =
     "h-11 rounded-2xl bg-violet-400 px-6 text-black font-semibold border border-violet-200/40 shadow-[0_6px_0_0_rgba(76,29,149,0.9)] transition-all hover:-translate-y-[1px] hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9)] active:translate-y-[6px]";
 
@@ -1601,19 +1643,43 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           <div>
             <CardTitle className="text-base">Link to Ad Universe</CardTitle>
             <p className="mt-1 text-sm text-white/55">
-              Step 1: scan URL, product image, English brand brief. Step 2: three UGC scripts (3 angles). Saves
-              automatically to Projects.
+              Parcours en 5 étapes — tout est sauvegardé dans Projets.
             </p>
           </div>
-          <div className="flex items-center gap-2 text-xs text-white/45">
-            <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1">
-              Stage: <span className="text-white/70">{stage}</span>
-            </span>
-          </div>
+          {stage === "error" ? (
+            <div className="flex items-center gap-2 text-xs text-red-300/90">
+              <span className="rounded-full border border-red-400/30 bg-red-500/10 px-2 py-1">Erreur</span>
+            </div>
+          ) : null}
         </div>
       </CardHeader>
 
       <CardContent className="space-y-6">
+        <LinkToAdUniverseStepper
+          currentStep={universeCurrentStep}
+          step1Done={step1Done}
+          step2Done={step2Done}
+          step3Done={step3Done}
+          step4Done={step4Done}
+          step5Done={step5Done}
+        />
+        {universeLoadingMessage ? (
+          <div className="-mt-2 mb-2 flex min-h-[4.25rem] items-center gap-3 rounded-xl border border-violet-500/15 bg-violet-500/[0.06] px-3 py-3 sm:gap-4 sm:px-4">
+            {isWorking && (stage === "scanning" || stage === "finding_image") ? (
+              <WebsiteScanLoader
+                label={stage === "finding_image" ? "Images" : "Scan"}
+                subtitle={universeLoadingMessage}
+              />
+            ) : (
+              <>
+                <Loader2 className="h-4 w-4 shrink-0 animate-spin text-violet-300" aria-hidden />
+                <TextShimmer as="span" className="text-sm font-medium">
+                  {universeLoadingMessage}
+                </TextShimmer>
+              </>
+            )}
+          </div>
+        ) : null}
         <div className="space-y-3">
           <div className="flex flex-wrap items-end gap-3">
             <div className="flex-1 min-w-[240px]">

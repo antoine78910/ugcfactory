@@ -146,3 +146,76 @@
 .animate-marquee-track {
   animation: marquee-track 38s linear infinite;
 }
+
+/* Link to Ad — loader scan site (barre + clip-path, branding violet) */
+@keyframes lta-website-scan-move {
+  0% {
+    top: 0;
+  }
+  25% {
+    top: 2.5rem;
+  }
+  50% {
+    top: 0;
+  }
+  75% {
+    top: 2.5rem;
+  }
+  100% {
+    top: 0;
+  }
+}
+
+@keyframes lta-website-scan-cut {
+  0% {
+    clip-path: inset(0 0 0 0);
+  }
+  25% {
+    clip-path: inset(100% 0 0 0);
+  }
+  50% {
+    clip-path: inset(0 0 100% 0);
+  }
+  75% {
+    clip-path: inset(0 0 0 0);
+  }
+  100% {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+.lta-website-scan-line-glow {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 6px;
+  border-radius: 4px;
+  background-color: rgba(167, 139, 250, 0.42);
+  top: 0;
+  z-index: 0;
+  filter: blur(10px);
+  animation: lta-website-scan-move 2s infinite;
+  transition: color 1s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.lta-website-scan-line-solid {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 5px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #a78bfa, #e9d5ff, #c4b5fd);
+  top: 0;
+  z-index: 1;
+  opacity: 0.92;
+  animation: lta-website-scan-move 2s infinite;
+  transition: opacity 1s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.lta-website-scan-cut {
+  display: inline-block;
+  position: relative;
+  z-index: 2;
+  animation: lta-website-scan-cut 2s infinite;
+  transition: clip-path 1s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}

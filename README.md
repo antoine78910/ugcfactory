@@ -77,6 +77,15 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+### Shadcn CLI (`npx shadcn add …`)
+
+Le projet Next.js est le dossier **`ugc-automation`** (pas le dossier parent `speel 2.0`). Sinon le CLI affiche *We could not detect a supported framework*.
+
+```bash
+cd ugc-automation
+npx shadcn@latest add https://21st.dev/r/ibelick/text-shimmer --yes
+```
+
 UI lives in `src/app/page.tsx`.
 
 ## Notes
