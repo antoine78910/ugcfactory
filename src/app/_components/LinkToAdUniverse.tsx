@@ -893,11 +893,17 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
               nanoBananaImageUrl: first,
               nanoBananaTaskId: taskId,
             };
-            void persistUniverse(universeRunId, url0, extractedTitle, lastExtractedJson, snap, packshotsForSave(), {
-              imagePrompt: chosen || undefined,
-              selectedImageUrl: first,
-              generatedImageUrls: urls.slice(0, 8),
-            });
+            try {
+              await persistUniverse(universeRunId, url0, extractedTitle, lastExtractedJson, snap, packshotsForSave(), {
+                imagePrompt: chosen || undefined,
+                selectedImageUrl: first,
+                generatedImageUrls: urls.slice(0, 8),
+              });
+            } catch (e) {
+              toast.error("Sauvegarde NanoBanana échouée", {
+                description: e instanceof Error ? e.message : "Erreur",
+              });
+            }
           }
           toast.success("Image NanoBanana Pro enregistrée");
           if (interval) clearInterval(interval);
@@ -1025,10 +1031,16 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           const base = latestSnapRef.current;
           if (base && lastExtractedJson && url0) {
             const snap: LinkToAdUniverseSnapshotV1 = { ...base, klingVideoUrl: vUrl, klingTaskId: taskId };
-            void persistUniverse(universeRunId, url0, extractedTitle, lastExtractedJson, snap, packshotsForSave(), {
-              videoUrl: vUrl,
-              videoPrompt: lastKlingVideoPromptRef.current || undefined,
-            });
+            try {
+              await persistUniverse(universeRunId, url0, extractedTitle, lastExtractedJson, snap, packshotsForSave(), {
+                videoUrl: vUrl,
+                videoPrompt: lastKlingVideoPromptRef.current || undefined,
+              });
+            } catch (e) {
+              toast.error("Sauvegarde vidéo Kling échouée", {
+                description: e instanceof Error ? e.message : "Erreur",
+              });
+            }
           }
           toast.success("Vidéo Kling enregistrée dans le projet");
           if (interval) clearInterval(interval);
