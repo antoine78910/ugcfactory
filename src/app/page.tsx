@@ -369,8 +369,7 @@ export default function LandingPage() {
         <div className="relative overflow-hidden">
           <div className="pointer-events-none absolute inset-y-0 left-0 z-20 w-16 bg-gradient-to-r from-[#050507] to-transparent sm:w-28" />
           <div className="pointer-events-none absolute inset-y-0 right-0 z-20 w-16 bg-gradient-to-l from-[#050507] to-transparent sm:w-28" />
-          <div className="pointer-events-none absolute inset-y-0 left-1/2 z-30 w-[3px] -translate-x-1/2 bg-violet-400/90 shadow-[0_0_14px_4px_rgba(139,92,246,0.95)]" />
-          <div className="pointer-events-none absolute inset-y-0 left-1/2 z-20 w-14 -translate-x-1/2 bg-gradient-to-r from-transparent via-violet-500/25 to-transparent blur-md" />
+          {/* No center "scan line" overlay — it drew a violet seam through cards (e.g. product-1) while scrolling. */}
 
           <div
             ref={carouselTrackRef}
