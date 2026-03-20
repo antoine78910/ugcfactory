@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Check, ChevronDown, Loader2, RefreshCw } from "lucide-react";
+import { Check, ChevronDown, Loader2, Maximize2, RefreshCw, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -185,6 +185,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const [isVideoPromptLoading, setIsVideoPromptLoading] = useState(false);
   const [isKlingSubmitting, setIsKlingSubmitting] = useState(false);
   const [klingPollTaskId, setKlingPollTaskId] = useState<string | null>(null);
+  /** Lightbox: full NanoBanana image (source is often 9:16; grid shows 3:4 crop). */
+  const [nanoImageLightboxUrl, setNanoImageLightboxUrl] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const prevAngleRef = useRef<number | null>(null);
@@ -253,6 +255,15 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   useEffect(() => {
     setImgError(false);
   }, [resolvedPreviewUrl]);
+
+  useEffect(() => {
+    if (!nanoImageLightboxUrl) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setNanoImageLightboxUrl(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [nanoImageLightboxUrl]);
 
   const hydrateFromRun = useCallback(
     (run: {
@@ -1583,6 +1594,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   }
 
   return (
+    <>
     <Card className="border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.10)]">
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1938,41 +1950,63 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                   {nanoHasThreeImages ? (
                     <div className="mt-4 space-y-4">
                       <p className="text-xs font-medium text-white/45">
-                        NanoBanana Pro (2K · 9:16) — aperçu complet sans rognage
+                        NanoBanana Pro — aperçu rogné <span className="text-white/60">3:4</span> à l’écran (image source
+                        souvent 9:16). Utilise <span className="text-white/60">Vue entière</span> pour voir le cadre
+                        complet.
                       </p>
                       <div className="grid gap-4 sm:grid-cols-3">
                         {([0, 1, 2] as const).map((i) => {
                           const selected = nanoBananaSelectedImageIndex === i;
                           return (
-                            <button
+                            <div
                               key={i}
-                              type="button"
+                              role="button"
+                              tabIndex={0}
                               aria-pressed={selected}
                               onClick={() => void onSelectNanoBananaImage(i)}
-                              className={`relative flex flex-col overflow-hidden rounded-xl border bg-[#08080c] text-left transition-all active:scale-[0.99] hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 ${
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  void onSelectNanoBananaImage(i);
+                                }
+                              }}
+                              className={`group relative flex cursor-pointer flex-col overflow-hidden rounded-2xl border bg-[#08080c] text-left transition-[transform,box-shadow,border-color] duration-200 ease-out active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0912] ${
                                 selected
-                                  ? "border-violet-400/90 shadow-[0_0_0_1px_rgba(76,29,149,0.25)]"
-                                  : "border-white/10 hover:border-violet-400/35"
+                                  ? "border-[3px] border-violet-400 shadow-[0_0_0_1px_rgba(139,92,246,0.45),0_0_28px_rgba(139,92,246,0.22),0_12px_40px_rgba(76,29,149,0.25)]"
+                                  : "border border-white/10 hover:border-violet-400/40"
                               }`}
                             >
                               <span className="border-b border-white/10 px-2 py-1.5 text-center text-[10px] font-bold uppercase tracking-wide text-emerald-300/90">
                                 Image {i + 1}
                               </span>
-                              <div className="relative aspect-[9/16] w-full">
+                              <div className="relative aspect-[3/4] w-full overflow-hidden bg-[#050507]">
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img
                                   src={nanoBananaImageUrls[i]}
                                   alt={`NanoBanana reference ${i + 1}`}
-                                  className="absolute inset-0 h-full w-full object-contain object-center"
+                                  className="h-full w-full object-cover object-center"
                                   loading="lazy"
                                 />
+                                <Button
+                                  type="button"
+                                  variant="secondary"
+                                  size="sm"
+                                  className="absolute bottom-2 right-2 z-20 h-8 gap-1 rounded-lg border border-white/15 bg-black/70 px-2 text-[10px] font-semibold text-white shadow-lg backdrop-blur-md hover:bg-black/85"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setNanoImageLightboxUrl(nanoBananaImageUrls[i]);
+                                  }}
+                                >
+                                  <Maximize2 className="h-3.5 w-3.5 shrink-0 opacity-90" aria-hidden />
+                                  Vue entière
+                                </Button>
                               </div>
                               {selected ? (
-                                <span className="absolute right-2 top-9 z-10 inline-flex h-6 w-6 items-center justify-center rounded-full bg-violet-400/90 text-black shadow">
-                                  <Check className="h-4 w-4" aria-hidden />
+                                <span className="absolute right-2 top-9 z-10 inline-flex h-7 w-7 items-center justify-center rounded-full border-2 border-violet-200/40 bg-violet-400 text-black shadow-md shadow-violet-500/30">
+                                  <Check className="h-4 w-4" strokeWidth={2.5} aria-hidden />
                                 </span>
                               ) : null}
-                            </button>
+                            </div>
                           );
                         })}
                       </div>
@@ -2074,5 +2108,37 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         ) : null}
       </CardContent>
     </Card>
+
+    {nanoImageLightboxUrl ? (
+      <div
+        className="fixed inset-0 z-[200] flex items-center justify-center bg-black/88 p-4 backdrop-blur-[2px]"
+        onClick={() => setNanoImageLightboxUrl(null)}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Image NanoBanana complète"
+      >
+        <Button
+          type="button"
+          variant="secondary"
+          size="icon"
+          className="absolute right-3 top-3 z-10 h-10 w-10 rounded-full border border-white/20 bg-black/65 text-white shadow-lg hover:bg-black/85"
+          onClick={(e) => {
+            e.stopPropagation();
+            setNanoImageLightboxUrl(null);
+          }}
+          aria-label="Fermer"
+        >
+          <X className="h-5 w-5" aria-hidden />
+        </Button>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={nanoImageLightboxUrl}
+          alt="Aperçu complet NanoBanana Pro"
+          className="max-h-[92vh] max-w-[min(100%,1200px)] rounded-xl border border-violet-500/20 object-contain shadow-[0_0_60px_rgba(139,92,246,0.15)]"
+          onClick={(e) => e.stopPropagation()}
+        />
+      </div>
+    ) : null}
+    </>
   );
 }
