@@ -16,6 +16,10 @@ export type LinkToAdUniverseSnapshotV1 = {
   nanoBananaSelectedPromptIndex?: 0 | 1 | 2 | null;
   nanoBananaTaskId?: string | null;
   nanoBananaImageUrl?: string | null;
+  /** NanoBanana Pro generated images for PROMPT 1/2/3 (index-aligned). */
+  nanoBananaImageUrls?: string[] | null;
+  /** Which of the 3 generated NanoBanana images is selected. */
+  nanoBananaSelectedImageIndex?: 0 | 1 | 2 | null;
   /** GPT image-to-video prompt for Kling / Veo */
   ugcVideoPromptGpt?: string;
   klingTaskId?: string | null;
