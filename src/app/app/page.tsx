@@ -1896,13 +1896,13 @@ export default function AppBrandWizard() {
                   </div>
 
                   {imageGen.kind === "success" ? (
-                    <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="grid gap-4 sm:grid-cols-2">
                       {(imageGen as Extract<ImageGenState, { kind: "success" }>).urls.map((u) => (
                         <button
                           key={u}
                           type="button"
-                          className={`rounded-md border overflow-hidden text-left cursor-pointer hover:opacity-90 ${
-                            selectedImageUrl === u ? "ring-2 ring-primary" : ""
+                          className={`rounded-xl border border-white/10 bg-black/30 text-left cursor-pointer hover:opacity-95 overflow-hidden ${
+                            selectedImageUrl === u ? "ring-2 ring-violet-400" : ""
                           }`}
                           onClick={() => {
                             setSelectedImageUrl(u);
@@ -1910,7 +1910,14 @@ export default function AppBrandWizard() {
                           }}
                           title="Clique pour agrandir"
                         >
-                          <img src={u} alt="Generated" className="h-64 w-full object-cover" />
+                          <div className="aspect-[9/16] w-full">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={u}
+                              alt="Generated"
+                              className="h-full w-full object-contain object-center"
+                            />
+                          </div>
                         </button>
                       ))}
                     </div>

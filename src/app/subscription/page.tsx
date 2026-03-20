@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Check, CreditCard, Sparkles, X } from "lucide-react";
+import { Check, CreditCard, X } from "lucide-react";
 import { toast } from "sonner";
 import StudioShell from "@/app/_components/StudioShell";
 import { cn } from "@/lib/utils";
@@ -12,92 +12,56 @@ type Billing = "monthly" | "yearly";
 type PlanDef = {
   id: string;
   name: string;
-  badge?: "MOST POPULAR" | "BEST VALUE";
+  badge?: string;
   description: string;
   monthly: number;
-  yearlyPerMonth: number;
   credits: number;
-  /** Core feature gates (first screenshot) */
-  gates: {
-    influencerTraining: boolean;
-    imageGen: boolean;
-    videoGen: boolean;
-    motionControl: boolean;
-    imageUpscale: boolean;
-  };
+  /** Rough monthly capacity hints */
+  usage: { ads: string; videos: string; images: string };
   cardClass: string;
   buttonClass: string;
 };
 
 const PLANS: PlanDef[] = [
   {
-    id: "builder",
-    name: "Builder",
-    description: "For beginners first exploring AI creation",
+    id: "starter",
+    name: "Starter",
+    description: "For beginners & testing",
     monthly: 29,
-    yearlyPerMonth: 24,
-    credits: 500,
-    gates: {
-      influencerTraining: false,
-      imageGen: true,
-      videoGen: false,
-      motionControl: false,
-      imageUpscale: false,
-    },
-    cardClass: "border-white/10 bg-white/[0.02]",
-    buttonClass: "bg-white text-black hover:bg-white/90",
-  },
-  {
-    id: "launch",
-    name: "Launch",
-    description: "For enthusiasts creating regularly",
-    monthly: 45,
-    yearlyPerMonth: 37,
-    credits: 1000,
-    gates: {
-      influencerTraining: true,
-      imageGen: true,
-      videoGen: false,
-      motionControl: false,
-      imageUpscale: false,
-    },
+    credits: 250,
+    usage: { ads: "~6–7 ads", videos: "~30 videos", images: "~350 images" },
     cardClass: "border-white/10 bg-white/[0.02]",
     buttonClass: "bg-white text-black hover:bg-white/90",
   },
   {
     id: "growth",
     name: "Growth",
-    badge: "MOST POPULAR",
-    description: "The smart choice for pros creating daily",
-    monthly: 79,
-    yearlyPerMonth: 66,
-    credits: 4000,
-    gates: {
-      influencerTraining: true,
-      imageGen: true,
-      videoGen: true,
-      motionControl: false,
-      imageUpscale: true,
-    },
+    badge: "MOST POPULAR ⭐",
+    description: "Most popular",
+    monthly: 59,
+    credits: 600,
+    usage: { ads: "~15–17 ads", videos: "~70 videos", images: "~900 images" },
     cardClass:
       "border-sky-400/35 bg-gradient-to-b from-sky-500/15 via-[#0b0912] to-[#0b0912] shadow-[0_0_40px_rgba(56,189,248,0.12)]",
     buttonClass: "bg-sky-400 text-white hover:bg-sky-300",
   },
   {
-    id: "creator",
-    name: "Creator",
-    badge: "BEST VALUE",
-    description: "For experts scaling production to the max",
-    monthly: 99,
-    yearlyPerMonth: 82,
-    credits: 6000,
-    gates: {
-      influencerTraining: true,
-      imageGen: true,
-      videoGen: true,
-      motionControl: true,
-      imageUpscale: true,
-    },
+    id: "pro",
+    name: "Pro",
+    description: "For serious scaling",
+    monthly: 119,
+    credits: 1400,
+    usage: { ads: "~35–40 ads", videos: "~150 videos", images: "~2000 images" },
+    cardClass: "border-white/10 bg-white/[0.02]",
+    buttonClass: "bg-white text-black hover:bg-white/90",
+  },
+  {
+    id: "scale",
+    name: "Scale",
+    description: "For power users & brands",
+    monthly: 239,
+    credits: 3200,
+    usage: { ads: "~80–90 ads", videos: "~350 videos", images: "~4500 images" },
     cardClass:
       "border-violet-500/40 bg-gradient-to-b from-violet-600/18 via-[#0b0912] to-[#0b0912] shadow-[0_0_40px_rgba(139,92,246,0.15)]",
     buttonClass: "bg-violet-500 text-white hover:bg-violet-400",
@@ -107,7 +71,7 @@ const PLANS: PlanDef[] = [
 type ModelRow = {
   label: string;
   badges?: { text: string; className: string }[];
-  /** which plan tiers include this (0=Builder … 3=Creator) */
+  /** which plan tiers include this (0=Starter … 3=Scale) */
   tiers: [boolean, boolean, boolean, boolean];
 };
 
@@ -161,19 +125,31 @@ const UPSCALE_TOP: { label: string; tiers: [boolean, boolean, boolean, boolean] 
   { label: "Video Upscale", tiers: [false, false, false, true] },
 ];
 
-function GateIcon({ ok }: { ok: boolean }) {
-  return ok ? (
-    <Check className="h-4 w-4 shrink-0 text-emerald-400" strokeWidth={2.5} aria-label="Included" />
-  ) : (
-    <X className="h-4 w-4 shrink-0 text-white/25" strokeWidth={2} aria-label="Not included" />
-  );
-}
-
-function CellIcon({ ok, accent }: { ok: boolean; accent?: "sky" | "violet" }) {
+function CellIcon({ ok, accent }: { ok: boolean; accent?: "sky" | "violet" | "amber" }) {
   if (!ok) return <X className="mx-auto h-4 w-4 text-white/20" strokeWidth={2} />;
   const cls =
-    accent === "sky" ? "text-sky-300" : accent === "violet" ? "text-violet-300" : "text-white";
+    accent === "sky"
+      ? "text-sky-300"
+      : accent === "violet"
+        ? "text-violet-300"
+        : accent === "amber"
+          ? "text-amber-200"
+          : "text-white";
   return <Check className={cn("mx-auto h-4 w-4", cls)} strokeWidth={2.5} />;
+}
+
+function tierAccent(ti: number): "sky" | "violet" | "amber" | undefined {
+  if (ti === 1) return "sky"; // Growth
+  if (ti === 2) return "amber"; // Pro
+  if (ti === 3) return "violet"; // Scale
+  return undefined;
+}
+
+function tierColBg(ti: number): string {
+  if (ti === 1) return "bg-sky-500/[0.03]";
+  if (ti === 2) return "bg-amber-500/[0.04]";
+  if (ti === 3) return "bg-violet-500/[0.04]";
+  return "";
 }
 
 export default function SubscriptionPage() {
@@ -185,9 +161,19 @@ export default function SubscriptionPage() {
   );
 
   function priceFor(plan: PlanDef) {
-    if (billing === "monthly") return { main: plan.monthly, sub: "Billed monthly" };
-    const y = plan.yearlyPerMonth * 12;
-    return { main: plan.yearlyPerMonth, sub: `Billed yearly ($${y}/yr)` };
+    if (billing === "monthly") {
+      return { mainLabel: String(plan.monthly), sub: "Billed monthly" };
+    }
+    // Yearly: -50% vs paying 12× monthly → pay 6× monthly / year, i.e. half per month.
+    const perMonthEquiv = plan.monthly * 0.5;
+    const yearlyTotal = plan.monthly * 6;
+    const mainLabel = Number.isInteger(perMonthEquiv)
+      ? String(perMonthEquiv)
+      : perMonthEquiv.toFixed(2);
+    return {
+      mainLabel,
+      sub: `Billed yearly ($${yearlyTotal.toLocaleString("en-US")}/yr) — save 50%`,
+    };
   }
 
   return (
@@ -225,16 +211,21 @@ export default function SubscriptionPage() {
                   billing === "yearly" ? "bg-white/15 text-white shadow-sm" : "text-white/50 hover:text-white/80",
                 )}
               >
-                Yearly
+                Yearly <span className="text-violet-300/90">(-50%)</span>
               </button>
             </div>
           </div>
         </header>
 
+        <p className="mx-auto max-w-3xl text-center text-sm font-semibold tracking-wide text-violet-200/90">
+          💳 TON SETUP IDÉAL
+        </p>
+
         {/* Four plan cards */}
         <section className="mx-auto grid max-w-6xl grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {PLANS.map((plan) => {
-            const { main, sub } = priceFor(plan);
+            const { mainLabel, sub } = priceFor(plan);
+            const isPopular = plan.badge?.includes("POPULAR");
 
             return (
               <div
@@ -247,8 +238,8 @@ export default function SubscriptionPage() {
                 {plan.badge ? (
                   <div
                     className={cn(
-                      "absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 rounded-full border px-3 py-1 text-[10px] font-bold tracking-widest",
-                      plan.badge === "MOST POPULAR"
+                      "absolute left-1/2 top-0 max-w-[95%] -translate-x-1/2 -translate-y-1/2 rounded-full border px-3 py-1 text-center text-[9px] font-bold leading-tight tracking-wide sm:text-[10px] sm:tracking-widest",
+                      isPopular
                         ? "border-sky-400/40 bg-sky-500/20 text-sky-200"
                         : "border-fuchsia-400/40 bg-fuchsia-500/20 text-fuchsia-100",
                     )}
@@ -263,9 +254,12 @@ export default function SubscriptionPage() {
                 </div>
 
                 <div className="mt-5">
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-3xl font-extrabold text-white">${main}</span>
-                    <span className="text-sm font-medium text-white/45">/month</span>
+                  <div className="flex flex-wrap items-baseline gap-1.5">
+                    <span className="text-base" aria-hidden>
+                      🔁
+                    </span>
+                    <span className="text-3xl font-extrabold text-white">${mainLabel}</span>
+                    <span className="text-sm font-medium text-white/45">/mo</span>
                   </div>
                   <p className="mt-1 text-xs text-white/40">{sub}</p>
                 </div>
@@ -278,32 +272,32 @@ export default function SubscriptionPage() {
                   Subscribe
                 </button>
 
-                <ul className="mt-6 space-y-3 border-t border-white/10 pt-5 text-sm">
+                <ul className="mt-6 space-y-2.5 border-t border-white/10 pt-5 text-left text-sm text-white/85">
                   <li className="flex items-start gap-2">
-                    <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-violet-400" aria-hidden />
+                    <span className="shrink-0" aria-hidden>
+                      💳
+                    </span>
                     <span className="font-semibold text-white">
-                      {plan.credits.toLocaleString()} credits per month
+                      {plan.credits.toLocaleString()} credits / month
                     </span>
                   </li>
-                  <li className="flex items-center gap-2 text-white/75">
-                    <GateIcon ok={plan.gates.influencerTraining} />
-                    <span className={!plan.gates.influencerTraining ? "text-white/35" : ""}>Influencer Training</span>
+                  <li className="flex items-start gap-2">
+                    <span className="shrink-0" aria-hidden>
+                      🎬
+                    </span>
+                    <span>{plan.usage.ads}</span>
                   </li>
-                  <li className="flex items-center gap-2 text-white/75">
-                    <GateIcon ok={plan.gates.imageGen} />
-                    <span className={!plan.gates.imageGen ? "text-white/35" : ""}>Image generation</span>
+                  <li className="flex items-start gap-2">
+                    <span className="shrink-0" aria-hidden>
+                      🎥
+                    </span>
+                    <span>{plan.usage.videos}</span>
                   </li>
-                  <li className="flex items-center gap-2 text-white/75">
-                    <GateIcon ok={plan.gates.videoGen} />
-                    <span className={!plan.gates.videoGen ? "text-white/35" : ""}>Video generation</span>
-                  </li>
-                  <li className="flex items-center gap-2 text-white/75">
-                    <GateIcon ok={plan.gates.motionControl} />
-                    <span className={!plan.gates.motionControl ? "text-white/35" : ""}>Motion Control</span>
-                  </li>
-                  <li className="flex items-center gap-2 text-white/75">
-                    <GateIcon ok={plan.gates.imageUpscale} />
-                    <span className={!plan.gates.imageUpscale ? "text-white/35" : ""}>Image Upscale</span>
+                  <li className="flex items-start gap-2">
+                    <span className="shrink-0" aria-hidden>
+                      🖼️
+                    </span>
+                    <span>{plan.usage.images}</span>
                   </li>
                 </ul>
               </div>
@@ -383,7 +377,8 @@ export default function SubscriptionPage() {
                     key={p.id}
                     className={cn(
                       "border-l border-white/5 p-4 text-center text-xs font-bold text-white/90",
-                      i === 2 && "bg-sky-500/5",
+                      i === 1 && "bg-sky-500/5",
+                      i === 2 && "bg-amber-500/5",
                       i === 3 && "bg-violet-500/5",
                     )}
                   >
@@ -404,11 +399,10 @@ export default function SubscriptionPage() {
                       key={ti}
                       className={cn(
                         "flex items-center justify-center border-l border-white/5 py-3",
-                        ti === 2 && "bg-sky-500/[0.03]",
-                        ti === 3 && "bg-violet-500/[0.04]",
+                        tierColBg(ti),
                       )}
                     >
-                      <CellIcon ok={ok} accent={ti === 2 ? "sky" : ti === 3 ? "violet" : undefined} />
+                      <CellIcon ok={ok} accent={tierAccent(ti)} />
                     </div>
                   ))}
                 </div>
@@ -422,8 +416,8 @@ export default function SubscriptionPage() {
                   Unlimited access
                 </div>
                 <div className="border-l border-white/5" />
-                <div className="border-l border-white/5" />
                 <div className="border-l border-white/5 bg-sky-500/[0.04]" />
+                <div className="border-l border-white/5 bg-amber-500/[0.05]" />
                 <div className="border-l border-white/5 bg-violet-500/[0.06]" />
               </div>
 
@@ -449,11 +443,10 @@ export default function SubscriptionPage() {
                       key={ti}
                       className={cn(
                         "flex items-center justify-center border-l border-white/5 py-2.5",
-                        ti === 2 && "bg-sky-500/[0.03]",
-                        ti === 3 && "bg-violet-500/[0.04]",
+                        tierColBg(ti),
                       )}
                     >
-                      <CellIcon ok={ok} accent={ti === 2 ? "sky" : ti === 3 ? "violet" : undefined} />
+                      <CellIcon ok={ok} accent={tierAccent(ti)} />
                     </div>
                   ))}
                 </div>

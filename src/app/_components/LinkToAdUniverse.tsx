@@ -839,6 +839,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       return;
     }
     setIsNanoPromptsLoading(true);
+    setIsNanoAllImagesSubmitting(false);
+    let text = "";
     try {
       const res = await fetch("/api/gpt/nanobanana-ugc-prompts", {
         method: "POST",
@@ -847,7 +849,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       });
       const json = (await res.json()) as { data?: string; error?: string };
       if (!res.ok || !json.data) throw new Error(json.error || "GPT prompts failed");
-      const text = String(json.data);
+      text = String(json.data);
       setNanoBananaPromptsRaw(text);
       setNanoBananaSelectedPromptIndex(0);
       setNanoBananaImageUrl(null);
@@ -871,7 +873,38 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           imagePrompt: text,
         });
       }
-      toast.success("3 image prompts saved (project)");
+      toast.success("3 image prompts saved — launching NanoBanana Pro…");
+
+      const rawTri = parseThreeLabeledPrompts(text);
+      const prompts: [string, string, string] = [rawTri[0].trim(), rawTri[1].trim(), rawTri[2].trim()];
+      if (!prompts[0] || !prompts[1] || !prompts[2]) {
+        toast.warning("Prompts enregistrés", {
+          description: "Les 3 prompts n’ont pas pu être parsés — génère les images avec le bouton dédié.",
+        });
+        return;
+      }
+
+      setIsNanoAllImagesSubmitting(true);
+      toast.message("NanoBanana Pro", {
+        description: "Génération des 3 images (2K, 9:16) — plusieurs minutes possibles.",
+        duration: 6000,
+      });
+      try {
+        const { urlsByPrompt, lastTaskId } = await runNanoBananaProThreeSequential(img, prompts);
+        if (!urlsByPrompt[0] || !urlsByPrompt[1] || !urlsByPrompt[2]) {
+          throw new Error("NanoBanana n’a pas renvoyé 3 images.");
+        }
+        await persistNanoThreeGeneratedImages(url, prompts, urlsByPrompt, lastTaskId);
+        toast.success("3 images NanoBanana Pro prêtes");
+      } catch (imgErr) {
+        toast.error("NanoBanana Pro", {
+          description:
+            (imgErr instanceof Error ? imgErr.message : "Erreur inconnue") +
+            " — les prompts GPT sont sauvegardés, tu peux réessayer « Generate 3 NanoBanana Pro images ».",
+        });
+      } finally {
+        setIsNanoAllImagesSubmitting(false);
+      }
     } catch (e) {
       toast.error("NanoBanana prompts", { description: e instanceof Error ? e.message : "Unknown error" });
     } finally {
@@ -999,6 +1032,66 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     throw new Error("NanoBanana task timed out.");
   }
 
+  /** Run 3 NanoBanana Pro jobs sequentially; returns URLs in prompt order. */
+  async function runNanoBananaProThreeSequential(
+    img: string,
+    prompts: [string, string, string],
+  ): Promise<{ urlsByPrompt: string[]; lastTaskId: string | null }> {
+    const urlsByPrompt: string[] = [];
+    let lastTaskId: string | null = null;
+    for (let i = 0; i < 3; i++) {
+      const prompt = prompts[i];
+      lastNanoImagePromptRef.current = prompt;
+      lastNanoImagePromptIndexRef.current = i as 0 | 1 | 2;
+      const res = await fetch("/api/nanobanana/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "pro",
+          prompt,
+          imageUrls: [img],
+          resolution: "2K",
+          aspectRatio: "9:16",
+        }),
+      });
+      const json = (await res.json()) as { taskId?: string; error?: string };
+      if (!res.ok || !json.taskId) throw new Error(json.error || "NanoBanana Pro failed");
+      lastTaskId = json.taskId;
+      const urls = await pollNanoBananaTaskForUrls(json.taskId);
+      urlsByPrompt[i] = urls[0];
+    }
+    return { urlsByPrompt, lastTaskId };
+  }
+
+  async function persistNanoThreeGeneratedImages(
+    url: string,
+    prompts: [string, string, string],
+    urlsByPrompt: string[],
+    lastTaskId: string | null,
+  ) {
+    setNanoBananaImageUrls(urlsByPrompt);
+    setNanoBananaSelectedImageIndex(0);
+    setNanoBananaSelectedPromptIndex(0);
+    setNanoBananaTaskId(lastTaskId);
+    setNanoBananaImageUrl(urlsByPrompt[0]);
+    const base = latestSnapRef.current;
+    if (base && lastExtractedJson) {
+      const snap: LinkToAdUniverseSnapshotV1 = {
+        ...base,
+        nanoBananaTaskId: lastTaskId,
+        nanoBananaImageUrl: urlsByPrompt[0],
+        nanoBananaImageUrls: urlsByPrompt,
+        nanoBananaSelectedImageIndex: 0,
+        nanoBananaSelectedPromptIndex: 0,
+      };
+      await persistUniverse(universeRunId, url, extractedTitle, lastExtractedJson, snap, packshotsForSave(), {
+        imagePrompt: prompts[0],
+        selectedImageUrl: urlsByPrompt[0],
+        generatedImageUrls: urlsByPrompt,
+      });
+    }
+  }
+
   async function onGenerateNanoBananaImagesFromAllPrompts() {
     const url = storeUrl.trim();
     const candidates =
@@ -1033,57 +1126,13 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
 
     setIsNanoAllImagesSubmitting(true);
     try {
-      const urlsByPrompt: string[] = [];
-      let lastTaskId: string | null = null;
-      for (let i = 0; i < 3; i++) {
-        const prompt = prompts[i];
-        lastNanoImagePromptRef.current = prompt;
-        lastNanoImagePromptIndexRef.current = i as 0 | 1 | 2;
-        const res = await fetch("/api/nanobanana/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model: "pro",
-            prompt,
-            imageUrls: [img],
-            resolution: "2K",
-            aspectRatio: "9:16",
-          }),
-        });
-        const json = (await res.json()) as { taskId?: string; error?: string };
-        if (!res.ok || !json.taskId) throw new Error(json.error || "NanoBanana Pro failed");
-        lastTaskId = json.taskId;
-
-        const urls = await pollNanoBananaTaskForUrls(json.taskId);
-        urlsByPrompt[i] = urls[0];
-      }
+      const { urlsByPrompt, lastTaskId } = await runNanoBananaProThreeSequential(img, prompts as [string, string, string]);
 
       if (!urlsByPrompt[0] || !urlsByPrompt[1] || !urlsByPrompt[2]) {
         throw new Error("NanoBanana n’a pas produit 3 images.");
       }
 
-      setNanoBananaImageUrls(urlsByPrompt);
-      setNanoBananaSelectedImageIndex(0);
-      setNanoBananaSelectedPromptIndex(0);
-      setNanoBananaTaskId(lastTaskId);
-      setNanoBananaImageUrl(urlsByPrompt[0]);
-
-      const base = latestSnapRef.current;
-      if (base && lastExtractedJson) {
-        const snap: LinkToAdUniverseSnapshotV1 = {
-          ...base,
-          nanoBananaTaskId: lastTaskId,
-          nanoBananaImageUrl: urlsByPrompt[0],
-          nanoBananaImageUrls: urlsByPrompt,
-          nanoBananaSelectedImageIndex: 0,
-          nanoBananaSelectedPromptIndex: 0,
-        };
-        await persistUniverse(universeRunId, url, extractedTitle, lastExtractedJson, snap, packshotsForSave(), {
-          imagePrompt: prompts[0],
-          selectedImageUrl: urlsByPrompt[0],
-          generatedImageUrls: urlsByPrompt,
-        });
-      }
+      await persistNanoThreeGeneratedImages(url, prompts as [string, string, string], urlsByPrompt, lastTaskId);
 
       toast.success("NanoBanana Pro — 3 images generated");
     } catch (e) {
@@ -1425,14 +1474,14 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                 )}
               </div>
 
-              <div className="mt-3 aspect-[4/3] w-full overflow-hidden rounded-lg border border-white/10 bg-[#050507]">
+              <div className="mt-3 mx-auto w-full max-w-[min(100%,320px)] aspect-[9/16] overflow-hidden rounded-lg border border-white/10 bg-[#050507]">
                 {resolvedPreviewUrl && !imgError ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     key={resolvedPreviewUrl}
                     src={resolvedPreviewUrl}
                     alt="Clean product"
-                    className="h-full w-full object-contain"
+                    className="h-full w-full object-contain object-center"
                     loading="eager"
                     referrerPolicy="no-referrer"
                     onError={() => setImgError(true)}
@@ -1600,18 +1649,20 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
             <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/[0.06] p-4">
               <p className="text-sm font-semibold text-white/90">Step 3 — Prompts image (GPT) → NanoBanana Pro</p>
               <p className="mt-1 text-xs text-white/45">
-                Send the chosen angle script + the product image to GPT, then generate the reference image (2K, 9:16).
-                Each step is saved in the project.
+                GPT génère 3 prompts à partir du script d’angle + l’image produit, puis les 3 images NanoBanana Pro (2K,
+                9:16) partent automatiquement. Tout est enregistré dans le projet.
               </p>
               <div className="mt-4 flex flex-wrap gap-2">
                 <Button
                   type="button"
-                  disabled={isNanoPromptsLoading || !resolvedPreviewUrl}
+                  disabled={isNanoPromptsLoading || isNanoAllImagesSubmitting || !resolvedPreviewUrl}
                   className={primaryBtnClass}
                   onClick={() => void onGenerateNanoBananaPrompts()}
                 >
-                  {isNanoPromptsLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                  Generate 3 image prompts (GPT)
+                  {isNanoPromptsLoading || isNanoAllImagesSubmitting ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : null}
+                  Générer prompts + 3 images (GPT → NanoBanana Pro)
                 </Button>
                 {nanoPollTaskId ? (
                   <span className="flex items-center gap-2 text-xs text-emerald-300">
@@ -1671,36 +1722,60 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                   </Button>
 
                   {nanoHasThreeImages ? (
-                    <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                      {([0, 1, 2] as const).map((i) => {
-                        const selected = nanoBananaSelectedImageIndex === i;
-                        return (
-                          <button
-                            key={i}
-                            type="button"
-                            aria-pressed={selected}
-                            onClick={() => void onSelectNanoBananaImage(i)}
-                            className={`relative overflow-hidden rounded-lg border bg-white/[0.03] transition-all active:scale-[0.99] hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 ${
-                              selected
-                                ? "border-violet-400/90 shadow-[0_0_0_1px_rgba(76,29,149,0.25)]"
-                                : "border-white/10 hover:border-violet-400/35"
-                            }`}
-                          >
+                    <div className="mt-4 space-y-4">
+                      <p className="text-xs font-medium text-white/45">
+                        NanoBanana Pro (2K · 9:16) — aperçu complet sans rognage
+                      </p>
+                      <div className="grid gap-4 sm:grid-cols-3">
+                        {([0, 1, 2] as const).map((i) => {
+                          const selected = nanoBananaSelectedImageIndex === i;
+                          return (
+                            <button
+                              key={i}
+                              type="button"
+                              aria-pressed={selected}
+                              onClick={() => void onSelectNanoBananaImage(i)}
+                              className={`relative flex flex-col overflow-hidden rounded-xl border bg-[#08080c] text-left transition-all active:scale-[0.99] hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 ${
+                                selected
+                                  ? "border-violet-400/90 shadow-[0_0_0_1px_rgba(76,29,149,0.25)]"
+                                  : "border-white/10 hover:border-violet-400/35"
+                              }`}
+                            >
+                              <span className="border-b border-white/10 px-2 py-1.5 text-center text-[10px] font-bold uppercase tracking-wide text-emerald-300/90">
+                                Image {i + 1}
+                              </span>
+                              <div className="relative aspect-[9/16] w-full">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={nanoBananaImageUrls[i]}
+                                  alt={`NanoBanana reference ${i + 1}`}
+                                  className="absolute inset-0 h-full w-full object-contain object-center"
+                                  loading="lazy"
+                                />
+                              </div>
+                              {selected ? (
+                                <span className="absolute right-2 top-9 z-10 inline-flex h-6 w-6 items-center justify-center rounded-full bg-violet-400/90 text-black shadow">
+                                  <Check className="h-4 w-4" aria-hidden />
+                                </span>
+                              ) : null}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {nanoBananaImageUrl ? (
+                        <div className="border-t border-white/10 pt-4">
+                          <p className="mb-2 text-xs font-medium text-white/50">Image sélectionnée pour la vidéo (grand format)</p>
+                          <div className="mx-auto aspect-[9/16] w-full max-w-md overflow-hidden rounded-xl border border-white/10 bg-[#050507]">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
-                              src={nanoBananaImageUrls[i]}
-                              alt=""
-                              className="h-24 w-full object-cover sm:h-28"
+                              src={nanoBananaImageUrl}
+                              alt="Référence sélectionnée"
+                              className="h-full w-full object-contain object-center"
                               loading="lazy"
                             />
-                            {selected ? (
-                              <span className="absolute right-2 top-2 inline-flex h-6 w-6 items-center justify-center rounded-full bg-violet-400/90 text-black shadow">
-                                <Check className="h-4 w-4" aria-hidden />
-                              </span>
-                            ) : null}
-                          </button>
-                        );
-                      })}
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
                   ) : null}
                 </div>
