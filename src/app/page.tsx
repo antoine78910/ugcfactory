@@ -230,7 +230,7 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen bg-[#050507] text-white selection:bg-violet-500/30">
       {/* ── Sticky header: Nano Banana bar + nav (no hero texture here) ── */}
-      <header className="sticky top-0 z-50 border-b-[4px] border-white/40 bg-[#050507]/80 backdrop-blur-xl">
+      <header className="sticky top-0 z-50 border-b-[4px] border-white/40 bg-transparent backdrop-blur-xl">
         <div className="relative border-b-[4px] border-[#0b0912] bg-[#987eee] px-4 py-1.5 text-center">
           <p className="text-[11px] font-semibold text-[#0b0912]/90 sm:text-xs">
             Nano Banana 2 UNLIMITED. Kling 3.0 & Motion Control Available.
