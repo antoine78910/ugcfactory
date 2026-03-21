@@ -7,7 +7,7 @@ import { usePathname } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import SidebarAccountMenu from "@/app/_components/SidebarAccountMenu";
 import CreditLowBanner from "@/app/_components/CreditLowBanner";
-import { CreditsPlanProvider, useCreditsPlan } from "@/app/_components/CreditsPlanContext";
+import { useCreditsPlan } from "@/app/_components/CreditsPlanContext";
 import SidebarCreditsBar from "@/app/_components/SidebarCreditsBar";
 
 export type StudioNavSection = "link_to_ad" | "motion_control" | "image" | "video" | "projects";
@@ -166,9 +166,6 @@ function StudioShellInner({
 }
 
 export default function StudioShell(props: Props) {
-  return (
-    <CreditsPlanProvider>
-      <StudioShellInner {...props} />
-    </CreditsPlanProvider>
-  );
+  /** CreditsPlanProvider lives in root layout so /app page hooks and shell share one state. */
+  return <StudioShellInner {...props} />;
 }

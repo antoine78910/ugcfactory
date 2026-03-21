@@ -325,11 +325,6 @@ export default function LandingPage() {
             />
           </h1>
 
-          <p className="mx-auto mt-6 max-w-2xl text-sm text-white/55 sm:text-lg leading-relaxed">
-            Paste a product URL and we&apos;ll create a scroll-stopping video ad
-            with AI avatars and voiceover in minutes.
-          </p>
-
           <div className="mx-auto mt-10 max-w-xl">
             <p className="mb-3 text-sm text-white/55">
               We analyze your site like a top-tier media buyer, and turn it into
