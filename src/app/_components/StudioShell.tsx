@@ -6,6 +6,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import SidebarAccountMenu from "@/app/_components/SidebarAccountMenu";
+import CreditLowBanner from "@/app/_components/CreditLowBanner";
 
 export type StudioNavSection = "link_to_ad" | "motion_control" | "image" | "video" | "projects";
 
@@ -154,6 +155,8 @@ export default function StudioShell({
 
         {children}
       </main>
+
+      <CreditLowBanner />
     </div>
   );
 }

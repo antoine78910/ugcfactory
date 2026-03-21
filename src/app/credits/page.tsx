@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import StudioShell from "@/app/_components/StudioShell";
+import { CREDIT_PACKS } from "@/lib/pricing";
 
 type CreditPack = {
   key: string;
@@ -14,30 +15,24 @@ type CreditPack = {
   ctaHref: string;
 };
 
-const creditPacks: CreditPack[] = [
+const PACK_UI: Omit<CreditPack, "price" | "credits">[] = [
   {
     key: "starter",
-    price: "$30",
     name: "Starter",
-    credits: 200,
     description: "👉 Perfect to test & launch your first ads",
     promoLine: "(no discount)",
     ctaHref: "/auth?pack=starter",
   },
   {
     key: "growth",
-    price: "$60",
     name: "Growth",
-    credits: 450,
     description: "👉 For consistent content & scaling",
     promoLine: "Save 11%",
     ctaHref: "/auth?pack=growth",
   },
   {
     key: "most-popular",
-    price: "$120",
     name: "Most Popular ⭐",
-    credits: 1000,
     description: "👉 Best balance for serious creators",
     badge: "BEST BALANCE",
     promoLine: "🔥 Save 20%",
@@ -45,24 +40,30 @@ const creditPacks: CreditPack[] = [
   },
   {
     key: "pro",
-    price: "$240",
     name: "Pro",
-    credits: 2200,
     description: "👉 For heavy users & brands",
     promoLine: "🚀 Save 27%",
     ctaHref: "/auth?pack=pro",
   },
   {
     key: "scale",
-    price: "$480",
     name: "Scale",
-    credits: 5000,
     description: "👉 For teams & aggressive scaling",
     badge: "BEST VALUE",
     promoLine: "💎 Save 36%",
     ctaHref: "/auth?pack=scale",
   },
 ];
+
+const creditPacks: CreditPack[] = PACK_UI.map((meta, i) => {
+  const row = CREDIT_PACKS[i];
+  if (!row) throw new Error(`CREDIT_PACKS[${i}] missing`);
+  return {
+    ...meta,
+    price: `$${row.price_usd}`,
+    credits: row.credits,
+  };
+});
 
 export default function CreditsPage() {
   return (

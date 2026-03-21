@@ -6,6 +6,7 @@ import { Check, CreditCard, X } from "lucide-react";
 import { toast } from "sonner";
 import StudioShell from "@/app/_components/StudioShell";
 import { cn } from "@/lib/utils";
+import { SUBSCRIPTIONS } from "@/lib/pricing";
 
 type Billing = "monthly" | "yearly";
 
@@ -27,8 +28,8 @@ const PLANS: PlanDef[] = [
     id: "starter",
     name: "Starter",
     description: "For beginners & testing",
-    monthly: 29,
-    credits: 250,
+    monthly: SUBSCRIPTIONS[0].price_usd,
+    credits: SUBSCRIPTIONS[0].credits_per_month,
     usage: { ads: "~6–7 ads", videos: "~30 videos", images: "~350 images" },
     cardClass: "border-white/10 bg-white/[0.02]",
     buttonClass: "bg-white text-black hover:bg-white/90",
@@ -38,8 +39,8 @@ const PLANS: PlanDef[] = [
     name: "Growth",
     badge: "MOST POPULAR ⭐",
     description: "Most popular",
-    monthly: 59,
-    credits: 600,
+    monthly: SUBSCRIPTIONS[1].price_usd,
+    credits: SUBSCRIPTIONS[1].credits_per_month,
     usage: { ads: "~15–17 ads", videos: "~70 videos", images: "~900 images" },
     cardClass:
       "border-sky-400/35 bg-gradient-to-b from-sky-500/15 via-[#0b0912] to-[#0b0912] shadow-[0_0_40px_rgba(56,189,248,0.12)]",
@@ -49,8 +50,8 @@ const PLANS: PlanDef[] = [
     id: "pro",
     name: "Pro",
     description: "For serious scaling",
-    monthly: 119,
-    credits: 1400,
+    monthly: SUBSCRIPTIONS[2].price_usd,
+    credits: SUBSCRIPTIONS[2].credits_per_month,
     usage: { ads: "~35–40 ads", videos: "~150 videos", images: "~2000 images" },
     cardClass: "border-white/10 bg-white/[0.02]",
     buttonClass: "bg-white text-black hover:bg-white/90",
@@ -59,8 +60,8 @@ const PLANS: PlanDef[] = [
     id: "scale",
     name: "Scale",
     description: "For power users & brands",
-    monthly: 239,
-    credits: 3200,
+    monthly: SUBSCRIPTIONS[3].price_usd,
+    credits: SUBSCRIPTIONS[3].credits_per_month,
     usage: { ads: "~80–90 ads", videos: "~350 videos", images: "~4500 images" },
     cardClass:
       "border-violet-500/40 bg-gradient-to-b from-violet-600/18 via-[#0b0912] to-[#0b0912] shadow-[0_0_40px_rgba(139,92,246,0.15)]",

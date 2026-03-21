@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { StudioEmptyExamples, StudioOutputPane } from "@/app/_components/StudioEmptyExamples";
+import { IMAGE_MODEL } from "@/lib/pricing";
 
 const ASPECT_RATIOS = [
   "1:1",
@@ -26,8 +27,11 @@ const PRO_RESOLUTIONS = ["1K", "2K", "4K"] as const;
 
 type NanoModel = "nano" | "pro";
 
-/** Placeholder credits shown in UI (billing not wired). */
-const CREDITS_BY_MODEL: Record<NanoModel, number> = { nano: 1, pro: 2 };
+/** Credits from product spec (`@/lib/pricing`). */
+const CREDITS_BY_MODEL: Record<NanoModel, number> = {
+  nano: IMAGE_MODEL.nanobanana_standard.credits,
+  pro: IMAGE_MODEL.nanobanana_pro.credits,
+};
 
 async function uploadReferenceFile(file: File): Promise<string> {
   const fd = new FormData();

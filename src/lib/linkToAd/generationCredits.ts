@@ -1,66 +1,65 @@
 /**
- * Credit estimates for all generation types.
- *
- * Pricing rule: 70 % gross margin on the base credit value ($0.15 / credit
- * from the Starter pack).  Formula: credits = ceil(apiCost / 0.045).
+ * Link-to-Ad & studio generation credits.
+ * Source of truth: `@/lib/pricing` (spec: dynamic video, fixed ads, image tiers).
  */
+
+import {
+  AD_CREDITS,
+  IMAGE_MODEL,
+  calculateMotionControlCreditsFromDuration,
+  calculateVideoCreditsForModel,
+  calculateVideoCreditsFromDuration,
+} from "@/lib/pricing";
 
 // ---------------------------------------------------------------------------
 // Image credits
 // ---------------------------------------------------------------------------
 
-export const CREDITS_NANO_PRO_PER_IMAGE = 2;
+export const CREDITS_NANO_PRO_PER_IMAGE = IMAGE_MODEL.nanobanana_pro.credits;
+export const CREDITS_NANO_STANDARD_PER_IMAGE = IMAGE_MODEL.nanobanana_standard.credits;
 export const CREDITS_LINK_TO_AD_THREE_REF_IMAGES = CREDITS_NANO_PRO_PER_IMAGE * 3;
 
 // ---------------------------------------------------------------------------
-// Link-to-Ad video (Kling 3.0, ~5 s, 720 p, no audio → 2 × 5 = 10)
+// Video (Link to Ad default clip length 12s → ceil(12 × 2.25) = 27)
 // ---------------------------------------------------------------------------
 
-export const CREDITS_KLING_LINK_TO_AD_VIDEO = 10;
+export const LINK_TO_AD_VIDEO_DURATION_SEC = 12;
+export const CREDITS_KLING_LINK_TO_AD_VIDEO = calculateVideoCreditsFromDuration(
+  LINK_TO_AD_VIDEO_DURATION_SEC,
+);
+
+/** Full ad bundle — backend must bill this fixed amount, not sum of parts. */
+export { AD_CREDITS as CREDITS_AD_GENERATION };
+export { AD_CREDITS };
 
 // ---------------------------------------------------------------------------
-// Video generation — dynamic per model / duration / audio / quality
+// Video generation — dynamic by duration (studio)
 // ---------------------------------------------------------------------------
 
 export function calculateVideoCredits(opts: {
   modelId: string;
   duration: number;
   audio: boolean;
-  quality: string; // "std" | "pro" for Kling 3.0 (720p / 1080p)
+  quality: string;
 }): number {
-  const { modelId, duration, audio, quality } = opts;
-
-  switch (modelId) {
-    case "kling-3.0/video": {
-      const is1080 = quality === "pro";
-      const ratePerSec =
-        is1080 && audio ? 3 : is1080 && !audio ? 2 : audio ? 3 : 2;
-      return Math.max(1, ratePerSec * duration);
-    }
-
-    case "kling-2.6/video": {
-      if (duration <= 5) return audio ? 13 : 7;
-      return audio ? 25 : 13;
-    }
-
-    case "openai/sora-2": {
-      return duration <= 10 ? 4 : 5;
-    }
-
-    // Seedance / Veo — flat rate (no per-second pricing published)
-    default:
-      return 21;
-  }
+  return calculateVideoCreditsForModel({
+    modelId: opts.modelId,
+    duration: opts.duration,
+    audio: opts.audio,
+    quality: opts.quality,
+  });
 }
 
+export { calculateVideoCreditsFromDuration };
+
 // ---------------------------------------------------------------------------
-// Motion Control — per-second pricing, 70 % margin
+// Motion control — same curve as Kling 3.0 video length
 // ---------------------------------------------------------------------------
 
 export function calculateMotionControlCredits(opts: {
-  quality: string; // "720p" | "1080p"
+  quality: string;
   durationSeconds: number;
 }): number {
-  const ratePerSec = opts.quality === "1080p" ? 3 : 2;
-  return Math.max(1, Math.ceil(ratePerSec * opts.durationSeconds));
+  void opts.quality; // quality reserved for future tiered pricing
+  return calculateMotionControlCreditsFromDuration(opts.durationSeconds);
 }
