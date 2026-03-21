@@ -7,6 +7,8 @@ import { usePathname } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import SidebarAccountMenu from "@/app/_components/SidebarAccountMenu";
 import CreditLowBanner from "@/app/_components/CreditLowBanner";
+import { CreditsPlanProvider, useCreditsPlan } from "@/app/_components/CreditsPlanContext";
+import SidebarCreditsBar from "@/app/_components/SidebarCreditsBar";
 
 export type StudioNavSection = "link_to_ad" | "motion_control" | "image" | "video" | "projects";
 
@@ -44,7 +46,7 @@ function navButtonClass(active: boolean): string {
   ].join(" ");
 }
 
-export default function StudioShell({
+function StudioShellInner({
   children,
   studioSection,
   onStudioSectionChange,
@@ -52,6 +54,7 @@ export default function StudioShell({
 }: Props) {
   const pathname = usePathname();
   const [email, setEmail] = useState("");
+  const { planDisplayName } = useCreditsPlan();
 
   const isApp = pathname === "/app";
 
@@ -86,7 +89,7 @@ export default function StudioShell({
       <div className="pointer-events-none fixed left-1/2 top-0 -z-0 h-[520px] w-[1000px] -translate-x-1/2 rounded-full bg-violet-600/15 blur-[150px]" />
       <main className="relative z-10 grid min-h-screen grid-cols-[250px_1fr] items-start">
         <aside className="sticky top-0 flex h-screen flex-col overflow-hidden border-r border-white/10 bg-[#06070d] px-3 py-4">
-          <div className="shrink-0 px-2 pb-2">
+          <div className="shrink-0 space-y-3 px-2 pb-2">
             <Link href="/app" className="inline-block">
               <Image
                 src="/youry-logo.png"
@@ -97,6 +100,7 @@ export default function StudioShell({
                 priority
               />
             </Link>
+            <SidebarCreditsBar />
           </div>
 
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">
@@ -149,7 +153,7 @@ export default function StudioShell({
           </div>
 
           <div className="mt-auto shrink-0 border-t border-white/10 pt-3">
-            <SidebarAccountMenu email={email} onLogout={onSignOut} planLabel="Free" />
+            <SidebarAccountMenu email={email} onLogout={onSignOut} planLabel={planDisplayName} />
           </div>
         </aside>
 
@@ -158,5 +162,13 @@ export default function StudioShell({
 
       <CreditLowBanner />
     </div>
+  );
+}
+
+export default function StudioShell(props: Props) {
+  return (
+    <CreditsPlanProvider>
+      <StudioShellInner {...props} />
+    </CreditsPlanProvider>
   );
 }

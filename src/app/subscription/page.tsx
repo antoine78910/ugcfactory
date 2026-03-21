@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Check, CreditCard, X } from "lucide-react";
 import { toast } from "sonner";
 import StudioShell from "@/app/_components/StudioShell";
+import { consumeCheckoutQueryParams } from "@/app/_components/CreditsPlanContext";
 import { cn } from "@/lib/utils";
 import { SUBSCRIPTIONS } from "@/lib/pricing";
 
@@ -160,14 +161,20 @@ export default function SubscriptionPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const c = params.get("checkout");
-    if (c === "success") {
-      toast.success("Checkout completed", {
-        description: "Your subscription will activate once Stripe confirms payment.",
-      });
-      window.history.replaceState({}, "", "/subscription");
-    } else if (c === "cancel") {
+    if (c === "cancel") {
       toast.message("Checkout cancelled");
       window.history.replaceState({}, "", "/subscription");
+      return;
+    }
+    if (c === "success") {
+      const applied = consumeCheckoutQueryParams(window.location.pathname);
+      toast.success(
+        applied ? "Subscription tier updated" : "Checkout completed",
+        applied
+          ? { description: "Sidebar now shows your plan and refreshed credits." }
+          : { description: "Stripe will confirm your subscription shortly." },
+      );
+      if (!applied) window.history.replaceState({}, "", "/subscription");
     }
   }, []);
 

@@ -45,7 +45,7 @@ export async function POST(req: Request) {
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
       line_items: [{ price: priceId, quantity: 1 }],
-      success_url: `${base.replace(/\/$/, "")}/credits?checkout=success`,
+      success_url: `${base.replace(/\/$/, "")}/credits?checkout=success&pack=${encodeURIComponent(packKey)}`,
       cancel_url: `${base.replace(/\/$/, "")}/credits?checkout=cancel`,
       allow_promotion_codes: true,
       metadata: { credit_pack: packKey },

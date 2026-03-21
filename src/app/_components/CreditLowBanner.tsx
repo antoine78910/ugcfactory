@@ -1,123 +1,27 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Check, X, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { SUBSCRIPTIONS } from "@/lib/pricing";
-
-// ---------------------------------------------------------------------------
-// Demo credit store (localStorage). Replace with real API later.
-// ---------------------------------------------------------------------------
-
-const LS_KEY = "ugc_demo_credits";
-const LS_PLAN_KEY = "ugc_demo_plan";
-
-type PlanId = "starter" | "growth" | "pro" | "scale";
-
-type PlanDef = {
-  id: PlanId;
-  name: string;
-  monthly: number;
-  credits: number;
-  usage: { ads: string; videos: string; images: string };
-  cardBorder: string;
-  btnClass: string;
-  popular?: boolean;
-};
-
-const PLANS: PlanDef[] = [
-  {
-    id: "starter",
-    name: "Starter",
-    monthly: SUBSCRIPTIONS[0].price_usd,
-    credits: SUBSCRIPTIONS[0].credits_per_month,
-    usage: { ads: "~6–7 ads", videos: "~30 videos", images: "~350 images" },
-    cardBorder: "border-white/10",
-    btnClass: "bg-white text-black hover:bg-white/90",
-  },
-  {
-    id: "growth",
-    name: "Growth",
-    monthly: SUBSCRIPTIONS[1].price_usd,
-    credits: SUBSCRIPTIONS[1].credits_per_month,
-    usage: { ads: "~15–17 ads", videos: "~70 videos", images: "~900 images" },
-    cardBorder: "border-sky-400/35",
-    btnClass: "bg-sky-400 text-white hover:bg-sky-300",
-    popular: true,
-  },
-  {
-    id: "pro",
-    name: "Pro",
-    monthly: SUBSCRIPTIONS[2].price_usd,
-    credits: SUBSCRIPTIONS[2].credits_per_month,
-    usage: { ads: "~35–40 ads", videos: "~150 videos", images: "~2 000 images" },
-    cardBorder: "border-white/10",
-    btnClass: "bg-white text-black hover:bg-white/90",
-  },
-  {
-    id: "scale",
-    name: "Scale",
-    monthly: SUBSCRIPTIONS[3].price_usd,
-    credits: SUBSCRIPTIONS[3].credits_per_month,
-    usage: { ads: "~80–90 ads", videos: "~350 videos", images: "~4 500 images" },
-    cardBorder: "border-violet-500/40",
-    btnClass: "bg-violet-500 text-white hover:bg-violet-400",
-  },
-];
-
-function readCredits(): { current: number; total: number; planId: PlanId } {
-  const starterTotal = SUBSCRIPTIONS[0].credits_per_month;
-  if (typeof window === "undefined")
-    return { current: starterTotal, total: starterTotal, planId: "starter" };
-  const planId = (localStorage.getItem(LS_PLAN_KEY) ?? "starter") as PlanId;
-  const plan = PLANS.find((p) => p.id === planId) ?? PLANS[0];
-  const raw = localStorage.getItem(LS_KEY);
-  const current = raw !== null ? Number(raw) : plan.credits;
-  return { current, total: plan.credits, planId };
-}
-
-export function useCredits() {
-  const [state, setState] = useState(() => readCredits());
-
-  useEffect(() => {
-    setState(readCredits());
-    const onStorage = () => setState(readCredits());
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
-  }, []);
-
-  const spend = useCallback((n: number) => {
-    const s = readCredits();
-    const next = Math.max(0, s.current - n);
-    localStorage.setItem(LS_KEY, String(next));
-    setState({ ...s, current: next });
-  }, []);
-
-  const setPlan = useCallback((planId: PlanId) => {
-    const plan = PLANS.find((p) => p.id === planId) ?? PLANS[0];
-    localStorage.setItem(LS_PLAN_KEY, planId);
-    localStorage.setItem(LS_KEY, String(plan.credits));
-    setState({ current: plan.credits, total: plan.credits, planId });
-  }, []);
-
-  return { ...state, spend, setPlan };
-}
-
-// ---------------------------------------------------------------------------
-// Upgrade modal
-// ---------------------------------------------------------------------------
+import {
+  type AccountPlanId,
+  useCreditsPlan,
+} from "@/app/_components/CreditsPlanContext";
+import type { SubscriptionPlanId } from "@/lib/stripe/subscriptionPrices";
 
 function UpgradeModal({
   currentPlanId,
   onClose,
   onSelectPlan,
 }: {
-  currentPlanId: PlanId;
+  currentPlanId: AccountPlanId;
   onClose: () => void;
-  onSelectPlan: (id: PlanId) => void;
+  onSelectPlan: (id: SubscriptionPlanId) => void;
 }) {
-  const currentIdx = PLANS.findIndex((p) => p.id === currentPlanId);
+  const { subscriptionTiers: PLANS } = useCreditsPlan();
+  const currentIdx =
+    currentPlanId === "free" ? -1 : PLANS.findIndex((p) => p.id === currentPlanId);
 
   return (
     <div
@@ -137,9 +41,7 @@ function UpgradeModal({
         </button>
 
         <div className="mb-6 text-center">
-          <h2 className="text-2xl font-extrabold tracking-tight text-white">
-            Upgrade your plan
-          </h2>
+          <h2 className="text-2xl font-extrabold tracking-tight text-white">Upgrade your plan</h2>
           <p className="mt-1 text-sm text-white/50">
             Get more credits, unlock premium models, and scale your content.
           </p>
@@ -147,20 +49,18 @@ function UpgradeModal({
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {PLANS.map((plan, i) => {
-            const isCurrent = plan.id === currentPlanId;
-            const isUpgrade = i > currentIdx;
+            const isCurrent = currentPlanId !== "free" && plan.id === currentPlanId;
+            const isUpgrade = currentPlanId === "free" || i > currentIdx;
             return (
               <div
                 key={plan.id}
                 className={cn(
                   "relative flex flex-col rounded-2xl border p-5 transition-all",
                   plan.cardBorder,
-                  isCurrent
-                    ? "bg-white/[0.04] ring-1 ring-violet-400/40"
-                    : "bg-white/[0.02]",
+                  isCurrent ? "bg-white/[0.04] ring-1 ring-violet-400/40" : "bg-white/[0.02]",
                 )}
               >
-                {plan.popular ? (
+                {"popular" in plan && plan.popular ? (
                   <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 rounded-full border border-sky-400/40 bg-sky-500/20 px-3 py-0.5 text-[10px] font-bold tracking-wide text-sky-200">
                     MOST POPULAR
                   </span>
@@ -169,15 +69,11 @@ function UpgradeModal({
                 <h3 className="mt-1 text-lg font-bold text-white">{plan.name}</h3>
 
                 <div className="mt-3 flex items-baseline gap-1">
-                  <span className="text-3xl font-extrabold text-white">
-                    ${plan.monthly}
-                  </span>
+                  <span className="text-3xl font-extrabold text-white">${plan.monthly}</span>
                   <span className="text-sm text-white/45">/mo</span>
                 </div>
 
-                <p className="mt-2 text-sm font-semibold text-white">
-                  {plan.credits.toLocaleString()} credits
-                </p>
+                <p className="mt-2 text-sm font-semibold text-white">{plan.credits.toLocaleString()} credits</p>
 
                 <ul className="mt-4 flex-1 space-y-2 text-xs text-white/70">
                   <li className="flex items-center gap-1.5">
@@ -212,11 +108,7 @@ function UpgradeModal({
 
         <p className="mt-5 text-center text-xs text-white/35">
           Or buy one-off credit packs on the{" "}
-          <Link
-            href="/credits"
-            onClick={onClose}
-            className="text-violet-300 underline-offset-2 hover:underline"
-          >
+          <Link href="/credits" onClick={onClose} className="text-violet-300 underline-offset-2 hover:underline">
             Credits
           </Link>{" "}
           page.
@@ -226,24 +118,21 @@ function UpgradeModal({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Bottom-right banner
-// ---------------------------------------------------------------------------
-
 export default function CreditLowBanner() {
-  const { current, total, planId, setPlan } = useCredits();
+  const { current, total, planId, setSubscriptionPlan } = useCreditsPlan();
   const [dismissed, setDismissed] = useState(false);
   const [showModal, setShowModal] = useState(false);
 
   const pct = total > 0 ? ((total - current) / total) * 100 : 0;
-  const isLow = pct >= 90;
+  const isLow = total > 0 && pct >= 90;
 
   const bannerVisible = isLow && !dismissed;
 
   const progressLabel = useMemo(() => {
+    if (total <= 0) return "";
     if (pct >= 100) return "All credits used";
     return `Over ${Math.floor(pct / 10) * 10}% already used`;
-  }, [pct]);
+  }, [pct, total]);
 
   if (!bannerVisible && !showModal) return null;
 
@@ -279,7 +168,7 @@ export default function CreditLowBanner() {
           currentPlanId={planId}
           onClose={() => setShowModal(false)}
           onSelectPlan={(id) => {
-            setPlan(id);
+            setSubscriptionPlan(id);
             setShowModal(false);
             setDismissed(false);
           }}

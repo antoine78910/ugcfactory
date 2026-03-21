@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import StudioShell from "@/app/_components/StudioShell";
+import { consumeCheckoutQueryParams } from "@/app/_components/CreditsPlanContext";
 import { CREDIT_PACKS } from "@/lib/pricing";
 
 type CreditPack = {
@@ -67,14 +68,23 @@ export default function CreditsPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const c = params.get("checkout");
-    if (c === "success") {
-      toast.success("Payment received", {
-        description: "Credits will appear once your webhook / backend grants them.",
-      });
-      window.history.replaceState({}, "", "/credits");
-    } else if (c === "cancel") {
+    if (c === "cancel") {
       toast.message("Checkout cancelled");
       window.history.replaceState({}, "", "/credits");
+      return;
+    }
+    if (c === "success") {
+      const applied = consumeCheckoutQueryParams(window.location.pathname);
+      toast.success(
+        applied ? "Credits added" : "Payment received",
+        applied
+          ? { description: "Your balance and sidebar bar were updated." }
+          : {
+              description:
+                "If nothing changed, add ?pack= in Stripe success URL or use webhooks.",
+            },
+      );
+      if (!applied) window.history.replaceState({}, "", "/credits");
     }
   }, []);
 
