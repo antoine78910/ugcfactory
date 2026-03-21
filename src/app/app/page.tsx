@@ -72,6 +72,25 @@ type VideoGenState =
 
 const UGC_CURRENT_RUN_KEY = "ugc_current_run_id";
 
+const APP_VALID_SECTIONS: AppSection[] = [
+  "link_to_ad",
+  "motion_control",
+  "image",
+  "video",
+  "projects",
+];
+
+function sectionFromSearchParams(sp: URLSearchParams): AppSection {
+  const s = sp.get("section");
+  if (s && APP_VALID_SECTIONS.includes(s as AppSection)) return s as AppSection;
+  return "link_to_ad";
+}
+
+/** Stable identity for sync: project id + section (avoids ?a=1&b=2 vs ?b=2&a=1 churn). */
+function appRouteKey(project: string, section: AppSection) {
+  return `${project}\0${section}`;
+}
+
 function normalizeUrl(url: string): string {
   try {
     const u = new URL(url.trim());
@@ -204,6 +223,8 @@ export default function AppBrandWizard() {
   const [isLoadingRuns, setIsLoadingRuns] = useState(false);
   /** While set, ignore URL→section sync so stale ?section= in the bar cannot overwrite a sidebar click before router.replace runs. */
   const pendingSectionNavRef = useRef<AppSection | null>(null);
+  /** After we call router.replace, ignore one URL→state pass so Next’s searchParams cannot fight our appSection (fixes link_to_ad ↔ projects loops). */
+  const lastPushedRouteKeyRef = useRef<string | null>(null);
 
   const [storeUrl, setStoreUrl] = useState("");
   const [isExtracting, setIsExtracting] = useState(false);
@@ -616,10 +637,18 @@ export default function AppBrandWizard() {
   const searchKey = searchParams.toString();
 
   useLayoutEffect(() => {
-    const secRaw = searchParams.get("section");
-    const validSections: AppSection[] = ["link_to_ad", "motion_control", "image", "video", "projects"];
-    const sec =
-      secRaw && validSections.includes(secRaw as AppSection) ? (secRaw as AppSection) : null;
+    const curProject = searchParams.get("project") ?? "";
+    const sec = sectionFromSearchParams(searchParams);
+    const incomingKey = appRouteKey(curProject, sec);
+
+    if (lastPushedRouteKeyRef.current !== null && incomingKey === lastPushedRouteKeyRef.current) {
+      lastPushedRouteKeyRef.current = null;
+      const pending = pendingSectionNavRef.current;
+      if (pending !== null && sec === pending) {
+        pendingSectionNavRef.current = null;
+      }
+      return;
+    }
 
     const pending = pendingSectionNavRef.current;
     if (pending !== null) {
@@ -629,10 +658,8 @@ export default function AppBrandWizard() {
       return;
     }
 
-    if (sec) {
-      setAppSection((prev) => (prev === sec ? prev : sec));
-    }
-  }, [searchKey, searchParams]);
+    setAppSection((prev) => (prev === sec ? prev : sec));
+  }, [searchKey]);
 
   useEffect(() => {
     if (!deleteProjectDialog || deleteProjectLoading) return;
@@ -689,12 +716,14 @@ export default function AppBrandWizard() {
   useEffect(() => {
     if (pathname !== "/app") return;
     const curProject = searchParams.get("project") ?? "";
-    const curSection = searchParams.get("section") || "link_to_ad";
-    const wantProject = runId ?? "";
+    const curSec = sectionFromSearchParams(searchParams);
 
-    // Before loadRun() sets runId, keep ?project= but still sync ?section= (avoids stripping project + clears pending nav).
+    // Before loadRun() sets runId, keep ?project= but still sync ?section=.
     if (!runId && curProject) {
-      if (appSection !== curSection) {
+      const curKey = appRouteKey(curProject, curSec);
+      const wantKey = appRouteKey(curProject, appSection);
+      if (wantKey !== curKey) {
+        lastPushedRouteKeyRef.current = wantKey;
         const p = new URLSearchParams(searchParams.toString());
         p.set("project", curProject);
         p.set("section", appSection);
@@ -703,12 +732,17 @@ export default function AppBrandWizard() {
       return;
     }
 
-    if (wantProject === curProject && appSection === curSection) return;
+    const wantProject = runId ?? "";
+    const curKey = appRouteKey(curProject, curSec);
+    const wantKey = appRouteKey(wantProject, appSection);
+    if (wantKey === curKey) return;
+
+    lastPushedRouteKeyRef.current = wantKey;
     const p = new URLSearchParams();
     if (runId) p.set("project", runId);
     p.set("section", appSection);
     router.replace(`/app?${p.toString()}`);
-  }, [runId, appSection, pathname, router, searchKey, searchParams]);
+  }, [runId, appSection, pathname, router, searchKey]);
 
   async function onExtract() {
     const url = storeUrl.trim();

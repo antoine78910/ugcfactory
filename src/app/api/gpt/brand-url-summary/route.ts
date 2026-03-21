@@ -18,41 +18,41 @@ export async function POST(req: Request) {
   if (!url) return NextResponse.json({ error: "Missing `url`." }, { status: 400 });
 
   const developer = [
-    "Tu es un expert senior en marketing direct-response et analyse marque / produit.",
-    "Tu DOIS utiliser l’outil de recherche web pour ouvrir et analyser l’URL produit fournie (et pages utiles du même site si besoin) avant de rédiger le brief.",
-    "Réponds UNIQUEMENT par le brand brief demandé, en français.",
-    "La sortie DOIT suivre exactement la forme et la structure de l’exemple fourni dans le message utilisateur.",
-    "Pas de titres supplémentaires, pas de listes à puces, pas de sections structurées : un seul flux de texte après le label initial.",
-    "Reste concis et clair, ne diverge pas du modèle (longueur comparable à l’exemple, cible ~380 mots, plafond ~500 mots).",
+    "You are a senior expert in direct-response marketing and brand / product analysis.",
+    "You MUST use the web search tool to open and analyze the provided product URL (and useful pages on the same site if needed) before writing the brief.",
+    "Respond ONLY with the requested brand brief, in English.",
+    "The output MUST follow exactly the shape and structure of the example in the user message.",
+    "No extra headings, no bullet lists, no structured sections: one continuous flow of text after the initial label.",
+    "Stay concise and clear, do not diverge from the template (length comparable to the example, target ~380 words, max ~500 words).",
   ].join("\n");
 
   const EXAMPLE_SKULT =
-    "Skult Men est une marque de skincare masculine qui propose des produits destinés à améliorer l’apparence du visage et à donner une mâchoire plus définie et un visage plus sculpté. Le produit principal, le Collagen Face Sculpt Wrap, est un masque facial conçu pour aider à raffermir la peau, améliorer l’élasticité et donner l’apparence d’un visage plus tonique et plus structuré. Le problème principal que le produit adresse est l’insatisfaction liée à la définition du visage chez les hommes, notamment un manque de jawline marquée, un visage perçu comme trop rond ou relâché, ou encore une perte de fermeté de la peau. Cette problématique peut affecter la perception de masculinité, l’attractivité et la confiance en soi. La promesse centrale du produit est d’aider à raffermir et sculpter visuellement le visage grâce au collagène et à un effet tenseur, afin d’obtenir une mâchoire plus définie et un visage plus net. La transformation vendue est le passage d’un visage plus mou ou moins défini à un visage plus sculpté, plus masculin et plus structuré. La cible principale est un homme entre 20 et 40 ans, sensible à son apparence, intéressé par le grooming et l’optimisation de son physique, et influencé par les standards esthétiques modernes (jawline marquée, visage structuré). Ses douleurs principales sont un manque de définition du visage, un visage jugé trop rond ou fatigué, et une envie d’améliorer son apparence sans procédures invasives. Ses désirs sont d’avoir une jawline plus nette, un visage plus masculin, recevoir des compliments et se sentir plus confiant dans son apparence. Les principales objections peuvent être : est-ce que le produit fonctionne vraiment, combien de temps avant de voir les résultats, est-ce que l’effet est durable, et est-ce adapté à tous les types de peau. Les angles marketing les plus exploitables pour cette marque sont : l’angle transformation (avant/après jawline), l’angle masculinité (visage plus structuré et viril), l’angle solution simple (un masque facile à utiliser à la maison), l’angle confiance (améliorer l’apparence et la présence), et l’angle preuve sociale (témoignages et résultats visibles). Globalement, Skult Men se positionne comme une marque de grooming masculine qui promet une amélioration visible de la définition du visage et vend principalement l’idée d’un visage plus sculpté, plus masculin et plus confiant grâce à une solution simple et accessible.";
+    "Skult Men is a men's skincare brand offering products designed to improve facial appearance and deliver a more defined jawline and a more sculpted face. The hero product, the Collagen Face Sculpt Wrap, is a facial mask meant to help firm skin, improve elasticity, and create the look of a more toned, structured face. The core problem it addresses is dissatisfaction with facial definition among men—especially a weak jawline, a face that feels too round or slack, or loss of skin firmness. That tension can affect perceived masculinity, attractiveness, and self-confidence. The central product promise is to help visibly firm and sculpt the face using collagen and a tightening effect, for a sharper jawline and clearer facial structure. The transformation sold is moving from a softer or less defined face to one that looks more sculpted, masculine, and structured. The primary audience is men roughly 20–40 who care about appearance, are into grooming and optimizing how they look, and respond to modern aesthetic cues (strong jawline, structured face). Their main pains are lack of facial definition, a face that looks too round or tired, and wanting to improve looks without invasive procedures. Their desires include a clearer jawline, a more masculine-looking face, compliments, and more confidence in how they look. Key objections may be whether it really works, how long until results show, whether the effect lasts, and whether it suits all skin types. The strongest marketing angles are transformation (before/after jawline), masculinity (more structured, virile look), simple solution (an easy at-home mask), confidence (better presence and appearance), and social proof (testimonials and visible results). Overall, Skult Men positions as a men's grooming brand promising visible improvement in facial definition and selling the idea of a more sculpted, masculine, confident face through a simple, accessible solution.";
 
   const userPrompt = [
-    "D’après cette URL, je veux que tu m’indiques tous les bénéfices du produit, le problème qu’il résout, pour bien cerner et connaître le produit à 100 % : comment il s’applique et comment l’utiliser — c’est très important pour pouvoir faire des UGC réalistes.",
+    "From this URL, cover every product benefit and the problem it solves so the product is fully understood: how it is applied and how to use it—critical for realistic UGC.",
     "",
-    `URL du produit : ${url}`,
+    `Product URL: ${url}`,
     "",
-    "Tu me donneras en sortie un brand brief détaillé. N’oublie pas de dire comment l’utiliser, assez pour que l’on comprenne comment l’UGC pourra démontrer le bénéfice du produit — mais sans t’y attarder trop longtemps.",
+    "Output a detailed brand brief. Include enough on how to use it so UGC can show the benefit clearly—without dwelling on it too long.",
     "",
-    "Tu garderas la même forme et structure que l’exemple ci-dessous (concis, clair, ne diverge pas). L’exemple illustre uniquement la structure et le ton, pas le contenu à copier pour une autre marque.",
+    "Match the form and structure of the example below (concise, clear, do not diverge). The example shows structure and tone only—not content to copy for another brand.",
     "",
-    "Exemple de structure (après le préfixe « Brand brief: ») :",
+    "Structure example (after the prefix \"Brand brief:\"):",
     `Brand brief: ${EXAMPLE_SKULT}`,
     "",
-    "Règles de formatage :",
-    "- Commence exactement par : Brand brief:",
-    "- Puis un seul paragraphe continu en français.",
-    "- Même ordre et flux que l’exemple : marque / produit et bénéfices, problème résolu, promesse, transformation, cible, douleurs, désirs, objections, angles marketing, positionnement global.",
-    "- Intègre clairement les bénéfices, le problème adressé, et l’usage / application du produit (pour des UGC crédibles).",
-    "- Ne dépasse pas ~500 mots.",
+    "Formatting rules:",
+    "- Start exactly with: Brand brief:",
+    "- Then one continuous paragraph in English.",
+    "- Same order and flow as the example: brand / product and benefits, problem solved, promise, transformation, audience, pains, desires, objections, marketing angles, overall positioning.",
+    "- Clearly weave in benefits, the problem addressed, and usage / application (for credible UGC).",
+    "- Do not exceed ~500 words.",
     "",
-    "Génère maintenant le brand brief pour l’URL fournie ci-dessus.",
+    "Generate the brand brief for the URL above now.",
   ].join("\n");
 
   try {
-    const cacheKey = makeCacheKey({ v: 3, url });
+    const cacheKey = makeCacheKey({ v: 4, url });
     try {
       const { data: hit } = await supabase
         .from("gpt_cache")

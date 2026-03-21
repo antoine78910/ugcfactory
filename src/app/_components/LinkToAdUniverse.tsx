@@ -20,6 +20,7 @@ import {
 } from "@/lib/linkToAdUniverse";
 import { LinkToAdUniverseStepper } from "@/app/_components/LinkToAdUniverseStepper";
 import { TextShimmer } from "@/components/ui/text-shimmer";
+import { WebsiteScanChecklist } from "@/app/_components/WebsiteScanChecklist";
 import { WebsiteScanLoader } from "@/app/_components/WebsiteScanLoader";
 
 export type LinkToAdUniverseProps = {
@@ -530,6 +531,10 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     /** Saved run for this URL hydrates in place unless bypass (redo step 1). */
     const tryHydrateFromSavedRun = !opts?.bypassSavedProject;
 
+    // Loader + barre de statut dès le clic (avant find-by-url, qui était sans isWorking).
+    setIsWorking(true);
+    setStage("scanning");
+
     if (tryHydrateFromSavedRun) {
       try {
         const findRes = await fetch(`/api/runs/find-by-store-url?url=${encodeURIComponent(url)}`, { cache: "no-store" });
@@ -538,6 +543,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           const snap = readUniverseFromExtracted(findJson.data.extracted);
           if (snap) {
             hydrateFromRun(findJson.data);
+            setStage("ready");
             setIsWorking(false);
             return;
           }
@@ -547,7 +553,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       }
     }
 
-    setIsWorking(true);
     setSummaryText("");
     setScriptsText("");
     setAngleLabels(["", "", ""]);
@@ -711,10 +716,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       }
 
       setIsNanoAllImagesSubmitting(true);
-      toast.message("Image generation", {
-        description: "Generating 3 reference frames — this may take several minutes.",
-        duration: 6000,
-      });
       try {
         const { urlsByPrompt, lastTaskId } = await runNanoBananaProThreeSequential(img, prompts);
         if (!urlsByPrompt[0] || !urlsByPrompt[1] || !urlsByPrompt[2]) {
@@ -1274,17 +1275,19 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   }, [step1Done, step2Done, step3Done, step4Done]);
 
   const universeLoadingMessage = useMemo(() => {
-    if (nanoPollTaskId) return "Generating your reference images…";
-    if (isNanoAllImagesSubmitting || isNanoPromptsLoading) return "Preparing image prompts and renders…";
-    if (isNanoImageSubmitting) return "Image generation in progress…";
+    if (nanoPollTaskId || isNanoAllImagesSubmitting) {
+      return "Generating 3 images of your persona with your product…";
+    }
+    if (isNanoPromptsLoading) return "Preparing image prompts…";
+    if (isNanoImageSubmitting) return "Generating your image…";
     if (isVideoPromptLoading) return "Generating video prompt…";
     if (isKlingSubmitting || klingPollTaskId) return "Generating your video…";
     if (!isWorking) return null;
     if (stage === "server_pipeline") {
-      return "Full store pass — page, images, brand brief, then script angles. You can switch pages; your project saves as we go.";
+      return "Scanning the store — page, images, brand brief, and scripts. You can switch pages; your project saves as we go.";
     }
     if (stage === "scanning") {
-      return "Scanning the website — fetching the store page, structure, and visible text…";
+      return "Checking for a saved project for this URL, then scanning the store page…";
     }
     if (stage === "finding_image") {
       return "Scanning images — collecting product photos and picking the clearest preview…";
@@ -1346,7 +1349,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   }
 
   const primaryBtnClass =
-    "h-11 rounded-2xl bg-violet-400 px-6 text-black font-semibold border border-violet-200/40 shadow-[0_6px_0_0_rgba(76,29,149,0.9)] transition-all hover:-translate-y-[1px] hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9)] active:translate-y-[6px]";
+    "h-11 rounded-2xl bg-violet-400 px-6 text-black font-semibold border border-violet-200/40 shadow-[0_6px_0_0_rgba(76,29,149,0.9)] transition-all hover:-translate-y-[1px] hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9)] active:translate-y-[6px] disabled:cursor-wait disabled:pointer-events-none disabled:active:translate-y-0 disabled:hover:translate-y-0 disabled:hover:bg-violet-400 disabled:hover:shadow-[0_6px_0_0_rgba(76,29,149,0.9)] disabled:opacity-100";
 
   function handleGenerateFromUrl() {
     const u = storeUrl.trim();
@@ -1418,33 +1421,44 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           step4Done={step4Done}
         />
         {universeLoadingMessage ? (
-          <div className="-mt-2 mb-2 flex min-h-[4.25rem] items-center gap-3 rounded-xl border border-violet-500/15 bg-violet-500/[0.06] px-3 py-3 sm:gap-4 sm:px-4">
+          <div className="-mt-2 mb-2 flex min-h-[4.25rem] items-center gap-3 rounded-xl border border-violet-500/15 bg-violet-500/[0.06] px-3 py-3 sm:gap-4 sm:px-4 shadow-[0_0_24px_rgba(139,92,246,0.12)]">
             {isWorking &&
             (stage === "scanning" ||
               stage === "finding_image" ||
               stage === "server_pipeline" ||
               stage === "summarizing" ||
               stage === "writing_scripts") ? (
-              <WebsiteScanLoader
-                label={
-                  stage === "scanning"
-                    ? "Scan site"
-                    : stage === "finding_image"
-                      ? "Scan images"
-                      : stage === "summarizing"
-                        ? "Brand"
-                        : stage === "writing_scripts"
-                          ? "Scripts"
-                          : "Full pass"
-                }
-                subtitle={universeLoadingMessage}
-              />
+              <div className="flex min-w-0 flex-col gap-5 lg:flex-row lg:items-stretch lg:gap-8">
+                <WebsiteScanLoader
+                  label={
+                    stage === "scanning"
+                      ? "Scan site"
+                      : stage === "finding_image"
+                        ? "Scan images"
+                        : stage === "summarizing"
+                          ? "Brand"
+                          : stage === "writing_scripts"
+                            ? "Scripts"
+                            : "Scanning…"
+                  }
+                  subtitle={universeLoadingMessage}
+                  className="min-w-0 flex-1"
+                />
+                <WebsiteScanChecklist stage={stage} isWorking={isWorking} className="shrink-0 lg:max-w-[min(100%,22rem)]" />
+              </div>
             ) : (
               <>
                 <Loader2 className="h-4 w-4 shrink-0 animate-spin text-violet-300" aria-hidden />
-                <TextShimmer as="span" className="text-sm font-medium">
-                  {universeLoadingMessage}
-                </TextShimmer>
+                <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                  <TextShimmer as="span" className="text-sm font-medium">
+                    {universeLoadingMessage}
+                  </TextShimmer>
+                  {(nanoPollTaskId || isNanoAllImagesSubmitting) ? (
+                    <span className="text-xs font-normal text-white/50">
+                      This may take several minutes.
+                    </span>
+                  ) : null}
+                </div>
               </>
             )}
           </div>
@@ -1453,12 +1467,25 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           {!showBrandHeaderInsteadOfUrl ? (
             <div>
               <Label className="text-base font-medium text-white/80">Store URL</Label>
-              <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-stretch">
+              <div className="relative mt-2 flex flex-col gap-3 sm:flex-row sm:items-stretch">
+                {isWorking ? (
+                  <div
+                    className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-[#0b0912]/70 backdrop-blur-[2px]"
+                    aria-live="polite"
+                    aria-busy="true"
+                  >
+                    <div className="flex items-center gap-2.5 rounded-2xl border border-violet-500/35 bg-[#0b0912]/95 px-5 py-2.5 shadow-[0_6px_0_0_rgba(76,29,149,0.75)]">
+                      <Loader2 className="h-5 w-5 shrink-0 animate-spin text-violet-300" aria-hidden />
+                      <span className="text-sm font-semibold text-white/90">Starting…</span>
+                    </div>
+                  </div>
+                ) : null}
                 <Input
                   value={storeUrl}
                   onChange={(e) => setStoreUrl(e.target.value)}
                   placeholder="https://..."
-                  className="h-14 min-h-[3.5rem] min-w-0 flex-1 rounded-xl border-white/10 bg-white/[0.03] px-4 text-lg text-white placeholder:text-white/35"
+                  disabled={isWorking}
+                  className="h-14 min-h-[3.5rem] min-w-0 flex-1 rounded-xl border-white/10 bg-white/[0.03] px-4 text-lg text-white placeholder:text-white/35 disabled:cursor-wait disabled:opacity-60"
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
@@ -1470,7 +1497,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                   type="button"
                   disabled={isWorking || !storeUrl.trim()}
                   onClick={handleGenerateFromUrl}
-                  className={`${primaryBtnClass} h-14 min-h-[3.5rem] shrink-0 px-8 text-base sm:min-w-[160px]`}
+                  aria-busy={isWorking}
+                  className={`${primaryBtnClass} h-14 min-h-[3.5rem] shrink-0 px-8 text-base sm:min-w-[160px] inline-flex items-center justify-center gap-2`}
                 >
                   {isWorking ? (
                     <>
@@ -1753,8 +1781,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
               ) : null}
 
               <div className="mt-auto shrink-0 rounded-xl border border-white/10 bg-black/25 p-4">
-                <p className="text-sm font-semibold text-white/90">Choose an image to generate your UGC</p>
-                <div className="mt-3 flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2">
                   {selectedAngleIndex !== null &&
                   !nanoBananaPromptsRaw.trim() &&
                   !isNanoPromptsLoading &&
@@ -1770,9 +1797,18 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                     </Button>
                   ) : null}
                   {nanoPollTaskId || isNanoPromptsLoading || isNanoAllImagesSubmitting ? (
-                    <span className="flex items-center gap-2 text-xs text-violet-200">
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      Generating images…
+                    <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm font-medium text-violet-200">
+                      <span className="inline-flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                        {nanoPollTaskId || isNanoAllImagesSubmitting
+                          ? "Generating 3 images of your persona with your product…"
+                          : "Preparing image prompts…"}
+                      </span>
+                      {nanoPollTaskId || isNanoAllImagesSubmitting ? (
+                        <span className="text-xs font-normal text-white/45">
+                          This may take several minutes.
+                        </span>
+                      ) : null}
                     </span>
                   ) : null}
                 </div>
