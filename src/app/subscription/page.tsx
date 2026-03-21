@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Check, CreditCard, X } from "lucide-react";
 import { toast } from "sonner";
@@ -155,6 +155,43 @@ function tierColBg(ti: number): string {
 
 export default function SubscriptionPage() {
   const [billing, setBilling] = useState<Billing>("monthly");
+  const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const c = params.get("checkout");
+    if (c === "success") {
+      toast.success("Checkout completed", {
+        description: "Your subscription will activate once Stripe confirms payment.",
+      });
+      window.history.replaceState({}, "", "/subscription");
+    } else if (c === "cancel") {
+      toast.message("Checkout cancelled");
+      window.history.replaceState({}, "", "/subscription");
+    }
+  }, []);
+
+  async function startSubscriptionCheckout(planId: string) {
+    setCheckoutLoading(planId);
+    try {
+      const res = await fetch("/api/stripe/checkout/subscription", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ planId, billing }),
+      });
+      const data = (await res.json()) as { url?: string; error?: string };
+      if (!res.ok) throw new Error(data.error || "Checkout failed");
+      if (data.url) {
+        window.location.href = data.url;
+        return;
+      }
+      throw new Error("No checkout URL");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Checkout failed");
+    } finally {
+      setCheckoutLoading(null);
+    }
+  }
 
   const subtitle = useMemo(
     () => "Manage your subscription and choose a plan that fits your needs.",
@@ -218,6 +255,16 @@ export default function SubscriptionPage() {
           </div>
         </header>
 
+        {billing === "yearly" ? (
+          <p className="mx-auto max-w-3xl text-center text-xs text-amber-200/90">
+            Yearly checkout needs Stripe yearly prices — set{" "}
+            <code className="rounded bg-white/10 px-1 py-0.5 text-[10px] text-white/80">
+              STRIPE_PRICE_SUBSCRIPTION_*_YEARLY
+            </code>{" "}
+            in env, or use Monthly (configured).
+          </p>
+        ) : null}
+
         <p className="mx-auto max-w-3xl text-center text-sm font-semibold tracking-wide text-violet-200/90">
           💳 TON SETUP IDÉAL
         </p>
@@ -267,10 +314,14 @@ export default function SubscriptionPage() {
 
                 <button
                   type="button"
-                  onClick={() => toast.message("Checkout", { description: "Connect Stripe / billing when ready." })}
-                  className={cn("mt-6 h-11 w-full rounded-xl text-sm font-bold transition-colors", plan.buttonClass)}
+                  disabled={Boolean(checkoutLoading)}
+                  onClick={() => void startSubscriptionCheckout(plan.id)}
+                  className={cn(
+                    "mt-6 h-11 w-full rounded-xl text-sm font-bold transition-colors disabled:opacity-60",
+                    plan.buttonClass,
+                  )}
                 >
-                  Subscribe
+                  {checkoutLoading === plan.id ? "Redirecting…" : "Subscribe"}
                 </button>
 
                 <ul className="mt-6 space-y-2.5 border-t border-white/10 pt-5 text-left text-sm text-white/85">

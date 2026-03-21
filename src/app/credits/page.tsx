@@ -1,6 +1,8 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { toast } from "sonner";
 import StudioShell from "@/app/_components/StudioShell";
 import { CREDIT_PACKS } from "@/lib/pricing";
 
@@ -12,38 +14,33 @@ type CreditPack = {
   description: string;
   promoLine: string;
   badge?: string;
-  ctaHref: string;
 };
 
 const PACK_UI: Omit<CreditPack, "price" | "credits">[] = [
   {
     key: "starter",
-    name: "Starter",
+    name: "Launch",
     description: "👉 Perfect to test & launch your first ads",
     promoLine: "(no discount)",
-    ctaHref: "/auth?pack=starter",
   },
   {
     key: "growth",
     name: "Growth",
     description: "👉 For consistent content & scaling",
     promoLine: "Save 11%",
-    ctaHref: "/auth?pack=growth",
   },
   {
     key: "most-popular",
-    name: "Most Popular ⭐",
+    name: "Boost",
     description: "👉 Best balance for serious creators",
     badge: "BEST BALANCE",
     promoLine: "🔥 Save 20%",
-    ctaHref: "/auth?pack=most-popular",
   },
   {
     key: "pro",
     name: "Pro",
     description: "👉 For heavy users & brands",
     promoLine: "🚀 Save 27%",
-    ctaHref: "/auth?pack=pro",
   },
   {
     key: "scale",
@@ -51,7 +48,6 @@ const PACK_UI: Omit<CreditPack, "price" | "credits">[] = [
     description: "👉 For teams & aggressive scaling",
     badge: "BEST VALUE",
     promoLine: "💎 Save 36%",
-    ctaHref: "/auth?pack=scale",
   },
 ];
 
@@ -66,6 +62,44 @@ const creditPacks: CreditPack[] = PACK_UI.map((meta, i) => {
 });
 
 export default function CreditsPage() {
+  const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const c = params.get("checkout");
+    if (c === "success") {
+      toast.success("Payment received", {
+        description: "Credits will appear once your webhook / backend grants them.",
+      });
+      window.history.replaceState({}, "", "/credits");
+    } else if (c === "cancel") {
+      toast.message("Checkout cancelled");
+      window.history.replaceState({}, "", "/credits");
+    }
+  }, []);
+
+  async function buyPack(packKey: string) {
+    setCheckoutLoading(packKey);
+    try {
+      const res = await fetch("/api/stripe/checkout/credits", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ packKey }),
+      });
+      const data = (await res.json()) as { url?: string; error?: string };
+      if (!res.ok) throw new Error(data.error || "Checkout failed");
+      if (data.url) {
+        window.location.href = data.url;
+        return;
+      }
+      throw new Error("No checkout URL");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Checkout failed");
+    } finally {
+      setCheckoutLoading(null);
+    }
+  }
+
   return (
     <StudioShell>
       <section className="max-w-6xl space-y-8 px-6 py-6 md:px-8">
@@ -128,17 +162,19 @@ export default function CreditsPage() {
                 <p className="mt-3 text-sm font-semibold text-white/75">{p.description}</p>
 
                 <div className="mt-6">
-                  <Link
-                    href={p.ctaHref}
+                  <button
+                    type="button"
+                    disabled={Boolean(checkoutLoading)}
+                    onClick={() => void buyPack(p.key)}
                     className={[
-                      "flex h-11 w-full items-center justify-center rounded-xl border font-semibold transition-all",
+                      "flex h-11 w-full cursor-pointer items-center justify-center rounded-xl border font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-60",
                       isFeatured
                         ? "border-violet-200/30 bg-violet-400 text-black hover:bg-violet-300"
                         : "border-white/10 bg-white/5 text-white hover:bg-white/10",
                     ].join(" ")}
                   >
-                    Buy now
-                  </Link>
+                    {checkoutLoading === p.key ? "Redirecting…" : "Buy now"}
+                  </button>
                 </div>
               </div>
             );
@@ -157,7 +193,7 @@ export default function CreditsPage() {
               </div>
             </div>
             <div className="rounded-2xl border border-violet-500/20 bg-violet-500/10 p-4">
-              <div className="text-xs font-bold uppercase tracking-wider text-violet-200">Boost</div>
+              <div className="text-xs font-bold uppercase tracking-wider text-violet-200">Scale</div>
               <div className="mt-2 text-lg font-extrabold">
                 $480 <span className="text-white/60">→</span> Max savings
               </div>
@@ -166,7 +202,7 @@ export default function CreditsPage() {
         </section>
 
         <footer className="text-center text-xs text-white/40">
-          Demo UI. Connect packs & checkout to your payment provider when ready.
+          Stripe Checkout — grant credits via webhook when payment succeeds.
         </footer>
       </section>
     </StudioShell>
