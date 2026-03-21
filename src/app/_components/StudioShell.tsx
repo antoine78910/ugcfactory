@@ -36,7 +36,7 @@ function sectionHref(section: StudioNavSection, projectId: string | null | undef
 
 function navButtonClass(active: boolean): string {
   return [
-    "block w-full rounded-xl px-3 py-2 text-left text-sm font-semibold transition-all cursor-pointer",
+    "block w-full rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition-all cursor-pointer",
     active
       ? "bg-violet-400 text-black shadow-[0_7px_0_0_rgba(76,29,149,0.95)] hover:bg-violet-300 hover:shadow-[0_9px_0_0_rgba(76,29,149,0.95)] active:translate-y-[6px]"
       : "border border-white/10 bg-white/5 text-white hover:bg-white/10 hover:border-violet-400/40 shadow-[0_0_22px_rgba(139,92,246,0.12)] hover:shadow-[0_0_36px_rgba(139,92,246,0.22)]",
@@ -101,7 +101,7 @@ export default function StudioShell({
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">
             <div className="rounded-xl border border-white/10 bg-[#0b0912]/85 p-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/45">CREATE</p>
-              <div className="mt-2 space-y-1">
+              <div className="mt-2 space-y-2.5">
                 {CREATE_SECTIONS.map(({ id, label }) => {
                   const active = controlled && activeSection === id;
                   if (controlled) {
@@ -126,7 +126,7 @@ export default function StudioShell({
             </div>
 
             <div className="rounded-xl border border-white/10 bg-[#0b0912]/85 p-3">
-              <div className="space-y-1">
+              <div className="space-y-2.5">
                 {controlled ? (
                   <button
                     type="button"
