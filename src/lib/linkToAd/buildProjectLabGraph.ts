@@ -11,7 +11,9 @@ export type LabNodeKind =
   | "angle"
   | "ref_image"
   | "video"
-  | "classic";
+  | "classic"
+  | "folder"
+  | "custom_angle";
 
 export type LabNode = {
   id: string;
