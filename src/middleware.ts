@@ -18,6 +18,12 @@ export function middleware(req: NextRequest) {
 
   // On app.youry.io, serve the app from "/" (rewrite -> /app).
   if (host === APP_HOST) {
+    // OAuth / magic links often land on the site root (?code= / ?error= / ?token_hash=).
+    // Never rewrite those to /app — the session is created in /auth/callback only.
+    if (pathname === "/" && hasAuthParams) {
+      url.pathname = "/auth/callback";
+      return NextResponse.redirect(url, 307);
+    }
     if (pathname === "/") {
       url.pathname = "/app";
       return NextResponse.rewrite(url);

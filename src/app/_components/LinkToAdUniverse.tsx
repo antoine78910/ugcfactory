@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { toast } from "sonner";
-import { Check, LayoutGrid, Loader2, Maximize2, RefreshCw, Sparkles, Video, X } from "lucide-react";
+import { Check, Loader2, Maximize2, RefreshCw, Sparkles, Video, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,12 +11,22 @@ import { Label } from "@/components/ui/label";
 import { absolutizeImageUrl } from "@/lib/imageUrl";
 import { pickBestProductUrlForNanoBanana, productUrlsForGpt } from "@/lib/productReferenceImages";
 import {
+  cloneAnglePipeline,
   cloneExtractedBase,
+  createEmptyKlingByReference,
   deriveAngleLabelsFromScripts,
+  emptyAnglePipeline,
+  flattenAnglePipeToTopLevel,
+  normalizeKlingByReference,
+  normalizePipelineByAngle,
   parseThreeLabeledPrompts,
   readUniverseFromExtracted,
   selectedAngleScript,
-  UNIVERSE_PIPELINE_CLEAR,
+  snapshotAfterKlingVideoSuccessForAngle,
+  splitScriptOptions,
+  teaserFromScriptBlock,
+  type KlingReferenceSlotV1,
+  type LinkToAdAnglePipelineV1,
   type LinkToAdUniverseSnapshotV1,
 } from "@/lib/linkToAdUniverse";
 import { LinkToAdUniverseStepper } from "@/app/_components/LinkToAdUniverseStepper";
@@ -25,6 +35,10 @@ import { WebsiteScanLoader } from "@/app/_components/WebsiteScanLoader";
 import { TextShimmer } from "@/components/ui/text-shimmer";
 import { cn } from "@/lib/utils";
 import { LINK_TO_AD_LOADING_MESSAGES } from "@/lib/linkToAd/loadingMessageLoops";
+import {
+  CREDITS_KLING_LINK_TO_AD_VIDEO,
+  CREDITS_LINK_TO_AD_THREE_REF_IMAGES,
+} from "@/lib/linkToAd/generationCredits";
 import type { InternalFetch } from "@/lib/linkToAd/internalFetch";
 import { runInitialPipeline } from "@/lib/linkToAd/runInitialPipeline";
 
@@ -174,6 +188,10 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const [lastExtractedJson, setLastExtractedJson] = useState<Record<string, unknown> | null>(null);
   const [angleLabels, setAngleLabels] = useState<[string, string, string]>(["", "", ""]);
   const [selectedAngleIndex, setSelectedAngleIndex] = useState<number | null>(null);
+  /** Saved Nano + Kling pipeline per script angle (inactive slots + hydrate); active angle also in flat state below. */
+  const [pipelineByAngle, setPipelineByAngle] = useState<
+    [LinkToAdAnglePipelineV1, LinkToAdAnglePipelineV1, LinkToAdAnglePipelineV1]
+  >(() => [emptyAnglePipeline(), emptyAnglePipeline(), emptyAnglePipeline()]);
 
   const [nanoBananaPromptsRaw, setNanoBananaPromptsRaw] = useState("");
   const [nanoBananaSelectedPromptIndex, setNanoBananaSelectedPromptIndex] = useState<0 | 1 | 2>(0);
@@ -182,8 +200,10 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const [nanoBananaImageUrls, setNanoBananaImageUrls] = useState<string[]>([]);
   const [nanoBananaSelectedImageIndex, setNanoBananaSelectedImageIndex] = useState<0 | 1 | 2 | null>(null);
   const [ugcVideoPromptGpt, setUgcVideoPromptGpt] = useState("");
-  const [klingTaskId, setKlingTaskId] = useState<string | null>(null);
-  const [klingVideoUrl, setKlingVideoUrl] = useState<string | null>(null);
+  /** Per reference image (0–2): Kling video URL, task id, history, saved motion prompt. */
+  const [klingByRef, setKlingByRef] = useState<KlingReferenceSlotV1[]>(() => createEmptyKlingByReference());
+  /** Which reference index the active Kling poll belongs to (single global poll). */
+  const [klingPollImageIndex, setKlingPollImageIndex] = useState<0 | 1 | 2 | null>(null);
 
   const [isNanoPromptsLoading, setIsNanoPromptsLoading] = useState(false);
   const [isNanoImageSubmitting, setIsNanoImageSubmitting] = useState(false);
@@ -195,8 +215,164 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   /** Lightbox: full reference image (source is often 9:16; grid shows 3:4 crop). */
   const [nanoImageLightboxUrl, setNanoImageLightboxUrl] = useState<string | null>(null);
 
+  const selImg = nanoBananaSelectedImageIndex;
+  const activeKlingSlot = useMemo(() => {
+    if (selImg === null) {
+      return { videoUrl: null as string | null, taskId: null as string | null, history: [] as string[] };
+    }
+    const s = klingByRef[selImg];
+    return {
+      videoUrl: (s?.videoUrl ?? null) as string | null,
+      taskId: (s?.taskId ?? null) as string | null,
+      history: [...(s?.history ?? [])],
+    };
+  }, [selImg, klingByRef]);
+  const klingVideoUrl = activeKlingSlot.videoUrl;
+  const klingTaskId = activeKlingSlot.taskId;
+  const klingHistory = activeKlingSlot.history;
+
+  const klingRenderingThisReference = Boolean(
+    klingPollTaskId &&
+      klingPollImageIndex !== null &&
+      klingPollImageIndex === nanoBananaSelectedImageIndex,
+  );
+
+  function patchKlingSlot(i: 0 | 1 | 2, patch: Partial<KlingReferenceSlotV1>) {
+    setKlingByRef((prev) => {
+      const next = prev.map((s) => ({
+        ...s,
+        history: [...(s.history || [])],
+      }));
+      next[i] = { ...next[i], ...patch };
+      return next;
+    });
+  }
+
+  function promoteHistoryToMain(slotIdx: 0 | 1 | 2, historyUrl: string) {
+    setKlingByRef((prev) => {
+      const next = prev.map((s) => ({
+        ...s,
+        history: [...(s.history || [])],
+      }));
+      const cur = next[slotIdx];
+      const main = cur.videoUrl?.trim();
+      const hist = (cur.history || []).filter((u) => u !== historyUrl);
+      const newHist = main && main !== historyUrl ? [main, ...hist] : hist;
+      next[slotIdx] = { ...cur, videoUrl: historyUrl, history: newHist.slice(0, 12) };
+      return next;
+    });
+  }
+
+  function captureActivePipeline(): LinkToAdAnglePipelineV1 {
+    const imgIdx = nanoBananaSelectedImageIndex;
+    const klingMerged = klingByRef.map((s, i) => ({
+      videoUrl: s.videoUrl ?? null,
+      taskId: s.taskId ?? null,
+      history: [...(s.history || [])],
+      ugcVideoPrompt:
+        i === imgIdx ? ugcVideoPromptGpt || undefined : s.ugcVideoPrompt,
+    }));
+    return {
+      nanoBananaPromptsRaw,
+      nanoBananaSelectedPromptIndex,
+      nanoBananaTaskId,
+      nanoBananaImageUrl,
+      nanoBananaImageUrls: [...nanoBananaImageUrls],
+      nanoBananaSelectedImageIndex,
+      ugcVideoPromptGpt,
+      klingByReferenceIndex: klingMerged,
+      videoStageMode,
+    };
+  }
+
+  function applyPipelineFromSnapshot(p: LinkToAdAnglePipelineV1) {
+    setNanoBananaPromptsRaw(p.nanoBananaPromptsRaw ?? "");
+    setNanoBananaSelectedPromptIndex(
+      p.nanoBananaSelectedPromptIndex === 0 || p.nanoBananaSelectedPromptIndex === 1 || p.nanoBananaSelectedPromptIndex === 2
+        ? p.nanoBananaSelectedPromptIndex
+        : 0,
+    );
+    setNanoBananaTaskId(p.nanoBananaTaskId ?? null);
+    setNanoBananaImageUrl(p.nanoBananaImageUrl ?? null);
+    setNanoBananaImageUrls(Array.isArray(p.nanoBananaImageUrls) ? [...p.nanoBananaImageUrls] : []);
+    setNanoBananaSelectedImageIndex(
+      p.nanoBananaSelectedImageIndex === 0 || p.nanoBananaSelectedImageIndex === 1 || p.nanoBananaSelectedImageIndex === 2
+        ? p.nanoBananaSelectedImageIndex
+        : null,
+    );
+    setUgcVideoPromptGpt(p.ugcVideoPromptGpt ?? "");
+    const k = p.klingByReferenceIndex;
+    setKlingByRef(
+      k && k.length === 3
+        ? k.map((s) => ({
+            videoUrl: s.videoUrl ?? null,
+            taskId: s.taskId ?? null,
+            history: [...(s.history || [])],
+            ugcVideoPrompt: s.ugcVideoPrompt,
+          }))
+        : createEmptyKlingByReference(),
+    );
+    setVideoStageMode(Boolean(p.videoStageMode));
+    setUserStartedVideoFromImage(
+      Boolean(
+        (p.ugcVideoPromptGpt && p.ugcVideoPromptGpt.trim()) ||
+          (p.nanoBananaImageUrl && String(p.nanoBananaImageUrl).trim()) ||
+          (k &&
+            k.some(
+              (s) =>
+                (s.videoUrl && String(s.videoUrl).trim()) ||
+                (s.taskId && String(s.taskId).trim()) ||
+                (s.history && s.history.length > 0) ||
+                (s.ugcVideoPrompt && s.ugcVideoPrompt.trim()),
+            )),
+      ),
+    );
+  }
+
+  /** Clone triple from state + merge current flat UI into the active angle (for saves). */
+  function buildPersistTriplePatchingActive(
+    patch?: Partial<LinkToAdAnglePipelineV1>,
+  ): [LinkToAdAnglePipelineV1, LinkToAdAnglePipelineV1, LinkToAdAnglePipelineV1] {
+    const t: [LinkToAdAnglePipelineV1, LinkToAdAnglePipelineV1, LinkToAdAnglePipelineV1] = [
+      cloneAnglePipeline(pipelineByAngle[0]),
+      cloneAnglePipeline(pipelineByAngle[1]),
+      cloneAnglePipeline(pipelineByAngle[2]),
+    ];
+    const a = selectedAngleIndex;
+    if (a === 0 || a === 1 || a === 2) {
+      t[a] = { ...captureActivePipeline(), ...(patch ?? {}) };
+    }
+    return t;
+  }
+
+  function snapshotWithPersistTriple(
+    base: LinkToAdUniverseSnapshotV1,
+    triple: [LinkToAdAnglePipelineV1, LinkToAdAnglePipelineV1, LinkToAdAnglePipelineV1],
+    sel?: number | null,
+  ): LinkToAdUniverseSnapshotV1 {
+    const effectiveSel = sel !== undefined ? sel : base.selectedAngleIndex;
+    const active =
+      effectiveSel === 0 || effectiveSel === 1 || effectiveSel === 2 ? triple[effectiveSel] : triple[0];
+    const kn = normalizeKlingByReference({
+      klingByReferenceIndex: active.klingByReferenceIndex,
+      klingVideoUrl: null,
+      klingTaskId: null,
+      nanoBananaSelectedImageIndex: active.nanoBananaSelectedImageIndex,
+    });
+    return {
+      ...base,
+      ...(sel !== undefined ? { selectedAngleIndex: sel } : {}),
+      linkToAdPipelineByAngle: triple,
+      ...flattenAnglePipeToTopLevel(active, kn),
+    };
+  }
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const prevAngleRef = useRef<number | null>(null);
+  /** Angle / slots when Kling poll started (so save targets the right pipeline if state moves). */
+  const klingPollAngleRef = useRef<0 | 1 | 2 | null>(null);
+  const klingPollSlotsRef = useRef<KlingReferenceSlotV1[] | null>(null);
+  const klingMergedSnapRef = useRef<LinkToAdUniverseSnapshotV1 | null>(null);
   const summaryTextRef = useRef("");
   const isWorkingRef = useRef(false);
   const autoContinueScriptsFiredRef = useRef(false);
@@ -210,6 +386,21 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const klingResumeAttemptedRef = useRef(false);
 
   useEffect(() => {
+    const idx = nanoBananaSelectedImageIndex;
+    const mergedSlots: KlingReferenceSlotV1[] = klingByRef.map((s, i) => ({
+      ...s,
+      history: [...(s.history || [])],
+      ...(i === idx ? { ugcVideoPrompt: ugcVideoPromptGpt || undefined } : {}),
+    }));
+    const mirror = idx !== null ? mergedSlots[idx] : null;
+    const triple: [LinkToAdAnglePipelineV1, LinkToAdAnglePipelineV1, LinkToAdAnglePipelineV1] = [
+      cloneAnglePipeline(pipelineByAngle[0]),
+      cloneAnglePipeline(pipelineByAngle[1]),
+      cloneAnglePipeline(pipelineByAngle[2]),
+    ];
+    if (selectedAngleIndex === 0 || selectedAngleIndex === 1 || selectedAngleIndex === 2) {
+      triple[selectedAngleIndex] = captureActivePipeline();
+    }
     latestSnapRef.current = {
       v: 1,
       phase: scriptsText ? "after_scripts" : "after_summary",
@@ -229,8 +420,10 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       nanoBananaImageUrls: nanoBananaImageUrls.length ? nanoBananaImageUrls : undefined,
       nanoBananaSelectedImageIndex: nanoBananaSelectedImageIndex ?? undefined,
       ugcVideoPromptGpt: ugcVideoPromptGpt || undefined,
-      klingTaskId: klingTaskId ?? undefined,
-      klingVideoUrl: klingVideoUrl ?? undefined,
+      klingByReferenceIndex: mergedSlots,
+      klingTaskId: mirror?.taskId ?? undefined,
+      klingVideoUrl: mirror?.videoUrl ?? undefined,
+      linkToAdPipelineByAngle: triple,
     };
   }, [
     cleanCandidate,
@@ -249,12 +442,18 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     nanoBananaImageUrls,
     nanoBananaSelectedImageIndex,
     ugcVideoPromptGpt,
-    klingTaskId,
-    klingVideoUrl,
+    klingByRef,
+    nanoBananaSelectedImageIndex,
+    pipelineByAngle,
+    videoStageMode,
   ]);
 
   const quality = useMemo(() => confidenceToQuality(confidence ?? undefined), [confidence]);
   const parsedNanoPrompts = useMemo(() => parseThreeLabeledPrompts(nanoBananaPromptsRaw), [nanoBananaPromptsRaw]);
+  const scriptOptionBodies = useMemo((): [string, string, string] => {
+    if (!scriptsText.trim()) return ["", "", ""];
+    return splitScriptOptions(scriptsText);
+  }, [scriptsText]);
   const displayedProductImageUrl = neutralUploadUrl ?? cleanCandidate?.url ?? fallbackImageUrl ?? null;
 
   const resolvedPreviewUrl = useMemo(() => {
@@ -325,38 +524,21 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
             : ["", "", ""],
       );
       setSelectedAngleIndex(snap.selectedAngleIndex);
-      setNanoBananaPromptsRaw(snap.nanoBananaPromptsRaw ?? "");
-      setNanoBananaSelectedPromptIndex(
-        snap.nanoBananaSelectedPromptIndex === 0 || snap.nanoBananaSelectedPromptIndex === 1 || snap.nanoBananaSelectedPromptIndex === 2
-          ? snap.nanoBananaSelectedPromptIndex
-          : 0,
-      );
-      setNanoBananaTaskId(snap.nanoBananaTaskId ?? null);
-      setNanoBananaImageUrl(snap.nanoBananaImageUrl ?? null);
-      setNanoBananaImageUrls(Array.isArray(snap.nanoBananaImageUrls) ? snap.nanoBananaImageUrls : []);
-      setNanoBananaSelectedImageIndex(
-        snap.nanoBananaSelectedImageIndex === 0 || snap.nanoBananaSelectedImageIndex === 1 || snap.nanoBananaSelectedImageIndex === 2
-          ? snap.nanoBananaSelectedImageIndex
-          : null,
-      );
-      setUgcVideoPromptGpt(snap.ugcVideoPromptGpt ?? "");
-      setKlingTaskId(snap.klingTaskId ?? null);
-      setKlingVideoUrl(snap.klingVideoUrl ?? null);
+      const triple = normalizePipelineByAngle(snap);
+      setPipelineByAngle([
+        cloneAnglePipeline(triple[0]),
+        cloneAnglePipeline(triple[1]),
+        cloneAnglePipeline(triple[2]),
+      ]);
+      const sAng = snap.selectedAngleIndex;
+      if (sAng === 0 || sAng === 1 || sAng === 2) {
+        applyPipelineFromSnapshot(cloneAnglePipeline(triple[sAng]));
+      } else {
+        applyPipelineFromSnapshot(emptyAnglePipeline());
+      }
       setNanoPollTaskId(null);
       setKlingPollTaskId(null);
-      setUserStartedVideoFromImage(
-        Boolean(
-          (snap.ugcVideoPromptGpt && snap.ugcVideoPromptGpt.trim()) ||
-            (snap.klingVideoUrl && snap.klingVideoUrl.trim()),
-        ),
-      );
-      setVideoStageMode(
-        Boolean(
-          (snap.ugcVideoPromptGpt && snap.ugcVideoPromptGpt.trim()) ||
-            (snap.klingVideoUrl && snap.klingVideoUrl.trim()) ||
-            (snap.klingTaskId != null && String(snap.klingTaskId).trim() !== ""),
-        ),
-      );
+      setKlingPollImageIndex(null);
       prevAngleRef.current = snap.selectedAngleIndex;
       setLastExtractedJson(cloneExtractedBase(run.extracted));
       setStage("ready");
@@ -463,33 +645,58 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     const url = storeUrl.trim();
     if (!url || !lastExtractedJson) return;
 
-    const prev = prevAngleRef.current;
-    const angleChanged = prev !== null && prev !== index;
+    const prevIdx = prevAngleRef.current;
+    const angleChanged = prevIdx !== null && prevIdx !== index;
+
+    let nextTriple: [LinkToAdAnglePipelineV1, LinkToAdAnglePipelineV1, LinkToAdAnglePipelineV1] = [
+      cloneAnglePipeline(pipelineByAngle[0]),
+      cloneAnglePipeline(pipelineByAngle[1]),
+      cloneAnglePipeline(pipelineByAngle[2]),
+    ];
+
+    if (angleChanged && prevIdx !== null) {
+      nextTriple[prevIdx] = captureActivePipeline();
+    }
+
+    const load = cloneAnglePipeline(nextTriple[index]);
+
+    if (angleChanged || prevIdx === null) {
+      setPipelineByAngle(nextTriple);
+      applyPipelineFromSnapshot(load);
+      setNanoPollTaskId(null);
+      setKlingPollTaskId(null);
+      setKlingPollImageIndex(null);
+    }
+
     prevAngleRef.current = index;
     setSelectedAngleIndex(index);
 
-    if (angleChanged) {
-      setNanoBananaPromptsRaw("");
-      setNanoBananaSelectedPromptIndex(0);
-      setNanoBananaTaskId(null);
-      setNanoBananaImageUrl(null);
-      setNanoBananaImageUrls([]);
-      setNanoBananaSelectedImageIndex(null);
-      setUgcVideoPromptGpt("");
-      setKlingTaskId(null);
-      setKlingVideoUrl(null);
-      setNanoPollTaskId(null);
-      setKlingPollTaskId(null);
-      setUserStartedVideoFromImage(false);
-      setVideoStageMode(false);
-    }
-
     const base = latestSnapRef.current;
     if (!base) return;
+
+    const persistTriple: [LinkToAdAnglePipelineV1, LinkToAdAnglePipelineV1, LinkToAdAnglePipelineV1] = [
+      cloneAnglePipeline(nextTriple[0]),
+      cloneAnglePipeline(nextTriple[1]),
+      cloneAnglePipeline(nextTriple[2]),
+    ];
+    if (angleChanged || prevIdx === null) {
+      persistTriple[index] = cloneAnglePipeline(load);
+    } else {
+      persistTriple[index] = captureActivePipeline();
+    }
+
+    const activePipe = persistTriple[index];
+    const kn = normalizeKlingByReference({
+      klingByReferenceIndex: activePipe.klingByReferenceIndex,
+      klingVideoUrl: null,
+      klingTaskId: null,
+      nanoBananaSelectedImageIndex: activePipe.nanoBananaSelectedImageIndex,
+    });
     const snap: LinkToAdUniverseSnapshotV1 = {
       ...base,
       selectedAngleIndex: index,
-      ...(angleChanged ? UNIVERSE_PIPELINE_CLEAR : {}),
+      linkToAdPipelineByAngle: persistTriple,
+      ...flattenAnglePipeToTopLevel(activePipe, kn),
     };
     try {
       await persistUniverse(universeRunId, url, extractedTitle, lastExtractedJson, snap, packshotsForSave());
@@ -623,13 +830,14 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     setNanoBananaImageUrls([]);
     setNanoBananaSelectedImageIndex(null);
     setUgcVideoPromptGpt("");
-    setKlingTaskId(null);
-    setKlingVideoUrl(null);
+    setKlingByRef(createEmptyKlingByReference());
     setNanoPollTaskId(null);
     setKlingPollTaskId(null);
+    setKlingPollImageIndex(null);
     setUserStartedVideoFromImage(false);
     setVideoStageMode(false);
     prevAngleRef.current = null;
+    setPipelineByAngle([emptyAnglePipeline(), emptyAnglePipeline(), emptyAnglePipeline()]);
 
     try {
       setStage("server_pipeline");
@@ -730,20 +938,24 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       setNanoBananaImageUrl(null);
       setNanoBananaImageUrls([]);
       setNanoBananaSelectedImageIndex(null);
-      const base = latestSnapRef.current;
-      if (base && lastExtractedJson) {
-        const snap: LinkToAdUniverseSnapshotV1 = {
-          ...base,
+      setKlingByRef(createEmptyKlingByReference());
+      const sel = selectedAngleIndex;
+      const triple: [LinkToAdAnglePipelineV1, LinkToAdAnglePipelineV1, LinkToAdAnglePipelineV1] = [
+        cloneAnglePipeline(pipelineByAngle[0]),
+        cloneAnglePipeline(pipelineByAngle[1]),
+        cloneAnglePipeline(pipelineByAngle[2]),
+      ];
+      if (sel === 0 || sel === 1 || sel === 2) {
+        triple[sel] = {
+          ...emptyAnglePipeline(),
           nanoBananaPromptsRaw: text,
           nanoBananaSelectedPromptIndex: 0,
-          nanoBananaTaskId: null,
-          nanoBananaImageUrl: null,
-          nanoBananaImageUrls: undefined,
-          nanoBananaSelectedImageIndex: null,
-          ugcVideoPromptGpt: undefined,
-          klingTaskId: null,
-          klingVideoUrl: null,
         };
+      }
+      setPipelineByAngle(triple);
+      const base = latestSnapRef.current;
+      if (base && lastExtractedJson) {
+        const snap = snapshotWithPersistTriple(base, triple, sel);
         await persistUniverse(universeRunId, url, extractedTitle, lastExtractedJson, snap, packshotsForSave(), {
           imagePrompt: text,
         });
@@ -827,13 +1039,14 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       setNanoPollTaskId(json.taskId);
       const base = latestSnapRef.current;
       if (base && lastExtractedJson) {
-        const snap: LinkToAdUniverseSnapshotV1 = {
-          ...base,
+        const triple = buildPersistTriplePatchingActive({
           nanoBananaTaskId: json.taskId,
           nanoBananaImageUrl: null,
-          nanoBananaImageUrls: undefined,
+          nanoBananaImageUrls: [],
           nanoBananaSelectedImageIndex: null,
-        };
+        });
+        setPipelineByAngle(triple);
+        const snap = snapshotWithPersistTriple(base, triple);
         await persistUniverse(universeRunId, url, extractedTitle, lastExtractedJson, snap, packshotsForSave(), {
           imagePrompt: prompt,
         });
@@ -932,24 +1145,25 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     setNanoBananaTaskId(lastTaskId);
     setNanoBananaImageUrl(null);
     setUgcVideoPromptGpt("");
-    setKlingVideoUrl(null);
-    setKlingTaskId(null);
+    setKlingByRef(createEmptyKlingByReference());
     setKlingPollTaskId(null);
+    setKlingPollImageIndex(null);
     setUserStartedVideoFromImage(false);
     setVideoStageMode(false);
     const base = latestSnapRef.current;
     if (base && lastExtractedJson) {
-      const snap: LinkToAdUniverseSnapshotV1 = {
-        ...base,
+      const triple = buildPersistTriplePatchingActive({
         nanoBananaTaskId: lastTaskId,
         nanoBananaImageUrl: null,
         nanoBananaImageUrls: urlsByPrompt,
         nanoBananaSelectedImageIndex: null,
         nanoBananaSelectedPromptIndex: 0,
-        ugcVideoPromptGpt: undefined,
-        klingTaskId: null,
-        klingVideoUrl: null,
-      };
+        ugcVideoPromptGpt: "",
+        klingByReferenceIndex: createEmptyKlingByReference(),
+        videoStageMode: false,
+      });
+      setPipelineByAngle(triple);
+      const snap = snapshotWithPersistTriple(base, triple);
       await persistUniverse(universeRunId, url, extractedTitle, lastExtractedJson, snap, packshotsForSave(), {
         selectedImageUrl: null,
         generatedImageUrls: urlsByPrompt,
@@ -1018,11 +1232,30 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     const selectedUrl = nanoBananaImageUrls[idx];
     const prompt = parsedNanoPrompts[idx]?.trim() || "";
 
-    setUgcVideoPromptGpt("");
-    setKlingVideoUrl(null);
-    setKlingTaskId(null);
-    setKlingPollTaskId(null);
-    setUserStartedVideoFromImage(false);
+    const slotsAfterSave = klingByRef.map((s) => ({
+      ...s,
+      history: [...(s.history || [])],
+    }));
+    if (nanoBananaSelectedImageIndex !== null) {
+      const ci = nanoBananaSelectedImageIndex;
+      slotsAfterSave[ci] = {
+        ...slotsAfterSave[ci],
+        ugcVideoPrompt: ugcVideoPromptGpt || undefined,
+      };
+    }
+    const slot = slotsAfterSave[idx];
+    const promptForNew = slot.ugcVideoPrompt ?? "";
+
+    setKlingByRef(slotsAfterSave);
+    setUgcVideoPromptGpt(promptForNew);
+    setUserStartedVideoFromImage(
+      Boolean(
+        promptForNew.trim() ||
+          slot.videoUrl?.trim() ||
+          slot.taskId?.trim() ||
+          (slot.history && slot.history.length > 0),
+      ),
+    );
 
     setNanoBananaSelectedImageIndex(idx);
     setNanoBananaSelectedPromptIndex(idx);
@@ -1032,23 +1265,34 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
 
     const base = latestSnapRef.current;
     if (!base) return;
-    const snap: LinkToAdUniverseSnapshotV1 = {
-      ...base,
+    const mirror = slotsAfterSave[idx];
+    const triple = buildPersistTriplePatchingActive({
       nanoBananaSelectedImageIndex: idx,
       nanoBananaSelectedPromptIndex: idx,
       nanoBananaImageUrl: selectedUrl,
-      nanoBananaImageUrls: nanoBananaImageUrls,
-      ugcVideoPromptGpt: undefined,
-      klingTaskId: null,
-      klingVideoUrl: null,
+      nanoBananaImageUrls: [...nanoBananaImageUrls],
+      ugcVideoPromptGpt: promptForNew,
+      klingByReferenceIndex: slotsAfterSave.map((s) => ({
+        videoUrl: s.videoUrl ?? null,
+        taskId: s.taskId ?? null,
+        history: [...(s.history || [])],
+        ugcVideoPrompt: s.ugcVideoPrompt,
+      })),
+    });
+    setPipelineByAngle(triple);
+    const snap = snapshotWithPersistTriple(base, triple);
+    const snapWithMirror: LinkToAdUniverseSnapshotV1 = {
+      ...snap,
+      klingTaskId: mirror.taskId ?? null,
+      klingVideoUrl: mirror.videoUrl ?? null,
     };
     try {
-      await persistUniverse(universeRunId, url, extractedTitle, lastExtractedJson, snap, packshotsForSave(), {
+      await persistUniverse(universeRunId, url, extractedTitle, lastExtractedJson, snapWithMirror, packshotsForSave(), {
         imagePrompt: prompt || undefined,
         selectedImageUrl: selectedUrl,
         generatedImageUrls: nanoBananaImageUrls,
-        videoPrompt: "",
-        videoUrl: null,
+        videoPrompt: promptForNew,
+        videoUrl: mirror.videoUrl ?? null,
       });
     } catch {
       /* ignore */
@@ -1096,13 +1340,15 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           const base = latestSnapRef.current;
           if (base && lastExtractedJson && url0) {
             const chosen = lastNanoImagePromptRef.current.trim();
-            const snap: LinkToAdUniverseSnapshotV1 = {
-              ...base,
+            const pIdx = lastNanoImagePromptIndexRef.current;
+            const triple = buildPersistTriplePatchingActive({
               nanoBananaImageUrl: first,
               nanoBananaImageUrls: [first],
-              nanoBananaSelectedImageIndex: lastNanoImagePromptIndexRef.current,
+              nanoBananaSelectedImageIndex: pIdx,
               nanoBananaTaskId: taskId,
-            };
+            });
+            setPipelineByAngle(triple);
+            const snap = snapshotWithPersistTriple(base, triple);
             try {
               await persistUniverse(universeRunId, url0, extractedTitle, lastExtractedJson, snap, packshotsForSave(), {
                 imagePrompt: chosen || undefined,
@@ -1159,9 +1405,24 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       if (!res.ok || !json.data) throw new Error(json.error || "Video prompt failed");
       const text = String(json.data);
       setUgcVideoPromptGpt(text);
+      const idx = nanoBananaSelectedImageIndex;
+      if (idx === 0 || idx === 1 || idx === 2) {
+        patchKlingSlot(idx, { ugcVideoPrompt: text });
+      }
       const base = latestSnapRef.current;
       if (base && lastExtractedJson) {
-        const snap: LinkToAdUniverseSnapshotV1 = { ...base, ugcVideoPromptGpt: text };
+        const nextSlots = klingByRef.map((s, i) => ({
+          videoUrl: s.videoUrl ?? null,
+          taskId: s.taskId ?? null,
+          history: [...(s.history || [])],
+          ugcVideoPrompt: i === idx ? text : s.ugcVideoPrompt,
+        }));
+        const triple = buildPersistTriplePatchingActive({
+          ugcVideoPromptGpt: text,
+          klingByReferenceIndex: nextSlots,
+        });
+        setPipelineByAngle(triple);
+        const snap = snapshotWithPersistTriple(base, triple);
         await persistUniverse(universeRunId, url, extractedTitle, lastExtractedJson, snap, packshotsForSave(), {
           videoPrompt: text,
         });
@@ -1180,7 +1441,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     const url = storeUrl.trim();
     const img = nanoBananaImageUrl;
     const prompt = (overrideVideoPrompt ?? ugcVideoPromptGpt).trim();
-    if (!url || !lastExtractedJson || !img || !prompt) {
+    const idx = nanoBananaSelectedImageIndex;
+    if (!url || !lastExtractedJson || !img || !prompt || idx === null) {
       toast.error("Reference image and video prompt are required.");
       return;
     }
@@ -1202,13 +1464,41 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       });
       const json = (await res.json()) as { taskId?: string; error?: string };
       if (!res.ok || !json.taskId) throw new Error(json.error || "Video generation failed");
-      setKlingVideoUrl(null);
-      setKlingTaskId(json.taskId);
+      const nextSlots = klingByRef.map((s, i) => ({
+        ...s,
+        history: [...(s.history || [])],
+      }));
+      nextSlots[idx] = { ...nextSlots[idx], taskId: json.taskId };
+      setKlingByRef(nextSlots);
+      const ang =
+        selectedAngleIndex === 0 || selectedAngleIndex === 1 || selectedAngleIndex === 2 ? selectedAngleIndex : 0;
+      klingPollAngleRef.current = ang;
+      klingPollSlotsRef.current = nextSlots.map((s) => ({
+        videoUrl: s.videoUrl ?? null,
+        taskId: s.taskId ?? null,
+        history: [...(s.history || [])],
+        ugcVideoPrompt: s.ugcVideoPrompt,
+      }));
       setKlingPollTaskId(json.taskId);
+      setKlingPollImageIndex(idx);
       const base = latestSnapRef.current;
       if (base && lastExtractedJson) {
-        const snap: LinkToAdUniverseSnapshotV1 = { ...base, klingTaskId: json.taskId, klingVideoUrl: null };
-        await persistUniverse(universeRunId, url, extractedTitle, lastExtractedJson, snap, packshotsForSave(), {
+        const triple = buildPersistTriplePatchingActive({
+          klingByReferenceIndex: nextSlots.map((s) => ({
+            videoUrl: s.videoUrl ?? null,
+            taskId: s.taskId ?? null,
+            history: [...(s.history || [])],
+            ugcVideoPrompt: s.ugcVideoPrompt,
+          })),
+        });
+        setPipelineByAngle(triple);
+        const snap = snapshotWithPersistTriple(base, triple);
+        const snapOut: LinkToAdUniverseSnapshotV1 = {
+          ...snap,
+          klingTaskId: json.taskId,
+          klingVideoUrl: nextSlots[idx].videoUrl ?? null,
+        };
+        await persistUniverse(universeRunId, url, extractedTitle, lastExtractedJson, snapOut, packshotsForSave(), {
           videoPrompt: klingPrompt,
         });
       }
@@ -1220,23 +1510,45 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     }
   }
 
+  const klingSlotSignature = useMemo(
+    () => klingByRef.map((s) => `${s.taskId ?? ""}|${s.videoUrl ?? ""}`).join(";"),
+    [klingByRef],
+  );
+
   useEffect(() => {
     klingResumeAttemptedRef.current = false;
-  }, [klingTaskId]);
+  }, [klingSlotSignature]);
 
   /** Resume KIE polling if the user left during generation (task saved, poll was cancelled on unmount). */
   useEffect(() => {
-    if (!klingTaskId?.trim()) return;
-    if (klingVideoUrl?.trim()) return;
     if (klingPollTaskId) return;
     if (klingResumeAttemptedRef.current) return;
-    klingResumeAttemptedRef.current = true;
-    setKlingPollTaskId(klingTaskId);
-  }, [klingTaskId, klingVideoUrl, klingPollTaskId]);
+    for (let i = 0; i < 3; i++) {
+      const slot = klingByRef[i];
+      const tid = slot.taskId?.trim();
+      const vid = slot.videoUrl?.trim();
+      if (tid && !vid) {
+        klingResumeAttemptedRef.current = true;
+        const ang =
+          selectedAngleIndex === 0 || selectedAngleIndex === 1 || selectedAngleIndex === 2 ? selectedAngleIndex : 0;
+        klingPollAngleRef.current = ang;
+        klingPollSlotsRef.current = klingByRef.map((s) => ({
+          videoUrl: s.videoUrl ?? null,
+          taskId: s.taskId ?? null,
+          history: [...(s.history || [])],
+          ugcVideoPrompt: s.ugcVideoPrompt,
+        }));
+        setKlingPollTaskId(tid);
+        setKlingPollImageIndex(i as 0 | 1 | 2);
+        return;
+      }
+    }
+  }, [klingByRef, klingPollTaskId]);
 
   useEffect(() => {
-    if (!klingPollTaskId) return;
+    if (!klingPollTaskId || klingPollImageIndex === null) return;
     const taskId = klingPollTaskId;
+    const slotIndex = klingPollImageIndex;
     let cancelled = false;
     let interval: ReturnType<typeof setInterval> | null = null;
 
@@ -1254,14 +1566,54 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         if (s === "SUCCESS") {
           const vUrl = json.data.response?.[0];
           if (!vUrl) throw new Error("Video OK but URL missing.");
-          setKlingVideoUrl(vUrl);
+          klingMergedSnapRef.current = null;
+          setKlingByRef((prev) => {
+            const base = latestSnapRef.current;
+            if (!base) return prev;
+            const angleIdx = klingPollAngleRef.current ?? 0;
+            const slotsFromPoll =
+              klingPollSlotsRef.current?.map((s) => ({
+                videoUrl: s.videoUrl ?? null,
+                taskId: s.taskId ?? null,
+                history: [...(s.history || [])],
+                ugcVideoPrompt: s.ugcVideoPrompt,
+              })) ?? prev.map((s) => ({
+                videoUrl: s.videoUrl ?? null,
+                taskId: s.taskId ?? null,
+                history: [...(s.history || [])],
+                ugcVideoPrompt: s.ugcVideoPrompt,
+              }));
+            const triple = normalizePipelineByAngle(base).map((p) => cloneAnglePipeline(p)) as [
+              LinkToAdAnglePipelineV1,
+              LinkToAdAnglePipelineV1,
+              LinkToAdAnglePipelineV1,
+            ];
+            const pipe = cloneAnglePipeline(triple[angleIdx]);
+            triple[angleIdx] = { ...pipe, klingByReferenceIndex: slotsFromPoll };
+            const interim: LinkToAdUniverseSnapshotV1 = { ...base, linkToAdPipelineByAngle: triple };
+            const nextSnap = snapshotAfterKlingVideoSuccessForAngle(
+              interim,
+              angleIdx as 0 | 1 | 2,
+              slotIndex,
+              vUrl,
+              taskId,
+            );
+            klingMergedSnapRef.current = nextSnap;
+            klingPollAngleRef.current = null;
+            klingPollSlotsRef.current = null;
+            return nextSnap.klingByReferenceIndex ?? prev;
+          });
           setKlingPollTaskId(null);
+          setKlingPollImageIndex(null);
+          const mergedSnapForPersist = klingMergedSnapRef.current as LinkToAdUniverseSnapshotV1 | null;
+          const tripleAfterKling = mergedSnapForPersist?.linkToAdPipelineByAngle;
+          if (tripleAfterKling) {
+            setPipelineByAngle([cloneAnglePipeline(tripleAfterKling[0]), cloneAnglePipeline(tripleAfterKling[1]), cloneAnglePipeline(tripleAfterKling[2])]);
+          }
           const url0 = storeUrl.trim();
-          const base = latestSnapRef.current;
-          if (base && lastExtractedJson && url0) {
-            const snap: LinkToAdUniverseSnapshotV1 = { ...base, klingVideoUrl: vUrl, klingTaskId: taskId };
+          if (mergedSnapForPersist && lastExtractedJson && url0) {
             try {
-              await persistUniverse(universeRunId, url0, extractedTitle, lastExtractedJson, snap, packshotsForSave(), {
+              await persistUniverse(universeRunId, url0, extractedTitle, lastExtractedJson, mergedSnapForPersist, packshotsForSave(), {
                 videoUrl: vUrl,
                 videoPrompt: lastKlingVideoPromptRef.current || undefined,
               });
@@ -1280,7 +1632,10 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       } catch (err) {
         if (cancelled) return;
         toast.error("Video generation", { description: err instanceof Error ? err.message : "Unknown error" });
+        klingPollAngleRef.current = null;
+        klingPollSlotsRef.current = null;
         setKlingPollTaskId(null);
+        setKlingPollImageIndex(null);
         if (interval) clearInterval(interval);
         interval = null;
       }
@@ -1292,7 +1647,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       cancelled = true;
       if (interval) clearInterval(interval);
     };
-  }, [klingPollTaskId]);
+  }, [klingPollTaskId, klingPollImageIndex]);
 
   const showUploadRecommendation = quality.label === "medium" || quality.label === "bad";
   const showAnglePicker = Boolean(scriptsText && angleLabels[0] && angleLabels[1] && angleLabels[2]);
@@ -1351,7 +1706,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     if (isKlingSubmitting) {
       return { phase: "kling_starting", message: LINK_TO_AD_LOADING_MESSAGES.kling_starting };
     }
-    if (klingPollTaskId) {
+    if (klingRenderingThisReference) {
       return { phase: "kling_rendering", message: LINK_TO_AD_LOADING_MESSAGES.kling_rendering };
     }
     if (!isWorking) return { phase: null, message: null };
@@ -1378,7 +1733,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     isNanoImageSubmitting,
     isVideoPromptLoading,
     isKlingSubmitting,
-    klingPollTaskId,
+    klingRenderingThisReference,
     isWorking,
     stage,
   ]);
@@ -1815,7 +2170,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                             type="button"
                             onClick={() => void onSelectNanoBananaImage(i)}
                             className={cn(
-                              "relative h-14 w-10 shrink-0 overflow-hidden rounded-lg border-2 bg-[#050507] transition-all sm:h-16 sm:w-11",
+                              "relative aspect-[9/16] w-9 shrink-0 overflow-hidden rounded-lg border-2 bg-[#050507] transition-all sm:w-11",
                               sel
                                 ? "border-violet-400 shadow-[0_0_12px_rgba(139,92,246,0.35)]"
                                 : "border-transparent opacity-80 hover:border-white/20 hover:opacity-100",
@@ -1840,6 +2195,46 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                   </div>
                 ) : null}
               </div>
+
+              {/* All three script angles visible; tap a card to switch (same as 1 / 2 / 3 above). */}
+              {scriptsText.trim() ? (
+                <div className="mt-3 border-t border-white/10 pt-3">
+                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-white/45">
+                    Script angles — tap to use
+                  </p>
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    {([0, 1, 2] as const).map((i) => {
+                      const active = selectedAngleIndex === i;
+                      const label = angleLabels[i]?.trim();
+                      const fallback = teaserFromScriptBlock(scriptOptionBodies[i], i);
+                      const body = label || fallback || "—";
+                      return (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => void onSelectAngle(i)}
+                          className={cn(
+                            "rounded-xl border px-3 py-2.5 text-left transition-all sm:min-h-[5.5rem]",
+                            active
+                              ? "border-violet-400/55 bg-violet-500/[0.14] shadow-[0_0_20px_rgba(139,92,246,0.12)] ring-1 ring-violet-400/25"
+                              : "border-white/10 bg-white/[0.03] hover:border-violet-400/35 hover:bg-white/[0.06]",
+                          )}
+                        >
+                          <span className="text-[10px] font-bold uppercase tracking-wide text-violet-300">
+                            Angle {i + 1}
+                            {active ? (
+                              <span className="ml-1.5 font-semibold normal-case text-violet-200/90">· active</span>
+                            ) : null}
+                          </span>
+                          <p className="mt-1.5 text-xs leading-snug text-white/80 line-clamp-5 sm:line-clamp-4">
+                            {body}
+                          </p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             {/* Full-size image grid until user enters video stage (then compact strip + video column). */}
@@ -1880,7 +2275,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                             <span className="border-b border-white/10 px-2 py-1.5 text-center text-[10px] font-bold uppercase tracking-wide text-violet-300/90">
                               Image {i + 1}
                             </span>
-                            <div className="relative aspect-[3/4] w-full overflow-hidden bg-[#050507]">
+                            <div className="relative aspect-[9/16] w-full overflow-hidden bg-[#050507]">
                               {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img
                                 src={nanoBananaImageUrls[i]}
@@ -1891,15 +2286,16 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                               <Button
                                 type="button"
                                 variant="secondary"
-                                size="sm"
-                                className="absolute bottom-2 right-2 z-20 h-8 gap-1 rounded-lg border border-white/15 bg-black/70 px-2 text-[10px] font-semibold text-white shadow-lg backdrop-blur-md hover:bg-black/85"
+                                size="icon"
+                                title="View full size"
+                                aria-label="View full size"
+                                className="absolute left-2 top-2 z-20 h-8 w-8 shrink-0 rounded-lg border border-white/20 bg-black/75 text-white shadow-lg backdrop-blur-md hover:bg-black/90"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setNanoImageLightboxUrl(nanoBananaImageUrls[i]);
                                 }}
                               >
-                                <Maximize2 className="h-3.5 w-3.5 shrink-0 opacity-90" aria-hidden />
-                                Full view
+                                <Maximize2 className="h-4 w-4" aria-hidden />
                               </Button>
                             </div>
                             {selected ? (
@@ -1920,17 +2316,22 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                               isVideoPromptLoading || isKlingSubmitting || Boolean(klingPollTaskId) || !nanoBananaImageUrl
                             }
                             onClick={() => void handleGenerateVideoFromSelectedImage()}
-                            className={`${primaryBtnClass} w-full max-w-md`}
+                            className={`flex h-auto min-h-12 w-full max-w-md flex-col gap-1 py-2.5 ${primaryBtnClass}`}
                           >
                             {isVideoPromptLoading || isKlingSubmitting || klingPollTaskId ? (
-                              <>
+                              <span className="inline-flex items-center justify-center gap-2 text-base font-semibold">
                                 <Loader2 className="h-5 w-5 shrink-0 animate-spin" aria-hidden />
                                 Working…
-                              </>
+                              </span>
                             ) : (
                               <>
-                                <Video className="h-5 w-5 shrink-0" aria-hidden />
-                                Generate video from this image
+                                <span className="inline-flex items-center justify-center gap-2 text-base font-semibold leading-tight">
+                                  <Video className="h-5 w-5 shrink-0" aria-hidden />
+                                  Generate video from this image
+                                </span>
+                                <span className="text-[11px] font-semibold text-black/70">
+                                  {CREDITS_KLING_LINK_TO_AD_VIDEO} credits
+                                </span>
                               </>
                             )}
                           </Button>
@@ -1982,23 +2383,11 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
 
             {showVideoStageLayout ? (
               <div className="flex flex-col gap-5 rounded-xl border border-violet-500/25 bg-violet-500/[0.06] p-4 lg:flex-row lg:items-stretch">
-                <aside className="flex w-full shrink-0 flex-col gap-2 border-b border-white/10 pb-4 lg:w-[min(100%,7.5rem)] lg:border-b-0 lg:border-r lg:pb-0 lg:pr-4">
+                <aside className="flex w-full shrink-0 flex-col gap-2 border-b border-white/10 pb-4 lg:w-[min(100%,10rem)] lg:border-b-0 lg:border-r lg:pb-0 lg:pr-4">
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-white/50">Actions</p>
                   <Button
                     type="button"
-                    variant="secondary"
-                    size="sm"
-                    className="h-9 w-full justify-center gap-2 border border-white/10 bg-white/5 text-xs text-white hover:bg-white/10"
-                    onClick={() => setVideoStageMode(false)}
-                  >
-                    <LayoutGrid className="h-3.5 w-3.5 shrink-0 opacity-90" aria-hidden />
-                    Full grid
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    className="h-9 w-full justify-center text-xs border border-white/10 bg-white/5 text-white hover:bg-white/10"
+                    className={`h-auto min-h-11 w-full flex-col gap-1 px-3 py-2.5 ${primaryBtnClass}`}
                     disabled={
                       isNanoAllImagesSubmitting ||
                       isNanoPromptsLoading ||
@@ -2010,10 +2399,13 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                     }
                     onClick={() => void onGenerateNanoBananaImagesFromAllPrompts()}
                   >
-                    New 3 images
+                    <span className="text-sm font-semibold leading-tight">New 3 images</span>
+                    <span className="text-[11px] font-semibold text-black/70">
+                      {CREDITS_LINK_TO_AD_THREE_REF_IMAGES} credits
+                    </span>
                   </Button>
                   <p className="text-[10px] leading-snug text-white/35">
-                    Angle &amp; reference frames are in the bar above.
+                    Angles &amp; references: bar above — full angle text under &quot;Script angles&quot;.
                   </p>
                 </aside>
 
@@ -2023,57 +2415,106 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                       <div className="rounded-xl border border-white/10 bg-black/20 p-4">
                         <p className="text-xs font-semibold uppercase tracking-wide text-white/50">Your video</p>
                         <p className="mt-1 text-xs text-white/45">
-                          Preview in 9:16. Regenerate or download beside the player (below on small screens).
+                          Preview in 9:16. Regenerate adds the last clip below; switch reference images to see each
+                          frame&apos;s ads.
                         </p>
                         {klingVideoUrl ? (
-                          <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-5">
-                            <div className="mx-auto w-full max-w-[min(100%,300px)] shrink-0 sm:mx-0">
-                              <div className="aspect-[9/16] w-full overflow-hidden rounded-lg border border-white/10 bg-black">
-                                <video
-                                  src={klingVideoUrl}
-                                  controls
-                                  playsInline
-                                  className="h-full w-full object-contain"
-                                />
+                          <>
+                            <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-5">
+                              <div className="mx-auto w-full max-w-[min(100%,300px)] shrink-0 sm:mx-0">
+                                <div className="aspect-[9/16] w-full overflow-hidden rounded-lg border border-white/10 bg-black">
+                                  <video
+                                    src={klingVideoUrl}
+                                    controls
+                                    playsInline
+                                    className="h-full w-full object-contain"
+                                  />
+                                </div>
+                              </div>
+                              <div className="flex w-full flex-col justify-center gap-2 sm:w-auto sm:min-w-[11rem] sm:flex-1">
+                                <Button
+                                  type="button"
+                                  className={`h-auto min-h-10 w-full flex-col gap-0.5 px-3 py-2 sm:w-full ${primaryBtnClass}`}
+                                  disabled={
+                                    isKlingSubmitting ||
+                                    Boolean(klingPollTaskId) ||
+                                    !ugcVideoPromptGpt.trim() ||
+                                    !nanoBananaImageUrl
+                                  }
+                                  onClick={() => void onGenerateKlingVideo()}
+                                >
+                                  {isKlingSubmitting || klingRenderingThisReference ? (
+                                    <span className="inline-flex items-center gap-2 text-sm font-semibold">
+                                      <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                                      Working…
+                                    </span>
+                                  ) : (
+                                    <>
+                                      <span className="inline-flex items-center gap-2 text-sm font-semibold leading-tight">
+                                        <RefreshCw className="h-4 w-4 shrink-0" aria-hidden />
+                                        Regenerate
+                                      </span>
+                                      <span className="text-[11px] font-semibold text-black/70">
+                                        {CREDITS_KLING_LINK_TO_AD_VIDEO} credits
+                                      </span>
+                                    </>
+                                  )}
+                                </Button>
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  className="h-10 w-full justify-center border border-white/15 bg-white/5 text-white hover:bg-white/10 sm:w-full"
+                                  asChild
+                                >
+                                  <a
+                                    href={`/api/download?url=${encodeURIComponent(klingVideoUrl)}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                  >
+                                    Download video
+                                  </a>
+                                </Button>
                               </div>
                             </div>
-                            <div className="flex w-full flex-col justify-center gap-2 sm:w-auto sm:min-w-[11rem] sm:flex-1">
-                              <Button
-                                type="button"
-                                variant="secondary"
-                                size="sm"
-                                className="h-10 w-full justify-center gap-2 border border-white/15 bg-white/5 text-white hover:bg-white/10 sm:w-full"
-                                disabled={
-                                  isKlingSubmitting ||
-                                  Boolean(klingPollTaskId) ||
-                                  !ugcVideoPromptGpt.trim() ||
-                                  !nanoBananaImageUrl
-                                }
-                                onClick={() => void onGenerateKlingVideo()}
-                              >
-                                {isKlingSubmitting || klingPollTaskId ? (
-                                  <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
-                                ) : (
-                                  <RefreshCw className="h-4 w-4 shrink-0" aria-hidden />
-                                )}
-                                Regenerate
-                              </Button>
-                              <Button
-                                variant="secondary"
-                                size="sm"
-                                className="h-10 w-full justify-center border border-white/15 bg-white/5 text-white hover:bg-white/10 sm:w-full"
-                                asChild
-                              >
-                                <a
-                                  href={`/api/download?url=${encodeURIComponent(klingVideoUrl)}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                >
-                                  Download video
-                                </a>
-                              </Button>
-                            </div>
-                          </div>
+                            {klingHistory.length > 0 &&
+                            (nanoBananaSelectedImageIndex === 0 ||
+                              nanoBananaSelectedImageIndex === 1 ||
+                              nanoBananaSelectedImageIndex === 2) ? (
+                              <div className="mt-4 border-t border-white/10 pt-4">
+                                <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
+                                  Previous versions
+                                </p>
+                                <p className="mt-0.5 text-[10px] text-white/35">
+                                  Tap a thumbnail to make it the main preview (swap with current).
+                                </p>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  {klingHistory.map((u, hi) => (
+                                    <button
+                                      key={`${u.slice(-32)}-${hi}`}
+                                      type="button"
+                                      className="group relative aspect-[9/16] w-[4.25rem] shrink-0 overflow-hidden rounded-lg border border-white/15 bg-black transition hover:border-violet-400/60"
+                                      title="Use this version as main preview"
+                                      onClick={() =>
+                                        promoteHistoryToMain(nanoBananaSelectedImageIndex, u)
+                                      }
+                                    >
+                                      {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                                      <video
+                                        src={u}
+                                        muted
+                                        playsInline
+                                        preload="metadata"
+                                        className="pointer-events-none h-full w-full object-cover"
+                                      />
+                                      <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 to-transparent py-3 pt-6 text-center text-[9px] font-medium text-white/95 opacity-0 transition group-hover:opacity-100">
+                                        Use
+                                      </span>
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : null}
+                          </>
                         ) : null}
                         {nanoBananaImageUrl &&
                         ugcVideoPromptGpt.trim() &&
@@ -2082,10 +2523,13 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                         !isKlingSubmitting ? (
                           <Button
                             type="button"
-                            className={`mt-4 ${primaryBtnClass}`}
+                            className={`mt-4 flex h-auto min-h-11 flex-col gap-1 py-2.5 ${primaryBtnClass}`}
                             onClick={() => void onGenerateKlingVideo()}
                           >
-                            Retry video render
+                            <span className="text-sm font-semibold leading-tight">Retry video render</span>
+                            <span className="text-[11px] font-semibold text-black/70">
+                              {CREDITS_KLING_LINK_TO_AD_VIDEO} credits
+                            </span>
                           </Button>
                         ) : null}
                         {isKlingSubmitting ? (
@@ -2094,7 +2538,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                             <span>{LINK_TO_AD_LOADING_MESSAGES.kling_starting}</span>
                           </div>
                         ) : null}
-                        {klingPollTaskId ? (
+                        {klingRenderingThisReference ? (
                           <p className="mt-4 flex items-center gap-2 text-xs text-violet-200">
                             <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
                             <span>{LINK_TO_AD_LOADING_MESSAGES.kling_rendering}</span>
@@ -2157,12 +2601,15 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                           !nanoBananaImageUrl
                         }
                         onClick={() => void handleGenerateVideoFromSelectedImage()}
-                        className={primaryBtnClass}
+                        className={`flex h-auto min-h-12 flex-col gap-1 py-2.5 ${primaryBtnClass}`}
                       >
-                        <>
+                        <span className="inline-flex items-center justify-center gap-2 text-base font-semibold leading-tight">
                           <Video className="h-5 w-5 shrink-0" aria-hidden />
                           Generate video from this image
-                        </>
+                        </span>
+                        <span className="text-[11px] font-semibold text-black/70">
+                          {CREDITS_KLING_LINK_TO_AD_VIDEO} credits
+                        </span>
                       </Button>
                     </div>
                   )}

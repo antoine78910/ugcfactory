@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Loader2, Play, Plus, Sparkles, Trash2, X } from "lucide-react";
+import { GitBranch, Loader2, Play, Plus, Sparkles, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import LinkToAdUniverse from "@/app/_components/LinkToAdUniverse";
+import { ProjectLabCanvas } from "@/app/_components/ProjectLabCanvas";
 import { ProjectRunBrandBriefEditor } from "@/app/_components/ProjectRunBrandBriefEditor";
 import { ProjectRunScriptsEditor } from "@/app/_components/ProjectRunScriptsEditor";
 import StudioImagePanel from "@/app/_components/StudioImagePanel";
@@ -25,6 +26,7 @@ import {
   branchUniverseForNewAd,
   cloneExtractedBase,
   readUniverseFromExtracted,
+  universeHasPendingKlingTask,
 } from "@/lib/linkToAdUniverse";
 
 type WizardStep = "url" | "analysis" | "quiz" | "image" | "video";
@@ -219,6 +221,12 @@ export default function AppBrandWizard() {
     label: string;
   } | null>(null);
   const [deleteProjectLoading, setDeleteProjectLoading] = useState(false);
+  /** Full-screen “lab” graph: architecture of Link to Ad generations for a store URL. */
+  const [projectLab, setProjectLab] = useState<{
+    title: string;
+    storeUrl: string;
+    runs: (typeof savedRuns)[number][];
+  } | null>(null);
   const [runId, setRunId] = useState<string | null>(null);
   const [isLoadingRuns, setIsLoadingRuns] = useState(false);
   /** While set, ignore URL→section sync so stale ?section= in the bar cannot overwrite a sidebar click before router.replace runs. */
@@ -409,7 +417,7 @@ export default function AppBrandWizard() {
       const pendingKling = runs.filter((r: { id: string; extracted?: unknown }) => {
         if (!runHasLinkToAdUniverse(r.extracted)) return false;
         const s = readUniverseFromExtracted(r.extracted);
-        return Boolean(s?.klingTaskId?.trim() && !s?.klingVideoUrl?.trim());
+        return universeHasPendingKlingTask(s);
       });
       if (pendingKling.length > 0) {
         void (async () => {
@@ -686,7 +694,7 @@ export default function AppBrandWizard() {
         const pending = runs.filter((r) => {
           if (!runHasLinkToAdUniverse(r.extracted)) return false;
           const s = readUniverseFromExtracted(r.extracted);
-          return Boolean(s?.klingTaskId?.trim() && !s?.klingVideoUrl?.trim());
+          return universeHasPendingKlingTask(s);
         });
         for (const r of pending) {
           if (cancelled) return;
@@ -1411,6 +1419,22 @@ export default function AppBrandWizard() {
                                 </div>
                               </div>
                               <div className="flex shrink-0 items-center gap-1">
+                                <Button
+                                  type="button"
+                                  size="icon"
+                                  variant="secondary"
+                                  className="h-9 w-9 border border-cyan-400/35 bg-cyan-500/15 text-cyan-100 hover:bg-cyan-500/30"
+                                  title="Vue lab — carte des générations (zoom, branches)"
+                                  onClick={() =>
+                                    setProjectLab({
+                                      title: proj.title ?? proj.storeUrl,
+                                      storeUrl: proj.storeUrl,
+                                      runs: proj.runs,
+                                    })
+                                  }
+                                >
+                                  <GitBranch className="h-4 w-4" strokeWidth={2.25} />
+                                </Button>
                                 {isUniverse ? (
                                   <Button
                                     type="button"
@@ -2489,6 +2513,25 @@ export default function AppBrandWizard() {
             </CardContent>
           </Card>
         </div>
+      ) : null}
+
+      {projectLab ? (
+        <ProjectLabCanvas
+          open
+          onClose={() => setProjectLab(null)}
+          projectTitle={projectLab.title}
+          storeUrl={projectLab.storeUrl}
+          runs={projectLab.runs}
+          onOpenRunInEditor={(runId) => {
+            setProjectLab(null);
+            setRunId(runId);
+            if (typeof localStorage !== "undefined") {
+              localStorage.setItem(UGC_CURRENT_RUN_KEY, runId);
+            }
+            setAppSectionNav("link_to_ad");
+            setLinkToAdResumeRunId(runId);
+          }}
+        />
       ) : null}
 
       {lightboxUrl ? (

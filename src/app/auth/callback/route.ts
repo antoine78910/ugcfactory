@@ -66,7 +66,7 @@ export async function GET(req: NextRequest) {
   });
 
   async function redirectToAppWithCapturedCookies() {
-    const target = new URL("/dashboard", url.origin);
+    const target = new URL("/app", url.origin);
     const redirectResponse = NextResponse.redirect(target, 302);
     for (const cookie of cookieCaptureResponse.cookies.getAll()) {
       redirectResponse.cookies.set(cookie);

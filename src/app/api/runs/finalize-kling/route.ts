@@ -7,8 +7,11 @@ import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { kieMarketRecordInfo, parseResultUrls } from "@/lib/kieMarket";
 import {
   cloneExtractedBase,
+  findPendingKlingInUniverse,
+  normalizePipelineByAngle,
   readUniverseFromExtracted,
-  type LinkToAdUniverseSnapshotV1,
+  snapshotAfterKlingVideoSuccessForAngle,
+  universeHasPendingKlingTask,
 } from "@/lib/linkToAdUniverse";
 
 type Body = { runId?: string };
@@ -39,18 +42,34 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Not a Link to Ad run." }, { status: 400 });
   }
 
-  if (snap.klingVideoUrl?.trim()) {
+  if (!universeHasPendingKlingTask(snap)) {
+    const triple = normalizePipelineByAngle(snap);
+    let videoUrl = snap.klingVideoUrl?.trim() || "";
+    if (!videoUrl) {
+      outer: for (const pipe of triple) {
+        const slots = pipe.klingByReferenceIndex;
+        if (!Array.isArray(slots)) continue;
+        for (const s of slots) {
+          const v = typeof s.videoUrl === "string" ? s.videoUrl.trim() : "";
+          if (v) {
+            videoUrl = v;
+            break outer;
+          }
+        }
+      }
+    }
     return NextResponse.json({
       ok: true,
-      videoUrl: snap.klingVideoUrl.trim(),
+      ...(videoUrl ? { videoUrl } : {}),
       alreadyFinalized: true,
     });
   }
 
-  const taskId = snap.klingTaskId?.trim();
-  if (!taskId) {
+  const pending = findPendingKlingInUniverse(snap);
+  if (!pending) {
     return NextResponse.json({ error: "No pending Kling/KIE task on this run." }, { status: 400 });
   }
+  const { angleIndex, refIndex, taskId } = pending;
 
   const sleepMs = 4000;
   const maxWaitMs = 14 * 60 * 1000;
@@ -72,11 +91,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Task succeeded but no video URL in result." }, { status: 502 });
       }
 
-      const nextSnap: LinkToAdUniverseSnapshotV1 = {
-        ...snap,
-        klingVideoUrl: vUrl,
-        klingTaskId: taskId,
-      };
+      const nextSnap = snapshotAfterKlingVideoSuccessForAngle(snap, angleIndex, refIndex, vUrl, taskId);
       const base = cloneExtractedBase(run.extracted);
       const extracted = { ...base, __universe: nextSnap };
 

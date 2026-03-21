@@ -19,7 +19,15 @@ const HAS_SUPABASE_ENV = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 const APP_REDIRECT_BASE =
   (process.env.NEXT_PUBLIC_APP_URL && process.env.NEXT_PUBLIC_APP_URL.trim()) ||
   "https://app.youry.io";
-const AUTH_CALLBACK_URL = `${APP_REDIRECT_BASE.replace(/\/+$/, "")}/auth/callback`;
+const AUTH_CALLBACK_FALLBACK = `${APP_REDIRECT_BASE.replace(/\/+$/, "")}/auth/callback`;
+
+/** Must match the URL Google/Supabase redirects to (same origin as the page avoids env mismatches). */
+function getAuthCallbackUrl() {
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return `${window.location.origin}/auth/callback`;
+  }
+  return AUTH_CALLBACK_FALLBACK;
+}
 
 export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
   const router = useRouter();
@@ -95,7 +103,7 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
     try {
       const { error } = await client.auth.signInWithOtp({
         email: email.trim(),
-        options: { emailRedirectTo: AUTH_CALLBACK_URL },
+        options: { emailRedirectTo: getAuthCallbackUrl() },
       });
       if (error) throw error;
       toast.success("Magic link sent", { description: "Check your email inbox." });
@@ -114,7 +122,7 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
       const { error } = await client.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: AUTH_CALLBACK_URL,
+          redirectTo: getAuthCallbackUrl(),
         },
       });
       if (error) throw error;
@@ -165,10 +173,22 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
           </div>
 
           <div className="p-8">
-            <div className="space-y-4">
+            <form
+              className="space-y-4"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (isSignIn) void onSignIn();
+                else void onSignUp();
+              }}
+            >
               <div className="space-y-2">
-                <Label className="text-white/80">Email</Label>
+                <Label htmlFor="auth-email" className="text-white/80">
+                  Email
+                </Label>
                 <Input
+                  id="auth-email"
+                  name="email"
+                  autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@domain.com"
@@ -177,8 +197,13 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
               </div>
 
               <div className="space-y-2">
-                <Label className="text-white/80">Password</Label>
+                <Label htmlFor="auth-password" className="text-white/80">
+                  Password
+                </Label>
                 <Input
+                  id="auth-password"
+                  name="password"
+                  autoComplete={isSignIn ? "current-password" : "new-password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   type="password"
@@ -188,22 +213,12 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
               </div>
 
               {isSignIn ? (
-                <Button
-                  type="button"
-                  className={`mt-2 ${primaryBtnClass}`}
-                  onClick={onSignIn}
-                  disabled={isLoading}
-                >
+                <Button type="submit" className={`mt-2 ${primaryBtnClass}`} disabled={isLoading}>
                   {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   Sign in
                 </Button>
               ) : (
-                <Button
-                  type="button"
-                  className={`mt-2 ${primaryBtnClass}`}
-                  onClick={onSignUp}
-                  disabled={isLoading}
-                >
+                <Button type="submit" className={`mt-2 ${primaryBtnClass}`} disabled={isLoading}>
                   {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   Create account
                 </Button>
@@ -226,7 +241,7 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
                 <span className="mr-1 text-sm font-semibold">G</span>
                 Continue with Google
               </Button>
-            </div>
+            </form>
 
             <p className="mt-6 text-center text-sm text-white/50">
               {isSignIn ? "No account yet?" : "Already have an account?"} {" "}
