@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 const STEP_LABELS = ["Store", "Scripts", "Images", "Video"] as const;
 
 export type LinkToAdUniverseStepperProps = {
-  /** 1–4 = étape en cours, 5 = tout terminé */
+  /** 1–4 = current step, 5 = all done */
   currentStep: number;
   step1Done: boolean;
   step2Done: boolean;

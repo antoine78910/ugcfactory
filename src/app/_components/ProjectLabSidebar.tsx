@@ -178,7 +178,7 @@ export function ProjectLabSidebar({
         <TreeRow
           depth={depth}
           label={f.name}
-          sub="Dossier"
+          sub="Folder"
           expanded={isOpen}
           onToggle={() => toggle(id)}
           hasChildren={hasKids}
@@ -198,7 +198,7 @@ export function ProjectLabSidebar({
                     <TreeRow
                       depth={depth + 1}
                       label={a.name}
-                      sub={a.notes || "Angle perso"}
+                      sub={a.notes || "Custom angle"}
                       expanded={false}
                       onToggle={() => {}}
                       hasChildren={false}
@@ -214,7 +214,7 @@ export function ProjectLabSidebar({
                     size="icon"
                     variant="ghost"
                     className="h-7 w-7 shrink-0 text-white/35 hover:text-red-300"
-                    title="Supprimer"
+                    title="Delete"
                     onClick={() => removeAngle(a.id)}
                   >
                     <Trash2 className="h-3 w-3" />
@@ -230,7 +230,7 @@ export function ProjectLabSidebar({
   }
 
   function addFolder() {
-    const name = newFolderName.trim() || "Nouveau dossier";
+    const name = newFolderName.trim() || "New folder";
     const parent =
       targetFolderId === "" || targetFolderId === "root"
         ? null
@@ -247,7 +247,7 @@ export function ProjectLabSidebar({
   }
 
   function addAngle() {
-    const name = newAngleName.trim() || "Nouvel angle";
+    const name = newAngleName.trim() || "New angle";
     const id = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `a-${Date.now()}`;
     const folderId =
       targetFolderId && targetFolderId !== "root" && artifacts.folders.some((x) => x.id === targetFolderId)
@@ -275,15 +275,15 @@ export function ProjectLabSidebar({
     <aside className="flex w-[min(100%,280px)] shrink-0 flex-col border-r border-white/10 bg-black/55 backdrop-blur-md">
       <div className="border-b border-white/10 p-3">
         <p className="text-[10px] font-semibold uppercase tracking-wide text-cyan-300/90">Architecture</p>
-        <p className="mt-0.5 text-[10px] text-white/40">Arborescence des nœuds générés + ton organisation.</p>
+        <p className="mt-0.5 text-[10px] text-white/40">Tree of generated nodes plus your layout.</p>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
-        <p className="mb-1 px-1 text-[9px] font-semibold uppercase tracking-wide text-white/35">Données projet</p>
+        <p className="mb-1 px-1 text-[9px] font-semibold uppercase tracking-wide text-white/35">Project data</p>
         <TreeRow
           depth={0}
-          label="Produit / runs"
-          sub="Link to Ad & classique"
+          label="Product / runs"
+          sub="Link to Ad & classic"
           expanded={expanded.has("root")}
           onToggle={() => toggle("root")}
           hasChildren
@@ -295,10 +295,10 @@ export function ProjectLabSidebar({
         />
         {expanded.has("root") ? <div className="mt-0.5">{renderAutoBranch("root", 1)}</div> : null}
 
-        <p className="mb-1 mt-4 px-1 text-[9px] font-semibold uppercase tracking-wide text-white/35">Ton espace</p>
+        <p className="mb-1 mt-4 px-1 text-[9px] font-semibold uppercase tracking-wide text-white/35">Your space</p>
         <TreeRow
           depth={0}
-          label="Dossiers & angles perso"
+          label="Folders & custom angles"
           expanded={expanded.has("lab-user-root")}
           onToggle={() => toggle("lab-user-root")}
           hasChildren={topFolders.length > 0 || orphanAngles.length > 0}
@@ -316,7 +316,7 @@ export function ProjectLabSidebar({
                     <TreeRow
                       depth={1}
                       label={a.name}
-                      sub={a.notes || "Sous projet"}
+                      sub={a.notes || "Sub-project"}
                       expanded={false}
                       onToggle={() => {}}
                       hasChildren={false}
@@ -332,7 +332,7 @@ export function ProjectLabSidebar({
                     size="icon"
                     variant="ghost"
                     className="h-7 w-7 shrink-0 text-white/35 hover:text-red-300"
-                    title="Supprimer"
+                    title="Delete"
                     onClick={() => removeAngle(a.id)}
                   >
                     <Trash2 className="h-3 w-3" />
@@ -345,16 +345,16 @@ export function ProjectLabSidebar({
       </div>
 
       <div className="space-y-2 border-t border-white/10 p-3">
-        <p className="text-[9px] font-semibold uppercase text-white/40">Créer</p>
+        <p className="text-[9px] font-semibold uppercase text-white/40">Create</p>
         <select
           className="h-8 w-full rounded-md border border-white/15 bg-white/[0.04] px-2 text-[11px] text-white"
           value={targetFolderId}
           onChange={(e) => setTargetFolderId(e.target.value as typeof targetFolderId)}
         >
-          <option value="">Racine (lié au projet)</option>
+          <option value="">Root (project-linked)</option>
           {artifacts.folders.map((f) => (
             <option key={f.id} value={f.id}>
-              Dans « {f.name} »
+              In “{f.name}”
             </option>
           ))}
         </select>
@@ -362,32 +362,32 @@ export function ProjectLabSidebar({
           <Input
             value={newFolderName}
             onChange={(e) => setNewFolderName(e.target.value)}
-            placeholder="Nom du dossier"
+            placeholder="Folder name"
             className="h-8 flex-1 border-white/15 bg-white/[0.04] text-[11px] text-white"
           />
-          <Button type="button" size="icon" className="h-8 w-8 shrink-0 bg-cyan-500/30" onClick={addFolder} title="Nouveau dossier">
+          <Button type="button" size="icon" className="h-8 w-8 shrink-0 bg-cyan-500/30" onClick={addFolder} title="New folder">
             <FolderPlus className="h-4 w-4" />
           </Button>
         </div>
         <Input
           value={newAngleName}
           onChange={(e) => setNewAngleName(e.target.value)}
-          placeholder="Nom de l’angle"
+          placeholder="Angle name"
           className="h-8 border-white/15 bg-white/[0.04] text-[11px] text-white"
         />
         <Input
           value={newAngleNotes}
           onChange={(e) => setNewAngleNotes(e.target.value)}
-          placeholder="Notes (optionnel)"
+          placeholder="Notes (optional)"
           className="h-8 border-white/15 bg-white/[0.04] text-[11px] text-white"
         />
         <Button type="button" size="sm" className="w-full gap-1 bg-violet-500/25 text-white" onClick={addAngle}>
           <Plus className="h-3.5 w-3.5" />
-          Nouvel angle
+          New angle
         </Button>
         {artifacts.folders.length > 0 ? (
           <div className="space-y-1 pt-1">
-            <p className="text-[9px] text-white/35">Supprimer dossier (vide les angles liés)</p>
+            <p className="text-[9px] text-white/35">Delete folder (clears linked angles)</p>
             {artifacts.folders.map((f) => (
               <div key={f.id} className="flex items-center justify-between gap-1 rounded border border-white/10 bg-white/[0.02] px-2 py-1">
                 <span className="truncate text-[10px] text-white/70">{f.name}</span>

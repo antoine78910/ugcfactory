@@ -29,6 +29,8 @@ import {
   type LinkToAdAnglePipelineV1,
   type LinkToAdUniverseSnapshotV1,
 } from "@/lib/linkToAdUniverse";
+import { useCreditsPlan } from "@/app/_components/CreditsPlanContext";
+import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
 import { LinkToAdUniverseStepper } from "@/app/_components/LinkToAdUniverseStepper";
 import { WebsiteScanChecklist } from "@/app/_components/WebsiteScanChecklist";
 import { WebsiteScanLoader } from "@/app/_components/WebsiteScanLoader";
@@ -151,6 +153,8 @@ function compactBrandSummaryForUi(full: string, maxLen = 200): string {
 }
 
 export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRunsChanged }: LinkToAdUniverseProps) {
+  const { planId, current: creditsBalance } = useCreditsPlan();
+  const [ltaVideoCreditsOpen, setLtaVideoCreditsOpen] = useState(false);
   const [storeUrl, setStoreUrl] = useState("");
   const [isWorking, setIsWorking] = useState(false);
   const [extractedTitle, setExtractedTitle] = useState<string | null>(null);
@@ -782,13 +786,13 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       return;
     }
 
-    /** Refaire l’étape 1 : ne pas réutiliser l’upload neutre (l’UI doit se vider comme le brief). */
+    /** Re-run step 1: do not reuse neutral upload (UI should clear like the brief). */
     const userUploadedImageUrl = opts?.bypassSavedProject ? null : neutralUploadUrl;
 
     /** Saved run for this URL hydrates in place unless bypass (redo step 1). */
     const tryHydrateFromSavedRun = !opts?.bypassSavedProject;
 
-    // Loader + barre de statut dès le clic (avant find-by-url, qui était sans isWorking).
+    // Loader + status bar from first click (before find-by-url, which had no isWorking).
     setIsWorking(true);
     setStage("scanning");
 
@@ -1757,6 +1761,10 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       toast.error("Select a reference image first.");
       return;
     }
+    if (creditsBalance < CREDITS_LINK_TO_AD_VIDEO_FROM_IMAGE) {
+      setLtaVideoCreditsOpen(true);
+      return;
+    }
     if (isVideoPromptLoading || isKlingSubmitting || Boolean(klingPollTaskId)) return;
     setVideoStageMode(true);
     setUserStartedVideoFromImage(true);
@@ -1902,9 +1910,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                     aria-live="polite"
                     aria-busy="true"
                   >
-                    <div className="flex items-center gap-2.5 rounded-2xl border border-violet-500/35 bg-[#0b0912]/95 px-5 py-2.5 shadow-[0_6px_0_0_rgba(76,29,149,0.75)]">
-                      <Loader2 className="h-5 w-5 shrink-0 animate-spin text-violet-300" aria-hidden />
-                      <StatusLineShimmer text="Starting your scan…" className="text-sm font-semibold" />
+                    <div className="flex items-center justify-center rounded-2xl border border-violet-500/35 bg-[#0b0912]/95 px-5 py-3 shadow-[0_6px_0_0_rgba(76,29,149,0.75)]">
+                      <Loader2 className="h-6 w-6 shrink-0 animate-spin text-violet-300" aria-label="Loading" />
                     </div>
                   </div>
                 ) : null}
@@ -2095,7 +2102,11 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                 Writing three script angles…
               </div>
             ) : showAnglePicker ? (
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="space-y-3">
+                <p className="text-sm font-semibold tracking-tight text-white/90">
+                  Choose your AI UGC angle
+                </p>
+                <div className="grid gap-3 sm:grid-cols-3">
                 {([0, 1, 2] as const).map((i) => (
                   <button
                     key={i}
@@ -2109,6 +2120,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                     <p className="mt-2 text-sm leading-snug text-white/85">{angleLabels[i]}</p>
                   </button>
                 ))}
+                </div>
               </div>
             ) : (
               <div className="flex min-h-[80px] items-center justify-center rounded-lg border border-white/10 bg-black/20 px-4 text-center text-sm text-white/35">
@@ -2124,9 +2136,9 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
             <div className="flex min-w-0 flex-col gap-4 lg:w-[min(100%,22rem)] xl:w-[min(100%,26rem)] lg:shrink-0">
               <div className="rounded-xl border border-violet-500/20 bg-black/25 px-3 py-2.5 sm:px-4">
                 <div className="flex flex-col gap-4">
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
                     <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-white/45">
-                      Script angle
+                      Choose your AI UGC angle
                     </span>
                     <div className="inline-flex rounded-xl border border-white/10 bg-white/[0.04] p-0.5">
                       {([0, 1, 2] as const).map((i) => (
@@ -2162,7 +2174,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                               type="button"
                               onClick={() => void onSelectNanoBananaImage(i)}
                               className={cn(
-                                "relative aspect-[9/16] w-14 shrink-0 overflow-hidden rounded-lg border-2 bg-[#050507] transition-all sm:w-16",
+                                "relative aspect-square w-12 shrink-0 overflow-hidden rounded-lg border-2 bg-[#050507] transition-all sm:w-14",
                                 sel
                                   ? "border-violet-400 shadow-[0_0_12px_rgba(139,92,246,0.35)]"
                                   : "border-transparent opacity-80 hover:border-white/20 hover:opacity-100",
@@ -2191,7 +2203,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                 {scriptsText.trim() ? (
                   <div className="mt-3 border-t border-white/10 pt-3">
                     <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-white/45">
-                      Script angles — tap to use
+                      Choose your AI UGC angle — tap to switch
                     </p>
                     <div className="grid grid-cols-1 gap-2">
                       {([0, 1, 2] as const).map((i) => {
@@ -2227,71 +2239,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                   </div>
                 ) : null}
               </div>
-
-              {!showVideoStageLayout && nanoBananaPromptsRaw && nanoHasThreeImages ? (
-                <div className="rounded-xl border border-violet-500/25 bg-violet-500/[0.06] p-3 sm:p-4">
-                  <p className="mb-3 text-[10px] font-semibold uppercase tracking-wide text-white/45">
-                    Generated images — choose one
-                  </p>
-                  <div className="flex flex-col gap-3">
-                    {([0, 1, 2] as const).map((i) => {
-                      const selected = nanoBananaSelectedImageIndex === i;
-                      return (
-                        <div
-                          key={i}
-                          role="button"
-                          tabIndex={0}
-                          aria-pressed={selected}
-                          onClick={() => void onSelectNanoBananaImage(i)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault();
-                              void onSelectNanoBananaImage(i);
-                            }
-                          }}
-                          className={`group relative flex cursor-pointer flex-col overflow-hidden rounded-2xl border bg-[#08080c] text-left transition-[transform,box-shadow,border-color] duration-200 ease-out active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0912] ${
-                            selected
-                              ? "border-[3px] border-violet-400 shadow-[0_0_0_1px_rgba(139,92,246,0.45),0_0_28px_rgba(139,92,246,0.22),0_12px_40px_rgba(76,29,149,0.25)]"
-                              : "border border-white/10 hover:border-violet-400/40"
-                          }`}
-                        >
-                          <span className="border-b border-white/10 px-2 py-1.5 text-center text-[10px] font-bold uppercase tracking-wide text-violet-300/90">
-                            Image {i + 1}
-                          </span>
-                          <div className="relative aspect-[9/16] w-full max-w-[220px] mx-auto overflow-hidden bg-[#050507]">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={nanoBananaImageUrls[i]}
-                              alt={`Reference ${i + 1}`}
-                              className="h-full w-full object-cover object-center"
-                              loading="lazy"
-                            />
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              size="icon"
-                              title="View full size"
-                              aria-label="View full size"
-                              className="absolute left-2 top-2 z-20 h-8 w-8 shrink-0 rounded-lg border border-white/20 bg-black/75 text-white shadow-lg backdrop-blur-md hover:bg-black/90"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setNanoImageLightboxUrl(nanoBananaImageUrls[i]);
-                              }}
-                            >
-                              <Maximize2 className="h-4 w-4" aria-hidden />
-                            </Button>
-                          </div>
-                          {selected ? (
-                            <span className="absolute right-2 top-9 z-10 inline-flex h-7 w-7 items-center justify-center rounded-full border-2 border-violet-200/40 bg-violet-400 text-black shadow-md shadow-violet-500/30">
-                              <Check className="h-4 w-4" strokeWidth={2.5} aria-hidden />
-                            </span>
-                          ) : null}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ) : null}
             </div>
 
             {/* Right: generate prompts, generate video, Kling / video stage */}
@@ -2305,17 +2252,52 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                           Next step
                         </h3>
                         <p className="mt-2 text-sm leading-snug text-white/70">
-                          Pick a reference on the left, then generate your UGC video here.
+                          Pick a 1:1 reference below (or use the strip on the left), then generate your UGC video.
                         </p>
                       </div>
-                      {nanoBananaSelectedImageIndex !== null ? (
+                      <div className="grid w-full max-w-md grid-cols-3 gap-2 sm:max-w-lg sm:gap-3">
+                        {([0, 1, 2] as const).map((i) => {
+                          const sel = nanoBananaSelectedImageIndex === i;
+                          return (
+                            <button
+                              key={i}
+                              type="button"
+                              onClick={() => void onSelectNanoBananaImage(i)}
+                              className={cn(
+                                "relative aspect-square w-full min-w-0 overflow-hidden rounded-xl border-2 bg-[#050507] transition-all",
+                                sel
+                                  ? "border-violet-400 shadow-[0_0_12px_rgba(139,92,246,0.35)]"
+                                  : "border-white/10 opacity-90 hover:border-violet-400/40 hover:opacity-100",
+                              )}
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={nanoBananaImageUrls[i]}
+                                alt={`Reference ${i + 1}`}
+                                className="h-full w-full object-cover object-center"
+                                loading="lazy"
+                              />
+                              {sel ? (
+                                <span className="absolute bottom-1 right-1 flex h-5 w-5 items-center justify-center rounded-full bg-violet-400 text-black shadow sm:h-6 sm:w-6">
+                                  <Check className="h-3 w-3 sm:h-3.5 sm:w-3.5" strokeWidth={3} aria-hidden />
+                                </span>
+                              ) : null}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div className="flex max-w-md flex-col gap-2 sm:max-w-lg">
                         <Button
                           type="button"
                           disabled={
-                            isVideoPromptLoading || isKlingSubmitting || Boolean(klingPollTaskId) || !nanoBananaImageUrl
+                            nanoBananaSelectedImageIndex === null ||
+                            isVideoPromptLoading ||
+                            isKlingSubmitting ||
+                            Boolean(klingPollTaskId) ||
+                            !nanoBananaImageUrl
                           }
                           onClick={() => void handleGenerateVideoFromSelectedImage()}
-                          className={`flex h-auto min-h-12 w-full max-w-md flex-col gap-1 py-2.5 ${primaryBtnClass}`}
+                          className={`flex h-auto min-h-12 w-full flex-col gap-1 py-2.5 ${primaryBtnClass}`}
                         >
                           {isVideoPromptLoading || isKlingSubmitting || klingPollTaskId ? (
                             <span className="inline-flex items-center justify-center gap-2 text-base font-semibold">
@@ -2334,9 +2316,17 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                             </>
                           )}
                         </Button>
-                      ) : (
-                        <p className="text-xs text-white/45">Select an image on the left to enable video generation.</p>
-                      )}
+                        {nanoBananaSelectedImageIndex === null ? (
+                          <p className="text-xs text-white/45">
+                            Tap a square above to choose your reference, then generate.
+                          </p>
+                        ) : creditsBalance < CREDITS_LINK_TO_AD_VIDEO_FROM_IMAGE ? (
+                          <p className="text-xs text-amber-200/85">
+                            You need {CREDITS_LINK_TO_AD_VIDEO_FROM_IMAGE} credits (you have {creditsBalance}). Tap
+                            Generate below to open billing and top up.
+                          </p>
+                        ) : null}
+                      </div>
                     </div>
                   ) : null}
 
@@ -2355,7 +2345,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                         !nanoPollTaskId ? (
                           <>
                             <p className="text-sm text-white/75">
-                              Angle sélectionné — lance la génération quand tu veux (prompts GPT + 3 images NanoBanana).
+                              Angle selected — run generation when you&apos;re ready (GPT prompts + 3 NanoBanana images).
                             </p>
                             <Button
                               type="button"
@@ -2364,7 +2354,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                               onClick={() => void onGenerateNanoBananaPrompts(selectedAngleIndex as 0 | 1 | 2)}
                             >
                               <span className="text-sm font-semibold leading-tight">
-                                Générer les 3 prompts &amp; images
+                                Generate 3 prompts &amp; images
                               </span>
                               <span className="text-[11px] font-semibold text-black/70">
                                 {CREDITS_LINK_TO_AD_THREE_REF_IMAGES} credits
@@ -2598,7 +2588,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                           Image {(nanoBananaSelectedImageIndex ?? 0) + 1} selected
                         </p>
                         <p className="mx-auto mt-2 max-w-sm text-sm text-white/55">
-                          Generate a motion prompt and video from this frame, or choose another reference on the left.
+                          Generate a motion prompt and video from this frame, or pick another 1:1 reference (left strip or
+                          “Next step” column).
                         </p>
                       </div>
                       <Button
@@ -2661,6 +2652,18 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         />
       </div>
     ) : null}
+
+    <StudioBillingDialog
+      open={ltaVideoCreditsOpen}
+      onOpenChange={setLtaVideoCreditsOpen}
+      planId={planId}
+      studioMode="video"
+      variant={{
+        kind: "credits",
+        currentCredits: creditsBalance,
+        requiredCredits: CREDITS_LINK_TO_AD_VIDEO_FROM_IMAGE,
+      }}
+    />
     </>
   );
 }

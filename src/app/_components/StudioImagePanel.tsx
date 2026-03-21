@@ -307,9 +307,9 @@ export default function StudioImagePanel() {
           </div>
 
           <div>
-            <Label className="text-xs text-white/45">Qualité (résolution)</Label>
+            <Label className="text-xs text-white/45">Quality (resolution)</Label>
             <p className="mt-0.5 text-[10px] leading-snug text-white/35">
-              1K = plus rapide / moins cher · 4K = plus de détail
+              1K = faster / lower cost · 4K = more detail
             </p>
             <Select value={resolution} onValueChange={(v) => setResolution(v as (typeof PRO_RESOLUTIONS)[number])}>
               <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
@@ -326,9 +326,9 @@ export default function StudioImagePanel() {
           </div>
 
           <div>
-            <Label className="text-xs text-white/45">Images (même prompt)</Label>
+            <Label className="text-xs text-white/45">Images (same prompt)</Label>
             <p className="mt-0.5 text-[10px] leading-snug text-white/35">
-              Pro : une requête par image (jusqu’à 4). Standard : NanoBanana 2 en parallèle.
+              Pro: one request per image (up to 4). Standard: NanoBanana 2 in parallel.
             </p>
             <Select
               value={String(numImages)}

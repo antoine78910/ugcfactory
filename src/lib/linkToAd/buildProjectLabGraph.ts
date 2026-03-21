@@ -90,7 +90,7 @@ export function buildProjectLabGraph(params: {
     y: 0,
     w: 280,
     h: 88,
-    label: shorten(params.projectTitle || "Projet", 48),
+    label: shorten(params.projectTitle || "Project", 48),
     sublabel: shorten(params.storeUrl, 56),
   });
 
@@ -128,7 +128,7 @@ export function buildProjectLabGraph(params: {
       y: oy,
       w: 260,
       h: 64,
-      label: "Génération Link to Ad",
+      label: "Link to Ad generation",
       sublabel: dateStr,
       runId: run.id,
     });
@@ -151,7 +151,7 @@ export function buildProjectLabGraph(params: {
         sublabel: snap.summaryText?.trim()
           ? shorten(snap.summaryText, 90)
           : snap.scriptsText?.trim()
-            ? "3 angles UGC prêts"
+            ? "3 UGC angles ready"
             : undefined,
         runId: run.id,
       });
@@ -220,7 +220,7 @@ export function buildProjectLabGraph(params: {
             y: imgY + imgH + 16,
             w: 84,
             h: 118,
-            label: "Vidéo",
+            label: "Video",
             videoUrl: v,
             runId: run.id,
             angleIndex: a,
@@ -235,8 +235,8 @@ export function buildProjectLabGraph(params: {
             y: imgY + imgH + 16,
             w: 84,
             h: 56,
-            label: "Vidéo",
-            sublabel: "Génération…",
+            label: "Video",
+            sublabel: "Generating…",
             pendingVideo: true,
             runId: run.id,
             angleIndex: a,
@@ -251,7 +251,7 @@ export function buildProjectLabGraph(params: {
             y: imgY + imgH + 16,
             w: 84,
             h: 118,
-            label: "Vidéo (historique)",
+            label: "Video (history)",
             videoUrl: hist[0],
             runId: run.id,
             angleIndex: a,
@@ -280,8 +280,8 @@ export function buildProjectLabGraph(params: {
       y: cy,
       w: 280,
       h: 72,
-      label: "Workflow classique",
-      sublabel: `${classicRuns.length} génération(s) — ouvrir depuis la liste`,
+      label: "Classic workflow",
+      sublabel: `${classicRuns.length} generation(s) — open from the list`,
     });
     e(rootId, clId);
     cursorY += 100;

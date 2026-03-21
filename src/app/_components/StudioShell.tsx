@@ -14,10 +14,10 @@ export type StudioNavSection = "link_to_ad" | "motion_control" | "image" | "vide
 
 type Props = {
   children: React.ReactNode;
-  /** Sur /app : section active et changement via boutons (préserve l’état wizard). */
+  /** On /app: active section and changes via buttons (keeps wizard state). */
   studioSection?: StudioNavSection;
   onStudioSectionChange?: (s: StudioNavSection) => void;
-  /** Pour préserver `?project=` dans les liens CREATE depuis crédits / abonnement. */
+  /** Preserve `?project=` in CREATE links from credits / subscription pages. */
   studioProjectId?: string | null;
 };
 
@@ -166,6 +166,6 @@ function StudioShellInner({
 }
 
 export default function StudioShell(props: Props) {
-  /** CreditsPlanProvider lives in root layout so /app page hooks and shell share one state. */
+  /** CreditsPlanProvider is in the root layout so /app hooks and shell share one state. */
   return <StudioShellInner {...props} />;
 }

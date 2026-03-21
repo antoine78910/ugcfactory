@@ -21,15 +21,15 @@ import { ProjectLabSidebar } from "@/app/_components/ProjectLabSidebar";
 import { cn } from "@/lib/utils";
 
 const KIND_LABEL: Record<LabNodeKind, string> = {
-  root: "Projet",
-  generation: "Génération",
+  root: "Project",
+  generation: "Generation",
   brief: "Brief",
   angle: "Angle",
-  ref_image: "Image ref",
-  video: "Vidéo",
+  ref_image: "Ref image",
+  video: "Video",
   classic: "Run",
-  folder: "Dossier",
-  custom_angle: "Angle perso",
+  folder: "Folder",
+  custom_angle: "Custom angle",
 };
 
 type Props = {
@@ -123,7 +123,7 @@ function LabNodeCard({
         type="button"
         data-lab-drag="1"
         className="absolute left-1 top-1 z-20 flex h-5 w-5 cursor-grab items-center justify-center rounded border border-white/15 bg-black/70 text-white/50 hover:border-violet-400/40 hover:text-violet-200 active:cursor-grabbing"
-        title="Déplacer"
+        title="Move"
         onClick={(e) => e.stopPropagation()}
         onPointerDown={(e) => {
           e.stopPropagation();
@@ -137,7 +137,7 @@ function LabNodeCard({
         // eslint-disable-next-line @next/next/no-img-element
         <img src={node.imageUrl} alt="" draggable={false} className="h-full w-full object-cover select-none" />
       ) : node.kind === "ref_image" ? (
-        <div className="flex h-full items-center justify-center bg-white/[0.04] text-[9px] text-white/35">Pas d’image</div>
+        <div className="flex h-full items-center justify-center bg-white/[0.04] text-[9px] text-white/35">No image</div>
       ) : node.kind === "video" && node.videoUrl && !node.pendingVideo ? (
         <div
           className="h-full w-full min-h-0"
@@ -429,9 +429,9 @@ export function ProjectLabCanvas({ open, onClose, projectTitle, storeUrl, runs, 
             <GitBranch className="h-5 w-5 text-violet-200" />
           </div>
           <div className="min-w-0">
-            <h2 className="truncate text-sm font-semibold text-white">Vue lab — architecture</h2>
+            <h2 className="truncate text-sm font-semibold text-white">Lab view — map</h2>
             <p className="truncate text-xs text-white/45">
-              Carte : cliquer-glisser pour déplacer · Fond : pan · Molette : zoom
+              Nodes: drag to move · Background: pan · Scroll wheel: zoom
             </p>
           </div>
         </div>
@@ -442,7 +442,7 @@ export function ProjectLabCanvas({ open, onClose, projectTitle, storeUrl, runs, 
             variant="secondary"
             className="border border-white/10 bg-white/5 text-white hover:bg-white/10"
             onClick={resetPositions}
-            title="Réinitialiser les positions"
+            title="Reset positions"
           >
             <RotateCcw className="h-4 w-4" />
           </Button>
@@ -475,7 +475,7 @@ export function ProjectLabCanvas({ open, onClose, projectTitle, storeUrl, runs, 
           </Button>
           <Button type="button" size="sm" variant="secondary" onClick={onClose} className="gap-1">
             <X className="h-4 w-4" />
-            Fermer
+            Close
           </Button>
         </div>
       </header>
@@ -558,13 +558,12 @@ export function ProjectLabCanvas({ open, onClose, projectTitle, storeUrl, runs, 
 
         {selected ? (
           <aside className="relative z-[2] w-[min(100%,300px)] shrink-0 border-l border-white/10 bg-black/50 p-4 backdrop-blur-md">
-            <div className="text-xs font-semibold uppercase tracking-wide text-violet-300/90">Nœud sélectionné</div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-violet-300/90">Selected node</div>
             <div className="mt-2 text-sm font-medium text-white">{selected.label}</div>
             {selected.sublabel ? <p className="mt-1 text-xs text-white/50">{selected.sublabel}</p> : null}
             {selected.kind === "folder" || selected.kind === "custom_angle" ? (
               <p className="mt-2 text-[11px] text-cyan-200/70">
-                Élément d’organisation (sauvegardé localement sur cet appareil). Les angles Link to Ad réels sont dans « Données
-                projet ».
+                Organization item (saved locally on this device). Real Link to Ad angles are under “Project data”.
               </p>
             ) : null}
             {selected.imageUrl ? (
@@ -580,11 +579,11 @@ export function ProjectLabCanvas({ open, onClose, projectTitle, storeUrl, runs, 
               />
             ) : null}
             {selected.pendingVideo ? (
-              <p className="mt-3 text-xs text-amber-200/80">Vidéo en cours de génération…</p>
+              <p className="mt-3 text-xs text-amber-200/80">Video generating…</p>
             ) : null}
             {selected.runId ? (
               <Button type="button" className="mt-4 w-full" size="sm" onClick={() => onOpenRunInEditor(selected.runId!)}>
-                Ouvrir dans Link to Ad
+                Open in Link to Ad
               </Button>
             ) : null}
           </aside>

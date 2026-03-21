@@ -25,7 +25,7 @@ type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   planId: AccountPlanId;
-  /** Liste des modèles inclus : onglet image ou vidéo du studio. */
+  /** Included models list: studio image vs video tab. */
   studioMode: "image" | "video";
   variant: StudioBillingVariant;
 };
@@ -48,17 +48,17 @@ export function StudioBillingDialog({ open, onOpenChange, planId, studioMode, va
         ? minPlanForStudioVideo(variant.blockedModelId)
         : minPlanForStudioImage(variant.blockedModelId as "nano" | "pro");
     const headline = upgradePlanMessage(requiredPlan, blockedLabel);
-    title = "Modèle non inclus";
-    description = headline || "Ce modèle nécessite un forfait supérieur.";
+    title = "Model not included";
+    description = headline || "This model requires a higher plan.";
   } else {
     const { currentCredits, requiredCredits } = variant;
-    title = "Crédits insuffisants";
+    title = "Not enough credits";
     description = (
       <>
-        Tu as <strong className="text-white/90">{currentCredits}</strong>{" "}
-        {currentCredits === 1 ? "crédit" : "crédits"} — cette génération en demande{" "}
+        You have <strong className="text-white/90">{currentCredits}</strong>{" "}
+        {currentCredits === 1 ? "credit" : "credits"}. This generation needs{" "}
         <strong className="text-white/90">{requiredCredits}</strong>{" "}
-        {requiredCredits === 1 ? "crédit" : "crédits"}.
+        {requiredCredits === 1 ? "credit" : "credits"}.
       </>
     );
   }
@@ -78,7 +78,7 @@ export function StudioBillingDialog({ open, onOpenChange, planId, studioMode, va
           {!isPlan ? (
             <div className="mt-5 space-y-2">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-200/90">
-                Acheter des crédits
+                Buy credits
               </p>
               <Dialog.Close asChild>
                 <Button
@@ -88,12 +88,12 @@ export function StudioBillingDialog({ open, onOpenChange, planId, studioMode, va
                 >
                   <Link href="/credits">
                     <Coins className="h-4 w-4 shrink-0" />
-                    Acheter des crédits
+                    Buy credits
                   </Link>
                 </Button>
               </Dialog.Close>
               <p className="text-[10px] leading-snug text-white/40">
-                Packs one-off — utilisables tout de suite, en complément ou sur le plan Free.
+                One-off packs — use right away on Free or stacked with a subscription.
               </p>
             </div>
           ) : null}
@@ -102,7 +102,7 @@ export function StudioBillingDialog({ open, onOpenChange, planId, studioMode, va
             <div className="my-5 flex items-center gap-3">
               <div className="h-px flex-1 bg-white/10" />
               <span className="text-[10px] font-semibold uppercase tracking-wide text-white/35">
-                Forfaits &amp; accès modèles
+                Plans &amp; model access
               </span>
               <div className="h-px flex-1 bg-white/10" />
             </div>
@@ -116,11 +116,10 @@ export function StudioBillingDialog({ open, onOpenChange, planId, studioMode, va
             }
           >
             <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-200/90">
-              Avec ton forfait actuel ({planDisplayName(planId)})
+              On your current plan ({planDisplayName(planId)})
             </p>
             <p className="mt-2 text-xs text-white/50">
-              Tu peux utiliser les modèles suivants dans le studio{" "}
-              {studioMode === "video" ? "vidéo" : "image"}&nbsp;:
+              You can use the following models in the {studioMode === "video" ? "video" : "image"} studio:
             </p>
             <ul className="mt-3 space-y-2 border-t border-white/10 pt-3">
               {allowed.length ? (
@@ -137,7 +136,7 @@ export function StudioBillingDialog({ open, onOpenChange, planId, studioMode, va
                 ))
               ) : (
                 <li className="text-sm text-amber-200/80">
-                  Aucun modèle studio dans ce volet — passe à un forfait supérieur.
+                  No studio models in this section — upgrade your plan.
                 </li>
               )}
             </ul>
@@ -150,7 +149,7 @@ export function StudioBillingDialog({ open, onOpenChange, planId, studioMode, va
                 variant="secondary"
                 className="border-white/15 bg-white/5 text-white hover:bg-white/10"
               >
-                Fermer
+                Close
               </Button>
             </Dialog.Close>
             <Dialog.Close asChild>
@@ -161,7 +160,7 @@ export function StudioBillingDialog({ open, onOpenChange, planId, studioMode, va
               >
                 <Link href="/subscription">
                   <Sparkles className="h-4 w-4" />
-                  Voir les forfaits
+                  View plans
                 </Link>
               </Button>
             </Dialog.Close>

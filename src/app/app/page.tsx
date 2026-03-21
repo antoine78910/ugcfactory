@@ -164,8 +164,8 @@ function runGenerationPreview(run: {
 const TEMPLATES = [
   {
     id: "template1",
-    title: "Template 1 — UGC Smartphone authentique (POV/Selfie)",
-    bestFor: "beauté / boisson / food / fashion / gadget",
+    title: "Template 1 — Authentic UGC smartphone (POV/Selfie)",
+    bestFor: "beauty / beverage / food / fashion / gadget",
   },
   {
     id: "template2",
@@ -175,7 +175,7 @@ const TEMPLATES = [
   {
     id: "template3",
     title: "Template 3 — Storytelling problem-solution UGC",
-    bestFor: "gadget / douleur / complément / niche émotionnelle",
+    bestFor: "gadget / pain point / supplement / emotional niche",
   },
 ] as const;
 
@@ -1148,7 +1148,7 @@ export default function AppBrandWizard() {
         Array.isArray(extracted.images) && typeof extracted.images[0] === "string" ? extracted.images[0] : null,
       );
       if (!nanoRefUrl) {
-        toast.error("Aucune image produit HTTPS valide pour NanoBanana (packshot requis).");
+        toast.error("No valid HTTPS product image for NanoBanana (packshot required).");
         setImageGen({ kind: "idle" });
         return;
       }
@@ -1458,7 +1458,7 @@ export default function AppBrandWizard() {
                                   size="icon"
                                   variant="secondary"
                                   className="h-9 w-9 border border-cyan-400/35 bg-cyan-500/15 text-cyan-100 hover:bg-cyan-500/30"
-                                  title="Vue lab — carte des générations (zoom, branches)"
+                                  title="Lab view — generation map (zoom, branches)"
                                   onClick={() =>
                                     setProjectLab({
                                       title: proj.title ?? proj.storeUrl,
@@ -1797,7 +1797,7 @@ export default function AppBrandWizard() {
                         icon="kling"
                         resolution="1080p"
                         durationRange="3s–30s"
-                        hint="Seul modèle disponible pour Motion Control."
+                        hint="Only model available for Motion Control."
                       />
                       {motionControlUpgradeMessage(planId) ? (
                         <p className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-100/90">
@@ -1809,11 +1809,11 @@ export default function AppBrandWizard() {
                       <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
                         <span className="text-xs font-semibold text-white/80">Quality</span>
                         <p className="mt-1 text-[10px] leading-snug text-white/40">
-                          720p et 1080p n’ont pas le même coût en crédits (voir Generate).
+                          720p and 1080p use different credit costs (see Generate).
                         </p>
                         <Select value={motionQuality} onValueChange={setMotionQuality}>
                           <SelectTrigger className="mt-2 rounded-xl border-white/15 bg-[#0a0a0d] text-white">
-                            <SelectValue placeholder="Qualité" />
+                            <SelectValue placeholder="Quality" />
                           </SelectTrigger>
                           <SelectContent position="popper" className={studioSelectContentClass}>
                             <SelectItem value="720p" className={studioSelectItemClass}>
@@ -1875,7 +1875,7 @@ export default function AppBrandWizard() {
                             </span>
                             {motionCreditsUsesEstimate ? (
                               <span className="text-[10px] font-normal text-white/50">
-                                ~{motionBillableSeconds}s estimée
+                                ~{motionBillableSeconds}s estimated
                               </span>
                             ) : (
                               <span className="text-[10px] font-normal text-white/50">{motionBillableSeconds}s</span>
@@ -1967,7 +1967,7 @@ export default function AppBrandWizard() {
 
                   {!extracted ? (
                     <div className="rounded-md border bg-background/30 p-4 text-sm text-muted-foreground">
-                      Colle une URL puis clique Extract.
+                      Paste a URL, then click Extract.
                     </div>
                   ) : (
                     <div className="space-y-3">
@@ -1978,13 +1978,13 @@ export default function AppBrandWizard() {
                       </div>
                       <div className="flex flex-wrap gap-2">
                         <Button variant="secondary" onClick={() => setStep("analysis")} disabled={!extracted}>
-                          Next → Analyse
+                          Next → Analysis
                         </Button>
                       </div>
                       {extracted?.images?.length ? (
                         <div className="space-y-2">
                           <div className="text-xs text-muted-foreground">
-                            Images trouvées: <span className="font-medium">{extracted?.images?.length}</span>
+                            Images found: <span className="font-medium">{extracted?.images?.length}</span>
                           </div>
                           <div className="grid gap-3 sm:grid-cols-3">
                             {extracted?.images?.slice(0, 6).map((u) => (
@@ -2007,7 +2007,7 @@ export default function AppBrandWizard() {
             {appSection === "link_to_ad" && false && step === "analysis" && (
               <Card className="border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
                 <CardHeader>
-                  <CardTitle className="text-base">2) Analyse GPT (1→9)</CardTitle>
+                  <CardTitle className="text-base">2) GPT analysis (1→9)</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="flex flex-wrap gap-2">
@@ -2022,7 +2022,7 @@ export default function AppBrandWizard() {
 
                   {!analysis ? (
                     <div className="rounded-md border bg-background/30 p-4 text-sm text-muted-foreground">
-                      Clique “Run GPT analysis”.
+                      Click “Run GPT analysis”.
                     </div>
                   ) : (
                     <div className="space-y-3">
@@ -2066,13 +2066,13 @@ export default function AppBrandWizard() {
             {appSection === "link_to_ad" && false && step === "quiz" && (
               <Card className="border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
                 <CardHeader>
-                  <CardTitle className="text-base">3) Mini-quiz (pré-rempli)</CardTitle>
+                  <CardTitle className="text-base">3) Mini quiz (pre-filled)</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="flex flex-wrap gap-2">
                     <Button variant="secondary" onClick={onAutoFillQuiz} disabled={!extracted || isQuizAutofilling}>
                       {isQuizAutofilling ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                      Auto-répondre (depuis l’URL)
+                      Auto-fill (from URL)
                     </Button>
                     <Button variant="secondary" onClick={() => setStep("image")} disabled={!analysis}>
                       Next → Image
@@ -2080,7 +2080,7 @@ export default function AppBrandWizard() {
                   </div>
                   <p className="text-xs text-muted-foreground">
                     {quizPrecisionNote ||
-                      "Auto-répondre aide à démarrer, mais ce sera plus précis si vous le rentrez vous-même."}
+                      "Auto-fill helps you start, but answers are more accurate if you edit them yourself."}
                   </p>
 
                   <div className="grid gap-3">
@@ -2088,40 +2088,40 @@ export default function AppBrandWizard() {
                       value={quiz.aboutProduct}
                       onChange={(e) => setQuiz((q) => ({ ...q, aboutProduct: e.target.value }))}
                       rows={4}
-                      placeholder="1) Parle-nous de ton produit..."
+                      placeholder="1) Tell us about your product..."
                     />
                     <Textarea
                       value={quiz.problems}
                       onChange={(e) => setQuiz((q) => ({ ...q, problems: e.target.value }))}
                       rows={3}
-                      placeholder="2) Quel(s) problème(s) ton produit résout ?"
+                      placeholder="2) What problem(s) does your product solve?"
                     />
                     <Textarea
                       value={quiz.promises}
                       onChange={(e) => setQuiz((q) => ({ ...q, promises: e.target.value }))}
                       rows={3}
-                      placeholder="3) Quelles sont ses promesses principales ?"
+                      placeholder="3) What are its main promises?"
                     />
                     <Textarea
                       value={quiz.persona}
                       onChange={(e) => setQuiz((q) => ({ ...q, persona: e.target.value }))}
                       rows={4}
-                      placeholder="4) Décris ton persona type (âge, situation, désir...)"
+                      placeholder="4) Describe your target persona (age, situation, desires...)"
                     />
                     <Textarea
                       value={quiz.angles}
                       onChange={(e) => setQuiz((q) => ({ ...q, angles: e.target.value }))}
                       rows={3}
-                      placeholder="5) Tes principaux angles marketing ?"
+                      placeholder="5) Your main marketing angles?"
                     />
                     <Textarea
                       value={quiz.offers}
                       onChange={(e) => setQuiz((q) => ({ ...q, offers: e.target.value }))}
                       rows={3}
-                      placeholder="6) Tes offres actuelles (promo, bundle, garantie, livraison...)"
+                      placeholder="6) Your current offers (promo, bundle, guarantee, shipping...)"
                     />
                     <div className="space-y-2">
-                      <Label>7) Durée souhaitée vidéos</Label>
+                      <Label>7) Preferred video length</Label>
                       <Select
                         value={quiz.videoDurationPreference}
                         onValueChange={(v) =>
@@ -2165,7 +2165,7 @@ export default function AppBrandWizard() {
                       disabled={!extracted?.images?.length || isClassifyingImages}
                     >
                       {isClassifyingImages ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                      Trouver images “produit seul” (AI)
+                      Find “product-only” images (AI)
                     </Button>
                     <Select value={nanoModel} onValueChange={(v) => setNanoModel(v as NanoModel)}>
                       <SelectTrigger className="w-[220px] rounded-xl border-white/15 bg-[#0a0a0d] text-white">
@@ -2185,7 +2185,7 @@ export default function AppBrandWizard() {
                   {productOnlyCandidates.length > 0 ? (
                     <div className="space-y-2">
                       <p className="text-xs text-muted-foreground">
-                        Sélectionne 1–4 images packshot (multi-angles) pour aider NanoBanana à garder le produit réaliste.
+                        Select 1–4 packshot images (multi-angle) to help NanoBanana keep the product realistic.
                       </p>
                       <div className="grid gap-3 sm:grid-cols-2">
                         {productOnlyCandidates.slice(0, 6).map((c) => {
@@ -2220,9 +2220,9 @@ export default function AppBrandWizard() {
                     </div>
                   ) : hasClassifiedImages && !isClassifyingImages ? (
                     <div className="rounded-md border bg-background/30 p-3 text-sm text-muted-foreground">
-                      Aucun packshot “produit seul” détecté sur cette page.
+                      No “product-only” packshot detected on this page.
                       <div className="mt-2 text-xs">
-                        Pour de meilleurs résultats, uploade 2–4 images du produit seul (face, profil, dos, détail).
+                        For best results, upload 2–4 images of the product alone (front, side, back, detail).
                       </div>
                     </div>
                   ) : null}
@@ -2232,7 +2232,7 @@ export default function AppBrandWizard() {
                       <div>
                         <div className="text-sm font-medium">Upload packshots (produit seul)</div>
                         <div className="text-xs text-muted-foreground">
-                          Idéal: 2–4 angles. Formats: jpg/png/webp.
+                          Ideal: 2–4 angles. Formats: jpg/png/webp.
                         </div>
                       </div>
                       <input
@@ -2262,7 +2262,7 @@ export default function AppBrandWizard() {
                     {packshotUrls.length > 0 ? (
                       <div className="mt-3">
                         <div className="text-xs text-muted-foreground mb-2">
-                          Packshots sélectionnés: <span className="font-medium">{packshotUrls.length}</span>
+                          Packshots selected: <span className="font-medium">{packshotUrls.length}</span>
                         </div>
                         <div className="grid gap-3 sm:grid-cols-4">
                           {packshotUrls.slice(0, 8).map((u) => (
@@ -2271,7 +2271,7 @@ export default function AppBrandWizard() {
                               type="button"
                               className="rounded-md border overflow-hidden cursor-pointer hover:opacity-90"
                               onClick={() => setLightboxUrl(u)}
-                              title="Clique pour agrandir"
+                              title="Click to enlarge"
                             >
                               <img src={u} alt="Packshot" className="h-24 w-full object-cover" />
                             </button>
@@ -2280,7 +2280,7 @@ export default function AppBrandWizard() {
                       </div>
                     ) : (
                       <div className="mt-3 text-xs text-muted-foreground">
-                        Aucun packshot sélectionné pour l’instant.
+                        No packshot selected yet.
                       </div>
                     )}
                   </div>
@@ -2297,7 +2297,7 @@ export default function AppBrandWizard() {
                       }
                     >
                       {isCreatingPerfectImagePrompt ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                      {imagePrompt.trim().length > 0 ? "Prompt déjà généré" : "Create “perfect” image prompt"}
+                      {imagePrompt.trim().length > 0 ? "Prompt already generated" : "Create “perfect” image prompt"}
                     </Button>
                     {imagePrompt.trim().length > 0 ? (
                       <Button
@@ -2327,7 +2327,7 @@ export default function AppBrandWizard() {
                   <div className="rounded-md border bg-background/30 p-3 text-sm">
                     <div className="font-medium mb-2">Image prompt</div>
                     <div className="whitespace-pre-wrap text-muted-foreground">
-                      {imagePrompt || "— (clique “Create perfect image prompt”) —"}
+                      {imagePrompt || "— (click “Create perfect image prompt”) —"}
                     </div>
                     {negativePrompt ? (
                       <div className="mt-3">
@@ -2350,7 +2350,7 @@ export default function AppBrandWizard() {
                             setSelectedImageUrl(u);
                             setLightboxUrl(u);
                           }}
-                          title="Clique pour agrandir"
+                          title="Click to enlarge"
                         >
                           <div className="aspect-[9/16] w-full">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -2383,7 +2383,7 @@ export default function AppBrandWizard() {
             {appSection === "link_to_ad" && false && step === "video" && (
               <Card className="border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
                 <CardHeader>
-                  <CardTitle className="text-base">5) Template → vidéo (Kling 3.0 Standard)</CardTitle>
+                  <CardTitle className="text-base">5) Template → video (Kling 3.0 Standard)</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <p className="text-xs text-muted-foreground">
@@ -2422,7 +2422,7 @@ export default function AppBrandWizard() {
                       }
                     >
                       {isBuildingVideoPrompt ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                      {videoPrompt.trim().length > 0 ? "Prompt déjà généré" : "Build UGC prompt from template"}
+                      {videoPrompt.trim().length > 0 ? "Prompt already generated" : "Build UGC prompt from template"}
                     </Button>
                     {videoPrompt.trim().length > 0 ? (
                       <Button
@@ -2458,7 +2458,7 @@ export default function AppBrandWizard() {
                       value={videoPrompt}
                       onChange={(e) => setVideoPrompt(e.target.value)}
                       rows={10}
-                      placeholder="Clique “Build UGC prompt from template”…"
+                      placeholder="Click “Build UGC prompt from template”…"
                     />
                   </div>
 

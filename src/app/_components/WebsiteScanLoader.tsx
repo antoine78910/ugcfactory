@@ -4,16 +4,16 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 type WebsiteScanLoaderProps = {
-  /** Mot affiché avec l’effet « scan » (ex. Scan, Site…) */
+  /** Word shown with the scan effect (e.g. Scan, Site…) */
   label?: string;
-  /** Sous-texte descriptif (statut détaillé) */
+  /** Descriptive subtext (detailed status) */
   subtitle?: ReactNode;
   className?: string;
 };
 
 /**
- * Animation type « scan laser » sur le texte + barre verticale (inspiré loader scan),
- * couleurs violet / lilas (branding Link to Ad).
+ * Laser-scan style animation on text + vertical bar (scan-loader inspired),
+ * violet / lilac (Link to Ad branding).
  */
 export function WebsiteScanLoader({
   label = "Scan",
@@ -23,7 +23,7 @@ export function WebsiteScanLoader({
   return (
     <div className={cn("flex min-w-0 flex-1 flex-col gap-1 sm:flex-row sm:items-center sm:gap-4", className)}>
       <div className="relative inline-block max-w-fit py-1">
-        {/* Zone de déplacement des barres (hauteur ~ texte lg) */}
+        {/* Bar travel area (~ lg text height) */}
         <div className="pointer-events-none absolute inset-x-0 top-0 h-[3rem] overflow-visible">
           <div className="lta-website-scan-line-glow" aria-hidden />
           <div className="lta-website-scan-line-solid" aria-hidden />

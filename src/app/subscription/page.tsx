@@ -217,7 +217,7 @@ export default function SubscriptionPage() {
         ) : null}
 
         <p className="mx-auto max-w-3xl text-center text-sm font-semibold tracking-wide text-violet-200/90">
-          💳 TON SETUP IDÉAL
+          💳 YOUR IDEAL SETUP
         </p>
 
         {/* Four plan cards */}
@@ -369,8 +369,8 @@ export default function SubscriptionPage() {
             Studio Image &amp; Video — same rules as the app. Higher tiers unlock heavier models (more credits).
           </p>
           <p className="mt-2 text-xs text-white/35">
-            <span className="font-semibold text-white/50">Free</span> (credit packs) : accès modèles identique à{" "}
-            <span className="text-white/60">Starter</span> dans le studio.
+            <span className="font-semibold text-white/50">Free</span> (credit packs) has the same studio model access as{" "}
+            <span className="text-white/60">Starter</span>.
           </p>
 
           <div className="mt-6 overflow-x-auto rounded-2xl border border-white/10 bg-[#08090e]">

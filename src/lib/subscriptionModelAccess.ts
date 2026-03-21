@@ -109,7 +109,7 @@ export function planDisplayName(planId: AccountPlanId): string {
 export function upgradePlanMessage(requiredPlan: AccountPlanId, featureLabel: string): string {
   if (requiredPlan === "free") return "";
   const name = planDisplayName(requiredPlan);
-  return `Passe au forfait ${name} pour utiliser ${featureLabel}.`;
+  return `Upgrade to the ${name} plan to use ${featureLabel}.`;
 }
 
 const STUDIO_VIDEO_LABELS: Record<string, string> = {

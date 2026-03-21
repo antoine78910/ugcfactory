@@ -192,8 +192,8 @@ export default function CreditsPage() {
         </section>
 
         <section className="rounded-3xl border border-white/10 bg-white/[0.02] p-6">
-          <div className="text-sm font-semibold text-white/80">🧠 Petit hack conversion</div>
-          <div className="mt-1 text-sm text-white/60">👉 Tu peux même booster :</div>
+          <div className="text-sm font-semibold text-white/80">🧠 Conversion tip</div>
+          <div className="mt-1 text-sm text-white/60">👉 You can also push harder with:</div>
 
           <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
             <div className="rounded-2xl border border-violet-400/20 bg-violet-400/10 p-4">
