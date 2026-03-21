@@ -376,7 +376,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const summaryTextRef = useRef("");
   const isWorkingRef = useRef(false);
   const autoContinueScriptsFiredRef = useRef(false);
-  const nanoAutoGenKeyRef = useRef<string>("");
   const latestSnapRef = useRef<LinkToAdUniverseSnapshotV1 | null>(null);
   /** Prompt string sent for the current image task (for accurate persist after poll). */
   const lastNanoImagePromptRef = useRef("");
@@ -1750,22 +1749,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     void onContinueScripts();
   }, [showContinueScripts, isWorking]);
 
-  useEffect(() => {
-    if (selectedAngleIndex === null || !scriptsText.trim() || nanoBananaPromptsRaw.trim()) return;
-    if (isNanoPromptsLoading || isNanoAllImagesSubmitting || Boolean(nanoPollTaskId)) return;
-    const key = `${selectedAngleIndex}|${scriptsText.length}|${nanoBananaPromptsRaw ? 1 : 0}`;
-    if (nanoAutoGenKeyRef.current === key) return;
-    nanoAutoGenKeyRef.current = key;
-    void onGenerateNanoBananaPrompts(selectedAngleIndex as 0 | 1 | 2);
-  }, [
-    selectedAngleIndex,
-    scriptsText,
-    nanoBananaPromptsRaw,
-    isNanoPromptsLoading,
-    isNanoAllImagesSubmitting,
-    nanoPollTaskId,
-  ]);
-
   async function handleGenerateVideoFromSelectedImage() {
     if (nanoBananaSelectedImageIndex === null || !nanoBananaImageUrl?.trim()) {
       toast.error("Select a reference image first.");
@@ -2349,19 +2332,24 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                   nanoPollTaskId ||
                   isNanoAllImagesSubmitting) ? (
                   <div className="mt-auto shrink-0 rounded-xl border border-white/10 bg-black/25 p-4">
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-col gap-3">
                       {!nanoBananaPromptsRaw.trim() &&
                       !isNanoPromptsLoading &&
                       !isNanoAllImagesSubmitting &&
                       !nanoPollTaskId ? (
-                        <Button
-                          type="button"
-                          disabled={!resolvedPreviewUrl}
-                          className={primaryBtnClass}
-                          onClick={() => void onGenerateNanoBananaPrompts(selectedAngleIndex as 0 | 1 | 2)}
-                        >
-                          Retry prompts &amp; 3 images
-                        </Button>
+                        <>
+                          <p className="text-sm text-white/75">
+                            Angle sélectionné — lance la génération quand tu veux (prompts GPT + 3 images NanoBanana).
+                          </p>
+                          <Button
+                            type="button"
+                            disabled={!resolvedPreviewUrl}
+                            className={primaryBtnClass}
+                            onClick={() => void onGenerateNanoBananaPrompts(selectedAngleIndex as 0 | 1 | 2)}
+                          >
+                            Générer les 3 prompts &amp; images
+                          </Button>
+                        </>
                       ) : null}
                       {/* Prompt copy lives only in the top status bar while isNanoPromptsLoading */}
                       {nanoPollTaskId || isNanoAllImagesSubmitting ? (
