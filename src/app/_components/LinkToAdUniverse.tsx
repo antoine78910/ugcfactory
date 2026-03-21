@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { motion, useReducedMotion } from "framer-motion";
 import { toast } from "sonner";
 import { Check, LayoutGrid, Loader2, Maximize2, Sparkles, Video, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -19,10 +20,40 @@ import {
   type LinkToAdUniverseSnapshotV1,
 } from "@/lib/linkToAdUniverse";
 import { LinkToAdUniverseStepper } from "@/app/_components/LinkToAdUniverseStepper";
-import { TextLoop } from "@/components/core/text-loop";
 import { WebsiteScanChecklist } from "@/app/_components/WebsiteScanChecklist";
 import { WebsiteScanLoader } from "@/app/_components/WebsiteScanLoader";
-import { LINK_TO_AD_LOADING_LOOPS } from "@/lib/linkToAd/loadingMessageLoops";
+import { TextShimmer } from "@/components/ui/text-shimmer";
+import { cn } from "@/lib/utils";
+import { LINK_TO_AD_LOADING_MESSAGES } from "@/lib/linkToAd/loadingMessageLoops";
+import type { InternalFetch } from "@/lib/linkToAd/internalFetch";
+import { runInitialPipeline } from "@/lib/linkToAd/runInitialPipeline";
+
+/** Same-origin API calls with session (mirrors server `createInternalFetchFromRequest`). */
+const browserPipelineFetch = ((path: string, init?: RequestInit) => fetch(path, init)) as InternalFetch;
+
+/** Shimmer sweep on copy + very subtle tilt (spinner beside it supplies the obvious “rotate”). */
+function StatusLineShimmer({ text, className }: { text: string; className?: string }) {
+  const reduceMotion = useReducedMotion();
+  return (
+    <motion.span
+      className="inline-block align-baseline will-change-transform"
+      animate={reduceMotion ? { rotate: 0 } : { rotate: [0, 0.35, 0, -0.35, 0] }}
+      transition={{ repeat: reduceMotion ? 0 : Infinity, duration: 6.5, ease: "easeInOut" }}
+    >
+      <TextShimmer
+        as="span"
+        className={cn(
+          "dark:[--base-color:rgba(210,200,255,0.5)] dark:[--base-gradient-color:#faf5ff]",
+          className,
+        )}
+        duration={2.8}
+        spread={1.65}
+      >
+        {text}
+      </TextShimmer>
+    </motion.span>
+  );
+}
 
 export type LinkToAdUniverseProps = {
   /** When set, load this run once (e.g. from Projects). */
@@ -135,6 +166,9 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     | "ready"
     | "error"
   >("idle");
+
+  /** Real checklist step 0–4 during `runInitialPipeline` from the browser (no fake timer). */
+  const [serverPipelineStepIndex, setServerPipelineStepIndex] = useState<number | null>(null);
 
   const [universeRunId, setUniverseRunId] = useState<string | null>(null);
   const [lastExtractedJson, setLastExtractedJson] = useState<Record<string, unknown> | null>(null);
@@ -599,24 +633,18 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
 
     try {
       setStage("server_pipeline");
-      const pipeRes = await fetch("/api/link-to-ad/initial-pipeline", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          storeUrl: url,
-          neutralUploadUrl: userUploadedImageUrl,
-        }),
-      });
-      const pipeJson = (await pipeRes.json()) as {
-        runId?: string;
-        scriptsStepOk?: boolean;
-        scriptsError?: string;
-        error?: string;
-      };
+      setServerPipelineStepIndex(0);
+      const pipeResult = await runInitialPipeline(
+        browserPipelineFetch,
+        { storeUrl: url, neutralUploadUrl: userUploadedImageUrl },
+        (step) => setServerPipelineStepIndex(step),
+      );
 
-      if (!pipeRes.ok || !pipeJson.runId) {
-        if (pipeJson.runId) {
-          const getRes = await fetch(`/api/runs/get?runId=${encodeURIComponent(pipeJson.runId)}`, { cache: "no-store" });
+      if (!pipeResult.ok) {
+        if (pipeResult.runId) {
+          const getRes = await fetch(`/api/runs/get?runId=${encodeURIComponent(pipeResult.runId)}`, {
+            cache: "no-store",
+          });
           const getJson = (await getRes.json()) as {
             data?: { id: string; store_url?: string | null; title?: string | null; extracted?: unknown };
             error?: string;
@@ -624,17 +652,17 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           if (getRes.ok && getJson.data) {
             hydrateFromRun(getJson.data, { silent: true });
             toast.message("Pipeline stopped early", {
-              description: pipeJson.error || "Partial data was saved — check your project.",
+              description: pipeResult.error || "Partial data was saved — check your project.",
             });
             setStage("ready");
             onRunsChanged?.();
             return;
           }
         }
-        throw new Error(pipeJson.error || "Initial pipeline failed");
+        throw new Error(pipeResult.error || "Initial pipeline failed");
       }
 
-      const getRes = await fetch(`/api/runs/get?runId=${encodeURIComponent(pipeJson.runId)}`, { cache: "no-store" });
+      const getRes = await fetch(`/api/runs/get?runId=${encodeURIComponent(pipeResult.runId)}`, { cache: "no-store" });
       const getJson = (await getRes.json()) as {
         data?: { id: string; store_url?: string | null; title?: string | null; extracted?: unknown };
         error?: string;
@@ -645,10 +673,10 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       hydrateFromRun(getJson.data, { silent: true });
       setStage("ready");
       toast.success("Project saved");
-      if (pipeJson.scriptsStepOk) {
+      if (pipeResult.scriptsStepOk) {
         toast.success("3 UGC scripts ready");
-      } else if (pipeJson.scriptsError) {
-        toast.warning("Scripts step failed", { description: pipeJson.scriptsError });
+      } else if (pipeResult.scriptsError) {
+        toast.warning("Scripts step failed", { description: pipeResult.scriptsError });
       }
       onRunsChanged?.();
     } catch (err) {
@@ -656,6 +684,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       const message = err instanceof Error ? err.message : "Unknown error";
       toast.error("Universe error", { description: message });
     } finally {
+      setServerPipelineStepIndex(null);
       setIsWorking(false);
     }
   }
@@ -1305,43 +1334,43 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
 
   const universeLoadingState = useMemo((): {
     phase: string | null;
-    messages: readonly string[];
+    message: string | null;
   } => {
     if (nanoPollTaskId || isNanoAllImagesSubmitting) {
-      return { phase: "nano_three", messages: LINK_TO_AD_LOADING_LOOPS.nano_three };
+      return { phase: "nano_three", message: LINK_TO_AD_LOADING_MESSAGES.nano_three };
     }
     if (isNanoPromptsLoading) {
-      return { phase: "nano_prompts", messages: LINK_TO_AD_LOADING_LOOPS.nano_prompts };
+      return { phase: "nano_prompts", message: LINK_TO_AD_LOADING_MESSAGES.nano_prompts };
     }
     if (isNanoImageSubmitting) {
-      return { phase: "nano_single_image", messages: LINK_TO_AD_LOADING_LOOPS.nano_single_image };
+      return { phase: "nano_single_image", message: LINK_TO_AD_LOADING_MESSAGES.nano_single_image };
     }
     if (isVideoPromptLoading) {
-      return { phase: "video_prompt", messages: LINK_TO_AD_LOADING_LOOPS.video_prompt };
+      return { phase: "video_prompt", message: LINK_TO_AD_LOADING_MESSAGES.video_prompt };
     }
     if (isKlingSubmitting) {
-      return { phase: "kling_starting", messages: LINK_TO_AD_LOADING_LOOPS.kling_starting };
+      return { phase: "kling_starting", message: LINK_TO_AD_LOADING_MESSAGES.kling_starting };
     }
     if (klingPollTaskId) {
-      return { phase: "kling_rendering", messages: LINK_TO_AD_LOADING_LOOPS.kling_rendering };
+      return { phase: "kling_rendering", message: LINK_TO_AD_LOADING_MESSAGES.kling_rendering };
     }
-    if (!isWorking) return { phase: null, messages: [] };
+    if (!isWorking) return { phase: null, message: null };
     if (stage === "server_pipeline") {
-      return { phase: "server_pipeline", messages: LINK_TO_AD_LOADING_LOOPS.server_pipeline };
+      return { phase: "server_pipeline", message: LINK_TO_AD_LOADING_MESSAGES.server_pipeline };
     }
     if (stage === "scanning") {
-      return { phase: "scanning", messages: LINK_TO_AD_LOADING_LOOPS.scanning };
+      return { phase: "scanning", message: LINK_TO_AD_LOADING_MESSAGES.scanning };
     }
     if (stage === "finding_image") {
-      return { phase: "finding_image", messages: LINK_TO_AD_LOADING_LOOPS.finding_image };
+      return { phase: "finding_image", message: LINK_TO_AD_LOADING_MESSAGES.finding_image };
     }
     if (stage === "summarizing") {
-      return { phase: "summarizing", messages: LINK_TO_AD_LOADING_LOOPS.summarizing };
+      return { phase: "summarizing", message: LINK_TO_AD_LOADING_MESSAGES.summarizing };
     }
     if (stage === "writing_scripts") {
-      return { phase: "writing_scripts", messages: LINK_TO_AD_LOADING_LOOPS.writing_scripts };
+      return { phase: "writing_scripts", message: LINK_TO_AD_LOADING_MESSAGES.writing_scripts };
     }
-    return { phase: "working", messages: LINK_TO_AD_LOADING_LOOPS.working };
+    return { phase: "working", message: LINK_TO_AD_LOADING_MESSAGES.working };
   }, [
     nanoPollTaskId,
     isNanoAllImagesSubmitting,
@@ -1354,7 +1383,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     stage,
   ]);
 
-  const showUniverseLoading = universeLoadingState.messages.length > 0;
+  const showUniverseLoading = universeLoadingState.message !== null;
 
   useEffect(() => {
     if (!showContinueScripts) {
@@ -1488,40 +1517,36 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                             : "Scanning…"
                   }
                   subtitle={
-                    <TextLoop
-                      className="block"
-                      activeKey={universeLoadingState.phase ?? "idle"}
-                      intervalMs={2600}
-                    >
-                      {universeLoadingState.messages.map((m) => (
-                        <span key={m}>{m}</span>
-                      ))}
-                    </TextLoop>
+                    universeLoadingState.message ? (
+                      <StatusLineShimmer
+                        text={universeLoadingState.message}
+                        className="block text-left text-xs leading-snug sm:text-sm"
+                      />
+                    ) : null
                   }
                   className="min-w-0 flex-1"
                 />
-                <WebsiteScanChecklist stage={stage} isWorking={isWorking} className="shrink-0 lg:max-w-[min(100%,22rem)]" />
+                <WebsiteScanChecklist
+                  stage={stage}
+                  isWorking={isWorking}
+                  serverPipelineStepIndex={serverPipelineStepIndex}
+                  className="shrink-0 lg:max-w-[min(100%,22rem)]"
+                />
               </div>
             ) : (
-              <>
-                <Loader2 className="h-4 w-4 shrink-0 animate-spin text-violet-300" aria-hidden />
-                <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                  <TextLoop
-                    className="text-sm font-medium text-violet-100"
-                    activeKey={universeLoadingState.phase ?? "idle"}
-                    intervalMs={2600}
-                  >
-                    {universeLoadingState.messages.map((m) => (
-                      <span key={m}>{m}</span>
-                    ))}
-                  </TextLoop>
+              <div className="flex min-w-0 items-start gap-3 sm:gap-4">
+                <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-violet-300" aria-hidden />
+                <div className="flex min-w-0 flex-col gap-1">
+                  {universeLoadingState.message ? (
+                    <StatusLineShimmer text={universeLoadingState.message} className="text-sm font-medium" />
+                  ) : null}
                   {(nanoPollTaskId || isNanoAllImagesSubmitting) ? (
                     <span className="text-xs font-normal text-white/50">
                       This may take several minutes.
                     </span>
                   ) : null}
                 </div>
-              </>
+              </div>
             )}
           </div>
         ) : null}
@@ -1538,11 +1563,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                   >
                     <div className="flex items-center gap-2.5 rounded-2xl border border-violet-500/35 bg-[#0b0912]/95 px-5 py-2.5 shadow-[0_6px_0_0_rgba(76,29,149,0.75)]">
                       <Loader2 className="h-5 w-5 shrink-0 animate-spin text-violet-300" aria-hidden />
-                      <TextLoop className="text-sm font-semibold text-white/90" activeKey="url-start" intervalMs={2200}>
-                        <span>Starting…</span>
-                        <span>Spinning up your scan…</span>
-                        <span>Connecting to the store…</span>
-                      </TextLoop>
+                      <StatusLineShimmer text="Starting your scan…" className="text-sm font-semibold" />
                     </div>
                   </div>
                 ) : null}
@@ -1627,13 +1648,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                           {storeHostnameResolved || storeUrl.trim() || "—"}
                         </p>
                         {isWorking ? (
-                          <div className="mt-1 text-xs text-violet-300/90">
-                            <TextLoop activeKey="store-card-scan" intervalMs={2400}>
-                              <span>Scanning…</span>
-                              <span>Fetching the page…</span>
-                              <span>Reading product signals…</span>
-                            </TextLoop>
-                          </div>
+                          <p className="mt-1 text-xs text-violet-300/90">Scanning the store…</p>
                         ) : null}
                       </div>
                     )}
@@ -1860,49 +1875,43 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                   </div>
                 ) : null}
 
-                <div className="mt-auto shrink-0 rounded-xl border border-white/10 bg-black/25 p-4">
-                  <div className="flex flex-wrap gap-2">
-                    {selectedAngleIndex !== null &&
-                    !nanoBananaPromptsRaw.trim() &&
-                    !isNanoPromptsLoading &&
-                    !isNanoAllImagesSubmitting &&
-                    !nanoPollTaskId ? (
-                      <Button
-                        type="button"
-                        disabled={!resolvedPreviewUrl}
-                        className={primaryBtnClass}
-                        onClick={() => void onGenerateNanoBananaPrompts(selectedAngleIndex as 0 | 1 | 2)}
-                      >
-                        Retry prompts &amp; 3 images
-                      </Button>
-                    ) : null}
-                    {nanoPollTaskId || isNanoPromptsLoading || isNanoAllImagesSubmitting ? (
-                      <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm font-medium text-violet-200">
-                        <span className="inline-flex items-center gap-2">
-                          <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
-                          <TextLoop
-                            activeKey={
-                              nanoPollTaskId || isNanoAllImagesSubmitting ? "nano_three_panel" : "nano_prompts_panel"
-                            }
-                            intervalMs={2600}
-                          >
-                            {(nanoPollTaskId || isNanoAllImagesSubmitting
-                              ? LINK_TO_AD_LOADING_LOOPS.nano_three
-                              : LINK_TO_AD_LOADING_LOOPS.nano_prompts
-                            ).map((m) => (
-                              <span key={m}>{m}</span>
-                            ))}
-                          </TextLoop>
-                        </span>
-                        {nanoPollTaskId || isNanoAllImagesSubmitting ? (
+                {selectedAngleIndex !== null &&
+                ((!nanoBananaPromptsRaw.trim() &&
+                  !isNanoPromptsLoading &&
+                  !isNanoAllImagesSubmitting &&
+                  !nanoPollTaskId) ||
+                  nanoPollTaskId ||
+                  isNanoAllImagesSubmitting) ? (
+                  <div className="mt-auto shrink-0 rounded-xl border border-white/10 bg-black/25 p-4">
+                    <div className="flex flex-wrap gap-2">
+                      {!nanoBananaPromptsRaw.trim() &&
+                      !isNanoPromptsLoading &&
+                      !isNanoAllImagesSubmitting &&
+                      !nanoPollTaskId ? (
+                        <Button
+                          type="button"
+                          disabled={!resolvedPreviewUrl}
+                          className={primaryBtnClass}
+                          onClick={() => void onGenerateNanoBananaPrompts(selectedAngleIndex as 0 | 1 | 2)}
+                        >
+                          Retry prompts &amp; 3 images
+                        </Button>
+                      ) : null}
+                      {/* Prompt copy lives only in the top status bar while isNanoPromptsLoading */}
+                      {nanoPollTaskId || isNanoAllImagesSubmitting ? (
+                        <div className="flex flex-col gap-1.5 text-sm font-medium text-violet-200">
+                          <span className="inline-flex items-center gap-2">
+                            <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                            <span>{LINK_TO_AD_LOADING_MESSAGES.nano_three}</span>
+                          </span>
                           <span className="text-xs font-normal text-white/45">
                             This may take several minutes.
                           </span>
-                        ) : null}
-                      </span>
-                    ) : null}
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
-                </div>
+                ) : null}
               </div>
             ) : null}
 
@@ -2033,21 +2042,13 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                         {isKlingSubmitting ? (
                           <div className="mt-4 flex items-center gap-2 text-xs text-violet-200">
                             <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
-                            <TextLoop activeKey="kling_start_panel" intervalMs={2400}>
-                              {LINK_TO_AD_LOADING_LOOPS.kling_starting.map((m) => (
-                                <span key={m}>{m}</span>
-                              ))}
-                            </TextLoop>
+                            <span>{LINK_TO_AD_LOADING_MESSAGES.kling_starting}</span>
                           </div>
                         ) : null}
                         {klingPollTaskId ? (
                           <p className="mt-4 flex items-center gap-2 text-xs text-violet-200">
                             <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
-                            <TextLoop activeKey="kling_poll_panel" intervalMs={2600}>
-                              {LINK_TO_AD_LOADING_LOOPS.kling_rendering.map((m) => (
-                                <span key={m}>{m}</span>
-                              ))}
-                            </TextLoop>
+                            <span>{LINK_TO_AD_LOADING_MESSAGES.kling_rendering}</span>
                           </p>
                         ) : null}
                       </div>
@@ -2077,11 +2078,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                           {isVideoPromptLoading ? (
                             <div className="mt-3 flex items-center gap-2 text-xs text-violet-200">
                               <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
-                              <TextLoop activeKey="video_prompt_panel" intervalMs={2600}>
-                                {LINK_TO_AD_LOADING_LOOPS.video_prompt.map((m) => (
-                                  <span key={m}>{m}</span>
-                                ))}
-                              </TextLoop>
+                              <span>{LINK_TO_AD_LOADING_MESSAGES.video_prompt}</span>
                             </div>
                           ) : null}
                           {ugcVideoPromptGpt ? (

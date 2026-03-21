@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 type WebsiteScanLoaderProps = {
   /** Mot affiché avec l’effet « scan » (ex. Scan, Site…) */
   label?: string;
-  /** Sous-texte descriptif (statut détaillé) — string ou composant (ex. TextLoop) */
+  /** Sous-texte descriptif (statut détaillé) */
   subtitle?: ReactNode;
   className?: string;
 };

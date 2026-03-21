@@ -40,20 +40,33 @@ export type InitialPipelineResult =
   | { ok: true; runId: string; scriptsStepOk: boolean; scriptsError?: string }
   | { ok: false; error: string; runId?: string };
 
+/** Checklist step 0–4 while the initial pipeline runs (real order, not simulated). */
+export type InitialPipelineStepIndex = 0 | 1 | 2 | 3 | 4;
+
 /**
- * Full Link to Ad initial chain on the server: extract → classify → brand brief → save → UGC scripts → save.
- * Survives client navigation because work happens in one long server request.
+ * Full Link to Ad initial chain: extract → classify → brand brief → save → UGC scripts → save.
+ * Optional `onProgress` fires at the start of each major step (for UI). Safe to call from browser `fetch`.
  */
 export async function runInitialPipeline(
   f: InternalFetch,
   opts: { storeUrl: string; neutralUploadUrl: string | null },
+  onProgress?: (step: InitialPipelineStepIndex) => void,
 ): Promise<InitialPipelineResult> {
   const url = opts.storeUrl.trim();
   const userUploadedImageUrl = opts.neutralUploadUrl;
 
   let activeRunId: string | null = null;
 
+  const report = (step: InitialPipelineStepIndex) => {
+    try {
+      onProgress?.(step);
+    } catch {
+      /* ignore UI errors */
+    }
+  };
+
   try {
+    report(0);
     const extractRes = await f("/api/store/extract", {
       method: "POST",
       body: JSON.stringify({ url }),
@@ -74,6 +87,7 @@ export async function runInitialPipeline(
       return { ok: false, error: "No images found on that page." };
     }
 
+    report(1);
     const classifyRes = await f("/api/gpt/images-classify", {
       method: "POST",
       body: JSON.stringify({ pageUrl: url, imageUrls: images }),
@@ -119,6 +133,7 @@ export async function runInitialPipeline(
     const confidenceStr =
       typeof confidenceVal === "string" ? confidenceVal : confidenceVal != null ? String(confidenceVal) : "low";
 
+    report(2);
     const summaryRes = await f("/api/gpt/brand-url-summary", {
       method: "POST",
       body: JSON.stringify({ url }),
@@ -162,6 +177,7 @@ export async function runInitialPipeline(
       packshotUrls: shots,
     });
 
+    report(3);
     let scriptsStepOk = false;
     let scriptsStr = "";
     let scriptsError: string | undefined;
@@ -190,6 +206,7 @@ export async function runInitialPipeline(
     }
 
     if (scriptsStepOk && scriptsStr) {
+      report(4);
       const labels = deriveAngleLabelsFromScripts(scriptsStr);
       const snapAfterScripts: LinkToAdUniverseSnapshotV1 = {
         v: 1,

@@ -4,12 +4,13 @@ import { useEffect, useMemo, useState } from "react";
 import { Check, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+/** Matches {@link runInitialPipeline} order (extract → classify → brief → save → scripts → save). */
 const STEPS = [
-  "Connecting to website",
-  "Extracting product images",
-  "Reading brand & product details",
-  "Drafting UGC script angles",
-  "Saving your project",
+  "Fetch the store page",
+  "Analyze product images",
+  "Write brand brief (from the site)",
+  "Generate 3 UGC script angles",
+  "Save your project",
 ] as const;
 
 type ScanStage =
@@ -28,6 +29,7 @@ function stepStateAt(
   index: number,
   stage: ScanStage,
   simulatedPipelineStep: number,
+  realPipelineStep: number | null | undefined,
 ): StepState {
   if (stage === "scanning") {
     if (index === 0) return "active";
@@ -49,8 +51,12 @@ function stepStateAt(
     return "pending";
   }
   if (stage === "server_pipeline") {
-    if (index < simulatedPipelineStep) return "done";
-    if (index === simulatedPipelineStep) return "active";
+    const active =
+      realPipelineStep != null && realPipelineStep >= 0 && realPipelineStep < STEPS.length
+        ? realPipelineStep
+        : simulatedPipelineStep;
+    if (index < active) return "done";
+    if (index === active) return "active";
     return "pending";
   }
   return "pending";
@@ -71,30 +77,40 @@ type Props = {
   stage: ScanStage;
   isWorking: boolean;
   className?: string;
+  /**
+   * When `stage === "server_pipeline"`, checklist follows this index (real pipeline progress).
+   * If omitted, falls back to a slow simulated advance (legacy).
+   */
+  serverPipelineStepIndex?: number | null;
 };
 
 /**
- * Checklist + progress bar inspired by scan UIs; violet accent to match Link to Ad.
- * During `server_pipeline`, steps advance on a timer (no granular server events).
+ * Checklist + progress bar; violet accent. Prefer passing `serverPipelineStepIndex` during initial pipeline.
  */
-export function WebsiteScanChecklist({ stage, isWorking, className }: Props) {
+export function WebsiteScanChecklist({ stage, isWorking, className, serverPipelineStepIndex }: Props) {
   const [pipelineTick, setPipelineTick] = useState(0);
+  const useRealSteps =
+    stage === "server_pipeline" && serverPipelineStepIndex != null && serverPipelineStepIndex >= 0;
 
   useEffect(() => {
     if (stage !== "server_pipeline" || !isWorking) {
       setPipelineTick(0);
       return;
     }
+    if (useRealSteps) {
+      setPipelineTick(0);
+      return;
+    }
     setPipelineTick(0);
     const id = window.setInterval(() => {
       setPipelineTick((t) => Math.min(t + 1, STEPS.length - 1));
-    }, 2600);
+    }, 10_000);
     return () => window.clearInterval(id);
-  }, [stage, isWorking]);
+  }, [stage, isWorking, useRealSteps]);
 
   const states = useMemo(() => {
-    return STEPS.map((_, i) => stepStateAt(i, stage, pipelineTick));
-  }, [stage, pipelineTick]);
+    return STEPS.map((_, i) => stepStateAt(i, stage, pipelineTick, serverPipelineStepIndex));
+  }, [stage, pipelineTick, serverPipelineStepIndex]);
 
   const pct = useMemo(() => progressPercent([...states]), [states]);
 
@@ -115,7 +131,7 @@ export function WebsiteScanChecklist({ stage, isWorking, className }: Props) {
             <li key={label} className="flex items-center gap-3">
               <span
                 className={cn(
-                  "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 transition-colors duration-300",
+                  "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 transition-colors duration-700 ease-out",
                   s === "done" && "border-violet-400 bg-violet-500 text-black",
                   s === "active" && "border-violet-400/90 bg-violet-500/15 text-violet-200",
                   s === "pending" && "border-white/15 bg-transparent text-white/25",
@@ -132,7 +148,7 @@ export function WebsiteScanChecklist({ stage, isWorking, className }: Props) {
               </span>
               <span
                 className={cn(
-                  "text-sm font-medium leading-tight transition-colors duration-300",
+                  "text-sm font-medium leading-tight transition-colors duration-700 ease-out",
                   s === "done" && "text-white",
                   s === "active" && "text-white",
                   s === "pending" && "text-white/38",
@@ -147,7 +163,7 @@ export function WebsiteScanChecklist({ stage, isWorking, className }: Props) {
       <div className="mt-4 space-y-1.5">
         <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.08]">
           <div
-            className="h-full rounded-full bg-gradient-to-r from-violet-500 to-violet-400 transition-[width] duration-700 ease-out"
+            className="h-full rounded-full bg-gradient-to-r from-violet-500 to-violet-400 transition-[width] duration-1000 ease-out"
             style={{ width: `${pct}%` }}
           />
         </div>
