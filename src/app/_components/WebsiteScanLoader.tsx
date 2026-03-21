@@ -1,12 +1,13 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 type WebsiteScanLoaderProps = {
   /** Mot affiché avec l’effet « scan » (ex. Scan, Site…) */
   label?: string;
-  /** Sous-texte descriptif (statut détaillé) */
-  subtitle?: string;
+  /** Sous-texte descriptif (statut détaillé) — string ou composant (ex. TextLoop) */
+  subtitle?: ReactNode;
   className?: string;
 };
 
@@ -37,8 +38,8 @@ export function WebsiteScanLoader({
           <span className="lta-website-scan-cut">{label}</span>
         </p>
       </div>
-      {subtitle ? (
-        <p className="m-0 max-w-md text-xs leading-snug text-white/55 sm:text-sm sm:text-white/50">{subtitle}</p>
+      {subtitle != null && subtitle !== "" ? (
+        <div className="m-0 max-w-md text-xs leading-snug text-white/55 sm:text-sm sm:text-white/50">{subtitle}</div>
       ) : null}
     </div>
   );

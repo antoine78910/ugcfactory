@@ -19,9 +19,10 @@ import {
   type LinkToAdUniverseSnapshotV1,
 } from "@/lib/linkToAdUniverse";
 import { LinkToAdUniverseStepper } from "@/app/_components/LinkToAdUniverseStepper";
-import { TextShimmer } from "@/components/ui/text-shimmer";
+import { TextLoop } from "@/components/core/text-loop";
 import { WebsiteScanChecklist } from "@/app/_components/WebsiteScanChecklist";
 import { WebsiteScanLoader } from "@/app/_components/WebsiteScanLoader";
+import { LINK_TO_AD_LOADING_LOOPS } from "@/lib/linkToAd/loadingMessageLoops";
 
 export type LinkToAdUniverseProps = {
   /** When set, load this run once (e.g. from Projects). */
@@ -1274,31 +1275,45 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     return 5;
   }, [step1Done, step2Done, step3Done, step4Done]);
 
-  const universeLoadingMessage = useMemo(() => {
+  const universeLoadingState = useMemo((): {
+    phase: string | null;
+    messages: readonly string[];
+  } => {
     if (nanoPollTaskId || isNanoAllImagesSubmitting) {
-      return "Generating 3 images of your persona with your product…";
+      return { phase: "nano_three", messages: LINK_TO_AD_LOADING_LOOPS.nano_three };
     }
-    if (isNanoPromptsLoading) return "Preparing image prompts…";
-    if (isNanoImageSubmitting) return "Generating your image…";
-    if (isVideoPromptLoading) return "Generating video prompt…";
-    if (isKlingSubmitting || klingPollTaskId) return "Generating your video…";
-    if (!isWorking) return null;
+    if (isNanoPromptsLoading) {
+      return { phase: "nano_prompts", messages: LINK_TO_AD_LOADING_LOOPS.nano_prompts };
+    }
+    if (isNanoImageSubmitting) {
+      return { phase: "nano_single_image", messages: LINK_TO_AD_LOADING_LOOPS.nano_single_image };
+    }
+    if (isVideoPromptLoading) {
+      return { phase: "video_prompt", messages: LINK_TO_AD_LOADING_LOOPS.video_prompt };
+    }
+    if (isKlingSubmitting) {
+      return { phase: "kling_starting", messages: LINK_TO_AD_LOADING_LOOPS.kling_starting };
+    }
+    if (klingPollTaskId) {
+      return { phase: "kling_rendering", messages: LINK_TO_AD_LOADING_LOOPS.kling_rendering };
+    }
+    if (!isWorking) return { phase: null, messages: [] };
     if (stage === "server_pipeline") {
-      return "Scanning the store — page, images, brand brief, and scripts. You can switch pages; your project saves as we go.";
+      return { phase: "server_pipeline", messages: LINK_TO_AD_LOADING_LOOPS.server_pipeline };
     }
     if (stage === "scanning") {
-      return "Checking for a saved project for this URL, then scanning the store page…";
+      return { phase: "scanning", messages: LINK_TO_AD_LOADING_LOOPS.scanning };
     }
     if (stage === "finding_image") {
-      return "Scanning images — collecting product photos and picking the clearest preview…";
+      return { phase: "finding_image", messages: LINK_TO_AD_LOADING_LOOPS.finding_image };
     }
     if (stage === "summarizing") {
-      return "Reading the brand — turning what we found into a concise brief for your ads…";
+      return { phase: "summarizing", messages: LINK_TO_AD_LOADING_LOOPS.summarizing };
     }
     if (stage === "writing_scripts") {
-      return "Writing 3 UGC script angles from the brief… You can switch pages — we’ll save when it’s done.";
+      return { phase: "writing_scripts", messages: LINK_TO_AD_LOADING_LOOPS.writing_scripts };
     }
-    return "Working…";
+    return { phase: "working", messages: LINK_TO_AD_LOADING_LOOPS.working };
   }, [
     nanoPollTaskId,
     isNanoAllImagesSubmitting,
@@ -1310,6 +1325,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     isWorking,
     stage,
   ]);
+
+  const showUniverseLoading = universeLoadingState.messages.length > 0;
 
   useEffect(() => {
     if (!showContinueScripts) {
@@ -1420,7 +1437,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           step3Done={step3Done}
           step4Done={step4Done}
         />
-        {universeLoadingMessage ? (
+        {showUniverseLoading ? (
           <div className="-mt-2 mb-2 flex min-h-[4.25rem] items-center gap-3 rounded-xl border border-violet-500/15 bg-violet-500/[0.06] px-3 py-3 sm:gap-4 sm:px-4 shadow-[0_0_24px_rgba(139,92,246,0.12)]">
             {isWorking &&
             (stage === "scanning" ||
@@ -1441,7 +1458,17 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                             ? "Scripts"
                             : "Scanning…"
                   }
-                  subtitle={universeLoadingMessage}
+                  subtitle={
+                    <TextLoop
+                      className="block"
+                      activeKey={universeLoadingState.phase ?? "idle"}
+                      intervalMs={2600}
+                    >
+                      {universeLoadingState.messages.map((m) => (
+                        <span key={m}>{m}</span>
+                      ))}
+                    </TextLoop>
+                  }
                   className="min-w-0 flex-1"
                 />
                 <WebsiteScanChecklist stage={stage} isWorking={isWorking} className="shrink-0 lg:max-w-[min(100%,22rem)]" />
@@ -1450,9 +1477,15 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
               <>
                 <Loader2 className="h-4 w-4 shrink-0 animate-spin text-violet-300" aria-hidden />
                 <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                  <TextShimmer as="span" className="text-sm font-medium">
-                    {universeLoadingMessage}
-                  </TextShimmer>
+                  <TextLoop
+                    className="text-sm font-medium text-violet-100"
+                    activeKey={universeLoadingState.phase ?? "idle"}
+                    intervalMs={2600}
+                  >
+                    {universeLoadingState.messages.map((m) => (
+                      <span key={m}>{m}</span>
+                    ))}
+                  </TextLoop>
                   {(nanoPollTaskId || isNanoAllImagesSubmitting) ? (
                     <span className="text-xs font-normal text-white/50">
                       This may take several minutes.
@@ -1476,7 +1509,11 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                   >
                     <div className="flex items-center gap-2.5 rounded-2xl border border-violet-500/35 bg-[#0b0912]/95 px-5 py-2.5 shadow-[0_6px_0_0_rgba(76,29,149,0.75)]">
                       <Loader2 className="h-5 w-5 shrink-0 animate-spin text-violet-300" aria-hidden />
-                      <span className="text-sm font-semibold text-white/90">Starting…</span>
+                      <TextLoop className="text-sm font-semibold text-white/90" activeKey="url-start" intervalMs={2200}>
+                        <span>Starting…</span>
+                        <span>Spinning up your scan…</span>
+                        <span>Connecting to the store…</span>
+                      </TextLoop>
                     </div>
                   </div>
                 ) : null}
@@ -1561,7 +1598,13 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                           {storeHostnameResolved || storeUrl.trim() || "—"}
                         </p>
                         {isWorking ? (
-                          <p className="mt-1 text-xs text-violet-300/90">Scanning…</p>
+                          <div className="mt-1 text-xs text-violet-300/90">
+                            <TextLoop activeKey="store-card-scan" intervalMs={2400}>
+                              <span>Scanning…</span>
+                              <span>Fetching the page…</span>
+                              <span>Reading product signals…</span>
+                            </TextLoop>
+                          </div>
                         ) : null}
                       </div>
                     )}
@@ -1689,8 +1732,18 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           <div className="space-y-4">
             <div className="flex flex-col gap-4 rounded-xl border border-violet-500/25 bg-violet-500/[0.06] p-4">
               {nanoBananaPromptsRaw && nanoHasThreeImages ? (
-                <div className="space-y-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-white/45">Generated images</p>
+                <div className="space-y-6">
+                  <div className="px-2 text-center sm:px-4">
+                    <h3 className="text-lg font-semibold tracking-tight text-white sm:text-xl md:text-2xl">
+                      Generated images
+                    </h3>
+                    <p className="mx-auto mt-3 max-w-md text-base font-medium leading-snug text-white/90 sm:text-lg">
+                      Choose an image to generate your UGC.
+                    </p>
+                    <p className="mx-auto mt-2 max-w-sm text-xs leading-relaxed text-white/50 sm:text-sm">
+                      Tap a frame to select it — your video button appears below.
+                    </p>
+                  </div>
                   <div className="grid gap-4 sm:grid-cols-3">
                     {([0, 1, 2] as const).map((i) => {
                       const selected = nanoBananaSelectedImageIndex === i;
@@ -1747,12 +1800,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                           );
                         })}
                       </div>
-                  <div className="border-t border-white/10 pt-5">
-                    {nanoBananaSelectedImageIndex === null ? (
-                      <p className="text-center text-xs text-white/45">
-                        Select an image, then generate your video from this section.
-                      </p>
-                    ) : (
+                  {nanoBananaSelectedImageIndex !== null ? (
+                    <div className="border-t border-white/10 pt-5">
                       <div className="flex flex-col items-center gap-3">
                         <Button
                           type="button"
@@ -1775,8 +1824,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                           )}
                         </Button>
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
 
@@ -1800,9 +1849,19 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                     <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm font-medium text-violet-200">
                       <span className="inline-flex items-center gap-2">
                         <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
-                        {nanoPollTaskId || isNanoAllImagesSubmitting
-                          ? "Generating 3 images of your persona with your product…"
-                          : "Preparing image prompts…"}
+                        <TextLoop
+                          activeKey={
+                            nanoPollTaskId || isNanoAllImagesSubmitting ? "nano_three_panel" : "nano_prompts_panel"
+                          }
+                          intervalMs={2600}
+                        >
+                          {(nanoPollTaskId || isNanoAllImagesSubmitting
+                            ? LINK_TO_AD_LOADING_LOOPS.nano_three
+                            : LINK_TO_AD_LOADING_LOOPS.nano_prompts
+                          ).map((m) => (
+                            <span key={m}>{m}</span>
+                          ))}
+                        </TextLoop>
                       </span>
                       {nanoPollTaskId || isNanoAllImagesSubmitting ? (
                         <span className="text-xs font-normal text-white/45">
@@ -1842,14 +1901,22 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                   ) : null}
                   {isKlingSubmitting ? (
                     <div className="mt-4 flex items-center gap-2 text-xs text-violet-200">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Starting video render…
+                      <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+                      <TextLoop activeKey="kling_start_panel" intervalMs={2400}>
+                        {LINK_TO_AD_LOADING_LOOPS.kling_starting.map((m) => (
+                          <span key={m}>{m}</span>
+                        ))}
+                      </TextLoop>
                     </div>
                   ) : null}
                   {klingPollTaskId ? (
                     <p className="mt-4 flex items-center gap-2 text-xs text-violet-200">
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      Generating video…
+                      <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                      <TextLoop activeKey="kling_poll_panel" intervalMs={2600}>
+                        {LINK_TO_AD_LOADING_LOOPS.kling_rendering.map((m) => (
+                          <span key={m}>{m}</span>
+                        ))}
+                      </TextLoop>
                     </p>
                   ) : null}
                 </div>
@@ -1878,8 +1945,12 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                     ) : null}
                     {isVideoPromptLoading ? (
                       <div className="mt-3 flex items-center gap-2 text-xs text-violet-200">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Generating video prompt…
+                        <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+                        <TextLoop activeKey="video_prompt_panel" intervalMs={2600}>
+                          {LINK_TO_AD_LOADING_LOOPS.video_prompt.map((m) => (
+                            <span key={m}>{m}</span>
+                          ))}
+                        </TextLoop>
                       </div>
                     ) : null}
                     {ugcVideoPromptGpt ? (
