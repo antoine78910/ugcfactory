@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Loader2, Play, Plus, Sparkles, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
@@ -202,6 +202,8 @@ export default function AppBrandWizard() {
   const [deleteProjectLoading, setDeleteProjectLoading] = useState(false);
   const [runId, setRunId] = useState<string | null>(null);
   const [isLoadingRuns, setIsLoadingRuns] = useState(false);
+  /** While set, ignore URL→section sync so stale ?section= in the bar cannot overwrite a sidebar click before router.replace runs. */
+  const pendingSectionNavRef = useRef<AppSection | null>(null);
 
   const [storeUrl, setStoreUrl] = useState("");
   const [isExtracting, setIsExtracting] = useState(false);
@@ -477,7 +479,7 @@ export default function AppBrandWizard() {
       if (typeof localStorage !== "undefined") localStorage.setItem(UGC_CURRENT_RUN_KEY, json.runId);
       setStoreUrl(proj.storeUrl);
       setLinkToAdResumeRunId(json.runId);
-      setAppSection("link_to_ad");
+      setAppSectionNav("link_to_ad");
       toast.success("New ad — pick a marketing angle.");
     } catch (err) {
       toast.error("Error", { description: err instanceof Error ? err.message : "Unknown error" });
@@ -606,13 +608,31 @@ export default function AppBrandWizard() {
     else if (typeof localStorage !== "undefined") localStorage.removeItem(UGC_CURRENT_RUN_KEY);
   }, [runId]);
 
+  const setAppSectionNav = useCallback((s: AppSection) => {
+    pendingSectionNavRef.current = s;
+    setAppSection(s);
+  }, []);
+
+  const searchKey = searchParams.toString();
+
   useLayoutEffect(() => {
-    const sec = searchParams.get("section");
+    const secRaw = searchParams.get("section");
     const validSections: AppSection[] = ["link_to_ad", "motion_control", "image", "video", "projects"];
-    if (sec && validSections.includes(sec as AppSection)) {
-      setAppSection(sec as AppSection);
+    const sec =
+      secRaw && validSections.includes(secRaw as AppSection) ? (secRaw as AppSection) : null;
+
+    const pending = pendingSectionNavRef.current;
+    if (pending !== null) {
+      if (sec === pending) {
+        pendingSectionNavRef.current = null;
+      }
+      return;
     }
-  }, [searchParams]);
+
+    if (sec) {
+      setAppSection((prev) => (prev === sec ? prev : sec));
+    }
+  }, [searchKey, searchParams]);
 
   useEffect(() => {
     if (!deleteProjectDialog || deleteProjectLoading) return;
@@ -671,13 +691,24 @@ export default function AppBrandWizard() {
     const curProject = searchParams.get("project") ?? "";
     const curSection = searchParams.get("section") || "link_to_ad";
     const wantProject = runId ?? "";
-    if (wantProject !== curProject || appSection !== curSection) {
-      const p = new URLSearchParams();
-      if (runId) p.set("project", runId);
-      p.set("section", appSection);
-      router.replace(`/app?${p.toString()}`);
+
+    // Before loadRun() sets runId, keep ?project= but still sync ?section= (avoids stripping project + clears pending nav).
+    if (!runId && curProject) {
+      if (appSection !== curSection) {
+        const p = new URLSearchParams(searchParams.toString());
+        p.set("project", curProject);
+        p.set("section", appSection);
+        router.replace(`/app?${p.toString()}`);
+      }
+      return;
     }
-  }, [runId, appSection, pathname, router, searchParams]);
+
+    if (wantProject === curProject && appSection === curSection) return;
+    const p = new URLSearchParams();
+    if (runId) p.set("project", runId);
+    p.set("section", appSection);
+    router.replace(`/app?${p.toString()}`);
+  }, [runId, appSection, pathname, router, searchKey, searchParams]);
 
   async function onExtract() {
     const url = storeUrl.trim();
@@ -1275,7 +1306,7 @@ export default function AppBrandWizard() {
     <>
       <StudioShell
         studioSection={appSection}
-        onStudioSectionChange={setAppSection}
+        onStudioSectionChange={setAppSectionNav}
         studioProjectId={runId}
       >
         <section className="space-y-6 px-6 py-6 md:px-8">
@@ -1392,7 +1423,11 @@ export default function AppBrandWizard() {
                                     type="button"
                                     onClick={() => {
                                       if (runIsUniverse) {
-                                        setAppSection("link_to_ad");
+                                        setRunId(run.id);
+                                        if (typeof localStorage !== "undefined") {
+                                          localStorage.setItem(UGC_CURRENT_RUN_KEY, run.id);
+                                        }
+                                        setAppSectionNav("link_to_ad");
                                         setLinkToAdResumeRunId(run.id);
                                         return;
                                       }

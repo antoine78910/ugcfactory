@@ -19,6 +19,7 @@ export async function POST(req: Request) {
 
   const developer = [
     "Tu es un expert senior en marketing direct-response et analyse marque / produit.",
+    "Tu DOIS utiliser l’outil de recherche web pour ouvrir et analyser l’URL produit fournie (et pages utiles du même site si besoin) avant de rédiger le brief.",
     "Réponds UNIQUEMENT par le brand brief demandé, en français.",
     "La sortie DOIT suivre exactement la forme et la structure de l’exemple fourni dans le message utilisateur.",
     "Pas de titres supplémentaires, pas de listes à puces, pas de sections structurées : un seul flux de texte après le label initial.",
@@ -51,7 +52,7 @@ export async function POST(req: Request) {
   ].join("\n");
 
   try {
-    const cacheKey = makeCacheKey({ v: 2, url });
+    const cacheKey = makeCacheKey({ v: 3, url });
     try {
       const { data: hit } = await supabase
         .from("gpt_cache")
@@ -74,7 +75,14 @@ export async function POST(req: Request) {
       // ignore cache failures
     }
 
-    const { text } = await openaiResponsesText({ developer, user: userPrompt });
+    const model =
+      process.env.OPENAI_BRAND_SUMMARY_MODEL?.trim() || "gpt-5-mini";
+    const { text } = await openaiResponsesText({
+      developer,
+      user: userPrompt,
+      model,
+      tools: [{ type: "web_search", search_context_size: "medium" }],
+    });
 
     try {
       await supabase
