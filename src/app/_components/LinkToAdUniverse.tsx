@@ -2111,66 +2111,107 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         ) : null}
 
         {showI2vPipeline ? (
-          <div className="space-y-4">
-            {/* Compact angle + reference strip (refs appear once 3 images exist). */}
-            <div className="rounded-xl border border-violet-500/20 bg-black/25 px-3 py-2.5 sm:px-4">
-              <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
-                <div className="flex min-w-0 flex-wrap items-center gap-2">
-                  <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-white/45">
-                    Script angle
-                  </span>
-                  <div className="inline-flex rounded-xl border border-white/10 bg-white/[0.04] p-0.5">
-                    {([0, 1, 2] as const).map((i) => (
-                      <button
-                        key={i}
-                        type="button"
-                        onClick={() => void onSelectAngle(i)}
-                        disabled={selectedAngleIndex === i}
-                        title={angleLabels[i] ? angleLabels[i].slice(0, 120) : `Angle ${i + 1}`}
-                        className={cn(
-                          "min-w-[2.25rem] rounded-lg px-2.5 py-1.5 text-xs font-bold transition-colors",
-                          selectedAngleIndex === i
-                            ? "bg-violet-500/35 text-violet-50 shadow-inner"
-                            : "text-white/55 hover:bg-white/[0.06] hover:text-white/90",
-                        )}
-                      >
-                        {i + 1}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                {nanoBananaPromptsRaw.trim() && nanoHasThreeImages ? (
-                  <div className="flex min-w-0 flex-wrap items-center gap-2 border-t border-white/10 pt-3 sm:border-l sm:border-t-0 sm:pl-5 sm:pt-0">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:gap-6">
+            {/* Left: script angles + reference thumbnails + large image pickers */}
+            <div className="flex min-w-0 flex-col gap-4 lg:w-[min(100%,22rem)] xl:w-[min(100%,26rem)] lg:shrink-0">
+              <div className="rounded-xl border border-violet-500/20 bg-black/25 px-3 py-2.5 sm:px-4">
+                <div className="flex flex-col gap-4">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-white/45">
-                      Reference
+                      Script angle
                     </span>
-                    <div className="flex gap-1.5">
+                    <div className="inline-flex rounded-xl border border-white/10 bg-white/[0.04] p-0.5">
+                      {([0, 1, 2] as const).map((i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => void onSelectAngle(i)}
+                          disabled={selectedAngleIndex === i}
+                          title={angleLabels[i] ? angleLabels[i].slice(0, 120) : `Angle ${i + 1}`}
+                          className={cn(
+                            "min-w-[2.25rem] rounded-lg px-2.5 py-1.5 text-xs font-bold transition-colors",
+                            selectedAngleIndex === i
+                              ? "bg-violet-500/35 text-violet-50 shadow-inner"
+                              : "text-white/55 hover:bg-white/[0.06] hover:text-white/90",
+                          )}
+                        >
+                          {i + 1}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {nanoBananaPromptsRaw.trim() && nanoHasThreeImages ? (
+                    <div className="flex flex-col gap-2 border-t border-white/10 pt-3">
+                      <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-white/45">
+                        Reference
+                      </span>
+                      <div className="flex flex-wrap gap-2">
+                        {([0, 1, 2] as const).map((i) => {
+                          const sel = nanoBananaSelectedImageIndex === i;
+                          return (
+                            <button
+                              key={i}
+                              type="button"
+                              onClick={() => void onSelectNanoBananaImage(i)}
+                              className={cn(
+                                "relative aspect-[9/16] w-14 shrink-0 overflow-hidden rounded-lg border-2 bg-[#050507] transition-all sm:w-16",
+                                sel
+                                  ? "border-violet-400 shadow-[0_0_12px_rgba(139,92,246,0.35)]"
+                                  : "border-transparent opacity-80 hover:border-white/20 hover:opacity-100",
+                              )}
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={nanoBananaImageUrls[i]}
+                                alt={`Reference ${i + 1}`}
+                                className="h-full w-full object-cover object-center"
+                                loading="lazy"
+                              />
+                              {sel ? (
+                                <span className="absolute bottom-0.5 right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-violet-400 text-black shadow">
+                                  <Check className="h-2.5 w-2.5" strokeWidth={3} aria-hidden />
+                                </span>
+                              ) : null}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+
+                {scriptsText.trim() ? (
+                  <div className="mt-3 border-t border-white/10 pt-3">
+                    <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-white/45">
+                      Script angles — tap to use
+                    </p>
+                    <div className="grid grid-cols-1 gap-2">
                       {([0, 1, 2] as const).map((i) => {
-                        const sel = nanoBananaSelectedImageIndex === i;
+                        const active = selectedAngleIndex === i;
+                        const label = angleLabels[i]?.trim();
+                        const fallback = teaserFromScriptBlock(scriptOptionBodies[i], i);
+                        const body = label || fallback || "—";
                         return (
                           <button
                             key={i}
                             type="button"
-                            onClick={() => void onSelectNanoBananaImage(i)}
+                            onClick={() => void onSelectAngle(i)}
                             className={cn(
-                              "relative aspect-[9/16] w-9 shrink-0 overflow-hidden rounded-lg border-2 bg-[#050507] transition-all sm:w-11",
-                              sel
-                                ? "border-violet-400 shadow-[0_0_12px_rgba(139,92,246,0.35)]"
-                                : "border-transparent opacity-80 hover:border-white/20 hover:opacity-100",
+                              "rounded-xl border px-3 py-2.5 text-left transition-all min-h-[4.5rem]",
+                              active
+                                ? "border-violet-400/55 bg-violet-500/[0.14] shadow-[0_0_20px_rgba(139,92,246,0.12)] ring-1 ring-violet-400/25"
+                                : "border-white/10 bg-white/[0.03] hover:border-violet-400/35 hover:bg-white/[0.06]",
                             )}
                           >
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={nanoBananaImageUrls[i]}
-                              alt={`Reference ${i + 1}`}
-                              className="h-full w-full object-cover object-center"
-                              loading="lazy"
-                            />
-                            {sel ? (
-                              <span className="absolute bottom-0.5 right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-violet-400 text-black shadow">
-                                <Check className="h-2.5 w-2.5" strokeWidth={3} aria-hidden />
-                              </span>
-                            ) : null}
+                            <span className="text-[10px] font-bold uppercase tracking-wide text-violet-300">
+                              Angle {i + 1}
+                              {active ? (
+                                <span className="ml-1.5 font-semibold normal-case text-violet-200/90">· active</span>
+                              ) : null}
+                            </span>
+                            <p className="mt-1.5 text-xs leading-snug text-white/80 line-clamp-5">
+                              {body}
+                            </p>
                           </button>
                         );
                       })}
@@ -2179,40 +2220,65 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                 ) : null}
               </div>
 
-              {/* All three script angles visible; tap a card to switch (same as 1 / 2 / 3 above). */}
-              {scriptsText.trim() ? (
-                <div className="mt-3 border-t border-white/10 pt-3">
-                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-white/45">
-                    Script angles — tap to use
+              {!showVideoStageLayout && nanoBananaPromptsRaw && nanoHasThreeImages ? (
+                <div className="rounded-xl border border-violet-500/25 bg-violet-500/[0.06] p-3 sm:p-4">
+                  <p className="mb-3 text-[10px] font-semibold uppercase tracking-wide text-white/45">
+                    Generated images — choose one
                   </p>
-                  <div className="grid gap-2 sm:grid-cols-3">
+                  <div className="flex flex-col gap-3">
                     {([0, 1, 2] as const).map((i) => {
-                      const active = selectedAngleIndex === i;
-                      const label = angleLabels[i]?.trim();
-                      const fallback = teaserFromScriptBlock(scriptOptionBodies[i], i);
-                      const body = label || fallback || "—";
+                      const selected = nanoBananaSelectedImageIndex === i;
                       return (
-                        <button
+                        <div
                           key={i}
-                          type="button"
-                          onClick={() => void onSelectAngle(i)}
-                          className={cn(
-                            "rounded-xl border px-3 py-2.5 text-left transition-all sm:min-h-[5.5rem]",
-                            active
-                              ? "border-violet-400/55 bg-violet-500/[0.14] shadow-[0_0_20px_rgba(139,92,246,0.12)] ring-1 ring-violet-400/25"
-                              : "border-white/10 bg-white/[0.03] hover:border-violet-400/35 hover:bg-white/[0.06]",
-                          )}
+                          role="button"
+                          tabIndex={0}
+                          aria-pressed={selected}
+                          onClick={() => void onSelectNanoBananaImage(i)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              void onSelectNanoBananaImage(i);
+                            }
+                          }}
+                          className={`group relative flex cursor-pointer flex-col overflow-hidden rounded-2xl border bg-[#08080c] text-left transition-[transform,box-shadow,border-color] duration-200 ease-out active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0912] ${
+                            selected
+                              ? "border-[3px] border-violet-400 shadow-[0_0_0_1px_rgba(139,92,246,0.45),0_0_28px_rgba(139,92,246,0.22),0_12px_40px_rgba(76,29,149,0.25)]"
+                              : "border border-white/10 hover:border-violet-400/40"
+                          }`}
                         >
-                          <span className="text-[10px] font-bold uppercase tracking-wide text-violet-300">
-                            Angle {i + 1}
-                            {active ? (
-                              <span className="ml-1.5 font-semibold normal-case text-violet-200/90">· active</span>
-                            ) : null}
+                          <span className="border-b border-white/10 px-2 py-1.5 text-center text-[10px] font-bold uppercase tracking-wide text-violet-300/90">
+                            Image {i + 1}
                           </span>
-                          <p className="mt-1.5 text-xs leading-snug text-white/80 line-clamp-5 sm:line-clamp-4">
-                            {body}
-                          </p>
-                        </button>
+                          <div className="relative aspect-[9/16] w-full max-w-[220px] mx-auto overflow-hidden bg-[#050507]">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={nanoBananaImageUrls[i]}
+                              alt={`Reference ${i + 1}`}
+                              className="h-full w-full object-cover object-center"
+                              loading="lazy"
+                            />
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="icon"
+                              title="View full size"
+                              aria-label="View full size"
+                              className="absolute left-2 top-2 z-20 h-8 w-8 shrink-0 rounded-lg border border-white/20 bg-black/75 text-white shadow-lg backdrop-blur-md hover:bg-black/90"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setNanoImageLightboxUrl(nanoBananaImageUrls[i]);
+                              }}
+                            >
+                              <Maximize2 className="h-4 w-4" aria-hidden />
+                            </Button>
+                          </div>
+                          {selected ? (
+                            <span className="absolute right-2 top-9 z-10 inline-flex h-7 w-7 items-center justify-center rounded-full border-2 border-violet-200/40 bg-violet-400 text-black shadow-md shadow-violet-500/30">
+                              <Check className="h-4 w-4" strokeWidth={2.5} aria-hidden />
+                            </span>
+                          ) : null}
+                        </div>
                       );
                     })}
                   </div>
@@ -2220,185 +2286,124 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
               ) : null}
             </div>
 
-            {/* Full-size image grid until user enters video stage (then compact strip + video column). */}
-            {!showVideoStageLayout ? (
-              <div className="flex flex-col gap-4 rounded-xl border border-violet-500/25 bg-violet-500/[0.06] p-4">
-                {nanoBananaPromptsRaw && nanoHasThreeImages ? (
-                  <div className="space-y-6">
-                    <div className="px-2 text-center sm:px-4">
-                      <h3 className="text-lg font-semibold tracking-tight text-white sm:text-xl md:text-2xl">
-                        Generated images
-                      </h3>
-                      <p className="mx-auto mt-3 max-w-md text-base font-medium leading-snug text-white/90 sm:text-lg">
-                        Choose an image to generate your UGC.
-                      </p>
-                    </div>
-                    <div className="grid gap-4 sm:grid-cols-3">
-                      {([0, 1, 2] as const).map((i) => {
-                        const selected = nanoBananaSelectedImageIndex === i;
-                        return (
-                          <div
-                            key={i}
-                            role="button"
-                            tabIndex={0}
-                            aria-pressed={selected}
-                            onClick={() => void onSelectNanoBananaImage(i)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter" || e.key === " ") {
-                                e.preventDefault();
-                                void onSelectNanoBananaImage(i);
-                              }
-                            }}
-                            className={`group relative flex cursor-pointer flex-col overflow-hidden rounded-2xl border bg-[#08080c] text-left transition-[transform,box-shadow,border-color] duration-200 ease-out active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0912] ${
-                              selected
-                                ? "border-[3px] border-violet-400 shadow-[0_0_0_1px_rgba(139,92,246,0.45),0_0_28px_rgba(139,92,246,0.22),0_12px_40px_rgba(76,29,149,0.25)]"
-                                : "border border-white/10 hover:border-violet-400/40"
-                            }`}
-                          >
-                            <span className="border-b border-white/10 px-2 py-1.5 text-center text-[10px] font-bold uppercase tracking-wide text-violet-300/90">
-                              Image {i + 1}
-                            </span>
-                            <div className="relative aspect-[9/16] w-full overflow-hidden bg-[#050507]">
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={nanoBananaImageUrls[i]}
-                                alt={`Reference ${i + 1}`}
-                                className="h-full w-full object-cover object-center"
-                                loading="lazy"
-                              />
-                              <Button
-                                type="button"
-                                variant="secondary"
-                                size="icon"
-                                title="View full size"
-                                aria-label="View full size"
-                                className="absolute left-2 top-2 z-20 h-8 w-8 shrink-0 rounded-lg border border-white/20 bg-black/75 text-white shadow-lg backdrop-blur-md hover:bg-black/90"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setNanoImageLightboxUrl(nanoBananaImageUrls[i]);
-                                }}
-                              >
-                                <Maximize2 className="h-4 w-4" aria-hidden />
-                              </Button>
-                            </div>
-                            {selected ? (
-                              <span className="absolute right-2 top-9 z-10 inline-flex h-7 w-7 items-center justify-center rounded-full border-2 border-violet-200/40 bg-violet-400 text-black shadow-md shadow-violet-500/30">
-                                <Check className="h-4 w-4" strokeWidth={2.5} aria-hidden />
-                              </span>
-                            ) : null}
-                          </div>
-                        );
-                      })}
-                    </div>
-                    {nanoBananaSelectedImageIndex !== null ? (
-                      <div className="border-t border-white/10 pt-5">
-                        <div className="flex flex-col items-center gap-3">
-                          <Button
-                            type="button"
-                            disabled={
-                              isVideoPromptLoading || isKlingSubmitting || Boolean(klingPollTaskId) || !nanoBananaImageUrl
-                            }
-                            onClick={() => void handleGenerateVideoFromSelectedImage()}
-                            className={`flex h-auto min-h-12 w-full max-w-md flex-col gap-1 py-2.5 ${primaryBtnClass}`}
-                          >
-                            {isVideoPromptLoading || isKlingSubmitting || klingPollTaskId ? (
-                              <span className="inline-flex items-center justify-center gap-2 text-base font-semibold">
-                                <Loader2 className="h-5 w-5 shrink-0 animate-spin" aria-hidden />
-                                Working…
-                              </span>
-                            ) : (
-                              <>
-                                <span className="inline-flex items-center justify-center gap-2 text-base font-semibold leading-tight">
-                                  <Video className="h-5 w-5 shrink-0" aria-hidden />
-                                  Generate video from this image
-                                </span>
-                                <span className="text-[11px] font-semibold text-black/70">
-                                  {CREDITS_KLING_LINK_TO_AD_VIDEO} credits
-                                </span>
-                              </>
-                            )}
-                          </Button>
-                        </div>
+            {/* Right: generate prompts, generate video, Kling / video stage */}
+            <div className="flex min-w-0 flex-1 flex-col gap-4">
+              {!showVideoStageLayout ? (
+                <div className="flex flex-col gap-4 rounded-xl border border-violet-500/25 bg-violet-500/[0.06] p-4">
+                  {nanoBananaPromptsRaw && nanoHasThreeImages ? (
+                    <div className="space-y-4">
+                      <div>
+                        <h3 className="text-lg font-semibold tracking-tight text-white sm:text-xl">
+                          Next step
+                        </h3>
+                        <p className="mt-2 text-sm leading-snug text-white/70">
+                          Pick a reference on the left, then generate your UGC video here.
+                        </p>
                       </div>
-                    ) : null}
-                  </div>
-                ) : null}
-
-                {selectedAngleIndex !== null &&
-                ((!nanoBananaPromptsRaw.trim() &&
-                  !isNanoPromptsLoading &&
-                  !isNanoAllImagesSubmitting &&
-                  !nanoPollTaskId) ||
-                  nanoPollTaskId ||
-                  isNanoAllImagesSubmitting) ? (
-                  <div className="mt-auto shrink-0 rounded-xl border border-white/10 bg-black/25 p-4">
-                    <div className="flex flex-col gap-3">
-                      {!nanoBananaPromptsRaw.trim() &&
-                      !isNanoPromptsLoading &&
-                      !isNanoAllImagesSubmitting &&
-                      !nanoPollTaskId ? (
-                        <>
-                          <p className="text-sm text-white/75">
-                            Angle sélectionné — lance la génération quand tu veux (prompts GPT + 3 images NanoBanana).
-                          </p>
-                          <Button
-                            type="button"
-                            disabled={!resolvedPreviewUrl}
-                            className={primaryBtnClass}
-                            onClick={() => void onGenerateNanoBananaPrompts(selectedAngleIndex as 0 | 1 | 2)}
-                          >
-                            Générer les 3 prompts &amp; images
-                          </Button>
-                        </>
-                      ) : null}
-                      {/* Prompt copy lives only in the top status bar while isNanoPromptsLoading */}
-                      {nanoPollTaskId || isNanoAllImagesSubmitting ? (
-                        <div className="flex flex-col gap-1.5 text-sm font-medium text-violet-200">
-                          <span className="inline-flex items-center gap-2">
-                            <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
-                            <span>{LINK_TO_AD_LOADING_MESSAGES.nano_three}</span>
-                          </span>
-                          <span className="text-xs font-normal text-white/45">
-                            This may take several minutes.
-                          </span>
-                        </div>
-                      ) : null}
+                      {nanoBananaSelectedImageIndex !== null ? (
+                        <Button
+                          type="button"
+                          disabled={
+                            isVideoPromptLoading || isKlingSubmitting || Boolean(klingPollTaskId) || !nanoBananaImageUrl
+                          }
+                          onClick={() => void handleGenerateVideoFromSelectedImage()}
+                          className={`flex h-auto min-h-12 w-full max-w-md flex-col gap-1 py-2.5 ${primaryBtnClass}`}
+                        >
+                          {isVideoPromptLoading || isKlingSubmitting || klingPollTaskId ? (
+                            <span className="inline-flex items-center justify-center gap-2 text-base font-semibold">
+                              <Loader2 className="h-5 w-5 shrink-0 animate-spin" aria-hidden />
+                              Working…
+                            </span>
+                          ) : (
+                            <>
+                              <span className="inline-flex items-center justify-center gap-2 text-base font-semibold leading-tight">
+                                <Video className="h-5 w-5 shrink-0" aria-hidden />
+                                Generate video from this image
+                              </span>
+                              <span className="text-[11px] font-semibold text-black/70">
+                                {CREDITS_KLING_LINK_TO_AD_VIDEO} credits
+                              </span>
+                            </>
+                          )}
+                        </Button>
+                      ) : (
+                        <p className="text-xs text-white/45">Select an image on the left to enable video generation.</p>
+                      )}
                     </div>
+                  ) : null}
+
+                  {selectedAngleIndex !== null &&
+                  ((!nanoBananaPromptsRaw.trim() &&
+                    !isNanoPromptsLoading &&
+                    !isNanoAllImagesSubmitting &&
+                    !nanoPollTaskId) ||
+                    nanoPollTaskId ||
+                    isNanoAllImagesSubmitting) ? (
+                    <div className="shrink-0 rounded-xl border border-white/10 bg-black/25 p-4">
+                      <div className="flex flex-col gap-3">
+                        {!nanoBananaPromptsRaw.trim() &&
+                        !isNanoPromptsLoading &&
+                        !isNanoAllImagesSubmitting &&
+                        !nanoPollTaskId ? (
+                          <>
+                            <p className="text-sm text-white/75">
+                              Angle sélectionné — lance la génération quand tu veux (prompts GPT + 3 images NanoBanana).
+                            </p>
+                            <Button
+                              type="button"
+                              disabled={!resolvedPreviewUrl}
+                              className={primaryBtnClass}
+                              onClick={() => void onGenerateNanoBananaPrompts(selectedAngleIndex as 0 | 1 | 2)}
+                            >
+                              Générer les 3 prompts &amp; images
+                            </Button>
+                          </>
+                        ) : null}
+                        {nanoPollTaskId || isNanoAllImagesSubmitting ? (
+                          <div className="flex flex-col gap-1.5 text-sm font-medium text-violet-200">
+                            <span className="inline-flex items-center gap-2">
+                              <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                              <span>{LINK_TO_AD_LOADING_MESSAGES.nano_three}</span>
+                            </span>
+                            <span className="text-xs font-normal text-white/45">
+                              This may take several minutes.
+                            </span>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="flex flex-col gap-5 rounded-xl border border-violet-500/25 bg-violet-500/[0.06] p-4">
+                  <div className="flex flex-col gap-2 border-b border-white/10 pb-4">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-white/50">Actions</p>
+                    <Button
+                      type="button"
+                      className={`h-auto min-h-11 w-full max-w-sm flex-col gap-1 px-3 py-2.5 ${primaryBtnClass}`}
+                      disabled={
+                        isNanoAllImagesSubmitting ||
+                        isNanoPromptsLoading ||
+                        Boolean(nanoPollTaskId) ||
+                        isWorking ||
+                        isVideoPromptLoading ||
+                        isKlingSubmitting ||
+                        Boolean(klingPollTaskId)
+                      }
+                      onClick={() => void onGenerateNanoBananaImagesFromAllPrompts()}
+                    >
+                      <span className="text-sm font-semibold leading-tight">New 3 images</span>
+                      <span className="text-[11px] font-semibold text-black/70">
+                        {CREDITS_LINK_TO_AD_THREE_REF_IMAGES} credits
+                      </span>
+                    </Button>
+                    <p className="text-[10px] leading-snug text-white/35">
+                      Angles &amp; reference frames are on the left.
+                    </p>
                   </div>
-                ) : null}
-              </div>
-            ) : null}
 
-            {showVideoStageLayout ? (
-              <div className="flex flex-col gap-5 rounded-xl border border-violet-500/25 bg-violet-500/[0.06] p-4 lg:flex-row lg:items-stretch">
-                <aside className="flex w-full shrink-0 flex-col gap-2 border-b border-white/10 pb-4 lg:w-[min(100%,10rem)] lg:border-b-0 lg:border-r lg:pb-0 lg:pr-4">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-white/50">Actions</p>
-                  <Button
-                    type="button"
-                    className={`h-auto min-h-11 w-full flex-col gap-1 px-3 py-2.5 ${primaryBtnClass}`}
-                    disabled={
-                      isNanoAllImagesSubmitting ||
-                      isNanoPromptsLoading ||
-                      Boolean(nanoPollTaskId) ||
-                      isWorking ||
-                      isVideoPromptLoading ||
-                      isKlingSubmitting ||
-                      Boolean(klingPollTaskId)
-                    }
-                    onClick={() => void onGenerateNanoBananaImagesFromAllPrompts()}
-                  >
-                    <span className="text-sm font-semibold leading-tight">New 3 images</span>
-                    <span className="text-[11px] font-semibold text-black/70">
-                      {CREDITS_LINK_TO_AD_THREE_REF_IMAGES} credits
-                    </span>
-                  </Button>
-                  <p className="text-[10px] leading-snug text-white/35">
-                    Angles &amp; references: bar above — full angle text under &quot;Script angles&quot;.
-                  </p>
-                </aside>
-
-                <div className="flex min-w-0 flex-1 flex-col gap-6">
-                  {showVideoWorkPanel ? (
+                  <div className="flex min-w-0 flex-1 flex-col gap-6">
+                    {showVideoWorkPanel ? (
                     <>
                       <div className="rounded-xl border border-white/10 bg-black/20 p-4">
                         <p className="text-xs font-semibold uppercase tracking-wide text-white/50">Your video</p>
@@ -2603,7 +2608,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                   )}
                 </div>
               </div>
-            ) : null}
+            )}
+            </div>
           </div>
         ) : null}
       </CardContent>
