@@ -15,6 +15,7 @@ import { ProjectLabCanvas } from "@/app/_components/ProjectLabCanvas";
 import { ProjectRunBrandBriefEditor } from "@/app/_components/ProjectRunBrandBriefEditor";
 import { ProjectRunScriptsEditor } from "@/app/_components/ProjectRunScriptsEditor";
 import { StudioEmptyExamples, StudioOutputPane } from "@/app/_components/StudioEmptyExamples";
+import { calculateMotionControlCredits } from "@/lib/linkToAd/generationCredits";
 import StudioImagePanel from "@/app/_components/StudioImagePanel";
 import StudioShell from "@/app/_components/StudioShell";
 import StudioVideoPanel from "@/app/_components/StudioVideoPanel";
@@ -281,9 +282,8 @@ export default function AppBrandWizard() {
 
   type MotionSubTab = "create" | "edit" | "control";
   const [motionSubTab, setMotionSubTab] = useState<MotionSubTab>("control");
-  const [motionVideoRefReady, setMotionVideoRefReady] = useState(false);
-  const [motionVideoRefFileName, setMotionVideoRefFileName] = useState<string>("");
-  const [motionVideoDurationSeconds, setMotionVideoDurationSeconds] = useState<number>(12);
+  const [motionVideoRefBlobUrl, setMotionVideoRefBlobUrl] = useState<string | null>(null);
+  const [motionVideoDetectedDuration, setMotionVideoDetectedDuration] = useState<number | null>(null);
   const [motionCharacterImageUrl, setMotionCharacterImageUrl] = useState<string | null>(null);
   const [motionModel, setMotionModel] = useState<string>("kling-3.0-motion-control");
   const [motionQuality, setMotionQuality] = useState<string>("720p");
@@ -291,13 +291,20 @@ export default function AppBrandWizard() {
   const motionVideoInputRef = useRef<HTMLInputElement>(null);
   const motionCharacterInputRef = useRef<HTMLInputElement>(null);
 
+  const motionCredits = useMemo(
+    () =>
+      motionVideoDetectedDuration
+        ? calculateMotionControlCredits({ quality: motionQuality, durationSeconds: motionVideoDetectedDuration })
+        : null,
+    [motionQuality, motionVideoDetectedDuration],
+  );
+
   useEffect(() => {
     return () => {
-      if (motionCharacterImageUrl?.startsWith("blob:")) {
-        URL.revokeObjectURL(motionCharacterImageUrl);
-      }
+      if (motionCharacterImageUrl?.startsWith("blob:")) URL.revokeObjectURL(motionCharacterImageUrl);
+      if (motionVideoRefBlobUrl?.startsWith("blob:")) URL.revokeObjectURL(motionVideoRefBlobUrl);
     };
-  }, [motionCharacterImageUrl]);
+  }, [motionCharacterImageUrl, motionVideoRefBlobUrl]);
 
   const currentProductName = useMemo(() => {
     const fromAnalysis = safeString(analysis?.step1_rawSheet ?? "");
@@ -1660,188 +1667,163 @@ export default function AppBrandWizard() {
                   </div>
                 ) : (
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:gap-6">
-                    <aside className="flex min-w-0 flex-col gap-4 lg:w-[min(100%,22rem)] xl:w-[min(100%,26rem)] lg:shrink-0 lg:max-h-[min(90vh,calc(100vh-10rem))] lg:overflow-y-auto lg:pr-1">
+                    <aside className="flex min-w-0 flex-col gap-4 lg:w-[min(100%,22rem)] xl:w-[min(100%,26rem)] lg:shrink-0">
                       <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
                         Motion control — parameters
                       </p>
-                      <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-violet-500/15 to-transparent p-4">
-                        <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-violet-300">
-                            Motion control
-                          </span>
-                        </div>
-                        <h2 className="mt-2 text-base font-bold tracking-tight text-white">
-                          Video reference + character
-                        </h2>
-                        <p className="mt-1 text-xs text-white/55">
-                          Short motion clip + clear character still. Outputs appear on the right.
-                        </p>
-                        <div className="relative mx-auto mt-3 aspect-[9/16] w-full max-w-[140px] overflow-hidden rounded-xl border border-white/10 bg-white/[0.03]">
+
+                      {/* Two upload slots: video ref + character image */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <input
+                          ref={motionVideoInputRef}
+                          type="file"
+                          accept="video/*"
+                          className="sr-only"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0] ?? null;
+                            if (!f) return;
+                            const blobUrl = URL.createObjectURL(f);
+                            setMotionVideoRefBlobUrl(blobUrl);
+                            const vid = document.createElement("video");
+                            vid.preload = "metadata";
+                            vid.onloadedmetadata = () => {
+                              const dur = Math.min(30, Math.max(3, Math.round(vid.duration)));
+                              setMotionVideoDetectedDuration(dur);
+                              URL.revokeObjectURL(vid.src);
+                            };
+                            vid.src = URL.createObjectURL(f);
+                            toast.success("Video reference selected", { description: f.name });
+                            e.currentTarget.value = "";
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => motionVideoInputRef.current?.click()}
+                          className="relative flex aspect-[4/3] w-full flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-white/20 bg-[#0c0c10] text-white/50 transition hover:border-violet-400/40 hover:bg-white/[0.03]"
+                        >
+                          {motionVideoRefBlobUrl ? (
+                            <>
+                              {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                              <video
+                                src={motionVideoRefBlobUrl}
+                                className="absolute inset-0 h-full w-full rounded-2xl object-cover"
+                                muted
+                                playsInline
+                              />
+                              {motionVideoDetectedDuration ? (
+                                <span className="absolute bottom-2 rounded-md bg-black/70 px-2 py-1 text-[10px] font-medium text-white">
+                                  {motionVideoDetectedDuration}s
+                                </span>
+                              ) : null}
+                            </>
+                          ) : (
+                            <>
+                              <Play className="h-8 w-8 opacity-50" />
+                              <span className="text-xs font-medium text-white/45">Add motion to copy</span>
+                              <span className="text-[10px] text-white/30">Video duration: 3–30 seconds</span>
+                            </>
+                          )}
+                        </button>
+
+                        <input
+                          ref={motionCharacterInputRef}
+                          type="file"
+                          accept="image/*"
+                          className="sr-only"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0] ?? null;
+                            if (!f) return;
+                            const url = URL.createObjectURL(f);
+                            setMotionCharacterImageUrl(url);
+                            toast.success("Character image selected", { description: f.name });
+                            e.currentTarget.value = "";
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => motionCharacterInputRef.current?.click()}
+                          className="relative flex aspect-[4/3] w-full flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-white/20 bg-[#0c0c10] text-white/50 transition hover:border-violet-400/40 hover:bg-white/[0.03]"
+                        >
                           {motionCharacterImageUrl ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img
                               src={motionCharacterImageUrl}
                               alt="Character"
-                              className="h-full w-full object-cover"
+                              className="absolute inset-0 h-full w-full rounded-2xl object-cover"
                             />
                           ) : (
-                            <div className="flex h-full flex-col items-center justify-center p-2 text-center">
-                              <Play className="mb-1 h-8 w-8 text-violet-200/50" />
-                              <span className="text-[10px] text-white/45">Character preview</span>
-                            </div>
+                            <>
+                              <Plus className="h-8 w-8 opacity-50" />
+                              <span className="text-xs font-medium text-white/45">Add your character</span>
+                              <span className="text-[10px] text-white/30">Image with visible face and body</span>
+                            </>
                           )}
-                        </div>
+                        </button>
                       </div>
 
+                      {/* Model */}
                       <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                        <div className="flex items-center gap-2">
-                          <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-violet-400/30 bg-violet-400/20">
-                            <Play className="h-4 w-4 text-violet-200" />
-                          </div>
-                          <div>
-                            <div className="text-sm font-semibold text-white">Motion reference video</div>
-                            <div className="text-xs text-white/55">Duration hint</div>
-                          </div>
-                        </div>
-                        <div className="mt-3 space-y-3">
-                          <div className="flex items-center justify-between text-xs text-white/55">
-                            <span>3s</span>
-                            <span className="font-medium text-white/75">{motionVideoDurationSeconds}s</span>
-                            <span>30s</span>
-                          </div>
-                          <input
-                            type="range"
-                            min={3}
-                            max={30}
-                            step={1}
-                            value={motionVideoDurationSeconds}
-                            onChange={(e) => setMotionVideoDurationSeconds(Number(e.target.value))}
-                            className="w-full accent-violet-300"
-                          />
-                          <input
-                            ref={motionVideoInputRef}
-                            type="file"
-                            accept="video/*"
-                            className="sr-only"
-                            onChange={(e) => {
-                              const f = e.target.files?.[0] ?? null;
-                              if (!f) return;
-                              setMotionVideoRefReady(true);
-                              setMotionVideoRefFileName(f.name);
-                              toast.success("Video reference selected", { description: f.name });
-                              e.currentTarget.value = "";
-                            }}
-                          />
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            className="w-full border border-white/10 bg-white/5 text-white hover:bg-white/10"
-                            onClick={() => motionVideoInputRef.current?.click()}
-                          >
-                            {motionVideoRefReady ? "Change video reference" : "Choose video reference"}
-                          </Button>
-                        </div>
+                        <span className="text-xs font-semibold text-white/80">Model</span>
+                        <Select value={motionModel} onValueChange={(v) => setMotionModel(v)}>
+                          <SelectTrigger className="mt-2">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="kling-3.0-motion-control">Kling 3.0 Motion Control</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
 
+                      {/* Quality */}
                       <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                        <div className="text-sm font-semibold text-white">Character image</div>
-                        <p className="mt-1 text-xs text-white/55">
-                          Visible face and body (so motion control matches the character).
-                        </p>
-                        <div className="mt-3 flex flex-col gap-3">
-                          <input
-                            ref={motionCharacterInputRef}
-                            type="file"
-                            accept="image/*"
-                            className="sr-only"
-                            onChange={(e) => {
-                              const f = e.target.files?.[0] ?? null;
-                              if (!f) return;
-                              const url = URL.createObjectURL(f);
-                              setMotionCharacterImageUrl(url);
-                              toast.success("Character image selected", { description: f.name });
-                              e.currentTarget.value = "";
-                            }}
-                          />
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            className="border border-white/10 bg-white/5 text-white hover:bg-white/10"
-                            onClick={() => motionCharacterInputRef.current?.click()}
-                          >
-                            {motionCharacterImageUrl ? "Change character image" : "Choose character image"}
-                          </Button>
-                          {motionVideoRefReady ? (
-                            <div className="rounded-xl border border-emerald-400/20 bg-emerald-400/5 p-3 text-xs text-emerald-200/90">
-                              Video selected. Duration: {motionVideoDurationSeconds}s
-                            </div>
-                          ) : null}
-                          {motionVideoRefReady && motionVideoRefFileName ? (
-                            <div className="break-all text-xs text-white/45">Ref: {motionVideoRefFileName}</div>
-                          ) : null}
-                        </div>
+                        <span className="text-xs font-semibold text-white/80">Quality</span>
+                        <Select value={motionQuality} onValueChange={(v) => setMotionQuality(v)}>
+                          <SelectTrigger className="mt-2">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="720p">720p</SelectItem>
+                            <SelectItem value="1080p">1080p</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
 
-                      <div className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                        <div>
-                          <span className="text-xs font-semibold text-white/80">Model</span>
-                          <Select value={motionModel} onValueChange={(v) => setMotionModel(v)}>
-                            <SelectTrigger className="mt-2">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="kling-3.0-motion-control">Kling 3.0 Motion Control</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <span className="text-xs font-semibold text-white/80">Quality</span>
-                          <Select value={motionQuality} onValueChange={(v) => setMotionQuality(v)}>
-                            <SelectTrigger className="mt-2">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="720p">720p</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-
-                      <div className="rounded-2xl border border-violet-400/20 bg-violet-400/10 p-4">
-                        <p className="text-xs text-white/55">
-                          UI prototype (front-end only). Generation will be wired to APIs later.
-                        </p>
-                        <Button
-                          type="button"
-                          disabled={motionIsGenerating}
-                          className="mt-3 w-full bg-violet-400 text-black border border-violet-200/40 shadow-[0_0_0_1px_rgba(76,29,149,0.3)] hover:bg-violet-300 h-12 rounded-2xl font-semibold inline-flex items-center justify-center gap-2"
-                          onClick={async () => {
-                            if (!motionCharacterImageUrl) {
-                              toast.error("Please choose a character image first.");
-                              return;
-                            }
-                            if (!motionVideoRefReady) {
-                              toast.error("Please choose a video reference first.");
-                              return;
-                            }
-                            if (motionIsGenerating) return;
-                            setMotionIsGenerating(true);
-                            try {
-                              await new Promise((r) => setTimeout(r, 1200));
-                              toast.success("Motion control generation queued (UI only)");
-                            } finally {
-                              setMotionIsGenerating(false);
-                            }
-                          }}
-                        >
-                          {motionIsGenerating ? (
-                            <Loader2 className="h-5 w-5 animate-spin" />
-                          ) : (
+                      {/* Generate button with dynamic credits */}
+                      <Button
+                        type="button"
+                        disabled={motionIsGenerating || !motionCharacterImageUrl || !motionVideoRefBlobUrl}
+                        className="h-14 w-full rounded-2xl border border-violet-300/40 bg-violet-500 text-lg font-semibold text-white shadow-[0_6px_0_0_rgba(76,29,149,0.85)] transition-all hover:-translate-y-px hover:bg-violet-400 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.85)] active:translate-y-1 active:shadow-none disabled:opacity-50"
+                        onClick={async () => {
+                          if (!motionCharacterImageUrl) {
+                            toast.error("Please choose a character image first.");
+                            return;
+                          }
+                          if (!motionVideoRefBlobUrl) {
+                            toast.error("Please choose a video reference first.");
+                            return;
+                          }
+                          if (motionIsGenerating) return;
+                          setMotionIsGenerating(true);
+                          try {
+                            await new Promise((r) => setTimeout(r, 1200));
+                            toast.success("Motion control generation queued (UI only)");
+                          } finally {
+                            setMotionIsGenerating(false);
+                          }
+                        }}
+                      >
+                        {motionIsGenerating ? (
+                          <Loader2 className="h-6 w-6 animate-spin" />
+                        ) : (
+                          <span className="inline-flex items-center gap-2">
+                            Generate
                             <Sparkles className="h-5 w-5" />
-                          )}
-                          Generate
-                        </Button>
-                      </div>
+                            <span className="rounded-md bg-white/15 px-2 py-0.5 text-base tabular-nums">
+                              {motionCredits ?? "—"}
+                            </span>
+                          </span>
+                        )}
+                      </Button>
                     </aside>
 
                     <StudioOutputPane
@@ -1873,7 +1855,7 @@ export default function AppBrandWizard() {
                 <CardHeader>
                   <CardTitle className="text-base">Video</CardTitle>
                   <p className="text-sm text-white/50">
-                    Kling 3.0, Seedance, Veo — frames, prompt, duration, aspect, audio.
+                    Kling 3.0, Kling 2.6, Sora 2, Seedance, Veo — frames, prompt, duration, aspect, audio.
                   </p>
                 </CardHeader>
                 <CardContent>

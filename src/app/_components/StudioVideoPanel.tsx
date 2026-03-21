@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ImageIcon, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -8,25 +8,59 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { StudioEmptyExamples, StudioOutputPane } from "@/app/_components/StudioEmptyExamples";
+import { calculateVideoCredits } from "@/lib/linkToAd/generationCredits";
 
 type VideoTab = "create" | "edit";
 
 type VideoModelId =
   | "kling-3.0/video"
+  | "kling-2.6/video"
+  | "openai/sora-2"
   | "bytedance/seedance-1.5-pro"
   | "bytedance/seedance-2.0-pro"
   | "veo3_fast"
   | "veo3";
 
-const MODEL_OPTIONS: { id: VideoModelId; label: string; family: "kie" | "veo" }[] = [
+type VideoFamily = "kie" | "veo" | "sora";
+
+const MODEL_OPTIONS: { id: VideoModelId; label: string; family: VideoFamily }[] = [
   { id: "kling-3.0/video", label: "Kling 3.0", family: "kie" },
+  { id: "kling-2.6/video", label: "Kling 2.6", family: "kie" },
+  { id: "openai/sora-2", label: "Sora 2", family: "sora" },
   { id: "bytedance/seedance-1.5-pro", label: "Seedance 1.5 Pro", family: "kie" },
   { id: "bytedance/seedance-2.0-pro", label: "Seedance 2.0 Pro", family: "kie" },
   { id: "veo3_fast", label: "Veo 3 Fast", family: "veo" },
   { id: "veo3", label: "Veo 3", family: "veo" },
 ];
 
-const CREDITS_SHOWN = 21;
+function getDurationChoices(modelId: VideoModelId): string[] {
+  switch (modelId) {
+    case "kling-3.0/video":
+      return ["5", "10", "12", "15"];
+    case "kling-2.6/video":
+      return ["5", "10"];
+    case "openai/sora-2":
+      return ["10", "15"];
+    case "bytedance/seedance-1.5-pro":
+      return ["4", "8", "12"];
+    case "bytedance/seedance-2.0-pro":
+      return ["4", "6", "8", "10", "12"];
+    default:
+      return ["5", "10"];
+  }
+}
+
+function modelHasQuality(id: VideoModelId): boolean {
+  return id === "kling-3.0/video";
+}
+
+function modelHasAudio(id: VideoModelId): boolean {
+  return id === "kling-3.0/video" || id === "kling-2.6/video";
+}
+
+function modelHasMultiShot(id: VideoModelId): boolean {
+  return id === "kling-3.0/video";
+}
 
 async function uploadFile(file: File): Promise<string> {
   const fd = new FormData();
@@ -140,6 +174,18 @@ export default function StudioVideoPanel() {
   const [videoHistory, setVideoHistory] = useState<string[]>([]);
 
   const meta = MODEL_OPTIONS.find((m) => m.id === modelId)!;
+  const durationChoices = getDurationChoices(modelId);
+
+  const credits = useMemo(
+    () =>
+      calculateVideoCredits({
+        modelId,
+        duration: Number(duration),
+        audio: soundOn,
+        quality: klingMode,
+      }),
+    [modelId, duration, soundOn, klingMode],
+  );
 
   const pickFrame = useCallback((which: "start" | "end") => {
     const input = document.createElement("input");
@@ -163,26 +209,39 @@ export default function StudioVideoPanel() {
     input.click();
   }, []);
 
-  const durationChoices =
-    modelId === "bytedance/seedance-1.5-pro"
-      ? ["4", "8", "12"]
-      : modelId.startsWith("bytedance/seedance-2")
-        ? ["4", "6", "8", "10", "12"]
-        : ["5", "10", "12", "15"];
-
   const generate = async () => {
     const p = prompt.trim();
     if (!p) {
       toast.error("Describe your video.");
       return;
     }
-    if (meta.family === "kie" && modelId !== "kling-3.0/video" && !startUrl) {
+    if (meta.family === "kie" && modelId !== "kling-3.0/video" && modelId !== "kling-2.6/video" && !startUrl) {
       toast.error("Seedance needs a start frame image.");
       return;
     }
     if (busy) return;
     setBusy(true);
     try {
+      if (meta.family === "sora") {
+        const res = await fetch("/api/kling/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            marketModel: "openai/sora-2",
+            prompt: p,
+            imageUrl: startUrl ?? undefined,
+            duration: Number(duration),
+          }),
+        });
+        const json = (await res.json()) as { taskId?: string; error?: string };
+        if (!res.ok || !json.taskId) throw new Error(json.error || "Sora 2 failed");
+        toast.message("Sora 2 started", { description: "Rendering…" });
+        const url = await pollKlingVideo(json.taskId);
+        setVideoHistory((h) => [url, ...h]);
+        toast.success("Video ready");
+        return;
+      }
+
       if (meta.family === "veo") {
         const urls = [startUrl, endUrl].filter(Boolean) as string[];
         let generationType: "TEXT_2_VIDEO" | "FIRST_AND_LAST_FRAMES_2_VIDEO" | "REFERENCE_2_VIDEO" =
@@ -211,6 +270,8 @@ export default function StudioVideoPanel() {
       }
 
       // KIE market (Kling / Seedance)
+      const isKling30 = modelId === "kling-3.0/video";
+      const isKling26 = modelId === "kling-2.6/video";
       const res = await fetch("/api/kling/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -219,10 +280,10 @@ export default function StudioVideoPanel() {
           prompt: p,
           imageUrl: startUrl ?? undefined,
           duration: Number(duration),
-          aspectRatio: modelId === "kling-3.0/video" && !startUrl ? aspect : undefined,
-          sound: soundOn,
-          mode: modelId === "kling-3.0/video" ? klingMode : undefined,
-          multiShots: modelId === "kling-3.0/video" ? multiShot : undefined,
+          aspectRatio: (isKling30 || isKling26) && !startUrl ? aspect : undefined,
+          sound: modelHasAudio(modelId) ? soundOn : undefined,
+          mode: isKling30 ? klingMode : undefined,
+          multiShots: isKling30 ? multiShot : undefined,
         }),
       });
       const json = (await res.json()) as { taskId?: string; error?: string };
@@ -324,31 +385,30 @@ export default function StudioVideoPanel() {
             </div>
 
             <div className="rounded-2xl border border-white/10 bg-[#101014] p-4">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2 text-sm text-white/80">
-                  <span>Multi-shot</span>
-                  <span className="text-xs text-white/35" title="Kling 3.0 only">
-                    ⓘ
-                  </span>
+              {modelHasMultiShot(modelId) ? (
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 text-sm text-white/80">
+                    <span>Multi-shot</span>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => setMultiShot((m) => !m)}
+                    className={`relative h-7 w-12 shrink-0 rounded-full border transition ${
+                      multiShot
+                        ? "border-violet-400/50 bg-violet-500/40"
+                        : "border-white/15 bg-white/10"
+                    } disabled:opacity-40`}
+                    aria-pressed={multiShot}
+                  >
+                    <span
+                      className={`absolute top-0.5 h-6 w-6 rounded-full bg-white transition-all ${
+                        multiShot ? "left-5" : "left-0.5"
+                      }`}
+                    />
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  disabled={busy || modelId !== "kling-3.0/video"}
-                  onClick={() => setMultiShot((m) => !m)}
-                  className={`relative h-7 w-12 shrink-0 rounded-full border transition ${
-                    multiShot
-                      ? "border-violet-400/50 bg-violet-500/40"
-                      : "border-white/15 bg-white/10"
-                  } disabled:opacity-40`}
-                  aria-pressed={multiShot}
-                >
-                  <span
-                    className={`absolute top-0.5 h-6 w-6 rounded-full bg-white transition-all ${
-                      multiShot ? "left-5" : "left-0.5"
-                    }`}
-                  />
-                </button>
-              </div>
+              ) : null}
               <Textarea
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
@@ -360,23 +420,33 @@ export default function StudioVideoPanel() {
                 <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/60">
                   ✨ Studio
                 </span>
-                <button
-                  type="button"
-                  onClick={() => setSoundOn((s) => !s)}
-                  className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-                    soundOn
-                      ? "border-emerald-400/40 bg-emerald-500/15 text-emerald-200"
-                      : "border-white/10 bg-white/5 text-white/50"
-                  }`}
-                >
-                  🔊 {soundOn ? "Audio on" : "Audio off"}
-                </button>
+                {modelHasAudio(modelId) ? (
+                  <button
+                    type="button"
+                    onClick={() => setSoundOn((s) => !s)}
+                    className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                      soundOn
+                        ? "border-emerald-400/40 bg-emerald-500/15 text-emerald-200"
+                        : "border-white/10 bg-white/5 text-white/50"
+                    }`}
+                  >
+                    🔊 {soundOn ? "Audio on" : "Audio off"}
+                  </button>
+                ) : null}
               </div>
             </div>
 
             <div className="rounded-2xl border border-white/10 bg-[#101014] p-4">
               <Label className="text-xs text-white/45">Model</Label>
-              <Select value={modelId} onValueChange={(v) => setModelId(v as VideoModelId)}>
+              <Select
+                value={modelId}
+                onValueChange={(v) => {
+                  const next = v as VideoModelId;
+                  setModelId(next);
+                  const choices = getDurationChoices(next);
+                  if (!choices.includes(duration)) setDuration(choices[0]);
+                }}
+              >
                 <SelectTrigger className="mt-2 h-12 rounded-xl border-white/15 bg-[#0a0a0d] text-white">
                   <SelectValue />
                 </SelectTrigger>
@@ -404,19 +474,34 @@ export default function StudioVideoPanel() {
                 </Select>
               ) : (
                 <>
-                  <Select value={duration} onValueChange={setDuration}>
-                    <SelectTrigger className="h-11 w-[100px] rounded-xl border-white/15 bg-[#101014] text-white">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {durationChoices.map((d) => (
-                        <SelectItem key={d} value={d}>
-                          {d}s
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {modelId === "kling-3.0/video" && !startUrl ? (
+                  {meta.family !== "sora" ? (
+                    <Select value={duration} onValueChange={setDuration}>
+                      <SelectTrigger className="h-11 w-[100px] rounded-xl border-white/15 bg-[#101014] text-white">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {durationChoices.map((d) => (
+                          <SelectItem key={d} value={d}>
+                            {d}s
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Select value={duration} onValueChange={setDuration}>
+                      <SelectTrigger className="h-11 w-[100px] rounded-xl border-white/15 bg-[#101014] text-white">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {durationChoices.map((d) => (
+                          <SelectItem key={d} value={d}>
+                            {d}s
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  {(modelId === "kling-3.0/video" || modelId === "kling-2.6/video") && !startUrl ? (
                     <Select value={aspect} onValueChange={setAspect}>
                       <SelectTrigger className="h-11 w-[100px] rounded-xl border-white/15 bg-[#101014] text-white">
                         <SelectValue />
@@ -428,14 +513,14 @@ export default function StudioVideoPanel() {
                       </SelectContent>
                     </Select>
                   ) : null}
-                  {modelId === "kling-3.0/video" ? (
+                  {modelHasQuality(modelId) ? (
                     <Select value={klingMode} onValueChange={(v) => setKlingMode(v as "std" | "pro")}>
                       <SelectTrigger className="h-11 min-w-[120px] rounded-xl border-white/15 bg-[#101014] text-white">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="std">720p std</SelectItem>
-                        <SelectItem value="pro">Pro</SelectItem>
+                        <SelectItem value="std">720p</SelectItem>
+                        <SelectItem value="pro">1080p</SelectItem>
                       </SelectContent>
                     </Select>
                   ) : null}
@@ -462,7 +547,7 @@ export default function StudioVideoPanel() {
                 <span className="inline-flex items-center gap-2">
                   Generate
                   <Sparkles className="h-5 w-5" />
-                  <span className="rounded-md bg-white/15 px-2 py-0.5 text-base tabular-nums">{CREDITS_SHOWN}</span>
+                  <span className="rounded-md bg-white/15 px-2 py-0.5 text-base tabular-nums">{credits}</span>
                 </span>
               )}
             </Button>

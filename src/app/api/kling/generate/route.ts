@@ -27,22 +27,32 @@ function validateDurationForModel(model: string, duration: number | undefined) {
     }
     return;
   }
+  if (model === "kling-2.6/video") {
+    if (duration !== 5 && duration !== 10) {
+      throw new Error("Invalid duration for Kling 2.6. Must be 5 or 10.");
+    }
+    return;
+  }
+  if (model === "openai/sora-2") {
+    if (duration !== 10 && duration !== 15) {
+      throw new Error("Invalid duration for Sora 2. Must be 10 or 15.");
+    }
+    return;
+  }
   if (model === "bytedance/seedance-1.5-pro") {
     if (duration !== 4 && duration !== 8 && duration !== 12) {
       throw new Error("Invalid duration for Seedance 1.5 Pro. Must be 4, 8, or 12.");
     }
     return;
   }
-  // Seedance 2.0 isn't documented in docs.kie.ai yet; allow a safe range.
   if (model.startsWith("bytedance/seedance-2")) {
     if (duration < 4 || duration > 15) {
       throw new Error("Invalid duration for Seedance 2.0. Must be between 4 and 15.");
     }
     return;
   }
-  // default guard
-  if (duration < 3 || duration > 15) {
-    throw new Error("Invalid duration. Must be between 3 and 15.");
+  if (duration < 3 || duration > 30) {
+    throw new Error("Invalid duration. Must be between 3 and 30.");
   }
 }
 
@@ -89,6 +99,25 @@ export async function POST(req: Request) {
         // Safer: omit it to avoid server-side errors.
       } else {
         if (body.aspectRatio) input.aspect_ratio = body.aspectRatio;
+      }
+    } else if (model === "kling-2.6/video") {
+      input = {
+        prompt,
+        sound: body.sound ?? false,
+        duration: String(body.duration ?? 5),
+      };
+      if (imageUrl) {
+        input.image_urls = [imageUrl];
+      } else if (body.aspectRatio) {
+        input.aspect_ratio = body.aspectRatio;
+      }
+    } else if (model === "openai/sora-2") {
+      input = {
+        prompt,
+        duration: String(body.duration ?? 10),
+      };
+      if (imageUrl) {
+        input.image_urls = [imageUrl];
       }
     } else if (model.startsWith("bytedance/seedance")) {
       if (!imageUrl) {
