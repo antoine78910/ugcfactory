@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 import { CreditsPlanProvider } from "@/app/_components/CreditsPlanContext";
 import { Toaster } from "@/components/ui/sonner";
@@ -24,6 +25,10 @@ export const metadata: Metadata = {
   },
 };
 
+const DATAFAST_WEBSITE_ID =
+  process.env.NEXT_PUBLIC_DATAFAST_WEBSITE_ID ?? "dfid_CATofowr0YLBVK8sLAekT";
+const DATAFAST_DOMAIN = process.env.NEXT_PUBLIC_DATAFAST_DOMAIN ?? "youry.io";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -31,6 +36,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      {/* Datafast analytics — same as snippet in <head>; beforeInteractive injects early */}
+      <Script
+        id="datafast"
+        src="https://datafa.st/js/script.js"
+        strategy="beforeInteractive"
+        data-website-id={DATAFAST_WEBSITE_ID}
+        data-domain={DATAFAST_DOMAIN}
+      />
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
