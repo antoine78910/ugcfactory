@@ -19,6 +19,15 @@ export const CREDITS_NANO_PRO_PER_IMAGE = IMAGE_MODEL.nanobanana_pro.credits;
 export const CREDITS_NANO_STANDARD_PER_IMAGE = IMAGE_MODEL.nanobanana_standard.credits;
 export const CREDITS_LINK_TO_AD_THREE_REF_IMAGES = CREDITS_NANO_PRO_PER_IMAGE * 3;
 
+/**
+ * Shown on first “Generate” from store URL (site scan + brand + UGC scripts GPT).
+ * Tune when API routes deduct credits per step.
+ */
+export const CREDITS_LINK_TO_AD_STORE_SCAN = 8;
+
+/** GPT step: motion / UGC video prompt (Link to Ad). Shown on “Retry video prompt”. */
+export const CREDITS_LINK_TO_AD_VIDEO_PROMPT_GPT = 2;
+
 // ---------------------------------------------------------------------------
 // Video (Link to Ad default clip length 12s → ceil(12 × 2.25) = 27)
 // ---------------------------------------------------------------------------
@@ -27,6 +36,10 @@ export const LINK_TO_AD_VIDEO_DURATION_SEC = 12;
 export const CREDITS_KLING_LINK_TO_AD_VIDEO = calculateVideoCreditsFromDuration(
   LINK_TO_AD_VIDEO_DURATION_SEC,
 );
+
+/** One-shot “Generate video from this image” = motion prompt GPT + default Kling clip. */
+export const CREDITS_LINK_TO_AD_VIDEO_FROM_IMAGE =
+  CREDITS_LINK_TO_AD_VIDEO_PROMPT_GPT + CREDITS_KLING_LINK_TO_AD_VIDEO;
 
 /** Full ad bundle — backend must bill this fixed amount, not sum of parts. */
 export { AD_CREDITS as CREDITS_AD_GENERATION };
@@ -60,6 +73,5 @@ export function calculateMotionControlCredits(opts: {
   quality: string;
   durationSeconds: number;
 }): number {
-  void opts.quality; // quality reserved for future tiered pricing
-  return calculateMotionControlCreditsFromDuration(opts.durationSeconds);
+  return calculateMotionControlCreditsFromDuration(opts.durationSeconds, opts.quality);
 }

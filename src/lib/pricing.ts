@@ -61,15 +61,44 @@ export function creditsForImageModel(key: ImageModelKey): number {
 // ---------------------------------------------------------------------------
 
 /**
- * Backend rule: credits scale linearly with duration (Kling 3.0 family).
- * Example: 12s → ceil(27) = 27 credits.
+ * Kling 3.0 / 2.6 — quality + audio multipliers (ratios vs 1080p + audio anchor).
+ * Anchor: 2.25 credits/s at 1080p + audio (e.g. 12s → 27 credits).
  */
-export function calculateVideoCreditsFromDuration(durationSec: number): number {
-  const d = Math.max(0, Number(durationSec) || 0);
-  return Math.ceil(d * KLING_3_VIDEO_CREDITS_PER_SECOND);
+export function is1080pVideoQuality(quality: string | undefined): boolean {
+  return quality === "pro" || quality === "1080p";
 }
 
-/** Reference row from spec: 12s + audio anchor (same as dynamic at 12s). */
+/** Multiplier on (duration × KLING_3_VIDEO_CREDITS_PER_SECOND). */
+export function kling30CreditsMultiplier(quality: string | undefined, audio: boolean): number {
+  const is1080 = is1080pVideoQuality(quality);
+  if (is1080 && audio) return 1;
+  if (is1080 && !audio) return 18 / 27;
+  if (!is1080 && audio) return 20 / 27;
+  return 14 / 27;
+}
+
+/**
+ * Kling 3.0–style video credits (studio + API).
+ */
+export function calculateKling30VideoCredits(
+  durationSec: number,
+  quality: string | undefined,
+  audio: boolean,
+): number {
+  const d = Math.max(0, Number(durationSec) || 0);
+  const mult = kling30CreditsMultiplier(quality, audio);
+  return Math.max(1, Math.ceil(d * KLING_3_VIDEO_CREDITS_PER_SECOND * mult));
+}
+
+/**
+ * Shorthand: anchor tier only (1080p + audio). For legacy call sites.
+ * Example: 12s → 27 credits.
+ */
+export function calculateVideoCreditsFromDuration(durationSec: number): number {
+  return calculateKling30VideoCredits(durationSec, "pro", true);
+}
+
+/** Reference row from spec: 12s + audio @ 1080p. */
 export const KLING_3_0_12S_AUDIO_REFERENCE = {
   model: "kling_3_0_12s_audio",
   duration_sec: 12,
@@ -77,7 +106,7 @@ export const KLING_3_0_12S_AUDIO_REFERENCE = {
   cost_with_buffer: 1.62,
   target_margin: PRICING_BASE.target_margins.video,
   price_usd: 4.05,
-  credits: calculateVideoCreditsFromDuration(12),
+  credits: calculateKling30VideoCredits(12, "pro", true),
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -169,16 +198,19 @@ export function calculateMargin(creditsUsed: number): number {
 export type VideoCreditOptions = {
   modelId: string;
   duration: number;
-  /** Kept for API compatibility; Kling 3.0 dynamic ignores these for credit math. */
+  /** Kling: sound on/off. */
   audio?: boolean;
+  /** Kling studio: `std` = 720p, `pro` = 1080p. Motion: `720p` / `1080p`. */
   quality?: string;
 };
 
 /**
- * Video billing: dynamic duration for Kling-style models; Sora uses tier table.
+ * Video billing: Kling uses duration × quality × audio; Sora uses tier table.
  */
 export function calculateVideoCreditsForModel(opts: VideoCreditOptions): number {
   const d = Math.max(0, Number(opts.duration) || 0);
+  const audio = Boolean(opts.audio);
+  const quality = opts.quality;
 
   switch (opts.modelId) {
     case "openai/sora-2":
@@ -186,15 +218,31 @@ export function calculateVideoCreditsForModel(opts: VideoCreditOptions): number 
 
     case "kling-3.0/video":
     case "kling-2.6/video":
+      return calculateKling30VideoCredits(d, quality, audio);
+
     default:
-      // Seedance, Veo, etc.: same linear rule unless you add a separate table later
-      return Math.max(1, calculateVideoCreditsFromDuration(d));
+      // Seedance, Veo, etc.: anchor tier until per-model tables exist
+      return Math.max(1, calculateKling30VideoCredits(d, "pro", true));
   }
 }
 
+/** Normalize UI quality strings for motion control billing. */
+export function normalizeMotionControlQuality(quality: string | undefined): "720p" | "1080p" {
+  const q = (quality ?? "720p").toLowerCase().trim();
+  if (q === "1080p" || q === "pro" || q.includes("1080")) return "1080p";
+  return "720p";
+}
+
 /**
- * Motion control (Kling 3.0 MC): same per-second credit curve as video.
+ * Motion control (Kling 3.0 MC): 1080p = anchor rate/s, 720p = 14/27 of anchor.
+ * (No separate audio toggle in UI — priced like 1080p vs 720p motion tiers.)
  */
-export function calculateMotionControlCreditsFromDuration(durationSeconds: number): number {
-  return Math.max(1, calculateVideoCreditsFromDuration(durationSeconds));
+export function calculateMotionControlCreditsFromDuration(
+  durationSeconds: number,
+  quality: string,
+): number {
+  const d = Math.max(0, Number(durationSeconds) || 0);
+  const tier = normalizeMotionControlQuality(quality);
+  const mult = tier === "1080p" ? 1 : 14 / 27;
+  return Math.max(1, Math.ceil(d * KLING_3_VIDEO_CREDITS_PER_SECOND * mult));
 }

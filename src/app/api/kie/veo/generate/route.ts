@@ -7,8 +7,10 @@ import {
   type KieVeoGenerationType,
   type KieVeoModel,
 } from "@/lib/kie";
+import { canUseVeoApiModel, parseAccountPlan, veoUpgradeMessage } from "@/lib/subscriptionModelAccess";
 
 type Body = {
+  accountPlan?: string;
   prompt: string;
   model?: KieVeoModel;
   aspectRatio?: KieVeoAspectRatio;
@@ -37,10 +39,24 @@ export async function POST(req: Request) {
     body?.generationType ??
     (normalizedImageUrls.length > 0 ? "FIRST_AND_LAST_FRAMES_2_VIDEO" : "TEXT_2_VIDEO");
 
+  const veoModel = body?.model ?? "veo3_fast";
+  if (body?.accountPlan != null && String(body.accountPlan).trim() !== "") {
+    const accountPlan = parseAccountPlan(body.accountPlan);
+    if (!canUseVeoApiModel(accountPlan, veoModel)) {
+      return NextResponse.json(
+        {
+          error: veoUpgradeMessage(accountPlan, veoModel) ?? "Subscription upgrade required for this Veo model.",
+          code: "PLAN_UPGRADE_REQUIRED",
+        },
+        { status: 403 },
+      );
+    }
+  }
+
   try {
     const taskId = await kieVeoGenerate({
       prompt,
-      model: body?.model ?? "veo3_fast",
+      model: veoModel,
       aspect_ratio: body?.aspectRatio ?? "16:9",
       generationType,
       imageUrls: normalizedImageUrls.length > 0 ? normalizedImageUrls : undefined,

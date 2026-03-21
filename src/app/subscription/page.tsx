@@ -8,6 +8,7 @@ import StudioShell from "@/app/_components/StudioShell";
 import { consumeCheckoutQueryParams } from "@/app/_components/CreditsPlanContext";
 import { cn } from "@/lib/utils";
 import { SUBSCRIPTIONS } from "@/lib/pricing";
+import { SUBSCRIPTION_MODEL_MATRIX_ROWS } from "@/lib/subscriptionModelAccess";
 
 type Billing = "monthly" | "yearly";
 
@@ -68,63 +69,6 @@ const PLANS: PlanDef[] = [
       "border-violet-500/40 bg-gradient-to-b from-violet-600/18 via-[#0b0912] to-[#0b0912] shadow-[0_0_40px_rgba(139,92,246,0.15)]",
     buttonClass: "bg-violet-500 text-white hover:bg-violet-400",
   },
-];
-
-type ModelRow = {
-  label: string;
-  badges?: { text: string; className: string }[];
-  /** which plan tiers include this (0=Starter … 3=Scale) */
-  tiers: [boolean, boolean, boolean, boolean];
-};
-
-const MODEL_ROWS: ModelRow[] = [
-  { label: "Flux Image Models", tiers: [true, true, true, true] },
-  {
-    label: "Flux LoRA",
-    badges: [{ text: "TRAINING", className: "bg-amber-900/50 text-amber-200 border-amber-700/40" }],
-    tiers: [false, true, true, true],
-  },
-  { label: "Nano Banana 2", tiers: [false, true, true, true] },
-  { label: "Z-image Turbo", tiers: [false, true, true, true] },
-  { label: "Kling 2.1 Master", tiers: [false, false, true, true] },
-  { label: "Kling 2.5 Turbo", tiers: [false, false, true, true] },
-  { label: "Kling O1", tiers: [false, false, true, true] },
-  { label: "Seedance 1.5 Pro", tiers: [false, false, true, true] },
-  { label: "Veo 3.1", tiers: [false, false, true, true] },
-  { label: "Veo 3.1 Fast", tiers: [false, false, true, true] },
-  { label: "WAN 2.6", tiers: [false, false, true, true] },
-  {
-    label: "Seedream 4.5",
-    badges: [{ text: "4K", className: "bg-violet-500/20 text-violet-200 border-violet-400/30" }],
-    tiers: [false, false, false, true],
-  },
-  {
-    label: "Kling 2.6 Pro",
-    badges: [{ text: "4K", className: "bg-violet-500/20 text-violet-200 border-violet-400/30" }],
-    tiers: [false, false, false, true],
-  },
-  {
-    label: "Kling 3.0 Pro",
-    badges: [
-      { text: "4K", className: "bg-violet-500/20 text-violet-200 border-violet-400/30" },
-      { text: "VOICE", className: "bg-teal-500/20 text-teal-200 border-teal-400/30" },
-    ],
-    tiers: [false, false, false, true],
-  },
-  {
-    label: "Sora 2 Pro",
-    badges: [
-      { text: "4K", className: "bg-violet-500/20 text-violet-200 border-violet-400/30" },
-      { text: "VOICE", className: "bg-teal-500/20 text-teal-200 border-teal-400/30" },
-    ],
-    tiers: [false, false, false, true],
-  },
-];
-
-/** Top rows: Image / Video upscale per tier */
-const UPSCALE_TOP: { label: string; tiers: [boolean, boolean, boolean, boolean] }[] = [
-  { label: "Image Upscale", tiers: [false, false, true, true] },
-  { label: "Video Upscale", tiers: [false, false, false, true] },
 ];
 
 function CellIcon({ ok, accent }: { ok: boolean; accent?: "sky" | "violet" | "amber" }) {
@@ -421,7 +365,13 @@ export default function SubscriptionPage() {
         {/* Model matrix — second mockup */}
         <section className="mx-auto max-w-6xl">
           <h2 className="text-lg font-bold text-white">Model access</h2>
-          <p className="mt-1 text-sm text-white/45">Compare included models and upscaling by plan.</p>
+          <p className="mt-1 text-sm text-white/45">
+            Studio Image &amp; Video — same rules as the app. Higher tiers unlock heavier models (more credits).
+          </p>
+          <p className="mt-2 text-xs text-white/35">
+            <span className="font-semibold text-white/50">Free</span> (credit packs) : accès modèles identique à{" "}
+            <span className="text-white/60">Starter</span> dans le studio.
+          </p>
 
           <div className="mt-6 overflow-x-auto rounded-2xl border border-white/10 bg-[#08090e]">
             <div className="min-w-[720px]">
@@ -446,33 +396,12 @@ export default function SubscriptionPage() {
                 ))}
               </div>
 
-              {UPSCALE_TOP.map((row) => (
-                <div
-                  key={row.label}
-                  className="grid border-b border-white/5"
-                  style={{ gridTemplateColumns: "minmax(200px,1.2fr) repeat(4, minmax(88px,1fr))" }}
-                >
-                  <div className="p-3 pl-4 text-sm text-white/70">{row.label}</div>
-                  {row.tiers.map((ok, ti) => (
-                    <div
-                      key={ti}
-                      className={cn(
-                        "flex items-center justify-center border-l border-white/5 py-3",
-                        tierColBg(ti),
-                      )}
-                    >
-                      <CellIcon ok={ok} accent={tierAccent(ti)} />
-                    </div>
-                  ))}
-                </div>
-              ))}
-
               <div
                 className="grid border-b border-white/10 bg-violet-500/5"
                 style={{ gridTemplateColumns: "minmax(200px,1.2fr) repeat(4, minmax(88px,1fr))" }}
               >
                 <div className="p-3 pl-4 text-xs font-bold uppercase tracking-[0.12em] text-violet-200/90">
-                  Unlimited access
+                  Studio — models
                 </div>
                 <div className="border-l border-white/5" />
                 <div className="border-l border-white/5 bg-sky-500/[0.04]" />
@@ -480,7 +409,7 @@ export default function SubscriptionPage() {
                 <div className="border-l border-white/5 bg-violet-500/[0.06]" />
               </div>
 
-              {MODEL_ROWS.map((row) => (
+              {SUBSCRIPTION_MODEL_MATRIX_ROWS.map((row) => (
                 <div
                   key={row.label}
                   className="grid border-b border-white/5 last:border-b-0"

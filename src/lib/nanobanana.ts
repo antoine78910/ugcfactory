@@ -27,6 +27,27 @@ export type NanoBananaGenerateRequest = {
 };
 
 export type NanoBananaProResolution = "1K" | "2K" | "4K";
+
+/** Aspect ratios supported by `POST /api/v1/nanobanana/generate-2` */
+export const NANO_BANANA_2_ASPECT_RATIOS = [
+  "auto",
+  "1:1",
+  "1:4",
+  "1:8",
+  "2:3",
+  "3:2",
+  "3:4",
+  "4:1",
+  "4:3",
+  "4:5",
+  "5:4",
+  "8:1",
+  "9:16",
+  "16:9",
+  "21:9",
+] as const;
+
+export type NanoBanana2AspectRatio = (typeof NANO_BANANA_2_ASPECT_RATIOS)[number];
 export type NanoBananaProAspectRatio =
   | NanoBananaImageSize
   | "auto";
@@ -72,6 +93,65 @@ export async function nanoBananaGenerate(req: NanoBananaGenerateRequest) {
 type NanoBananaProGenerateResponse =
   | { code: 200; message: string; data: { taskId: string } }
   | { code: number; message: string; data?: unknown };
+
+export function coerceNanoBanana2AspectRatio(aspect: string | undefined): NanoBanana2AspectRatio {
+  const v = (aspect ?? "auto").trim();
+  if ((NANO_BANANA_2_ASPECT_RATIOS as readonly string[]).includes(v)) {
+    return v as NanoBanana2AspectRatio;
+  }
+  return "auto";
+}
+
+type NanoBanana2GenerateResponse =
+  | { code: 200; message: string; data: { taskId: string } }
+  | { code: number; message: string; data?: unknown };
+
+/** NanoBanana 2 — text/image with 1K/2K/4K resolution (replaces legacy `/generate` for studio “nano”). */
+export async function nanoBananaGenerate2(req: {
+  prompt: string;
+  imageUrls?: string[];
+  aspectRatio?: string;
+  resolution?: NanoBananaProResolution;
+  callBackUrl?: string;
+  outputFormat?: "png" | "jpg";
+  googleSearch?: boolean;
+}) {
+  const apiKey = requireEnv("NANOBANANA_API_KEY");
+
+  const res = await fetch(`${API_BASE}/api/v1/nanobanana/generate-2`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      prompt: req.prompt,
+      imageUrls: req.imageUrls?.length ? req.imageUrls : [],
+      aspectRatio: coerceNanoBanana2AspectRatio(req.aspectRatio),
+      resolution: req.resolution ?? "1K",
+      callBackUrl: req.callBackUrl,
+      outputFormat: req.outputFormat ?? "jpg",
+      googleSearch: req.googleSearch ?? false,
+    }),
+    cache: "no-store",
+  });
+
+  const json = (await res.json()) as NanoBanana2GenerateResponse & { msg?: string };
+  const taskId = (json as unknown as { data?: { taskId?: unknown } })?.data?.taskId;
+
+  if (!res.ok || json.code !== 200 || typeof taskId !== "string") {
+    const code = (json as unknown as { code?: unknown })?.code;
+    const msg =
+      (json as { message?: string; msg?: string }).message ??
+      json.msg ??
+      `HTTP ${res.status}`;
+    throw new Error(
+      `NanoBanana generate-2 failed: HTTP ${res.status} / code ${String(code)} / ${String(msg)}`,
+    );
+  }
+
+  return taskId;
+}
 
 export async function nanoBananaGeneratePro(req: NanoBananaProGenerateRequest) {
   const apiKey = requireEnv("NANOBANANA_API_KEY");

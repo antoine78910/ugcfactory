@@ -1,0 +1,240 @@
+/**
+ * Which Studio image/video models each subscription tier may use.
+ * Higher tiers unlock more expensive models (credits / API cost).
+ */
+
+import { isSubscriptionPlanId, type SubscriptionPlanId } from "@/lib/stripe/subscriptionPrices";
+
+/** Includes free (credit packs / demo). */
+export type AccountPlanId = "free" | SubscriptionPlanId;
+
+const ORDER: AccountPlanId[] = ["free", "starter", "growth", "pro", "scale"];
+
+/**
+ * Effective tier for gating. **Free** is treated like **Starter** (rank 1) so credit-pack users
+ * get the same studio model access as the first paid tier.
+ */
+export function planRank(planId: AccountPlanId): number {
+  if (planId === "free") return 1;
+  const i = ORDER.indexOf(planId);
+  return i >= 0 ? i : 1;
+}
+
+export function parseAccountPlan(raw: unknown): AccountPlanId {
+  if (raw == null || raw === "") return "free";
+  if (raw === "free") return "free";
+  if (typeof raw === "string" && isSubscriptionPlanId(raw)) return raw;
+  return "free";
+}
+
+/** Minimum tier rank required (same index as ORDER). */
+const IMAGE_MIN_RANK: Record<"nano" | "pro", number> = {
+  nano: 0,
+  pro: 2, // Growth+
+};
+
+/** KIE / OpenAI ids used by Studio video panel + Veo API. */
+const VIDEO_MIN_RANK: Record<string, number> = {
+  "bytedance/seedance-1.5-pro": 0,
+  "kling-2.6/video": 1, // Starter+
+  "bytedance/seedance-2.0-pro": 2,
+  "veo3_fast": 2,
+  "kling-3.0/video": 3,
+  veo3: 3,
+  "openai/sora-2": 3,
+};
+
+/** Veo checkout body uses these keys — map to same gates as studio ids. */
+const VEO_BODY_MODEL_MIN_RANK: Record<string, number> = {
+  veo3_fast: VIDEO_MIN_RANK.veo3_fast,
+  veo3: VIDEO_MIN_RANK.veo3,
+};
+
+export function canUseStudioImageModel(planId: AccountPlanId, model: "nano" | "pro"): boolean {
+  return planRank(planId) >= IMAGE_MIN_RANK[model];
+}
+
+export function canUseStudioVideoModel(planId: AccountPlanId, marketModelId: string): boolean {
+  const id = marketModelId.trim();
+  const min = VIDEO_MIN_RANK[id];
+  if (min === undefined) return false;
+  return planRank(planId) >= min;
+}
+
+export function canUseVeoApiModel(planId: AccountPlanId, veoModel: string | undefined): boolean {
+  const key = (veoModel ?? "veo3_fast").trim();
+  const min = VEO_BODY_MODEL_MIN_RANK[key];
+  if (min === undefined) return false;
+  return planRank(planId) >= min;
+}
+
+/** Motion Control = Kling 3.0 class — align with Kling 3.0 tier. */
+export function canUseMotionControl(planId: AccountPlanId): boolean {
+  return canUseStudioVideoModel(planId, "kling-3.0/video");
+}
+
+function planIdAtMinRank(rank: number): AccountPlanId {
+  return ORDER[Math.max(0, Math.min(rank, ORDER.length - 1))];
+}
+
+export function minPlanForStudioImage(model: "nano" | "pro"): AccountPlanId {
+  return planIdAtMinRank(IMAGE_MIN_RANK[model]);
+}
+
+export function minPlanForStudioVideo(marketModelId: string): AccountPlanId {
+  const min = VIDEO_MIN_RANK[marketModelId.trim()];
+  if (min === undefined) return "scale";
+  return planIdAtMinRank(min);
+}
+
+export function minPlanForVeo(veoModel: string | undefined): AccountPlanId {
+  const key = (veoModel ?? "veo3_fast").trim();
+  const min = VEO_BODY_MODEL_MIN_RANK[key];
+  if (min === undefined) return "scale";
+  return planIdAtMinRank(min);
+}
+
+const PLAN_DISPLAY: Record<AccountPlanId, string> = {
+  free: "Free",
+  starter: "Starter",
+  growth: "Growth",
+  pro: "Pro",
+  scale: "Scale",
+};
+
+export function planDisplayName(planId: AccountPlanId): string {
+  return PLAN_DISPLAY[planId] ?? planId;
+}
+
+export function upgradePlanMessage(requiredPlan: AccountPlanId, featureLabel: string): string {
+  if (requiredPlan === "free") return "";
+  const name = planDisplayName(requiredPlan);
+  return `Passe au forfait ${name} pour utiliser ${featureLabel}.`;
+}
+
+const STUDIO_VIDEO_LABELS: Record<string, string> = {
+  "kling-3.0/video": "Kling 3.0",
+  "kling-2.6/video": "Kling 2.6",
+  "openai/sora-2": "Sora 2",
+  "bytedance/seedance-1.5-pro": "Seedance 1.5 Pro",
+  "bytedance/seedance-2.0-pro": "Seedance 2.0 Pro",
+  veo3_fast: "Veo 3 Fast",
+  veo3: "Veo 3",
+};
+
+/** Order used in “included with your plan” lists (cheapest → premium). */
+export const STUDIO_VIDEO_IDS_ORDERED: readonly string[] = [
+  "bytedance/seedance-1.5-pro",
+  "kling-2.6/video",
+  "bytedance/seedance-2.0-pro",
+  "veo3_fast",
+  "kling-3.0/video",
+  "veo3",
+  "openai/sora-2",
+];
+
+export function studioVideoDisplayLabel(modelId: string): string {
+  return STUDIO_VIDEO_LABELS[modelId] ?? modelId;
+}
+
+export function studioImageDisplayLabel(model: "nano" | "pro"): string {
+  return model === "pro" ? "Nano Banana Pro" : "Nano Banana (Standard)";
+}
+
+/** Human-readable names for video models the user can use on this plan. */
+export function listAllowedStudioVideoModels(planId: AccountPlanId): string[] {
+  return STUDIO_VIDEO_IDS_ORDERED.filter((id) => canUseStudioVideoModel(planId, id)).map(
+    (id) => STUDIO_VIDEO_LABELS[id] ?? id,
+  );
+}
+
+/** Human-readable names for image models the user can use on this plan. */
+export function listAllowedStudioImageModels(planId: AccountPlanId): string[] {
+  const out: string[] = [];
+  if (canUseStudioImageModel(planId, "nano")) out.push(studioImageDisplayLabel("nano"));
+  if (canUseStudioImageModel(planId, "pro")) out.push(studioImageDisplayLabel("pro"));
+  return out;
+}
+
+export function studioImageUpgradeMessage(
+  planId: AccountPlanId,
+  model: "nano" | "pro",
+): string | null {
+  if (canUseStudioImageModel(planId, model)) return null;
+  const need = minPlanForStudioImage(model);
+  return upgradePlanMessage(need, studioImageDisplayLabel(model));
+}
+
+export function studioVideoUpgradeMessage(planId: AccountPlanId, marketModelId: string): string | null {
+  if (canUseStudioVideoModel(planId, marketModelId)) return null;
+  const need = minPlanForStudioVideo(marketModelId);
+  const label = studioVideoDisplayLabel(marketModelId);
+  return upgradePlanMessage(need, label);
+}
+
+export function veoUpgradeMessage(planId: AccountPlanId, veoModel: string | undefined): string | null {
+  if (canUseVeoApiModel(planId, veoModel)) return null;
+  const need = minPlanForVeo(veoModel);
+  const label = (veoModel ?? "veo3_fast") === "veo3" ? "Veo 3" : "Veo 3 Fast";
+  return upgradePlanMessage(need, label);
+}
+
+export function motionControlUpgradeMessage(planId: AccountPlanId): string | null {
+  if (canUseMotionControl(planId)) return null;
+  return upgradePlanMessage(minPlanForStudioVideo("kling-3.0/video"), "Motion Control (Kling 3.0)");
+}
+
+// ---------------------------------------------------------------------------
+// Subscription page matrix (Starter … Scale — four paid columns)
+// ---------------------------------------------------------------------------
+
+export type SubscriptionModelMatrixRow = {
+  label: string;
+  badges?: { text: string; className: string }[];
+  /** [starter, growth, pro, scale] */
+  tiers: [boolean, boolean, boolean, boolean];
+};
+
+/** Paid columns: Starter=1, Growth=2, Pro=3, Scale=4 in `planRank`. */
+function tierBools(minRank: number): [boolean, boolean, boolean, boolean] {
+  return [1, 2, 3, 4].map((r) => r >= minRank) as [boolean, boolean, boolean, boolean];
+}
+
+/** Rows shown under “Model access” on /subscription — synced with gates above. */
+export const SUBSCRIPTION_MODEL_MATRIX_ROWS: SubscriptionModelMatrixRow[] = [
+  {
+    label: "Nano Banana (Standard) — images",
+    tiers: tierBools(IMAGE_MIN_RANK.nano),
+  },
+  {
+    label: "Nano Banana Pro — images",
+    badges: [{ text: "2 credits", className: "bg-violet-500/20 text-violet-200 border-violet-400/30" }],
+    tiers: tierBools(IMAGE_MIN_RANK.pro),
+  },
+  { label: "Seedance 1.5 Pro — video", tiers: tierBools(VIDEO_MIN_RANK["bytedance/seedance-1.5-pro"]) },
+  { label: "Kling 2.6 — video", tiers: tierBools(VIDEO_MIN_RANK["kling-2.6/video"]) },
+  { label: "Seedance 2.0 Pro — video", tiers: tierBools(VIDEO_MIN_RANK["bytedance/seedance-2.0-pro"]) },
+  {
+    label: "Veo 3 Fast — video",
+    badges: [{ text: "Google", className: "bg-amber-500/20 text-amber-200 border-amber-400/30" }],
+    tiers: tierBools(VIDEO_MIN_RANK.veo3_fast),
+  },
+  {
+    label: "Kling 3.0 — video",
+    badges: [
+      { text: "1080p", className: "bg-violet-500/20 text-violet-200 border-violet-400/30" },
+      { text: "Audio", className: "bg-teal-500/20 text-teal-200 border-teal-400/30" },
+    ],
+    tiers: tierBools(VIDEO_MIN_RANK["kling-3.0/video"]),
+  },
+  { label: "Veo 3 — video", tiers: tierBools(VIDEO_MIN_RANK.veo3) },
+  {
+    label: "Sora 2 — video",
+    badges: [{ text: "OpenAI", className: "bg-sky-500/20 text-sky-200 border-sky-400/30" }],
+    tiers: tierBools(VIDEO_MIN_RANK["openai/sora-2"]),
+  },
+  {
+    label: "Motion Control — Kling 3.0",
+    tiers: tierBools(VIDEO_MIN_RANK["kling-3.0/video"]),
+  },
+];

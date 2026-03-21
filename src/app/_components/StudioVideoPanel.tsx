@@ -1,14 +1,22 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ImageIcon, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { StudioEmptyExamples, StudioOutputPane } from "@/app/_components/StudioEmptyExamples";
+import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
+import {
+  StudioModelPicker,
+  studioSelectContentClass,
+  studioSelectItemClass,
+  type StudioModelPickerItem,
+} from "@/app/_components/StudioModelPicker";
+import { useCreditsPlan } from "@/app/_components/CreditsPlanContext";
 import { calculateVideoCredits } from "@/lib/linkToAd/generationCredits";
+import { canUseStudioVideoModel, studioVideoUpgradeMessage } from "@/lib/subscriptionModelAccess";
 
 type VideoTab = "create" | "edit";
 
@@ -31,6 +39,72 @@ const MODEL_OPTIONS: { id: VideoModelId; label: string; family: VideoFamily }[] 
   { id: "bytedance/seedance-2.0-pro", label: "Seedance 2.0 Pro", family: "kie" },
   { id: "veo3_fast", label: "Veo 3 Fast", family: "veo" },
   { id: "veo3", label: "Veo 3", family: "veo" },
+];
+
+const VIDEO_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
+  {
+    id: "kling-3.0/video",
+    label: "Kling 3.0",
+    icon: "kling",
+    exclusive: true,
+    hasAudio: true,
+    resolution: "1080p",
+    durationRange: "3s–15s",
+  },
+  {
+    id: "kling-2.6/video",
+    label: "Kling 2.6",
+    icon: "kling",
+    hasAudio: true,
+    resolution: "1080p",
+    durationRange: "5s–10s",
+  },
+  {
+    id: "openai/sora-2",
+    label: "Sora 2",
+    icon: "sora",
+    resolution: "1080p",
+    durationRange: "10s–15s",
+  },
+  {
+    id: "bytedance/seedance-1.5-pro",
+    label: "Seedance 1.5 Pro",
+    icon: "seedance",
+    resolution: "720p",
+    durationRange: "4s–12s",
+  },
+  {
+    id: "bytedance/seedance-2.0-pro",
+    label: "Seedance 2.0 Pro",
+    icon: "seedance",
+    resolution: "1080p",
+    durationRange: "4s–12s",
+  },
+  {
+    id: "veo3_fast",
+    label: "Veo 3 Fast",
+    icon: "veo",
+    resolution: "1080p",
+    durationRange: "5s–10s",
+  },
+  {
+    id: "veo3",
+    label: "Veo 3",
+    icon: "veo",
+    resolution: "1080p",
+    durationRange: "5s–10s",
+  },
+];
+
+/** Cheapest first — used to pick a valid model after plan change. */
+const VIDEO_MODEL_ACCESS_ORDER: VideoModelId[] = [
+  "bytedance/seedance-1.5-pro",
+  "kling-2.6/video",
+  "bytedance/seedance-2.0-pro",
+  "veo3_fast",
+  "kling-3.0/video",
+  "veo3",
+  "openai/sora-2",
 ];
 
 function getDurationChoices(modelId: VideoModelId): string[] {
@@ -158,13 +232,14 @@ async function pollVeoVideo(taskId: string): Promise<string> {
 }
 
 export default function StudioVideoPanel() {
+  const { planId, current: creditsBalance } = useCreditsPlan();
   const [tab, setTab] = useState<VideoTab>("create");
   const [startUrl, setStartUrl] = useState<string | null>(null);
   const [endUrl, setEndUrl] = useState<string | null>(null);
   const [prompt, setPrompt] = useState("");
   const [multiShot, setMultiShot] = useState(false);
   const [soundOn, setSoundOn] = useState(true);
-  const [modelId, setModelId] = useState<VideoModelId>("kling-3.0/video");
+  const [modelId, setModelId] = useState<VideoModelId>("bytedance/seedance-1.5-pro");
   const [duration, setDuration] = useState("12");
   const [aspect, setAspect] = useState("9:16");
   const [klingMode, setKlingMode] = useState<"std" | "pro">("std");
@@ -172,6 +247,11 @@ export default function StudioVideoPanel() {
   const [busy, setBusy] = useState(false);
   /** Newest first — shown above the form */
   const [videoHistory, setVideoHistory] = useState<string[]>([]);
+  type VideoBilling =
+    | { open: false }
+    | { open: true; reason: "plan"; blockedId: string }
+    | { open: true; reason: "credits"; required: number };
+  const [billing, setBilling] = useState<VideoBilling>({ open: false });
 
   const meta = MODEL_OPTIONS.find((m) => m.id === modelId)!;
   const durationChoices = getDurationChoices(modelId);
@@ -186,6 +266,15 @@ export default function StudioVideoPanel() {
       }),
     [modelId, duration, soundOn, klingMode],
   );
+
+  useEffect(() => {
+    if (canUseStudioVideoModel(planId, modelId)) return;
+    const next = VIDEO_MODEL_ACCESS_ORDER.find((id) => canUseStudioVideoModel(planId, id));
+    if (!next) return;
+    setModelId(next);
+    const choices = getDurationChoices(next);
+    setDuration(choices[0] ?? "5");
+  }, [planId, modelId]);
 
   const pickFrame = useCallback((which: "start" | "end") => {
     const input = document.createElement("input");
@@ -219,6 +308,15 @@ export default function StudioVideoPanel() {
       toast.error("Seedance needs a start frame image.");
       return;
     }
+    const gate = studioVideoUpgradeMessage(planId, modelId);
+    if (gate) {
+      setBilling({ open: true, reason: "plan", blockedId: modelId });
+      return;
+    }
+    if (creditsBalance < credits) {
+      setBilling({ open: true, reason: "credits", required: credits });
+      return;
+    }
     if (busy) return;
     setBusy(true);
     try {
@@ -227,6 +325,7 @@ export default function StudioVideoPanel() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            accountPlan: planId,
             marketModel: "openai/sora-2",
             prompt: p,
             imageUrl: startUrl ?? undefined,
@@ -253,6 +352,7 @@ export default function StudioVideoPanel() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            accountPlan: planId,
             prompt: p,
             model: modelId === "veo3" ? "veo3" : "veo3_fast",
             aspectRatio: veoAspect,
@@ -276,6 +376,7 @@ export default function StudioVideoPanel() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          accountPlan: planId,
           marketModel: modelId,
           prompt: p,
           imageUrl: startUrl ?? undefined,
@@ -364,7 +465,7 @@ export default function StudioVideoPanel() {
         </div>
       ) : (
         <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:gap-6">
-          <aside className="flex min-w-0 flex-col gap-4 lg:w-[min(100%,22rem)] xl:w-[min(100%,26rem)] lg:shrink-0 lg:max-h-[min(90vh,calc(100vh-10rem))] lg:overflow-y-auto lg:pr-1">
+          <aside className="studio-params-scroll flex min-w-0 flex-col gap-4 lg:w-[min(100%,22rem)] xl:w-[min(100%,26rem)] lg:shrink-0 lg:max-h-[min(90vh,calc(100vh-10rem))] lg:overflow-y-auto">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Create — parameters</p>
             <div className="grid grid-cols-2 gap-2">
               <FrameSlot
@@ -409,13 +510,29 @@ export default function StudioVideoPanel() {
                   </button>
                 </div>
               ) : null}
-              <Textarea
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder="Describe your video, like 'A woman walking through a neon-lit city'."
-                className="min-h-[100px] border-white/10 bg-[#0a0a0d] text-white placeholder:text-white/35"
-                rows={4}
-              />
+              <div className="flex min-h-[100px] flex-wrap gap-2">
+                <Textarea
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  placeholder="Describe your video, like 'A woman walking through a neon-lit city'."
+                  className="min-h-[100px] min-w-0 flex-1 border-white/10 bg-[#0a0a0d] text-white placeholder:text-white/35"
+                  rows={4}
+                />
+                <StudioModelPicker
+                  value={modelId}
+                  items={VIDEO_MODEL_PICKER_ITEMS}
+                  isItemLocked={(id) => !canUseStudioVideoModel(planId, id)}
+                  onLockedPick={(id) => {
+                    setBilling({ open: true, reason: "plan", blockedId: id });
+                  }}
+                  onChange={(v) => {
+                    const next = v as VideoModelId;
+                    setModelId(next);
+                    const choices = getDurationChoices(next);
+                    if (!choices.includes(duration)) setDuration(choices[0]);
+                  }}
+                />
+              </div>
               <div className="mt-3 flex flex-wrap gap-2">
                 <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/60">
                   ✨ Studio
@@ -436,40 +553,22 @@ export default function StudioVideoPanel() {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-white/10 bg-[#101014] p-4">
-              <Label className="text-xs text-white/45">Model</Label>
-              <Select
-                value={modelId}
-                onValueChange={(v) => {
-                  const next = v as VideoModelId;
-                  setModelId(next);
-                  const choices = getDurationChoices(next);
-                  if (!choices.includes(duration)) setDuration(choices[0]);
-                }}
-              >
-                <SelectTrigger className="mt-2 h-12 rounded-xl border-white/15 bg-[#0a0a0d] text-white">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {MODEL_OPTIONS.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>
-                      {m.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
             <div className="flex flex-wrap gap-2">
               {meta.family === "veo" ? (
                 <Select value={veoAspect} onValueChange={(v) => setVeoAspect(v as typeof veoAspect)}>
                   <SelectTrigger className="h-11 w-full min-w-[120px] rounded-xl border-white/15 bg-[#101014] text-white">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="9:16">9:16</SelectItem>
-                    <SelectItem value="16:9">16:9</SelectItem>
-                    <SelectItem value="Auto">Auto</SelectItem>
+                  <SelectContent position="popper" className={studioSelectContentClass}>
+                    <SelectItem value="9:16" className={studioSelectItemClass}>
+                      9:16
+                    </SelectItem>
+                    <SelectItem value="16:9" className={studioSelectItemClass}>
+                      16:9
+                    </SelectItem>
+                    <SelectItem value="Auto" className={studioSelectItemClass}>
+                      Auto
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               ) : (
@@ -479,9 +578,9 @@ export default function StudioVideoPanel() {
                       <SelectTrigger className="h-11 w-[100px] rounded-xl border-white/15 bg-[#101014] text-white">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent position="popper" className={studioSelectContentClass}>
                         {durationChoices.map((d) => (
-                          <SelectItem key={d} value={d}>
+                          <SelectItem key={d} value={d} className={studioSelectItemClass}>
                             {d}s
                           </SelectItem>
                         ))}
@@ -492,9 +591,9 @@ export default function StudioVideoPanel() {
                       <SelectTrigger className="h-11 w-[100px] rounded-xl border-white/15 bg-[#101014] text-white">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent position="popper" className={studioSelectContentClass}>
                         {durationChoices.map((d) => (
-                          <SelectItem key={d} value={d}>
+                          <SelectItem key={d} value={d} className={studioSelectItemClass}>
                             {d}s
                           </SelectItem>
                         ))}
@@ -506,10 +605,16 @@ export default function StudioVideoPanel() {
                       <SelectTrigger className="h-11 w-[100px] rounded-xl border-white/15 bg-[#101014] text-white">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="9:16">9:16</SelectItem>
-                        <SelectItem value="16:9">16:9</SelectItem>
-                        <SelectItem value="1:1">1:1</SelectItem>
+                      <SelectContent position="popper" className={studioSelectContentClass}>
+                        <SelectItem value="9:16" className={studioSelectItemClass}>
+                          9:16
+                        </SelectItem>
+                        <SelectItem value="16:9" className={studioSelectItemClass}>
+                          16:9
+                        </SelectItem>
+                        <SelectItem value="1:1" className={studioSelectItemClass}>
+                          1:1
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                   ) : null}
@@ -518,9 +623,13 @@ export default function StudioVideoPanel() {
                       <SelectTrigger className="h-11 min-w-[120px] rounded-xl border-white/15 bg-[#101014] text-white">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="std">720p</SelectItem>
-                        <SelectItem value="pro">1080p</SelectItem>
+                      <SelectContent position="popper" className={studioSelectContentClass}>
+                        <SelectItem value="std" className={studioSelectItemClass}>
+                          720p
+                        </SelectItem>
+                        <SelectItem value="pro" className={studioSelectItemClass}>
+                          1080p
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                   ) : null}
@@ -529,10 +638,16 @@ export default function StudioVideoPanel() {
                       <SelectTrigger className="h-11 w-[100px] rounded-xl border-white/15 bg-[#101014] text-white">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="9:16">9:16</SelectItem>
-                        <SelectItem value="16:9">16:9</SelectItem>
-                        <SelectItem value="1:1">1:1</SelectItem>
+                      <SelectContent position="popper" className={studioSelectContentClass}>
+                        <SelectItem value="9:16" className={studioSelectItemClass}>
+                          9:16
+                        </SelectItem>
+                        <SelectItem value="16:9" className={studioSelectItemClass}>
+                          16:9
+                        </SelectItem>
+                        <SelectItem value="1:1" className={studioSelectItemClass}>
+                          1:1
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                   ) : null}
@@ -561,6 +676,22 @@ export default function StudioVideoPanel() {
           />
         </div>
       )}
+
+      <StudioBillingDialog
+        open={billing.open}
+        onOpenChange={(o) => {
+          if (!o) setBilling({ open: false });
+        }}
+        planId={planId}
+        studioMode="video"
+        variant={
+          !billing.open
+            ? { kind: "credits", currentCredits: 0, requiredCredits: 0 }
+            : billing.reason === "plan"
+              ? { kind: "plan", blockedModelId: billing.blockedId }
+              : { kind: "credits", currentCredits: creditsBalance, requiredCredits: billing.required }
+        }
+      />
     </div>
   );
 }

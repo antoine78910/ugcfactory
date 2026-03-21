@@ -85,13 +85,13 @@ function LabNodeCard({
   selected,
   shift,
   onSelect,
-  onDragHandleDown,
+  onNodeDragStart,
 }: {
   node: LabNode;
   selected: boolean;
   shift: { x: number; y: number };
   onSelect: (n: LabNode) => void;
-  onDragHandleDown: (e: React.PointerEvent, node: LabNode) => void;
+  onNodeDragStart: (e: React.PointerEvent, node: LabNode) => void;
 }) {
   const isThumb =
     (node.kind === "ref_image" && node.imageUrl) ||
@@ -101,14 +101,22 @@ function LabNodeCard({
     <div
       data-lab-node="1"
       className={cn(
-        "absolute flex flex-col overflow-hidden rounded-xl border bg-black/55 shadow-lg backdrop-blur-md transition-[box-shadow] duration-200",
+        "absolute flex flex-col overflow-hidden rounded-xl border bg-black/55 shadow-lg backdrop-blur-md transition-[box-shadow] duration-200 touch-manipulation",
         selected ? "border-violet-400 ring-2 ring-violet-400/40 z-10" : "border-white/15 hover:border-violet-400/50",
-        isThumb ? "p-0" : "p-2 pt-6",
+        isThumb ? "cursor-grab p-0 active:cursor-grabbing" : "cursor-grab p-2 pt-6 active:cursor-grabbing",
       )}
       style={{ left: node.x - shift.x, top: node.y - shift.y, width: node.w, height: node.h }}
       onClick={(e) => {
         if ((e.target as HTMLElement).closest("[data-lab-drag]")) return;
         onSelect(node);
+      }}
+      onPointerDown={(e) => {
+        if (e.button !== 0) return;
+        const t = e.target as HTMLElement;
+        if (t.closest("[data-lab-drag]")) return;
+        if (t.closest("button")) return;
+        if (t.closest("a[href]")) return;
+        onNodeDragStart(e, node);
       }}
     >
       <button
@@ -117,29 +125,42 @@ function LabNodeCard({
         className="absolute left-1 top-1 z-20 flex h-5 w-5 cursor-grab items-center justify-center rounded border border-white/15 bg-black/70 text-white/50 hover:border-violet-400/40 hover:text-violet-200 active:cursor-grabbing"
         title="Déplacer"
         onClick={(e) => e.stopPropagation()}
-        onPointerDown={(e) => onDragHandleDown(e, node)}
+        onPointerDown={(e) => {
+          e.stopPropagation();
+          onNodeDragStart(e, node);
+        }}
       >
         <GripVertical className="h-3 w-3" />
       </button>
 
       {node.kind === "ref_image" && node.imageUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={node.imageUrl} alt="" className="h-full w-full object-cover" />
+        <img src={node.imageUrl} alt="" draggable={false} className="h-full w-full object-cover select-none" />
       ) : node.kind === "ref_image" ? (
         <div className="flex h-full items-center justify-center bg-white/[0.04] text-[9px] text-white/35">Pas d’image</div>
       ) : node.kind === "video" && node.videoUrl && !node.pendingVideo ? (
-        <video
-          src={node.videoUrl}
-          className="h-full w-full object-cover"
-          muted
-          playsInline
-          loop
-          onMouseEnter={(e) => void e.currentTarget.play().catch(() => {})}
-          onMouseLeave={(e) => {
-            e.currentTarget.pause();
-            e.currentTarget.currentTime = 0;
+        <div
+          className="h-full w-full min-h-0"
+          onMouseEnter={(e) => {
+            const v = e.currentTarget.querySelector("video");
+            if (v) void (v as HTMLVideoElement).play().catch(() => {});
           }}
-        />
+          onMouseLeave={(e) => {
+            const v = e.currentTarget.querySelector("video");
+            if (v) {
+              (v as HTMLVideoElement).pause();
+              (v as HTMLVideoElement).currentTime = 0;
+            }
+          }}
+        >
+          <video
+            src={node.videoUrl}
+            className="pointer-events-none h-full w-full object-cover select-none"
+            muted
+            playsInline
+            loop
+          />
+        </div>
       ) : (
         <div className="flex h-full flex-col justify-center gap-0.5 overflow-hidden text-left">
           <div className="text-[10px] font-semibold uppercase tracking-wide text-violet-300/90">{KIND_LABEL[node.kind]}</div>
@@ -223,8 +244,15 @@ export function ProjectLabCanvas({ open, onClose, projectTitle, storeUrl, runs, 
     }));
   }, [mergedGraph.nodes, offsets]);
 
-  const bbox = useMemo(() => computeBBox(displayNodes), [displayNodes]);
-  const shift = useMemo(() => ({ x: bbox.shiftX, y: bbox.shiftY }), [bbox.shiftX, bbox.shiftY]);
+  /**
+   * Origin for node `left` / edges: pinned to the auto-layout graph only (no user drag offsets).
+   * Otherwise the bbox recenters on every move and nodes “snap” as if tied to the top-left.
+   */
+  const baseBBox = useMemo(() => computeBBox(mergedGraph.nodes), [mergedGraph.nodes]);
+  const shift = useMemo(() => ({ x: baseBBox.shiftX, y: baseBBox.shiftY }), [baseBBox.shiftX, baseBBox.shiftY]);
+
+  /** Canvas size follows dragged positions so nothing clips. */
+  const extentBBox = useMemo(() => computeBBox(displayNodes), [displayNodes]);
 
   const nodeById = useMemo(() => {
     const m = new Map<string, LabNode>();
@@ -236,8 +264,8 @@ export function ProjectLabCanvas({ open, onClose, projectTitle, storeUrl, runs, 
     const el = containerRef.current;
     if (!el) return;
     const { width: vw, height: vh } = el.getBoundingClientRect();
-    const bw = Math.max(1, bbox.w);
-    const bh = Math.max(1, bbox.h);
+    const bw = Math.max(1, extentBBox.w);
+    const bh = Math.max(1, extentBBox.h);
     const s = Math.min(vw / bw, vh / bh) * 0.78;
     const clamped = Math.max(0.18, Math.min(s, 1.35));
     setZoom(clamped);
@@ -245,7 +273,7 @@ export function ProjectLabCanvas({ open, onClose, projectTitle, storeUrl, runs, 
       x: vw / 2 - (bw / 2) * clamped,
       y: vh / 2 - (bh / 2) * clamped,
     });
-  }, [bbox.w, bbox.h]);
+  }, [extentBBox.w, extentBBox.h]);
 
   useEffect(() => {
     if (!open) return;
@@ -294,6 +322,7 @@ export function ProjectLabCanvas({ open, onClose, projectTitle, storeUrl, runs, 
     const onMove = (e: PointerEvent) => {
       const d = nodeDragRef.current;
       if (!d) return;
+      e.preventDefault();
       const wdx = (e.clientX - d.startClientX) / zoom;
       const wdy = (e.clientY - d.startClientY) / zoom;
       setOffsets((o) => ({
@@ -304,7 +333,7 @@ export function ProjectLabCanvas({ open, onClose, projectTitle, storeUrl, runs, 
     const onUp = () => {
       nodeDragRef.current = null;
     };
-    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointermove", onMove, { passive: false });
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onUp);
     return () => {
@@ -314,7 +343,7 @@ export function ProjectLabCanvas({ open, onClose, projectTitle, storeUrl, runs, 
     };
   }, [zoom]);
 
-  const onDragHandleDown = (e: React.PointerEvent, node: LabNode) => {
+  const onNodeDragStart = (e: React.PointerEvent, node: LabNode) => {
     e.preventDefault();
     e.stopPropagation();
     const cur = offsets[node.id] ?? { dx: 0, dy: 0 };
@@ -325,7 +354,8 @@ export function ProjectLabCanvas({ open, onClose, projectTitle, storeUrl, runs, 
       startDx: cur.dx,
       startDy: cur.dy,
     };
-    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    const captureEl = (e.currentTarget as HTMLElement) ?? (e.target as HTMLElement);
+    captureEl.setPointerCapture?.(e.pointerId);
   };
 
   const onWheel = useCallback((e: React.WheelEvent) => {
@@ -374,7 +404,7 @@ export function ProjectLabCanvas({ open, onClose, projectTitle, storeUrl, runs, 
 
   if (!open) return null;
 
-  const { w: svgW, h: svgH } = bbox;
+  const { w: svgW, h: svgH } = extentBBox;
 
   return (
     <div className="fixed inset-0 z-[100] flex flex-col bg-[#06040d]">
@@ -401,7 +431,7 @@ export function ProjectLabCanvas({ open, onClose, projectTitle, storeUrl, runs, 
           <div className="min-w-0">
             <h2 className="truncate text-sm font-semibold text-white">Vue lab — architecture</h2>
             <p className="truncate text-xs text-white/45">
-              Poignée ⋮⋮ : déplacer un nœud · Fond : pan · Molette : zoom
+              Carte : cliquer-glisser pour déplacer · Fond : pan · Molette : zoom
             </p>
           </div>
         </div>
@@ -519,7 +549,7 @@ export function ProjectLabCanvas({ open, onClose, projectTitle, storeUrl, runs, 
                     setSelected(node);
                     setSelectedId(node.id);
                   }}
-                  onDragHandleDown={onDragHandleDown}
+                  onNodeDragStart={onNodeDragStart}
                 />
               ))}
             </div>

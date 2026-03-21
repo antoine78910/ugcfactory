@@ -97,9 +97,12 @@ export function buildProjectLabGraph(params: {
   const universeRuns = params.runs.filter((r) => readUniverseFromExtracted(r.extracted) !== null);
   const classicRuns = params.runs.filter((r) => readUniverseFromExtracted(r.extracted) === null);
 
-  const blockH = 480;
+  /** Vertical slice per generation — tall enough for brief + angle row + refs + video. */
+  const blockH = 580;
   let cursorY = 140;
-  const runGap = 48;
+  const runGap = 64;
+  /** Horizontal gap between angle columns (refs span ~260px; keep clear margin so angles don’t overlap). */
+  const colGap = 300;
 
   let maxX = 320;
   let maxY = 120;
@@ -156,7 +159,6 @@ export function buildProjectLabGraph(params: {
     }
 
     const angleBaseY = oy + (briefId ? 200 : 100);
-    const colGap = 248;
     const startColX = ox + 20;
 
     for (let a = 0; a < 3; a++) {

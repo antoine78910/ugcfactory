@@ -14,10 +14,17 @@ import LinkToAdUniverse from "@/app/_components/LinkToAdUniverse";
 import { ProjectLabCanvas } from "@/app/_components/ProjectLabCanvas";
 import { ProjectRunBrandBriefEditor } from "@/app/_components/ProjectRunBrandBriefEditor";
 import { ProjectRunScriptsEditor } from "@/app/_components/ProjectRunScriptsEditor";
+import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
 import { StudioEmptyExamples, StudioOutputPane } from "@/app/_components/StudioEmptyExamples";
 import { calculateMotionControlCredits } from "@/lib/linkToAd/generationCredits";
 import StudioImagePanel from "@/app/_components/StudioImagePanel";
 import StudioShell from "@/app/_components/StudioShell";
+import {
+  StudioSingleModelCard,
+  studioSelectContentClass,
+  studioSelectItemClass,
+} from "@/app/_components/StudioModelPicker";
+import { useCreditsPlan } from "@/app/_components/CreditsPlanContext";
 import StudioVideoPanel from "@/app/_components/StudioVideoPanel";
 import {
   packshotUrlsForGpt,
@@ -30,6 +37,7 @@ import {
   readUniverseFromExtracted,
   universeHasPendingKlingTask,
 } from "@/lib/linkToAdUniverse";
+import { motionControlUpgradeMessage } from "@/lib/subscriptionModelAccess";
 
 type WizardStep = "url" | "analysis" | "quiz" | "image" | "video";
 type AppSection = "link_to_ad" | "motion_control" | "image" | "video" | "projects";
@@ -285,18 +293,36 @@ export default function AppBrandWizard() {
   const [motionVideoRefBlobUrl, setMotionVideoRefBlobUrl] = useState<string | null>(null);
   const [motionVideoDetectedDuration, setMotionVideoDetectedDuration] = useState<number | null>(null);
   const [motionCharacterImageUrl, setMotionCharacterImageUrl] = useState<string | null>(null);
-  const [motionModel, setMotionModel] = useState<string>("kling-3.0-motion-control");
   const [motionQuality, setMotionQuality] = useState<string>("720p");
   const [motionIsGenerating, setMotionIsGenerating] = useState(false);
+  type MotionBilling =
+    | { open: false }
+    | { open: true; reason: "plan" }
+    | { open: true; reason: "credits"; required: number };
+  const [motionBilling, setMotionBilling] = useState<MotionBilling>({ open: false });
   const motionVideoInputRef = useRef<HTMLInputElement>(null);
   const motionCharacterInputRef = useRef<HTMLInputElement>(null);
+  const { planId, current: creditsBalance } = useCreditsPlan();
+
+  /** Billable seconds: real clip length, or placeholder so 720p ↔ 1080p updates credits before upload. */
+  const MOTION_CREDITS_PLACEHOLDER_SEC = 12;
+  const motionBillableSeconds = useMemo(() => {
+    const d = motionVideoDetectedDuration;
+    if (d != null && Number.isFinite(d) && d > 0) return d;
+    return MOTION_CREDITS_PLACEHOLDER_SEC;
+  }, [motionVideoDetectedDuration]);
+  const motionCreditsUsesEstimate =
+    motionVideoDetectedDuration == null ||
+    !Number.isFinite(motionVideoDetectedDuration) ||
+    motionVideoDetectedDuration <= 0;
 
   const motionCredits = useMemo(
     () =>
-      motionVideoDetectedDuration
-        ? calculateMotionControlCredits({ quality: motionQuality, durationSeconds: motionVideoDetectedDuration })
-        : null,
-    [motionQuality, motionVideoDetectedDuration],
+      calculateMotionControlCredits({
+        quality: motionQuality,
+        durationSeconds: motionBillableSeconds,
+      }),
+    [motionQuality, motionBillableSeconds],
   );
 
   useEffect(() => {
@@ -1667,7 +1693,7 @@ export default function AppBrandWizard() {
                   </div>
                 ) : (
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:gap-6">
-                    <aside className="flex min-w-0 flex-col gap-4 lg:w-[min(100%,22rem)] xl:w-[min(100%,26rem)] lg:shrink-0">
+                    <aside className="studio-params-scroll flex min-w-0 flex-col gap-4 lg:w-[min(100%,22rem)] xl:w-[min(100%,26rem)] lg:shrink-0 lg:max-h-[min(90vh,calc(100vh-10rem))] lg:overflow-y-auto">
                       <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
                         Motion control — parameters
                       </p>
@@ -1687,7 +1713,11 @@ export default function AppBrandWizard() {
                             const vid = document.createElement("video");
                             vid.preload = "metadata";
                             vid.onloadedmetadata = () => {
-                              const dur = Math.min(30, Math.max(3, Math.round(vid.duration)));
+                              const raw = Number(vid.duration);
+                              const dur =
+                                Number.isFinite(raw) && raw > 0
+                                  ? Math.min(120, Math.max(1, Math.round(raw)))
+                                  : null;
                               setMotionVideoDetectedDuration(dur);
                               URL.revokeObjectURL(vid.src);
                             };
@@ -1761,29 +1791,37 @@ export default function AppBrandWizard() {
                         </button>
                       </div>
 
-                      {/* Model */}
-                      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                        <span className="text-xs font-semibold text-white/80">Model</span>
-                        <Select value={motionModel} onValueChange={(v) => setMotionModel(v)}>
-                          <SelectTrigger className="mt-2">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="kling-3.0-motion-control">Kling 3.0 Motion Control</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
+                      {/* Model — single backend (no dropdown) */}
+                      <StudioSingleModelCard
+                        label="Kling 3.0 Motion Control"
+                        icon="kling"
+                        resolution="1080p"
+                        durationRange="3s–30s"
+                        hint="Seul modèle disponible pour Motion Control."
+                      />
+                      {motionControlUpgradeMessage(planId) ? (
+                        <p className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-100/90">
+                          {motionControlUpgradeMessage(planId)}
+                        </p>
+                      ) : null}
 
                       {/* Quality */}
                       <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
                         <span className="text-xs font-semibold text-white/80">Quality</span>
-                        <Select value={motionQuality} onValueChange={(v) => setMotionQuality(v)}>
-                          <SelectTrigger className="mt-2">
-                            <SelectValue />
+                        <p className="mt-1 text-[10px] leading-snug text-white/40">
+                          720p et 1080p n’ont pas le même coût en crédits (voir Generate).
+                        </p>
+                        <Select value={motionQuality} onValueChange={setMotionQuality}>
+                          <SelectTrigger className="mt-2 rounded-xl border-white/15 bg-[#0a0a0d] text-white">
+                            <SelectValue placeholder="Qualité" />
                           </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="720p">720p</SelectItem>
-                            <SelectItem value="1080p">1080p</SelectItem>
+                          <SelectContent position="popper" className={studioSelectContentClass}>
+                            <SelectItem value="720p" className={studioSelectItemClass}>
+                              720p
+                            </SelectItem>
+                            <SelectItem value="1080p" className={studioSelectItemClass}>
+                              1080p
+                            </SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -1791,9 +1829,19 @@ export default function AppBrandWizard() {
                       {/* Generate button with dynamic credits */}
                       <Button
                         type="button"
-                        disabled={motionIsGenerating || !motionCharacterImageUrl || !motionVideoRefBlobUrl}
+                        disabled={
+                          motionIsGenerating ||
+                          !motionCharacterImageUrl ||
+                          !motionVideoRefBlobUrl ||
+                          Boolean(motionControlUpgradeMessage(planId))
+                        }
                         className="h-14 w-full rounded-2xl border border-violet-300/40 bg-violet-500 text-lg font-semibold text-white shadow-[0_6px_0_0_rgba(76,29,149,0.85)] transition-all hover:-translate-y-px hover:bg-violet-400 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.85)] active:translate-y-1 active:shadow-none disabled:opacity-50"
                         onClick={async () => {
+                          const mcGate = motionControlUpgradeMessage(planId);
+                          if (mcGate) {
+                            setMotionBilling({ open: true, reason: "plan" });
+                            return;
+                          }
                           if (!motionCharacterImageUrl) {
                             toast.error("Please choose a character image first.");
                             return;
@@ -1803,6 +1851,10 @@ export default function AppBrandWizard() {
                             return;
                           }
                           if (motionIsGenerating) return;
+                          if (creditsBalance < motionCredits) {
+                            setMotionBilling({ open: true, reason: "credits", required: motionCredits });
+                            return;
+                          }
                           setMotionIsGenerating(true);
                           try {
                             await new Promise((r) => setTimeout(r, 1200));
@@ -1819,8 +1871,15 @@ export default function AppBrandWizard() {
                             Generate
                             <Sparkles className="h-5 w-5" />
                             <span className="rounded-md bg-white/15 px-2 py-0.5 text-base tabular-nums">
-                              {motionCredits ?? "—"}
+                              {motionCredits}
                             </span>
+                            {motionCreditsUsesEstimate ? (
+                              <span className="text-[10px] font-normal text-white/50">
+                                ~{motionBillableSeconds}s estimée
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-normal text-white/50">{motionBillableSeconds}s</span>
+                            )}
                           </span>
                         )}
                       </Button>
@@ -1834,6 +1893,26 @@ export default function AppBrandWizard() {
                     />
                   </div>
                 )}
+
+                <StudioBillingDialog
+                  open={motionBilling.open}
+                  onOpenChange={(o) => {
+                    if (!o) setMotionBilling({ open: false });
+                  }}
+                  planId={planId}
+                  studioMode="video"
+                  variant={
+                    !motionBilling.open
+                      ? { kind: "credits", currentCredits: 0, requiredCredits: 0 }
+                      : motionBilling.reason === "plan"
+                        ? { kind: "plan", blockedModelId: "kling-3.0/video" }
+                        : {
+                            kind: "credits",
+                            currentCredits: creditsBalance,
+                            requiredCredits: motionBilling.required,
+                          }
+                  }
+                />
               </div>
             ) : null}
 
@@ -2052,13 +2131,19 @@ export default function AppBrandWizard() {
                           }))
                         }
                       >
-                        <SelectTrigger>
+                        <SelectTrigger className="w-full max-w-xs rounded-xl border-white/15 bg-[#0a0a0d] text-white">
                           <SelectValue />
                         </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="15s">15s</SelectItem>
-                          <SelectItem value="20s">20s</SelectItem>
-                          <SelectItem value="30s">30s</SelectItem>
+                        <SelectContent position="popper" className={studioSelectContentClass}>
+                          <SelectItem value="15s" className={studioSelectItemClass}>
+                            15s
+                          </SelectItem>
+                          <SelectItem value="20s" className={studioSelectItemClass}>
+                            20s
+                          </SelectItem>
+                          <SelectItem value="30s" className={studioSelectItemClass}>
+                            30s
+                          </SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -2083,12 +2168,16 @@ export default function AppBrandWizard() {
                       Trouver images “produit seul” (AI)
                     </Button>
                     <Select value={nanoModel} onValueChange={(v) => setNanoModel(v as NanoModel)}>
-                      <SelectTrigger className="w-[220px]">
+                      <SelectTrigger className="w-[220px] rounded-xl border-white/15 bg-[#0a0a0d] text-white">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="nano">NanoBanana</SelectItem>
-                        <SelectItem value="pro">NanoBanana Pro</SelectItem>
+                      <SelectContent position="popper" className={studioSelectContentClass}>
+                        <SelectItem value="nano" className={studioSelectItemClass}>
+                          NanoBanana
+                        </SelectItem>
+                        <SelectItem value="pro" className={studioSelectItemClass}>
+                          NanoBanana Pro
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -2305,12 +2394,12 @@ export default function AppBrandWizard() {
                   <div className="space-y-2">
                     <Label className="text-xs">Template</Label>
                     <Select value={selectedTemplate} onValueChange={(v) => setSelectedTemplate(v as TemplateId)}>
-                      <SelectTrigger>
+                      <SelectTrigger className="rounded-xl border-white/15 bg-[#0a0a0d] text-white">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent position="popper" className={studioSelectContentClass}>
                         {TEMPLATES.map((t) => (
-                          <SelectItem key={t.id} value={t.id}>
+                          <SelectItem key={t.id} value={t.id} className={studioSelectItemClass}>
                             {t.title}
                           </SelectItem>
                         ))}

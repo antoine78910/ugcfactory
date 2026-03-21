@@ -1,16 +1,27 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Loader2, Minus, Plus, Sparkles } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCreditsPlan } from "@/app/_components/CreditsPlanContext";
+import { Loader2, Plus, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  StudioModelPicker,
+  studioSelectContentClass,
+  studioSelectItemClass,
+  type StudioModelPickerItem,
+} from "@/app/_components/StudioModelPicker";
 import { StudioEmptyExamples, StudioOutputPane } from "@/app/_components/StudioEmptyExamples";
+import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
 import { IMAGE_MODEL } from "@/lib/pricing";
+import { NANO_BANANA_2_ASPECT_RATIOS } from "@/lib/nanobanana";
+import { cn } from "@/lib/utils";
+import { canUseStudioImageModel, studioImageUpgradeMessage } from "@/lib/subscriptionModelAccess";
 
-const ASPECT_RATIOS = [
+const ASPECT_RATIOS_PRO = [
   "1:1",
   "9:16",
   "16:9",
@@ -27,7 +38,26 @@ const PRO_RESOLUTIONS = ["1K", "2K", "4K"] as const;
 
 type NanoModel = "nano" | "pro";
 
-/** Credits from product spec (`@/lib/pricing`). */
+const IMAGE_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
+  {
+    id: "pro",
+    label: "Nano Banana Pro",
+    icon: "image_pro",
+    exclusive: true,
+    resolution: "1K–4K",
+    durationRange: "4 images / run",
+    searchText: "nano banana pro",
+  },
+  {
+    id: "nano",
+    label: "Nano Banana Standard",
+    icon: "image_std",
+    resolution: "Multi ratio",
+    durationRange: "Nano 2",
+    searchText: "nano banana standard",
+  },
+];
+
 const CREDITS_BY_MODEL: Record<NanoModel, number> = {
   nano: IMAGE_MODEL.nanobanana_standard.credits,
   pro: IMAGE_MODEL.nanobanana_pro.credits,
@@ -78,6 +108,7 @@ async function pollNanoTask(taskId: string): Promise<string[]> {
 }
 
 export default function StudioImagePanel() {
+  const { planId, current: creditsBalance } = useCreditsPlan();
   const [prompt, setPrompt] = useState("");
   const [model, setModel] = useState<NanoModel>("pro");
   const [aspect, setAspect] = useState<string>("3:4");
@@ -86,10 +117,30 @@ export default function StudioImagePanel() {
   const [refUrls, setRefUrls] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [results, setResults] = useState<string[]>([]);
+  type ImageBilling =
+    | { open: false }
+    | { open: true; reason: "plan"; blockedId: NanoModel }
+    | { open: true; reason: "credits"; required: number };
+  const [billing, setBilling] = useState<ImageBilling>({ open: false });
+
+  const aspectOptions = useMemo(() => {
+    if (model === "pro") return ["auto", ...ASPECT_RATIOS_PRO] as const;
+    return NANO_BANANA_2_ASPECT_RATIOS;
+  }, [model]);
 
   useEffect(() => {
-    if (model === "nano" && aspect === "auto") setAspect("3:4");
-  }, [model, aspect]);
+    const allowed = new Set(aspectOptions as readonly string[]);
+    if (!allowed.has(aspect)) {
+      setAspect(model === "pro" ? "3:4" : "auto");
+    }
+  }, [model, aspectOptions, aspect]);
+
+  useEffect(() => {
+    if (canUseStudioImageModel(planId, model)) return;
+    setModel("nano");
+  }, [planId, model]);
+
+  const totalCredits = numImages * CREDITS_BY_MODEL[model];
 
   const onAddRefs = useCallback(() => {
     const input = document.createElement("input");
@@ -122,32 +173,46 @@ export default function StudioImagePanel() {
       toast.error("Describe the scene you imagine.");
       return;
     }
+    const gate = studioImageUpgradeMessage(planId, model);
+    if (gate) {
+      setBilling({ open: true, reason: "plan", blockedId: model });
+      return;
+    }
+    if (creditsBalance < totalCredits) {
+      setBilling({ open: true, reason: "credits", required: totalCredits });
+      return;
+    }
     if (busy) return;
     setBusy(true);
     try {
-      const body: Record<string, unknown> = {
-        prompt: p,
-        model,
-        imageUrls: refUrls.length ? refUrls : undefined,
-      };
-      if (model === "pro") {
-        body.resolution = resolution;
-        body.aspectRatio = aspect;
-      } else {
-        body.imageSize = aspect;
-        body.numImages = Math.min(4, Math.max(1, numImages));
-      }
+      const n = Math.min(4, Math.max(1, numImages));
       const res = await fetch("/api/nanobanana/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          accountPlan: planId,
+          prompt: p,
+          model,
+          imageUrls: refUrls.length ? refUrls : undefined,
+          aspectRatio: aspect,
+          resolution,
+          numImages: n,
+        }),
       });
-      const json = (await res.json()) as { taskId?: string; error?: string };
-      if (!res.ok || !json.taskId) throw new Error(json.error || "Generate failed");
-      toast.message("Generation started", { description: "Polling NanoBanana…" });
-      const urls = await pollNanoTask(json.taskId);
+      const json = (await res.json()) as { taskId?: string; taskIds?: string[]; error?: string };
+      if (!res.ok) throw new Error(json.error || "Generate failed");
+      const ids =
+        Array.isArray(json.taskIds) && json.taskIds.length > 0
+          ? json.taskIds
+          : json.taskId
+            ? [json.taskId]
+            : [];
+      if (!ids.length) throw new Error("No task id returned");
+      toast.message("Generation started", { description: `Polling ${ids.length} task(s)…` });
+      const batches = await Promise.all(ids.map((id) => pollNanoTask(id)));
+      const urls = batches.flat();
       setResults((prev) => [...urls, ...prev]);
-      toast.success("Image ready");
+      toast.success(ids.length > 1 ? `${urls.length} images ready` : "Image ready");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Error");
     } finally {
@@ -184,103 +249,102 @@ export default function StudioImagePanel() {
 
   return (
     <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:gap-6">
-      <aside className="flex min-w-0 flex-col gap-4 lg:w-[min(100%,22rem)] xl:w-[min(100%,26rem)] lg:shrink-0 lg:max-h-[min(90vh,calc(100vh-10rem))] lg:overflow-y-auto lg:pr-1">
+      <aside className="studio-params-scroll flex min-w-0 flex-col gap-4 lg:w-[min(100%,22rem)] xl:w-[min(100%,26rem)] lg:shrink-0 lg:max-h-[min(90vh,calc(100vh-10rem))] lg:overflow-y-auto">
         <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Create — parameters</p>
         <div className="rounded-2xl border border-white/10 bg-[#101014] p-4">
-          <div className="flex min-h-[100px] flex-col gap-2">
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                size="icon"
-                className="h-11 w-11 shrink-0 rounded-xl border border-white/10 bg-white/5 text-white hover:bg-white/10"
-                title="Add reference images"
-                disabled={busy}
-                onClick={onAddRefs}
-              >
-                <Plus className="h-5 w-5" />
-              </Button>
-              <Textarea
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder="Describe the scene you imagine."
-                className="min-h-[100px] flex-1 resize-none border-white/10 bg-[#0a0a0d] px-3 py-3 text-sm text-white placeholder:text-white/35 focus-visible:ring-0"
-                rows={4}
-              />
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/60">
-                ✨ Studio
-              </span>
-            </div>
+          <div className="flex min-h-[100px] flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              size="icon"
+              className="h-11 w-11 shrink-0 self-start rounded-xl border border-white/10 bg-white/5 text-white hover:bg-white/10"
+              title="Add reference images"
+              disabled={busy}
+              onClick={onAddRefs}
+            >
+              <Plus className="h-5 w-5" />
+            </Button>
+            <Textarea
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              placeholder="Describe the scene you imagine."
+              className="min-h-[100px] min-w-0 flex-1 resize-none border-white/10 bg-[#0a0a0d] px-3 py-3 text-sm text-white placeholder:text-white/35 focus-visible:ring-0"
+              rows={4}
+            />
+            <StudioModelPicker
+              value={model}
+              items={IMAGE_MODEL_PICKER_ITEMS}
+              isItemLocked={(id) => !canUseStudioImageModel(planId, id as NanoModel)}
+              onLockedPick={(id) => {
+                setBilling({ open: true, reason: "plan", blockedId: id as NanoModel });
+              }}
+              onChange={(v) => setModel(v as NanoModel)}
+              featuredTitle="Featured image models"
+            />
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/60">
+              ✨ Studio
+            </span>
           </div>
         </div>
 
-        <div className="rounded-2xl border border-white/10 bg-[#101014] p-4">
-          <Label className="text-xs text-white/45">Model</Label>
-          <div className="mt-2 flex flex-col gap-2">
-            <Select value={model} onValueChange={(v) => setModel(v as NanoModel)}>
-              <SelectTrigger className="h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
-                <SelectValue />
+        <div className="rounded-2xl border border-white/10 bg-[#101014] p-4 space-y-4">
+          <div>
+            <Label className="text-xs text-white/45">Aspect ratio</Label>
+            <Select value={aspect} onValueChange={setAspect}>
+              <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
+                <SelectValue placeholder="Ratio" />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="pro">Nano Banana Pro</SelectItem>
-                <SelectItem value="nano">Nano Banana</SelectItem>
+              <SelectContent position="popper" className={cn(studioSelectContentClass, "max-h-[min(280px,50vh)]")}>
+                {aspectOptions.map((r) => (
+                  <SelectItem key={r} value={r} className={studioSelectItemClass}>
+                    {r}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
-            <div className="flex flex-wrap items-center gap-2">
-              <Select value={aspect} onValueChange={setAspect}>
-                <SelectTrigger className="h-12 min-w-[6rem] flex-1 rounded-xl border-white/15 bg-[#0a0a0d] text-white">
-                  <SelectValue placeholder="Ratio" />
-                </SelectTrigger>
-                <SelectContent>
-                  {model === "pro" ? <SelectItem value="auto">auto</SelectItem> : null}
-                  {ASPECT_RATIOS.map((r) => (
-                    <SelectItem key={r} value={r}>
-                      {r}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {model === "pro" ? (
-                <Select value={resolution} onValueChange={(v) => setResolution(v as (typeof PRO_RESOLUTIONS)[number])}>
-                  <SelectTrigger className="h-12 w-[88px] rounded-xl border-white/15 bg-[#0a0a0d] text-white">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PRO_RESOLUTIONS.map((r) => (
-                      <SelectItem key={r} value={r}>
-                        {r}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <div className="flex h-12 flex-1 items-center justify-center gap-1 rounded-xl border border-white/15 bg-[#0a0a0d] px-2">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-white hover:bg-white/10"
-                    disabled={busy || numImages <= 1}
-                    onClick={() => setNumImages((n) => Math.max(1, n - 1))}
-                  >
-                    <Minus className="h-4 w-4" />
-                  </Button>
-                  <span className="min-w-[3rem] text-center text-xs font-medium text-white/80">{numImages}/4</span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-white hover:bg-white/10"
-                    disabled={busy || numImages >= 4}
-                    onClick={() => setNumImages((n) => Math.min(4, n + 1))}
-                  >
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                </div>
-              )}
-            </div>
+          </div>
+
+          <div>
+            <Label className="text-xs text-white/45">Qualité (résolution)</Label>
+            <p className="mt-0.5 text-[10px] leading-snug text-white/35">
+              1K = plus rapide / moins cher · 4K = plus de détail
+            </p>
+            <Select value={resolution} onValueChange={(v) => setResolution(v as (typeof PRO_RESOLUTIONS)[number])}>
+              <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper" className={studioSelectContentClass}>
+                {PRO_RESOLUTIONS.map((r) => (
+                  <SelectItem key={r} value={r} className={studioSelectItemClass}>
+                    {r}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <Label className="text-xs text-white/45">Images (même prompt)</Label>
+            <p className="mt-0.5 text-[10px] leading-snug text-white/35">
+              Pro : une requête par image (jusqu’à 4). Standard : NanoBanana 2 en parallèle.
+            </p>
+            <Select
+              value={String(numImages)}
+              onValueChange={(v) => setNumImages(Math.min(4, Math.max(1, Number(v) || 1)))}
+            >
+              <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper" className={studioSelectContentClass}>
+                {[1, 2, 3, 4].map((n) => (
+                  <SelectItem key={n} value={String(n)} className={studioSelectItemClass}>
+                    {n} image{n > 1 ? "s" : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
@@ -314,9 +378,8 @@ export default function StudioImagePanel() {
             <span className="inline-flex items-center gap-2">
               Generate
               <Sparkles className="h-5 w-5" />
-              <span className="rounded-md bg-white/15 px-2 py-0.5 text-base tabular-nums">
-                {CREDITS_BY_MODEL[model]}
-              </span>
+              <span className="rounded-md bg-white/15 px-2 py-0.5 text-base tabular-nums">{totalCredits}</span>
+              <span className="text-sm font-normal text-white/80">credits</span>
             </span>
           )}
         </Button>
@@ -327,6 +390,22 @@ export default function StudioImagePanel() {
         hasOutput={results.length > 0}
         output={resultsOutput}
         empty={<StudioEmptyExamples variant="image" />}
+      />
+
+      <StudioBillingDialog
+        open={billing.open}
+        onOpenChange={(o) => {
+          if (!o) setBilling({ open: false });
+        }}
+        planId={planId}
+        studioMode="image"
+        variant={
+          !billing.open
+            ? { kind: "credits", currentCredits: 0, requiredCredits: 0 }
+            : billing.reason === "plan"
+              ? { kind: "plan", blockedModelId: billing.blockedId }
+              : { kind: "credits", currentCredits: creditsBalance, requiredCredits: billing.required }
+        }
       />
     </div>
   );

@@ -2,11 +2,18 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import { kieMarketCreateTask } from "@/lib/kieMarket";
+import {
+  canUseStudioVideoModel,
+  parseAccountPlan,
+  studioVideoUpgradeMessage,
+} from "@/lib/subscriptionModelAccess";
 
 type KlingAspectRatio = "16:9" | "9:16" | "1:1";
 type KlingMode = "std" | "pro";
 
 type Body = {
+  /** Client plan (demo: localStorage). When set, premium models are rejected for lower tiers. */
+  accountPlan?: string;
   // KIE Market model id (optional; defaults to Kling 3.0)
   marketModel?: string;
   prompt: string;
@@ -68,6 +75,19 @@ export async function POST(req: Request) {
   const prompt = (body.prompt ?? "").trim();
   if (!prompt) {
     return NextResponse.json({ error: "Missing `prompt`." }, { status: 400 });
+  }
+
+  if (body.accountPlan != null && String(body.accountPlan).trim() !== "") {
+    const accountPlan = parseAccountPlan(body.accountPlan);
+    if (!canUseStudioVideoModel(accountPlan, model)) {
+      return NextResponse.json(
+        {
+          error: studioVideoUpgradeMessage(accountPlan, model) ?? "Subscription upgrade required for this model.",
+          code: "PLAN_UPGRADE_REQUIRED",
+        },
+        { status: 403 },
+      );
+    }
   }
 
   const imageUrl = (body.imageUrl ?? "").trim();

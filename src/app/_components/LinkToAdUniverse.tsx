@@ -37,7 +37,10 @@ import { cn } from "@/lib/utils";
 import { LINK_TO_AD_LOADING_MESSAGES } from "@/lib/linkToAd/loadingMessageLoops";
 import {
   CREDITS_KLING_LINK_TO_AD_VIDEO,
+  CREDITS_LINK_TO_AD_STORE_SCAN,
   CREDITS_LINK_TO_AD_THREE_REF_IMAGES,
+  CREDITS_LINK_TO_AD_VIDEO_FROM_IMAGE,
+  CREDITS_LINK_TO_AD_VIDEO_PROMPT_GPT,
 } from "@/lib/linkToAd/generationCredits";
 import type { InternalFetch } from "@/lib/linkToAd/internalFetch";
 import { runInitialPipeline } from "@/lib/linkToAd/runInitialPipeline";
@@ -1923,17 +1926,22 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                   disabled={isWorking || !storeUrl.trim()}
                   onClick={handleGenerateFromUrl}
                   aria-busy={isWorking}
-                  className={`${primaryBtnClass} h-14 min-h-[3.5rem] shrink-0 px-8 text-base sm:min-w-[160px] inline-flex items-center justify-center gap-2`}
+                  className={`${primaryBtnClass} h-auto min-h-14 shrink-0 px-8 py-2.5 text-base sm:min-w-[160px] inline-flex flex-col items-center justify-center gap-1`}
                 >
                   {isWorking ? (
-                    <>
+                    <span className="inline-flex items-center justify-center gap-2">
                       <Loader2 className="h-5 w-5 shrink-0 animate-spin" aria-hidden />
                       Working…
-                    </>
+                    </span>
                   ) : (
                     <>
-                      <Sparkles className="h-5 w-5 shrink-0" aria-hidden />
-                      Generate
+                      <span className="inline-flex items-center justify-center gap-2 font-semibold leading-tight">
+                        <Sparkles className="h-5 w-5 shrink-0" aria-hidden />
+                        Generate
+                      </span>
+                      <span className="text-[11px] font-semibold text-black/70">
+                        {CREDITS_LINK_TO_AD_STORE_SCAN} credits
+                      </span>
                     </>
                   )}
                 </Button>
@@ -2321,7 +2329,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                                 Generate video from this image
                               </span>
                               <span className="text-[11px] font-semibold text-black/70">
-                                {CREDITS_KLING_LINK_TO_AD_VIDEO} credits
+                                {CREDITS_LINK_TO_AD_VIDEO_FROM_IMAGE} credits
                               </span>
                             </>
                           )}
@@ -2352,10 +2360,15 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                             <Button
                               type="button"
                               disabled={!resolvedPreviewUrl}
-                              className={primaryBtnClass}
+                              className={`h-auto min-h-11 w-full max-w-md flex-col gap-1 py-2.5 ${primaryBtnClass}`}
                               onClick={() => void onGenerateNanoBananaPrompts(selectedAngleIndex as 0 | 1 | 2)}
                             >
-                              Générer les 3 prompts &amp; images
+                              <span className="text-sm font-semibold leading-tight">
+                                Générer les 3 prompts &amp; images
+                              </span>
+                              <span className="text-[11px] font-semibold text-black/70">
+                                {CREDITS_LINK_TO_AD_THREE_REF_IMAGES} credits
+                              </span>
                             </Button>
                           </>
                         ) : null}
@@ -2555,10 +2568,13 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                           selectedAngleIndex !== null ? (
                             <Button
                               type="button"
-                              className={`mt-2 ${primaryBtnClass}`}
+                              className={`mt-2 flex h-auto min-h-11 flex-col gap-1 py-2.5 ${primaryBtnClass}`}
                               onClick={() => void onGenerateUgcVideoPrompt()}
                             >
-                              Retry video prompt
+                              <span className="text-sm font-semibold leading-tight">Retry video prompt</span>
+                              <span className="text-[11px] font-semibold text-black/70">
+                                {CREDITS_LINK_TO_AD_VIDEO_PROMPT_GPT} credits
+                              </span>
                             </Button>
                           ) : null}
                           {isVideoPromptLoading ? (
@@ -2601,7 +2617,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                           Generate video from this image
                         </span>
                         <span className="text-[11px] font-semibold text-black/70">
-                          {CREDITS_KLING_LINK_TO_AD_VIDEO} credits
+                          {CREDITS_LINK_TO_AD_VIDEO_FROM_IMAGE} credits
                         </span>
                       </Button>
                     </div>
