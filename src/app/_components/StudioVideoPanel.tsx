@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { StudioEmptyExamples, StudioOutputPane } from "@/app/_components/StudioEmptyExamples";
 
 type VideoTab = "create" | "edit";
 
@@ -237,8 +238,32 @@ export default function StudioVideoPanel() {
     }
   };
 
+  const videoResultsOutput = (
+    <div className="space-y-2">
+      <p className="text-xs font-semibold uppercase tracking-wide text-white/45">Recent generations</p>
+      <div className="flex flex-col gap-4">
+        {videoHistory.map((u) => (
+          <div key={u} className="overflow-hidden rounded-2xl border border-white/10 bg-black">
+            <video src={u} controls className="max-h-[520px] w-full" />
+            <div className="border-t border-white/10 p-3">
+              <a
+                href={`/api/download?url=${encodeURIComponent(u)}`}
+                className="text-sm font-medium text-violet-300 underline"
+              >
+                Download
+              </a>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  const generateBtnClass =
+    "h-14 w-full rounded-2xl border border-violet-300/40 bg-violet-500 text-lg font-semibold text-white shadow-[0_6px_0_0_rgba(76,29,149,0.85)] transition-all hover:-translate-y-px hover:bg-violet-400 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.85)] active:translate-y-1 active:shadow-none";
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex flex-wrap gap-2 border-b border-white/10 pb-3">
         <Button
           type="button"
@@ -261,200 +286,195 @@ export default function StudioVideoPanel() {
       </div>
 
       {tab === "edit" ? (
-        <div className="rounded-2xl border border-white/10 bg-[#0b0912]/85 p-8 text-center text-sm text-white/55">
-          Edit Video tools will be available here soon. Use <strong className="text-white/80">Motion Control</strong>{" "}
-          in the sidebar for motion-reference workflows.
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:gap-6">
+          <aside className="flex min-w-0 flex-col gap-3 rounded-2xl border border-white/10 bg-[#101014] p-4 lg:w-[min(100%,22rem)] lg:shrink-0">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Edit video</p>
+            <div className="text-sm text-white/55">
+              Edit Video tools will be available here soon. Use{" "}
+              <strong className="text-white/80">Motion Control</strong> in the sidebar for motion-reference workflows.
+            </div>
+          </aside>
+          <StudioOutputPane
+            title="Generations"
+            hasOutput={false}
+            output={null}
+            empty={<StudioEmptyExamples variant="video" />}
+          />
         </div>
       ) : (
-        <>
-          {videoHistory.length > 0 ? (
-            <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-white/45">Recent generations</p>
-              <div className="flex flex-col gap-4">
-                {videoHistory.map((u) => (
-                  <div key={u} className="overflow-hidden rounded-2xl border border-white/10 bg-black">
-                    <video src={u} controls className="max-h-[520px] w-full" />
-                    <div className="border-t border-white/10 p-3">
-                      <a
-                        href={`/api/download?url=${encodeURIComponent(u)}`}
-                        className="text-sm font-medium text-violet-300 underline"
-                      >
-                        Download
-                      </a>
-                    </div>
-                  </div>
-                ))}
-              </div>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:gap-6">
+          <aside className="flex min-w-0 flex-col gap-4 lg:w-[min(100%,22rem)] xl:w-[min(100%,26rem)] lg:shrink-0 lg:max-h-[min(90vh,calc(100vh-10rem))] lg:overflow-y-auto lg:pr-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Create — parameters</p>
+            <div className="grid grid-cols-2 gap-2">
+              <FrameSlot
+                label="Start frame"
+                url={startUrl}
+                disabled={busy}
+                onPick={() => pickFrame("start")}
+                onClear={() => setStartUrl(null)}
+              />
+              <FrameSlot
+                label="End frame"
+                optional
+                url={endUrl}
+                disabled={busy}
+                onPick={() => pickFrame("end")}
+                onClear={() => setEndUrl(null)}
+              />
             </div>
-          ) : null}
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <FrameSlot
-              label="Start frame"
-              url={startUrl}
-              disabled={busy}
-              onPick={() => pickFrame("start")}
-              onClear={() => setStartUrl(null)}
-            />
-            <FrameSlot
-              label="End frame"
-              optional
-              url={endUrl}
-              disabled={busy}
-              onPick={() => pickFrame("end")}
-              onClear={() => setEndUrl(null)}
-            />
-          </div>
-
-          <div className="rounded-2xl border border-white/10 bg-[#101014] p-4">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2 text-sm text-white/80">
-                <span>Multi-shot</span>
-                <span className="text-xs text-white/35" title="Kling 3.0 only">
-                  ⓘ
+            <div className="rounded-2xl border border-white/10 bg-[#101014] p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-sm text-white/80">
+                  <span>Multi-shot</span>
+                  <span className="text-xs text-white/35" title="Kling 3.0 only">
+                    ⓘ
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  disabled={busy || modelId !== "kling-3.0/video"}
+                  onClick={() => setMultiShot((m) => !m)}
+                  className={`relative h-7 w-12 shrink-0 rounded-full border transition ${
+                    multiShot
+                      ? "border-violet-400/50 bg-violet-500/40"
+                      : "border-white/15 bg-white/10"
+                  } disabled:opacity-40`}
+                  aria-pressed={multiShot}
+                >
+                  <span
+                    className={`absolute top-0.5 h-6 w-6 rounded-full bg-white transition-all ${
+                      multiShot ? "left-5" : "left-0.5"
+                    }`}
+                  />
+                </button>
+              </div>
+              <Textarea
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder="Describe your video, like 'A woman walking through a neon-lit city'."
+                className="min-h-[100px] border-white/10 bg-[#0a0a0d] text-white placeholder:text-white/35"
+                rows={4}
+              />
+              <div className="mt-3 flex flex-wrap gap-2">
+                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/60">
+                  ✨ Studio
                 </span>
-              </div>
-              <button
-                type="button"
-                disabled={busy || modelId !== "kling-3.0/video"}
-                onClick={() => setMultiShot((m) => !m)}
-                className={`relative h-7 w-12 shrink-0 rounded-full border transition ${
-                  multiShot
-                    ? "border-violet-400/50 bg-violet-500/40"
-                    : "border-white/15 bg-white/10"
-                } disabled:opacity-40`}
-                aria-pressed={multiShot}
-              >
-                <span
-                  className={`absolute top-0.5 h-6 w-6 rounded-full bg-white transition-all ${
-                    multiShot ? "left-5" : "left-0.5"
+                <button
+                  type="button"
+                  onClick={() => setSoundOn((s) => !s)}
+                  className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                    soundOn
+                      ? "border-emerald-400/40 bg-emerald-500/15 text-emerald-200"
+                      : "border-white/10 bg-white/5 text-white/50"
                   }`}
-                />
-              </button>
+                >
+                  🔊 {soundOn ? "Audio on" : "Audio off"}
+                </button>
+              </div>
             </div>
-            <Textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Describe your video, like 'A woman walking through a neon-lit city'."
-              className="min-h-[120px] border-white/10 bg-[#0a0a0d] text-white placeholder:text-white/35"
-              rows={5}
-            />
-            <div className="mt-3 flex flex-wrap gap-2">
-              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/60">
-                ✨ Studio
-              </span>
-              <button
-                type="button"
-                onClick={() => setSoundOn((s) => !s)}
-                className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-                  soundOn
-                    ? "border-emerald-400/40 bg-emerald-500/15 text-emerald-200"
-                    : "border-white/10 bg-white/5 text-white/50"
-                }`}
-              >
-                🔊 {soundOn ? "Audio on" : "Audio off"}
-              </button>
-            </div>
-          </div>
 
-          <div className="rounded-2xl border border-white/10 bg-[#101014] p-4">
-            <Label className="text-xs text-white/45">Model</Label>
-            <Select value={modelId} onValueChange={(v) => setModelId(v as VideoModelId)}>
-              <SelectTrigger className="mt-2 h-12 rounded-xl border-white/15 bg-[#0a0a0d] text-white">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {MODEL_OPTIONS.map((m) => (
-                  <SelectItem key={m.id} value={m.id}>
-                    {m.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            {meta.family === "veo" ? (
-              <Select value={veoAspect} onValueChange={(v) => setVeoAspect(v as typeof veoAspect)}>
-                <SelectTrigger className="h-11 w-[120px] rounded-xl border-white/15 bg-[#101014] text-white">
+            <div className="rounded-2xl border border-white/10 bg-[#101014] p-4">
+              <Label className="text-xs text-white/45">Model</Label>
+              <Select value={modelId} onValueChange={(v) => setModelId(v as VideoModelId)}>
+                <SelectTrigger className="mt-2 h-12 rounded-xl border-white/15 bg-[#0a0a0d] text-white">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="9:16">9:16</SelectItem>
-                  <SelectItem value="16:9">16:9</SelectItem>
-                  <SelectItem value="Auto">Auto</SelectItem>
+                  {MODEL_OPTIONS.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      {m.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
-            ) : (
-              <>
-                <Select value={duration} onValueChange={setDuration}>
-                  <SelectTrigger className="h-11 w-[100px] rounded-xl border-white/15 bg-[#101014] text-white">
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {meta.family === "veo" ? (
+                <Select value={veoAspect} onValueChange={(v) => setVeoAspect(v as typeof veoAspect)}>
+                  <SelectTrigger className="h-11 w-full min-w-[120px] rounded-xl border-white/15 bg-[#101014] text-white">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {durationChoices.map((d) => (
-                      <SelectItem key={d} value={d}>
-                        {d}s
-                      </SelectItem>
-                    ))}
+                    <SelectItem value="9:16">9:16</SelectItem>
+                    <SelectItem value="16:9">16:9</SelectItem>
+                    <SelectItem value="Auto">Auto</SelectItem>
                   </SelectContent>
                 </Select>
-                {modelId === "kling-3.0/video" && !startUrl ? (
-                  <Select value={aspect} onValueChange={setAspect}>
+              ) : (
+                <>
+                  <Select value={duration} onValueChange={setDuration}>
                     <SelectTrigger className="h-11 w-[100px] rounded-xl border-white/15 bg-[#101014] text-white">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="9:16">9:16</SelectItem>
-                      <SelectItem value="16:9">16:9</SelectItem>
-                      <SelectItem value="1:1">1:1</SelectItem>
+                      {durationChoices.map((d) => (
+                        <SelectItem key={d} value={d}>
+                          {d}s
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
-                ) : null}
-                {modelId === "kling-3.0/video" ? (
-                  <Select value={klingMode} onValueChange={(v) => setKlingMode(v as "std" | "pro")}>
-                    <SelectTrigger className="h-11 w-[120px] rounded-xl border-white/15 bg-[#101014] text-white">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="std">720p std</SelectItem>
-                      <SelectItem value="pro">Pro</SelectItem>
-                    </SelectContent>
-                  </Select>
-                ) : null}
-                {modelId.startsWith("bytedance/seedance") ? (
-                  <Select value={aspect} onValueChange={setAspect}>
-                    <SelectTrigger className="h-11 w-[100px] rounded-xl border-white/15 bg-[#101014] text-white">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="9:16">9:16</SelectItem>
-                      <SelectItem value="16:9">16:9</SelectItem>
-                      <SelectItem value="1:1">1:1</SelectItem>
-                    </SelectContent>
-                  </Select>
-                ) : null}
-              </>
-            )}
-          </div>
+                  {modelId === "kling-3.0/video" && !startUrl ? (
+                    <Select value={aspect} onValueChange={setAspect}>
+                      <SelectTrigger className="h-11 w-[100px] rounded-xl border-white/15 bg-[#101014] text-white">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="9:16">9:16</SelectItem>
+                        <SelectItem value="16:9">16:9</SelectItem>
+                        <SelectItem value="1:1">1:1</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : null}
+                  {modelId === "kling-3.0/video" ? (
+                    <Select value={klingMode} onValueChange={(v) => setKlingMode(v as "std" | "pro")}>
+                      <SelectTrigger className="h-11 min-w-[120px] rounded-xl border-white/15 bg-[#101014] text-white">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="std">720p std</SelectItem>
+                        <SelectItem value="pro">Pro</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : null}
+                  {modelId.startsWith("bytedance/seedance") ? (
+                    <Select value={aspect} onValueChange={setAspect}>
+                      <SelectTrigger className="h-11 w-[100px] rounded-xl border-white/15 bg-[#101014] text-white">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="9:16">9:16</SelectItem>
+                        <SelectItem value="16:9">16:9</SelectItem>
+                        <SelectItem value="1:1">1:1</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : null}
+                </>
+              )}
+            </div>
 
-          <Button
-            type="button"
-            disabled={busy}
-            onClick={() => void generate()}
-            className="h-14 w-full rounded-2xl border border-violet-300/40 bg-violet-500 text-lg font-semibold text-white shadow-[0_6px_0_0_rgba(76,29,149,0.85)] transition-all hover:-translate-y-px hover:bg-violet-400 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.85)] active:translate-y-1 active:shadow-none"
-          >
-            {busy ? (
-              <Loader2 className="h-6 w-6 animate-spin" />
-            ) : (
-              <span className="inline-flex items-center gap-2">
-                Generate
-                <Sparkles className="h-5 w-5" />
-                <span className="rounded-md bg-white/15 px-2 py-0.5 text-base tabular-nums">{CREDITS_SHOWN}</span>
-              </span>
-            )}
-          </Button>
-        </>
+            <Button type="button" disabled={busy} onClick={() => void generate()} className={generateBtnClass}>
+              {busy ? (
+                <Loader2 className="h-6 w-6 animate-spin" />
+              ) : (
+                <span className="inline-flex items-center gap-2">
+                  Generate
+                  <Sparkles className="h-5 w-5" />
+                  <span className="rounded-md bg-white/15 px-2 py-0.5 text-base tabular-nums">{CREDITS_SHOWN}</span>
+                </span>
+              )}
+            </Button>
+          </aside>
+
+          <StudioOutputPane
+            title="Generations"
+            hasOutput={videoHistory.length > 0}
+            output={videoResultsOutput}
+            empty={<StudioEmptyExamples variant="video" />}
+          />
+        </div>
       )}
     </div>
   );
