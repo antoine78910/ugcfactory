@@ -91,7 +91,7 @@ export async function POST(req: Request) {
   }
   if (studioVideoEditRouteKind(pickerId) !== "kie_edit") {
     return NextResponse.json(
-      { error: "This picker uses Motion Control — call `/api/kling/motion-control` instead." },
+      { error: "This picker uses Motion Control. Call `/api/kling/motion-control` instead." },
       { status: 400 },
     );
   }

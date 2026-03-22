@@ -412,9 +412,9 @@ export function snapshotAfterKlingVideoSuccess(
 }
 
 const FALLBACK_ANGLE_LABELS: [string, string, string] = [
-  "Pain & urgency — relatable frustration on camera, fast hook, pushes the viewer to stop scrolling and listen.",
-  "Trust & proof — calmer energy, addresses doubts, shows why the product works without hard selling.",
-  "Desire & transformation — benefit-led, paints the after-state and makes the product feel like the obvious next step.",
+  "Pain & urgency: relatable frustration on camera, fast hook, pushes the viewer to stop scrolling and listen.",
+  "Trust & proof: calmer energy, addresses doubts, shows why the product works without hard selling.",
+  "Desire & transformation: benefit-led, paints the after-state and makes the product feel like the obvious next step.",
 ];
 
 /** Max length for angle titles in the Link to Ad UI (headline + fallbacks). */
@@ -519,7 +519,7 @@ export function teaserFromScriptBlock(block: string, index: 0 | 1 | 2): string {
   const solution = solutionQuotedLine(block);
   const spokenParts: string[] = [];
   if (hook && solution && hook !== solution) {
-    spokenParts.push(`${hook} — ${solution}`);
+    spokenParts.push(`${hook}: ${solution}`);
   } else if (hook) {
     spokenParts.push(hook);
   } else if (solution) {

@@ -39,7 +39,7 @@ export default function SidebarCreditsBar() {
                 {percentRemaining}% <span className="font-medium text-white/45">left</span>
               </>
             ) : (
-              <span className="text-white/45">—</span>
+              <span className="text-white/45">…</span>
             )}
           </span>
         </div>
@@ -79,7 +79,7 @@ export default function SidebarCreditsBar() {
       {showCta ? (
         <div className="mt-2.5 flex flex-col gap-1.5 border-t border-white/10 pt-2.5">
           <p className="text-[10px] font-medium leading-snug text-amber-200/90">
-            Running low — top up or upgrade your plan.
+            Running low? Top up or upgrade your plan.
           </p>
           <div className="flex gap-2">
             <Link

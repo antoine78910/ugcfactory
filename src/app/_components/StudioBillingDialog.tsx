@@ -104,7 +104,7 @@ export function StudioBillingDialog({ open, onOpenChange, planId, studioMode, va
                 </Button>
               </Dialog.Close>
               <p className="text-[10px] leading-snug text-white/40">
-                One-off packs — use right away on Free or stacked with a subscription.
+                One-off packs: use right away on Free or stacked with a subscription.
               </p>
             </div>
           ) : null}
@@ -153,7 +153,7 @@ export function StudioBillingDialog({ open, onOpenChange, planId, studioMode, va
                 ))
               ) : (
                 <li className="text-sm text-amber-200/80">
-                  No studio models in this section — upgrade your plan.
+                  No studio models in this section. Upgrade your plan.
                 </li>
               )}
             </ul>
@@ -188,7 +188,7 @@ export function StudioBillingDialog({ open, onOpenChange, planId, studioMode, va
   );
 }
 
-/** @deprecated Use StudioBillingDialog with variant plan — kept for quick imports */
+/** @deprecated Use StudioBillingDialog with variant plan; kept for quick imports */
 export function StudioPlanUpgradeDialog({
   open,
   onOpenChange,

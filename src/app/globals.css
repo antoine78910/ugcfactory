@@ -222,8 +222,8 @@
 }
 
 /**
- * Studio create panels (video / image / motion): scroll with wheel or trackpad
- * inside the column — no visible scrollbar thumb / resize cursor on the edge.
+ * Studio left column (prompt + parameters + actions): one scroll region — no
+ * visible scrollbar thumb / resize cursor on the edge.
  */
 .studio-params-scroll {
   scrollbar-width: none;

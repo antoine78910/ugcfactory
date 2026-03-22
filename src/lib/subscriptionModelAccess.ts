@@ -45,7 +45,7 @@ const VIDEO_MIN_RANK: Record<string, number> = {
   "openai/sora-2": 3,
 };
 
-/** Studio Edit Video tab — picker ids (`studio-edit/…`), not raw Kie strings. */
+/** Studio Edit Video tab: picker ids (`studio-edit/…`), not raw Kie strings. */
 const VIDEO_EDIT_PICKER_MIN_RANK: Record<string, number> = {
   "studio-edit/grok": 2,
   "studio-edit/kling-omni": 3,
@@ -54,7 +54,7 @@ const VIDEO_EDIT_PICKER_MIN_RANK: Record<string, number> = {
   "studio-edit/motion-v3": 3,
 };
 
-/** Veo checkout body uses these keys — map to same gates as studio ids. */
+/** Veo checkout body uses these keys; map to same gates as studio ids. */
 const VEO_BODY_MODEL_MIN_RANK: Record<string, number> = {
   veo3_fast: VIDEO_MIN_RANK.veo3_fast,
   veo3: VIDEO_MIN_RANK.veo3,
@@ -85,7 +85,7 @@ export function canUseVeoApiModel(planId: AccountPlanId, veoModel: string | unde
   return planRank(planId) >= min;
 }
 
-/** Motion Control = Kling 3.0 class — align with Kling 3.0 tier. */
+/** Motion Control = Kling 3.0 class; align with Kling 3.0 tier. */
 export function canUseMotionControl(planId: AccountPlanId): boolean {
   return canUseStudioVideoModel(planId, "kling-3.0/video");
 }
@@ -234,7 +234,7 @@ export function motionControlUpgradeMessage(planId: AccountPlanId): string | nul
 }
 
 // ---------------------------------------------------------------------------
-// Subscription page matrix (Starter … Scale — four paid columns)
+// Subscription page matrix (Starter … Scale, four paid columns)
 // ---------------------------------------------------------------------------
 
 export type SubscriptionModelMatrixRow = {
@@ -249,41 +249,41 @@ function tierBools(minRank: number): [boolean, boolean, boolean, boolean] {
   return [1, 2, 3, 4].map((r) => r >= minRank) as [boolean, boolean, boolean, boolean];
 }
 
-/** Rows shown under “Model access” on /subscription — synced with gates above. */
+/** Rows shown under “Model access” on /subscription; synced with gates above. */
 export const SUBSCRIPTION_MODEL_MATRIX_ROWS: SubscriptionModelMatrixRow[] = [
   {
-    label: "NanoBanana 2 — images",
+    label: "NanoBanana 2: images",
     tiers: tierBools(IMAGE_MIN_RANK.nano),
   },
   {
-    label: "NanoBanana Pro — images",
+    label: "NanoBanana Pro: images",
     badges: [{ text: "2 credits", className: "bg-violet-500/20 text-violet-200 border-violet-400/30" }],
     tiers: tierBools(IMAGE_MIN_RANK.pro),
   },
-  { label: "NanoBanana 2 — video", tiers: tierBools(VIDEO_MIN_RANK["bytedance/seedance-1.5-pro"]) },
-  { label: "Kling 2.6 — video", tiers: tierBools(VIDEO_MIN_RANK["kling-2.6/video"]) },
-  { label: "Seedance 2.0 Pro — video", tiers: tierBools(VIDEO_MIN_RANK["bytedance/seedance-2.0-pro"]) },
+  { label: "NanoBanana 2: video", tiers: tierBools(VIDEO_MIN_RANK["bytedance/seedance-1.5-pro"]) },
+  { label: "Kling 2.6: video", tiers: tierBools(VIDEO_MIN_RANK["kling-2.6/video"]) },
+  { label: "Seedance 2.0 Pro: video", tiers: tierBools(VIDEO_MIN_RANK["bytedance/seedance-2.0-pro"]) },
   {
-    label: "Veo 3 Fast — video",
+    label: "Veo 3 Fast: video",
     badges: [{ text: "Google", className: "bg-amber-500/20 text-amber-200 border-amber-400/30" }],
     tiers: tierBools(VIDEO_MIN_RANK.veo3_fast),
   },
   {
-    label: "Kling 3.0 — video",
+    label: "Kling 3.0: video",
     badges: [
       { text: "1080p", className: "bg-violet-500/20 text-violet-200 border-violet-400/30" },
       { text: "Audio", className: "bg-teal-500/20 text-teal-200 border-teal-400/30" },
     ],
     tiers: tierBools(VIDEO_MIN_RANK["kling-3.0/video"]),
   },
-  { label: "Veo 3 — video", tiers: tierBools(VIDEO_MIN_RANK.veo3) },
+  { label: "Veo 3: video", tiers: tierBools(VIDEO_MIN_RANK.veo3) },
   {
-    label: "Sora 2 — video",
+    label: "Sora 2: video",
     badges: [{ text: "OpenAI", className: "bg-sky-500/20 text-sky-200 border-sky-400/30" }],
     tiers: tierBools(VIDEO_MIN_RANK["openai/sora-2"]),
   },
   {
-    label: "Motion Control — Kling 3.0",
+    label: "Motion Control (Kling 3.0)",
     tiers: tierBools(VIDEO_MIN_RANK["kling-3.0/video"]),
   },
 ];

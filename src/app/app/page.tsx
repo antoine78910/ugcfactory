@@ -168,17 +168,17 @@ function runGenerationPreview(run: {
 const TEMPLATES = [
   {
     id: "template1",
-    title: "Template 1 — Authentic UGC smartphone (POV/Selfie)",
+    title: "Template 1: Authentic UGC smartphone (POV/Selfie)",
     bestFor: "beauty / beverage / food / fashion / gadget",
   },
   {
     id: "template2",
-    title: "Template 2 — Beauty/Wellness cinematic UGC",
+    title: "Template 2: Beauty/Wellness cinematic UGC",
     bestFor: "skincare / makeup / supplement / self-care",
   },
   {
     id: "template3",
-    title: "Template 3 — Storytelling problem-solution UGC",
+    title: "Template 3: Storytelling problem-solution UGC",
     bestFor: "gadget / pain point / supplement / emotional niche",
   },
 ] as const;
@@ -581,7 +581,7 @@ export default function AppBrandWizard() {
       setStoreUrl(proj.storeUrl);
       setLinkToAdResumeRunId(json.runId);
       setAppSectionNav("link_to_ad");
-      toast.success("New ad — pick a marketing angle.");
+      toast.success("New ad: pick a marketing angle.");
     } catch (err) {
       toast.error("Error", { description: err instanceof Error ? err.message : "Unknown error" });
     } finally {
@@ -1496,7 +1496,7 @@ export default function AppBrandWizard() {
                                   size="icon"
                                   variant="secondary"
                                   className="h-9 w-9 border border-cyan-400/35 bg-cyan-500/15 text-cyan-100 hover:bg-cyan-500/30"
-                                  title="Lab view — generation map (zoom, branches)"
+                                  title="Lab view: generation map (zoom, branches)"
                                   onClick={() =>
                                     setProjectLab({
                                       title: proj.title ?? proj.storeUrl,
@@ -1513,7 +1513,7 @@ export default function AppBrandWizard() {
                                     size="icon"
                                     variant="secondary"
                                     className="h-9 w-9 border border-violet-400/45 bg-violet-500/20 text-white hover:bg-violet-500/35"
-                                    title="New ad — marketing angles"
+                                    title="New ad: marketing angles"
                                     disabled={branchingNormalizedUrl === proj.normalizedUrl}
                                     onClick={() => void startNewLinkToAdFromProject(proj)}
                                   >
@@ -1607,10 +1607,10 @@ export default function AppBrandWizard() {
                             }) ? (
                               <div className="space-y-2 border-t border-white/10 px-2 pb-3 pt-3">
                                 <p className="px-1 text-[11px] font-semibold uppercase tracking-wide text-white/45">
-                                  Generations — brand brief &amp; scripts
+                                  Generations: brand brief &amp; scripts
                                 </p>
                                 <p className="px-1 text-[10px] leading-snug text-white/40">
-                                  Open a generation in Link to Ad, or edit the brand brief and UGC scripts here — each has
+                                  Open a generation in Link to Ad, or edit the brand brief and UGC scripts here. Each has
                                   its own save button.
                                 </p>
                                 {proj.runs.map((run) => {
@@ -1654,7 +1654,7 @@ export default function AppBrandWizard() {
                                           />
                                         ) : (
                                           <p className="text-[11px] text-white/40">
-                                            Scripts not generated yet for this run — continue in Link to Ad or use
+                                            Scripts not generated yet for this run. Continue in Link to Ad or use
                                             Generate.
                                           </p>
                                         )}
@@ -1679,9 +1679,9 @@ export default function AppBrandWizard() {
                     <div className="flex min-w-0 flex-1 flex-col lg:max-w-[min(100%,30rem)] lg:min-h-0 lg:overflow-hidden">
                       <div className="studio-params-scroll flex min-w-0 flex-col gap-4 lg:flex-1 lg:min-h-0 lg:max-h-[min(55vh,calc(100vh-14rem))] lg:overflow-y-auto">
                       <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
-                        Motion control — references
+                        Motion control
                       </p>
-                      <div className="rounded-2xl border border-white/10 bg-[#101014] p-4">
+                      <div className="rounded-2xl border border-white/10 bg-[#101014] p-4 space-y-4">
                         <div className="grid grid-cols-2 gap-3">
                           <input
                             ref={motionVideoInputRef}
@@ -1773,10 +1773,8 @@ export default function AppBrandWizard() {
                             )}
                           </button>
                         </div>
-                      </div>
 
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Parameters</p>
-                      <div className="rounded-2xl border border-white/10 bg-[#101014] p-4 space-y-4">
+                        <div className="border-t border-white/10 pt-4 space-y-4">
                         <div>
                             <StudioSingleModelCard
                               hideMeta
@@ -1834,6 +1832,7 @@ export default function AppBrandWizard() {
                               </SelectItem>
                             </SelectContent>
                           </Select>
+                        </div>
                         </div>
                       </div>
 
@@ -2065,8 +2064,8 @@ export default function AppBrandWizard() {
                   ) : (
                     <div className="space-y-3">
                       <div className="rounded-md border bg-background/30 p-3">
-                        <div className="font-medium">{extracted?.title ?? "—"}</div>
-                        <div className="text-sm text-muted-foreground">{extracted?.description ?? "—"}</div>
+                        <div className="font-medium">{extracted?.title ?? "…"}</div>
+                        <div className="text-sm text-muted-foreground">{extracted?.description ?? "…"}</div>
                         <div className="mt-2 text-xs text-muted-foreground break-all">{extracted?.url}</div>
                       </div>
                       <div className="flex flex-wrap gap-2">
@@ -2138,7 +2137,7 @@ export default function AppBrandWizard() {
                       </div>
                       <div className="rounded-md border bg-background/30 p-3 text-sm">
                         <div className="font-medium mb-1">Positioning</div>
-                        <div className="text-muted-foreground">{safeString(analysis.step2_positioning, "—")}</div>
+                        <div className="text-muted-foreground">{safeString(analysis.step2_positioning, "…")}</div>
                       </div>
                       {researchNotes.length > 0 ? (
                         <div className="rounded-md border bg-background/30 p-3 text-sm">
@@ -2420,7 +2419,7 @@ export default function AppBrandWizard() {
                   <div className="rounded-md border bg-background/30 p-3 text-sm">
                     <div className="font-medium mb-2">Image prompt</div>
                     <div className="whitespace-pre-wrap text-muted-foreground">
-                      {imagePrompt || "— (click “Create perfect image prompt”) —"}
+                      {imagePrompt || "No prompt yet (use “Create perfect image prompt”)."}
                     </div>
                     {negativePrompt ? (
                       <div className="mt-3">

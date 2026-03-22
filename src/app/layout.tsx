@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Youry — Turn Any Product Into A Video Ad",
+  title: "Youry | Turn Any Product Into A Video Ad",
   description: "Turn any product into realistic AI ads, UGC, reels and stories.",
   icons: {
     icon: "/icon.png",
@@ -36,7 +36,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      {/* Datafast analytics — same as snippet in <head>; beforeInteractive injects early */}
+      {/* Datafast analytics; same as snippet in <head>; beforeInteractive injects early */}
       <Script
         id="datafast"
         src="https://datafa.st/js/script.js"

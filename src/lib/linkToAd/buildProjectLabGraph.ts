@@ -97,7 +97,7 @@ export function buildProjectLabGraph(params: {
   const universeRuns = params.runs.filter((r) => readUniverseFromExtracted(r.extracted) !== null);
   const classicRuns = params.runs.filter((r) => readUniverseFromExtracted(r.extracted) === null);
 
-  /** Vertical slice per generation — tall enough for brief + angle row + refs + video. */
+  /** Vertical slice per generation; tall enough for brief + angle row + refs + video. */
   const blockH = 580;
   let cursorY = 140;
   const runGap = 64;
@@ -281,7 +281,7 @@ export function buildProjectLabGraph(params: {
       w: 280,
       h: 72,
       label: "Classic workflow",
-      sublabel: `${classicRuns.length} generation(s) — open from the list`,
+      sublabel: `${classicRuns.length} generation(s). Open from the list.`,
     });
     e(rootId, clId);
     cursorY += 100;

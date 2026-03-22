@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import RotatingText from "./RotatingText";
 import ShapeGrid from "./ShapeGrid";
+import { HeroVideoCarousel3D } from "./HeroVideoCarousel3D";
 import { ArrowRight, ChevronDown, Play, Sparkles } from "lucide-react";
 
 const STEPS = [
@@ -68,7 +69,7 @@ type RevealRegistryEntry = {
 const FAQ_ITEMS = [
   {
     q: "What kind of products work best?",
-    a: "Youry works with any e-commerce product — skincare, supplements, fashion, electronics, home goods, and more. If it has a product page, we can turn it into a video ad.",
+    a: "Youry works with any e-commerce product: skincare, supplements, fashion, electronics, home goods, and more. If it has a product page, we can turn it into a video ad.",
   },
   {
     q: "Do I need to provide my own video footage?",
@@ -159,7 +160,7 @@ export default function LandingPage() {
     Array.from({ length: REVEAL_SLIDE_TOTAL }, () => null),
   );
 
-  // Single RAF for all reveal slides — avoids desync / invalid clip-path when width≈0 (fixes video bleeding or missing video).
+  // Single RAF for all reveal slides; avoids desync / invalid clip-path when width≈0 (fixes video bleeding or missing video).
   useEffect(() => {
     let rafId = 0;
     function tick() {
@@ -301,8 +302,11 @@ export default function LandingPage() {
             hoverTrailAmount={0}
           />
         </div>
-        <div className="pointer-events-none absolute inset-0 z-[2] bg-gradient-to-b from-[#050507]/35 via-[#050507]/50 to-[#050507]" />
-        <div className="pointer-events-none absolute left-1/2 top-0 z-[2] -translate-x-1/2 h-[700px] w-[1000px] rounded-full bg-violet-600/[0.12] blur-[140px]" />
+        <div className="pointer-events-none absolute inset-0 z-[2]">
+          <HeroVideoCarousel3D srcs={UGC_SLIDES.map((s) => s.src)} />
+        </div>
+        <div className="pointer-events-none absolute inset-0 z-[3] bg-gradient-to-b from-[#050507]/30 via-[#050507]/42 to-[#050507]" />
+        <div className="pointer-events-none absolute left-1/2 top-0 z-[3] -translate-x-1/2 h-[700px] w-[1000px] rounded-full bg-violet-600/[0.12] blur-[140px]" />
 
         <div className="relative z-10 mx-auto max-w-4xl px-5 pt-28 pb-24 text-center">
           <h1 className="mx-auto max-w-3xl px-4 sm:px-8 text-4xl font-extrabold tracking-tight leading-[1.12] sm:text-5xl md:text-6xl">
@@ -405,7 +409,7 @@ export default function LandingPage() {
         <div className="relative overflow-hidden">
           <div className="pointer-events-none absolute inset-y-0 left-0 z-20 w-16 bg-gradient-to-r from-[#050507] to-transparent sm:w-28" />
           <div className="pointer-events-none absolute inset-y-0 right-0 z-20 w-16 bg-gradient-to-l from-[#050507] to-transparent sm:w-28" />
-          {/* Thin center marker (no heavy glow) — marks the reveal axis */}
+          {/* Thin center marker (no heavy glow); marks the reveal axis */}
           <div
             className="pointer-events-none absolute inset-y-0 left-1/2 z-[15] w-px -translate-x-1/2 bg-violet-400/80"
             aria-hidden

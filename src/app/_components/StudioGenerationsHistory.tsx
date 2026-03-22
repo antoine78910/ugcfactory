@@ -66,7 +66,7 @@ export function StudioGenerationsHistory({ items, empty, mediaLabel = "Generatio
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* Top bar — History / How it works + view controls */}
+      {/* Top bar: History / How it works + view controls */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-3">
         <div className="flex flex-wrap items-center gap-1">
           <button

@@ -20,7 +20,7 @@ const VARIANTS: Record<
   },
   video: {
     title: "Your videos will show here",
-    subtitle: "Pick a model, frames and prompt on the left — outputs stack on this side.",
+    subtitle: "Pick a model, frames and prompt on the left. Outputs stack on this side.",
     examples: [
       { icon: Video, label: "Kling & Seedance", hint: "Text or image-to-video workflows" },
       { icon: Sparkles, label: "Veo 3", hint: "Optional start / end frames" },
@@ -29,7 +29,7 @@ const VARIANTS: Record<
   },
   motion: {
     title: "Motion control output",
-    subtitle: "Add a reference clip + character on the left — the generated video appears here.",
+    subtitle: "Add a reference clip and character on the left. The generated video appears here.",
     examples: [
       { icon: Video, label: "Drive motion from video", hint: "Copy movement onto your character" },
       { icon: ImageIcon, label: "Character image", hint: "Clear face & body for best match" },

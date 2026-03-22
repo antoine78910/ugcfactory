@@ -137,7 +137,7 @@ export default function SubscriptionPage() {
 
   const subtitle = useMemo(
     () =>
-      "Monthly credits, model access, and room to experiment — pick the tier that matches how often you ship.",
+      "Monthly credits, model access, and room to experiment. Pick the tier that matches how often you ship.",
     [],
   );
 
@@ -150,7 +150,7 @@ export default function SubscriptionPage() {
     const mainLabel = Number.isInteger(perMonthEquiv) ? String(perMonthEquiv) : perMonthEquiv.toFixed(2);
     return {
       mainLabel,
-      sub: `Billed yearly ($${yearlyTotal.toLocaleString("en-US")}/yr) — save 50%`,
+      sub: `Billed yearly ($${yearlyTotal.toLocaleString("en-US")}/yr). Save 50%.`,
     };
   }
 
@@ -215,7 +215,7 @@ export default function SubscriptionPage() {
 
           {billing === "yearly" ? (
             <p className="mx-auto max-w-2xl rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-4 py-3 text-center text-xs leading-relaxed text-amber-100/90">
-              Yearly billing needs Stripe yearly price IDs — set{" "}
+              Yearly billing needs Stripe yearly price IDs. Set{" "}
               <code className="rounded-md bg-black/30 px-1.5 py-0.5 font-mono text-[10px] text-white/80">
                 STRIPE_PRICE_SUBSCRIPTION_*_YEARLY
               </code>{" "}
@@ -419,7 +419,7 @@ export default function SubscriptionPage() {
                     style={{ gridTemplateColumns: "minmax(200px,1.2fr) repeat(4, minmax(88px,1fr))" }}
                   >
                     <div className="p-3 pl-4 text-xs font-bold uppercase tracking-[0.12em] text-violet-200/95">
-                      Studio — models
+                      Studio: models
                     </div>
                     <div className="border-l border-white/5" />
                     <div className="border-l border-white/5 bg-violet-500/[0.04]" />

@@ -99,7 +99,7 @@ function UpgradeModal({
                     isUpgrade ? plan.btnClass : "bg-white/10 text-white/50",
                   )}
                 >
-                  {isCurrent ? "Current plan" : isUpgrade ? "Upgrade" : "—"}
+                  {isCurrent ? "Current plan" : isUpgrade ? "Upgrade" : "…"}
                 </button>
               </div>
             );

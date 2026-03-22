@@ -174,8 +174,8 @@ export default function StudioUpscalePanel() {
   return (
     <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:gap-6 lg:min-h-0 lg:max-h-[min(92vh,calc(100vh-7rem))]">
       <div className="flex min-w-0 flex-1 flex-col gap-4 lg:max-w-[min(100%,30rem)] lg:min-h-0 lg:overflow-hidden">
-        <div className="studio-left-inputs-scroll flex min-w-0 flex-col gap-4 lg:max-h-[min(42vh,24rem)] lg:shrink-0 lg:overflow-y-auto">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Kie — video</p>
+        <div className="studio-params-scroll flex min-w-0 flex-col gap-4 lg:flex-1 lg:min-h-0 lg:max-h-[min(55vh,calc(100vh-14rem))] lg:overflow-y-auto">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Source &amp; billing</p>
           <div className="rounded-2xl border border-white/10 bg-[#101014] p-4 space-y-3">
             <Label className="text-xs text-white/45">Source video</Label>
             <div className="flex flex-wrap gap-2">
@@ -225,13 +225,11 @@ export default function StudioUpscalePanel() {
               </div>
             </div>
           </div>
-        </div>
 
-        <div className="studio-params-scroll flex min-w-0 flex-1 flex-col gap-4 lg:min-h-0 lg:overflow-y-auto">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">More Kie upscale</p>
           <div className={soonCard}>
             <span className="text-xs font-semibold text-white/55">Topaz Image Upscale</span>
-            <span className="text-[10px] text-white/35">Same Kie market family — wiring next.</span>
+            <span className="text-[10px] text-white/35">Same Kie market family; wiring next.</span>
           </div>
           <div className={soonCard}>
             <span className="text-xs font-semibold text-white/55">Other Kie upscalers</span>
@@ -252,7 +250,6 @@ export default function StudioUpscalePanel() {
               <span className="text-sm font-normal text-white/80">credits</span>
             </span>
           </Button>
-        </div>
 
         <details className="group rounded-2xl border border-white/10 bg-[#0c0c10]/90 text-white/80 open:border-violet-500/20">
           <summary className="cursor-pointer list-none px-4 py-3 text-xs font-semibold uppercase tracking-wide text-white/50 transition hover:text-white/70 [&::-webkit-details-marker]:hidden">
@@ -299,7 +296,7 @@ export default function StudioUpscalePanel() {
                         </span>
                       </td>
                       <td className="px-2 py-2.5 tabular-nums text-white/55">
-                        {r.falListUsd != null ? `$${r.falListUsd.toFixed(2)}` : "—"}
+                        {r.falListUsd != null ? `$${r.falListUsd.toFixed(2)}` : "–"}
                       </td>
                       <td className="px-2 py-2.5 tabular-nums text-violet-200/90">
                         {r.discountVsFalListPct != null ? (
@@ -311,7 +308,7 @@ export default function StudioUpscalePanel() {
                             </span>
                           </>
                         ) : (
-                          "—"
+                          "–"
                         )}
                       </td>
                     </tr>
@@ -326,6 +323,7 @@ export default function StudioUpscalePanel() {
             </p>
           </div>
         </details>
+        </div>
       </div>
 
       <div className="flex h-full min-h-0 min-w-0 flex-[2.5] lg:flex-[3] flex-col lg:min-h-0 lg:overflow-hidden">

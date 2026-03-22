@@ -429,7 +429,7 @@ export function ProjectLabCanvas({ open, onClose, projectTitle, storeUrl, runs, 
             <GitBranch className="h-5 w-5 text-violet-200" />
           </div>
           <div className="min-w-0">
-            <h2 className="truncate text-sm font-semibold text-white">Lab view — map</h2>
+            <h2 className="truncate text-sm font-semibold text-white">Lab view: map</h2>
             <p className="truncate text-xs text-white/45">
               Nodes: drag to move · Background: pan · Scroll wheel: zoom
             </p>

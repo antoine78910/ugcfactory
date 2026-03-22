@@ -125,7 +125,7 @@ export async function POST(req: Request) {
     {
       ok: false,
       pending: true,
-      message: "Video still processing — open Link to Ad or refresh My Projects in a moment.",
+      message: "Video still processing. Open Link to Ad or refresh My Projects in a moment.",
     },
     { status: 202 },
   );

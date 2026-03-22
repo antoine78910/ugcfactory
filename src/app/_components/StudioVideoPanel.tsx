@@ -159,7 +159,7 @@ const VIDEO_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
 /** First allowed Edit picker when plan changes. */
 const VIDEO_EDIT_PICKER_ACCESS_ORDER = [...STUDIO_VIDEO_EDIT_PICKER_IDS];
 
-/** Cheapest first — used to pick a valid model after plan change. */
+/** Cheapest first; used to pick a valid model after plan change. */
 const VIDEO_MODEL_ACCESS_ORDER: VideoModelId[] = [
   "bytedance/seedance-1.5-pro",
   "kling-2.6/video",
@@ -436,7 +436,7 @@ export default function StudioVideoPanel() {
   const [aspect, setAspect] = useState("9:16");
   const [klingMode, setKlingMode] = useState<"std" | "pro">("std");
   const [veoAspect, setVeoAspect] = useState<"16:9" | "9:16" | "Auto">("9:16");
-  /** Start/end frame uploads only — does not block Generate. */
+  /** Start/end frame uploads only; does not block Generate. */
   const [frameUploadBusy, setFrameUploadBusy] = useState(false);
   const [historyItems, setHistoryItems] = useState<StudioHistoryItem[]>([]);
   type VideoBilling =
@@ -453,7 +453,7 @@ export default function StudioVideoPanel() {
   const [editPrompt, setEditPrompt] = useState("");
   const [editAutoSettings, setEditAutoSettings] = useState(true);
   const [editKlingMode, setEditKlingMode] = useState<"std" | "pro">("pro");
-  /** Motion: Kie `background_source` — video backdrop vs still backdrop. */
+  /** Motion: Kie `background_source` (video backdrop vs still backdrop). */
   const [editSceneBackground, setEditSceneBackground] = useState<"input_video" | "input_image">(
     "input_video",
   );
@@ -1060,8 +1060,8 @@ export default function StudioVideoPanel() {
       {tab === "edit" ? (
         <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:gap-6 lg:min-h-0 lg:max-h-[min(92vh,calc(100vh-7rem))]">
           <div className="flex min-w-0 flex-1 flex-col gap-4 lg:max-w-[min(100%,30rem)] lg:min-h-0 lg:overflow-hidden">
-            <div className="studio-left-inputs-scroll flex min-w-0 flex-col gap-4 lg:max-h-[min(42vh,24rem)] lg:shrink-0 lg:overflow-y-auto">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Edit — prompt</p>
+            <div className="studio-params-scroll flex min-w-0 flex-col gap-4 lg:flex-1 lg:min-h-0 lg:max-h-[min(55vh,calc(100vh-14rem))] lg:overflow-y-auto">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Edit prompt</p>
             <div className="rounded-2xl border border-white/10 bg-[#101014] p-4 space-y-3">
               {motionEdit ? (
                 <div className="grid grid-cols-2 gap-2">
@@ -1129,9 +1129,7 @@ export default function StudioVideoPanel() {
                 ) : null}
               </div>
             </div>
-            </div>
 
-            <div className="studio-params-scroll flex min-w-0 flex-1 flex-col gap-4 lg:min-h-0 lg:overflow-y-auto">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Parameters</p>
             <div className="rounded-2xl border border-white/10 bg-[#101014] p-4 space-y-4">
               <div className="flex items-center justify-between gap-3">
@@ -1251,8 +1249,8 @@ export default function StudioVideoPanel() {
       ) : (
         <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:gap-6 lg:min-h-0 lg:max-h-[min(92vh,calc(100vh-7rem))]">
           <div className="flex min-w-0 flex-1 flex-col gap-4 lg:max-w-[min(100%,30rem)] lg:min-h-0 lg:overflow-hidden">
-            <div className="studio-left-inputs-scroll flex min-w-0 flex-col gap-4 lg:max-h-[min(42vh,24rem)] lg:shrink-0 lg:overflow-y-auto">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Create — prompt</p>
+            <div className="studio-params-scroll flex min-w-0 flex-col gap-4 lg:flex-1 lg:min-h-0 lg:max-h-[min(55vh,calc(100vh-14rem))] lg:overflow-y-auto">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Create prompt</p>
             <div className="rounded-2xl border border-white/10 bg-[#101014] p-4">
               <div className="grid grid-cols-2 gap-2">
                 <FrameSlot
@@ -1285,9 +1283,7 @@ export default function StudioVideoPanel() {
                 </span>
               </div>
             </div>
-            </div>
 
-            <div className="studio-params-scroll flex min-w-0 flex-1 flex-col gap-4 lg:min-h-0 lg:overflow-y-auto">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Parameters</p>
             <div className="rounded-2xl border border-white/10 bg-[#101014] p-4 space-y-4">
               <div>

@@ -133,7 +133,7 @@ function brandFaviconUrl(hostname: string): string {
   return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(hostname)}&sz=64`;
 }
 
-/** Short teaser for UI only — full text stays in state for GPT / scripts APIs. */
+/** Short teaser for UI only; full text stays in state for GPT / scripts APIs. */
 function compactBrandSummaryForUi(full: string, maxLen = 200): string {
   const t = full.replace(/\r\n/g, "\n").trim();
   if (!t) return "";
@@ -762,7 +762,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       return;
     }
     if (!universeRunId) {
-      toast.error("No saved project yet — run Generate from URL first.");
+      toast.error("No saved project yet. Run Generate from URL first.");
       return;
     }
 
@@ -906,7 +906,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           if (getRes.ok && getJson.data) {
             hydrateFromRun(getJson.data, { silent: true });
             toast.message("Pipeline stopped early", {
-              description: pipeResult.error || "Partial data was saved — check your project.",
+              description: pipeResult.error || "Partial data was saved. Check your project.",
             });
             setStage("ready");
             onRunsChanged?.();
@@ -1011,13 +1011,13 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           imagePrompt: text,
         });
       }
-      toast.success("3 image prompts saved — starting generation…");
+      toast.success("3 image prompts saved. Starting generation…");
 
       const rawTri = parseThreeLabeledPrompts(text);
       const prompts: [string, string, string] = [rawTri[0].trim(), rawTri[1].trim(), rawTri[2].trim()];
       if (!prompts[0] || !prompts[1] || !prompts[2]) {
         toast.warning("Prompts saved", {
-          description: "Could not parse all 3 prompts — use Regenerate if needed.",
+          description: "Could not parse all 3 prompts. Use Regenerate if needed.",
         });
         return;
       }
@@ -1034,7 +1034,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         toast.error("Image generation", {
           description:
             (imgErr instanceof Error ? imgErr.message : "Unknown error") +
-            " — Prompts are saved; you can retry.",
+            " Prompts are saved; you can retry.",
         });
       } finally {
         setIsNanoAllImagesSubmitting(false);
@@ -1995,12 +1995,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                 </Button>
               </div>
               <p className="mt-2 max-w-xl text-[11px] leading-snug text-white/40">
-                Use the exact product page URL, not just your shop homepage — we need the specific listing to pull the
+                Use the exact product page URL, not just your shop homepage. We need the specific listing to pull the
                 right images and details.
-              </p>
-              <p className="mt-2 max-w-2xl text-sm text-white/50">
-                Paste your URL and click <span className="text-white/65">Generate</span> (or press Enter). We scan the
-                page and continue until you choose an angle, then an image, then we finish the ad.
               </p>
             </div>
           ) : null}
@@ -2043,7 +2039,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                       <div className="min-w-0 py-0.5">
                         <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Store</p>
                         <p className="truncate text-sm font-medium text-white/85">
-                          {storeHostnameResolved || storeUrl.trim() || "—"}
+                          {storeHostnameResolved || storeUrl.trim() || "…"}
                         </p>
                         {isWorking ? (
                           <p className="mt-1 text-xs text-violet-300/90">Scanning the store…</p>
@@ -2231,7 +2227,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                         const active = selectedAngleIndex === i;
                         const label = angleLabels[i]?.trim();
                         const fallback = teaserFromScriptBlock(scriptOptionBodies[i], i);
-                        const body = label || fallback || "—";
+                        const body = label || fallback || "…";
                         return (
                           <button
                             key={i}

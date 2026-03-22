@@ -225,7 +225,7 @@ type StudioModelPickerProps = {
   /** Right sheet (default) vs legacy dropdown below trigger. */
   panelMode?: "sheet" | "dropdown";
   /**
-   * Hide resolution / duration (and similar) in the trigger and list — use when the sidebar already shows those params.
+   * Hide resolution / duration (and similar) in the trigger and list when the sidebar already shows those params.
    */
   hideMeta?: boolean;
 };
@@ -465,7 +465,7 @@ export function StudioModelPicker({
   );
 }
 
-/** Dark Radix Select — panel #121212, row highlight / selected #2a2a2a, check discret (ref. maquette). */
+/** Dark Radix Select: panel #121212, row highlight / selected #2a2a2a, check discret (ref. maquette). */
 export const studioSelectContentClass =
   "rounded-lg border border-white/10 bg-[#121212] p-1 text-white shadow-[0_16px_48px_rgba(0,0,0,0.65)] !bg-[#121212]";
 

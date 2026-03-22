@@ -144,7 +144,7 @@ function ImageEconomicsTable({ rows }: { rows: StudioImageEconomicsRow[] }) {
                 </span>
               </td>
               <td className="px-2 py-2.5 tabular-nums text-white/55">
-                {row.falListUsd != null ? `$${row.falListUsd.toFixed(2)}` : "—"}
+                {row.falListUsd != null ? `$${row.falListUsd.toFixed(2)}` : "–"}
               </td>
               <td className="px-2 py-2.5 tabular-nums text-violet-200/90">
                 {row.discountVsFalListPct != null ? (
@@ -156,7 +156,7 @@ function ImageEconomicsTable({ rows }: { rows: StudioImageEconomicsRow[] }) {
                     </span>
                   </>
                 ) : (
-                  "—"
+                  "–"
                 )}
               </td>
             </tr>
@@ -188,7 +188,7 @@ export default function StudioImagePanel() {
   const [resolution, setResolution] = useState<(typeof PRO_RESOLUTIONS)[number]>("2K");
   const [numImages, setNumImages] = useState(1);
   const [refUrls, setRefUrls] = useState<string[]>([]);
-  /** Reference image uploads only — does not block Generate. */
+  /** Reference image uploads only; does not block Generate. */
   const [refUploadBusy, setRefUploadBusy] = useState(false);
   const [historyItems, setHistoryItems] = useState<StudioHistoryItem[]>([]);
   type ImageBilling =
@@ -347,8 +347,8 @@ export default function StudioImagePanel() {
   return (
     <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:gap-6 lg:min-h-0 lg:max-h-[min(92vh,calc(100vh-7rem))]">
       <div className="flex min-w-0 flex-1 flex-col gap-4 lg:max-w-[min(100%,30rem)] lg:min-h-0 lg:overflow-hidden">
-        <div className="studio-left-inputs-scroll flex min-w-0 flex-col gap-4 lg:max-h-[min(42vh,24rem)] lg:shrink-0 lg:overflow-y-auto">
-        <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Create — prompt</p>
+        <div className="studio-params-scroll flex min-w-0 flex-col gap-4 lg:flex-1 lg:min-h-0 lg:max-h-[min(55vh,calc(100vh-14rem))] lg:overflow-y-auto">
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Create prompt</p>
         <div className="rounded-2xl border border-white/10 bg-[#101014] p-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-white/45">Reference images</p>
           <div className="mt-3 flex flex-wrap gap-2">
@@ -392,9 +392,7 @@ export default function StudioImagePanel() {
             </span>
           </div>
         </div>
-        </div>
 
-        <div className="studio-params-scroll flex min-w-0 flex-1 flex-col gap-4 lg:min-h-0 lg:overflow-y-auto">
         <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Parameters</p>
         <div className="rounded-2xl border border-white/10 bg-[#101014] p-4 space-y-4">
           <div>
@@ -478,12 +476,11 @@ export default function StudioImagePanel() {
             <span className="text-sm font-normal text-white/80">credits</span>
           </span>
         </Button>
-        </div>
 
         <details className="group rounded-2xl border border-white/10 bg-[#0c0c10]/90 text-white/80 open:border-violet-500/20">
           <summary className="cursor-pointer list-none px-4 py-3 text-xs font-semibold uppercase tracking-wide text-white/50 transition hover:text-white/70 [&::-webkit-details-marker]:hidden">
             <span className="inline-flex w-full items-center justify-between gap-2">
-              Google Nano Banana 2 — economics
+              Google Nano Banana 2: economics
               <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-normal normal-case tracking-normal text-white/40 group-open:text-violet-200/80">
                 Kie
               </span>
@@ -498,7 +495,7 @@ export default function StudioImagePanel() {
         <details className="group rounded-2xl border border-white/10 bg-[#0c0c10]/90 text-white/80 open:border-violet-500/20">
           <summary className="cursor-pointer list-none px-4 py-3 text-xs font-semibold uppercase tracking-wide text-white/50 transition hover:text-white/70 [&::-webkit-details-marker]:hidden">
             <span className="inline-flex w-full items-center justify-between gap-2">
-              Google Nano Banana Pro — economics
+              Google Nano Banana Pro: economics
               <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-normal normal-case tracking-normal text-white/40 group-open:text-violet-200/80">
                 Kie
               </span>
@@ -513,7 +510,7 @@ export default function StudioImagePanel() {
         <details className="group rounded-2xl border border-white/10 bg-[#0c0c10]/90 text-white/80 open:border-violet-500/20">
           <summary className="cursor-pointer list-none px-4 py-3 text-xs font-semibold uppercase tracking-wide text-white/50 transition hover:text-white/70 [&::-webkit-details-marker]:hidden">
             <span className="inline-flex w-full items-center justify-between gap-2">
-              Grok Imagine — reference
+              Grok Imagine (reference)
               <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-normal normal-case tracking-normal text-white/40 group-open:text-violet-200/80">
                 Batch
               </span>
@@ -553,7 +550,7 @@ export default function StudioImagePanel() {
         <details className="group rounded-2xl border border-white/10 bg-[#0c0c10]/90 text-white/80 open:border-violet-500/20">
           <summary className="cursor-pointer list-none px-4 py-3 text-xs font-semibold uppercase tracking-wide text-white/50 transition hover:text-white/70 [&::-webkit-details-marker]:hidden">
             <span className="inline-flex w-full items-center justify-between gap-2">
-              Seedream 4.5 — economics
+              Seedream 4.5: economics
               <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-normal normal-case tracking-normal text-white/40 group-open:text-violet-200/80">
                 2 modalities
               </span>
@@ -571,6 +568,7 @@ export default function StudioImagePanel() {
             </p>
           </div>
         </details>
+        </div>
       </div>
 
       <div className="flex h-full min-h-0 min-w-0 flex-[2.5] lg:flex-[3] flex-col lg:min-h-0 lg:overflow-hidden">

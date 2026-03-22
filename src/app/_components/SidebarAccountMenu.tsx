@@ -24,7 +24,7 @@ export default function SidebarAccountMenu({ email, onLogout, planLabel = "Free"
     return () => document.removeEventListener("mousedown", onDoc);
   }, [open]);
 
-  const display = email.trim() || "—";
+  const display = email.trim() || "…";
   const truncated = display.length > 24 ? `${display.slice(0, 21)}…` : display;
 
   return (
