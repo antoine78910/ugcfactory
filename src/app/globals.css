@@ -124,6 +124,17 @@
   body {
     @apply bg-background text-foreground;
   }
+  /* Clear click affordance on interactive controls */
+  button:not(:disabled),
+  [role="button"]:not([data-disabled]):not([aria-disabled="true"]),
+  summary {
+    cursor: pointer;
+  }
+  button:disabled,
+  [role="button"][data-disabled],
+  [role="button"][aria-disabled="true"] {
+    cursor: not-allowed;
+  }
 }
 
 @keyframes marquee-left {
@@ -222,7 +233,7 @@
 }
 
 /**
- * Studio left column (prompt + parameters + actions): one scroll region — no
+ * Studio left column (prompt + parameters + actions): one scroll region; no
  * visible scrollbar thumb / resize cursor on the edge.
  */
 .studio-params-scroll {

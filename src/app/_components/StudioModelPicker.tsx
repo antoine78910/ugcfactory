@@ -494,7 +494,7 @@ export function StudioSingleModelCard({
   hideMeta?: boolean;
 }) {
   return (
-    <div className="rounded-xl border border-white/15 bg-[#0a0a0d] p-3">
+    <div className="rounded-xl border border-white/15 bg-[#0a0a0d] p-2.5">
       <div className="flex items-start gap-3">
         <ModelGlyph icon={icon} active />
         <div className="min-w-0 flex-1">

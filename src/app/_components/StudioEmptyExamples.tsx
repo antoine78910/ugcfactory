@@ -50,7 +50,7 @@ const VARIANTS: Record<
 export function StudioEmptyExamples({ variant }: { variant: StudioEmptyVariant }) {
   const v = VARIANTS[variant];
   return (
-    <div className="flex h-full min-h-[280px] flex-col justify-center gap-6 py-4">
+    <div className="flex h-full min-h-[240px] flex-col justify-center gap-4 py-2">
       <div className="text-center lg:text-left">
         <p className="text-sm font-semibold text-white/90">{v.title}</p>
         <p className="mt-1 text-xs text-white/45">{v.subtitle}</p>
@@ -88,7 +88,7 @@ export function StudioOutputPane({
   empty: ReactNode;
 }) {
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col rounded-2xl border border-white/10 bg-[#08080c]/90 p-4 lg:h-full lg:max-h-full lg:min-h-0">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col rounded-2xl border border-white/10 bg-[#08080c]/90 p-3 lg:h-full lg:max-h-full lg:min-h-0">
       {title ? (
         <p className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-white/45">{title}</p>
       ) : null}

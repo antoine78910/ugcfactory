@@ -1674,15 +1674,15 @@ export default function AppBrandWizard() {
             ) : null}
 
             {appSection === "motion_control" ? (
-              <div className="space-y-4">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:gap-6 lg:min-h-0 lg:max-h-[min(92vh,calc(100vh-7rem))]">
-                    <div className="flex min-w-0 flex-1 flex-col lg:max-w-[min(100%,30rem)] lg:min-h-0 lg:overflow-hidden">
-                      <div className="studio-params-scroll flex min-w-0 flex-col gap-4 lg:flex-1 lg:min-h-0 lg:max-h-[min(55vh,calc(100vh-14rem))] lg:overflow-y-auto">
+              <div className="space-y-2">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch lg:gap-4 lg:min-h-0 lg:max-h-[min(92vh,calc(100vh-7rem))]">
+                    <div className="flex min-w-0 flex-1 flex-col lg:max-w-[min(100%,24rem)] lg:min-h-0 lg:overflow-hidden">
+                      <div className="studio-params-scroll flex min-w-0 flex-col gap-2 lg:flex-1 lg:min-h-0 lg:max-h-[min(62vh,calc(100vh-12rem))] lg:overflow-y-auto">
                       <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
                         Motion control
                       </p>
-                      <div className="rounded-2xl border border-white/10 bg-[#101014] p-4 space-y-4">
-                        <div className="grid grid-cols-2 gap-3">
+                      <div className="rounded-2xl border border-white/10 bg-[#101014] p-3 space-y-3">
+                        <div className="grid grid-cols-2 gap-2">
                           <input
                             ref={motionVideoInputRef}
                             type="file"
@@ -1712,7 +1712,7 @@ export default function AppBrandWizard() {
                           <button
                             type="button"
                             onClick={() => motionVideoInputRef.current?.click()}
-                            className="relative flex aspect-[4/3] w-full flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-white/20 bg-[#0c0c10] text-white/50 transition hover:border-violet-400/40 hover:bg-white/[0.03]"
+                            className="relative flex aspect-[4/3] w-full cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-white/20 bg-[#0c0c10] text-white/50 transition hover:border-violet-400/40 hover:bg-white/[0.03]"
                           >
                             {motionVideoRefBlobUrl ? (
                               <>
@@ -1755,7 +1755,7 @@ export default function AppBrandWizard() {
                           <button
                             type="button"
                             onClick={() => motionCharacterInputRef.current?.click()}
-                            className="relative flex aspect-[4/3] w-full flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-white/20 bg-[#0c0c10] text-white/50 transition hover:border-violet-400/40 hover:bg-white/[0.03]"
+                            className="relative flex aspect-[4/3] w-full cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-white/20 bg-[#0c0c10] text-white/50 transition hover:border-violet-400/40 hover:bg-white/[0.03]"
                           >
                             {motionCharacterImageUrl ? (
                               // eslint-disable-next-line @next/next/no-img-element
@@ -1774,7 +1774,7 @@ export default function AppBrandWizard() {
                           </button>
                         </div>
 
-                        <div className="border-t border-white/10 pt-4 space-y-4">
+                        <div className="space-y-2">
                         <div>
                             <StudioSingleModelCard
                               hideMeta
@@ -1785,7 +1785,7 @@ export default function AppBrandWizard() {
                             />
                         </div>
                         {motionControlUpgradeMessage(planId) ? (
-                          <p className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-100/90">
+                          <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-2.5 py-1.5 text-[11px] leading-snug text-amber-100/90">
                             {motionControlUpgradeMessage(planId)}
                           </p>
                         ) : null}
@@ -1966,7 +1966,7 @@ export default function AppBrandWizard() {
                       </div>
                     </div>
 
-                    <div className="flex h-full min-h-0 min-w-0 flex-[2.5] lg:flex-[3] flex-col lg:min-h-0 lg:overflow-hidden">
+                    <div className="flex h-full min-h-0 min-w-0 flex-[2] lg:flex-[3.25] flex-col lg:min-h-0 lg:overflow-hidden">
                       <StudioOutputPane
                         title=""
                         hasOutput
@@ -2005,31 +2005,28 @@ export default function AppBrandWizard() {
             ) : null}
 
             {appSection === "image" ? (
-              <Card className="border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
-                <CardHeader>
-                  <CardTitle className="text-base">Image</CardTitle>
+              <Card className="gap-2 border-white/10 bg-[#0b0912]/85 py-3 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
+                <CardHeader className="space-y-0 px-6 pb-0 pt-2">
+                  <CardTitle className="text-sm">Image</CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="px-6 pb-3 pt-0">
                   <StudioImagePanel />
                 </CardContent>
               </Card>
             ) : null}
             {appSection === "video" ? (
-              <Card className="border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
-                <CardHeader>
-                  <CardTitle className="text-base">Video</CardTitle>
-                </CardHeader>
-                <CardContent>
+              <Card className="gap-2 border-white/10 bg-[#0b0912]/85 py-3 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
+                <CardContent className="px-6 pb-3 pt-2">
                   <StudioVideoPanel />
                 </CardContent>
               </Card>
             ) : null}
             {appSection === "upscale" ? (
-              <Card className="border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
-                <CardHeader>
-                  <CardTitle className="text-base">Upscale</CardTitle>
+              <Card className="gap-2 border-white/10 bg-[#0b0912]/85 py-3 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
+                <CardHeader className="space-y-0 px-6 pb-0 pt-2">
+                  <CardTitle className="text-sm">Upscale</CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="px-6 pb-3 pt-0">
                   <StudioUpscalePanel />
                 </CardContent>
               </Card>

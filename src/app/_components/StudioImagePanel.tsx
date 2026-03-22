@@ -345,9 +345,9 @@ export default function StudioImagePanel() {
     "h-14 w-full rounded-2xl border border-violet-300/40 bg-violet-500 text-lg font-semibold text-white shadow-[0_6px_0_0_rgba(76,29,149,0.85)] transition-all hover:-translate-y-px hover:bg-violet-400 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.85)] active:translate-y-1 active:shadow-none";
 
   return (
-    <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:gap-6 lg:min-h-0 lg:max-h-[min(92vh,calc(100vh-7rem))]">
-      <div className="flex min-w-0 flex-1 flex-col gap-4 lg:max-w-[min(100%,30rem)] lg:min-h-0 lg:overflow-hidden">
-        <div className="studio-params-scroll flex min-w-0 flex-col gap-4 lg:flex-1 lg:min-h-0 lg:max-h-[min(55vh,calc(100vh-14rem))] lg:overflow-y-auto">
+    <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch lg:gap-4 lg:min-h-0 lg:max-h-[min(92vh,calc(100vh-7rem))]">
+      <div className="flex min-w-0 flex-1 flex-col gap-2 lg:max-w-[min(100%,24rem)] lg:min-h-0 lg:overflow-hidden">
+        <div className="studio-params-scroll flex min-w-0 flex-col gap-2 lg:flex-1 lg:min-h-0 lg:max-h-[min(62vh,calc(100vh-12rem))] lg:overflow-y-auto">
         <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Create prompt</p>
         <div className="rounded-2xl border border-white/10 bg-[#101014] p-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-white/45">Reference images</p>
@@ -477,8 +477,8 @@ export default function StudioImagePanel() {
           </span>
         </Button>
 
-        <details className="group rounded-2xl border border-white/10 bg-[#0c0c10]/90 text-white/80 open:border-violet-500/20">
-          <summary className="cursor-pointer list-none px-4 py-3 text-xs font-semibold uppercase tracking-wide text-white/50 transition hover:text-white/70 [&::-webkit-details-marker]:hidden">
+        <details className="group rounded-xl border border-white/10 bg-[#0c0c10]/90 text-white/80 open:border-violet-500/20">
+          <summary className="cursor-pointer list-none px-3 py-2 text-xs font-semibold uppercase tracking-wide text-white/50 transition hover:text-white/70 [&::-webkit-details-marker]:hidden">
             <span className="inline-flex w-full items-center justify-between gap-2">
               Google Nano Banana 2: economics
               <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-normal normal-case tracking-normal text-white/40 group-open:text-violet-200/80">
@@ -492,8 +492,8 @@ export default function StudioImagePanel() {
           </div>
         </details>
 
-        <details className="group rounded-2xl border border-white/10 bg-[#0c0c10]/90 text-white/80 open:border-violet-500/20">
-          <summary className="cursor-pointer list-none px-4 py-3 text-xs font-semibold uppercase tracking-wide text-white/50 transition hover:text-white/70 [&::-webkit-details-marker]:hidden">
+        <details className="group rounded-xl border border-white/10 bg-[#0c0c10]/90 text-white/80 open:border-violet-500/20">
+          <summary className="cursor-pointer list-none px-3 py-2 text-xs font-semibold uppercase tracking-wide text-white/50 transition hover:text-white/70 [&::-webkit-details-marker]:hidden">
             <span className="inline-flex w-full items-center justify-between gap-2">
               Google Nano Banana Pro: economics
               <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-normal normal-case tracking-normal text-white/40 group-open:text-violet-200/80">
@@ -507,8 +507,8 @@ export default function StudioImagePanel() {
           </div>
         </details>
 
-        <details className="group rounded-2xl border border-white/10 bg-[#0c0c10]/90 text-white/80 open:border-violet-500/20">
-          <summary className="cursor-pointer list-none px-4 py-3 text-xs font-semibold uppercase tracking-wide text-white/50 transition hover:text-white/70 [&::-webkit-details-marker]:hidden">
+        <details className="group rounded-xl border border-white/10 bg-[#0c0c10]/90 text-white/80 open:border-violet-500/20">
+          <summary className="cursor-pointer list-none px-3 py-2 text-xs font-semibold uppercase tracking-wide text-white/50 transition hover:text-white/70 [&::-webkit-details-marker]:hidden">
             <span className="inline-flex w-full items-center justify-between gap-2">
               Grok Imagine (reference)
               <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-normal normal-case tracking-normal text-white/40 group-open:text-violet-200/80">
@@ -547,8 +547,8 @@ export default function StudioImagePanel() {
           </div>
         </details>
 
-        <details className="group rounded-2xl border border-white/10 bg-[#0c0c10]/90 text-white/80 open:border-violet-500/20">
-          <summary className="cursor-pointer list-none px-4 py-3 text-xs font-semibold uppercase tracking-wide text-white/50 transition hover:text-white/70 [&::-webkit-details-marker]:hidden">
+        <details className="group rounded-xl border border-white/10 bg-[#0c0c10]/90 text-white/80 open:border-violet-500/20">
+          <summary className="cursor-pointer list-none px-3 py-2 text-xs font-semibold uppercase tracking-wide text-white/50 transition hover:text-white/70 [&::-webkit-details-marker]:hidden">
             <span className="inline-flex w-full items-center justify-between gap-2">
               Seedream 4.5: economics
               <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-normal normal-case tracking-normal text-white/40 group-open:text-violet-200/80">
@@ -571,7 +571,7 @@ export default function StudioImagePanel() {
         </div>
       </div>
 
-      <div className="flex h-full min-h-0 min-w-0 flex-[2.5] lg:flex-[3] flex-col lg:min-h-0 lg:overflow-hidden">
+      <div className="flex h-full min-h-0 min-w-0 flex-[2] lg:flex-[3.25] flex-col lg:min-h-0 lg:overflow-hidden">
         <StudioOutputPane
           title=""
           hasOutput

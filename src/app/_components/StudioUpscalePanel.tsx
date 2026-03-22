@@ -172,9 +172,9 @@ export default function StudioUpscalePanel() {
   const row = STUDIO_UPSCALE_TOPAZ_VIDEO_ROWS[0];
 
   return (
-    <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:gap-6 lg:min-h-0 lg:max-h-[min(92vh,calc(100vh-7rem))]">
-      <div className="flex min-w-0 flex-1 flex-col gap-4 lg:max-w-[min(100%,30rem)] lg:min-h-0 lg:overflow-hidden">
-        <div className="studio-params-scroll flex min-w-0 flex-col gap-4 lg:flex-1 lg:min-h-0 lg:max-h-[min(55vh,calc(100vh-14rem))] lg:overflow-y-auto">
+    <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch lg:gap-4 lg:min-h-0 lg:max-h-[min(92vh,calc(100vh-7rem))]">
+      <div className="flex min-w-0 flex-1 flex-col gap-2 lg:max-w-[min(100%,24rem)] lg:min-h-0 lg:overflow-hidden">
+        <div className="studio-params-scroll flex min-w-0 flex-col gap-2 lg:flex-1 lg:min-h-0 lg:max-h-[min(62vh,calc(100vh-12rem))] lg:overflow-y-auto">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Source &amp; billing</p>
           <div className="rounded-2xl border border-white/10 bg-[#101014] p-4 space-y-3">
             <Label className="text-xs text-white/45">Source video</Label>
@@ -326,7 +326,7 @@ export default function StudioUpscalePanel() {
         </div>
       </div>
 
-      <div className="flex h-full min-h-0 min-w-0 flex-[2.5] lg:flex-[3] flex-col lg:min-h-0 lg:overflow-hidden">
+      <div className="flex h-full min-h-0 min-w-0 flex-[2] lg:flex-[3.25] flex-col lg:min-h-0 lg:overflow-hidden">
         <StudioOutputPane
           title=""
           hasOutput
