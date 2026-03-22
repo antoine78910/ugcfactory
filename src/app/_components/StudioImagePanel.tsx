@@ -108,7 +108,7 @@ async function pollNanoTask(taskId: string): Promise<string[]> {
 }
 
 export default function StudioImagePanel() {
-  const { planId, current: creditsBalance } = useCreditsPlan();
+  const { planId, current: creditsBalance, spendCredits } = useCreditsPlan();
   const [prompt, setPrompt] = useState("");
   const [model, setModel] = useState<NanoModel>("pro");
   const [aspect, setAspect] = useState<string>("3:4");
@@ -183,6 +183,7 @@ export default function StudioImagePanel() {
       return;
     }
     if (busy) return;
+    spendCredits(totalCredits);
     setBusy(true);
     try {
       const n = Math.min(4, Math.max(1, numImages));

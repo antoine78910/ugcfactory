@@ -41,6 +41,12 @@ export const CREDITS_KLING_LINK_TO_AD_VIDEO = calculateVideoCreditsFromDuration(
 export const CREDITS_LINK_TO_AD_VIDEO_FROM_IMAGE =
   CREDITS_LINK_TO_AD_VIDEO_PROMPT_GPT + CREDITS_KLING_LINK_TO_AD_VIDEO;
 
+/** Scan + 3 reference images + one default Link-to-Ad video (happy path). */
+export const CREDITS_LINK_TO_AD_FULL_PIPELINE =
+  CREDITS_LINK_TO_AD_STORE_SCAN +
+  CREDITS_LINK_TO_AD_THREE_REF_IMAGES +
+  CREDITS_LINK_TO_AD_VIDEO_FROM_IMAGE;
+
 /** Full ad bundle — backend must bill this fixed amount, not sum of parts. */
 export { AD_CREDITS as CREDITS_AD_GENERATION };
 export { AD_CREDITS };

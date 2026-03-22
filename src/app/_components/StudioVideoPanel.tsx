@@ -232,7 +232,7 @@ async function pollVeoVideo(taskId: string): Promise<string> {
 }
 
 export default function StudioVideoPanel() {
-  const { planId, current: creditsBalance } = useCreditsPlan();
+  const { planId, current: creditsBalance, spendCredits } = useCreditsPlan();
   const [tab, setTab] = useState<VideoTab>("create");
   const [startUrl, setStartUrl] = useState<string | null>(null);
   const [endUrl, setEndUrl] = useState<string | null>(null);
@@ -318,6 +318,7 @@ export default function StudioVideoPanel() {
       return;
     }
     if (busy) return;
+    spendCredits(credits);
     setBusy(true);
     try {
       if (meta.family === "sora") {

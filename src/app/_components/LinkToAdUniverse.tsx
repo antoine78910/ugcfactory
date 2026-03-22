@@ -39,10 +39,12 @@ import { cn } from "@/lib/utils";
 import { LINK_TO_AD_LOADING_MESSAGES } from "@/lib/linkToAd/loadingMessageLoops";
 import {
   CREDITS_KLING_LINK_TO_AD_VIDEO,
+  CREDITS_LINK_TO_AD_FULL_PIPELINE,
   CREDITS_LINK_TO_AD_STORE_SCAN,
   CREDITS_LINK_TO_AD_THREE_REF_IMAGES,
   CREDITS_LINK_TO_AD_VIDEO_FROM_IMAGE,
   CREDITS_LINK_TO_AD_VIDEO_PROMPT_GPT,
+  CREDITS_NANO_PRO_PER_IMAGE,
 } from "@/lib/linkToAd/generationCredits";
 import type { InternalFetch } from "@/lib/linkToAd/internalFetch";
 import { runInitialPipeline } from "@/lib/linkToAd/runInitialPipeline";
@@ -153,8 +155,39 @@ function compactBrandSummaryForUi(full: string, maxLen = 200): string {
 }
 
 export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRunsChanged }: LinkToAdUniverseProps) {
-  const { planId, current: creditsBalance } = useCreditsPlan();
-  const [ltaVideoCreditsOpen, setLtaVideoCreditsOpen] = useState(false);
+  const { planId, current: creditsBalance, spendCredits } = useCreditsPlan();
+  /** After a fresh store scan starts, gate later steps against this snapshot so the wallet UI does not “jump” each step. Resync on image/video redo actions only. */
+  const [ltaFrozenCredits, setLtaFrozenCredits] = useState<number | null>(null);
+  const creditsBalanceRef = useRef(creditsBalance);
+  creditsBalanceRef.current = creditsBalance;
+
+  const [ltaCreditModal, setLtaCreditModal] = useState<{
+    required: number;
+    current: number;
+  } | null>(null);
+
+  const creditsForLtaGating = ltaFrozenCredits ?? creditsBalance;
+
+  const refreshLtaCreditsFromWallet = useCallback(() => {
+    setLtaFrozenCredits(creditsBalanceRef.current);
+  }, []);
+
+  /** Deduct from wallet on Generate; keep ref/frozen in sync for back-to-back spends (e.g. video prompt then Kling). */
+  const spendLtaCreditsIfEnough = useCallback(
+    (cost: number): boolean => {
+      const k = Math.max(0, Math.floor(cost));
+      if (k <= 0) return true;
+      if (creditsBalanceRef.current < k) {
+        setLtaCreditModal({ current: creditsBalanceRef.current, required: k });
+        return false;
+      }
+      spendCredits(k);
+      creditsBalanceRef.current = Math.max(0, creditsBalanceRef.current - k);
+      setLtaFrozenCredits((x) => (x !== null ? Math.max(0, x - k) : x));
+      return true;
+    },
+    [spendCredits],
+  );
   const [storeUrl, setStoreUrl] = useState("");
   const [isWorking, setIsWorking] = useState(false);
   const [extractedTitle, setExtractedTitle] = useState<string | null>(null);
@@ -814,6 +847,24 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       }
     }
 
+    const walletNow = creditsBalanceRef.current;
+    if (walletNow < CREDITS_LINK_TO_AD_FULL_PIPELINE) {
+      setIsWorking(false);
+      setStage("idle");
+      setLtaCreditModal({
+        current: walletNow,
+        required: CREDITS_LINK_TO_AD_FULL_PIPELINE,
+      });
+      return;
+    }
+    setLtaFrozenCredits(walletNow);
+    if (!spendLtaCreditsIfEnough(CREDITS_LINK_TO_AD_STORE_SCAN)) {
+      setIsWorking(false);
+      setStage("idle");
+      setLtaFrozenCredits(null);
+      return;
+    }
+
     setSummaryText("");
     setScriptsText("");
     setAngleLabels(["", "", ""]);
@@ -927,6 +978,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       toast.error("HTTPS product image is required (missing preview or relative URL).");
       return;
     }
+    refreshLtaCreditsFromWallet();
+    if (!spendLtaCreditsIfEnough(CREDITS_LINK_TO_AD_THREE_REF_IMAGES)) return;
     setIsNanoPromptsLoading(true);
     setIsNanoAllImagesSubmitting(false);
     let text = "";
@@ -1024,6 +1077,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       toast.error("Product image missing or not HTTPS.");
       return;
     }
+    refreshLtaCreditsFromWallet();
+    if (!spendLtaCreditsIfEnough(CREDITS_NANO_PRO_PER_IMAGE)) return;
     setIsNanoImageSubmitting(true);
     lastNanoImagePromptRef.current = prompt;
     lastNanoImagePromptIndexRef.current = nanoBananaSelectedPromptIndex;
@@ -1211,6 +1266,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       return;
     }
 
+    refreshLtaCreditsFromWallet();
+    if (!spendLtaCreditsIfEnough(CREDITS_LINK_TO_AD_THREE_REF_IMAGES)) return;
     setIsNanoAllImagesSubmitting(true);
     try {
       const { urlsByPrompt, lastTaskId } = await runNanoBananaProThreeSequential(img, prompts as [string, string, string]);
@@ -1400,6 +1457,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       toast.error("Angle script is missing.");
       return null;
     }
+    if (!spendLtaCreditsIfEnough(CREDITS_LINK_TO_AD_VIDEO_PROMPT_GPT)) return null;
     setIsVideoPromptLoading(true);
     try {
       const res = await fetch("/api/gpt/ugc-i2v-prompt", {
@@ -1452,6 +1510,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       toast.error("Reference image and video prompt are required.");
       return;
     }
+    if (!spendLtaCreditsIfEnough(CREDITS_KLING_LINK_TO_AD_VIDEO)) return;
     setIsKlingSubmitting(true);
     const klingPrompt = withAudioHint(prompt);
     lastKlingVideoPromptRef.current = klingPrompt;
@@ -1761,8 +1820,11 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       toast.error("Select a reference image first.");
       return;
     }
-    if (creditsBalance < CREDITS_LINK_TO_AD_VIDEO_FROM_IMAGE) {
-      setLtaVideoCreditsOpen(true);
+    if (creditsForLtaGating < CREDITS_LINK_TO_AD_VIDEO_FROM_IMAGE) {
+      setLtaCreditModal({
+        current: creditsForLtaGating,
+        required: CREDITS_LINK_TO_AD_VIDEO_FROM_IMAGE,
+      });
       return;
     }
     if (isVideoPromptLoading || isKlingSubmitting || Boolean(klingPollTaskId)) return;
@@ -1947,7 +2009,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                         Generate
                       </span>
                       <span className="text-[11px] font-semibold text-black/70">
-                        {CREDITS_LINK_TO_AD_STORE_SCAN} credits
+                        Up to {CREDITS_LINK_TO_AD_FULL_PIPELINE} credits — full ad
                       </span>
                     </>
                   )}
@@ -2320,9 +2382,9 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                           <p className="text-xs text-white/45">
                             Tap a square above to choose your reference, then generate.
                           </p>
-                        ) : creditsBalance < CREDITS_LINK_TO_AD_VIDEO_FROM_IMAGE ? (
+                        ) : creditsForLtaGating < CREDITS_LINK_TO_AD_VIDEO_FROM_IMAGE ? (
                           <p className="text-xs text-amber-200/85">
-                            You need {CREDITS_LINK_TO_AD_VIDEO_FROM_IMAGE} credits (you have {creditsBalance}). Tap
+                            You need {CREDITS_LINK_TO_AD_VIDEO_FROM_IMAGE} credits (you have {creditsForLtaGating}). Tap
                             Generate below to open billing and top up.
                           </p>
                         ) : null}
@@ -2437,7 +2499,10 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                                     !ugcVideoPromptGpt.trim() ||
                                     !nanoBananaImageUrl
                                   }
-                                  onClick={() => void onGenerateKlingVideo()}
+                                  onClick={() => {
+                                    refreshLtaCreditsFromWallet();
+                                    void onGenerateKlingVideo();
+                                  }}
                                 >
                                   {isKlingSubmitting || klingRenderingThisReference ? (
                                     <span className="inline-flex items-center gap-2 text-sm font-semibold">
@@ -2520,7 +2585,10 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                           <Button
                             type="button"
                             className={`mt-4 flex h-auto min-h-11 flex-col gap-1 py-2.5 ${primaryBtnClass}`}
-                            onClick={() => void onGenerateKlingVideo()}
+                            onClick={() => {
+                              refreshLtaCreditsFromWallet();
+                              void onGenerateKlingVideo();
+                            }}
                           >
                             <span className="text-sm font-semibold leading-tight">Retry video render</span>
                             <span className="text-[11px] font-semibold text-black/70">
@@ -2559,7 +2627,10 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                             <Button
                               type="button"
                               className={`mt-2 flex h-auto min-h-11 flex-col gap-1 py-2.5 ${primaryBtnClass}`}
-                              onClick={() => void onGenerateUgcVideoPrompt()}
+                              onClick={() => {
+                                refreshLtaCreditsFromWallet();
+                                void onGenerateUgcVideoPrompt();
+                              }}
                             >
                               <span className="text-sm font-semibold leading-tight">Retry video prompt</span>
                               <span className="text-[11px] font-semibold text-black/70">
@@ -2653,17 +2724,21 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       </div>
     ) : null}
 
-    <StudioBillingDialog
-      open={ltaVideoCreditsOpen}
-      onOpenChange={setLtaVideoCreditsOpen}
-      planId={planId}
-      studioMode="video"
-      variant={{
-        kind: "credits",
-        currentCredits: creditsBalance,
-        requiredCredits: CREDITS_LINK_TO_AD_VIDEO_FROM_IMAGE,
-      }}
-    />
+    {ltaCreditModal ? (
+      <StudioBillingDialog
+        open
+        onOpenChange={(open) => {
+          if (!open) setLtaCreditModal(null);
+        }}
+        planId={planId}
+        studioMode="video"
+        variant={{
+          kind: "credits",
+          currentCredits: ltaCreditModal.current,
+          requiredCredits: ltaCreditModal.required,
+        }}
+      />
+    ) : null}
     </>
   );
 }

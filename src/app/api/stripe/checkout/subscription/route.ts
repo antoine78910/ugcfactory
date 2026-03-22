@@ -4,8 +4,12 @@ import {
   getSubscriptionStripePriceId,
   isSubscriptionPlanId,
 } from "@/lib/stripe/subscriptionPrices";
+import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 
 export async function POST(req: Request) {
+  const auth = await requireSupabaseUser();
+  if (auth.response) return auth.response;
+
   const secret = process.env.STRIPE_SECRET_KEY?.trim();
   if (!secret) {
     return NextResponse.json(
@@ -53,6 +57,7 @@ export async function POST(req: Request) {
     process.env.NEXT_PUBLIC_APP_URL?.trim() ||
     "http://localhost:3000";
   const stripe = new Stripe(secret, { apiVersion: "2026-02-25.clover" });
+  const customerEmail = auth.user.email?.trim();
 
   try {
     const session = await stripe.checkout.sessions.create({
@@ -61,6 +66,7 @@ export async function POST(req: Request) {
       success_url: `${base.replace(/\/$/, "")}/subscription?checkout=success&plan=${encodeURIComponent(planId)}`,
       cancel_url: `${base.replace(/\/$/, "")}/subscription?checkout=cancel`,
       allow_promotion_codes: true,
+      ...(customerEmail ? { customer_email: customerEmail } : {}),
     });
 
     if (!session.url) {
