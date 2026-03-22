@@ -6,18 +6,27 @@ import {
   ChevronDown,
   Clock,
   Diamond,
-  Infinity as InfinityIcon,
   Lock,
   Search,
   Volume2,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export type StudioModelPickerIcon = "kling" | "seedance" | "sora" | "veo" | "image_pro" | "image_std";
+export type StudioModelPickerIcon =
+  | "kling"
+  | "seedance"
+  | "sora"
+  | "veo"
+  | "image_pro"
+  | "image_std"
+  | "grok";
 
 export type StudioModelPickerItem = {
   id: string;
   label: string;
+  /** Shown under the title in the sheet / bar when `hideMeta` (or always in the list). */
+  subtitle?: string;
   exclusive?: boolean;
   hasAudio?: boolean;
   resolution: string;
@@ -26,48 +35,38 @@ export type StudioModelPickerItem = {
   searchText?: string;
 };
 
-function ModelGlyph({ icon, active }: { icon: StudioModelPickerIcon; active: boolean }) {
-  const lime = active ? "text-[#c8f542]" : "text-white/40";
-  const box = "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/10";
+/** Transparent PNGs in /public (see scripts/process-studio-model-logos.mjs). Veo uses the Google “G” mark. */
+const STUDIO_MODEL_LOGO_SRC: Partial<Record<StudioModelPickerIcon, string>> = {
+  kling: "/studio/model-logos/kling.png",
+  seedance: "/studio/model-logos/seedance.png",
+  sora: "/studio/model-logos/sora.png",
+  veo: "/studio/model-logos/google.png",
+  grok: "/studio/model-logos/grok.png",
+};
 
-  if (icon === "kling") {
+function ModelGlyph({ icon, active }: { icon: StudioModelPickerIcon; active: boolean }) {
+  const box =
+    "flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/10";
+
+  const logoSrc = STUDIO_MODEL_LOGO_SRC[icon];
+  if (logoSrc) {
     return (
-      <div className={cn(box, active ? "border-[#c8f542]/50 bg-[#c8f542]/12" : "bg-white/[0.06]")}>
-        <InfinityIcon className={cn("h-5 w-5", lime)} strokeWidth={2.25} />
+      <div
+        className={cn(
+          box,
+          active ? "border-violet-400/45 bg-white/[0.08]" : "bg-white/[0.06]",
+        )}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={logoSrc} alt="" className="h-[22px] w-[22px] object-contain" draggable={false} />
       </div>
     );
   }
-  if (icon === "seedance") {
-    return (
-      <div className={cn(box, "gap-0.5", active ? "border-emerald-400/40 bg-emerald-500/10" : "bg-white/[0.06]")}>
-        {[0.35, 0.65, 0.45].map((h, i) => (
-          <span
-            key={i}
-            className={cn("w-1 rounded-sm", active ? "bg-emerald-300" : "bg-white/35")}
-            style={{ height: `${h * 1.25}rem` }}
-          />
-        ))}
-      </div>
-    );
-  }
-  if (icon === "sora") {
-    return (
-      <div className={cn(box, active ? "border-sky-400/40 bg-sky-500/10" : "bg-white/[0.06]")}>
-        <span className={cn("text-sm font-bold", active ? "text-sky-200" : "text-white/45")}>S</span>
-      </div>
-    );
-  }
-  if (icon === "veo") {
-    return (
-      <div className={cn(box, active ? "border-amber-400/40 bg-amber-500/10" : "bg-white/[0.06]")}>
-        <span className={cn("text-sm font-bold", active ? "text-amber-200" : "text-white/45")}>V</span>
-      </div>
-    );
-  }
+
   if (icon === "image_pro") {
     return (
-      <div className={cn(box, active ? "border-[#c8f542]/50 bg-[#c8f542]/12" : "bg-white/[0.06]")}>
-        <span className={cn("text-[11px] font-bold", active ? "text-[#d4ff8a]" : "text-white/45")}>Pro</span>
+      <div className={cn(box, active ? "border-violet-400/45 bg-violet-500/15" : "bg-white/[0.06]")}>
+        <span className={cn("text-[11px] font-bold", active ? "text-violet-200" : "text-white/45")}>Pro</span>
       </div>
     );
   }
@@ -78,8 +77,143 @@ function ModelGlyph({ icon, active }: { icon: StudioModelPickerIcon; active: boo
   );
 }
 
-const panelClass =
-  "z-[80] w-[min(calc(100vw-1.5rem),22rem)] rounded-xl border border-white/10 bg-[#121214] p-2 shadow-[0_16px_48px_rgba(0,0,0,0.65)]";
+function ModelPickerPanelBody({
+  q,
+  setQ,
+  featuredTitle,
+  filtered,
+  value,
+  isItemLocked,
+  onLockedPick,
+  pick,
+  setOpen,
+  variant = "dropdown",
+  hideMeta = false,
+  showSearch = true,
+}: {
+  q: string;
+  setQ: (s: string) => void;
+  featuredTitle: string;
+  filtered: StudioModelPickerItem[];
+  value: string;
+  isItemLocked?: (id: string) => boolean;
+  onLockedPick?: (id: string) => void;
+  pick: (id: string) => void;
+  setOpen: (o: boolean) => void;
+  variant?: "dropdown" | "sheet";
+  hideMeta?: boolean;
+  showSearch?: boolean;
+}) {
+  return (
+    <div className={cn("flex min-h-0 flex-col", variant === "sheet" && "h-full")}>
+      {showSearch ? (
+        <div
+          className={cn(
+            "shrink-0 border-b border-white/10 p-2 pb-2",
+            variant === "sheet" && "border-violet-500/15 px-4 pb-3 pt-4",
+          )}
+        >
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/35" />
+            <input
+              type="search"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search models…"
+              className={cn(
+                "w-full rounded-xl border bg-black/40 py-2 pl-8 pr-3 text-sm text-white placeholder:text-white/35 focus:outline-none",
+                variant === "sheet"
+                  ? "border-white/12 focus:border-violet-400/45 focus:ring-2 focus:ring-violet-500/20"
+                  : "border-white/10 focus:border-violet-400/40 focus:ring-1 focus:ring-violet-400/25",
+              )}
+            />
+          </div>
+        </div>
+      ) : null}
+      {variant === "dropdown" && !hideMeta ? (
+        <div className="shrink-0 px-2 pt-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-violet-300/85">✦ {featuredTitle}</p>
+        </div>
+      ) : null}
+      {filtered.length === 0 ? (
+        <p className={cn("py-8 text-center text-sm text-white/45", variant === "sheet" ? "px-4" : "px-2")}>
+          No models match.
+        </p>
+      ) : (
+        <ul
+          className={cn(
+            "studio-params-scroll min-h-0 flex-1 overflow-y-auto pb-3",
+            variant === "dropdown"
+              ? cn("max-h-[min(52vh,20rem)] px-1", showSearch || !hideMeta ? "pt-1" : "pt-2")
+              : cn("px-3", showSearch ? "pt-3" : "pt-4"),
+          )}
+        >
+          {filtered.map((item) => {
+            const selected = item.id === value;
+            const locked = isItemLocked?.(item.id) ?? false;
+            return (
+              <li key={item.id}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (locked) {
+                      setOpen(false);
+                      setQ("");
+                      onLockedPick?.(item.id);
+                      return;
+                    }
+                    pick(item.id);
+                  }}
+                  className={cn(
+                    "mb-1 flex w-full items-center gap-2.5 rounded-xl border px-2.5 text-left transition",
+                    hideMeta ? "py-2" : "py-2.5",
+                    selected
+                      ? "border-violet-400/45 bg-violet-500/[0.12] shadow-[0_0_24px_rgba(139,92,246,0.1)]"
+                      : "border-transparent bg-transparent hover:border-white/12 hover:bg-white/[0.06]",
+                    locked && "opacity-55",
+                  )}
+                >
+                  <ModelGlyph icon={item.icon} active={selected && !locked} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="truncate text-sm font-medium text-white">{item.label}</span>
+                      {item.exclusive ? (
+                        <span className="shrink-0 rounded-md border border-violet-400/35 bg-violet-500/15 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-violet-200">
+                          Exclusive
+                        </span>
+                      ) : null}
+                      {!hideMeta && item.hasAudio ? (
+                        <Volume2 className="h-3 w-3 shrink-0 text-emerald-400/70" aria-hidden />
+                      ) : null}
+                      {locked ? <Lock className="h-3.5 w-3.5 shrink-0 text-white/40" aria-hidden /> : null}
+                    </div>
+                    {item.subtitle ? (
+                      <p className="mt-0.5 text-[11px] leading-snug text-white/40">{item.subtitle}</p>
+                    ) : null}
+                    {!hideMeta ? (
+                      <div className="mt-1 flex flex-wrap items-center gap-1 text-[10px] text-white/45">
+                        <span className="inline-flex items-center gap-0.5">
+                          <Diamond className="h-2.5 w-2.5" />
+                          {item.resolution}
+                        </span>
+                        <span className="text-white/20">·</span>
+                        <span className="inline-flex items-center gap-0.5">
+                          <Clock className="h-2.5 w-2.5" />
+                          {item.durationRange}
+                        </span>
+                      </div>
+                    ) : null}
+                  </div>
+                  {selected && !locked ? <Check className="h-4 w-4 shrink-0 text-violet-300" strokeWidth={2.5} /> : null}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 type StudioModelPickerProps = {
   value: string;
@@ -87,10 +221,18 @@ type StudioModelPickerProps = {
   items: StudioModelPickerItem[];
   featuredTitle?: string;
   triggerClassName?: string;
+  /** Narrow card beside the prompt (default) vs full-width row in the parameters block. */
+  triggerVariant?: "card" | "bar";
   align?: "end" | "start";
   /** If true, row is dimmed; click calls `onLockedPick` instead of changing value. */
   isItemLocked?: (id: string) => boolean;
   onLockedPick?: (id: string) => void;
+  /** Right sheet (default) vs legacy dropdown below trigger. */
+  panelMode?: "sheet" | "dropdown";
+  /**
+   * Hide resolution / duration (and similar) in the trigger and list — use when the sidebar already shows those params.
+   */
+  hideMeta?: boolean;
 };
 
 export function StudioModelPicker({
@@ -99,13 +241,17 @@ export function StudioModelPicker({
   items,
   featuredTitle = "Featured models",
   triggerClassName,
+  triggerVariant = "card",
   align = "end",
   isItemLocked,
   onLockedPick,
+  panelMode = "sheet",
+  hideMeta = false,
 }: StudioModelPickerProps) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
+  const sheetRef = useRef<HTMLDivElement>(null);
 
   const selected = useMemo(() => items.find((i) => i.id === value), [items, value]);
 
@@ -119,14 +265,28 @@ export function StudioModelPicker({
   }, [items, q]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || panelMode !== "dropdown") return;
     const onDoc = (e: MouseEvent) => {
       const el = rootRef.current;
       if (el && !el.contains(e.target as Node)) setOpen(false);
     };
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
-  }, [open]);
+  }, [open, panelMode]);
+
+  useEffect(() => {
+    if (!open || panelMode !== "sheet") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [open, panelMode]);
 
   const pick = useCallback(
     (id: string) => {
@@ -137,139 +297,168 @@ export function StudioModelPicker({
     [onChange],
   );
 
+  const isBar = triggerVariant === "bar";
+  /** With hideMeta, skip search for short lists (params panel already focused). */
+  const showSearch = !hideMeta || items.length > 8;
+
   return (
-    <div ref={rootRef} className={cn("relative shrink-0", align === "end" && "self-stretch")}>
+    <div
+      ref={rootRef}
+      className={cn("relative", isBar ? "w-full" : cn("shrink-0", align === "end" && "self-stretch"))}
+    >
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         className={cn(
-          "flex h-full min-h-[100px] w-[min(100%,8.5rem)] flex-col justify-between gap-2 rounded-xl border border-white/15 bg-[#0a0a0d] px-3 py-2.5 text-left transition hover:border-violet-400/35 hover:bg-[#0e0e12]",
-          open && "border-violet-400/50 ring-1 ring-violet-400/25",
+          "rounded-xl border border-white/15 bg-[#0a0a0d] text-left transition hover:border-violet-400/35 hover:bg-[#0e0e12]",
+          open && "border-violet-400/55 ring-1 ring-violet-400/30 shadow-[0_0_24px_rgba(139,92,246,0.15)]",
+          isBar
+            ? cn(
+                "flex w-full flex-row items-center justify-between gap-3 px-3 py-2.5",
+                hideMeta ? "min-h-[48px]" : "min-h-[52px]",
+              )
+            : "flex h-full min-h-[100px] w-[min(100%,8.5rem)] flex-col justify-between gap-2 px-3 py-2.5",
           triggerClassName,
         )}
       >
-        <div className="flex items-start justify-between gap-1">
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Model</span>
-          <ChevronDown className={cn("h-4 w-4 shrink-0 text-white/45 transition", open && "rotate-180")} />
-        </div>
-        <div className="flex min-w-0 flex-1 flex-col justify-center gap-1.5">
-          {selected ? (
-            <>
-              <div className="flex items-center gap-2">
-                <ModelGlyph icon={selected.icon} active />
-                <span className="truncate text-sm font-semibold text-white">{selected.label}</span>
-              </div>
-              <div className="flex flex-wrap gap-1">
-                <span className="inline-flex items-center gap-0.5 rounded-md border border-white/10 bg-black/40 px-1.5 py-0.5 text-[9px] font-medium text-white/55">
-                  <Diamond className="h-2.5 w-2.5" />
-                  {selected.resolution}
-                </span>
-                <span className="inline-flex items-center gap-0.5 rounded-md border border-white/10 bg-black/40 px-1.5 py-0.5 text-[9px] font-medium text-white/55">
-                  <Clock className="h-2.5 w-2.5" />
-                  {selected.durationRange}
-                </span>
-              </div>
-            </>
-          ) : (
-            <span className="text-sm text-white/45">Choose…</span>
-          )}
-        </div>
+        {isBar ? (
+          <>
+            <div className="flex min-w-0 flex-1 items-center gap-2.5">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Model</span>
+              {selected ? (
+                <>
+                  <ModelGlyph icon={selected.icon} active />
+                  <div className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold text-white">{selected.label}</span>
+                    {hideMeta && selected.subtitle ? (
+                      <span className="mt-0.5 block truncate text-[11px] text-white/40">{selected.subtitle}</span>
+                    ) : null}
+                    {!hideMeta ? (
+                      <span className="mt-0.5 block truncate text-[11px] text-white/40">
+                        {selected.resolution} · {selected.durationRange}
+                      </span>
+                    ) : null}
+                  </div>
+                </>
+              ) : (
+                <span className="text-sm text-white/45">Choose a model…</span>
+              )}
+            </div>
+            <ChevronDown className={cn("h-4 w-4 shrink-0 text-white/45 transition", open && "rotate-180")} />
+          </>
+        ) : (
+          <>
+            <div className="flex items-start justify-between gap-1">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Model</span>
+              <ChevronDown className={cn("h-4 w-4 shrink-0 text-white/45 transition", open && "rotate-180")} />
+            </div>
+            <div className="flex min-w-0 flex-1 flex-col justify-center gap-1.5">
+              {selected ? (
+                <>
+                  <div className="flex items-center gap-2">
+                    <ModelGlyph icon={selected.icon} active />
+                    <span className="truncate text-sm font-semibold text-white">{selected.label}</span>
+                  </div>
+                  {!hideMeta ? (
+                    <div className="flex flex-wrap gap-1">
+                      <span className="inline-flex items-center gap-0.5 rounded-md border border-white/10 bg-black/40 px-1.5 py-0.5 text-[9px] font-medium text-white/55">
+                        <Diamond className="h-2.5 w-2.5" />
+                        {selected.resolution}
+                      </span>
+                      <span className="inline-flex items-center gap-0.5 rounded-md border border-white/10 bg-black/40 px-1.5 py-0.5 text-[9px] font-medium text-white/55">
+                        <Clock className="h-2.5 w-2.5" />
+                        {selected.durationRange}
+                      </span>
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <span className="text-sm text-white/45">Choose…</span>
+              )}
+            </div>
+          </>
+        )}
       </button>
 
-      {open ? (
+      {open && panelMode === "dropdown" ? (
         <div
           className={cn(
-            "absolute mt-2 max-h-[min(70vh,28rem)] overflow-hidden rounded-xl",
+            "absolute z-[80] mt-2 max-h-[min(70vh,28rem)] w-[min(calc(100vw-1.5rem),22rem)] overflow-hidden rounded-xl border border-white/10 bg-[#121214] p-2 shadow-[0_16px_48px_rgba(0,0,0,0.65)]",
             align === "end" ? "right-0" : "left-0",
-            panelClass,
           )}
         >
-          <div className="border-b border-white/10 p-2 pb-2">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/35" />
-              <input
-                type="search"
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="Search…"
-                className="h-9 w-full rounded-lg border border-white/10 bg-[#1a1a1e] pl-8 pr-3 text-sm text-white placeholder:text-white/35 outline-none focus:border-violet-400/40 focus:ring-1 focus:ring-violet-400/20"
-                autoFocus
+          <ModelPickerPanelBody
+            q={q}
+            setQ={setQ}
+            featuredTitle={featuredTitle}
+            filtered={filtered}
+            value={value}
+            isItemLocked={isItemLocked}
+            onLockedPick={onLockedPick}
+            pick={pick}
+            setOpen={setOpen}
+            hideMeta={hideMeta}
+            showSearch={showSearch}
+          />
+        </div>
+      ) : null}
+
+      {open && panelMode === "sheet" ? (
+        <>
+          <button
+            type="button"
+            aria-label="Close model list"
+            className="fixed inset-0 z-[88] bg-black/60 backdrop-blur-[2px] animate-in fade-in duration-200"
+            onClick={() => {
+              setOpen(false);
+              setQ("");
+            }}
+          />
+          <div
+            ref={sheetRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="studio-model-sheet-title"
+            className="fixed inset-y-0 right-0 z-[90] flex w-[min(100vw,24rem)] flex-col border-l border-violet-500/20 bg-[#06070d] shadow-[-16px_0_60px_rgba(0,0,0,0.55)] animate-in slide-in-from-right duration-300"
+          >
+            <div className="pointer-events-none absolute left-0 top-0 h-32 w-full bg-gradient-to-b from-violet-600/12 to-transparent" />
+            <div className="relative flex shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-[#0b0912]/95 px-4 py-3">
+              <div>
+                <p id="studio-model-sheet-title" className="text-sm font-bold tracking-tight text-white">
+                  {hideMeta ? "Model" : "Models"}
+                </p>
+                {!hideMeta ? <p className="text-[11px] text-violet-300/70">{featuredTitle}</p> : null}
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  setQ("");
+                }}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.05] text-white/70 transition hover:border-violet-400/35 hover:bg-violet-500/10 hover:text-white"
+                aria-label="Close"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="relative min-h-0 flex-1 overflow-hidden">
+              <ModelPickerPanelBody
+                q={q}
+                setQ={setQ}
+                featuredTitle={featuredTitle}
+                filtered={filtered}
+                value={value}
+                isItemLocked={isItemLocked}
+                onLockedPick={onLockedPick}
+                pick={pick}
+                setOpen={setOpen}
+                variant="sheet"
+                hideMeta={hideMeta}
+                showSearch={showSearch}
               />
             </div>
           </div>
-          <div className="px-2 pt-2">
-            <p className="px-1 pb-1.5 text-[11px] font-medium text-white/40">✦ {featuredTitle}</p>
-          </div>
-          <ul className="studio-params-scroll max-h-[min(52vh,20rem)] overflow-y-auto px-1 pb-2">
-            {filtered.map((item) => {
-              const isSel = item.id === value;
-              const locked = isItemLocked?.(item.id) ?? false;
-              return (
-                <li key={item.id}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (locked) {
-                        setOpen(false);
-                        setQ("");
-                        onLockedPick?.(item.id);
-                        return;
-                      }
-                      pick(item.id);
-                    }}
-                    className={cn(
-                      "flex w-full items-start gap-2.5 rounded-lg px-2 py-2.5 text-left transition",
-                      locked && "cursor-not-allowed opacity-55",
-                      !locked && isSel && "bg-white/[0.08]",
-                      !locked && !isSel && "hover:bg-white/[0.05]",
-                    )}
-                  >
-                    <ModelGlyph icon={item.icon} active={isSel && !locked} />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="text-sm font-semibold text-white">{item.label}</span>
-                        {locked ? (
-                          <span className="inline-flex items-center gap-0.5 rounded-md border border-amber-500/35 bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-bold text-amber-200/95">
-                            <Lock className="h-2.5 w-2.5" />
-                            Plan
-                          </span>
-                        ) : null}
-                        {item.hasAudio ? (
-                          <Volume2 className="h-3.5 w-3.5 text-white/45" aria-label="Audio" />
-                        ) : null}
-                        {item.exclusive ? (
-                          <span className="rounded-md bg-[#d4ff00] px-1.5 py-0.5 text-[9px] font-bold italic text-black">
-                            EXCLUSIVE
-                          </span>
-                        ) : null}
-                      </div>
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        <span className="inline-flex items-center gap-0.5 rounded-md border border-white/10 bg-black/35 px-1.5 py-0.5 text-[9px] font-medium text-white/50">
-                          <Diamond className="h-2.5 w-2.5 text-white/40" />
-                          {item.resolution}
-                        </span>
-                        <span className="inline-flex items-center gap-0.5 rounded-md border border-white/10 bg-black/35 px-1.5 py-0.5 text-[9px] font-medium text-white/50">
-                          <Clock className="h-2.5 w-2.5 text-white/40" />
-                          {item.durationRange}
-                        </span>
-                      </div>
-                    </div>
-                    {isSel && !locked ? (
-                      <Check className="mt-0.5 h-4 w-4 shrink-0 text-[#c8f542]" strokeWidth={2.5} />
-                    ) : locked ? (
-                      <Lock className="mt-0.5 h-4 w-4 shrink-0 text-white/35" strokeWidth={2.25} />
-                    ) : (
-                      <span className="w-4 shrink-0" />
-                    )}
-                  </button>
-                </li>
-              );
-            })}
-            {filtered.length === 0 ? (
-              <li className="px-2 py-6 text-center text-sm text-white/40">No models match.</li>
-            ) : null}
-          </ul>
-        </div>
+        </>
       ) : null}
     </div>
   );
@@ -293,12 +482,15 @@ export function StudioSingleModelCard({
   resolution,
   durationRange,
   hint,
+  /** Hide resolution/duration chips when those live in Parameters (e.g. Quality). */
+  hideMeta,
 }: {
   label: string;
   icon: StudioModelPickerIcon;
   resolution: string;
   durationRange: string;
   hint?: string;
+  hideMeta?: boolean;
 }) {
   return (
     <div className="rounded-xl border border-white/15 bg-[#0a0a0d] p-3">
@@ -307,16 +499,18 @@ export function StudioSingleModelCard({
         <div className="min-w-0 flex-1">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Model</p>
           <p className="mt-0.5 text-sm font-semibold text-white">{label}</p>
-          <div className="mt-2 flex flex-wrap gap-1">
-            <span className="inline-flex items-center gap-0.5 rounded-md border border-white/10 bg-black/40 px-1.5 py-0.5 text-[9px] font-medium text-white/55">
-              <Diamond className="h-2.5 w-2.5" />
-              {resolution}
-            </span>
-            <span className="inline-flex items-center gap-0.5 rounded-md border border-white/10 bg-black/40 px-1.5 py-0.5 text-[9px] font-medium text-white/55">
-              <Clock className="h-2.5 w-2.5" />
-              {durationRange}
-            </span>
-          </div>
+          {!hideMeta ? (
+            <div className="mt-2 flex flex-wrap gap-1">
+              <span className="inline-flex items-center gap-0.5 rounded-md border border-white/10 bg-black/40 px-1.5 py-0.5 text-[9px] font-medium text-white/55">
+                <Diamond className="h-2.5 w-2.5" />
+                {resolution}
+              </span>
+              <span className="inline-flex items-center gap-0.5 rounded-md border border-white/10 bg-black/40 px-1.5 py-0.5 text-[9px] font-medium text-white/55">
+                <Clock className="h-2.5 w-2.5" />
+                {durationRange}
+              </span>
+            </div>
+          ) : null}
           {hint ? <p className="mt-2 text-[10px] leading-snug text-white/40">{hint}</p> : null}
         </div>
       </div>

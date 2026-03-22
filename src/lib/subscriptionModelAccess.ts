@@ -4,6 +4,7 @@
  */
 
 import { isSubscriptionPlanId, type SubscriptionPlanId } from "@/lib/stripe/subscriptionPrices";
+import { STUDIO_VIDEO_EDIT_PICKER_IDS } from "@/lib/studioVideoEditModels";
 
 /** Includes free (credit packs / demo). */
 export type AccountPlanId = "free" | SubscriptionPlanId;
@@ -44,6 +45,15 @@ const VIDEO_MIN_RANK: Record<string, number> = {
   "openai/sora-2": 3,
 };
 
+/** Studio Edit Video tab — picker ids (`studio-edit/…`), not raw Kie strings. */
+const VIDEO_EDIT_PICKER_MIN_RANK: Record<string, number> = {
+  "studio-edit/grok": 2,
+  "studio-edit/kling-omni": 3,
+  "studio-edit/kling-o1": 3,
+  "studio-edit/motion": 3,
+  "studio-edit/motion-v3": 3,
+};
+
 /** Veo checkout body uses these keys — map to same gates as studio ids. */
 const VEO_BODY_MODEL_MIN_RANK: Record<string, number> = {
   veo3_fast: VIDEO_MIN_RANK.veo3_fast,
@@ -57,6 +67,13 @@ export function canUseStudioImageModel(planId: AccountPlanId, model: "nano" | "p
 export function canUseStudioVideoModel(planId: AccountPlanId, marketModelId: string): boolean {
   const id = marketModelId.trim();
   const min = VIDEO_MIN_RANK[id];
+  if (min === undefined) return false;
+  return planRank(planId) >= min;
+}
+
+export function canUseStudioVideoEditPicker(planId: AccountPlanId, editPickerId: string): boolean {
+  const id = editPickerId.trim();
+  const min = VIDEO_EDIT_PICKER_MIN_RANK[id];
   if (min === undefined) return false;
   return planRank(planId) >= min;
 }
@@ -83,6 +100,12 @@ export function minPlanForStudioImage(model: "nano" | "pro"): AccountPlanId {
 
 export function minPlanForStudioVideo(marketModelId: string): AccountPlanId {
   const min = VIDEO_MIN_RANK[marketModelId.trim()];
+  if (min === undefined) return "scale";
+  return planIdAtMinRank(min);
+}
+
+export function minPlanForStudioVideoEditPicker(editPickerId: string): AccountPlanId {
+  const min = VIDEO_EDIT_PICKER_MIN_RANK[editPickerId.trim()];
   if (min === undefined) return "scale";
   return planIdAtMinRank(min);
 }
@@ -116,10 +139,18 @@ const STUDIO_VIDEO_LABELS: Record<string, string> = {
   "kling-3.0/video": "Kling 3.0",
   "kling-2.6/video": "Kling 2.6",
   "openai/sora-2": "Sora 2",
-  "bytedance/seedance-1.5-pro": "Seedance 1.5 Pro",
+  "bytedance/seedance-1.5-pro": "NanoBanana 2",
   "bytedance/seedance-2.0-pro": "Seedance 2.0 Pro",
   veo3_fast: "Veo 3 Fast",
   veo3: "Veo 3",
+};
+
+const STUDIO_VIDEO_EDIT_PICKER_LABELS: Record<string, string> = {
+  "studio-edit/kling-omni": "Kling 3.0 Omni Edit",
+  "studio-edit/kling-o1": "Kling O1 Video Edit",
+  "studio-edit/grok": "Grok Imagine Edit",
+  "studio-edit/motion": "Kling Motion Control",
+  "studio-edit/motion-v3": "Kling 3.0 Motion Control",
 };
 
 /** Order used in “included with your plan” lists (cheapest → premium). */
@@ -137,14 +168,25 @@ export function studioVideoDisplayLabel(modelId: string): string {
   return STUDIO_VIDEO_LABELS[modelId] ?? modelId;
 }
 
+export function studioVideoEditPickerDisplayLabel(pickerId: string): string {
+  return STUDIO_VIDEO_EDIT_PICKER_LABELS[pickerId] ?? pickerId;
+}
+
 export function studioImageDisplayLabel(model: "nano" | "pro"): string {
-  return model === "pro" ? "Nano Banana Pro" : "Nano Banana (Standard)";
+  return model === "pro" ? "NanoBanana Pro" : "NanoBanana 2";
 }
 
 /** Human-readable names for video models the user can use on this plan. */
 export function listAllowedStudioVideoModels(planId: AccountPlanId): string[] {
   return STUDIO_VIDEO_IDS_ORDERED.filter((id) => canUseStudioVideoModel(planId, id)).map(
     (id) => STUDIO_VIDEO_LABELS[id] ?? id,
+  );
+}
+
+/** Human-readable names for Edit Video pickers the user may use on this plan. */
+export function listAllowedStudioVideoEditPickers(planId: AccountPlanId): string[] {
+  return STUDIO_VIDEO_EDIT_PICKER_IDS.filter((id) => canUseStudioVideoEditPicker(planId, id)).map(
+    (id) => studioVideoEditPickerDisplayLabel(id),
   );
 }
 
@@ -169,6 +211,13 @@ export function studioVideoUpgradeMessage(planId: AccountPlanId, marketModelId: 
   if (canUseStudioVideoModel(planId, marketModelId)) return null;
   const need = minPlanForStudioVideo(marketModelId);
   const label = studioVideoDisplayLabel(marketModelId);
+  return upgradePlanMessage(need, label);
+}
+
+export function studioVideoEditUpgradeMessage(planId: AccountPlanId, editPickerId: string): string | null {
+  if (canUseStudioVideoEditPicker(planId, editPickerId)) return null;
+  const need = minPlanForStudioVideoEditPicker(editPickerId);
+  const label = studioVideoEditPickerDisplayLabel(editPickerId);
   return upgradePlanMessage(need, label);
 }
 
@@ -203,15 +252,15 @@ function tierBools(minRank: number): [boolean, boolean, boolean, boolean] {
 /** Rows shown under “Model access” on /subscription — synced with gates above. */
 export const SUBSCRIPTION_MODEL_MATRIX_ROWS: SubscriptionModelMatrixRow[] = [
   {
-    label: "Nano Banana (Standard) — images",
+    label: "NanoBanana 2 — images",
     tiers: tierBools(IMAGE_MIN_RANK.nano),
   },
   {
-    label: "Nano Banana Pro — images",
+    label: "NanoBanana Pro — images",
     badges: [{ text: "2 credits", className: "bg-violet-500/20 text-violet-200 border-violet-400/30" }],
     tiers: tierBools(IMAGE_MIN_RANK.pro),
   },
-  { label: "Seedance 1.5 Pro — video", tiers: tierBools(VIDEO_MIN_RANK["bytedance/seedance-1.5-pro"]) },
+  { label: "NanoBanana 2 — video", tiers: tierBools(VIDEO_MIN_RANK["bytedance/seedance-1.5-pro"]) },
   { label: "Kling 2.6 — video", tiers: tierBools(VIDEO_MIN_RANK["kling-2.6/video"]) },
   { label: "Seedance 2.0 Pro — video", tiers: tierBools(VIDEO_MIN_RANK["bytedance/seedance-2.0-pro"]) },
   {

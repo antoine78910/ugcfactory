@@ -125,6 +125,7 @@ export async function POST(req: Request) {
         prompt,
         sound: body.sound ?? false,
         duration: String(body.duration ?? 5),
+        mode,
       };
       if (imageUrl) {
         input.image_urls = [imageUrl];

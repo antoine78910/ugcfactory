@@ -56,6 +56,28 @@ export function creditsForImageModel(key: ImageModelKey): number {
   return IMAGE_MODEL[key].credits;
 }
 
+/** Pro / Standard studio UI — same resolution keys as NanoBanana Pro API. */
+export type StudioImageOutputResolution = "1K" | "2K" | "4K";
+
+/**
+ * Credits per generated image in Studio (model + output resolution).
+ * Pro anchors on `nanobanana_pro.credits` at 2K (1K = half, 4K = double).
+ * Standard anchors on `nanobanana_standard.credits` at 1K (2K/4K scale up).
+ */
+export function studioImageCreditsPerOutput(opts: {
+  studioModel: "pro" | "nano";
+  resolution: StudioImageOutputResolution;
+}): number {
+  if (opts.studioModel === "pro") {
+    const base = IMAGE_MODEL.nanobanana_pro.credits;
+    const mult = { "1K": 0.5, "2K": 1, "4K": 2 } as const;
+    return Math.max(1, Math.ceil(base * mult[opts.resolution]));
+  }
+  const base = IMAGE_MODEL.nanobanana_standard.credits;
+  const mult = { "1K": 1, "2K": 2, "4K": 3 } as const;
+  return Math.max(1, Math.ceil(base * mult[opts.resolution]));
+}
+
 // ---------------------------------------------------------------------------
 // Video — Kling 3.0 dynamic (primary)
 // ---------------------------------------------------------------------------
@@ -224,6 +246,33 @@ export function calculateVideoCreditsForModel(opts: VideoCreditOptions): number 
       // Seedance, Veo, etc.: anchor tier until per-model tables exist
       return Math.max(1, calculateKling30VideoCredits(d, "pro", true));
   }
+}
+
+/**
+ * Studio Edit Video tab — `studio-edit/…` picker ids.
+ * Edit jobs bill like Kling 3.0 length × quality; motion pickers use motion-control curve.
+ */
+export function calculateStudioVideoEditCredits(opts: {
+  editPickerId: string;
+  /** Seconds from uploaded source video (edit) or fallback (e.g. 10). */
+  editDurationSec: number;
+  /** Motion reference clip length when picker is motion. */
+  motionDurationSec?: number;
+  /** Sidebar quality: std | pro (720p / 1080p). */
+  quality: string;
+  /** When true, treat quality as Pro for non-motion models. */
+  autoSettings: boolean;
+}): number {
+  const id = opts.editPickerId.trim();
+  const motion = id === "studio-edit/motion" || id === "studio-edit/motion-v3";
+  if (motion) {
+    const d = Math.max(0, Number(opts.motionDurationSec) || 0);
+    const q = normalizeMotionControlQuality(opts.quality);
+    return calculateMotionControlCreditsFromDuration(d, q);
+  }
+  const d = Math.max(1, Number(opts.editDurationSec) || 10);
+  const q = opts.autoSettings ? "pro" : opts.quality;
+  return calculateKling30VideoCredits(d, q, true);
 }
 
 /** Normalize UI quality strings for motion control billing. */

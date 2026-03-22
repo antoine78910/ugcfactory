@@ -290,8 +290,6 @@ export default function AppBrandWizard() {
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const packshotFileInputRef = useRef<HTMLInputElement>(null);
 
-  type MotionSubTab = "create" | "edit" | "control";
-  const [motionSubTab, setMotionSubTab] = useState<MotionSubTab>("control");
   const [motionVideoRefBlobUrl, setMotionVideoRefBlobUrl] = useState<string | null>(null);
   const [motionVideoDetectedDuration, setMotionVideoDetectedDuration] = useState<number | null>(null);
   const [motionCharacterImageUrl, setMotionCharacterImageUrl] = useState<string | null>(null);
@@ -302,9 +300,13 @@ export default function AppBrandWizard() {
     | { open: true; reason: "plan" }
     | { open: true; reason: "credits"; required: number };
   const [motionBilling, setMotionBilling] = useState<MotionBilling>({ open: false });
+  const [motionSceneBackground, setMotionSceneBackground] = useState<"video" | "image">("video");
+  const [motionBusy, setMotionBusy] = useState(false);
   const motionVideoInputRef = useRef<HTMLInputElement>(null);
   const motionCharacterInputRef = useRef<HTMLInputElement>(null);
-  const { planId, current: creditsBalance } = useCreditsPlan();
+  const { planId, current: creditsBalance, spendCredits } = useCreditsPlan();
+  const creditsRef = useRef(creditsBalance);
+  creditsRef.current = creditsBalance;
 
   /** Billable seconds: real clip length, or placeholder so 720p ↔ 1080p updates credits before upload. */
   const MOTION_CREDITS_PLACEHOLDER_SEC = 12;
@@ -326,6 +328,38 @@ export default function AppBrandWizard() {
       }),
     [motionQuality, motionBillableSeconds],
   );
+
+  const uploadBlobUrlToCdn = useCallback(async (blobUrl: string, filename: string, fallbackMime: string) => {
+    const resFetch = await fetch(blobUrl);
+    const blob = await resFetch.blob();
+    const type = blob.type || fallbackMime;
+    const fd = new FormData();
+    fd.set("file", new File([blob], filename, { type }));
+    const res = await fetch("/api/uploads", { method: "POST", body: fd });
+    const json = (await res.json()) as { url?: string; error?: string };
+    if (!res.ok || !json.url) throw new Error(json.error || "Upload failed");
+    return json.url;
+  }, []);
+
+  const pollMotionKlingTask = useCallback(async (taskId: string) => {
+    for (let i = 0; i < 120; i++) {
+      const res = await fetch(`/api/kling/status?taskId=${encodeURIComponent(taskId)}`, { cache: "no-store" });
+      const json = (await res.json()) as {
+        data?: { status?: string; response?: string[]; error_message?: string | null };
+        error?: string;
+      };
+      if (!res.ok) throw new Error(json.error || "Kling status failed");
+      const st = json.data?.status;
+      if (st === "SUCCESS") {
+        const u = json.data?.response?.[0];
+        if (!u) throw new Error("No video URL");
+        return u;
+      }
+      if (st === "FAILED") throw new Error(json.data?.error_message || "Motion control failed");
+      await new Promise((r) => setTimeout(r, 4000));
+    }
+    throw new Error("Motion control timeout");
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -1639,199 +1673,176 @@ export default function AppBrandWizard() {
 
             {appSection === "motion_control" ? (
               <div className="space-y-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="secondary"
-                    className={`${
-                      motionSubTab === "create" ? "bg-violet-400 text-black border border-violet-200/40" : "bg-white/5 text-white"
-                    }`}
-                    onClick={() => setMotionSubTab("create")}
-                  >
-                    Create Video
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="secondary"
-                    className={`${
-                      motionSubTab === "edit" ? "bg-violet-400 text-black border border-violet-200/40" : "bg-white/5 text-white"
-                    }`}
-                    onClick={() => setMotionSubTab("edit")}
-                  >
-                    Edit Video
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="secondary"
-                    className={`${
-                      motionSubTab === "control" ? "bg-violet-400 text-black border border-violet-200/40" : "bg-white/5 text-white"
-                    }`}
-                    onClick={() => setMotionSubTab("control")}
-                  >
-                    Motion Control
-                  </Button>
-                </div>
-
-                {motionSubTab !== "control" ? (
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:gap-6">
-                    <aside className="flex min-w-0 flex-col gap-3 rounded-2xl border border-white/10 bg-[#0b0912]/85 p-4 lg:w-[min(100%,22rem)] lg:shrink-0">
-                      <CardTitle className="text-base text-white">
-                        {motionSubTab === "create" ? "Create Video" : "Edit Video"}
-                      </CardTitle>
-                      <p className="text-sm text-white/70">
-                        This tab is UI-only for now. Use <span className="text-white/90 font-medium">Motion Control</span>{" "}
-                        for the motion-reference workflow — parameters on the left, outputs on the right.
-                      </p>
-                    </aside>
-                    <StudioOutputPane
-                      title="Generations"
-                      hasOutput={false}
-                      output={<></>}
-                      empty={<StudioEmptyExamples variant="video" />}
-                    />
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:gap-6">
-                    <aside className="studio-params-scroll flex min-w-0 flex-col gap-4 lg:w-[min(100%,22rem)] xl:w-[min(100%,26rem)] lg:shrink-0 lg:max-h-[min(90vh,calc(100vh-10rem))] lg:overflow-y-auto">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:gap-6">
+                    <div className="flex min-w-0 flex-[1] flex-col gap-4 lg:min-w-[min(100%,18rem)]">
                       <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
-                        Motion control — parameters
+                        Motion control — references
                       </p>
+                      <div className="rounded-2xl border border-white/10 bg-[#101014] p-4">
+                        <div className="grid grid-cols-2 gap-3">
+                          <input
+                            ref={motionVideoInputRef}
+                            type="file"
+                            accept="video/*"
+                            className="sr-only"
+                            onChange={(e) => {
+                              const f = e.target.files?.[0] ?? null;
+                              if (!f) return;
+                              const blobUrl = URL.createObjectURL(f);
+                              setMotionVideoRefBlobUrl(blobUrl);
+                              const vid = document.createElement("video");
+                              vid.preload = "metadata";
+                              vid.onloadedmetadata = () => {
+                                const raw = Number(vid.duration);
+                                const dur =
+                                  Number.isFinite(raw) && raw > 0
+                                    ? Math.min(120, Math.max(1, Math.round(raw)))
+                                    : null;
+                                setMotionVideoDetectedDuration(dur);
+                                URL.revokeObjectURL(vid.src);
+                              };
+                              vid.src = URL.createObjectURL(f);
+                              toast.success("Video reference selected", { description: f.name });
+                              e.currentTarget.value = "";
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => motionVideoInputRef.current?.click()}
+                            className="relative flex aspect-[4/3] w-full flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-white/20 bg-[#0c0c10] text-white/50 transition hover:border-violet-400/40 hover:bg-white/[0.03]"
+                          >
+                            {motionVideoRefBlobUrl ? (
+                              <>
+                                {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                                <video
+                                  src={motionVideoRefBlobUrl}
+                                  className="absolute inset-0 h-full w-full rounded-2xl object-cover"
+                                  muted
+                                  playsInline
+                                />
+                                {motionVideoDetectedDuration ? (
+                                  <span className="absolute bottom-2 rounded-md bg-black/70 px-2 py-1 text-[10px] font-medium text-white">
+                                    {motionVideoDetectedDuration}s
+                                  </span>
+                                ) : null}
+                              </>
+                            ) : (
+                              <>
+                                <Play className="h-8 w-8 opacity-50" />
+                                <span className="text-xs font-medium text-white/45">Add motion to copy</span>
+                                <span className="text-[10px] text-white/30">Video duration: 3–30 seconds</span>
+                              </>
+                            )}
+                          </button>
 
-                      {/* Two upload slots: video ref + character image */}
-                      <div className="grid grid-cols-2 gap-3">
-                        <input
-                          ref={motionVideoInputRef}
-                          type="file"
-                          accept="video/*"
-                          className="sr-only"
-                          onChange={(e) => {
-                            const f = e.target.files?.[0] ?? null;
-                            if (!f) return;
-                            const blobUrl = URL.createObjectURL(f);
-                            setMotionVideoRefBlobUrl(blobUrl);
-                            const vid = document.createElement("video");
-                            vid.preload = "metadata";
-                            vid.onloadedmetadata = () => {
-                              const raw = Number(vid.duration);
-                              const dur =
-                                Number.isFinite(raw) && raw > 0
-                                  ? Math.min(120, Math.max(1, Math.round(raw)))
-                                  : null;
-                              setMotionVideoDetectedDuration(dur);
-                              URL.revokeObjectURL(vid.src);
-                            };
-                            vid.src = URL.createObjectURL(f);
-                            toast.success("Video reference selected", { description: f.name });
-                            e.currentTarget.value = "";
-                          }}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => motionVideoInputRef.current?.click()}
-                          className="relative flex aspect-[4/3] w-full flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-white/20 bg-[#0c0c10] text-white/50 transition hover:border-violet-400/40 hover:bg-white/[0.03]"
-                        >
-                          {motionVideoRefBlobUrl ? (
-                            <>
-                              {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-                              <video
-                                src={motionVideoRefBlobUrl}
+                          <input
+                            ref={motionCharacterInputRef}
+                            type="file"
+                            accept="image/*"
+                            className="sr-only"
+                            onChange={(e) => {
+                              const f = e.target.files?.[0] ?? null;
+                              if (!f) return;
+                              const url = URL.createObjectURL(f);
+                              setMotionCharacterImageUrl(url);
+                              toast.success("Character image selected", { description: f.name });
+                              e.currentTarget.value = "";
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => motionCharacterInputRef.current?.click()}
+                            className="relative flex aspect-[4/3] w-full flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-white/20 bg-[#0c0c10] text-white/50 transition hover:border-violet-400/40 hover:bg-white/[0.03]"
+                          >
+                            {motionCharacterImageUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={motionCharacterImageUrl}
+                                alt="Character"
                                 className="absolute inset-0 h-full w-full rounded-2xl object-cover"
-                                muted
-                                playsInline
                               />
-                              {motionVideoDetectedDuration ? (
-                                <span className="absolute bottom-2 rounded-md bg-black/70 px-2 py-1 text-[10px] font-medium text-white">
-                                  {motionVideoDetectedDuration}s
-                                </span>
-                              ) : null}
-                            </>
-                          ) : (
-                            <>
-                              <Play className="h-8 w-8 opacity-50" />
-                              <span className="text-xs font-medium text-white/45">Add motion to copy</span>
-                              <span className="text-[10px] text-white/30">Video duration: 3–30 seconds</span>
-                            </>
-                          )}
-                        </button>
+                            ) : (
+                              <>
+                                <Plus className="h-8 w-8 opacity-50" />
+                                <span className="text-xs font-medium text-white/45">Add your character</span>
+                                <span className="text-[10px] text-white/30">Image with visible face and body</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
 
-                        <input
-                          ref={motionCharacterInputRef}
-                          type="file"
-                          accept="image/*"
-                          className="sr-only"
-                          onChange={(e) => {
-                            const f = e.target.files?.[0] ?? null;
-                            if (!f) return;
-                            const url = URL.createObjectURL(f);
-                            setMotionCharacterImageUrl(url);
-                            toast.success("Character image selected", { description: f.name });
-                            e.currentTarget.value = "";
-                          }}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => motionCharacterInputRef.current?.click()}
-                          className="relative flex aspect-[4/3] w-full flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-white/20 bg-[#0c0c10] text-white/50 transition hover:border-violet-400/40 hover:bg-white/[0.03]"
-                        >
-                          {motionCharacterImageUrl ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={motionCharacterImageUrl}
-                              alt="Character"
-                              className="absolute inset-0 h-full w-full rounded-2xl object-cover"
+                    <aside className="studio-params-scroll flex min-w-0 flex-col gap-4 lg:w-[min(100%,17rem)] xl:w-[min(100%,19rem)] lg:shrink-0 lg:max-h-[min(90vh,calc(100vh-10rem))] lg:overflow-y-auto">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Parameters</p>
+                      <div className="rounded-2xl border border-white/10 bg-[#101014] p-4 space-y-4">
+                        <div>
+                          <Label className="text-xs text-white/45">Model</Label>
+                          <div className="mt-2">
+                            <StudioSingleModelCard
+                              hideMeta
+                              label="Kling 3.0 Motion Control"
+                              icon="kling"
+                              resolution="1080p"
+                              durationRange="3s–30s"
                             />
-                          ) : (
-                            <>
-                              <Plus className="h-8 w-8 opacity-50" />
-                              <span className="text-xs font-medium text-white/45">Add your character</span>
-                              <span className="text-[10px] text-white/30">Image with visible face and body</span>
-                            </>
-                          )}
-                        </button>
+                          </div>
+                        </div>
+                        {motionControlUpgradeMessage(planId) ? (
+                          <p className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-100/90">
+                            {motionControlUpgradeMessage(planId)}
+                          </p>
+                        ) : null}
+
+                        <div>
+                          <Label className="text-xs text-white/45">Scene control mode</Label>
+                          <p className="mt-0.5 text-[10px] leading-snug text-white/35">
+                            Choose where the background should come from: the motion reference video or the character
+                            image.
+                          </p>
+                          <Select
+                            value={motionSceneBackground}
+                            onValueChange={(v) => setMotionSceneBackground(v as "video" | "image")}
+                          >
+                            <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent position="popper" className={studioSelectContentClass}>
+                              <SelectItem value="video" className={studioSelectItemClass}>
+                                Video
+                              </SelectItem>
+                              <SelectItem value="image" className={studioSelectItemClass}>
+                                Image
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div>
+                          <Label className="text-xs text-white/45">Quality</Label>
+                          <p className="mt-0.5 text-[10px] leading-snug text-white/35">
+                            720p and 1080p use different credit costs (shown on Generate).
+                          </p>
+                          <Select value={motionQuality} onValueChange={setMotionQuality}>
+                            <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
+                              <SelectValue placeholder="Quality" />
+                            </SelectTrigger>
+                            <SelectContent position="popper" className={studioSelectContentClass}>
+                              <SelectItem value="720p" className={studioSelectItemClass}>
+                                720p
+                              </SelectItem>
+                              <SelectItem value="1080p" className={studioSelectItemClass}>
+                                1080p
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
                       </div>
 
-                      {/* Model — single backend (no dropdown) */}
-                      <StudioSingleModelCard
-                        label="Kling 3.0 Motion Control"
-                        icon="kling"
-                        resolution="1080p"
-                        durationRange="3s–30s"
-                        hint="Only model available for Motion Control."
-                      />
-                      {motionControlUpgradeMessage(planId) ? (
-                        <p className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-100/90">
-                          {motionControlUpgradeMessage(planId)}
-                        </p>
-                      ) : null}
-
-                      {/* Quality */}
-                      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                        <span className="text-xs font-semibold text-white/80">Quality</span>
-                        <p className="mt-1 text-[10px] leading-snug text-white/40">
-                          720p and 1080p use different credit costs (see Generate).
-                        </p>
-                        <Select value={motionQuality} onValueChange={setMotionQuality}>
-                          <SelectTrigger className="mt-2 rounded-xl border-white/15 bg-[#0a0a0d] text-white">
-                            <SelectValue placeholder="Quality" />
-                          </SelectTrigger>
-                          <SelectContent position="popper" className={studioSelectContentClass}>
-                            <SelectItem value="720p" className={studioSelectItemClass}>
-                              720p
-                            </SelectItem>
-                            <SelectItem value="1080p" className={studioSelectItemClass}>
-                              1080p
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      {/* Generate button with dynamic credits */}
                       <Button
                         type="button"
                         disabled={
+                          motionBusy ||
                           !motionCharacterImageUrl ||
                           !motionVideoRefBlobUrl ||
                           Boolean(motionControlUpgradeMessage(planId))
@@ -1851,13 +1862,15 @@ export default function AppBrandWizard() {
                             toast.error("Please choose a video reference first.");
                             return;
                           }
-                          if (creditsBalance < motionCredits) {
+                          if (creditsRef.current < motionCredits) {
                             setMotionBilling({ open: true, reason: "credits", required: motionCredits });
                             return;
                           }
                           const jobId = crypto.randomUUID();
                           const poster = motionCharacterImageUrl ?? undefined;
                           const startedAt = Date.now();
+                          const bgSource =
+                            motionSceneBackground === "video" ? "input_video" : "input_image";
                           setMotionHistoryItems((prev) => [
                             {
                               id: jobId,
@@ -1869,25 +1882,57 @@ export default function AppBrandWizard() {
                             },
                             ...prev,
                           ]);
+                          spendCredits(motionCredits);
+                          creditsRef.current = Math.max(0, creditsRef.current - motionCredits);
+                          setMotionBusy(true);
                           void (async () => {
                             try {
-                              await new Promise((r) => setTimeout(r, 1200));
-                              toast.success("Motion control generation queued (UI only)");
-                              setMotionHistoryItems((prev) =>
-                                prev.map((i) =>
-                                  i.id === jobId && i.status === "generating"
-                                    ? {
-                                        ...i,
-                                        status: "ready",
-                                        label: "Queued — result will appear here when the pipeline is live.",
-                                        posterUrl: poster,
-                                        createdAt: Date.now(),
-                                      }
-                                    : i,
-                                ),
+                              toast.message("Uploading references…");
+                              const imageHttps = await uploadBlobUrlToCdn(
+                                motionCharacterImageUrl,
+                                "motion-character.jpg",
+                                "image/jpeg",
                               );
+                              const videoHttps = await uploadBlobUrlToCdn(
+                                motionVideoRefBlobUrl,
+                                "motion-ref.mp4",
+                                "video/mp4",
+                              );
+                              const res = await fetch("/api/kling/motion-control", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  accountPlan: planId,
+                                  imageUrl: imageHttps,
+                                  videoUrl: videoHttps,
+                                  quality: motionQuality,
+                                  backgroundSource: bgSource,
+                                }),
+                              });
+                              const json = (await res.json()) as { taskId?: string; error?: string };
+                              if (!res.ok || !json.taskId) throw new Error(json.error || "Motion control failed");
+                              toast.message("Rendering…", { description: "Polling Kling Motion Control" });
+                              const url = await pollMotionKlingTask(json.taskId);
+                              const doneAt = Date.now();
+                              setMotionHistoryItems((prev) => {
+                                const rest = prev.filter((i) => i.id !== jobId);
+                                return [
+                                  {
+                                    id: `${jobId}-done-${doneAt}`,
+                                    kind: "motion",
+                                    status: "ready",
+                                    label: "Motion control",
+                                    mediaUrl: url,
+                                    posterUrl: poster,
+                                    createdAt: doneAt,
+                                  },
+                                  ...rest,
+                                ];
+                              });
+                              toast.success("Motion control video ready");
                             } catch (err) {
                               const msg = err instanceof Error ? err.message : "Error";
+                              toast.error(msg);
                               setMotionHistoryItems((prev) =>
                                 prev.map((i) =>
                                   i.id === jobId && i.status === "generating"
@@ -1900,6 +1945,8 @@ export default function AppBrandWizard() {
                                     : i,
                                 ),
                               );
+                            } finally {
+                              setMotionBusy(false);
                             }
                           })();
                         }}
@@ -1921,20 +1968,21 @@ export default function AppBrandWizard() {
                       </Button>
                     </aside>
 
-                    <StudioOutputPane
-                      title=""
-                      hasOutput
-                      output={
-                        <StudioGenerationsHistory
-                          items={motionHistoryItems}
-                          empty={<StudioEmptyExamples variant="motion" />}
-                          mediaLabel="Motion"
-                        />
-                      }
-                      empty={null}
-                    />
+                    <div className="flex h-full min-h-0 min-w-0 flex-[2.35] flex-col">
+                      <StudioOutputPane
+                        title=""
+                        hasOutput
+                        output={
+                          <StudioGenerationsHistory
+                            items={motionHistoryItems}
+                            empty={<StudioEmptyExamples variant="motion" />}
+                            mediaLabel="Motion"
+                          />
+                        }
+                        empty={null}
+                      />
+                    </div>
                   </div>
-                )}
 
                 <StudioBillingDialog
                   open={motionBilling.open}
@@ -1962,9 +2010,6 @@ export default function AppBrandWizard() {
               <Card className="border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
                 <CardHeader>
                   <CardTitle className="text-base">Image</CardTitle>
-                  <p className="text-sm text-white/50">
-                    NanoBanana &amp; NanoBanana Pro — prompt, aspect ratio, resolution, batch size, reference images.
-                  </p>
                 </CardHeader>
                 <CardContent>
                   <StudioImagePanel />
@@ -1975,9 +2020,6 @@ export default function AppBrandWizard() {
               <Card className="border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
                 <CardHeader>
                   <CardTitle className="text-base">Video</CardTitle>
-                  <p className="text-sm text-white/50">
-                    Kling 3.0, Kling 2.6, Sora 2, Seedance, Veo — frames, prompt, duration, aspect, audio.
-                  </p>
                 </CardHeader>
                 <CardContent>
                   <StudioVideoPanel />

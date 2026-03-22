@@ -8,12 +8,15 @@ import { Button } from "@/components/ui/button";
 import type { AccountPlanId } from "@/lib/subscriptionModelAccess";
 import {
   listAllowedStudioImageModels,
+  listAllowedStudioVideoEditPickers,
   listAllowedStudioVideoModels,
   minPlanForStudioImage,
   minPlanForStudioVideo,
+  minPlanForStudioVideoEditPicker,
   planDisplayName,
   studioImageDisplayLabel,
   studioVideoDisplayLabel,
+  studioVideoEditPickerDisplayLabel,
   upgradePlanMessage,
 } from "@/lib/subscriptionModelAccess";
 
@@ -25,15 +28,19 @@ type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   planId: AccountPlanId;
-  /** Included models list: studio image vs video tab. */
-  studioMode: "image" | "video";
+  /** Included models list: studio image vs video tab vs edit-video tab. */
+  studioMode: "image" | "video" | "video_edit";
   variant: StudioBillingVariant;
 };
 
 export function StudioBillingDialog({ open, onOpenChange, planId, studioMode, variant }: Props) {
   const isPlan = variant.kind === "plan";
   const allowed =
-    studioMode === "video" ? listAllowedStudioVideoModels(planId) : listAllowedStudioImageModels(planId);
+    studioMode === "video"
+      ? listAllowedStudioVideoModels(planId)
+      : studioMode === "video_edit"
+        ? listAllowedStudioVideoEditPickers(planId)
+        : listAllowedStudioImageModels(planId);
 
   let title = "";
   let description: ReactNode = null;
@@ -42,11 +49,15 @@ export function StudioBillingDialog({ open, onOpenChange, planId, studioMode, va
     const blockedLabel =
       studioMode === "video"
         ? studioVideoDisplayLabel(variant.blockedModelId)
-        : studioImageDisplayLabel(variant.blockedModelId as "nano" | "pro");
+        : studioMode === "video_edit"
+          ? studioVideoEditPickerDisplayLabel(variant.blockedModelId)
+          : studioImageDisplayLabel(variant.blockedModelId as "nano" | "pro");
     const requiredPlan =
       studioMode === "video"
         ? minPlanForStudioVideo(variant.blockedModelId)
-        : minPlanForStudioImage(variant.blockedModelId as "nano" | "pro");
+        : studioMode === "video_edit"
+          ? minPlanForStudioVideoEditPicker(variant.blockedModelId)
+          : minPlanForStudioImage(variant.blockedModelId as "nano" | "pro");
     const headline = upgradePlanMessage(requiredPlan, blockedLabel);
     title = "Model not included";
     description = headline || "This model requires a higher plan.";
@@ -119,7 +130,13 @@ export function StudioBillingDialog({ open, onOpenChange, planId, studioMode, va
               On your current plan ({planDisplayName(planId)})
             </p>
             <p className="mt-2 text-xs text-white/50">
-              You can use the following models in the {studioMode === "video" ? "video" : "image"} studio:
+              You can use the following models in the{" "}
+              {studioMode === "video"
+                ? "video"
+                : studioMode === "video_edit"
+                  ? "video edit"
+                  : "image"}{" "}
+              studio:
             </p>
             <ul className="mt-3 space-y-2 border-t border-white/10 pt-3">
               {allowed.length ? (

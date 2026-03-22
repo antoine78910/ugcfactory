@@ -42,6 +42,9 @@ export async function POST(req: Request) {
         "image/png": ".png",
         "image/webp": ".webp",
         "image/gif": ".gif",
+        "video/mp4": ".mp4",
+        "video/quicktime": ".mov",
+        "video/webm": ".webm",
       };
       return map[file.type] ?? "";
     })();
