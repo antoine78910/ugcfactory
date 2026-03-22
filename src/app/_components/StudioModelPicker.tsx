@@ -42,11 +42,13 @@ const STUDIO_MODEL_LOGO_SRC: Partial<Record<StudioModelPickerIcon, string>> = {
   sora: "/studio/model-logos/sora.png",
   veo: "/studio/model-logos/google.png",
   grok: "/studio/model-logos/grok.png",
+  image_pro: "/studio/model-logos/google.png",
+  image_std: "/studio/model-logos/google.png",
 };
 
 function ModelGlyph({ icon, active }: { icon: StudioModelPickerIcon; active: boolean }) {
   const box =
-    "flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/10";
+    "flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md border border-white/10";
 
   const logoSrc = STUDIO_MODEL_LOGO_SRC[icon];
   if (logoSrc) {
@@ -58,21 +60,14 @@ function ModelGlyph({ icon, active }: { icon: StudioModelPickerIcon; active: boo
         )}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={logoSrc} alt="" className="h-[22px] w-[22px] object-contain" draggable={false} />
+        <img src={logoSrc} alt="" className="h-4 w-4 object-contain" draggable={false} />
       </div>
     );
   }
 
-  if (icon === "image_pro") {
-    return (
-      <div className={cn(box, active ? "border-violet-400/45 bg-violet-500/15" : "bg-white/[0.06]")}>
-        <span className={cn("text-[11px] font-bold", active ? "text-violet-200" : "text-white/45")}>Pro</span>
-      </div>
-    );
-  }
   return (
     <div className={cn(box, active ? "border-white/25 bg-white/10" : "bg-white/[0.06]")}>
-      <span className={cn("text-[10px] font-semibold", active ? "text-white/90" : "text-white/45")}>Std</span>
+      <span className={cn("text-[9px] font-semibold", active ? "text-white/90" : "text-white/45")}>?</span>
     </div>
   );
 }
@@ -324,7 +319,9 @@ export function StudioModelPicker({
         {isBar ? (
           <>
             <div className="flex min-w-0 flex-1 items-center gap-2.5">
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Model</span>
+              {!hideMeta ? (
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Model</span>
+              ) : null}
               {selected ? (
                 <>
                   <ModelGlyph icon={selected.icon} active />
@@ -349,7 +346,11 @@ export function StudioModelPicker({
         ) : (
           <>
             <div className="flex items-start justify-between gap-1">
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Model</span>
+              {!hideMeta ? (
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Model</span>
+              ) : (
+                <span className="sr-only">Model</span>
+              )}
               <ChevronDown className={cn("h-4 w-4 shrink-0 text-white/45 transition", open && "rotate-180")} />
             </div>
             <div className="flex min-w-0 flex-1 flex-col justify-center gap-1.5">
@@ -425,7 +426,7 @@ export function StudioModelPicker({
             <div className="relative flex shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-[#0b0912]/95 px-4 py-3">
               <div>
                 <p id="studio-model-sheet-title" className="text-sm font-bold tracking-tight text-white">
-                  {hideMeta ? "Model" : "Models"}
+                  {hideMeta ? featuredTitle : "Models"}
                 </p>
                 {!hideMeta ? <p className="text-[11px] text-violet-300/70">{featuredTitle}</p> : null}
               </div>
@@ -497,8 +498,7 @@ export function StudioSingleModelCard({
       <div className="flex items-start gap-3">
         <ModelGlyph icon={icon} active />
         <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Model</p>
-          <p className="mt-0.5 text-sm font-semibold text-white">{label}</p>
+          <p className="text-sm font-semibold text-white">{label}</p>
           {!hideMeta ? (
             <div className="mt-2 flex flex-wrap gap-1">
               <span className="inline-flex items-center gap-0.5 rounded-md border border-white/10 bg-black/40 px-1.5 py-0.5 text-[9px] font-medium text-white/55">

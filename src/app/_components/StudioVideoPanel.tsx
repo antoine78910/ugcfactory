@@ -1153,8 +1153,6 @@ export default function StudioVideoPanel() {
               </div>
 
               <div>
-                <Label className="text-xs text-white/45">Model</Label>
-                <div className="mt-2">
                   <StudioModelPicker
                     value={editPickerId}
                     items={VIDEO_EDIT_MODEL_PICKER_ITEMS}
@@ -1167,7 +1165,6 @@ export default function StudioVideoPanel() {
                     onChange={(v) => setEditPickerId(v)}
                     featuredTitle="All models"
                   />
-                </div>
               </div>
 
               {!editAutoSettings ? (
@@ -1290,8 +1287,6 @@ export default function StudioVideoPanel() {
             <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Parameters</p>
             <div className="rounded-2xl border border-white/10 bg-[#101014] p-4 space-y-4">
               <div>
-                <Label className="text-xs text-white/45">Model</Label>
-                <div className="mt-2">
                   <StudioModelPicker
                     value={modelId}
                     items={VIDEO_MODEL_PICKER_ITEMS}
@@ -1309,7 +1304,6 @@ export default function StudioVideoPanel() {
                     }}
                     featuredTitle="Video models"
                   />
-                </div>
               </div>
 
               {modelHasMultiShot(modelId) ? (

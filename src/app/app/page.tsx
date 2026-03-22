@@ -1776,8 +1776,6 @@ export default function AppBrandWizard() {
                       <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Parameters</p>
                       <div className="rounded-2xl border border-white/10 bg-[#101014] p-4 space-y-4">
                         <div>
-                          <Label className="text-xs text-white/45">Model</Label>
-                          <div className="mt-2">
                             <StudioSingleModelCard
                               hideMeta
                               label="Kling 3.0 Motion Control"
@@ -1785,7 +1783,6 @@ export default function AppBrandWizard() {
                               resolution="1080p"
                               durationRange="3s–30s"
                             />
-                          </div>
                         </div>
                         {motionControlUpgradeMessage(planId) ? (
                           <p className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-100/90">
