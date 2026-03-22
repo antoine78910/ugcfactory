@@ -14,7 +14,7 @@ const VARIANTS: Record<
     subtitle: "Set your prompt and options on the left, then hit Generate.",
     examples: [
       { icon: ImageIcon, label: "Product shots", hint: "Clean backgrounds, brand-ready frames" },
-      { icon: Sparkles, label: "Creative scenes", hint: "NanoBanana 2 & Pro" },
+      { icon: Sparkles, label: "Creative scenes", hint: "NanoBanana 2 & Pro (Google)" },
       { icon: ImageIcon, label: "With references", hint: "Upload refs to match look & pose" },
     ],
   },

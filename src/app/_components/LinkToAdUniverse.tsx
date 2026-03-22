@@ -30,7 +30,11 @@ import {
   type LinkToAdAnglePipelineV1,
   type LinkToAdUniverseSnapshotV1,
 } from "@/lib/linkToAdUniverse";
-import { useCreditsPlan } from "@/app/_components/CreditsPlanContext";
+import {
+  useCreditsPlan,
+  getPersonalApiKey,
+  isPersonalApiActive,
+} from "@/app/_components/CreditsPlanContext";
 import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
 import { LinkToAdUniverseStepper } from "@/app/_components/LinkToAdUniverseStepper";
 import { WebsiteScanChecklist } from "@/app/_components/WebsiteScanChecklist";
@@ -162,6 +166,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   /** Deduct from wallet once on URL Generate; keep ref/frozen in sync with that charge. */
   const spendLtaCreditsIfEnough = useCallback(
     (cost: number): boolean => {
+      if (isPersonalApiActive()) return true;
       const k = Math.max(0, Math.floor(cost));
       if (k <= 0) return true;
       if (creditsBalanceRef.current < k) {
@@ -220,6 +225,12 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const [selectedAngleIndex, setSelectedAngleIndex] = useState<number | null>(null);
   const [customAngleInput, setCustomAngleInput] = useState("");
   const [isCustomAngleLoading, setIsCustomAngleLoading] = useState(false);
+  /** Generated script shown for review before merging into the three angle slots. */
+  const [pendingCustomAnglePreview, setPendingCustomAnglePreview] = useState<{
+    headline: string;
+    script: string;
+    sourcePrompt: string;
+  } | null>(null);
   const [editableScript, setEditableScript] = useState("");
   const [scriptEditVisible, setScriptEditVisible] = useState(false);
   const [editableVideoPrompt, setEditableVideoPrompt] = useState("");
@@ -558,6 +569,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       );
       setSummaryText(snap.summaryText);
       setScriptsText(snap.scriptsText);
+      setPendingCustomAnglePreview(null);
       setAngleLabels(
         snap.angleLabels[0] && snap.angleLabels[1] && snap.angleLabels[2]
           ? snap.angleLabels
@@ -732,20 +744,37 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       const newScript = json.data.trim();
       const headlineMatch = newScript.match(/ANGLE_HEADLINE:\s*(.+)/i);
       const headline = headlineMatch?.[1]?.trim() || angle;
-      setScriptsText((prev) => `${prev}\n\nSCRIPT OPTION ${scriptOptionBodies.length + 1}\n${newScript}`);
-      setAngleLabels((prev) => {
-        const copy = [...prev] as [string, string, string];
-        const nextIdx = copy.findIndex((l) => !l.trim());
-        if (nextIdx >= 0) copy[nextIdx] = headline;
-        return copy;
-      });
+      setPendingCustomAnglePreview({ headline, script: newScript, sourcePrompt: angle });
       setCustomAngleInput("");
-      toast.success("Custom angle script generated");
+      toast.success("Review the script below, then add it or discard.");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to generate custom angle");
     } finally {
       setIsCustomAngleLoading(false);
     }
+  }
+
+  function confirmPendingCustomAngle() {
+    const pending = pendingCustomAnglePreview;
+    if (!pending) return;
+    setScriptsText((prev) => {
+      const n = splitScriptOptions(prev).length + 1;
+      return `${prev}\n\nSCRIPT OPTION ${n}\n${pending.script}`;
+    });
+    setAngleLabels((prev) => {
+      const copy = [...prev] as [string, string, string];
+      const nextIdx = copy.findIndex((l) => !l.trim());
+      if (nextIdx >= 0) copy[nextIdx] = pending.headline;
+      return copy;
+    });
+    setPendingCustomAnglePreview(null);
+    toast.success("Custom angle added — pick it from the cards above.");
+  }
+
+  function discardPendingCustomAngle() {
+    const restore = pendingCustomAnglePreview?.sourcePrompt;
+    setPendingCustomAnglePreview(null);
+    if (restore) setCustomAngleInput(restore);
   }
 
   async function onSelectAngle(index: 0 | 1 | 2) {
@@ -956,6 +985,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
 
     setSummaryText("");
     setScriptsText("");
+    setPendingCustomAnglePreview(null);
+    setCustomAngleInput("");
     setAngleLabels(["", "", ""]);
     setSelectedAngleIndex(null);
     if (opts?.bypassSavedProject) {
@@ -1177,11 +1208,13 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          accountPlan: planId,
           model: "pro",
           prompt,
           imageUrls: [img],
           resolution: "2K",
           aspectRatio: "9:16",
+          personalApiKey: getPersonalApiKey(),
         }),
       });
       const json = (await res.json()) as { taskId?: string; error?: string };
@@ -1218,8 +1251,10 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     const sleepMs = 4000;
     // ~12 minutes max wait (enough for most generations).
     const maxAttempts = Math.ceil((12 * 60 * 1000) / sleepMs);
+    const pKey = getPersonalApiKey();
+    const keyParam = pKey ? `&personalApiKey=${encodeURIComponent(pKey)}` : "";
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      const res = await fetch(`/api/nanobanana/task?taskId=${encodeURIComponent(taskId)}`, {
+      const res = await fetch(`/api/nanobanana/task?taskId=${encodeURIComponent(taskId)}${keyParam}`, {
         method: "GET",
         cache: "no-store",
       });
@@ -1268,11 +1303,13 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          accountPlan: planId,
           model: "pro",
           prompt,
           imageUrls: [img],
           resolution: "2K",
           aspectRatio: "9:16",
+          personalApiKey: getPersonalApiKey(),
         }),
       });
       const json = (await res.json()) as { taskId?: string; error?: string };
@@ -1458,7 +1495,9 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
 
     async function tick() {
       try {
-        const res = await fetch(`/api/nanobanana/task?taskId=${encodeURIComponent(taskId)}`, { cache: "no-store" });
+        const nKey = getPersonalApiKey();
+        const nParam = nKey ? `&personalApiKey=${encodeURIComponent(nKey)}` : "";
+        const res = await fetch(`/api/nanobanana/task?taskId=${encodeURIComponent(taskId)}${nParam}`, { cache: "no-store" });
         const json = (await res.json()) as {
           data?: { successFlag?: number; response?: Record<string, unknown>; errorMessage?: string };
           error?: string;
@@ -1607,12 +1646,14 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          accountPlan: planId,
           marketModel: "kling-3.0/video",
           prompt: klingPrompt,
           imageUrl: img,
           duration: 12,
           mode: "std",
           sound: true,
+          personalApiKey: getPersonalApiKey(),
         }),
       });
       const json = (await res.json()) as { taskId?: string; error?: string };
@@ -1707,7 +1748,9 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
 
     async function tick() {
       try {
-        const res = await fetch(`/api/kling/status?taskId=${encodeURIComponent(taskId)}`, { cache: "no-store" });
+        const kKey = getPersonalApiKey();
+        const kParam = kKey ? `&personalApiKey=${encodeURIComponent(kKey)}` : "";
+        const res = await fetch(`/api/kling/status?taskId=${encodeURIComponent(taskId)}${kParam}`, { cache: "no-store" });
         const json = (await res.json()) as {
           data?: { status?: string; response?: string[]; error_message?: string };
           error?: string;
@@ -2364,6 +2407,35 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                       )}
                     </Button>
                   </div>
+                  {pendingCustomAnglePreview ? (
+                    <div className="mt-3 space-y-2 rounded-lg border border-violet-400/25 bg-violet-500/[0.08] p-3">
+                      <p className="text-xs font-semibold text-violet-200">Generated angle — review before adding</p>
+                      <p className="text-sm font-medium leading-snug text-white/90">{pendingCustomAnglePreview.headline}</p>
+                      <Textarea
+                        readOnly
+                        value={pendingCustomAnglePreview.script}
+                        className="max-h-52 min-h-[140px] resize-y border-white/10 bg-black/40 font-mono text-xs leading-relaxed text-white/85"
+                        spellCheck={false}
+                      />
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          onClick={confirmPendingCustomAngle}
+                          className="h-9 border border-violet-400/40 bg-violet-500/30 px-3 text-xs font-semibold text-white hover:bg-violet-500/40"
+                        >
+                          Add to my angles
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={discardPendingCustomAngle}
+                          className="h-9 border border-white/15 bg-white/5 px-3 text-xs text-white/80 hover:bg-white/10"
+                        >
+                          Discard
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             ) : (

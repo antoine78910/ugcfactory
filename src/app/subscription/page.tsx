@@ -10,6 +10,11 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { SUBSCRIPTIONS } from "@/lib/pricing";
 import { SUBSCRIPTION_MODEL_MATRIX_ROWS } from "@/lib/subscriptionModelAccess";
+import {
+  subscriptionPlanSortIndex,
+  type SubscriptionPlanId,
+} from "@/lib/stripe/subscriptionPrices";
+import type { AccountPlanId } from "@/app/_components/CreditsPlanContext";
 
 type Billing = "monthly" | "yearly";
 
@@ -60,6 +65,13 @@ const PLANS: PlanDef[] = [
     usage: { ads: "~80–90 ads", videos: "~350 videos", images: "~4 500 images" },
   },
 ];
+
+function visibleSubscriptionPlans(accountPlanId: AccountPlanId): PlanDef[] {
+  if (accountPlanId === "free") return PLANS;
+  const minIdx = subscriptionPlanSortIndex(accountPlanId);
+  if (minIdx < 0) return PLANS;
+  return PLANS.filter((p) => subscriptionPlanSortIndex(p.id as SubscriptionPlanId) >= minIdx);
+}
 
 function CellIcon({ ok, accent }: { ok: boolean; accent?: "violet" | "amber" | "emerald" }) {
   if (!ok) return <X className="mx-auto h-4 w-4 text-white/15" strokeWidth={2} />;
@@ -160,6 +172,23 @@ export default function SubscriptionPage() {
 
   const isSubscribed = planId !== "free";
 
+  const visiblePlans = useMemo(() => visibleSubscriptionPlans(planId), [planId]);
+  const planColumnIndices = useMemo(
+    () => visiblePlans.map((p) => subscriptionPlanSortIndex(p.id as SubscriptionPlanId)),
+    [visiblePlans],
+  );
+
+  const planGridClass =
+    visiblePlans.length <= 1
+      ? "mx-auto max-w-md grid-cols-1"
+      : visiblePlans.length === 2
+        ? "grid-cols-1 sm:grid-cols-2"
+        : visiblePlans.length === 3
+          ? "grid-cols-1 sm:grid-cols-2 xl:grid-cols-3"
+          : "grid-cols-1 sm:grid-cols-2 xl:grid-cols-4";
+
+  const matrixGridTemplate = `minmax(200px,1.2fr) repeat(${visiblePlans.length}, minmax(88px,1fr))`;
+
   return (
     <StudioShell>
       <div className="relative min-w-0 overflow-hidden">
@@ -232,32 +261,51 @@ export default function SubscriptionPage() {
               <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1">
                 <Sparkles className="h-3.5 w-3.5 text-violet-300" aria-hidden />
                 <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/50">
-                  Compare plans
+                  {isSubscribed ? "Your plan & upgrades" : "Compare plans"}
                 </span>
               </div>
+              {isSubscribed ? (
+                <p className="max-w-lg text-sm text-white/50">
+                  Current plan:{" "}
+                  <span className="font-semibold text-white/85">{planDisplayName}</span>
+                  {visiblePlans.length > 1
+                    ? ". Below are your tier and higher options only."
+                    : null}
+                </p>
+              ) : null}
+              {isSubscribed && visiblePlans.length === 1 ? (
+                <p className="max-w-md text-xs text-white/40">You’re on our highest subscription tier.</p>
+              ) : null}
             </div>
 
-            <div className="mx-auto grid max-w-6xl grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
-              {PLANS.map((plan) => {
+            <div className={cn("mx-auto grid max-w-6xl gap-5", planGridClass)}>
+              {visiblePlans.map((plan) => {
                 const { mainLabel, sub } = priceFor(plan);
+                const isCurrentPlanCard = isSubscribed && plan.id === planId;
 
                 return (
                   <div
                     key={plan.id}
                     className={cn(
                       "relative flex flex-col rounded-2xl border p-6 transition-all duration-300",
-                      plan.highlight
-                        ? "border-violet-400/40 bg-gradient-to-b from-violet-600/[0.18] via-[#0b0914] to-[#06070d] shadow-[0_0_48px_rgba(139,92,246,0.14),0_8px_0_0_rgba(76,29,149,0.4)] xl:scale-[1.02]"
-                        : "border-white/10 bg-white/[0.03] hover:border-violet-500/20 hover:bg-white/[0.045]",
+                      isCurrentPlanCard
+                        ? "border-emerald-400/45 bg-gradient-to-b from-emerald-600/[0.14] via-[#0b0914] to-[#06070d] shadow-[0_0_40px_rgba(16,185,129,0.12)]"
+                        : plan.highlight
+                          ? "border-violet-400/40 bg-gradient-to-b from-violet-600/[0.18] via-[#0b0914] to-[#06070d] shadow-[0_0_48px_rgba(139,92,246,0.14),0_8px_0_0_rgba(76,29,149,0.4)] xl:scale-[1.02]"
+                          : "border-white/10 bg-white/[0.03] hover:border-violet-500/20 hover:bg-white/[0.045]",
                     )}
                   >
-                    {plan.badge ? (
+                    {isCurrentPlanCard ? (
+                      <span className="absolute -top-3 left-1/2 max-w-[92%] -translate-x-1/2 rounded-full border border-emerald-400/50 bg-emerald-500/20 px-3 py-1 text-center text-[10px] font-bold uppercase tracking-wider text-emerald-100">
+                        Current plan
+                      </span>
+                    ) : plan.badge ? (
                       <span className="absolute -top-3 left-1/2 max-w-[92%] -translate-x-1/2 rounded-full border border-violet-400/45 bg-violet-500/25 px-3 py-1 text-center text-[10px] font-bold uppercase tracking-wider text-violet-100">
                         {plan.badge}
                       </span>
                     ) : null}
 
-                    <div className={cn("mt-2", plan.badge ? "mt-3" : "")}>
+                    <div className={cn("mt-2", plan.badge || isCurrentPlanCard ? "mt-3" : "")}>
                       <h2 className="text-xl font-bold text-white">{plan.name}</h2>
                       <p className="mt-2 min-h-[2.75rem] text-sm leading-relaxed text-white/48">{plan.description}</p>
                     </div>
@@ -272,20 +320,24 @@ export default function SubscriptionPage() {
 
                     <Button
                       type="button"
-                      disabled={Boolean(checkoutLoading)}
+                      disabled={Boolean(checkoutLoading) || isCurrentPlanCard}
                       onClick={() => void startSubscriptionCheckout(plan.id)}
                       className={cn(
                         "mt-6 h-12 w-full rounded-xl text-sm font-bold transition-all",
-                        plan.highlight
-                          ? "border border-violet-200/35 bg-violet-400 text-black shadow-[0_6px_0_0_rgba(76,29,149,0.9)] hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9)]"
-                          : "border border-white/15 bg-white/10 text-white hover:bg-white/15",
+                        isCurrentPlanCard
+                          ? "cursor-not-allowed border border-white/10 bg-white/[0.06] text-white/40 shadow-none hover:bg-white/[0.06]"
+                          : plan.highlight
+                            ? "border border-violet-200/35 bg-violet-400 text-black shadow-[0_6px_0_0_rgba(76,29,149,0.9)] hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9)]"
+                            : "border border-white/15 bg-white/10 text-white hover:bg-white/15",
                       )}
                     >
                       {checkoutLoading === plan.id ? (
                         "Redirecting…"
+                      ) : isCurrentPlanCard ? (
+                        "Current plan"
                       ) : (
                         <span className="inline-flex items-center justify-center gap-2">
-                          Subscribe
+                          {isSubscribed ? "Upgrade" : "Subscribe"}
                           <ArrowRight className="h-4 w-4" aria-hidden />
                         </span>
                       )}
@@ -400,42 +452,52 @@ export default function SubscriptionPage() {
                 <div className="min-w-[720px]">
                   <div
                     className="grid border-b border-white/10 bg-white/[0.03]"
-                    style={{ gridTemplateColumns: "minmax(200px,1.2fr) repeat(4, minmax(88px,1fr))" }}
+                    style={{ gridTemplateColumns: matrixGridTemplate }}
                   >
                     <div className="p-4 text-xs font-semibold uppercase tracking-wider text-white/35">Feature</div>
-                    {PLANS.map((p, i) => (
-                      <div
-                        key={p.id}
-                        className={cn(
-                          "border-l border-white/5 p-4 text-center text-xs font-bold text-white/90",
-                          i === 1 && "bg-violet-500/[0.06]",
-                          i === 2 && "bg-amber-500/[0.04]",
-                          i === 3 && "bg-violet-600/[0.07]",
-                        )}
-                      >
-                        {p.name}
-                      </div>
-                    ))}
+                    {visiblePlans.map((p, i) => {
+                      const colIdx = planColumnIndices[i] ?? 0;
+                      return (
+                        <div
+                          key={p.id}
+                          className={cn(
+                            "border-l border-white/5 p-4 text-center text-xs font-bold text-white/90",
+                            colIdx === 1 && "bg-violet-500/[0.06]",
+                            colIdx === 2 && "bg-amber-500/[0.04]",
+                            colIdx === 3 && "bg-violet-600/[0.07]",
+                          )}
+                        >
+                          {p.name}
+                        </div>
+                      );
+                    })}
                   </div>
 
                   <div
                     className="grid border-b border-violet-500/15 bg-violet-500/[0.06]"
-                    style={{ gridTemplateColumns: "minmax(200px,1.2fr) repeat(4, minmax(88px,1fr))" }}
+                    style={{ gridTemplateColumns: matrixGridTemplate }}
                   >
                     <div className="p-3 pl-4 text-xs font-bold uppercase tracking-[0.12em] text-violet-200/95">
                       Studio: models
                     </div>
-                    <div className="border-l border-white/5" />
-                    <div className="border-l border-white/5 bg-violet-500/[0.04]" />
-                    <div className="border-l border-white/5 bg-amber-500/[0.05]" />
-                    <div className="border-l border-white/5 bg-violet-600/[0.08]" />
+                    {planColumnIndices.map((colIdx) => (
+                      <div
+                        key={`studio-head-${colIdx}`}
+                        className={cn(
+                          "border-l border-white/5",
+                          colIdx === 1 && "bg-violet-500/[0.04]",
+                          colIdx === 2 && "bg-amber-500/[0.05]",
+                          colIdx === 3 && "bg-violet-600/[0.08]",
+                        )}
+                      />
+                    ))}
                   </div>
 
                   {SUBSCRIPTION_MODEL_MATRIX_ROWS.map((row) => (
                     <div
                       key={row.label}
                       className="grid border-b border-white/5 last:border-b-0"
-                      style={{ gridTemplateColumns: "minmax(200px,1.2fr) repeat(4, minmax(88px,1fr))" }}
+                      style={{ gridTemplateColumns: matrixGridTemplate }}
                     >
                       <div className="flex flex-wrap items-center gap-2 p-3 pl-4 text-sm text-white/78">
                         <span>{row.label}</span>
@@ -448,17 +510,20 @@ export default function SubscriptionPage() {
                           </span>
                         ))}
                       </div>
-                      {row.tiers.map((ok, ti) => (
-                        <div
-                          key={ti}
-                          className={cn(
-                            "flex items-center justify-center border-l border-white/5 py-2.5",
-                            tierColBg(ti),
-                          )}
-                        >
-                          <CellIcon ok={ok} accent={tierAccent(ti)} />
-                        </div>
-                      ))}
+                      {planColumnIndices.map((colIdx) => {
+                        const ok = row.tiers[colIdx] ?? false;
+                        return (
+                          <div
+                            key={`${row.label}-${colIdx}`}
+                            className={cn(
+                              "flex items-center justify-center border-l border-white/5 py-2.5",
+                              tierColBg(colIdx),
+                            )}
+                          >
+                            <CellIcon ok={ok} accent={tierAccent(colIdx)} />
+                          </div>
+                        );
+                      })}
                     </div>
                   ))}
                 </div>

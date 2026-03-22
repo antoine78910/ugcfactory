@@ -1,17 +1,20 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, Sparkles, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useCreditsPlan, getPersonalApiKey, isPersonalApiActive } from "@/app/_components/CreditsPlanContext";
+import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
 import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
+import { StudioOutputPane } from "@/app/_components/StudioEmptyExamples";
 import { StudioGenerationsHistory } from "@/app/_components/StudioGenerationsHistory";
 import type { StudioHistoryItem } from "@/app/_components/StudioGenerationsHistory";
 import { studioImageCreditsPerOutput } from "@/lib/pricing";
-import { cn } from "@/lib/utils";
+
+const LS_AVATAR_HISTORY = "ugc_studio_avatar_history_v1";
 
 const AGE_OPTIONS = ["18-25", "25-35", "35-45", "45-55", "55+"] as const;
 const SEX_OPTIONS = ["Female", "Male"] as const;
@@ -63,6 +66,33 @@ function buildAvatarPrompt(p: AvatarParams): string {
   ].join(" ");
 }
 
+function readLocalAvatarHistory(): StudioHistoryItem[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(LS_AVATAR_HISTORY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (x): x is StudioHistoryItem =>
+        x != null &&
+        typeof x === "object" &&
+        typeof (x as StudioHistoryItem).id === "string" &&
+        typeof (x as StudioHistoryItem).createdAt === "number",
+    );
+  } catch {
+    return [];
+  }
+}
+
+function writeLocalAvatarHistory(items: StudioHistoryItem[]) {
+  try {
+    localStorage.setItem(LS_AVATAR_HISTORY, JSON.stringify(items.slice(0, 80)));
+  } catch {
+    /* ignore */
+  }
+}
+
 async function pollNanoTask(taskId: string, personalApiKey?: string): Promise<string[]> {
   const keyParam = personalApiKey ? `&personalApiKey=${encodeURIComponent(personalApiKey)}` : "";
   for (let i = 0; i < 90; i++) {
@@ -79,9 +109,9 @@ async function pollNanoTask(taskId: string, personalApiKey?: string): Promise<st
     if (json.data.successFlag === 1) {
       const resp = json.data.response ?? {};
       const candidates: unknown[] = [
-        (resp as any).resultImageUrl,
-        (resp as any).resultUrls,
-        (resp as any).resultUrl,
+        (resp as { resultImageUrl?: unknown }).resultImageUrl,
+        (resp as { resultUrls?: unknown }).resultUrls,
+        (resp as { resultUrl?: unknown }).resultUrl,
       ];
       const urls = candidates.flatMap((v) => {
         if (Array.isArray(v)) return v.filter((x): x is string => typeof x === "string");
@@ -124,8 +154,23 @@ function SelectField({
   );
 }
 
+type RefundHint = { jobId: string; credits: number };
+
+function applyRefundHints(
+  hints: RefundHint[],
+  grantCredits: (n: number) => void,
+  creditsRef: { current: number },
+) {
+  for (const h of hints) {
+    if (h.credits > 0) {
+      grantCredits(h.credits);
+      creditsRef.current += h.credits;
+    }
+  }
+}
+
 export default function StudioAvatarPanel() {
-  const { planId, current: creditsBalance, spendCredits } = useCreditsPlan();
+  const { planId, current: creditsBalance, spendCredits, grantCredits } = useCreditsPlan();
   const creditsRef = useRef(creditsBalance);
   creditsRef.current = creditsBalance;
 
@@ -133,6 +178,8 @@ export default function StudioAvatarPanel() {
   const [busy, setBusy] = useState(false);
   const [historyItems, setHistoryItems] = useState<StudioHistoryItem[]>([]);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  /** null = unknown; true = Supabase + server poll; false = guest / local only */
+  const [serverHistory, setServerHistory] = useState<boolean | null>(null);
 
   type Bill = { open: false } | { open: true; reason: "credits"; required: number };
   const [billing, setBilling] = useState<Bill>({ open: false });
@@ -143,29 +190,131 @@ export default function StudioAvatarPanel() {
     setParams((prev) => ({ ...prev, [key]: value }));
   }, []);
 
+  const grantCreditsRef = useRef(grantCredits);
+  grantCreditsRef.current = grantCredits;
+
+  useEffect(() => {
+    void (async () => {
+      const res = await fetch("/api/studio/generations?kind=avatar", { cache: "no-store" });
+      if (res.status === 401) {
+        setServerHistory(false);
+        setHistoryItems(readLocalAvatarHistory());
+        return;
+      }
+      if (!res.ok) {
+        setServerHistory(false);
+        setHistoryItems(readLocalAvatarHistory());
+        return;
+      }
+      const json = (await res.json()) as { data?: StudioHistoryItem[]; refundHints?: RefundHint[] };
+      setServerHistory(true);
+      setHistoryItems(json.data ?? []);
+      const hints = json.refundHints ?? [];
+      if (hints.length) {
+        applyRefundHints(hints, grantCreditsRef.current, creditsRef);
+        toast.message("Credits refunded", { description: "A studio generation failed after charge." });
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (serverHistory !== true) return;
+
+    const tick = () => {
+      void (async () => {
+        const res = await fetch("/api/studio/generations/poll", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            kind: "avatar",
+            personalApiKey: getPersonalApiKey() ?? undefined,
+          }),
+        });
+        if (!res.ok) return;
+        const json = (await res.json()) as { data?: StudioHistoryItem[]; refundHints?: RefundHint[] };
+        if (Array.isArray(json.data)) setHistoryItems(json.data);
+        const hints = json.refundHints ?? [];
+        if (hints.length) {
+          applyRefundHints(hints, grantCreditsRef.current, creditsRef);
+          toast.message("Credits refunded", { description: "A studio generation failed after charge." });
+        }
+      })();
+    };
+
+    tick();
+    const id = window.setInterval(tick, 4000);
+    return () => window.clearInterval(id);
+  }, [serverHistory]);
+
+  useEffect(() => {
+    if (serverHistory !== false) return;
+    writeLocalAvatarHistory(historyItems);
+  }, [serverHistory, historyItems]);
+
   const generate = useCallback(() => {
     const usingPersonalApi = isPersonalApiActive();
     if (!usingPersonalApi && creditsRef.current < credits) {
       setBilling({ open: true, reason: "credits", required: credits });
       return;
     }
+    const platformCharge = usingPersonalApi ? 0 : credits;
     if (!usingPersonalApi) {
       spendCredits(credits);
       creditsRef.current = Math.max(0, creditsRef.current - credits);
     }
 
     const prompt = buildAvatarPrompt(params);
-    const jobId = crypto.randomUUID();
     const label = `${params.sex} · ${params.age} · ${params.ethnicity}`;
     setBusy(true);
 
-    const startedAt = Date.now();
-    setHistoryItems((prev) => [
-      { id: jobId, kind: "image", status: "generating", label, createdAt: startedAt },
-      ...prev,
-    ]);
-
     void (async () => {
+      if (serverHistory === true) {
+        try {
+          const res = await fetch("/api/studio/generations/start", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              kind: "avatar",
+              label,
+              accountPlan: planId,
+              creditsCharged: platformCharge,
+              prompt,
+              model: "pro",
+              aspectRatio: "3:4",
+              resolution: "1K",
+              numImages: 1,
+              personalApiKey: getPersonalApiKey(),
+            }),
+          });
+          const json = (await res.json()) as { data?: { id: string }; error?: string };
+          if (!res.ok) throw new Error(json.error || "Start failed");
+          const id = json.data?.id;
+          if (!id) throw new Error("No job id");
+          const startedAt = Date.now();
+          setHistoryItems((prev) => [
+            { id, kind: "image", status: "generating", label, createdAt: startedAt },
+            ...prev.filter((i) => i.id !== id),
+          ]);
+          toast.message("Avatar generation running", {
+            description: "You can leave this page — it will finish on the server.",
+          });
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : "Generation failed";
+          refundPlatformCredits(platformCharge, grantCredits, creditsRef);
+          toast.error(msg);
+        } finally {
+          setBusy(false);
+        }
+        return;
+      }
+
+      const jobId = crypto.randomUUID();
+      const startedAt = Date.now();
+      setHistoryItems((prev) => [
+        { id: jobId, kind: "image", status: "generating", label, createdAt: startedAt },
+        ...prev,
+      ]);
+
       try {
         const pKey = getPersonalApiKey();
         const res = await fetch("/api/nanobanana/generate", {
@@ -205,11 +354,20 @@ export default function StudioAvatarPanel() {
         toast.success("Avatar ready");
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Generation failed";
+        refundPlatformCredits(platformCharge, grantCredits, creditsRef);
         toast.error(msg);
         setHistoryItems((prev) => {
           const rest = prev.filter((i) => i.id !== jobId);
           return [
-            { id: `${jobId}-err`, kind: "image", status: "failed", label: msg, errorMessage: msg, createdAt: Date.now() },
+            {
+              id: `${jobId}-err`,
+              kind: "image",
+              status: "failed",
+              label: msg,
+              errorMessage: msg,
+              createdAt: Date.now(),
+              creditsRefunded: platformCharge > 0,
+            },
             ...rest,
           ];
         });
@@ -217,19 +375,26 @@ export default function StudioAvatarPanel() {
         setBusy(false);
       }
     })();
-  }, [params, planId, credits, spendCredits]);
+  }, [params, planId, credits, spendCredits, grantCredits, serverHistory]);
 
   return (
     <>
-      <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
-        <div className="flex min-w-0 flex-1 flex-col gap-5">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-4 lg:min-h-0 lg:max-h-[min(92vh,calc(100vh-7rem))]">
+        <div className="flex min-w-0 flex-1 flex-col gap-5 lg:max-w-[min(100%,24rem)] lg:min-h-0 lg:overflow-hidden">
           <div className="flex items-center gap-2.5">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-500/15 text-violet-300">
               <UserRound className="h-4 w-4" />
             </div>
             <div>
               <h3 className="text-sm font-bold text-white">Create your avatar</h3>
-              <p className="text-xs text-white/45">Configure appearance parameters, then generate with NanoBanana Pro.</p>
+              <p className="text-xs text-white/45">
+                Configure appearance, then generate with NanoBanana Pro.
+                {serverHistory === true
+                  ? " Signed in: jobs are saved and keep running if you leave."
+                  : serverHistory === false
+                    ? " Sign in to sync history across devices and run jobs in the background."
+                    : null}
+              </p>
             </div>
           </div>
 
@@ -248,7 +413,7 @@ export default function StudioAvatarPanel() {
           <div className="flex items-center gap-3">
             <Button
               type="button"
-              disabled={busy}
+              disabled={busy || serverHistory === null}
               onClick={generate}
               className="h-10 gap-2 rounded-xl border border-violet-400/30 bg-violet-500 px-5 text-sm font-bold text-white shadow-[0_4px_0_0_rgba(76,29,149,0.7)] hover:bg-violet-400"
             >
@@ -259,11 +424,18 @@ export default function StudioAvatarPanel() {
           </div>
         </div>
 
-        <div className="w-full lg:w-[360px] xl:w-[420px]">
-          <StudioGenerationsHistory
-            items={historyItems}
-            empty={<p className="py-8 text-center text-xs text-white/30">Generated avatars will appear here.</p>}
-            mediaLabel="Avatar"
+        <div className="flex h-full min-h-0 min-w-0 w-full flex-[2] flex-col lg:flex-[3.25] lg:min-h-0 lg:overflow-hidden">
+          <StudioOutputPane
+            title=""
+            hasOutput
+            output={
+              <StudioGenerationsHistory
+                items={historyItems}
+                empty={<p className="py-8 text-center text-xs text-white/30">Generated avatars will appear here.</p>}
+                mediaLabel="Avatar"
+              />
+            }
+            empty={null}
           />
         </div>
       </div>

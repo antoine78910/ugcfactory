@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCreditsPlan, getPersonalApiKey, isPersonalApiActive } from "@/app/_components/CreditsPlanContext";
+import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
 import { Sparkles, Upload, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -58,7 +59,7 @@ const soonCard =
   "flex flex-col gap-2 rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-left opacity-70";
 
 export default function StudioUpscalePanel() {
-  const { planId, current: creditsBalance, spendCredits } = useCreditsPlan();
+  const { planId, current: creditsBalance, spendCredits, grantCredits } = useCreditsPlan();
   const creditsRef = useRef(creditsBalance);
   creditsRef.current = creditsBalance;
 
@@ -123,6 +124,7 @@ export default function StudioUpscalePanel() {
     }
     const jobId = crypto.randomUUID();
     const label = `Topaz ${factor}× · ${durationSec}s`;
+    const platformCharge = usingPersonalApi ? 0 : credits;
     if (!usingPersonalApi) {
       spendCredits(credits);
       creditsRef.current = Math.max(0, creditsRef.current - credits);
@@ -162,11 +164,12 @@ export default function StudioUpscalePanel() {
         toast.success("Upscaled video ready");
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Error";
+        refundPlatformCredits(platformCharge, grantCredits, creditsRef);
         toast.error(msg);
         setHistoryItems((prev) =>
           prev.map((i) =>
             i.id === jobId && i.status === "generating"
-              ? { ...i, status: "failed", errorMessage: msg, creditsRefunded: false }
+              ? { ...i, status: "failed", errorMessage: msg, creditsRefunded: platformCharge > 0 }
               : i,
           ),
         );
@@ -177,9 +180,9 @@ export default function StudioUpscalePanel() {
   const row = STUDIO_UPSCALE_TOPAZ_VIDEO_ROWS[0];
 
   return (
-    <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch lg:gap-4 lg:min-h-0 lg:max-h-[min(92vh,calc(100vh-7rem))]">
+    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4 lg:min-h-0 lg:max-h-[min(92vh,calc(100vh-7rem))]">
       <div className="flex min-w-0 flex-1 flex-col gap-2 lg:max-w-[min(100%,24rem)] lg:min-h-0 lg:overflow-hidden">
-        <div className="studio-params-scroll flex min-w-0 flex-col gap-2 lg:flex-1 lg:min-h-0 lg:max-h-[min(62vh,calc(100vh-12rem))] lg:overflow-y-auto">
+        <div className="studio-params-scroll flex min-w-0 flex-col gap-2 lg:min-h-0 lg:max-h-[min(62vh,calc(100vh-12rem))] lg:overflow-y-auto">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Source &amp; billing</p>
           <div className="rounded-2xl border border-white/10 bg-[#101014] p-4 space-y-3">
             <Label className="text-xs text-white/45">Source video</Label>

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCreditsPlan, getPersonalApiKey, isPersonalApiActive } from "@/app/_components/CreditsPlanContext";
+import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
 import { Plus, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -52,19 +53,19 @@ const IMAGE_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
   {
     id: "pro",
     label: "NanoBanana Pro",
-    icon: "image_pro",
+    icon: "google",
     exclusive: true,
     resolution: "Up to 4K",
     durationRange: "Max 4 images",
-    searchText: "nanobanana pro nano banana pro",
+    searchText: "nanobanana pro nano banana pro google",
   },
   {
     id: "nano",
     label: "NanoBanana 2",
-    icon: "image_std",
+    icon: "google",
     resolution: "1K–4K",
     durationRange: "Max 4 images",
-    searchText: "nanobanana 2 standard",
+    searchText: "nanobanana 2 standard google",
   },
 ];
 
@@ -179,7 +180,7 @@ const economicsIntro = (
 );
 
 export default function StudioImagePanel() {
-  const { planId, current: creditsBalance, spendCredits } = useCreditsPlan();
+  const { planId, current: creditsBalance, spendCredits, grantCredits } = useCreditsPlan();
   const creditsRef = useRef(creditsBalance);
   creditsRef.current = creditsBalance;
 
@@ -257,7 +258,7 @@ export default function StudioImagePanel() {
       return;
     }
     const gate = studioImageUpgradeMessage(planId, model);
-    if (gate) {
+    if (!isPersonalApiActive() && gate) {
       setBilling({ open: true, reason: "plan", blockedId: model });
       return;
     }
@@ -269,6 +270,7 @@ export default function StudioImagePanel() {
     const n = Math.min(4, Math.max(1, numImages));
     const jobId = crypto.randomUUID();
     const summary = p.length > 72 ? `${p.slice(0, 72)}…` : p;
+    const platformCharge = usingPersonalApi ? 0 : totalCredits;
     if (!usingPersonalApi) {
       spendCredits(totalCredits);
       creditsRef.current = Math.max(0, creditsRef.current - totalCredits);
@@ -330,6 +332,7 @@ export default function StudioImagePanel() {
         toast.success(ids.length > 1 ? `${urls.length} images ready` : "Image ready");
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Error";
+        refundPlatformCredits(platformCharge, grantCredits, creditsRef);
         toast.error(msg);
         setHistoryItems((prev) =>
           prev.map((i) =>
@@ -338,7 +341,7 @@ export default function StudioImagePanel() {
                   ...i,
                   status: "failed",
                   errorMessage: msg,
-                  creditsRefunded: false,
+                  creditsRefunded: platformCharge > 0,
                 }
               : i,
           ),
@@ -351,9 +354,9 @@ export default function StudioImagePanel() {
     "h-14 w-full rounded-2xl border border-violet-300/40 bg-violet-500 text-lg font-semibold text-white shadow-[0_6px_0_0_rgba(76,29,149,0.85)] transition-all hover:-translate-y-px hover:bg-violet-400 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.85)] active:translate-y-1 active:shadow-none";
 
   return (
-    <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch lg:gap-4 lg:min-h-0 lg:max-h-[min(92vh,calc(100vh-7rem))]">
+    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4 lg:min-h-0 lg:max-h-[min(92vh,calc(100vh-7rem))]">
       <div className="flex min-w-0 flex-1 flex-col gap-2 lg:max-w-[min(100%,24rem)] lg:min-h-0 lg:overflow-hidden">
-        <div className="studio-params-scroll flex min-w-0 flex-col gap-2 lg:flex-1 lg:min-h-0 lg:max-h-[min(62vh,calc(100vh-12rem))] lg:overflow-y-auto">
+        <div className="studio-params-scroll flex min-w-0 flex-col gap-2 lg:min-h-0 lg:max-h-[min(62vh,calc(100vh-12rem))] lg:overflow-y-auto">
         <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Create prompt</p>
         <div className="rounded-2xl border border-white/10 bg-[#101014] p-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-white/45">Reference images</p>
@@ -407,7 +410,9 @@ export default function StudioImagePanel() {
                 items={IMAGE_MODEL_PICKER_ITEMS}
                 triggerVariant="bar"
                 hideMeta
-                isItemLocked={(id) => !canUseStudioImageModel(planId, id as NanoModel)}
+                isItemLocked={(id) =>
+                  !isPersonalApiActive() && !canUseStudioImageModel(planId, id as NanoModel)
+                }
                 onLockedPick={(id) => {
                   setBilling({ open: true, reason: "plan", blockedId: id as NanoModel });
                 }}

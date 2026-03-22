@@ -2,6 +2,7 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import { kieMarketCreateTask } from "@/lib/kieMarket";
+import { hasPersonalApiKey } from "@/lib/personalApiBypass";
 import {
   canUseStudioVideoEditPicker,
   parseAccountPlan,
@@ -106,7 +107,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Missing `videoUrl`." }, { status: 400 });
   }
 
-  if (body.accountPlan != null && String(body.accountPlan).trim() !== "") {
+  const personalKey = hasPersonalApiKey(body.personalApiKey) ? body.personalApiKey.trim() : undefined;
+  if (
+    !personalKey &&
+    body.accountPlan != null &&
+    String(body.accountPlan).trim() !== ""
+  ) {
     const accountPlan = parseAccountPlan(body.accountPlan);
     if (!canUseStudioVideoEditPicker(accountPlan, pickerId)) {
       return NextResponse.json(
@@ -139,9 +145,6 @@ export async function POST(req: Request) {
       keepAudio,
     });
 
-    const personalKey = typeof body.personalApiKey === "string" && body.personalApiKey.trim().length > 0
-      ? body.personalApiKey.trim()
-      : undefined;
     const taskId = await kieMarketCreateTask(
       { model: kieModel, input },
       personalKey,

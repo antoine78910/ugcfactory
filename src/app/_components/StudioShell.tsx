@@ -5,12 +5,26 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
-import { Copy, FolderOpen, Image as ImageIcon, Link2, Maximize2, UserRound, Video, Joystick } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Copy,
+  FolderOpen,
+  Image as ImageIcon,
+  Link2,
+  Maximize2,
+  UserRound,
+  Video,
+  Joystick,
+} from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import SidebarAccountMenu from "@/app/_components/SidebarAccountMenu";
 import CreditLowBanner from "@/app/_components/CreditLowBanner";
 import { useCreditsPlan } from "@/app/_components/CreditsPlanContext";
 import SidebarCreditsBar from "@/app/_components/SidebarCreditsBar";
+import { cn } from "@/lib/utils";
+
+const SIDEBAR_COLLAPSED_LS = "youry-studio-sidebar-collapsed";
 
 export type StudioNavSection =
   | "link_to_ad"
@@ -37,7 +51,7 @@ type CreateNavEntry =
 const CREATE_NAV: CreateNavEntry[] = [
   { kind: "route", id: "link_to_ad", label: "Link to Ad", icon: Link2 },
   { kind: "route", id: "avatar", label: "Avatar", icon: UserRound },
-  { kind: "soon", label: "Competitors Clone Ad", icon: Copy },
+  { kind: "soon", label: "Ad Clone", icon: Copy },
   { kind: "route", id: "motion_control", label: "Motion Control", icon: Joystick },
   { kind: "route", id: "image", label: "Image", icon: ImageIcon },
   { kind: "route", id: "video", label: "Video", icon: Video },
@@ -70,10 +84,10 @@ function navRowIconClass(active: boolean): string {
 
 function navButtonClass(active: boolean): string {
   return [
-    "block w-full rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition-all cursor-pointer",
+    "block w-full rounded-lg px-2.5 py-1.5 text-left text-xs font-semibold transition-all cursor-pointer leading-tight",
     active
-      ? "bg-violet-400 text-black shadow-[0_7px_0_0_rgba(76,29,149,0.95)] hover:bg-violet-300 hover:shadow-[0_9px_0_0_rgba(76,29,149,0.95)] active:translate-y-[6px]"
-      : "border border-white/10 bg-white/5 text-white hover:bg-white/10 hover:border-violet-400/40 shadow-[0_0_22px_rgba(139,92,246,0.12)] hover:shadow-[0_0_36px_rgba(139,92,246,0.22)]",
+      ? "bg-violet-400 text-black shadow-[0_4px_0_0_rgba(76,29,149,0.95)] hover:bg-violet-300 hover:shadow-[0_5px_0_0_rgba(76,29,149,0.95)] active:translate-y-[2px] active:shadow-none"
+      : "border border-white/10 bg-white/5 text-white hover:bg-white/10 hover:border-violet-400/35 shadow-[0_0_12px_rgba(139,92,246,0.08)] hover:shadow-[0_0_20px_rgba(139,92,246,0.15)]",
   ].join(" ");
 }
 
@@ -86,6 +100,23 @@ function StudioShellInner({
   const pathname = usePathname();
   const [email, setEmail] = useState("");
   const { planDisplayName } = useCreditsPlan();
+  const [navCollapsed, setNavCollapsed] = useState(false);
+
+  useEffect(() => {
+    try {
+      setNavCollapsed(localStorage.getItem(SIDEBAR_COLLAPSED_LS) === "1");
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SIDEBAR_COLLAPSED_LS, navCollapsed ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, [navCollapsed]);
 
   const isApp = pathname === "/app";
 
@@ -120,43 +151,113 @@ function StudioShellInner({
   return (
     <div className="dark min-h-screen bg-[#050507] text-white">
       <div className="pointer-events-none fixed left-1/2 top-0 -z-0 h-[520px] w-[1000px] -translate-x-1/2 rounded-full bg-violet-600/15 blur-[150px]" />
-      <main className="relative z-10 grid min-h-screen grid-cols-[250px_1fr] items-start">
-        <aside className="sticky top-0 flex h-screen flex-col overflow-hidden border-r border-white/10 bg-[#06070d] px-3 py-4">
-          <div className="shrink-0 space-y-3 px-2 pb-2">
-            <Link href="/app" className="inline-block">
-              <Image
-                src="/youry-logo.png"
-                alt="Youry"
-                width={174}
-                height={52}
-                className="h-8 w-auto"
-                priority
-              />
-            </Link>
-            <SidebarCreditsBar />
+      <main
+        className={cn(
+          "relative z-10 grid min-h-screen items-start transition-[grid-template-columns] duration-200 ease-out",
+          navCollapsed ? "grid-cols-[4rem_minmax(0,1fr)]" : "grid-cols-[230px_minmax(0,1fr)]",
+        )}
+      >
+        <aside
+          className={cn(
+            "sticky top-0 flex h-screen flex-col overflow-hidden border-r border-white/10 bg-[#06070d] py-4",
+            /* No text I-beam: feels natural to scroll the nav with the wheel over labels */
+            "select-none [&_*]:cursor-default [&_a]:cursor-pointer [&_button]:cursor-pointer",
+            navCollapsed ? "px-1.5" : "px-3",
+          )}
+        >
+          <div className={cn("shrink-0 pb-2", navCollapsed ? "space-y-2 px-0" : "space-y-3 px-2")}>
+            <div
+              className={cn(
+                "flex items-center gap-1.5",
+                navCollapsed ? "flex-col justify-center" : "flex-row",
+              )}
+            >
+              <Link
+                href="/app"
+                className={cn("inline-block shrink-0", navCollapsed && "flex justify-center")}
+                title="Youry home"
+              >
+                <Image
+                  src="/youry-logo.png"
+                  alt="Youry"
+                  width={174}
+                  height={52}
+                  className={cn("w-auto", navCollapsed ? "h-6 max-w-[2.25rem] object-contain object-left" : "h-8")}
+                  priority
+                />
+              </Link>
+              <button
+                type="button"
+                onClick={() => setNavCollapsed((c) => !c)}
+                className={cn(
+                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.06] text-white/70 transition hover:border-violet-400/35 hover:bg-white/[0.1] hover:text-white",
+                  navCollapsed && "mt-0.5",
+                )}
+                title={navCollapsed ? "Expand menu" : "Collapse menu"}
+                aria-expanded={!navCollapsed}
+                aria-label={navCollapsed ? "Expand menu" : "Collapse menu"}
+              >
+                {navCollapsed ? (
+                  <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+                ) : (
+                  <ChevronLeft className="h-3.5 w-3.5" aria-hidden />
+                )}
+              </button>
+            </div>
+            <SidebarCreditsBar collapsed={navCollapsed} />
           </div>
 
-          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">
-            <div className="rounded-xl border border-white/10 bg-[#0b0912]/85 p-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/45">CREATE</p>
-              <div className="mt-2 space-y-2.5">
+          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+            <div
+              className={cn(
+                "rounded-xl border border-white/10 bg-[#0b0912]/85",
+                navCollapsed ? "p-1.5" : "p-2",
+              )}
+            >
+              <p
+                className={cn(
+                  "font-semibold uppercase tracking-[0.12em] text-white/45",
+                  navCollapsed ? "sr-only" : "text-[10px] leading-none",
+                )}
+              >
+                CREATE
+              </p>
+              <div className={cn("space-y-1", !navCollapsed && "mt-1")}>
                 {CREATE_NAV.map((entry) => {
                   const NavIcon = entry.icon;
                   if (entry.kind === "soon") {
                     return (
                       <div
-                        key={entry.label}
-                        className={soonRowClass()}
-                        title="Coming soon"
+                        key="soon-ad-clone"
+                        className={cn(
+                          soonRowClass(),
+                          navCollapsed && "!flex-row items-center justify-center gap-0 px-1.5 py-1.5",
+                        )}
+                        title={`${entry.label} — coming soon`}
                         aria-disabled="true"
                       >
-                        <span className="flex w-full items-center gap-2.5">
-                          <NavIcon className="h-4 w-4 shrink-0 text-white/30" aria-hidden />
-                          <span className="min-w-0 flex-1 truncate text-sm font-semibold text-white/40">
+                        <span
+                          className={cn(
+                            "flex w-full items-center gap-2",
+                            navCollapsed ? "w-auto justify-center" : "",
+                          )}
+                        >
+                          <NavIcon className="h-3.5 w-3.5 shrink-0 text-white/30" aria-hidden />
+                          <span
+                            className={cn(
+                              "min-w-0 flex-1 truncate text-xs font-semibold text-white/40",
+                              navCollapsed && "sr-only",
+                            )}
+                          >
                             {entry.label}
                           </span>
                         </span>
-                        <span className="rounded-md border border-white/15 bg-white/[0.06] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white/50">
+                        <span
+                          className={cn(
+                            "rounded border border-white/15 bg-white/[0.06] px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-white/50",
+                            navCollapsed && "sr-only",
+                          )}
+                        >
                           Soon
                         </span>
                       </div>
@@ -169,55 +270,80 @@ function StudioShellInner({
                       <button
                         key={id}
                         type="button"
-                        className={navButtonClass(active)}
+                        className={cn(navButtonClass(active), navCollapsed && "px-1.5 py-2")}
+                        title={label}
                         onClick={() => onStudioSectionChange!(id)}
                       >
-                        <span className="flex items-center gap-2.5">
-                          <NavIcon className={`h-4 w-4 shrink-0 ${navRowIconClass(active)}`} aria-hidden />
-                          {label}
+                        <span
+                          className={cn("flex items-center gap-2", navCollapsed && "justify-center")}
+                        >
+                          <NavIcon
+                            className={`h-3.5 w-3.5 shrink-0 ${navRowIconClass(active)}`}
+                            aria-hidden
+                          />
+                          <span className={cn(navCollapsed && "sr-only")}>{label}</span>
                         </span>
                       </button>
                     );
                   }
                   return (
-                    <Link key={id} href={sectionHref(id, studioProjectId ?? null)} className={navButtonClass(active)}>
-                      <span className="flex items-center gap-2.5">
-                        <NavIcon className={`h-4 w-4 shrink-0 ${navRowIconClass(active)}`} aria-hidden />
-                        {label}
+                    <Link
+                      key={id}
+                      href={sectionHref(id, studioProjectId ?? null)}
+                      className={cn(navButtonClass(active), navCollapsed && "px-1.5 py-2")}
+                      title={label}
+                    >
+                      <span className={cn("flex items-center gap-2", navCollapsed && "justify-center")}>
+                        <NavIcon
+                          className={`h-3.5 w-3.5 shrink-0 ${navRowIconClass(active)}`}
+                          aria-hidden
+                        />
+                        <span className={cn(navCollapsed && "sr-only")}>{label}</span>
                       </span>
                     </Link>
                   );
                 })}
               </div>
-            </div>
 
-            <div className="rounded-xl border border-white/10 bg-[#0b0912]/85 p-3">
-              <div className="space-y-2.5">
+              <div
+                className={cn(
+                  "mt-1.5 border-t border-white/10 pt-1.5",
+                  navCollapsed && "mt-1 pt-1",
+                )}
+              >
                 {controlled ? (
                   <button
                     type="button"
-                    className={navButtonClass(activeSection === PROJECTS_NAV.id)}
+                    className={cn(
+                      navButtonClass(activeSection === PROJECTS_NAV.id),
+                      navCollapsed && "px-1.5 py-2",
+                    )}
+                    title={PROJECTS_NAV.label}
                     onClick={() => onStudioSectionChange!(PROJECTS_NAV.id)}
                   >
-                    <span className="flex items-center gap-2.5">
+                    <span className={cn("flex items-center gap-2", navCollapsed && "justify-center")}>
                       <ProjectsNavIcon
-                        className={`h-4 w-4 shrink-0 ${navRowIconClass(activeSection === PROJECTS_NAV.id)}`}
+                        className={`h-3.5 w-3.5 shrink-0 ${navRowIconClass(activeSection === PROJECTS_NAV.id)}`}
                         aria-hidden
                       />
-                      {PROJECTS_NAV.label}
+                      <span className={cn(navCollapsed && "sr-only")}>{PROJECTS_NAV.label}</span>
                     </span>
                   </button>
                 ) : (
                   <Link
                     href={sectionHref(PROJECTS_NAV.id, studioProjectId ?? null)}
-                    className={navButtonClass(activeSection === PROJECTS_NAV.id)}
+                    className={cn(
+                      navButtonClass(activeSection === PROJECTS_NAV.id),
+                      navCollapsed && "px-1.5 py-2",
+                    )}
+                    title={PROJECTS_NAV.label}
                   >
-                    <span className="flex items-center gap-2.5">
+                    <span className={cn("flex items-center gap-2", navCollapsed && "justify-center")}>
                       <ProjectsNavIcon
-                        className={`h-4 w-4 shrink-0 ${navRowIconClass(activeSection === PROJECTS_NAV.id)}`}
+                        className={`h-3.5 w-3.5 shrink-0 ${navRowIconClass(activeSection === PROJECTS_NAV.id)}`}
                         aria-hidden
                       />
-                      {PROJECTS_NAV.label}
+                      <span className={cn(navCollapsed && "sr-only")}>{PROJECTS_NAV.label}</span>
                     </span>
                   </Link>
                 )}
@@ -225,8 +351,13 @@ function StudioShellInner({
             </div>
           </div>
 
-          <div className="mt-auto shrink-0 border-t border-white/10 pt-3">
-            <SidebarAccountMenu email={email} onLogout={onSignOut} planLabel={planDisplayName} />
+          <div className="mt-auto shrink-0 border-t border-white/10 pt-2">
+            <SidebarAccountMenu
+              email={email}
+              onLogout={onSignOut}
+              planLabel={planDisplayName}
+              collapsed={navCollapsed}
+            />
           </div>
         </aside>
 

@@ -18,6 +18,8 @@ export type StudioModelPickerIcon =
   | "seedance"
   | "sora"
   | "veo"
+  /** Google NanoBanana / Gemini image models (not ByteDance Seedance video). */
+  | "google"
   | "image_pro"
   | "image_std"
   | "grok";
@@ -41,6 +43,7 @@ const STUDIO_MODEL_LOGO_SRC: Partial<Record<StudioModelPickerIcon, string>> = {
   seedance: "/studio/model-logos/seedance.png",
   sora: "/studio/model-logos/sora.png",
   veo: "/studio/model-logos/google.png",
+  google: "/studio/model-logos/google.png",
   grok: "/studio/model-logos/grok.png",
   image_pro: "/studio/model-logos/google.png",
   image_std: "/studio/model-logos/google.png",

@@ -28,7 +28,8 @@ import {
   studioSelectContentClass,
   studioSelectItemClass,
 } from "@/app/_components/StudioModelPicker";
-import { useCreditsPlan } from "@/app/_components/CreditsPlanContext";
+import { useCreditsPlan, getPersonalApiKey, isPersonalApiActive } from "@/app/_components/CreditsPlanContext";
+import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
 import StudioVideoPanel from "@/app/_components/StudioVideoPanel";
 import {
   packshotUrlsForGpt,
@@ -308,7 +309,7 @@ export default function AppBrandWizard() {
   const [motionBusy, setMotionBusy] = useState(false);
   const motionVideoInputRef = useRef<HTMLInputElement>(null);
   const motionCharacterInputRef = useRef<HTMLInputElement>(null);
-  const { planId, current: creditsBalance, spendCredits } = useCreditsPlan();
+  const { planId, current: creditsBalance, spendCredits, grantCredits } = useCreditsPlan();
   const creditsRef = useRef(creditsBalance);
   creditsRef.current = creditsBalance;
 
@@ -347,7 +348,9 @@ export default function AppBrandWizard() {
 
   const pollMotionKlingTask = useCallback(async (taskId: string) => {
     for (let i = 0; i < 120; i++) {
-      const res = await fetch(`/api/kling/status?taskId=${encodeURIComponent(taskId)}`, { cache: "no-store" });
+      const p = getPersonalApiKey();
+      const kp = p ? `&personalApiKey=${encodeURIComponent(p)}` : "";
+      const res = await fetch(`/api/kling/status?taskId=${encodeURIComponent(taskId)}${kp}`, { cache: "no-store" });
       const json = (await res.json()) as {
         data?: { status?: string; response?: string[]; error_message?: string | null };
         error?: string;
@@ -1196,6 +1199,7 @@ export default function AppBrandWizard() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          accountPlan: planId,
           model: nanoModel,
           prompt: imagePrompt,
           imageUrls: [nanoRefUrl],
@@ -1203,6 +1207,7 @@ export default function AppBrandWizard() {
           imageSize: "9:16",
           aspectRatio: "9:16",
           resolution: "2K",
+          personalApiKey: getPersonalApiKey(),
         }),
       });
       const json = (await res.json()) as { taskId?: string; error?: string };
@@ -1224,7 +1229,9 @@ export default function AppBrandWizard() {
 
     async function tick() {
       try {
-        const res = await fetch(`/api/nanobanana/task?taskId=${encodeURIComponent(taskId)}`, {
+        const pk = getPersonalApiKey();
+        const qs = pk ? `&personalApiKey=${encodeURIComponent(pk)}` : "";
+        const res = await fetch(`/api/nanobanana/task?taskId=${encodeURIComponent(taskId)}${qs}`, {
           method: "GET",
           cache: "no-store",
         });
@@ -1349,12 +1356,14 @@ export default function AppBrandWizard() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          accountPlan: planId,
           marketModel: "kling-3.0/video",
           prompt: promptWithAudio,
           imageUrl: selectedImageUrl,
           duration,
           mode: "std", // 720p Standard
           sound: true,
+          personalApiKey: getPersonalApiKey(),
         }),
       });
       const json = (await res.json()) as { taskId?: string; error?: string };
@@ -1376,7 +1385,9 @@ export default function AppBrandWizard() {
 
     async function tick() {
       try {
-        const res = await fetch(`/api/kling/status?taskId=${encodeURIComponent(taskId)}`, {
+        const vk = getPersonalApiKey();
+        const vq = vk ? `&personalApiKey=${encodeURIComponent(vk)}` : "";
+        const res = await fetch(`/api/kling/status?taskId=${encodeURIComponent(taskId)}${vq}`, {
           method: "GET",
           cache: "no-store",
         });
@@ -1677,9 +1688,9 @@ export default function AppBrandWizard() {
 
             {appSection === "motion_control" ? (
               <div className="space-y-2">
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch lg:gap-4 lg:min-h-0 lg:max-h-[min(92vh,calc(100vh-7rem))]">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4 lg:min-h-0 lg:max-h-[min(92vh,calc(100vh-7rem))]">
                     <div className="flex min-w-0 flex-1 flex-col lg:max-w-[min(100%,24rem)] lg:min-h-0 lg:overflow-hidden">
-                      <div className="studio-params-scroll flex min-w-0 flex-col gap-2 lg:flex-1 lg:min-h-0 lg:max-h-[min(62vh,calc(100vh-12rem))] lg:overflow-y-auto">
+                      <div className="studio-params-scroll flex min-w-0 flex-col gap-2 lg:min-h-0 lg:max-h-[min(62vh,calc(100vh-12rem))] lg:overflow-y-auto">
                       <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
                         Motion control
                       </p>
@@ -1786,7 +1797,7 @@ export default function AppBrandWizard() {
                               durationRange="3s–30s"
                             />
                         </div>
-                        {motionControlUpgradeMessage(planId) ? (
+                        {!isPersonalApiActive() && motionControlUpgradeMessage(planId) ? (
                           <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-2.5 py-1.5 text-[11px] leading-snug text-amber-100/90">
                             {motionControlUpgradeMessage(planId)}
                           </p>
@@ -1844,12 +1855,13 @@ export default function AppBrandWizard() {
                           motionBusy ||
                           !motionCharacterImageUrl ||
                           !motionVideoRefBlobUrl ||
-                          Boolean(motionControlUpgradeMessage(planId))
+                          (!isPersonalApiActive() && Boolean(motionControlUpgradeMessage(planId)))
                         }
                         className="h-14 w-full rounded-2xl border border-violet-300/40 bg-violet-500 text-lg font-semibold text-white shadow-[0_6px_0_0_rgba(76,29,149,0.85)] transition-all hover:-translate-y-px hover:bg-violet-400 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.85)] active:translate-y-1 active:shadow-none disabled:opacity-50"
                         onClick={() => {
                           const mcGate = motionControlUpgradeMessage(planId);
-                          if (mcGate) {
+                          const motionPersonal = isPersonalApiActive();
+                          if (!motionPersonal && mcGate) {
                             setMotionBilling({ open: true, reason: "plan" });
                             return;
                           }
@@ -1861,7 +1873,7 @@ export default function AppBrandWizard() {
                             toast.error("Please choose a video reference first.");
                             return;
                           }
-                          if (creditsRef.current < motionCredits) {
+                          if (!motionPersonal && creditsRef.current < motionCredits) {
                             setMotionBilling({ open: true, reason: "credits", required: motionCredits });
                             return;
                           }
@@ -1881,8 +1893,11 @@ export default function AppBrandWizard() {
                             },
                             ...prev,
                           ]);
-                          spendCredits(motionCredits);
-                          creditsRef.current = Math.max(0, creditsRef.current - motionCredits);
+                          const platformChargeMotion = motionPersonal ? 0 : motionCredits;
+                          if (!motionPersonal) {
+                            spendCredits(motionCredits);
+                            creditsRef.current = Math.max(0, creditsRef.current - motionCredits);
+                          }
                           setMotionBusy(true);
                           void (async () => {
                             try {
@@ -1906,6 +1921,7 @@ export default function AppBrandWizard() {
                                   videoUrl: videoHttps,
                                   quality: motionQuality,
                                   backgroundSource: bgSource,
+                                  personalApiKey: getPersonalApiKey(),
                                 }),
                               });
                               const json = (await res.json()) as { taskId?: string; error?: string };
@@ -1931,6 +1947,7 @@ export default function AppBrandWizard() {
                               toast.success("Motion control video ready");
                             } catch (err) {
                               const msg = err instanceof Error ? err.message : "Error";
+                              refundPlatformCredits(platformChargeMotion, grantCredits, creditsRef);
                               toast.error(msg);
                               setMotionHistoryItems((prev) =>
                                 prev.map((i) =>
@@ -1939,7 +1956,7 @@ export default function AppBrandWizard() {
                                         ...i,
                                         status: "failed",
                                         errorMessage: msg,
-                                        creditsRefunded: false,
+                                        creditsRefunded: platformChargeMotion > 0,
                                       }
                                     : i,
                                 ),

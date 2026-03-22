@@ -7,10 +7,12 @@ import {
   type KieVeoGenerationType,
   type KieVeoModel,
 } from "@/lib/kie";
+import { hasPersonalApiKey } from "@/lib/personalApiBypass";
 import { canUseVeoApiModel, parseAccountPlan, veoUpgradeMessage } from "@/lib/subscriptionModelAccess";
 
 type Body = {
   accountPlan?: string;
+  personalApiKey?: string;
   prompt: string;
   model?: KieVeoModel;
   aspectRatio?: KieVeoAspectRatio;
@@ -40,7 +42,13 @@ export async function POST(req: Request) {
     (normalizedImageUrls.length > 0 ? "FIRST_AND_LAST_FRAMES_2_VIDEO" : "TEXT_2_VIDEO");
 
   const veoModel = body?.model ?? "veo3_fast";
-  if (body?.accountPlan != null && String(body.accountPlan).trim() !== "") {
+  const personalKey =
+    body && hasPersonalApiKey(body.personalApiKey) ? body.personalApiKey.trim() : undefined;
+  if (
+    !personalKey &&
+    body?.accountPlan != null &&
+    String(body.accountPlan).trim() !== ""
+  ) {
     const accountPlan = parseAccountPlan(body.accountPlan);
     if (!canUseVeoApiModel(accountPlan, veoModel)) {
       return NextResponse.json(
@@ -54,15 +62,18 @@ export async function POST(req: Request) {
   }
 
   try {
-    const taskId = await kieVeoGenerate({
-      prompt,
-      model: veoModel,
-      aspect_ratio: body?.aspectRatio ?? "16:9",
-      generationType,
-      imageUrls: normalizedImageUrls.length > 0 ? normalizedImageUrls : undefined,
-      enableTranslation: body?.enableTranslation ?? true,
-      watermark: body?.watermark,
-    });
+    const taskId = await kieVeoGenerate(
+      {
+        prompt,
+        model: veoModel,
+        aspect_ratio: body?.aspectRatio ?? "16:9",
+        generationType,
+        imageUrls: normalizedImageUrls.length > 0 ? normalizedImageUrls : undefined,
+        enableTranslation: body?.enableTranslation ?? true,
+        watermark: body?.watermark,
+      },
+      personalKey,
+    );
 
     return NextResponse.json({
       taskId,

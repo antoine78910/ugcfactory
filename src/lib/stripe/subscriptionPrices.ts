@@ -10,6 +10,11 @@ export function isSubscriptionPlanId(id: string): id is SubscriptionPlanId {
   return (SUBSCRIPTION_PLAN_IDS as readonly string[]).includes(id);
 }
 
+/** 0 = starter … 3 = scale. Returns -1 if unknown. */
+export function subscriptionPlanSortIndex(planId: SubscriptionPlanId): number {
+  return SUBSCRIPTION_PLAN_IDS.indexOf(planId);
+}
+
 /** Monthly recurring prices (Stripe Dashboard). */
 export function getMonthlySubscriptionPriceId(planId: SubscriptionPlanId): string | null {
   const map: Record<SubscriptionPlanId, string | undefined> = {

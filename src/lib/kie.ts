@@ -30,8 +30,8 @@ type KieVeoGenerateResponse =
   | { code: 200; msg: string; data: { taskId: string } }
   | { code: number; msg: string; data?: unknown };
 
-export async function kieVeoGenerate(req: KieVeoGenerateRequest) {
-  const apiKey = getKieApiKey();
+export async function kieVeoGenerate(req: KieVeoGenerateRequest, overrideApiKey?: string) {
+  const apiKey = overrideApiKey?.trim() || getKieApiKey();
 
   const res = await fetch(`${API_BASE}/api/v1/veo/generate`, {
     method: "POST",
@@ -75,8 +75,8 @@ export type KieVeoRecordInfo =
     }
   | { code: number; msg: string; data?: unknown };
 
-export async function kieVeoRecordInfo(taskId: string) {
-  const apiKey = getKieApiKey();
+export async function kieVeoRecordInfo(taskId: string, overrideApiKey?: string) {
+  const apiKey = overrideApiKey?.trim() || getKieApiKey();
 
   const url = new URL(`${API_BASE}/api/v1/veo/record-info`);
   url.searchParams.set("taskId", taskId);

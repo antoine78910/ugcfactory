@@ -10,11 +10,59 @@ function isCreditsCriticallyLow(total: number, percentRemaining: number): boolea
   return total > 0 && percentRemaining <= 10;
 }
 
-export default function SidebarCreditsBar() {
+type SidebarCreditsBarProps = {
+  /** Narrow sidebar: icon + compact meter only. */
+  collapsed?: boolean;
+};
+
+export default function SidebarCreditsBar({ collapsed = false }: SidebarCreditsBarProps) {
   const { current, total, percentRemaining } = useCreditsPlan();
 
   const fillPct = total > 0 ? percentRemaining : 0;
   const showCta = isCreditsCriticallyLow(total, percentRemaining);
+
+  if (collapsed) {
+    return (
+      <Link
+        href="/credits"
+        className="flex flex-col items-center gap-1 rounded-lg border border-white/10 bg-[#0b0912]/90 px-1 py-1.5 transition-opacity hover:opacity-95"
+        title={`Credits: ${current.toLocaleString()}${total > 0 ? ` · ${percentRemaining}% left` : ""}`}
+      >
+        <Coins className="h-3.5 w-3.5 text-violet-400/90" aria-hidden />
+        <div
+          className="relative h-9 w-1.5 overflow-hidden rounded-full bg-white/[0.08]"
+          role="progressbar"
+          aria-valuenow={fillPct}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label={`Credits remaining: ${percentRemaining} percent`}
+        >
+          <div
+            className={cn(
+              "absolute bottom-0 left-0 right-0 min-h-[2px] rounded-full transition-[height] duration-300 ease-out",
+              showCta
+                ? "bg-gradient-to-t from-amber-500 to-orange-500"
+                : "bg-gradient-to-t from-violet-500 to-fuchsia-500",
+            )}
+            style={{ height: `${fillPct}%` }}
+          />
+        </div>
+        {total > 0 ? (
+          <span
+            className={cn(
+              "text-[9px] font-bold tabular-nums leading-none",
+              showCta ? "text-amber-200" : "text-white/80",
+            )}
+          >
+            {percentRemaining}
+            <span className="text-white/40">%</span>
+          </span>
+        ) : (
+          <span className="text-[9px] text-white/40">—</span>
+        )}
+      </Link>
+    );
+  }
 
   return (
     <div className="rounded-xl border border-white/10 bg-[#0b0912]/90 px-3 py-2.5">
@@ -63,7 +111,7 @@ export default function SidebarCreditsBar() {
           />
         </div>
 
-        <p className="text-[11px] tabular-nums text-white/45">
+        <p className="text-[10px] tabular-nums leading-tight text-white/45">
           <span className="font-semibold text-white/70">{current.toLocaleString()}</span>
           {total > 0 ? (
             <>
@@ -71,28 +119,28 @@ export default function SidebarCreditsBar() {
               / {total.toLocaleString()}
             </>
           ) : (
-            <span className="text-white/35"> · add a pack</span>
+            <span className="text-white/35"> · pack</span>
           )}
         </p>
       </Link>
 
       {showCta ? (
-        <div className="mt-2.5 flex flex-col gap-1.5 border-t border-white/10 pt-2.5">
-          <p className="text-[10px] font-medium leading-snug text-amber-200/90">
-            Running low? Top up or upgrade your plan.
+        <div className="mt-1.5 flex flex-col gap-1 border-t border-white/10 pt-1.5">
+          <p className="text-[9px] font-medium leading-snug text-amber-200/90">
+            Low balance — top up or upgrade.
           </p>
-          <div className="flex gap-2">
+          <div className="flex gap-1.5">
             <Link
               href="/subscription"
-              className="flex-1 rounded-lg bg-yellow-400 py-1.5 text-center text-[11px] font-bold text-black transition hover:bg-yellow-300"
+              className="flex-1 rounded-md bg-yellow-400 py-1 text-center text-[10px] font-bold text-black transition hover:bg-yellow-300"
             >
               Upgrade
             </Link>
             <Link
               href="/credits"
-              className="flex-1 rounded-lg border border-white/20 bg-white/5 py-1.5 text-center text-[11px] font-semibold text-white transition hover:bg-white/10"
+              className="flex-1 rounded-md border border-white/20 bg-white/5 py-1 text-center text-[10px] font-semibold text-white transition hover:bg-white/10"
             >
-              Get credits
+              Credits
             </Link>
           </div>
         </div>

@@ -139,7 +139,7 @@ const STUDIO_VIDEO_LABELS: Record<string, string> = {
   "kling-3.0/video": "Kling 3.0",
   "kling-2.6/video": "Kling 2.6",
   "openai/sora-2": "Sora 2",
-  "bytedance/seedance-1.5-pro": "NanoBanana 2",
+  "bytedance/seedance-1.5-pro": "Seedance 1.5 Pro",
   "bytedance/seedance-2.0-pro": "Seedance 2.0 Pro",
   veo3_fast: "Veo 3 Fast",
   veo3: "Veo 3",
@@ -253,14 +253,22 @@ function tierBools(minRank: number): [boolean, boolean, boolean, boolean] {
 export const SUBSCRIPTION_MODEL_MATRIX_ROWS: SubscriptionModelMatrixRow[] = [
   {
     label: "NanoBanana 2: images",
+    badges: [{ text: "Google", className: "bg-amber-500/20 text-amber-200 border-amber-400/30" }],
     tiers: tierBools(IMAGE_MIN_RANK.nano),
   },
   {
     label: "NanoBanana Pro: images",
-    badges: [{ text: "2 credits", className: "bg-violet-500/20 text-violet-200 border-violet-400/30" }],
+    badges: [
+      { text: "Google", className: "bg-amber-500/20 text-amber-200 border-amber-400/30" },
+      { text: "2 credits", className: "bg-violet-500/20 text-violet-200 border-violet-400/30" },
+    ],
     tiers: tierBools(IMAGE_MIN_RANK.pro),
   },
-  { label: "NanoBanana 2: video", tiers: tierBools(VIDEO_MIN_RANK["bytedance/seedance-1.5-pro"]) },
+  {
+    label: "Seedance 1.5 Pro: video",
+    badges: [{ text: "ByteDance", className: "bg-sky-500/20 text-sky-200 border-sky-400/30" }],
+    tiers: tierBools(VIDEO_MIN_RANK["bytedance/seedance-1.5-pro"]),
+  },
   { label: "Kling 2.6: video", tiers: tierBools(VIDEO_MIN_RANK["kling-2.6/video"]) },
   { label: "Seedance 2.0 Pro: video", tiers: tierBools(VIDEO_MIN_RANK["bytedance/seedance-2.0-pro"]) },
   {

@@ -18,6 +18,7 @@ import {
   type StudioModelPickerItem,
 } from "@/app/_components/StudioModelPicker";
 import { useCreditsPlan, getPersonalApiKey, isPersonalApiActive } from "@/app/_components/CreditsPlanContext";
+import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
 import { calculateVideoCredits } from "@/lib/linkToAd/generationCredits";
 import { calculateStudioVideoEditCredits } from "@/lib/pricing";
 import {
@@ -45,7 +46,7 @@ const MODEL_OPTIONS: { id: VideoModelId; label: string; family: VideoFamily }[] 
   { id: "kling-3.0/video", label: "Kling 3.0", family: "kie" },
   { id: "kling-2.6/video", label: "Kling 2.6", family: "kie" },
   { id: "openai/sora-2", label: "Sora 2", family: "sora" },
-  { id: "bytedance/seedance-1.5-pro", label: "NanoBanana 2", family: "kie" },
+  { id: "bytedance/seedance-1.5-pro", label: "Seedance 1.5 Pro", family: "kie" },
   { id: "bytedance/seedance-2.0-pro", label: "Seedance 2.0 Pro", family: "kie" },
   { id: "veo3_fast", label: "Veo 3 Fast", family: "veo" },
   { id: "veo3", label: "Veo 3", family: "veo" },
@@ -127,11 +128,11 @@ const VIDEO_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
   },
   {
     id: "bytedance/seedance-1.5-pro",
-    label: "NanoBanana 2",
+    label: "Seedance 1.5 Pro",
     icon: "seedance",
     resolution: "720p",
     durationRange: "4–12s",
-    searchText: "nanobanana 2 seedance",
+    searchText: "seedance 1.5 pro bytedance image to video",
   },
   {
     id: "bytedance/seedance-2.0-pro",
@@ -398,9 +399,10 @@ async function pollKlingVideo(taskId: string, personalApiKey?: string): Promise<
   throw new Error("Kling timeout");
 }
 
-async function pollVeoVideo(taskId: string): Promise<string> {
+async function pollVeoVideo(taskId: string, personalApiKey?: string): Promise<string> {
+  const keyParam = personalApiKey ? `&personalApiKey=${encodeURIComponent(personalApiKey)}` : "";
   for (let i = 0; i < 120; i++) {
-    const res = await fetch(`/api/kie/veo/status?taskId=${encodeURIComponent(taskId)}`, { cache: "no-store" });
+    const res = await fetch(`/api/kie/veo/status?taskId=${encodeURIComponent(taskId)}${keyParam}`, { cache: "no-store" });
     const json = (await res.json()) as {
       data?: { successFlag?: number; errorMessage?: string | null; response?: { resultUrls?: string[] } };
       error?: string;
@@ -422,7 +424,7 @@ async function pollVeoVideo(taskId: string): Promise<string> {
 }
 
 export default function StudioVideoPanel() {
-  const { planId, current: creditsBalance, spendCredits } = useCreditsPlan();
+  const { planId, current: creditsBalance, spendCredits, grantCredits } = useCreditsPlan();
   const creditsRef = useRef(creditsBalance);
   creditsRef.current = creditsBalance;
 
@@ -705,7 +707,7 @@ export default function StudioVideoPanel() {
     }
 
     const gate = studioVideoEditUpgradeMessage(planId, editPickerId);
-    if (gate) {
+    if (!isPersonalApiActive() && gate) {
       setBilling({ open: true, reason: "plan", blockedId: editPickerId, studioMode: "video_edit" });
       return;
     }
@@ -717,6 +719,7 @@ export default function StudioVideoPanel() {
 
     const jobId = crypto.randomUUID();
     const label = p.length > 60 ? `${p.slice(0, 60)}…` : p;
+    const platformChargeEdit = usingPersonalApi ? 0 : editCredits;
     if (!usingPersonalApi) {
       spendCredits(editCredits);
       creditsRef.current = Math.max(0, creditsRef.current - editCredits);
@@ -831,6 +834,7 @@ export default function StudioVideoPanel() {
         toast.success("Video ready");
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Error";
+        refundPlatformCredits(platformChargeEdit, grantCredits, creditsRef);
         toast.error(msg);
         setHistoryItems((prev) =>
           prev.map((i) =>
@@ -839,7 +843,7 @@ export default function StudioVideoPanel() {
                   ...i,
                   status: "failed",
                   errorMessage: msg,
-                  creditsRefunded: false,
+                  creditsRefunded: platformChargeEdit > 0,
                 }
               : i,
           ),
@@ -859,7 +863,7 @@ export default function StudioVideoPanel() {
       return;
     }
     const gate = studioVideoUpgradeMessage(planId, modelId);
-    if (gate) {
+    if (!isPersonalApiActive() && gate) {
       setBilling({ open: true, reason: "plan", blockedId: modelId, studioMode: "video" });
       return;
     }
@@ -871,6 +875,7 @@ export default function StudioVideoPanel() {
 
     const jobId = crypto.randomUUID();
     const label = p.length > 60 ? `${p.slice(0, 60)}…` : p;
+    const platformChargeCreate = usingPersonalApiCreate ? 0 : credits;
     if (!usingPersonalApiCreate) {
       spendCredits(credits);
       creditsRef.current = Math.max(0, creditsRef.current - credits);
@@ -960,12 +965,13 @@ export default function StudioVideoPanel() {
               aspectRatio: snap.veoAspect,
               generationType,
               imageUrls: urls.length ? urls : undefined,
+              personalApiKey: pKey,
             }),
           });
           const json = (await res.json()) as { taskId?: string; error?: string };
           if (!res.ok || !json.taskId) throw new Error(json.error || "Veo failed");
           toast.message("Veo started", { description: "Rendering…" });
-          const url = await pollVeoVideo(json.taskId);
+          const url = await pollVeoVideo(json.taskId, pKey);
           const doneAt = Date.now();
           setHistoryItems((prev) => {
             const rest = prev.filter((i) => i.id !== jobId);
@@ -1027,6 +1033,7 @@ export default function StudioVideoPanel() {
         toast.success("Video ready");
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Error";
+        refundPlatformCredits(platformChargeCreate, grantCredits, creditsRef);
         toast.error(msg);
         setHistoryItems((prev) =>
           prev.map((i) =>
@@ -1035,7 +1042,7 @@ export default function StudioVideoPanel() {
                   ...i,
                   status: "failed",
                   errorMessage: msg,
-                  creditsRefunded: false,
+                  creditsRefunded: platformChargeCreate > 0,
                 }
               : i,
           ),
@@ -1074,9 +1081,9 @@ export default function StudioVideoPanel() {
       </div>
 
       {tab === "edit" ? (
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch lg:gap-4 lg:min-h-0 lg:max-h-[min(92vh,calc(100vh-7rem))]">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4 lg:min-h-0 lg:max-h-[min(92vh,calc(100vh-7rem))]">
           <div className="flex min-w-0 flex-1 flex-col gap-2 lg:max-w-[min(100%,24rem)] lg:min-h-0 lg:overflow-hidden">
-            <div className="studio-params-scroll flex min-w-0 flex-col gap-2 lg:flex-1 lg:min-h-0 lg:max-h-[min(62vh,calc(100vh-12rem))] lg:overflow-y-auto">
+            <div className="studio-params-scroll flex min-w-0 flex-col gap-2 lg:min-h-0 lg:max-h-[min(62vh,calc(100vh-12rem))] lg:overflow-y-auto">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Edit prompt</p>
             <div className="rounded-2xl border border-white/10 bg-[#101014] p-4 space-y-3">
               {motionEdit ? (
@@ -1174,7 +1181,9 @@ export default function StudioVideoPanel() {
                     items={VIDEO_EDIT_MODEL_PICKER_ITEMS}
                     triggerVariant="bar"
                     hideMeta
-                    isItemLocked={(id) => !canUseStudioVideoEditPicker(planId, id)}
+                    isItemLocked={(id) =>
+                      !isPersonalApiActive() && !canUseStudioVideoEditPicker(planId, id)
+                    }
                     onLockedPick={(id) => {
                       setBilling({ open: true, reason: "plan", blockedId: id, studioMode: "video_edit" });
                     }}
@@ -1263,9 +1272,9 @@ export default function StudioVideoPanel() {
           </div>
         </div>
       ) : (
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch lg:gap-4 lg:min-h-0 lg:max-h-[min(92vh,calc(100vh-7rem))]">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4 lg:min-h-0 lg:max-h-[min(92vh,calc(100vh-7rem))]">
           <div className="flex min-w-0 flex-1 flex-col gap-2 lg:max-w-[min(100%,24rem)] lg:min-h-0 lg:overflow-hidden">
-            <div className="studio-params-scroll flex min-w-0 flex-col gap-2 lg:flex-1 lg:min-h-0 lg:max-h-[min(62vh,calc(100vh-12rem))] lg:overflow-y-auto">
+            <div className="studio-params-scroll flex min-w-0 flex-col gap-2 lg:min-h-0 lg:max-h-[min(62vh,calc(100vh-12rem))] lg:overflow-y-auto">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Create prompt</p>
             <div className="rounded-2xl border border-white/10 bg-[#101014] p-4">
               <div className="grid grid-cols-2 gap-2">
@@ -1308,7 +1317,9 @@ export default function StudioVideoPanel() {
                     items={VIDEO_MODEL_PICKER_ITEMS}
                     triggerVariant="bar"
                     hideMeta
-                    isItemLocked={(id) => !canUseStudioVideoModel(planId, id)}
+                    isItemLocked={(id) =>
+                      !isPersonalApiActive() && !canUseStudioVideoModel(planId, id)
+                    }
                     onLockedPick={(id) => {
                       setBilling({ open: true, reason: "plan", blockedId: id, studioMode: "video" });
                     }}

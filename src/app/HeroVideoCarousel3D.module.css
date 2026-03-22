@@ -1,7 +1,5 @@
 /**
- * Concave arc: 9 panels in a 160° arc, center pushed back (small),
- * sides come forward (large). 9:16 aspect ratio panels.
- * Gentle sway animation instead of full spin.
+ * Full-width 3D cylinder: portrait panels, continuous rotation.
  */
 
 .root {
@@ -11,28 +9,30 @@
   align-items: center;
   justify-content: center;
   pointer-events: none;
+  overflow: hidden;
 }
 
 .scene {
-  --pw: 58px;
-  --ph: 103px;
-  --r: 200px;
+  --pw: 76px;
+  --ph: 135px;
+  --r: 280px;
 
   width: 100%;
   height: 100%;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  perspective: 480px;
-  perspective-origin: 50% 50%;
+  padding-top: 0.5rem;
+  perspective: 1200px;
+  perspective-origin: 50% 35%;
 }
 
-.arc {
+.ring {
   position: relative;
   width: 0;
   height: 0;
   transform-style: preserve-3d;
-  animation: heroSway 16s ease-in-out infinite;
+  animation: heroSpin 48s linear infinite;
 }
 
 .panel {
@@ -41,11 +41,13 @@
   height: var(--ph);
   left: calc(var(--pw) / -2);
   top: calc(var(--ph) / -2);
-  border-radius: 8px;
+  border-radius: 10px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
-  transform: rotateY(var(--angle)) translateZ(calc(-1 * var(--r)));
+  transform: rotateY(var(--angle)) translateZ(var(--r));
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
 .video {
@@ -55,49 +57,45 @@
   display: block;
 }
 
-/* ── Responsive: bigger radius = wider arc, more panels visible ── */
-
 @media (min-width: 640px) {
   .scene {
-    --pw: 66px;
-    --ph: 117px;
-    --r: 320px;
-    perspective: 580px;
+    --pw: 92px;
+    --ph: 164px;
+    --r: 400px;
+    perspective: 1400px;
   }
 }
 
 @media (min-width: 1024px) {
   .scene {
-    --pw: 72px;
-    --ph: 128px;
-    --r: 560px;
-    perspective: 780px;
+    --pw: 108px;
+    --ph: 192px;
+    --r: 520px;
+    perspective: 1600px;
   }
 }
 
 @media (min-width: 1440px) {
   .scene {
-    --pw: 78px;
-    --ph: 139px;
-    --r: 700px;
-    perspective: 880px;
+    --pw: 124px;
+    --ph: 220px;
+    --r: 620px;
+    perspective: 1800px;
   }
 }
 
-/* ── Sway (gentle ±3° oscillation) ── */
-
-@keyframes heroSway {
-  0%, 100% {
-    transform: rotateX(-2deg) rotateY(3deg);
+@keyframes heroSpin {
+  from {
+    transform: rotateX(-4deg) rotateY(0deg);
   }
-  50% {
-    transform: rotateX(-2deg) rotateY(-3deg);
+  to {
+    transform: rotateX(-4deg) rotateY(-360deg);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .arc {
+  .ring {
     animation: none;
-    transform: rotateX(-2deg);
+    transform: rotateX(-4deg) rotateY(-18deg);
   }
 }

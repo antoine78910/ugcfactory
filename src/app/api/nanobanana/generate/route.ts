@@ -1,14 +1,9 @@
 export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
-import { getAppUrl, getEnv } from "@/lib/env";
-import { kieMarketCreateTask } from "@/lib/kieMarket";
-import {
-  buildKieGoogleImageInput,
-  kieMarketModelForStudioImage,
-  type KieGoogleImageResolution,
-} from "@/lib/kieGoogleImage";
+import { createStudioKieImageTasks } from "@/lib/studioKieImageTask";
 import type { NanoBananaImageSize, NanoBananaProAspectRatio, NanoBananaProResolution } from "@/lib/nanobanana";
+import { hasPersonalApiKey } from "@/lib/personalApiBypass";
 import {
   canUseStudioImageModel,
   parseAccountPlan,
@@ -29,12 +24,6 @@ type Body = {
   personalApiKey?: string;
 };
 
-function clampNumImages(n: unknown): number {
-  const x = Math.floor(Number(n));
-  if (!Number.isFinite(x)) return 1;
-  return Math.min(4, Math.max(1, x));
-}
-
 export async function POST(req: Request) {
   let body: Body;
   try {
@@ -48,18 +37,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Missing `prompt`." }, { status: 400 });
   }
 
-  const callBackUrl =
-    getEnv("NANOBANANA_CALLBACK_URL") ?? `${getAppUrl()}/api/nanobanana/callback`;
-
-  const normalizedImageUrls = Array.isArray(body.imageUrls)
-    ? body.imageUrls.filter((u) => typeof u === "string" && u.trim().length > 0)
-    : body.imageUrl
-      ? [body.imageUrl]
-      : [];
-
-  const imageUrls = normalizedImageUrls.length > 0 ? normalizedImageUrls : undefined;
   const model = body.model ?? "nano";
-  if (body.accountPlan != null && String(body.accountPlan).trim() !== "") {
+  const personalKey = hasPersonalApiKey(body.personalApiKey) ? body.personalApiKey.trim() : undefined;
+  if (
+    !personalKey &&
+    body.accountPlan != null &&
+    String(body.accountPlan).trim() !== ""
+  ) {
     const accountPlan = parseAccountPlan(body.accountPlan);
     if (!canUseStudioImageModel(accountPlan, model)) {
       return NextResponse.json(
@@ -73,35 +57,22 @@ export async function POST(req: Request) {
       );
     }
   }
-  const num = clampNumImages(body.numImages);
-  const resolutionNano = (body.resolution ?? "1K") as KieGoogleImageResolution;
-  const kieModel = kieMarketModelForStudioImage(model);
-  const aspectFor = body.aspectRatio ?? body.imageSize ?? "auto";
-  const personalKey = typeof body.personalApiKey === "string" && body.personalApiKey.trim().length > 0
-    ? body.personalApiKey.trim()
-    : undefined;
 
   try {
-    const runOne = () =>
-      kieMarketCreateTask(
-        {
-          model: kieModel,
-          callBackUrl,
-          input: buildKieGoogleImageInput({
-            prompt,
-            aspectRatio: typeof aspectFor === "string" ? aspectFor : "auto",
-            resolution: resolutionNano,
-            imageUrls,
-          }),
-        },
-        personalKey,
-      );
-
-    if (num <= 1) {
-      const taskId = await runOne();
+    const { taskId, taskIds, kieModel } = await createStudioKieImageTasks({
+      prompt,
+      model,
+      imageUrl: body.imageUrl,
+      imageUrls: body.imageUrls,
+      imageSize: body.imageSize,
+      numImages: body.numImages,
+      resolution: body.resolution,
+      aspectRatio: body.aspectRatio,
+      personalApiKey: body.personalApiKey,
+    });
+    if (taskId) {
       return NextResponse.json({ taskId, model, provider: "kie-market", kieModel });
     }
-    const taskIds = await Promise.all(Array.from({ length: num }, () => runOne()));
     return NextResponse.json({ taskIds, model, provider: "kie-market", kieModel });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error.";

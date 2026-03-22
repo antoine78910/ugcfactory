@@ -285,7 +285,7 @@ export default function LandingPage() {
       </header>
 
       {/* ── Hero (texture behind headline: Turn any product / AI Reels…) ── */}
-      <section className="relative overflow-hidden">
+      <section className="relative min-h-[min(92svh,880px)] overflow-hidden">
         <div
           className="pointer-events-none absolute inset-0 z-0 bg-cover bg-center bg-no-repeat"
           style={{ backgroundImage: "url(/hero-bg-texture.png)" }}
@@ -352,14 +352,14 @@ export default function LandingPage() {
             </div>
             </div>
           </div>
+        </div>
 
-          {/* Concave arc under the CTA */}
-          <div
-            className="pointer-events-none relative mt-3 h-[min(160px,24svh)] w-screen max-w-[100vw] -translate-x-1/2 left-1/2 overflow-visible sm:mt-3 sm:h-[min(190px,28svh)] lg:mt-2 lg:h-[min(220px,28svh)]"
-            aria-hidden
-          >
-            <HeroVideoCarousel3D srcs={UGC_SLIDES.map((s) => s.src)} />
-          </div>
+        {/* 3D video cylinder: full width, below headline in layout, continuous spin */}
+        <div
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-[2] h-[min(280px,42svh)] overflow-hidden sm:h-[min(320px,45svh)] lg:h-[min(380px,48svh)]"
+          aria-hidden
+        >
+          <HeroVideoCarousel3D srcs={UGC_SLIDES.map((s) => s.src)} />
         </div>
       </section>
 

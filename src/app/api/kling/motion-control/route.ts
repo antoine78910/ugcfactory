@@ -2,6 +2,7 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import { kieMarketCreateTask } from "@/lib/kieMarket";
+import { hasPersonalApiKey } from "@/lib/personalApiBypass";
 import {
   canUseMotionControl,
   parseAccountPlan,
@@ -46,7 +47,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Missing `imageUrl` or `videoUrl`." }, { status: 400 });
   }
 
-  if (body.accountPlan != null && String(body.accountPlan).trim() !== "") {
+  const personalKey = hasPersonalApiKey(body.personalApiKey) ? body.personalApiKey.trim() : undefined;
+  if (
+    !personalKey &&
+    body.accountPlan != null &&
+    String(body.accountPlan).trim() !== ""
+  ) {
     const accountPlan = parseAccountPlan(body.accountPlan);
     if (!canUseMotionControl(accountPlan)) {
       return NextResponse.json(
@@ -74,9 +80,6 @@ export async function POST(req: Request) {
     };
     if (prompt) input.prompt = prompt.slice(0, 2500);
 
-    const personalKey = typeof body.personalApiKey === "string" && body.personalApiKey.trim().length > 0
-      ? body.personalApiKey.trim()
-      : undefined;
     const taskId = await kieMarketCreateTask(
       { model: "kling-3.0/motion-control", input },
       personalKey,
