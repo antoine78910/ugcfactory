@@ -65,20 +65,20 @@ export default function SidebarCreditsBar({ collapsed = false }: SidebarCreditsB
   }
 
   return (
-    <div className="rounded-xl border border-white/10 bg-[#0b0912]/90 px-3 py-2.5">
+    <div className="rounded-xl border border-white/10 bg-[#0b0912]/85 p-2">
       <Link
         href="/credits"
-        className="group flex flex-col gap-2 transition-opacity hover:opacity-95"
+        className="group flex flex-col gap-1.5 transition-opacity hover:opacity-95"
         title="Buy credits"
       >
-        <div className="flex items-center justify-between gap-2">
-          <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/50">
-            <Coins className="h-3.5 w-3.5 text-violet-400/90" aria-hidden />
+        <div className="flex items-center justify-between gap-1.5">
+          <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/50">
+            <Coins className="h-3 w-3 text-violet-400/90" aria-hidden />
             Credits
           </span>
           <span
             className={cn(
-              "text-xs font-bold tabular-nums",
+              "text-[11px] font-bold tabular-nums leading-none",
               showCta ? "text-amber-200" : "text-white/90",
             )}
           >
@@ -93,7 +93,7 @@ export default function SidebarCreditsBar({ collapsed = false }: SidebarCreditsB
         </div>
 
         <div
-          className="h-2 overflow-hidden rounded-full bg-white/[0.08]"
+          className="h-1.5 overflow-hidden rounded-full bg-white/[0.08]"
           role="progressbar"
           aria-valuenow={fillPct}
           aria-valuemin={0}

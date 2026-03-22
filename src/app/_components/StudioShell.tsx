@@ -165,7 +165,13 @@ function StudioShellInner({
             navCollapsed ? "px-1.5" : "px-3",
           )}
         >
-          <div className={cn("shrink-0 pb-2", navCollapsed ? "space-y-2 px-0" : "space-y-3 px-2")}>
+          <div
+            className={cn(
+              "shrink-0 pb-2",
+              /* Same horizontal inset as CREATE card (aside px only) so Credits lines up */
+              navCollapsed ? "space-y-2 px-0" : "space-y-3",
+            )}
+          >
             <div
               className={cn(
                 "flex items-center gap-1.5",
