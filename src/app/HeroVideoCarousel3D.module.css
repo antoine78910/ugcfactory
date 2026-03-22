@@ -1,6 +1,6 @@
 /**
- * 3D ring carousel — tight translateZ (videos rapprochées), slow rotateY drift.
- * Place MP4s in /public/carousel/ (see HERO_CAROUSEL_VIDEO_SRCS).
+ * 5-card front arc + slow rotateY drift. Full-bleed width on LP.
+ * MP4s in /public/carousel/
  */
 
 .root {
@@ -10,10 +10,10 @@
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  perspective: 1400px;
-  perspective-origin: 50% 40%;
+  perspective: 1500px;
+  perspective-origin: 50% 38%;
   background: radial-gradient(
-    ellipse 95% 50% at 50% 92%,
+    ellipse 100% 48% at 50% 94%,
     rgba(5, 5, 7, 0.5) 0%,
     transparent 58%
   );
@@ -22,30 +22,28 @@
 .stage {
   position: relative;
   width: 100%;
-  max-width: 1280px;
-  height: min(540px, 60vw);
-  margin-top: clamp(3.25rem, 11vh, 6.5rem);
+  max-width: none;
+  height: min(520px, 58vw);
+  margin-top: clamp(4.5rem, 16vh, 9rem);
   transform-style: preserve-3d;
 }
 
 .inner {
-  --quantity: 10;
-  --w: clamp(76px, 11vw, 120px);
-  --h: clamp(114px, 16.5vw, 180px);
-  /* Plus petit = anneau plus serré (vidéos plus proches) */
-  --translateZ: clamp(210px, 30vw, 360px);
-  --tiltX: 6deg;
+  --w: clamp(84px, 9.5vw, 132px);
+  --h: clamp(126px, 14.2vw, 198px);
+  --translateZ: clamp(165px, 22vw, 300px);
+  --tiltX: 5deg;
 
   position: absolute;
   left: 50%;
-  top: 42%;
+  top: 44%;
   width: var(--w);
   height: var(--h);
   margin-left: calc(var(--w) / -2);
   margin-top: calc(var(--h) / -2);
   transform-style: preserve-3d;
   transform-origin: 50% 50%;
-  animation: heroRingDrift 56s linear infinite;
+  animation: heroRingDrift 52s linear infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -56,10 +54,10 @@
 
 @keyframes heroRingDrift {
   from {
-    transform: perspective(1400px) rotateX(var(--tiltX)) rotateY(0deg);
+    transform: perspective(1500px) rotateX(var(--tiltX)) rotateY(0deg);
   }
   to {
-    transform: perspective(1400px) rotateX(var(--tiltX)) rotateY(1turn);
+    transform: perspective(1500px) rotateX(var(--tiltX)) rotateY(1turn);
   }
 }
 
@@ -75,8 +73,7 @@
     0 0 0 1px rgba(139, 92, 246, 0.1);
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
-  transform: rotateY(calc((360deg / var(--quantity)) * var(--index)))
-    translateZ(var(--translateZ));
+  transform: rotateY(var(--angle)) translateZ(var(--translateZ));
 }
 
 .video {

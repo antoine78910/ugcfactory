@@ -308,8 +308,8 @@ export default function LandingPage() {
         <div className="pointer-events-none absolute inset-0 z-[3] bg-gradient-to-b from-[#050507]/30 via-[#050507]/42 to-[#050507]" />
         <div className="pointer-events-none absolute left-1/2 top-0 z-[3] -translate-x-1/2 h-[700px] w-[1000px] rounded-full bg-violet-600/[0.12] blur-[140px]" />
 
-        <div className="relative z-10 mx-auto max-w-4xl px-5 pt-28 pb-24 text-center">
-          <h1 className="mx-auto max-w-3xl px-4 sm:px-8 text-4xl font-extrabold tracking-tight leading-[1.12] sm:text-5xl md:text-6xl">
+        <div className="relative z-10 mx-auto w-full max-w-6xl px-5 pt-12 pb-10 text-center sm:pt-14 sm:pb-12 md:pt-16">
+          <h1 className="mx-auto max-w-4xl px-3 sm:px-6 text-4xl font-extrabold tracking-tight leading-[1.12] sm:text-5xl md:text-6xl">
             Turn any product
             <br />
             into realistic
@@ -329,8 +329,8 @@ export default function LandingPage() {
             />
           </h1>
 
-          <div className="mx-auto mt-10 max-w-xl">
-            <p className="mb-3 text-sm text-white/55">
+          <div className="mx-auto mt-6 max-w-3xl sm:mt-7">
+            <p className="mb-2.5 text-sm text-white/55 sm:text-base">
               We analyze your site like a top-tier media buyer, and turn it into
               high-converting ads 👇
             </p>
