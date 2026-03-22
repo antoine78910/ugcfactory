@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCreditsPlan } from "@/app/_components/CreditsPlanContext";
-import { Loader2, Plus, Sparkles } from "lucide-react";
+import { Plus, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -15,6 +15,8 @@ import {
   type StudioModelPickerItem,
 } from "@/app/_components/StudioModelPicker";
 import { StudioEmptyExamples, StudioOutputPane } from "@/app/_components/StudioEmptyExamples";
+import { StudioGenerationsHistory } from "@/app/_components/StudioGenerationsHistory";
+import type { StudioHistoryItem } from "@/app/_components/StudioGenerationsHistory";
 import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
 import { IMAGE_MODEL } from "@/lib/pricing";
 import { NANO_BANANA_2_ASPECT_RATIOS } from "@/lib/nanobanana";
@@ -109,14 +111,18 @@ async function pollNanoTask(taskId: string): Promise<string[]> {
 
 export default function StudioImagePanel() {
   const { planId, current: creditsBalance, spendCredits } = useCreditsPlan();
+  const creditsRef = useRef(creditsBalance);
+  creditsRef.current = creditsBalance;
+
   const [prompt, setPrompt] = useState("");
   const [model, setModel] = useState<NanoModel>("pro");
   const [aspect, setAspect] = useState<string>("3:4");
   const [resolution, setResolution] = useState<(typeof PRO_RESOLUTIONS)[number]>("2K");
   const [numImages, setNumImages] = useState(1);
   const [refUrls, setRefUrls] = useState<string[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [results, setResults] = useState<string[]>([]);
+  /** Reference image uploads only — does not block Generate. */
+  const [refUploadBusy, setRefUploadBusy] = useState(false);
+  const [historyItems, setHistoryItems] = useState<StudioHistoryItem[]>([]);
   type ImageBilling =
     | { open: false }
     | { open: true; reason: "plan"; blockedId: NanoModel }
@@ -150,7 +156,7 @@ export default function StudioImagePanel() {
     input.onchange = async () => {
       const files = Array.from(input.files ?? []);
       if (!files.length) return;
-      setBusy(true);
+      setRefUploadBusy(true);
       try {
         const urls: string[] = [];
         for (const f of files.slice(0, 8)) {
@@ -161,13 +167,13 @@ export default function StudioImagePanel() {
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Upload failed");
       } finally {
-        setBusy(false);
+        setRefUploadBusy(false);
       }
     };
     input.click();
   }, []);
 
-  const generate = async () => {
+  const generate = () => {
     const p = prompt.trim();
     if (!p) {
       toast.error("Describe the scene you imagine.");
@@ -178,75 +184,89 @@ export default function StudioImagePanel() {
       setBilling({ open: true, reason: "plan", blockedId: model });
       return;
     }
-    if (creditsBalance < totalCredits) {
+    if (creditsRef.current < totalCredits) {
       setBilling({ open: true, reason: "credits", required: totalCredits });
       return;
     }
-    if (busy) return;
+    const n = Math.min(4, Math.max(1, numImages));
+    const jobId = crypto.randomUUID();
+    const summary = p.length > 72 ? `${p.slice(0, 72)}…` : p;
     spendCredits(totalCredits);
-    setBusy(true);
-    try {
-      const n = Math.min(4, Math.max(1, numImages));
-      const res = await fetch("/api/nanobanana/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          accountPlan: planId,
-          prompt: p,
-          model,
-          imageUrls: refUrls.length ? refUrls : undefined,
-          aspectRatio: aspect,
-          resolution,
-          numImages: n,
-        }),
-      });
-      const json = (await res.json()) as { taskId?: string; taskIds?: string[]; error?: string };
-      if (!res.ok) throw new Error(json.error || "Generate failed");
-      const ids =
-        Array.isArray(json.taskIds) && json.taskIds.length > 0
-          ? json.taskIds
-          : json.taskId
-            ? [json.taskId]
-            : [];
-      if (!ids.length) throw new Error("No task id returned");
-      toast.message("Generation started", { description: `Polling ${ids.length} task(s)…` });
-      const batches = await Promise.all(ids.map((id) => pollNanoTask(id)));
-      const urls = batches.flat();
-      setResults((prev) => [...urls, ...prev]);
-      toast.success(ids.length > 1 ? `${urls.length} images ready` : "Image ready");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Error");
-    } finally {
-      setBusy(false);
-    }
+    creditsRef.current = Math.max(0, creditsRef.current - totalCredits);
+    const startedAt = Date.now();
+    setHistoryItems((prev) => [
+      {
+        id: jobId,
+        kind: "image",
+        status: "generating",
+        label: summary,
+        createdAt: startedAt,
+      },
+      ...prev,
+    ]);
+
+    void (async () => {
+      try {
+        const res = await fetch("/api/nanobanana/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            accountPlan: planId,
+            prompt: p,
+            model,
+            imageUrls: refUrls.length ? refUrls : undefined,
+            aspectRatio: aspect,
+            resolution,
+            numImages: n,
+          }),
+        });
+        const json = (await res.json()) as { taskId?: string; taskIds?: string[]; error?: string };
+        if (!res.ok) throw new Error(json.error || "Generate failed");
+        const ids =
+          Array.isArray(json.taskIds) && json.taskIds.length > 0
+            ? json.taskIds
+            : json.taskId
+              ? [json.taskId]
+              : [];
+        if (!ids.length) throw new Error("No task id returned");
+        toast.message("Generation started", { description: `Polling ${ids.length} task(s)…` });
+        const batches = await Promise.all(ids.map((tid) => pollNanoTask(tid)));
+        const urls = batches.flat();
+        const doneAt = Date.now();
+        setHistoryItems((prev) => {
+          const rest = prev.filter((i) => i.id !== jobId);
+          const adds: StudioHistoryItem[] = urls.map((u, idx) => ({
+            id: `${jobId}-done-${idx}-${doneAt}`,
+            kind: "image",
+            status: "ready",
+            label: summary,
+            mediaUrl: u,
+            createdAt: doneAt,
+          }));
+          return [...adds, ...rest];
+        });
+        toast.success(ids.length > 1 ? `${urls.length} images ready` : "Image ready");
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Error";
+        toast.error(msg);
+        setHistoryItems((prev) =>
+          prev.map((i) =>
+            i.id === jobId && i.status === "generating"
+              ? {
+                  ...i,
+                  status: "failed",
+                  errorMessage: msg,
+                  creditsRefunded: false,
+                }
+              : i,
+          ),
+        );
+      }
+    })();
   };
 
   const generateBtnClass =
     "h-14 w-full rounded-2xl border border-violet-300/40 bg-violet-500 text-lg font-semibold text-white shadow-[0_6px_0_0_rgba(76,29,149,0.85)] transition-all hover:-translate-y-px hover:bg-violet-400 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.85)] active:translate-y-1 active:shadow-none";
-
-  const resultsOutput = (
-    <div className="space-y-2">
-      <p className="text-xs font-semibold uppercase tracking-wide text-white/45">Recent generations</p>
-      <div className="flex flex-col gap-4">
-        {results.map((u) => (
-          <div key={u} className="overflow-hidden rounded-2xl border border-white/10 bg-black">
-            <a href={u} target="_blank" rel="noreferrer" className="block bg-[#0b0912]">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={u} alt="" className="max-h-[min(520px,70vh)] w-full object-contain object-center" />
-            </a>
-            <div className="border-t border-white/10 p-3">
-              <a
-                href={`/api/download?url=${encodeURIComponent(u)}`}
-                className="text-sm font-medium text-violet-300 underline"
-              >
-                Download
-              </a>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
 
   return (
     <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:gap-6">
@@ -260,7 +280,7 @@ export default function StudioImagePanel() {
               size="icon"
               className="h-11 w-11 shrink-0 self-start rounded-xl border border-white/10 bg-white/5 text-white hover:bg-white/10"
               title="Add reference images"
-              disabled={busy}
+              disabled={refUploadBusy}
               onClick={onAddRefs}
             >
               <Plus className="h-5 w-5" />
@@ -372,25 +392,27 @@ export default function StudioImagePanel() {
           </div>
         ) : null}
 
-        <Button type="button" disabled={busy} onClick={() => void generate()} className={generateBtnClass}>
-          {busy ? (
-            <Loader2 className="h-6 w-6 animate-spin" />
-          ) : (
-            <span className="inline-flex items-center gap-2">
-              Generate
-              <Sparkles className="h-5 w-5" />
-              <span className="rounded-md bg-white/15 px-2 py-0.5 text-base tabular-nums">{totalCredits}</span>
-              <span className="text-sm font-normal text-white/80">credits</span>
-            </span>
-          )}
+        <Button type="button" onClick={() => generate()} className={generateBtnClass}>
+          <span className="inline-flex items-center gap-2">
+            Generate
+            <Sparkles className="h-5 w-5" />
+            <span className="rounded-md bg-white/15 px-2 py-0.5 text-base tabular-nums">{totalCredits}</span>
+            <span className="text-sm font-normal text-white/80">credits</span>
+          </span>
         </Button>
       </aside>
 
       <StudioOutputPane
-        title="Generations"
-        hasOutput={results.length > 0}
-        output={resultsOutput}
-        empty={<StudioEmptyExamples variant="image" />}
+        title=""
+        hasOutput
+        output={
+          <StudioGenerationsHistory
+            items={historyItems}
+            empty={<StudioEmptyExamples variant="image" />}
+            mediaLabel="Image"
+          />
+        }
+        empty={null}
       />
 
       <StudioBillingDialog

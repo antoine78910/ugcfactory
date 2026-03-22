@@ -80,8 +80,12 @@ export function StudioOutputPane({
 }) {
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col rounded-2xl border border-white/10 bg-[#08080c]/90 p-4 lg:min-h-[min(560px,calc(100vh-12rem))]">
-      <p className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-white/45">{title}</p>
-      <div className="mt-3 min-h-0 flex-1 overflow-y-auto">{hasOutput ? output : empty}</div>
+      {title ? (
+        <p className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-white/45">{title}</p>
+      ) : null}
+      <div className={title ? "mt-3 min-h-0 flex-1 overflow-y-auto" : "min-h-0 flex-1 overflow-y-auto"}>
+        {hasOutput ? output : empty}
+      </div>
     </div>
   );
 }

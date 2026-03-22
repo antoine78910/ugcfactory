@@ -16,6 +16,8 @@ import { ProjectRunBrandBriefEditor } from "@/app/_components/ProjectRunBrandBri
 import { ProjectRunScriptsEditor } from "@/app/_components/ProjectRunScriptsEditor";
 import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
 import { StudioEmptyExamples, StudioOutputPane } from "@/app/_components/StudioEmptyExamples";
+import { StudioGenerationsHistory } from "@/app/_components/StudioGenerationsHistory";
+import type { StudioHistoryItem } from "@/app/_components/StudioGenerationsHistory";
 import { calculateMotionControlCredits } from "@/lib/linkToAd/generationCredits";
 import StudioImagePanel from "@/app/_components/StudioImagePanel";
 import StudioShell from "@/app/_components/StudioShell";
@@ -294,7 +296,7 @@ export default function AppBrandWizard() {
   const [motionVideoDetectedDuration, setMotionVideoDetectedDuration] = useState<number | null>(null);
   const [motionCharacterImageUrl, setMotionCharacterImageUrl] = useState<string | null>(null);
   const [motionQuality, setMotionQuality] = useState<string>("720p");
-  const [motionIsGenerating, setMotionIsGenerating] = useState(false);
+  const [motionHistoryItems, setMotionHistoryItems] = useState<StudioHistoryItem[]>([]);
   type MotionBilling =
     | { open: false }
     | { open: true; reason: "plan" }
@@ -1830,13 +1832,12 @@ export default function AppBrandWizard() {
                       <Button
                         type="button"
                         disabled={
-                          motionIsGenerating ||
                           !motionCharacterImageUrl ||
                           !motionVideoRefBlobUrl ||
                           Boolean(motionControlUpgradeMessage(planId))
                         }
                         className="h-14 w-full rounded-2xl border border-violet-300/40 bg-violet-500 text-lg font-semibold text-white shadow-[0_6px_0_0_rgba(76,29,149,0.85)] transition-all hover:-translate-y-px hover:bg-violet-400 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.85)] active:translate-y-1 active:shadow-none disabled:opacity-50"
-                        onClick={async () => {
+                        onClick={() => {
                           const mcGate = motionControlUpgradeMessage(planId);
                           if (mcGate) {
                             setMotionBilling({ open: true, reason: "plan" });
@@ -1850,46 +1851,87 @@ export default function AppBrandWizard() {
                             toast.error("Please choose a video reference first.");
                             return;
                           }
-                          if (motionIsGenerating) return;
                           if (creditsBalance < motionCredits) {
                             setMotionBilling({ open: true, reason: "credits", required: motionCredits });
                             return;
                           }
-                          setMotionIsGenerating(true);
-                          try {
-                            await new Promise((r) => setTimeout(r, 1200));
-                            toast.success("Motion control generation queued (UI only)");
-                          } finally {
-                            setMotionIsGenerating(false);
-                          }
+                          const jobId = crypto.randomUUID();
+                          const poster = motionCharacterImageUrl ?? undefined;
+                          const startedAt = Date.now();
+                          setMotionHistoryItems((prev) => [
+                            {
+                              id: jobId,
+                              kind: "motion",
+                              status: "generating",
+                              label: "Motion control",
+                              posterUrl: poster,
+                              createdAt: startedAt,
+                            },
+                            ...prev,
+                          ]);
+                          void (async () => {
+                            try {
+                              await new Promise((r) => setTimeout(r, 1200));
+                              toast.success("Motion control generation queued (UI only)");
+                              setMotionHistoryItems((prev) =>
+                                prev.map((i) =>
+                                  i.id === jobId && i.status === "generating"
+                                    ? {
+                                        ...i,
+                                        status: "ready",
+                                        label: "Queued — result will appear here when the pipeline is live.",
+                                        posterUrl: poster,
+                                        createdAt: Date.now(),
+                                      }
+                                    : i,
+                                ),
+                              );
+                            } catch (err) {
+                              const msg = err instanceof Error ? err.message : "Error";
+                              setMotionHistoryItems((prev) =>
+                                prev.map((i) =>
+                                  i.id === jobId && i.status === "generating"
+                                    ? {
+                                        ...i,
+                                        status: "failed",
+                                        errorMessage: msg,
+                                        creditsRefunded: false,
+                                      }
+                                    : i,
+                                ),
+                              );
+                            }
+                          })();
                         }}
                       >
-                        {motionIsGenerating ? (
-                          <Loader2 className="h-6 w-6 animate-spin" />
-                        ) : (
-                          <span className="inline-flex items-center gap-2">
-                            Generate
-                            <Sparkles className="h-5 w-5" />
-                            <span className="rounded-md bg-white/15 px-2 py-0.5 text-base tabular-nums">
-                              {motionCredits}
-                            </span>
-                            {motionCreditsUsesEstimate ? (
-                              <span className="text-[10px] font-normal text-white/50">
-                                ~{motionBillableSeconds}s estimated
-                              </span>
-                            ) : (
-                              <span className="text-[10px] font-normal text-white/50">{motionBillableSeconds}s</span>
-                            )}
+                        <span className="inline-flex items-center gap-2">
+                          Generate
+                          <Sparkles className="h-5 w-5" />
+                          <span className="rounded-md bg-white/15 px-2 py-0.5 text-base tabular-nums">
+                            {motionCredits}
                           </span>
-                        )}
+                          {motionCreditsUsesEstimate ? (
+                            <span className="text-[10px] font-normal text-white/50">
+                              ~{motionBillableSeconds}s estimated
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-normal text-white/50">{motionBillableSeconds}s</span>
+                          )}
+                        </span>
                       </Button>
                     </aside>
 
                     <StudioOutputPane
-                      title="Generations"
-                      hasOutput={false}
-                      output={<></>}
-                      empty={<StudioEmptyExamples variant="motion" />}
+                      title=""
+                      hasOutput
+                      output={
+                        <StudioGenerationsHistory
+                          items={motionHistoryItems}
+                          empty={<StudioEmptyExamples variant="motion" />}
+                          mediaLabel="Motion"
+                        />
+                      }
+                      empty={null}
                     />
                   </div>
                 )}

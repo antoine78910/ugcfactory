@@ -1,12 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { ImageIcon, Loader2, Sparkles } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ImageIcon, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { StudioEmptyExamples, StudioOutputPane } from "@/app/_components/StudioEmptyExamples";
+import { StudioGenerationsHistory } from "@/app/_components/StudioGenerationsHistory";
+import type { StudioHistoryItem } from "@/app/_components/StudioGenerationsHistory";
 import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
 import {
   StudioModelPicker,
@@ -233,6 +235,9 @@ async function pollVeoVideo(taskId: string): Promise<string> {
 
 export default function StudioVideoPanel() {
   const { planId, current: creditsBalance, spendCredits } = useCreditsPlan();
+  const creditsRef = useRef(creditsBalance);
+  creditsRef.current = creditsBalance;
+
   const [tab, setTab] = useState<VideoTab>("create");
   const [startUrl, setStartUrl] = useState<string | null>(null);
   const [endUrl, setEndUrl] = useState<string | null>(null);
@@ -244,9 +249,9 @@ export default function StudioVideoPanel() {
   const [aspect, setAspect] = useState("9:16");
   const [klingMode, setKlingMode] = useState<"std" | "pro">("std");
   const [veoAspect, setVeoAspect] = useState<"16:9" | "9:16" | "Auto">("9:16");
-  const [busy, setBusy] = useState(false);
-  /** Newest first — shown above the form */
-  const [videoHistory, setVideoHistory] = useState<string[]>([]);
+  /** Start/end frame uploads only — does not block Generate. */
+  const [frameUploadBusy, setFrameUploadBusy] = useState(false);
+  const [historyItems, setHistoryItems] = useState<StudioHistoryItem[]>([]);
   type VideoBilling =
     | { open: false }
     | { open: true; reason: "plan"; blockedId: string }
@@ -283,7 +288,7 @@ export default function StudioVideoPanel() {
     input.onchange = async () => {
       const f = input.files?.[0];
       if (!f) return;
-      setBusy(true);
+      setFrameUploadBusy(true);
       try {
         const u = await uploadFile(f);
         if (which === "start") setStartUrl(u);
@@ -292,13 +297,13 @@ export default function StudioVideoPanel() {
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Upload failed");
       } finally {
-        setBusy(false);
+        setFrameUploadBusy(false);
       }
     };
     input.click();
   }, []);
 
-  const generate = async () => {
+  const generate = () => {
     const p = prompt.trim();
     if (!p) {
       toast.error("Describe your video.");
@@ -313,114 +318,180 @@ export default function StudioVideoPanel() {
       setBilling({ open: true, reason: "plan", blockedId: modelId });
       return;
     }
-    if (creditsBalance < credits) {
+    if (creditsRef.current < credits) {
       setBilling({ open: true, reason: "credits", required: credits });
       return;
     }
-    if (busy) return;
+
+    const jobId = crypto.randomUUID();
+    const label = p.length > 60 ? `${p.slice(0, 60)}…` : p;
     spendCredits(credits);
-    setBusy(true);
-    try {
-      if (meta.family === "sora") {
+    creditsRef.current = Math.max(0, creditsRef.current - credits);
+    const startedAt = Date.now();
+    setHistoryItems((prev) => [
+      {
+        id: jobId,
+        kind: "video",
+        status: "generating",
+        label,
+        posterUrl: startUrl ?? undefined,
+        createdAt: startedAt,
+      },
+      ...prev,
+    ]);
+
+    const snap = {
+      family: meta.family,
+      modelId,
+      planId,
+      prompt: p,
+      startUrl,
+      endUrl,
+      duration,
+      veoAspect,
+      aspect,
+      klingMode,
+      soundOn,
+      multiShot,
+    };
+
+    void (async () => {
+      try {
+        if (snap.family === "sora") {
+          const res = await fetch("/api/kling/generate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              accountPlan: snap.planId,
+              marketModel: "openai/sora-2",
+              prompt: snap.prompt,
+              imageUrl: snap.startUrl ?? undefined,
+              duration: Number(snap.duration),
+            }),
+          });
+          const json = (await res.json()) as { taskId?: string; error?: string };
+          if (!res.ok || !json.taskId) throw new Error(json.error || "Sora 2 failed");
+          toast.message("Sora 2 started", { description: "Rendering…" });
+          const url = await pollKlingVideo(json.taskId);
+          const doneAt = Date.now();
+          setHistoryItems((prev) => {
+            const rest = prev.filter((i) => i.id !== jobId);
+            return [
+              {
+                id: `${jobId}-done-${doneAt}`,
+                kind: "video",
+                status: "ready",
+                label,
+                mediaUrl: url,
+                posterUrl: snap.startUrl ?? undefined,
+                createdAt: doneAt,
+              },
+              ...rest,
+            ];
+          });
+          toast.success("Video ready");
+          return;
+        }
+
+        if (snap.family === "veo") {
+          const urls = [snap.startUrl, snap.endUrl].filter(Boolean) as string[];
+          let generationType: "TEXT_2_VIDEO" | "FIRST_AND_LAST_FRAMES_2_VIDEO" | "REFERENCE_2_VIDEO" =
+            "TEXT_2_VIDEO";
+          if (urls.length >= 2) generationType = "FIRST_AND_LAST_FRAMES_2_VIDEO";
+          else if (urls.length === 1) generationType = "REFERENCE_2_VIDEO";
+
+          const res = await fetch("/api/kie/veo/generate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              accountPlan: snap.planId,
+              prompt: snap.prompt,
+              model: snap.modelId === "veo3" ? "veo3" : "veo3_fast",
+              aspectRatio: snap.veoAspect,
+              generationType,
+              imageUrls: urls.length ? urls : undefined,
+            }),
+          });
+          const json = (await res.json()) as { taskId?: string; error?: string };
+          if (!res.ok || !json.taskId) throw new Error(json.error || "Veo failed");
+          toast.message("Veo started", { description: "Rendering…" });
+          const url = await pollVeoVideo(json.taskId);
+          const doneAt = Date.now();
+          setHistoryItems((prev) => {
+            const rest = prev.filter((i) => i.id !== jobId);
+            return [
+              {
+                id: `${jobId}-done-${doneAt}`,
+                kind: "video",
+                status: "ready",
+                label,
+                mediaUrl: url,
+                posterUrl: snap.startUrl ?? undefined,
+                createdAt: doneAt,
+              },
+              ...rest,
+            ];
+          });
+          toast.success("Video ready");
+          return;
+        }
+
+        const isKling30 = snap.modelId === "kling-3.0/video";
+        const isKling26 = snap.modelId === "kling-2.6/video";
         const res = await fetch("/api/kling/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            accountPlan: planId,
-            marketModel: "openai/sora-2",
-            prompt: p,
-            imageUrl: startUrl ?? undefined,
-            duration: Number(duration),
+            accountPlan: snap.planId,
+            marketModel: snap.modelId,
+            prompt: snap.prompt,
+            imageUrl: snap.startUrl ?? undefined,
+            duration: Number(snap.duration),
+            aspectRatio: (isKling30 || isKling26) && !snap.startUrl ? snap.aspect : undefined,
+            sound: modelHasAudio(snap.modelId) ? snap.soundOn : undefined,
+            mode: isKling30 ? snap.klingMode : undefined,
+            multiShots: isKling30 ? snap.multiShot : undefined,
           }),
         });
         const json = (await res.json()) as { taskId?: string; error?: string };
-        if (!res.ok || !json.taskId) throw new Error(json.error || "Sora 2 failed");
-        toast.message("Sora 2 started", { description: "Rendering…" });
+        if (!res.ok || !json.taskId) throw new Error(json.error || "Video task failed");
+        toast.message("Generation started", { description: "Polling provider…" });
         const url = await pollKlingVideo(json.taskId);
-        setVideoHistory((h) => [url, ...h]);
-        toast.success("Video ready");
-        return;
-      }
-
-      if (meta.family === "veo") {
-        const urls = [startUrl, endUrl].filter(Boolean) as string[];
-        let generationType: "TEXT_2_VIDEO" | "FIRST_AND_LAST_FRAMES_2_VIDEO" | "REFERENCE_2_VIDEO" =
-          "TEXT_2_VIDEO";
-        if (urls.length >= 2) generationType = "FIRST_AND_LAST_FRAMES_2_VIDEO";
-        else if (urls.length === 1) generationType = "REFERENCE_2_VIDEO";
-
-        const res = await fetch("/api/kie/veo/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            accountPlan: planId,
-            prompt: p,
-            model: modelId === "veo3" ? "veo3" : "veo3_fast",
-            aspectRatio: veoAspect,
-            generationType,
-            imageUrls: urls.length ? urls : undefined,
-          }),
+        const doneAt = Date.now();
+        setHistoryItems((prev) => {
+          const rest = prev.filter((i) => i.id !== jobId);
+          return [
+            {
+              id: `${jobId}-done-${doneAt}`,
+              kind: "video",
+              status: "ready",
+              label,
+              mediaUrl: url,
+              posterUrl: snap.startUrl ?? undefined,
+              createdAt: doneAt,
+            },
+            ...rest,
+          ];
         });
-        const json = (await res.json()) as { taskId?: string; error?: string };
-        if (!res.ok || !json.taskId) throw new Error(json.error || "Veo failed");
-        toast.message("Veo started", { description: "Rendering…" });
-        const url = await pollVeoVideo(json.taskId);
-        setVideoHistory((h) => [url, ...h]);
         toast.success("Video ready");
-        return;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Error";
+        toast.error(msg);
+        setHistoryItems((prev) =>
+          prev.map((i) =>
+            i.id === jobId && i.status === "generating"
+              ? {
+                  ...i,
+                  status: "failed",
+                  errorMessage: msg,
+                  creditsRefunded: false,
+                }
+              : i,
+          ),
+        );
       }
-
-      // KIE market (Kling / Seedance)
-      const isKling30 = modelId === "kling-3.0/video";
-      const isKling26 = modelId === "kling-2.6/video";
-      const res = await fetch("/api/kling/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          accountPlan: planId,
-          marketModel: modelId,
-          prompt: p,
-          imageUrl: startUrl ?? undefined,
-          duration: Number(duration),
-          aspectRatio: (isKling30 || isKling26) && !startUrl ? aspect : undefined,
-          sound: modelHasAudio(modelId) ? soundOn : undefined,
-          mode: isKling30 ? klingMode : undefined,
-          multiShots: isKling30 ? multiShot : undefined,
-        }),
-      });
-      const json = (await res.json()) as { taskId?: string; error?: string };
-      if (!res.ok || !json.taskId) throw new Error(json.error || "Video task failed");
-      toast.message("Generation started", { description: "Polling provider…" });
-      const url = await pollKlingVideo(json.taskId);
-      setVideoHistory((h) => [url, ...h]);
-      toast.success("Video ready");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Error");
-    } finally {
-      setBusy(false);
-    }
+    })();
   };
-
-  const videoResultsOutput = (
-    <div className="space-y-2">
-      <p className="text-xs font-semibold uppercase tracking-wide text-white/45">Recent generations</p>
-      <div className="flex flex-col gap-4">
-        {videoHistory.map((u) => (
-          <div key={u} className="overflow-hidden rounded-2xl border border-white/10 bg-black">
-            <video src={u} controls className="max-h-[520px] w-full" />
-            <div className="border-t border-white/10 p-3">
-              <a
-                href={`/api/download?url=${encodeURIComponent(u)}`}
-                className="text-sm font-medium text-violet-300 underline"
-              >
-                Download
-              </a>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
 
   const generateBtnClass =
     "h-14 w-full rounded-2xl border border-violet-300/40 bg-violet-500 text-lg font-semibold text-white shadow-[0_6px_0_0_rgba(76,29,149,0.85)] transition-all hover:-translate-y-px hover:bg-violet-400 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.85)] active:translate-y-1 active:shadow-none";
@@ -458,10 +529,16 @@ export default function StudioVideoPanel() {
             </div>
           </aside>
           <StudioOutputPane
-            title="Generations"
-            hasOutput={false}
-            output={null}
-            empty={<StudioEmptyExamples variant="video" />}
+            title=""
+            hasOutput
+            output={
+              <StudioGenerationsHistory
+                items={historyItems}
+                empty={<StudioEmptyExamples variant="video" />}
+                mediaLabel="Video"
+              />
+            }
+            empty={null}
           />
         </div>
       ) : (
@@ -472,7 +549,7 @@ export default function StudioVideoPanel() {
               <FrameSlot
                 label="Start frame"
                 url={startUrl}
-                disabled={busy}
+                disabled={frameUploadBusy}
                 onPick={() => pickFrame("start")}
                 onClear={() => setStartUrl(null)}
               />
@@ -480,7 +557,7 @@ export default function StudioVideoPanel() {
                 label="End frame"
                 optional
                 url={endUrl}
-                disabled={busy}
+                disabled={frameUploadBusy}
                 onPick={() => pickFrame("end")}
                 onClear={() => setEndUrl(null)}
               />
@@ -494,7 +571,6 @@ export default function StudioVideoPanel() {
                   </div>
                   <button
                     type="button"
-                    disabled={busy}
                     onClick={() => setMultiShot((m) => !m)}
                     className={`relative h-7 w-12 shrink-0 rounded-full border transition ${
                       multiShot
@@ -656,24 +732,26 @@ export default function StudioVideoPanel() {
               )}
             </div>
 
-            <Button type="button" disabled={busy} onClick={() => void generate()} className={generateBtnClass}>
-              {busy ? (
-                <Loader2 className="h-6 w-6 animate-spin" />
-              ) : (
-                <span className="inline-flex items-center gap-2">
-                  Generate
-                  <Sparkles className="h-5 w-5" />
-                  <span className="rounded-md bg-white/15 px-2 py-0.5 text-base tabular-nums">{credits}</span>
-                </span>
-              )}
+            <Button type="button" onClick={() => generate()} className={generateBtnClass}>
+              <span className="inline-flex items-center gap-2">
+                Generate
+                <Sparkles className="h-5 w-5" />
+                <span className="rounded-md bg-white/15 px-2 py-0.5 text-base tabular-nums">{credits}</span>
+              </span>
             </Button>
           </aside>
 
           <StudioOutputPane
-            title="Generations"
-            hasOutput={videoHistory.length > 0}
-            output={videoResultsOutput}
-            empty={<StudioEmptyExamples variant="video" />}
+            title=""
+            hasOutput
+            output={
+              <StudioGenerationsHistory
+                items={historyItems}
+                empty={<StudioEmptyExamples variant="video" />}
+                mediaLabel="Video"
+              />
+            }
+            empty={null}
           />
         </div>
       )}

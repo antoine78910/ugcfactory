@@ -21,12 +21,24 @@ type Props = {
   studioProjectId?: string | null;
 };
 
-const CREATE_SECTIONS: { id: StudioNavSection; label: string }[] = [
-  { id: "link_to_ad", label: "Link to Ad" },
-  { id: "motion_control", label: "Motion Control" },
-  { id: "image", label: "Image" },
-  { id: "video", label: "Video" },
+type CreateNavEntry =
+  | { kind: "route"; id: StudioNavSection; label: string }
+  | { kind: "soon"; label: string };
+
+const CREATE_NAV: CreateNavEntry[] = [
+  { kind: "route", id: "link_to_ad", label: "Link to Ad" },
+  { kind: "soon", label: "Competitors Ad Clone" },
+  { kind: "route", id: "motion_control", label: "Motion Control" },
+  { kind: "route", id: "image", label: "Image" },
+  { kind: "route", id: "video", label: "Video" },
 ];
+
+function soonRowClass(): string {
+  return [
+    "flex w-full items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-left text-sm font-semibold text-white/40",
+    "cursor-not-allowed select-none pointer-events-none",
+  ].join(" ");
+}
 
 const PROJECTS_NAV: { id: StudioNavSection; label: string } = { id: "projects", label: "My Projects" };
 
@@ -107,7 +119,23 @@ function StudioShellInner({
             <div className="rounded-xl border border-white/10 bg-[#0b0912]/85 p-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/45">CREATE</p>
               <div className="mt-2 space-y-2.5">
-                {CREATE_SECTIONS.map(({ id, label }) => {
+                {CREATE_NAV.map((entry) => {
+                  if (entry.kind === "soon") {
+                    return (
+                      <div
+                        key={entry.label}
+                        className={soonRowClass()}
+                        title="Coming soon"
+                        aria-disabled="true"
+                      >
+                        <span>{entry.label}</span>
+                        <span className="shrink-0 rounded-md border border-white/15 bg-white/[0.06] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white/50">
+                          Soon
+                        </span>
+                      </div>
+                    );
+                  }
+                  const { id, label } = entry;
                   const active = controlled && activeSection === id;
                   if (controlled) {
                     return (
