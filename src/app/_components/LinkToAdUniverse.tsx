@@ -39,7 +39,7 @@ import { cn } from "@/lib/utils";
 import { LINK_TO_AD_LOADING_MESSAGES } from "@/lib/linkToAd/loadingMessageLoops";
 import {
   CREDITS_KLING_LINK_TO_AD_VIDEO,
-  CREDITS_LINK_TO_AD_FULL_PIPELINE,
+  CREDITS_LINK_TO_AD_GENERATE_FROM_URL,
   CREDITS_LINK_TO_AD_STORE_SCAN,
   CREDITS_LINK_TO_AD_THREE_REF_IMAGES,
   CREDITS_LINK_TO_AD_VIDEO_FROM_IMAGE,
@@ -51,6 +51,32 @@ import { runInitialPipeline } from "@/lib/linkToAd/runInitialPipeline";
 
 /** Same-origin API calls with session (mirrors server `createInternalFetchFromRequest`). */
 const browserPipelineFetch = ((path: string, init?: RequestInit) => fetch(path, init)) as InternalFetch;
+
+const LTA_BUNDLE_BANK_KEY = "lta_bundle_bank:";
+
+function persistLtaBundleBank(runId: string | null, remaining: number): void {
+  if (!runId || typeof window === "undefined") return;
+  try {
+    sessionStorage.setItem(
+      `${LTA_BUNDLE_BANK_KEY}${runId}`,
+      String(Math.max(0, Math.floor(remaining))),
+    );
+  } catch {
+    /* ignore */
+  }
+}
+
+function readLtaBundleBank(runId: string): number {
+  if (typeof window === "undefined") return 0;
+  try {
+    const raw = sessionStorage.getItem(`${LTA_BUNDLE_BANK_KEY}${runId}`);
+    if (raw === null) return 0;
+    const n = parseInt(raw, 10);
+    return !Number.isNaN(n) && n >= 0 ? n : 0;
+  } catch {
+    return 0;
+  }
+}
 
 /** Shimmer sweep on copy + very subtle tilt (spinner beside it supplies the obvious “rotate”). */
 function StatusLineShimmer({ text, className }: { text: string; className?: string }) {
@@ -155,11 +181,17 @@ function compactBrandSummaryForUi(full: string, maxLen = 200): string {
 }
 
 export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRunsChanged }: LinkToAdUniverseProps) {
-  const { planId, current: creditsBalance, spendCredits } = useCreditsPlan();
+  const { planId, current: creditsBalance, spendCredits, grantCredits } = useCreditsPlan();
   /** After a fresh store scan starts, gate later steps against this snapshot so the wallet UI does not “jump” each step. Resync on image/video redo actions only. */
   const [ltaFrozenCredits, setLtaFrozenCredits] = useState<number | null>(null);
   const creditsBalanceRef = useRef(creditsBalance);
   creditsBalanceRef.current = creditsBalance;
+  /**
+   * After “Generate” from URL, user is charged `CREDITS_LINK_TO_AD_GENERATE_FROM_URL` once. This balance is consumed
+   * for scan + 3 ref images + default video steps without re-debiting the wallet (must match the button amount).
+   */
+  const ltaPrepaidRemainingRef = useRef(0);
+  const universeRunIdRef = useRef<string | null>(null);
 
   const [ltaCreditModal, setLtaCreditModal] = useState<{
     required: number;
@@ -187,6 +219,24 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       return true;
     },
     [spendCredits],
+  );
+
+  /** Uses prepaid bundle first (same amount as the Generate button), then the wallet. */
+  const consumeBundledLinkToAd = useCallback(
+    (cost: number): boolean => {
+      const k = Math.max(0, Math.floor(cost));
+      if (k <= 0) return true;
+      const fromPrepaid = Math.min(ltaPrepaidRemainingRef.current, k);
+      if (fromPrepaid > 0) {
+        ltaPrepaidRemainingRef.current -= fromPrepaid;
+        persistLtaBundleBank(universeRunIdRef.current, ltaPrepaidRemainingRef.current);
+        setLtaFrozenCredits((x) => (x !== null ? Math.max(0, x - fromPrepaid) : x));
+      }
+      const rest = k - fromPrepaid;
+      if (rest <= 0) return true;
+      return spendLtaCreditsIfEnough(rest);
+    },
+    [spendLtaCreditsIfEnough],
   );
   const [storeUrl, setStoreUrl] = useState("");
   const [isWorking, setIsWorking] = useState(false);
@@ -225,6 +275,9 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const [serverPipelineStepIndex, setServerPipelineStepIndex] = useState<number | null>(null);
 
   const [universeRunId, setUniverseRunId] = useState<string | null>(null);
+  useEffect(() => {
+    universeRunIdRef.current = universeRunId;
+  }, [universeRunId]);
   const [lastExtractedJson, setLastExtractedJson] = useState<Record<string, unknown> | null>(null);
   const [angleLabels, setAngleLabels] = useState<[string, string, string]>(["", "", ""]);
   const [selectedAngleIndex, setSelectedAngleIndex] = useState<number | null>(null);
@@ -582,6 +635,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       setLastExtractedJson(cloneExtractedBase(run.extracted));
       setStage("ready");
       setImgError(false);
+      ltaPrepaidRemainingRef.current = readLtaBundleBank(run.id);
       if (!opts?.silent) {
         toast.success("Project resumed");
       }
@@ -848,22 +902,25 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     }
 
     const walletNow = creditsBalanceRef.current;
-    if (walletNow < CREDITS_LINK_TO_AD_FULL_PIPELINE) {
+    if (walletNow < CREDITS_LINK_TO_AD_GENERATE_FROM_URL) {
       setIsWorking(false);
       setStage("idle");
       setLtaCreditModal({
         current: walletNow,
-        required: CREDITS_LINK_TO_AD_FULL_PIPELINE,
+        required: CREDITS_LINK_TO_AD_GENERATE_FROM_URL,
       });
       return;
     }
+    let chargedFullBundle = false;
     setLtaFrozenCredits(walletNow);
-    if (!spendLtaCreditsIfEnough(CREDITS_LINK_TO_AD_STORE_SCAN)) {
+    if (!spendLtaCreditsIfEnough(CREDITS_LINK_TO_AD_GENERATE_FROM_URL)) {
       setIsWorking(false);
       setStage("idle");
       setLtaFrozenCredits(null);
       return;
     }
+    chargedFullBundle = true;
+    ltaPrepaidRemainingRef.current = CREDITS_LINK_TO_AD_GENERATE_FROM_URL;
 
     setSummaryText("");
     setScriptsText("");
@@ -873,6 +930,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       setNeutralUploadUrl(null);
     }
     setUniverseRunId(null);
+    ltaPrepaidRemainingRef.current = 0;
     setLastExtractedJson(null);
     setExtractedTitle(null);
     setCleanCandidate(null);
@@ -915,6 +973,11 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
             error?: string;
           };
           if (getRes.ok && getJson.data) {
+            ltaPrepaidRemainingRef.current = Math.max(
+              0,
+              ltaPrepaidRemainingRef.current - CREDITS_LINK_TO_AD_STORE_SCAN,
+            );
+            persistLtaBundleBank(pipeResult.runId, ltaPrepaidRemainingRef.current);
             hydrateFromRun(getJson.data, { silent: true });
             toast.message("Pipeline stopped early", {
               description: pipeResult.error || "Partial data was saved — check your project.",
@@ -935,6 +998,11 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       if (!getRes.ok || !getJson.data) {
         throw new Error(getJson.error || "Could not reload project after pipeline");
       }
+      ltaPrepaidRemainingRef.current = Math.max(
+        0,
+        ltaPrepaidRemainingRef.current - CREDITS_LINK_TO_AD_STORE_SCAN,
+      );
+      persistLtaBundleBank(pipeResult.runId, ltaPrepaidRemainingRef.current);
       hydrateFromRun(getJson.data, { silent: true });
       setStage("ready");
       toast.success("Project saved");
@@ -945,6 +1013,12 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       }
       onRunsChanged?.();
     } catch (err) {
+      if (chargedFullBundle) {
+        grantCredits(CREDITS_LINK_TO_AD_GENERATE_FROM_URL);
+        creditsBalanceRef.current += CREDITS_LINK_TO_AD_GENERATE_FROM_URL;
+        ltaPrepaidRemainingRef.current = 0;
+        setLtaFrozenCredits(null);
+      }
       setStage("error");
       const message = err instanceof Error ? err.message : "Unknown error";
       toast.error("Universe error", { description: message });
@@ -978,8 +1052,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       toast.error("HTTPS product image is required (missing preview or relative URL).");
       return;
     }
-    refreshLtaCreditsFromWallet();
-    if (!spendLtaCreditsIfEnough(CREDITS_LINK_TO_AD_THREE_REF_IMAGES)) return;
+    if (!consumeBundledLinkToAd(CREDITS_LINK_TO_AD_THREE_REF_IMAGES)) return;
     setIsNanoPromptsLoading(true);
     setIsNanoAllImagesSubmitting(false);
     let text = "";
@@ -1077,7 +1150,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       toast.error("Product image missing or not HTTPS.");
       return;
     }
-    refreshLtaCreditsFromWallet();
     if (!spendLtaCreditsIfEnough(CREDITS_NANO_PRO_PER_IMAGE)) return;
     setIsNanoImageSubmitting(true);
     lastNanoImagePromptRef.current = prompt;
@@ -1266,8 +1338,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       return;
     }
 
-    refreshLtaCreditsFromWallet();
-    if (!spendLtaCreditsIfEnough(CREDITS_LINK_TO_AD_THREE_REF_IMAGES)) return;
+    if (!consumeBundledLinkToAd(CREDITS_LINK_TO_AD_THREE_REF_IMAGES)) return;
     setIsNanoAllImagesSubmitting(true);
     try {
       const { urlsByPrompt, lastTaskId } = await runNanoBananaProThreeSequential(img, prompts as [string, string, string]);
@@ -1457,7 +1528,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       toast.error("Angle script is missing.");
       return null;
     }
-    if (!spendLtaCreditsIfEnough(CREDITS_LINK_TO_AD_VIDEO_PROMPT_GPT)) return null;
+    if (!consumeBundledLinkToAd(CREDITS_LINK_TO_AD_VIDEO_PROMPT_GPT)) return null;
     setIsVideoPromptLoading(true);
     try {
       const res = await fetch("/api/gpt/ugc-i2v-prompt", {
@@ -1510,7 +1581,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       toast.error("Reference image and video prompt are required.");
       return;
     }
-    if (!spendLtaCreditsIfEnough(CREDITS_KLING_LINK_TO_AD_VIDEO)) return;
+    if (!consumeBundledLinkToAd(CREDITS_KLING_LINK_TO_AD_VIDEO)) return;
     setIsKlingSubmitting(true);
     const klingPrompt = withAudioHint(prompt);
     lastKlingVideoPromptRef.current = klingPrompt;
@@ -2009,15 +2080,19 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                         Generate
                       </span>
                       <span className="text-[11px] font-semibold text-black/70">
-                        Up to {CREDITS_LINK_TO_AD_FULL_PIPELINE} credits — full ad
+                        {CREDITS_LINK_TO_AD_GENERATE_FROM_URL} credits
                       </span>
                     </>
                   )}
                 </Button>
               </div>
+              <p className="mt-2 max-w-xl text-[11px] leading-snug text-white/40">
+                Use the exact product page URL, not just your shop homepage — we need the specific listing to pull the
+                right images and details.
+              </p>
               <p className="mt-2 max-w-2xl text-sm text-white/50">
-                Paste your store URL and click <span className="text-white/65">Generate</span> (or press Enter). We scan
-                the shop and continue until you choose an angle, then an image, then we finish the ad.
+                Paste your URL and click <span className="text-white/65">Generate</span> (or press Enter). We scan the
+                page and continue until you choose an angle, then an image, then we finish the ad.
               </p>
             </div>
           ) : null}

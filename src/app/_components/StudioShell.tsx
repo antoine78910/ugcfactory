@@ -27,7 +27,7 @@ type CreateNavEntry =
 
 const CREATE_NAV: CreateNavEntry[] = [
   { kind: "route", id: "link_to_ad", label: "Link to Ad" },
-  { kind: "soon", label: "Competitors Ad Clone" },
+  { kind: "soon", label: "Competitors Clone Ad" },
   { kind: "route", id: "motion_control", label: "Motion Control" },
   { kind: "route", id: "image", label: "Image" },
   { kind: "route", id: "video", label: "Video" },
@@ -35,7 +35,7 @@ const CREATE_NAV: CreateNavEntry[] = [
 
 function soonRowClass(): string {
   return [
-    "flex w-full items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-left text-sm font-semibold text-white/40",
+    "flex w-full flex-col items-start gap-1 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-left",
     "cursor-not-allowed select-none pointer-events-none",
   ].join(" ");
 }
@@ -128,8 +128,8 @@ function StudioShellInner({
                         title="Coming soon"
                         aria-disabled="true"
                       >
-                        <span>{entry.label}</span>
-                        <span className="shrink-0 rounded-md border border-white/15 bg-white/[0.06] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white/50">
+                        <span className="w-full truncate text-sm font-semibold text-white/40">{entry.label}</span>
+                        <span className="rounded-md border border-white/15 bg-white/[0.06] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white/50">
                           Soon
                         </span>
                       </div>

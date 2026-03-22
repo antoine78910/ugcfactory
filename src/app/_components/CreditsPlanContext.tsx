@@ -90,6 +90,8 @@ type CreditsPlanContextValue = CreditsState & {
   setSubscriptionPlan: (planId: SubscriptionPlanId) => void;
   addPackCredits: (packKey: CreditPackKey) => void;
   spendCredits: (n: number) => void;
+  /** Add credits back (e.g. refund a failed client-side charge). */
+  grantCredits: (n: number) => void;
   /** For upgrade modal: paid tiers only */
   subscriptionTiers: typeof SUBSCRIPTION_TIERS;
 };
@@ -206,6 +208,21 @@ export function CreditsPlanProvider({ children }: { children: ReactNode }) {
     [commit],
   );
 
+  const grantCredits = useCallback(
+    (n: number) => {
+      const k = Math.max(0, Math.floor(n));
+      if (k === 0) return;
+      const prev = readState();
+      const nextCurrent = prev.current + k;
+      const nextTotal =
+        prev.planId === "free"
+          ? Math.max(prev.total, nextCurrent)
+          : Math.max(subscriptionCredits(prev.planId), nextCurrent);
+      commit({ planId: prev.planId, current: nextCurrent, total: nextTotal });
+    },
+    [commit],
+  );
+
   const planDisplayName = useMemo(() => {
     if (state.planId === "free") return "Free";
     return SUBSCRIPTION_TIERS.find((t) => t.id === state.planId)?.name ?? state.planId;
@@ -224,6 +241,7 @@ export function CreditsPlanProvider({ children }: { children: ReactNode }) {
       setSubscriptionPlan,
       addPackCredits,
       spendCredits,
+      grantCredits,
       subscriptionTiers: SUBSCRIPTION_TIERS,
     }),
     [
@@ -233,6 +251,7 @@ export function CreditsPlanProvider({ children }: { children: ReactNode }) {
       setSubscriptionPlan,
       addPackCredits,
       spendCredits,
+      grantCredits,
     ],
   );
 

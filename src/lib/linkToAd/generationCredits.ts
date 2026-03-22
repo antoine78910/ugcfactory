@@ -47,6 +47,9 @@ export const CREDITS_LINK_TO_AD_FULL_PIPELINE =
   CREDITS_LINK_TO_AD_THREE_REF_IMAGES +
   CREDITS_LINK_TO_AD_VIDEO_FROM_IMAGE;
 
+/** Same as `CREDITS_LINK_TO_AD_FULL_PIPELINE` — debited on Link-to-Ad “Generate” from URL (must match the button). */
+export const CREDITS_LINK_TO_AD_GENERATE_FROM_URL = CREDITS_LINK_TO_AD_FULL_PIPELINE;
+
 /** Full ad bundle — backend must bill this fixed amount, not sum of parts. */
 export { AD_CREDITS as CREDITS_AD_GENERATION };
 export { AD_CREDITS };
