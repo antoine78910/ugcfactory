@@ -412,10 +412,54 @@ export function snapshotAfterKlingVideoSuccess(
 }
 
 const FALLBACK_ANGLE_LABELS: [string, string, string] = [
-  "Pain & urgency — stop the scroll with a relatable frustration.",
-  "Trust & proof — calm objections and show why it works.",
-  "Desire & transformation — lead with the main product benefit.",
+  "Pain & urgency — relatable frustration on camera, fast hook, pushes the viewer to stop scrolling and listen.",
+  "Trust & proof — calmer energy, addresses doubts, shows why the product works without hard selling.",
+  "Desire & transformation — benefit-led, paints the after-state and makes the product feel like the obvious next step.",
 ];
+
+/** Max length for angle titles in the Link to Ad UI (headline + fallbacks). */
+const ANGLE_LABEL_MAX_LEN = 280;
+
+function clipAngleLabel(s: string, max = ANGLE_LABEL_MAX_LEN): string {
+  const t = s.replace(/\s+/g, " ").trim();
+  if (t.length <= max) return t;
+  return `${t.slice(0, max - 1)}…`;
+}
+
+/** Pull persona / tone / setting hints from VIDEO_METADATA (before ANGLE_HEADLINE if present). */
+function extractVideoMetadataHints(block: string): string {
+  const start = block.search(/^\s*VIDEO_METADATA\s*$/im);
+  if (start === -1) return "";
+  const after = block.slice(start).replace(/^\s*VIDEO_METADATA\s*\n/im, "");
+  const stop = after.search(/^\s*(?:ANGLE_HEADLINE|SCRIPT\s+OPTION)\b/im);
+  const body = stop === -1 ? after : after.slice(0, stop);
+  const priority = ["persona", "tone", "location", "camera_style", "energy_level", "props", "actions"];
+  const picked: string[] = [];
+  const used = new Set<string>();
+  for (const line of body.split("\n")) {
+    const m = line.match(/^\s*(persona|tone|location|camera_style|energy_level|props|actions)\s*[:：—\-]\s*(.+)$/i);
+    if (!m) continue;
+    const k = m[1].toLowerCase();
+    const v = m[2].replace(/\s+/g, " ").trim();
+    if (!v || used.has(k)) continue;
+    used.add(k);
+    picked.push(v);
+    if (picked.length >= 3) break;
+  }
+  return clipAngleLabel(picked.join(" · "), 140);
+}
+
+function hookQuotedLine(block: string): string | null {
+  const hookSpoken = block.match(/HOOK\s*[\s\S]*?\([^)]*\)\s*\n\s*"([^"]+)"/i);
+  const s = hookSpoken?.[1]?.trim();
+  return s || null;
+}
+
+function solutionQuotedLine(block: string): string | null {
+  const sol = block.match(/SOLUTION\s*[\s\S]*?\([^)]*\)\s*\n\s*"([^"]+)"/i);
+  const s = sol?.[1]?.trim();
+  return s || null;
+}
 
 /** Split GPT output into the 3 SCRIPT OPTION bodies (best-effort). */
 export function splitScriptOptions(full: string): [string, string, string] {
@@ -460,17 +504,41 @@ export function selectedAngleScript(scriptsText: string, selectedAngleIndex: num
   return [a, b, c][selectedAngleIndex] ?? "";
 }
 
-/** One-line-ish teaser from a script block: first spoken line after HOOK, else first quoted line. */
+/**
+ * Rich angle title: prefers GPT ANGLE_HEADLINE, else VIDEO_METADATA hints + HOOK/SOLUTION quotes,
+ * else first long quoted line. Kept in sync with `ugc-scripts-from-brief` output format.
+ */
 export function teaserFromScriptBlock(block: string, index: 0 | 1 | 2): string {
-  const hookSpoken = block.match(/HOOK\s*[\s\S]*?\([^)]*\)\s*\n\s*"([^"]+)"/i);
-  if (hookSpoken?.[1]) {
-    const s = hookSpoken[1].trim();
-    return s.length > 140 ? `${s.slice(0, 137)}…` : s;
+  const headline = block.match(/^\s*ANGLE_HEADLINE\s*:\s*(.+)$/im);
+  if (headline?.[1]) {
+    return clipAngleLabel(headline[1].replace(/\s+/g, " ").trim());
   }
-  const any = block.match(/"([^"]{10,200})"/);
+
+  const meta = extractVideoMetadataHints(block);
+  const hook = hookQuotedLine(block);
+  const solution = solutionQuotedLine(block);
+  const spokenParts: string[] = [];
+  if (hook && solution && hook !== solution) {
+    spokenParts.push(`${hook} — ${solution}`);
+  } else if (hook) {
+    spokenParts.push(hook);
+  } else if (solution) {
+    spokenParts.push(solution);
+  }
+
+  if (meta && spokenParts.length) {
+    return clipAngleLabel(`${meta} · ${spokenParts[0]}`);
+  }
+  if (meta) {
+    return clipAngleLabel(meta);
+  }
+  if (spokenParts.length) {
+    return clipAngleLabel(spokenParts[0]);
+  }
+
+  const any = block.match(/"([^"]{10,400})"/);
   if (any?.[1]) {
-    const s = any[1].trim();
-    return s.length > 140 ? `${s.slice(0, 137)}…` : s;
+    return clipAngleLabel(any[1].trim());
   }
   return FALLBACK_ANGLE_LABELS[index];
 }

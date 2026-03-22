@@ -37,46 +37,12 @@ import { WebsiteScanLoader } from "@/app/_components/WebsiteScanLoader";
 import { TextShimmer } from "@/components/ui/text-shimmer";
 import { cn } from "@/lib/utils";
 import { LINK_TO_AD_LOADING_MESSAGES } from "@/lib/linkToAd/loadingMessageLoops";
-import {
-  CREDITS_KLING_LINK_TO_AD_VIDEO,
-  CREDITS_LINK_TO_AD_GENERATE_FROM_URL,
-  CREDITS_LINK_TO_AD_STORE_SCAN,
-  CREDITS_LINK_TO_AD_THREE_REF_IMAGES,
-  CREDITS_LINK_TO_AD_VIDEO_FROM_IMAGE,
-  CREDITS_LINK_TO_AD_VIDEO_PROMPT_GPT,
-  CREDITS_NANO_PRO_PER_IMAGE,
-} from "@/lib/linkToAd/generationCredits";
+import { CREDITS_LINK_TO_AD_GENERATE_FROM_URL } from "@/lib/linkToAd/generationCredits";
 import type { InternalFetch } from "@/lib/linkToAd/internalFetch";
 import { runInitialPipeline } from "@/lib/linkToAd/runInitialPipeline";
 
 /** Same-origin API calls with session (mirrors server `createInternalFetchFromRequest`). */
 const browserPipelineFetch = ((path: string, init?: RequestInit) => fetch(path, init)) as InternalFetch;
-
-const LTA_BUNDLE_BANK_KEY = "lta_bundle_bank:";
-
-function persistLtaBundleBank(runId: string | null, remaining: number): void {
-  if (!runId || typeof window === "undefined") return;
-  try {
-    sessionStorage.setItem(
-      `${LTA_BUNDLE_BANK_KEY}${runId}`,
-      String(Math.max(0, Math.floor(remaining))),
-    );
-  } catch {
-    /* ignore */
-  }
-}
-
-function readLtaBundleBank(runId: string): number {
-  if (typeof window === "undefined") return 0;
-  try {
-    const raw = sessionStorage.getItem(`${LTA_BUNDLE_BANK_KEY}${runId}`);
-    if (raw === null) return 0;
-    const n = parseInt(raw, 10);
-    return !Number.isNaN(n) && n >= 0 ? n : 0;
-  } catch {
-    return 0;
-  }
-}
 
 /** Shimmer sweep on copy + very subtle tilt (spinner beside it supplies the obvious “rotate”). */
 function StatusLineShimmer({ text, className }: { text: string; className?: string }) {
@@ -186,25 +152,13 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const [ltaFrozenCredits, setLtaFrozenCredits] = useState<number | null>(null);
   const creditsBalanceRef = useRef(creditsBalance);
   creditsBalanceRef.current = creditsBalance;
-  /**
-   * After “Generate” from URL, user is charged `CREDITS_LINK_TO_AD_GENERATE_FROM_URL` once. This balance is consumed
-   * for scan + 3 ref images + default video steps without re-debiting the wallet (must match the button amount).
-   */
-  const ltaPrepaidRemainingRef = useRef(0);
-  const universeRunIdRef = useRef<string | null>(null);
 
   const [ltaCreditModal, setLtaCreditModal] = useState<{
     required: number;
     current: number;
   } | null>(null);
 
-  const creditsForLtaGating = ltaFrozenCredits ?? creditsBalance;
-
-  const refreshLtaCreditsFromWallet = useCallback(() => {
-    setLtaFrozenCredits(creditsBalanceRef.current);
-  }, []);
-
-  /** Deduct from wallet on Generate; keep ref/frozen in sync for back-to-back spends (e.g. video prompt then Kling). */
+  /** Deduct from wallet once on URL Generate; keep ref/frozen in sync with that charge. */
   const spendLtaCreditsIfEnough = useCallback(
     (cost: number): boolean => {
       const k = Math.max(0, Math.floor(cost));
@@ -221,23 +175,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     [spendCredits],
   );
 
-  /** Uses prepaid bundle first (same amount as the Generate button), then the wallet. */
-  const consumeBundledLinkToAd = useCallback(
-    (cost: number): boolean => {
-      const k = Math.max(0, Math.floor(cost));
-      if (k <= 0) return true;
-      const fromPrepaid = Math.min(ltaPrepaidRemainingRef.current, k);
-      if (fromPrepaid > 0) {
-        ltaPrepaidRemainingRef.current -= fromPrepaid;
-        persistLtaBundleBank(universeRunIdRef.current, ltaPrepaidRemainingRef.current);
-        setLtaFrozenCredits((x) => (x !== null ? Math.max(0, x - fromPrepaid) : x));
-      }
-      const rest = k - fromPrepaid;
-      if (rest <= 0) return true;
-      return spendLtaCreditsIfEnough(rest);
-    },
-    [spendLtaCreditsIfEnough],
-  );
   const [storeUrl, setStoreUrl] = useState("");
   const [isWorking, setIsWorking] = useState(false);
   const [extractedTitle, setExtractedTitle] = useState<string | null>(null);
@@ -275,9 +212,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const [serverPipelineStepIndex, setServerPipelineStepIndex] = useState<number | null>(null);
 
   const [universeRunId, setUniverseRunId] = useState<string | null>(null);
-  useEffect(() => {
-    universeRunIdRef.current = universeRunId;
-  }, [universeRunId]);
   const [lastExtractedJson, setLastExtractedJson] = useState<Record<string, unknown> | null>(null);
   const [angleLabels, setAngleLabels] = useState<[string, string, string]>(["", "", ""]);
   const [selectedAngleIndex, setSelectedAngleIndex] = useState<number | null>(null);
@@ -635,7 +569,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       setLastExtractedJson(cloneExtractedBase(run.extracted));
       setStage("ready");
       setImgError(false);
-      ltaPrepaidRemainingRef.current = readLtaBundleBank(run.id);
       if (!opts?.silent) {
         toast.success("Project resumed");
       }
@@ -920,7 +853,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       return;
     }
     chargedFullBundle = true;
-    ltaPrepaidRemainingRef.current = CREDITS_LINK_TO_AD_GENERATE_FROM_URL;
 
     setSummaryText("");
     setScriptsText("");
@@ -930,7 +862,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       setNeutralUploadUrl(null);
     }
     setUniverseRunId(null);
-    ltaPrepaidRemainingRef.current = 0;
     setLastExtractedJson(null);
     setExtractedTitle(null);
     setCleanCandidate(null);
@@ -973,11 +904,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
             error?: string;
           };
           if (getRes.ok && getJson.data) {
-            ltaPrepaidRemainingRef.current = Math.max(
-              0,
-              ltaPrepaidRemainingRef.current - CREDITS_LINK_TO_AD_STORE_SCAN,
-            );
-            persistLtaBundleBank(pipeResult.runId, ltaPrepaidRemainingRef.current);
             hydrateFromRun(getJson.data, { silent: true });
             toast.message("Pipeline stopped early", {
               description: pipeResult.error || "Partial data was saved — check your project.",
@@ -998,11 +924,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       if (!getRes.ok || !getJson.data) {
         throw new Error(getJson.error || "Could not reload project after pipeline");
       }
-      ltaPrepaidRemainingRef.current = Math.max(
-        0,
-        ltaPrepaidRemainingRef.current - CREDITS_LINK_TO_AD_STORE_SCAN,
-      );
-      persistLtaBundleBank(pipeResult.runId, ltaPrepaidRemainingRef.current);
       hydrateFromRun(getJson.data, { silent: true });
       setStage("ready");
       toast.success("Project saved");
@@ -1016,7 +937,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       if (chargedFullBundle) {
         grantCredits(CREDITS_LINK_TO_AD_GENERATE_FROM_URL);
         creditsBalanceRef.current += CREDITS_LINK_TO_AD_GENERATE_FROM_URL;
-        ltaPrepaidRemainingRef.current = 0;
         setLtaFrozenCredits(null);
       }
       setStage("error");
@@ -1052,7 +972,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       toast.error("HTTPS product image is required (missing preview or relative URL).");
       return;
     }
-    if (!consumeBundledLinkToAd(CREDITS_LINK_TO_AD_THREE_REF_IMAGES)) return;
     setIsNanoPromptsLoading(true);
     setIsNanoAllImagesSubmitting(false);
     let text = "";
@@ -1150,7 +1069,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       toast.error("Product image missing or not HTTPS.");
       return;
     }
-    if (!spendLtaCreditsIfEnough(CREDITS_NANO_PRO_PER_IMAGE)) return;
     setIsNanoImageSubmitting(true);
     lastNanoImagePromptRef.current = prompt;
     lastNanoImagePromptIndexRef.current = nanoBananaSelectedPromptIndex;
@@ -1338,7 +1256,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       return;
     }
 
-    if (!consumeBundledLinkToAd(CREDITS_LINK_TO_AD_THREE_REF_IMAGES)) return;
     setIsNanoAllImagesSubmitting(true);
     try {
       const { urlsByPrompt, lastTaskId } = await runNanoBananaProThreeSequential(img, prompts as [string, string, string]);
@@ -1528,7 +1445,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       toast.error("Angle script is missing.");
       return null;
     }
-    if (!consumeBundledLinkToAd(CREDITS_LINK_TO_AD_VIDEO_PROMPT_GPT)) return null;
     setIsVideoPromptLoading(true);
     try {
       const res = await fetch("/api/gpt/ugc-i2v-prompt", {
@@ -1581,7 +1497,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       toast.error("Reference image and video prompt are required.");
       return;
     }
-    if (!consumeBundledLinkToAd(CREDITS_KLING_LINK_TO_AD_VIDEO)) return;
     setIsKlingSubmitting(true);
     const klingPrompt = withAudioHint(prompt);
     lastKlingVideoPromptRef.current = klingPrompt;
@@ -1889,13 +1804,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   async function handleGenerateVideoFromSelectedImage() {
     if (nanoBananaSelectedImageIndex === null || !nanoBananaImageUrl?.trim()) {
       toast.error("Select a reference image first.");
-      return;
-    }
-    if (creditsForLtaGating < CREDITS_LINK_TO_AD_VIDEO_FROM_IMAGE) {
-      setLtaCreditModal({
-        current: creditsForLtaGating,
-        required: CREDITS_LINK_TO_AD_VIDEO_FROM_IMAGE,
-      });
       return;
     }
     if (isVideoPromptLoading || isKlingSubmitting || Boolean(klingPollTaskId)) return;
@@ -2273,30 +2181,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
             <div className="flex min-w-0 flex-col gap-4 lg:w-[min(100%,22rem)] xl:w-[min(100%,26rem)] lg:shrink-0">
               <div className="rounded-xl border border-violet-500/20 bg-black/25 px-3 py-2.5 sm:px-4">
                 <div className="flex flex-col gap-4">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
-                    <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-white/45">
-                      Choose your AI UGC angle
-                    </span>
-                    <div className="inline-flex rounded-xl border border-white/10 bg-white/[0.04] p-0.5">
-                      {([0, 1, 2] as const).map((i) => (
-                        <button
-                          key={i}
-                          type="button"
-                          onClick={() => void onSelectAngle(i)}
-                          disabled={selectedAngleIndex === i}
-                          title={angleLabels[i] ? angleLabels[i].slice(0, 120) : `Angle ${i + 1}`}
-                          className={cn(
-                            "min-w-[2.25rem] rounded-lg px-2.5 py-1.5 text-xs font-bold transition-colors",
-                            selectedAngleIndex === i
-                              ? "bg-violet-500/35 text-violet-50 shadow-inner"
-                              : "text-white/55 hover:bg-white/[0.06] hover:text-white/90",
-                          )}
-                        >
-                          {i + 1}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
                   {nanoBananaPromptsRaw.trim() && nanoHasThreeImages ? (
                     <div className="flex flex-col gap-2 border-t border-white/10 pt-3">
                       <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-white/45">
@@ -2340,7 +2224,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                 {scriptsText.trim() ? (
                   <div className="mt-3 border-t border-white/10 pt-3">
                     <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-white/45">
-                      Choose your AI UGC angle — tap to switch
+                      Script angles
                     </p>
                     <div className="grid grid-cols-1 gap-2">
                       {([0, 1, 2] as const).map((i) => {
@@ -2442,25 +2326,15 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                               Working…
                             </span>
                           ) : (
-                            <>
-                              <span className="inline-flex items-center justify-center gap-2 text-base font-semibold leading-tight">
-                                <Video className="h-5 w-5 shrink-0" aria-hidden />
-                                Generate video from this image
-                              </span>
-                              <span className="text-[11px] font-semibold text-black/70">
-                                {CREDITS_LINK_TO_AD_VIDEO_FROM_IMAGE} credits
-                              </span>
-                            </>
+                            <span className="inline-flex items-center justify-center gap-2 text-base font-semibold leading-tight">
+                              <Video className="h-5 w-5 shrink-0" aria-hidden />
+                              Generate video from this image
+                            </span>
                           )}
                         </Button>
                         {nanoBananaSelectedImageIndex === null ? (
                           <p className="text-xs text-white/45">
                             Tap a square above to choose your reference, then generate.
-                          </p>
-                        ) : creditsForLtaGating < CREDITS_LINK_TO_AD_VIDEO_FROM_IMAGE ? (
-                          <p className="text-xs text-amber-200/85">
-                            You need {CREDITS_LINK_TO_AD_VIDEO_FROM_IMAGE} credits (you have {creditsForLtaGating}). Tap
-                            Generate below to open billing and top up.
                           </p>
                         ) : null}
                       </div>
@@ -2482,19 +2356,16 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                         !nanoPollTaskId ? (
                           <>
                             <p className="text-sm text-white/75">
-                              Angle selected — run generation when you&apos;re ready (GPT prompts + 3 NanoBanana images).
+                              Angle selected. Generate now prompts + 3 personna visuals.
                             </p>
                             <Button
                               type="button"
                               disabled={!resolvedPreviewUrl}
-                              className={`h-auto min-h-11 w-full max-w-md flex-col gap-1 py-2.5 ${primaryBtnClass}`}
+                              className={`h-auto min-h-11 w-full max-w-md py-2.5 ${primaryBtnClass}`}
                               onClick={() => void onGenerateNanoBananaPrompts(selectedAngleIndex as 0 | 1 | 2)}
                             >
                               <span className="text-sm font-semibold leading-tight">
                                 Generate 3 prompts &amp; images
-                              </span>
-                              <span className="text-[11px] font-semibold text-black/70">
-                                {CREDITS_LINK_TO_AD_THREE_REF_IMAGES} credits
                               </span>
                             </Button>
                           </>
@@ -2533,9 +2404,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                       onClick={() => void onGenerateNanoBananaImagesFromAllPrompts()}
                     >
                       <span className="text-sm font-semibold leading-tight">New 3 images</span>
-                      <span className="text-[11px] font-semibold text-black/70">
-                        {CREDITS_LINK_TO_AD_THREE_REF_IMAGES} credits
-                      </span>
                     </Button>
                     <p className="text-[10px] leading-snug text-white/35">
                       Angles &amp; reference frames are on the left.
@@ -2567,7 +2435,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                               <div className="flex w-full flex-col justify-center gap-2 sm:w-auto sm:min-w-[11rem] sm:flex-1">
                                 <Button
                                   type="button"
-                                  className={`h-auto min-h-10 w-full flex-col gap-0.5 px-3 py-2 sm:w-full ${primaryBtnClass}`}
+                                  className={`h-auto min-h-10 w-full px-3 py-2 sm:w-full ${primaryBtnClass}`}
                                   disabled={
                                     isKlingSubmitting ||
                                     Boolean(klingPollTaskId) ||
@@ -2575,7 +2443,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                                     !nanoBananaImageUrl
                                   }
                                   onClick={() => {
-                                    refreshLtaCreditsFromWallet();
                                     void onGenerateKlingVideo();
                                   }}
                                 >
@@ -2585,15 +2452,10 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                                       Working…
                                     </span>
                                   ) : (
-                                    <>
-                                      <span className="inline-flex items-center gap-2 text-sm font-semibold leading-tight">
-                                        <RefreshCw className="h-4 w-4 shrink-0" aria-hidden />
-                                        Regenerate
-                                      </span>
-                                      <span className="text-[11px] font-semibold text-black/70">
-                                        {CREDITS_KLING_LINK_TO_AD_VIDEO} credits
-                                      </span>
-                                    </>
+                                    <span className="inline-flex items-center gap-2 text-sm font-semibold leading-tight">
+                                      <RefreshCw className="h-4 w-4 shrink-0" aria-hidden />
+                                      Regenerate
+                                    </span>
                                   )}
                                 </Button>
                                 <Button
@@ -2659,16 +2521,12 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                         !isKlingSubmitting ? (
                           <Button
                             type="button"
-                            className={`mt-4 flex h-auto min-h-11 flex-col gap-1 py-2.5 ${primaryBtnClass}`}
+                            className={`mt-4 h-auto min-h-11 py-2.5 ${primaryBtnClass}`}
                             onClick={() => {
-                              refreshLtaCreditsFromWallet();
                               void onGenerateKlingVideo();
                             }}
                           >
                             <span className="text-sm font-semibold leading-tight">Retry video render</span>
-                            <span className="text-[11px] font-semibold text-black/70">
-                              {CREDITS_KLING_LINK_TO_AD_VIDEO} credits
-                            </span>
                           </Button>
                         ) : null}
                         {isKlingSubmitting ? (
@@ -2701,16 +2559,12 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                           selectedAngleIndex !== null ? (
                             <Button
                               type="button"
-                              className={`mt-2 flex h-auto min-h-11 flex-col gap-1 py-2.5 ${primaryBtnClass}`}
+                              className={`mt-2 h-auto min-h-11 py-2.5 ${primaryBtnClass}`}
                               onClick={() => {
-                                refreshLtaCreditsFromWallet();
                                 void onGenerateUgcVideoPrompt();
                               }}
                             >
                               <span className="text-sm font-semibold leading-tight">Retry video prompt</span>
-                              <span className="text-[11px] font-semibold text-black/70">
-                                {CREDITS_LINK_TO_AD_VIDEO_PROMPT_GPT} credits
-                              </span>
                             </Button>
                           ) : null}
                           {isVideoPromptLoading ? (
@@ -2747,14 +2601,11 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                           !nanoBananaImageUrl
                         }
                         onClick={() => void handleGenerateVideoFromSelectedImage()}
-                        className={`flex h-auto min-h-12 flex-col gap-1 py-2.5 ${primaryBtnClass}`}
+                        className={`flex h-auto min-h-12 py-2.5 ${primaryBtnClass}`}
                       >
                         <span className="inline-flex items-center justify-center gap-2 text-base font-semibold leading-tight">
                           <Video className="h-5 w-5 shrink-0" aria-hidden />
                           Generate video from this image
-                        </span>
-                        <span className="text-[11px] font-semibold text-black/70">
-                          {CREDITS_LINK_TO_AD_VIDEO_FROM_IMAGE} credits
                         </span>
                       </Button>
                     </div>

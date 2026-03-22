@@ -2,9 +2,12 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { ArrowRight, Coins, Sparkles, Zap } from "lucide-react";
 import { toast } from "sonner";
 import StudioShell from "@/app/_components/StudioShell";
-import { consumeCheckoutQueryParams } from "@/app/_components/CreditsPlanContext";
+import { consumeCheckoutQueryParams, useCreditsPlan } from "@/app/_components/CreditsPlanContext";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { CREDIT_PACKS } from "@/lib/pricing";
 
 type CreditPack = {
@@ -21,34 +24,34 @@ const PACK_UI: Omit<CreditPack, "price" | "credits">[] = [
   {
     key: "starter",
     name: "Launch",
-    description: "👉 Perfect to test & launch your first ads",
-    promoLine: "(no discount)",
+    description: "Ideal to test the studio and ship your first ads.",
+    promoLine: "Entry pack",
   },
   {
     key: "growth",
     name: "Growth",
-    description: "👉 For consistent content & scaling",
+    description: "Steady output for creators posting every week.",
     promoLine: "Save 11%",
   },
   {
     key: "most-popular",
     name: "Boost",
-    description: "👉 Best balance for serious creators",
-    badge: "BEST BALANCE",
-    promoLine: "🔥 Save 20%",
+    description: "The sweet spot for serious solo brands and shops.",
+    badge: "Most picked",
+    promoLine: "Save 20%",
   },
   {
     key: "pro",
     name: "Pro",
-    description: "👉 For heavy users & brands",
-    promoLine: "🚀 Save 27%",
+    description: "Heavy usage: more videos, images, and iterations.",
+    promoLine: "Save 27%",
   },
   {
     key: "scale",
     name: "Scale",
-    description: "👉 For teams & aggressive scaling",
-    badge: "BEST VALUE",
-    promoLine: "💎 Save 36%",
+    description: "Teams and agencies running volume without friction.",
+    badge: "Best value",
+    promoLine: "Save 36%",
   },
 ];
 
@@ -64,6 +67,7 @@ const creditPacks: CreditPack[] = PACK_UI.map((meta, i) => {
 
 export default function CreditsPage() {
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
+  const { current, total, percentRemaining, planDisplayName } = useCreditsPlan();
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -78,10 +82,10 @@ export default function CreditsPage() {
       toast.success(
         applied ? "Credits added" : "Payment received",
         applied
-          ? { description: "Your balance and sidebar bar were updated." }
+          ? { description: "Your balance was updated in the sidebar." }
           : {
               description:
-                "If nothing changed, add ?pack= in Stripe success URL or use webhooks.",
+                "If the balance did not change, check your Stripe success URL or webhooks.",
             },
       );
       if (!applied) window.history.replaceState({}, "", "/credits");
@@ -112,109 +116,168 @@ export default function CreditsPage() {
 
   return (
     <StudioShell>
-      <section className="max-w-6xl space-y-8 px-6 py-6 md:px-8">
-        <header className="border-b border-white/10 pb-4">
-          <h1 className="text-2xl font-semibold tracking-tight">Credits</h1>
-          <p className="mt-1 text-sm text-white/55">
-            Buy credit packs to run generations. Need a recurring plan? See{" "}
-            <Link href="/subscription" className="font-medium text-violet-300 underline-offset-2 hover:underline">
-              Subscription
-            </Link>
-            .
-          </p>
-        </header>
+      <div className="relative min-w-0 overflow-hidden">
+        <div className="pointer-events-none absolute left-1/2 top-0 h-[420px] w-[900px] -translate-x-1/2 rounded-full bg-violet-600/12 blur-[120px]" />
+        <div className="pointer-events-none absolute -right-20 top-1/3 h-72 w-72 rounded-full bg-fuchsia-600/8 blur-[100px]" />
 
-        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {creditPacks.map((p) => {
-            const isFeatured = p.badge === "BEST VALUE" || p.key === "most-popular";
-
-            return (
-              <div
-                key={p.key}
-                className={[
-                  "relative overflow-hidden rounded-2xl border p-5 transition-all",
-                  p.key === "pro" || p.key === "scale" ? "sm:col-span-2 lg:col-span-3" : "",
-                  isFeatured
-                    ? "border-violet-500/30 bg-gradient-to-br from-violet-500/18 to-transparent shadow-[0_0_0_1px_rgba(139,92,246,0.18)] hover:shadow-[0_0_60px_rgba(139,92,246,0.14)]"
-                    : "border-white/10 bg-white/[0.03] hover:border-violet-500/25 hover:bg-white/[0.04]",
-                ].join(" ")}
+        <div className="relative mx-auto max-w-6xl space-y-12 px-5 py-10 md:px-8 md:py-12">
+          <header className="mx-auto max-w-2xl text-center">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-violet-400/90">Credits</p>
+            <h1 className="mt-3 bg-gradient-to-b from-white via-white to-white/60 bg-clip-text text-3xl font-bold tracking-tight text-transparent sm:text-4xl md:text-[2.75rem] md:leading-[1.1]">
+              Top up and keep creating
+            </h1>
+            <p className="mx-auto mt-4 max-w-lg text-sm leading-relaxed text-white/50 md:text-base">
+              One-off packs work with any account. Prefer predictable monthly credits?{" "}
+              <Link
+                href="/subscription"
+                className="font-medium text-violet-300/95 underline-offset-4 transition hover:text-violet-200 hover:underline"
               >
-                {p.badge ? (
-                  <div
-                    className={[
-                      "absolute right-4 top-4 rounded-md border px-2 py-1 text-[11px] font-bold tracking-wide",
-                      p.badge === "BEST VALUE"
-                        ? "border-violet-400/30 bg-violet-500/20 text-violet-200"
-                        : "border-violet-200/30 bg-violet-400/20 text-violet-200",
-                    ].join(" ")}
-                  >
-                    {p.badge}
-                  </div>
+                View subscriptions
+              </Link>
+              .
+            </p>
+
+            <div className="mx-auto mt-10 max-w-md rounded-2xl border border-violet-500/20 bg-gradient-to-b from-violet-500/[0.08] to-black/20 p-5 shadow-[0_0_40px_rgba(139,92,246,0.08)]">
+              <div className="flex items-center justify-center gap-2 text-xs font-medium uppercase tracking-wide text-white/40">
+                <Coins className="h-3.5 w-3.5 text-violet-400/80" aria-hidden />
+                Your balance
+              </div>
+              <p className="mt-2 text-3xl font-bold tabular-nums text-white sm:text-4xl">
+                {current.toLocaleString()}{" "}
+                <span className="text-lg font-semibold text-white/40 sm:text-xl">credits</span>
+              </p>
+              <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/10">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-400 transition-all duration-500"
+                  style={{ width: `${percentRemaining}%` }}
+                />
+              </div>
+              <p className="mt-2 text-center text-[11px] text-white/35">
+                Plan: <span className="text-white/55">{planDisplayName}</span>
+                {total > 0 ? (
+                  <>
+                    {" "}
+                    · Pool ~{total.toLocaleString()} for the meter
+                  </>
                 ) : null}
+              </p>
+            </div>
+          </header>
 
-                <div className="space-y-2">
-                  <div className="text-sm font-bold uppercase tracking-wide text-violet-300">
-                    💳 {p.price} — {p.name}
-                  </div>
+          <section>
+            <div className="mb-6 flex flex-col items-center gap-2 text-center sm:mb-8">
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1">
+                <Sparkles className="h-3.5 w-3.5 text-violet-300" aria-hidden />
+                <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/50">
+                  Credit packs
+                </span>
+              </div>
+              <p className="max-w-md text-sm text-white/45">Larger packs include a better price per credit.</p>
+            </div>
 
-                  <div className="text-4xl font-extrabold leading-none">{p.credits.toLocaleString()} credits</div>
+            <div className="flex flex-wrap justify-center gap-5">
+              {creditPacks.map((p) => {
+                const featured = p.key === "most-popular";
+                const value = p.badge === "Best value";
 
+                return (
                   <div
-                    className={[
-                      "text-sm font-semibold",
-                      p.promoLine.startsWith("(no discount)") ? "text-white/55" : "text-violet-200/95",
-                    ].join(" ")}
+                    key={p.key}
+                    className={cn(
+                      "relative flex w-full min-w-[min(100%,280px)] max-w-[320px] flex-col rounded-2xl border p-6 transition-all duration-300",
+                      featured || value
+                        ? "border-violet-400/35 bg-gradient-to-b from-violet-600/[0.14] via-[#0a0a10] to-[#06070d] shadow-[0_0_48px_rgba(139,92,246,0.12),0_8px_0_0_rgba(76,29,149,0.35)]"
+                        : "border-white/10 bg-white/[0.03] shadow-[0_0_24px_rgba(0,0,0,0.35)] hover:border-violet-500/25 hover:bg-white/[0.05]",
+                    )}
                   >
-                    {p.promoLine}
+                    {p.badge ? (
+                      <span
+                        className={cn(
+                          "absolute -top-2.5 left-1/2 max-w-[90%] -translate-x-1/2 rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-wider",
+                          featured
+                            ? "border-violet-400/40 bg-violet-500/25 text-violet-100"
+                            : "border-emerald-400/35 bg-emerald-500/15 text-emerald-100",
+                        )}
+                      >
+                        {p.badge}
+                      </span>
+                    ) : null}
+
+                    <div className="mt-1 flex items-baseline justify-between gap-2">
+                      <h2 className="text-lg font-bold text-white">{p.name}</h2>
+                      <span className="text-sm font-semibold text-violet-200/90">{p.price}</span>
+                    </div>
+
+                    <p className="mt-3 min-h-[2.75rem] text-sm leading-relaxed text-white/50">{p.description}</p>
+
+                    <div className="mt-5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-white/35">You get</p>
+                      <p className="mt-1 text-3xl font-extrabold tabular-nums tracking-tight text-white">
+                        {p.credits.toLocaleString()}
+                        <span className="ml-1.5 text-base font-semibold text-white/40">credits</span>
+                      </p>
+                      <p
+                        className={cn(
+                          "mt-2 text-xs font-semibold",
+                          p.promoLine === "Entry pack" ? "text-white/40" : "text-violet-300/85",
+                        )}
+                      >
+                        {p.promoLine}
+                      </p>
+                    </div>
+
+                    <Button
+                      type="button"
+                      disabled={Boolean(checkoutLoading)}
+                      onClick={() => void buyPack(p.key)}
+                      className={cn(
+                        "mt-6 h-12 w-full rounded-xl text-sm font-bold transition-all",
+                        featured || value
+                          ? "border border-violet-200/30 bg-violet-400 text-black shadow-[0_6px_0_0_rgba(76,29,149,0.85)] hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.85)]"
+                          : "border border-white/15 bg-white/10 text-white hover:bg-white/15",
+                      )}
+                    >
+                      {checkoutLoading === p.key ? (
+                        <span className="inline-flex items-center gap-2">Redirecting…</span>
+                      ) : (
+                        <span className="inline-flex items-center gap-2">
+                          Buy pack
+                          <ArrowRight className="h-4 w-4" aria-hidden />
+                        </span>
+                      )}
+                    </Button>
                   </div>
-                </div>
-
-                <p className="mt-3 text-sm font-semibold text-white/75">{p.description}</p>
-
-                <div className="mt-6">
-                  <button
-                    type="button"
-                    disabled={Boolean(checkoutLoading)}
-                    onClick={() => void buyPack(p.key)}
-                    className={[
-                      "flex h-11 w-full cursor-pointer items-center justify-center rounded-xl border font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-60",
-                      isFeatured
-                        ? "border-violet-200/30 bg-violet-400 text-black hover:bg-violet-300"
-                        : "border-white/10 bg-white/5 text-white hover:bg-white/10",
-                    ].join(" ")}
-                  >
-                    {checkoutLoading === p.key ? "Redirecting…" : "Buy now"}
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </section>
-
-        <section className="rounded-3xl border border-white/10 bg-white/[0.02] p-6">
-          <div className="text-sm font-semibold text-white/80">🧠 Conversion tip</div>
-          <div className="mt-1 text-sm text-white/60">👉 You can also push harder with:</div>
-
-          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-            <div className="rounded-2xl border border-violet-400/20 bg-violet-400/10 p-4">
-              <div className="text-xs font-bold uppercase tracking-wider text-violet-200">Boost</div>
-              <div className="mt-2 text-lg font-extrabold">
-                $120 <span className="text-white/60">→</span> Best value for most users
-              </div>
+                );
+              })}
             </div>
-            <div className="rounded-2xl border border-violet-500/20 bg-violet-500/10 p-4">
-              <div className="text-xs font-bold uppercase tracking-wider text-violet-200">Scale</div>
-              <div className="mt-2 text-lg font-extrabold">
-                $480 <span className="text-white/60">→</span> Max savings
-              </div>
-            </div>
-          </div>
-        </section>
+          </section>
 
-        <footer className="text-center text-xs text-white/40">
-          Stripe Checkout — grant credits via webhook when payment succeeds.
-        </footer>
-      </section>
+          <section className="mx-auto max-w-3xl rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.04] to-transparent p-6 md:p-8">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="inline-flex items-center gap-2 text-violet-300/90">
+                  <Zap className="h-4 w-4" aria-hidden />
+                  <span className="text-xs font-bold uppercase tracking-wider">Not sure?</span>
+                </div>
+                <p className="mt-2 text-sm text-white/55">
+                  Most creators settle on <span className="font-semibold text-white/75">Boost</span> for volume, or{" "}
+                  <span className="font-semibold text-white/75">Scale</span> when several brands run in parallel.
+                </p>
+              </div>
+              <Link
+                href="/app"
+                className="inline-flex shrink-0 items-center justify-center rounded-xl border border-violet-500/30 bg-violet-500/10 px-5 py-3 text-sm font-semibold text-violet-100 transition hover:border-violet-400/50 hover:bg-violet-500/20"
+              >
+                Back to studio
+              </Link>
+            </div>
+          </section>
+
+          <p className="pb-4 text-center text-[11px] text-white/30">
+            Secure checkout with Stripe. Credits are applied when payment succeeds.
+          </p>
+        </div>
+      </div>
     </StudioShell>
   );
 }

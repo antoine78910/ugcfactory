@@ -48,7 +48,7 @@ function shorten(s: string, max: number) {
 
 function angleShortLabel(labels: [string, string, string], i: 0 | 1 | 2) {
   const raw = labels[i]?.trim() || `Angle ${i + 1}`;
-  return shorten(raw, 42);
+  return shorten(raw, 72);
 }
 
 function hasAngleContent(pipe: LinkToAdAnglePipelineV1) {

@@ -94,6 +94,12 @@ Metadata for SaaS (after each script option)
 Each script option must be followed by a VIDEO_METADATA block with:
 persona, location, camera_style, props, actions, tone, energy_level
 
+Angle title (for the product UI — required after VIDEO_METADATA)
+On the line immediately after VIDEO_METADATA, output exactly:
+ANGLE_HEADLINE: followed by one English sentence of 12–24 words.
+It must name the persona/vibe, the emotional hook, and what makes this option clearly different from the other two.
+Do not paste script lines verbatim; summarize the creative angle.
+
 Output format (exact headings)
 SCRIPT OPTION 1
 (full script: VOICE PROFILE, scene context if used, then HOOK/PROBLEM/SOLUTION/CTA each as (gesture) "line")
@@ -101,15 +107,21 @@ SCRIPT OPTION 1
 VIDEO_METADATA
 (key: value lines or compact lines for the fields above)
 
+ANGLE_HEADLINE: (one sentence, 12–24 words, as specified above)
+
 SCRIPT OPTION 2
 (same structure)
 
 VIDEO_METADATA
 
+ANGLE_HEADLINE: (one sentence, 12–24 words)
+
 SCRIPT OPTION 3
 (same structure)
 
 VIDEO_METADATA
+
+ANGLE_HEADLINE: (one sentence, 12–24 words)
 
 Each script must test a different marketing angle.
 Output plain text only.
