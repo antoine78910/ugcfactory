@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Coins } from "lucide-react";
 import { useCreditsPlan } from "@/app/_components/CreditsPlanContext";
+import { CollapsedCreditsRing } from "@/app/_components/CollapsedCreditsRing";
 import { cn } from "@/lib/utils";
 
 /** Same rule as CreditLowBanner: ≥90% consumed → ≤10% remaining */
@@ -22,44 +23,43 @@ export default function SidebarCreditsBar({ collapsed = false }: SidebarCreditsB
   const showCta = isCreditsCriticallyLow(total, percentRemaining);
 
   if (collapsed) {
+    const indeterminate = total <= 0;
     return (
       <Link
         href="/credits"
-        className="flex flex-col items-center gap-1 rounded-lg border border-white/10 bg-[#0b0912]/90 px-1 py-1.5 transition-opacity hover:opacity-95"
+        className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-[#0b0912]/90 transition-opacity hover:opacity-95"
         title={`Credits: ${current.toLocaleString()}${total > 0 ? ` · ${percentRemaining}% left` : ""}`}
+        role="progressbar"
+        aria-valuenow={indeterminate ? undefined : fillPct}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={
+          indeterminate
+            ? "Credits: add a pack"
+            : `Credits remaining: ${percentRemaining} percent`
+        }
       >
-        <Coins className="h-3.5 w-3.5 text-violet-400/90" aria-hidden />
-        <div
-          className="relative h-9 w-1.5 overflow-hidden rounded-full bg-white/[0.08]"
-          role="progressbar"
-          aria-valuenow={fillPct}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-label={`Credits remaining: ${percentRemaining} percent`}
+        <CollapsedCreditsRing
+          percentRemaining={percentRemaining}
+          indeterminate={indeterminate}
+          critical={showCta}
+        />
+        <span
+          className={cn(
+            "pointer-events-none absolute inset-0 flex items-center justify-center pt-px text-[10px] font-bold tabular-nums leading-none text-zinc-800/90",
+            percentRemaining >= 100 && "text-[9px]",
+            showCta && "text-amber-950/90",
+          )}
         >
-          <div
-            className={cn(
-              "absolute bottom-0 left-0 right-0 min-h-[2px] rounded-full transition-[height] duration-300 ease-out",
-              showCta
-                ? "bg-gradient-to-t from-amber-500 to-orange-500"
-                : "bg-gradient-to-t from-violet-500 to-fuchsia-500",
-            )}
-            style={{ height: `${fillPct}%` }}
-          />
-        </div>
-        {total > 0 ? (
-          <span
-            className={cn(
-              "text-[9px] font-bold tabular-nums leading-none",
-              showCta ? "text-amber-200" : "text-white/80",
-            )}
-          >
-            {percentRemaining}
-            <span className="text-white/40">%</span>
-          </span>
-        ) : (
-          <span className="text-[9px] text-white/40">—</span>
-        )}
+          {indeterminate ? (
+            <span className="text-[11px] font-semibold text-zinc-600/80">—</span>
+          ) : (
+            <>
+              {percentRemaining}
+              <span className="text-[8px] font-bold text-zinc-600/75">%</span>
+            </>
+          )}
+        </span>
       </Link>
     );
   }

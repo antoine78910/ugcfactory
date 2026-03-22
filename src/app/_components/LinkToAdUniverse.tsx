@@ -24,6 +24,7 @@ import {
   readUniverseFromExtracted,
   selectedAngleScript,
   snapshotAfterKlingVideoSuccessForAngle,
+  joinScriptOptions,
   splitScriptOptions,
   teaserFromScriptBlock,
   type KlingReferenceSlotV1,
@@ -231,6 +232,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     script: string;
     sourcePrompt: string;
   } | null>(null);
+  /** Manual edit of headline + script before "Add to my angles". */
+  const [pendingCustomAngleEditing, setPendingCustomAngleEditing] = useState(false);
   const [editableScript, setEditableScript] = useState("");
   const [scriptEditVisible, setScriptEditVisible] = useState(false);
   const [editableVideoPrompt, setEditableVideoPrompt] = useState("");
@@ -745,6 +748,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       const headlineMatch = newScript.match(/ANGLE_HEADLINE:\s*(.+)/i);
       const headline = headlineMatch?.[1]?.trim() || angle;
       setPendingCustomAnglePreview({ headline, script: newScript, sourcePrompt: angle });
+      setPendingCustomAngleEditing(false);
       setCustomAngleInput("");
       toast.success("Review the script below, then add it or discard.");
     } catch (e) {
@@ -757,29 +761,57 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   function confirmPendingCustomAngle() {
     const pending = pendingCustomAnglePreview;
     if (!pending) return;
-    setScriptsText((prev) => {
-      const n = splitScriptOptions(prev).length + 1;
-      return `${prev}\n\nSCRIPT OPTION ${n}\n${pending.script}`;
-    });
-    setAngleLabels((prev) => {
-      const copy = [...prev] as [string, string, string];
-      const nextIdx = copy.findIndex((l) => !l.trim());
-      if (nextIdx >= 0) copy[nextIdx] = pending.headline;
-      return copy;
-    });
+    const headline = pending.headline.trim() || pending.sourcePrompt;
+    const script = pending.script.trim();
+    if (!script) {
+      toast.error("Script is empty", { description: "Add text or discard and regenerate." });
+      return;
+    }
+    const cleanedBody = script.replace(/^\s*SCRIPT\s+OPTION\s*\d+\b\s*\n*/i, "").trim();
+    if (!cleanedBody) {
+      toast.error("Script is empty", { description: "Add text or discard and regenerate." });
+      return;
+    }
+    const parts = splitScriptOptions(scriptsText);
+    const emptyIdx = angleLabels.findIndex((l) => !l.trim());
+    const slot: 0 | 1 | 2 = emptyIdx >= 0 ? (emptyIdx as 0 | 1 | 2) : 2;
+    const newParts: [string, string, string] = [parts[0], parts[1], parts[2]];
+    newParts[slot] = cleanedBody;
+    const merged = joinScriptOptions(newParts);
+    const nextLabels: [string, string, string] = [...angleLabels] as [string, string, string];
+    nextLabels[slot] = headline;
+
+    setScriptsText(merged);
+    setAngleLabels(nextLabels);
     setPendingCustomAnglePreview(null);
-    toast.success("Custom angle added — pick it from the cards above.");
+    setPendingCustomAngleEditing(false);
+    void onSelectAngle(slot, { scriptsText: merged, angleLabels: nextLabels });
+    toast.success(
+      emptyIdx < 0
+        ? "Custom angle added — replaced angle 3; ready to generate."
+        : "Custom angle added — selected; ready to generate.",
+    );
   }
 
   function discardPendingCustomAngle() {
     const restore = pendingCustomAnglePreview?.sourcePrompt;
     setPendingCustomAnglePreview(null);
+    setPendingCustomAngleEditing(false);
     if (restore) setCustomAngleInput(restore);
   }
 
-  async function onSelectAngle(index: 0 | 1 | 2) {
+  function patchPendingCustomAngle(updates: Partial<{ headline: string; script: string }>) {
+    setPendingCustomAnglePreview((prev) => (prev ? { ...prev, ...updates } : null));
+  }
+
+  async function onSelectAngle(
+    index: 0 | 1 | 2,
+    opts?: { scriptsText?: string; angleLabels?: [string, string, string] },
+  ) {
     const url = storeUrl.trim();
     if (!url || !lastExtractedJson) return;
+
+    const scriptsSrc = opts?.scriptsText ?? scriptsText;
 
     const prevIdx = prevAngleRef.current;
     const angleChanged = prevIdx !== null && prevIdx !== index;
@@ -806,7 +838,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
 
     prevAngleRef.current = index;
     setSelectedAngleIndex(index);
-    const script = selectedAngleScript(scriptsText, index);
+    const script = selectedAngleScript(scriptsSrc, index);
     setEditableScript(script);
     setScriptEditVisible(false);
 
@@ -836,6 +868,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       selectedAngleIndex: index,
       linkToAdPipelineByAngle: persistTriple,
       ...flattenAnglePipeToTopLevel(activePipe, kn),
+      ...(opts?.scriptsText !== undefined ? { scriptsText: opts.scriptsText } : {}),
+      ...(opts?.angleLabels !== undefined ? { angleLabels: opts.angleLabels } : {}),
     };
     try {
       await persistUniverse(universeRunId, url, extractedTitle, lastExtractedJson, snap, packshotsForSave());
@@ -2409,13 +2443,36 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                   </div>
                   {pendingCustomAnglePreview ? (
                     <div className="mt-3 space-y-2 rounded-lg border border-violet-400/25 bg-violet-500/[0.08] p-3">
-                      <p className="text-xs font-semibold text-violet-200">Generated angle — review before adding</p>
-                      <p className="text-sm font-medium leading-snug text-white/90">{pendingCustomAnglePreview.headline}</p>
+                      <p className="text-xs font-semibold text-violet-200">
+                        Generated angle — review before adding
+                        {pendingCustomAngleEditing ? (
+                          <span className="ml-1.5 font-normal text-violet-300/80">(editing)</span>
+                        ) : null}
+                      </p>
+                      {pendingCustomAngleEditing ? (
+                        <div className="space-y-1">
+                          <Label className="text-[10px] uppercase tracking-wide text-white/40">Headline</Label>
+                          <Input
+                            value={pendingCustomAnglePreview.headline}
+                            onChange={(e) => patchPendingCustomAngle({ headline: e.target.value })}
+                            className="h-9 border-white/10 bg-black/40 text-sm text-white placeholder:text-white/25"
+                            spellCheck
+                          />
+                        </div>
+                      ) : (
+                        <p className="text-sm font-medium leading-snug text-white/90">
+                          {pendingCustomAnglePreview.headline}
+                        </p>
+                      )}
                       <Textarea
-                        readOnly
+                        readOnly={!pendingCustomAngleEditing}
                         value={pendingCustomAnglePreview.script}
-                        className="max-h-52 min-h-[140px] resize-y border-white/10 bg-black/40 font-mono text-xs leading-relaxed text-white/85"
-                        spellCheck={false}
+                        onChange={(e) => patchPendingCustomAngle({ script: e.target.value })}
+                        className={cn(
+                          "max-h-52 min-h-[140px] resize-y border-white/10 bg-black/40 font-mono text-xs leading-relaxed text-white/85",
+                          !pendingCustomAngleEditing && "cursor-default opacity-95",
+                        )}
+                        spellCheck={pendingCustomAngleEditing}
                       />
                       <div className="flex flex-wrap gap-2">
                         <Button
@@ -2425,6 +2482,26 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                         >
                           Add to my angles
                         </Button>
+                        {pendingCustomAngleEditing ? (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            onClick={() => setPendingCustomAngleEditing(false)}
+                            className="h-9 border border-white/15 bg-white/5 px-3 text-xs text-white/80 hover:bg-white/10"
+                          >
+                            Done editing
+                          </Button>
+                        ) : (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            onClick={() => setPendingCustomAngleEditing(true)}
+                            className="h-9 border border-white/15 bg-white/5 px-3 text-xs text-white/80 hover:bg-white/10"
+                          >
+                            <PenLine className="mr-1.5 h-3.5 w-3.5 opacity-90" aria-hidden />
+                            Edit
+                          </Button>
+                        )}
                         <Button
                           type="button"
                           variant="secondary"

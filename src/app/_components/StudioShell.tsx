@@ -60,7 +60,7 @@ const CREATE_NAV: CreateNavEntry[] = [
 
 function soonRowClass(): string {
   return [
-    "flex w-full flex-col items-start gap-1 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-left",
+    "flex w-full flex-row items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-2.5 py-2 text-left",
     "cursor-not-allowed select-none pointer-events-none",
   ].join(" ");
 }
@@ -84,7 +84,7 @@ function navRowIconClass(active: boolean): string {
 
 function navButtonClass(active: boolean): string {
   return [
-    "block w-full rounded-lg px-2.5 py-1.5 text-left text-xs font-semibold transition-all cursor-pointer leading-tight",
+    "block w-full min-w-0 rounded-lg px-3 py-2 text-left text-[13px] font-semibold transition-all cursor-pointer leading-snug",
     active
       ? "bg-violet-400 text-black shadow-[0_4px_0_0_rgba(76,29,149,0.95)] hover:bg-violet-300 hover:shadow-[0_5px_0_0_rgba(76,29,149,0.95)] active:translate-y-[2px] active:shadow-none"
       : "border border-white/10 bg-white/5 text-white hover:bg-white/10 hover:border-violet-400/35 shadow-[0_0_12px_rgba(139,92,246,0.08)] hover:shadow-[0_0_20px_rgba(139,92,246,0.15)]",
@@ -154,7 +154,7 @@ function StudioShellInner({
       <main
         className={cn(
           "relative z-10 grid min-h-screen items-start transition-[grid-template-columns] duration-200 ease-out",
-          navCollapsed ? "grid-cols-[4rem_minmax(0,1fr)]" : "grid-cols-[230px_minmax(0,1fr)]",
+          navCollapsed ? "grid-cols-[4rem_minmax(0,1fr)]" : "grid-cols-[248px_minmax(0,1fr)]",
         )}
       >
         <aside
@@ -183,14 +183,25 @@ function StudioShellInner({
                 className={cn("inline-block shrink-0", navCollapsed && "flex justify-center")}
                 title="Youry home"
               >
-                <Image
-                  src="/youry-logo.png"
-                  alt="Youry"
-                  width={174}
-                  height={52}
-                  className={cn("w-auto", navCollapsed ? "h-6 max-w-[2.25rem] object-contain object-left" : "h-8")}
-                  priority
-                />
+                {navCollapsed ? (
+                  <Image
+                    src="/icon.png"
+                    alt="Youry"
+                    width={32}
+                    height={32}
+                    className="h-8 w-8 rounded-lg object-cover"
+                    priority
+                  />
+                ) : (
+                  <Image
+                    src="/youry-logo.png"
+                    alt="Youry"
+                    width={174}
+                    height={52}
+                    className="h-8 w-auto"
+                    priority
+                  />
+                )}
               </Link>
               <button
                 type="button"
@@ -217,18 +228,18 @@ function StudioShellInner({
             <div
               className={cn(
                 "rounded-xl border border-white/10 bg-[#0b0912]/85",
-                navCollapsed ? "p-1.5" : "p-2",
+                navCollapsed ? "p-1.5" : "p-2.5",
               )}
             >
               <p
                 className={cn(
                   "font-semibold uppercase tracking-[0.12em] text-white/45",
-                  navCollapsed ? "sr-only" : "text-[10px] leading-none",
+                  navCollapsed ? "sr-only" : "text-[11px] leading-none",
                 )}
               >
                 CREATE
               </p>
-              <div className={cn("space-y-1", !navCollapsed && "mt-1")}>
+              <div className={cn("space-y-1.5", !navCollapsed && "mt-1.5")}>
                 {CREATE_NAV.map((entry) => {
                   const NavIcon = entry.icon;
                   if (entry.kind === "soon") {
@@ -237,21 +248,21 @@ function StudioShellInner({
                         key="soon-ad-clone"
                         className={cn(
                           soonRowClass(),
-                          navCollapsed && "!flex-row items-center justify-center gap-0 px-1.5 py-1.5",
+                          navCollapsed && "!justify-center gap-0 px-1.5 py-2",
                         )}
                         title={`${entry.label} — coming soon`}
                         aria-disabled="true"
                       >
                         <span
                           className={cn(
-                            "flex w-full items-center gap-2",
-                            navCollapsed ? "w-auto justify-center" : "",
+                            "flex min-w-0 flex-1 items-center gap-2.5",
+                            navCollapsed && "w-auto flex-none justify-center",
                           )}
                         >
-                          <NavIcon className="h-3.5 w-3.5 shrink-0 text-white/30" aria-hidden />
+                          <NavIcon className="h-4 w-4 shrink-0 text-white/30" aria-hidden />
                           <span
                             className={cn(
-                              "min-w-0 flex-1 truncate text-xs font-semibold text-white/40",
+                              "min-w-0 truncate text-[13px] font-semibold text-white/40",
                               navCollapsed && "sr-only",
                             )}
                           >
@@ -260,7 +271,7 @@ function StudioShellInner({
                         </span>
                         <span
                           className={cn(
-                            "rounded border border-white/15 bg-white/[0.06] px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-white/50",
+                            "shrink-0 rounded-md border border-white/15 bg-white/[0.06] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white/50",
                             navCollapsed && "sr-only",
                           )}
                         >
@@ -276,18 +287,18 @@ function StudioShellInner({
                       <button
                         key={id}
                         type="button"
-                        className={cn(navButtonClass(active), navCollapsed && "px-1.5 py-2")}
+                        className={cn(navButtonClass(active), navCollapsed && "px-2 py-2.5")}
                         title={label}
                         onClick={() => onStudioSectionChange!(id)}
                       >
                         <span
-                          className={cn("flex items-center gap-2", navCollapsed && "justify-center")}
+                          className={cn("flex min-w-0 items-center gap-2.5", navCollapsed && "justify-center")}
                         >
                           <NavIcon
-                            className={`h-3.5 w-3.5 shrink-0 ${navRowIconClass(active)}`}
+                            className={`h-4 w-4 shrink-0 ${navRowIconClass(active)}`}
                             aria-hidden
                           />
-                          <span className={cn(navCollapsed && "sr-only")}>{label}</span>
+                          <span className={cn("min-w-0 truncate", navCollapsed && "sr-only")}>{label}</span>
                         </span>
                       </button>
                     );
@@ -296,15 +307,15 @@ function StudioShellInner({
                     <Link
                       key={id}
                       href={sectionHref(id, studioProjectId ?? null)}
-                      className={cn(navButtonClass(active), navCollapsed && "px-1.5 py-2")}
+                      className={cn(navButtonClass(active), navCollapsed && "px-2 py-2.5")}
                       title={label}
                     >
-                      <span className={cn("flex items-center gap-2", navCollapsed && "justify-center")}>
+                      <span className={cn("flex min-w-0 items-center gap-2.5", navCollapsed && "justify-center")}>
                         <NavIcon
-                          className={`h-3.5 w-3.5 shrink-0 ${navRowIconClass(active)}`}
+                          className={`h-4 w-4 shrink-0 ${navRowIconClass(active)}`}
                           aria-hidden
                         />
-                        <span className={cn(navCollapsed && "sr-only")}>{label}</span>
+                        <span className={cn("min-w-0 truncate", navCollapsed && "sr-only")}>{label}</span>
                       </span>
                     </Link>
                   );
@@ -322,17 +333,19 @@ function StudioShellInner({
                     type="button"
                     className={cn(
                       navButtonClass(activeSection === PROJECTS_NAV.id),
-                      navCollapsed && "px-1.5 py-2",
+                      navCollapsed && "px-2 py-2.5",
                     )}
                     title={PROJECTS_NAV.label}
                     onClick={() => onStudioSectionChange!(PROJECTS_NAV.id)}
                   >
-                    <span className={cn("flex items-center gap-2", navCollapsed && "justify-center")}>
+                    <span className={cn("flex min-w-0 items-center gap-2.5", navCollapsed && "justify-center")}>
                       <ProjectsNavIcon
-                        className={`h-3.5 w-3.5 shrink-0 ${navRowIconClass(activeSection === PROJECTS_NAV.id)}`}
+                        className={`h-4 w-4 shrink-0 ${navRowIconClass(activeSection === PROJECTS_NAV.id)}`}
                         aria-hidden
                       />
-                      <span className={cn(navCollapsed && "sr-only")}>{PROJECTS_NAV.label}</span>
+                      <span className={cn("min-w-0 truncate", navCollapsed && "sr-only")}>
+                        {PROJECTS_NAV.label}
+                      </span>
                     </span>
                   </button>
                 ) : (
@@ -340,16 +353,18 @@ function StudioShellInner({
                     href={sectionHref(PROJECTS_NAV.id, studioProjectId ?? null)}
                     className={cn(
                       navButtonClass(activeSection === PROJECTS_NAV.id),
-                      navCollapsed && "px-1.5 py-2",
+                      navCollapsed && "px-2 py-2.5",
                     )}
                     title={PROJECTS_NAV.label}
                   >
-                    <span className={cn("flex items-center gap-2", navCollapsed && "justify-center")}>
+                    <span className={cn("flex min-w-0 items-center gap-2.5", navCollapsed && "justify-center")}>
                       <ProjectsNavIcon
-                        className={`h-3.5 w-3.5 shrink-0 ${navRowIconClass(activeSection === PROJECTS_NAV.id)}`}
+                        className={`h-4 w-4 shrink-0 ${navRowIconClass(activeSection === PROJECTS_NAV.id)}`}
                         aria-hidden
                       />
-                      <span className={cn(navCollapsed && "sr-only")}>{PROJECTS_NAV.label}</span>
+                      <span className={cn("min-w-0 truncate", navCollapsed && "sr-only")}>
+                        {PROJECTS_NAV.label}
+                      </span>
                     </span>
                   </Link>
                 )}
