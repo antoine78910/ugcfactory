@@ -20,6 +20,7 @@ import { StudioGenerationsHistory } from "@/app/_components/StudioGenerationsHis
 import type { StudioHistoryItem } from "@/app/_components/StudioGenerationsHistory";
 import { calculateMotionControlCredits } from "@/lib/linkToAd/generationCredits";
 import StudioImagePanel from "@/app/_components/StudioImagePanel";
+import StudioUpscalePanel from "@/app/_components/StudioUpscalePanel";
 import StudioShell from "@/app/_components/StudioShell";
 import {
   StudioSingleModelCard,
@@ -42,7 +43,7 @@ import {
 import { motionControlUpgradeMessage } from "@/lib/subscriptionModelAccess";
 
 type WizardStep = "url" | "analysis" | "quiz" | "image" | "video";
-type AppSection = "link_to_ad" | "motion_control" | "image" | "video" | "projects";
+type AppSection = "link_to_ad" | "motion_control" | "image" | "video" | "upscale" | "projects";
 
 type Extracted = {
   url: string;
@@ -91,6 +92,7 @@ const APP_VALID_SECTIONS: AppSection[] = [
   "motion_control",
   "image",
   "video",
+  "upscale",
   "projects",
 ];
 
@@ -1673,8 +1675,9 @@ export default function AppBrandWizard() {
 
             {appSection === "motion_control" ? (
               <div className="space-y-4">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:gap-6">
-                    <div className="flex min-w-0 flex-1 flex-col gap-4 lg:max-w-[min(100%,30rem)] lg:min-w-0">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:gap-6 lg:min-h-0 lg:max-h-[min(92vh,calc(100vh-7rem))]">
+                    <div className="flex min-w-0 flex-1 flex-col lg:max-w-[min(100%,30rem)] lg:min-h-0 lg:overflow-hidden">
+                      <div className="studio-params-scroll flex min-w-0 flex-col gap-4 lg:flex-1 lg:min-h-0 lg:max-h-[min(55vh,calc(100vh-14rem))] lg:overflow-y-auto">
                       <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
                         Motion control — references
                       </p>
@@ -1772,7 +1775,6 @@ export default function AppBrandWizard() {
                         </div>
                       </div>
 
-                      <div className="studio-params-scroll flex min-w-0 flex-col gap-4 lg:max-h-[min(55vh,calc(100vh-14rem))] lg:overflow-y-auto">
                       <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Parameters</p>
                       <div className="rounded-2xl border border-white/10 bg-[#101014] p-4 space-y-4">
                         <div>
@@ -1965,7 +1967,7 @@ export default function AppBrandWizard() {
                       </div>
                     </div>
 
-                    <div className="flex h-full min-h-0 min-w-0 flex-[2.5] lg:flex-[3] flex-col">
+                    <div className="flex h-full min-h-0 min-w-0 flex-[2.5] lg:flex-[3] flex-col lg:min-h-0 lg:overflow-hidden">
                       <StudioOutputPane
                         title=""
                         hasOutput
@@ -2020,6 +2022,16 @@ export default function AppBrandWizard() {
                 </CardHeader>
                 <CardContent>
                   <StudioVideoPanel />
+                </CardContent>
+              </Card>
+            ) : null}
+            {appSection === "upscale" ? (
+              <Card className="border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
+                <CardHeader>
+                  <CardTitle className="text-base">Upscale</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <StudioUpscalePanel />
                 </CardContent>
               </Card>
             ) : null}

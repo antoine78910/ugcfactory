@@ -10,6 +10,7 @@ import {
   PRICING_BASE,
   SORA_10S,
   SUBSCRIPTIONS,
+  TOPAZ_VIDEO_UPSCALER,
   calculateMargin,
   calculateVideoCreditsFromDuration,
 } from "@/lib/pricing";
@@ -25,6 +26,9 @@ export async function GET() {
     credit_packs: CREDIT_PACKS,
     subscriptions: SUBSCRIPTIONS,
     images: IMAGE_MODEL,
+    upscale: {
+      topaz_video: TOPAZ_VIDEO_UPSCALER,
+    },
     video: {
       credits_per_second: KLING_3_VIDEO_CREDITS_PER_SECOND,
       formula: "ceil(duration_sec * credits_per_second)",

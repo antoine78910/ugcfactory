@@ -6,6 +6,7 @@ import type {
   NanoBananaProAspectRatio,
   NanoBananaProResolution,
 } from "@/lib/nanobanana";
+import { buildKieGoogleImageInput, kieMarketModelForStudioImage } from "@/lib/kieGoogleImage";
 
 type Body = {
   model?: "nano" | "pro";
@@ -26,25 +27,20 @@ export async function POST(req: Request) {
       ? body!.imageUrls!.filter((u) => typeof u === "string" && u.trim().length > 0)
       : [];
 
-  if (model === "pro") {
-    return NextResponse.json({
-      model,
-      endpoint: "/api/v1/nanobanana/generate-pro",
-      prompt: body?.prompt ?? "",
-      imageUrls,
-      resolution: body?.resolution ?? "2K",
-      aspectRatio: body?.aspectRatio ?? body?.imageSize ?? "4:5",
-    });
-  }
+  const resolution = body?.resolution ?? "2K";
+  const aspect = body?.aspectRatio ?? body?.imageSize ?? "auto";
+  const kieModel = kieMarketModelForStudioImage(model);
+  const input = buildKieGoogleImageInput({
+    prompt: body?.prompt ?? "",
+    aspectRatio: typeof aspect === "string" ? aspect : "auto",
+    resolution,
+    imageUrls: imageUrls.length ? imageUrls : undefined,
+  });
 
   return NextResponse.json({
-    model,
-    endpoint: "/api/v1/nanobanana/generate",
-    prompt: body?.prompt ?? "",
-    type: imageUrls.length > 0 ? "IMAGETOIAMGE" : "TEXTTOIAMGE",
-    imageUrls,
-    numImages: body?.numImages ?? 1,
-    image_size: body?.imageSize ?? "4:5",
+    provider: "kie-market",
+    model: kieModel,
+    endpoint: "/api/v1/jobs/createTask",
+    input,
   });
 }
-

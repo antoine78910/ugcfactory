@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { Clapperboard, ImageIcon, Sparkles, Video } from "lucide-react";
 
-type StudioEmptyVariant = "image" | "video" | "motion";
+type StudioEmptyVariant = "image" | "video" | "motion" | "upscale";
 
 const VARIANTS: Record<
   StudioEmptyVariant,
@@ -34,6 +34,15 @@ const VARIANTS: Record<
       { icon: Video, label: "Drive motion from video", hint: "Copy movement onto your character" },
       { icon: ImageIcon, label: "Character image", hint: "Clear face & body for best match" },
       { icon: Sparkles, label: "Kling 3.0 MC", hint: "Model & quality from the left panel" },
+    ],
+  },
+  upscale: {
+    title: "Upscaled videos appear here",
+    subtitle: "Use Topaz Video Upscale on the left (Kie). More Kie upscale tools will land in this module.",
+    examples: [
+      { icon: Video, label: "Topaz Video", hint: "1× / 2× / 4× via Kie market" },
+      { icon: Sparkles, label: "Credits / second", hint: "Billed from duration you confirm" },
+      { icon: Clapperboard, label: "HTTPS source", hint: "Upload or paste a public video URL" },
     ],
   },
 };
@@ -79,7 +88,7 @@ export function StudioOutputPane({
   empty: ReactNode;
 }) {
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col rounded-2xl border border-white/10 bg-[#08080c]/90 p-4 lg:min-h-[min(560px,calc(100vh-12rem))]">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col rounded-2xl border border-white/10 bg-[#08080c]/90 p-4 lg:h-full lg:max-h-full lg:min-h-0">
       {title ? (
         <p className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-white/45">{title}</p>
       ) : null}

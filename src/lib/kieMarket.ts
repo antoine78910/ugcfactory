@@ -115,3 +115,23 @@ export function parseResultUrls(resultJson: string | undefined): string[] {
   }
 }
 
+/** Fallback when `resultUrls` is missing — walk JSON for https URLs (image/video). */
+export function parseKieResultMediaUrls(resultJson: string | undefined): string[] {
+  const direct = parseResultUrls(resultJson);
+  if (direct.length > 0) return direct;
+  if (!resultJson) return [];
+  try {
+    const o = JSON.parse(resultJson) as unknown;
+    const out: string[] = [];
+    function walk(x: unknown): void {
+      if (typeof x === "string" && /^https?:\/\//i.test(x)) out.push(x);
+      else if (Array.isArray(x)) for (const i of x) walk(i);
+      else if (x && typeof x === "object") for (const v of Object.values(x)) walk(v);
+    }
+    walk(o);
+    return [...new Set(out)];
+  } catch {
+    return [];
+  }
+}
+

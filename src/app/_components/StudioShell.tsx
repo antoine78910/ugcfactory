@@ -10,7 +10,13 @@ import CreditLowBanner from "@/app/_components/CreditLowBanner";
 import { useCreditsPlan } from "@/app/_components/CreditsPlanContext";
 import SidebarCreditsBar from "@/app/_components/SidebarCreditsBar";
 
-export type StudioNavSection = "link_to_ad" | "motion_control" | "image" | "video" | "projects";
+export type StudioNavSection =
+  | "link_to_ad"
+  | "motion_control"
+  | "image"
+  | "video"
+  | "upscale"
+  | "projects";
 
 type Props = {
   children: React.ReactNode;
@@ -31,6 +37,7 @@ const CREATE_NAV: CreateNavEntry[] = [
   { kind: "route", id: "motion_control", label: "Motion Control" },
   { kind: "route", id: "image", label: "Image" },
   { kind: "route", id: "video", label: "Video" },
+  { kind: "route", id: "upscale", label: "Upscale" },
 ];
 
 function soonRowClass(): string {

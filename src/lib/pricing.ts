@@ -31,24 +31,303 @@ export const KLING_3_VIDEO_CREDITS_PER_SECOND = 2.25;
 // Images (fixed credits)
 // ---------------------------------------------------------------------------
 
+/**
+ * Derive billed credits from raw API cost (image margin + cost buffer + credit list price).
+ */
+export function computeImageModelFromCostUsd(costUsd: number): {
+  cost_usd: number;
+  cost_with_buffer: number;
+  target_margin: number;
+  price_usd: number;
+  credits: number;
+} {
+  const cost_with_buffer = costUsd * PRICING_BASE.cost_buffer;
+  const target_margin = PRICING_BASE.target_margins.image;
+  const price_usd = cost_with_buffer / (1 - target_margin);
+  const credits = Math.max(1, Math.ceil(price_usd / PRICING_BASE.credit_value_usd));
+  return { cost_usd: costUsd, cost_with_buffer, target_margin, price_usd, credits };
+}
+
+/** Fal public list; negotiated COGS ≈ list × (1 − 0.1875) → $0.0325. */
+export const SEEDREAM_45_FAL_LIST_USD = 0.04;
+export const SEEDREAM_45_COST_USD = 0.0325;
+
+const SEEDREAM_45_BASE = computeImageModelFromCostUsd(SEEDREAM_45_COST_USD);
+
+/** Google Nano Banana 2 / Pro on Kie — credits & COGS from provider sheet (Fal list + negotiated COGS). */
+function googleImageTier(p: {
+  model: string;
+  cost_usd: number;
+  credits: number;
+  fal_list_price_usd: number;
+}) {
+  const cost_with_buffer = p.cost_usd * PRICING_BASE.cost_buffer;
+  return {
+    model: p.model,
+    cost_usd: p.cost_usd,
+    cost_with_buffer,
+    target_margin: PRICING_BASE.target_margins.image,
+    price_usd: p.credits * PRICING_BASE.credit_value_usd,
+    credits: p.credits,
+    fal_list_price_usd: p.fal_list_price_usd,
+  };
+}
+
+const GOOGLE_NANO_2_1K = googleImageTier({
+  model: "google_nano_banana_2_1k",
+  cost_usd: 0.04,
+  credits: 6,
+  fal_list_price_usd: 0.08,
+});
+const GOOGLE_NANO_2_2K = googleImageTier({
+  model: "google_nano_banana_2_2k",
+  cost_usd: 0.06,
+  credits: 12,
+  fal_list_price_usd: 0.12,
+});
+const GOOGLE_NANO_2_4K = googleImageTier({
+  model: "google_nano_banana_2_4k",
+  cost_usd: 0.09,
+  credits: 18,
+  fal_list_price_usd: 0.16,
+});
+const GOOGLE_NANO_PRO_12K = googleImageTier({
+  model: "google_nano_banana_pro_1k_2k",
+  cost_usd: 0.09,
+  credits: 18,
+  fal_list_price_usd: 0.15,
+});
+const GOOGLE_NANO_PRO_4K = googleImageTier({
+  model: "google_nano_banana_pro_4k",
+  cost_usd: 0.12,
+  credits: 24,
+  fal_list_price_usd: 0.3,
+});
+
 export const IMAGE_MODEL = {
-  nanobanana_pro: {
-    model: "nanobanana_pro",
-    cost_usd: 0.1,
-    cost_with_buffer: 0.135,
-    target_margin: PRICING_BASE.target_margins.image,
-    price_usd: 0.3,
-    credits: 2,
+  google_nano_banana_2_1k: GOOGLE_NANO_2_1K,
+  google_nano_banana_2_2k: GOOGLE_NANO_2_2K,
+  google_nano_banana_2_4k: GOOGLE_NANO_2_4K,
+  google_nano_banana_pro_1k_2k: GOOGLE_NANO_PRO_12K,
+  google_nano_banana_pro_4k: GOOGLE_NANO_PRO_4K,
+  /** Legacy key — same tier as Google Nano Banana 2 @ 1K (studio “NanoBanana 2”). */
+  nanobanana_standard: { ...GOOGLE_NANO_2_1K, model: "nanobanana_standard" },
+  /** Legacy key — same tier as Google Nano Banana Pro @ 1K/2K (studio “NanoBanana Pro” default). */
+  nanobanana_pro: { ...GOOGLE_NANO_PRO_12K, model: "nanobanana_pro" },
+  seedream_45_text_to_image: {
+    model: "seedream_45_text_to_image",
+    cost_usd: SEEDREAM_45_BASE.cost_usd,
+    cost_with_buffer: SEEDREAM_45_BASE.cost_with_buffer,
+    target_margin: SEEDREAM_45_BASE.target_margin,
+    price_usd: SEEDREAM_45_BASE.price_usd,
+    credits: SEEDREAM_45_BASE.credits,
+    fal_list_price_usd: SEEDREAM_45_FAL_LIST_USD,
   },
-  nanobanana_standard: {
-    model: "nanobanana_standard",
-    cost_usd: 0.04,
-    cost_with_buffer: 0.054,
-    target_margin: PRICING_BASE.target_margins.image,
-    price_usd: 0.12,
-    credits: 1,
+  seedream_45_image_to_image: {
+    model: "seedream_45_image_to_image",
+    cost_usd: SEEDREAM_45_BASE.cost_usd,
+    cost_with_buffer: SEEDREAM_45_BASE.cost_with_buffer,
+    target_margin: SEEDREAM_45_BASE.target_margin,
+    price_usd: SEEDREAM_45_BASE.price_usd,
+    credits: SEEDREAM_45_BASE.credits,
+    fal_list_price_usd: SEEDREAM_45_FAL_LIST_USD,
   },
 } as const;
+
+/** Kie Market model id — Topaz Video Upscale (1× / 2× / 4×). */
+export const KIE_TOPAZ_VIDEO_UPSCALE_MODEL = "topaz/video-upscale" as const;
+
+/** Topaz Video Upscaler — negotiated COGS $0.06/s vs Fal list $0.08/s (−25%). */
+export const TOPAZ_VIDEO_UPSCALER = {
+  kie_model: KIE_TOPAZ_VIDEO_UPSCALE_MODEL,
+  cost_usd_per_second: 0.06,
+  fal_list_usd_per_second: 0.08,
+  /** Billed credits per second (product tier). */
+  credits_per_second: 12,
+} as const;
+
+export function topazVideoUpscaleCredits(durationSeconds: number): number {
+  const d = Math.max(0, Number(durationSeconds) || 0);
+  return Math.max(1, Math.ceil(d * TOPAZ_VIDEO_UPSCALER.credits_per_second));
+}
+
+/** Wholesale discount vs Fal list: (cost_usd − fal_list) / fal_list. */
+export function wholesaleDiscountVsFalListPct(costUsd: number, falListUsd: number): number {
+  if (!(falListUsd > 0)) return 0;
+  return ((costUsd - falListUsd) / falListUsd) * 100;
+}
+
+export type StudioImageEconomicsRow = {
+  key: string;
+  modelAndModality: string;
+  modality: string;
+  provider: string;
+  creditsPerGen: number;
+  creditsUnit: string;
+  ourRetailUsd: number;
+  falListUsd: number | null;
+  discountVsFalListPct: number | null;
+  cogsUsd: number;
+};
+
+function mapImageModelToEconomicsRow(
+  key: keyof typeof IMAGE_MODEL,
+  modelAndModality: string,
+  modality: string,
+  provider: string,
+  creditsUnit: string,
+): StudioImageEconomicsRow {
+  const m = IMAGE_MODEL[key];
+  const fal =
+    "fal_list_price_usd" in m && typeof (m as { fal_list_price_usd?: number }).fal_list_price_usd === "number"
+      ? (m as { fal_list_price_usd: number }).fal_list_price_usd
+      : null;
+  const discountPct = fal != null ? wholesaleDiscountVsFalListPct(m.cost_usd, fal) : null;
+  return {
+    key,
+    modelAndModality,
+    modality,
+    provider,
+    creditsPerGen: m.credits,
+    creditsUnit,
+    ourRetailUsd: m.credits * PRICING_BASE.credit_value_usd,
+    falListUsd: fal,
+    discountVsFalListPct: discountPct,
+    cogsUsd: m.cost_usd,
+  };
+}
+
+/** Google Nano Banana 2 (Kie) — studio economics rows. */
+export const STUDIO_IMAGE_GOOGLE_NANO_2_ECONOMICS_ROWS: StudioImageEconomicsRow[] = [
+  mapImageModelToEconomicsRow(
+    "google_nano_banana_2_4k",
+    "Google nano banana 2, 4K",
+    "image",
+    "Google",
+    "per image",
+  ),
+  mapImageModelToEconomicsRow(
+    "google_nano_banana_2_2k",
+    "Google nano banana 2, 2K",
+    "image",
+    "Google",
+    "per image",
+  ),
+  mapImageModelToEconomicsRow(
+    "google_nano_banana_2_1k",
+    "Google nano banana 2, 1K",
+    "image",
+    "Google",
+    "per image",
+  ),
+];
+
+/** Google Nano Banana Pro (Kie). */
+export const STUDIO_IMAGE_GOOGLE_NANO_PRO_ECONOMICS_ROWS: StudioImageEconomicsRow[] = [
+  mapImageModelToEconomicsRow(
+    "google_nano_banana_pro_1k_2k",
+    "Google nano banana pro, 1K / 2K",
+    "image",
+    "Google",
+    "per image",
+  ),
+  mapImageModelToEconomicsRow(
+    "google_nano_banana_pro_4k",
+    "Google nano banana pro, 4K",
+    "image",
+    "Google",
+    "per image",
+  ),
+];
+
+/** Rows for Studio Image transparency table (Seedream 4.5). */
+export const STUDIO_IMAGE_SEEDREAM_45_ECONOMICS_ROWS = [
+  {
+    key: "seedream_45_image_to_image" as const,
+    modelAndModality: "Seedream 4.5, image-to-image",
+    modality: "image",
+    provider: "ByteDance",
+  },
+  {
+    key: "seedream_45_text_to_image" as const,
+    modelAndModality: "Seedream 4.5, text-to-image",
+    modality: "image",
+    provider: "ByteDance",
+  },
+].map((row) => {
+  const m = IMAGE_MODEL[row.key];
+  const customerUsd = m.credits * PRICING_BASE.credit_value_usd;
+  const fal = m.fal_list_price_usd ?? SEEDREAM_45_FAL_LIST_USD;
+  const discountPct = wholesaleDiscountVsFalListPct(m.cost_usd, fal);
+  return {
+    ...row,
+    creditsPerGen: m.credits,
+    creditsUnit: "per image",
+    ourRetailUsd: customerUsd,
+    falListUsd: fal,
+    discountVsFalListPct: discountPct,
+    cogsUsd: m.cost_usd,
+  };
+});
+
+export type StudioGrokImagineEconomicsRow = {
+  modelAndModality: string;
+  modality: string;
+  provider: string;
+  creditsLabel: string;
+  ourRetailUsd: number;
+  cogsUsd: number;
+};
+
+/** Grok Imagine — batch-priced; no Fal list in sheet. */
+export const STUDIO_IMAGE_GROK_IMAGINE_ROWS: StudioGrokImagineEconomicsRow[] = [
+  {
+    modelAndModality: "grok-imagine, image-to-image",
+    modality: "image",
+    provider: "Grok",
+    creditsLabel: "4 credits per 2 images",
+    ourRetailUsd: 4 * PRICING_BASE.credit_value_usd,
+    cogsUsd: 0.02,
+  },
+  {
+    modelAndModality: "grok-imagine, text-to-image",
+    modality: "image",
+    provider: "Grok",
+    creditsLabel: "4 credits per 6 images",
+    ourRetailUsd: 4 * PRICING_BASE.credit_value_usd,
+    cogsUsd: 0.02,
+  },
+];
+
+export type StudioUpscaleEconomicsRow = {
+  modelAndModality: string;
+  modality: string;
+  provider: string;
+  creditsPerUnit: number;
+  unitLabel: string;
+  ourRetailUsd: number;
+  falListUsd: number | null;
+  discountVsFalListPct: number | null;
+  cogsUsd: number;
+};
+
+/** Topaz Video Upscaler — same credits/s for 1× / 2× / 4× (Kie). */
+export const STUDIO_UPSCALE_TOPAZ_VIDEO_ROWS: StudioUpscaleEconomicsRow[] = [
+  {
+    modelAndModality: "Topaz Video Upscaler, upscale factor 1× / 2× / 4×",
+    modality: "video",
+    provider: "Topaz",
+    creditsPerUnit: TOPAZ_VIDEO_UPSCALER.credits_per_second,
+    unitLabel: "per second",
+    ourRetailUsd: TOPAZ_VIDEO_UPSCALER.credits_per_second * PRICING_BASE.credit_value_usd,
+    falListUsd: TOPAZ_VIDEO_UPSCALER.fal_list_usd_per_second,
+    discountVsFalListPct: wholesaleDiscountVsFalListPct(
+      TOPAZ_VIDEO_UPSCALER.cost_usd_per_second,
+      TOPAZ_VIDEO_UPSCALER.fal_list_usd_per_second,
+    ),
+    cogsUsd: TOPAZ_VIDEO_UPSCALER.cost_usd_per_second,
+  },
+];
 
 export type ImageModelKey = keyof typeof IMAGE_MODEL;
 
@@ -56,26 +335,23 @@ export function creditsForImageModel(key: ImageModelKey): number {
   return IMAGE_MODEL[key].credits;
 }
 
-/** Pro / Standard studio UI — same resolution keys as NanoBanana Pro API. */
+/** Pro / Standard studio UI — same resolution keys as Kie Google image APIs. */
 export type StudioImageOutputResolution = "1K" | "2K" | "4K";
 
 /**
- * Credits per generated image in Studio (model + output resolution).
- * Pro anchors on `nanobanana_pro.credits` at 2K (1K = half, 4K = double).
- * Standard anchors on `nanobanana_standard.credits` at 1K (2K/4K scale up).
+ * Credits per generated image in Studio (Kie Google Nano Banana 2 / Pro).
  */
 export function studioImageCreditsPerOutput(opts: {
   studioModel: "pro" | "nano";
   resolution: StudioImageOutputResolution;
 }): number {
   if (opts.studioModel === "pro") {
-    const base = IMAGE_MODEL.nanobanana_pro.credits;
-    const mult = { "1K": 0.5, "2K": 1, "4K": 2 } as const;
-    return Math.max(1, Math.ceil(base * mult[opts.resolution]));
+    if (opts.resolution === "4K") return IMAGE_MODEL.google_nano_banana_pro_4k.credits;
+    return IMAGE_MODEL.google_nano_banana_pro_1k_2k.credits;
   }
-  const base = IMAGE_MODEL.nanobanana_standard.credits;
-  const mult = { "1K": 1, "2K": 2, "4K": 3 } as const;
-  return Math.max(1, Math.ceil(base * mult[opts.resolution]));
+  if (opts.resolution === "4K") return IMAGE_MODEL.google_nano_banana_2_4k.credits;
+  if (opts.resolution === "2K") return IMAGE_MODEL.google_nano_banana_2_2k.credits;
+  return IMAGE_MODEL.google_nano_banana_2_1k.credits;
 }
 
 // ---------------------------------------------------------------------------

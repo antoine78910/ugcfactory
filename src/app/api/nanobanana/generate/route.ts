@@ -2,13 +2,13 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import { getAppUrl, getEnv } from "@/lib/env";
+import { kieMarketCreateTask } from "@/lib/kieMarket";
 import {
-  nanoBananaGenerate2,
-  nanoBananaGeneratePro,
-  type NanoBananaImageSize,
-  type NanoBananaProAspectRatio,
-  type NanoBananaProResolution,
-} from "@/lib/nanobanana";
+  buildKieGoogleImageInput,
+  kieMarketModelForStudioImage,
+  type KieGoogleImageResolution,
+} from "@/lib/kieGoogleImage";
+import type { NanoBananaImageSize, NanoBananaProAspectRatio, NanoBananaProResolution } from "@/lib/nanobanana";
 import {
   canUseStudioImageModel,
   parseAccountPlan,
@@ -64,7 +64,8 @@ export async function POST(req: Request) {
       return NextResponse.json(
         {
           error:
-            studioImageUpgradeMessage(accountPlan, model) ?? "Subscription upgrade required for Nano Banana Pro.",
+            studioImageUpgradeMessage(accountPlan, model) ??
+            "Subscription upgrade required for Nano Banana Pro.",
           code: "PLAN_UPGRADE_REQUIRED",
         },
         { status: 403 },
@@ -72,60 +73,29 @@ export async function POST(req: Request) {
     }
   }
   const num = clampNumImages(body.numImages);
-  /** NanoBanana 2 defaults to 1K in docs; Pro callers usually pass explicit resolution. */
-  const resolutionNano: NanoBananaProResolution = body.resolution ?? "1K";
+  const resolutionNano = (body.resolution ?? "1K") as KieGoogleImageResolution;
+  const kieModel = kieMarketModelForStudioImage(model);
+  const aspectFor = body.aspectRatio ?? body.imageSize ?? "auto";
 
   try {
-    if (model === "pro") {
-      const aspect = body.aspectRatio ?? body.imageSize ?? "auto";
-      if (num <= 1) {
-        const taskId = await nanoBananaGeneratePro({
-          prompt,
-          imageUrls,
-          resolution: body.resolution,
-          aspectRatio: aspect,
-          callBackUrl,
-        });
-        return NextResponse.json({ taskId, model });
-      }
-      const taskIds = await Promise.all(
-        Array.from({ length: num }, () =>
-          nanoBananaGeneratePro({
-            prompt,
-            imageUrls,
-            resolution: body.resolution,
-            aspectRatio: aspect,
-            callBackUrl,
-          }),
-        ),
-      );
-      return NextResponse.json({ taskIds, model });
-    }
-
-    // Studio "nano" → generate-2 (1K/2K/4K + same aspect API as docs)
-    const aspectFor2 = body.aspectRatio ?? body.imageSize ?? "auto";
-    if (num <= 1) {
-      const taskId = await nanoBananaGenerate2({
-        prompt,
-        imageUrls,
-        aspectRatio: aspectFor2,
-        resolution: resolutionNano,
+    const runOne = () =>
+      kieMarketCreateTask({
+        model: kieModel,
         callBackUrl,
-      });
-      return NextResponse.json({ taskId, model });
-    }
-    const taskIds = await Promise.all(
-      Array.from({ length: num }, () =>
-        nanoBananaGenerate2({
+        input: buildKieGoogleImageInput({
           prompt,
-          imageUrls,
-          aspectRatio: aspectFor2,
+          aspectRatio: typeof aspectFor === "string" ? aspectFor : "auto",
           resolution: resolutionNano,
-          callBackUrl,
+          imageUrls,
         }),
-      ),
-    );
-    return NextResponse.json({ taskIds, model });
+      });
+
+    if (num <= 1) {
+      const taskId = await runOne();
+      return NextResponse.json({ taskId, model, provider: "kie-market", kieModel });
+    }
+    const taskIds = await Promise.all(Array.from({ length: num }, () => runOne()));
+    return NextResponse.json({ taskIds, model, provider: "kie-market", kieModel });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error.";
     return NextResponse.json({ error: message }, { status: 502 });

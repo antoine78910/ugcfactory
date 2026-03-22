@@ -1058,8 +1058,9 @@ export default function StudioVideoPanel() {
       </div>
 
       {tab === "edit" ? (
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:gap-6">
-          <div className="flex min-w-0 flex-1 flex-col gap-4 lg:max-w-[min(100%,30rem)] lg:min-w-0">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:gap-6 lg:min-h-0 lg:max-h-[min(92vh,calc(100vh-7rem))]">
+          <div className="flex min-w-0 flex-1 flex-col gap-4 lg:max-w-[min(100%,30rem)] lg:min-h-0 lg:overflow-hidden">
+            <div className="studio-left-inputs-scroll flex min-w-0 flex-col gap-4 lg:max-h-[min(42vh,24rem)] lg:shrink-0 lg:overflow-y-auto">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Edit — prompt</p>
             <div className="rounded-2xl border border-white/10 bg-[#101014] p-4 space-y-3">
               {motionEdit ? (
@@ -1128,8 +1129,9 @@ export default function StudioVideoPanel() {
                 ) : null}
               </div>
             </div>
+            </div>
 
-            <div className="studio-params-scroll flex min-w-0 flex-col gap-4 lg:max-h-[min(55vh,calc(100vh-14rem))] lg:overflow-y-auto">
+            <div className="studio-params-scroll flex min-w-0 flex-1 flex-col gap-4 lg:min-h-0 lg:overflow-y-auto">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Parameters</p>
             <div className="rounded-2xl border border-white/10 bg-[#101014] p-4 space-y-4">
               <div className="flex items-center justify-between gap-3">
@@ -1231,7 +1233,7 @@ export default function StudioVideoPanel() {
             </div>
           </div>
 
-          <div className="flex h-full min-h-0 min-w-0 flex-[2.5] lg:flex-[3] flex-col">
+          <div className="flex h-full min-h-0 min-w-0 flex-[2.5] lg:flex-[3] flex-col lg:min-h-0 lg:overflow-hidden">
             <StudioOutputPane
               title=""
               hasOutput
@@ -1247,8 +1249,9 @@ export default function StudioVideoPanel() {
           </div>
         </div>
       ) : (
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:gap-6">
-          <div className="flex min-w-0 flex-1 flex-col gap-4 lg:max-w-[min(100%,30rem)] lg:min-w-0">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:gap-6 lg:min-h-0 lg:max-h-[min(92vh,calc(100vh-7rem))]">
+          <div className="flex min-w-0 flex-1 flex-col gap-4 lg:max-w-[min(100%,30rem)] lg:min-h-0 lg:overflow-hidden">
+            <div className="studio-left-inputs-scroll flex min-w-0 flex-col gap-4 lg:max-h-[min(42vh,24rem)] lg:shrink-0 lg:overflow-y-auto">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Create — prompt</p>
             <div className="rounded-2xl border border-white/10 bg-[#101014] p-4">
               <div className="grid grid-cols-2 gap-2">
@@ -1282,8 +1285,9 @@ export default function StudioVideoPanel() {
                 </span>
               </div>
             </div>
+            </div>
 
-            <div className="studio-params-scroll flex min-w-0 flex-col gap-4 lg:max-h-[min(55vh,calc(100vh-14rem))] lg:overflow-y-auto">
+            <div className="studio-params-scroll flex min-w-0 flex-1 flex-col gap-4 lg:min-h-0 lg:overflow-y-auto">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Parameters</p>
             <div className="rounded-2xl border border-white/10 bg-[#101014] p-4 space-y-4">
               <div>
@@ -1461,7 +1465,7 @@ export default function StudioVideoPanel() {
             </div>
           </div>
 
-          <div className="flex h-full min-h-0 min-w-0 flex-[2.5] lg:flex-[3] flex-col">
+          <div className="flex h-full min-h-0 min-w-0 flex-[2.5] lg:flex-[3] flex-col lg:min-h-0 lg:overflow-hidden">
             <StudioOutputPane
               title=""
               hasOutput
