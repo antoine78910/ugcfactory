@@ -1059,7 +1059,7 @@ export default function StudioVideoPanel() {
 
       {tab === "edit" ? (
         <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:gap-6">
-          <div className="flex min-w-0 flex-[1] flex-col gap-4 lg:min-w-[min(100%,18rem)]">
+          <div className="flex min-w-0 flex-1 flex-col gap-4 lg:max-w-[min(100%,30rem)] lg:min-w-0">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Edit — prompt</p>
             <div className="rounded-2xl border border-white/10 bg-[#101014] p-4 space-y-3">
               {motionEdit ? (
@@ -1128,9 +1128,8 @@ export default function StudioVideoPanel() {
                 ) : null}
               </div>
             </div>
-          </div>
 
-          <aside className="studio-params-scroll flex min-w-0 flex-col gap-4 lg:w-[min(100%,17rem)] xl:w-[min(100%,19rem)] lg:shrink-0 lg:max-h-[min(90vh,calc(100vh-10rem))] lg:overflow-y-auto">
+            <div className="studio-params-scroll flex min-w-0 flex-col gap-4 lg:max-h-[min(55vh,calc(100vh-14rem))] lg:overflow-y-auto">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Parameters</p>
             <div className="rounded-2xl border border-white/10 bg-[#101014] p-4 space-y-4">
               <div className="flex items-center justify-between gap-3">
@@ -1232,9 +1231,10 @@ export default function StudioVideoPanel() {
                 <span className="rounded-md bg-white/15 px-2 py-0.5 text-base tabular-nums">{editCredits}</span>
               </span>
             </Button>
-          </aside>
+            </div>
+          </div>
 
-          <div className="flex h-full min-h-0 min-w-0 flex-[2.35] flex-col">
+          <div className="flex h-full min-h-0 min-w-0 flex-[2.5] lg:flex-[3] flex-col">
             <StudioOutputPane
               title=""
               hasOutput
@@ -1251,7 +1251,7 @@ export default function StudioVideoPanel() {
         </div>
       ) : (
         <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:gap-6">
-          <div className="flex min-w-0 flex-[1] flex-col gap-4 lg:min-w-[min(100%,18rem)]">
+          <div className="flex min-w-0 flex-1 flex-col gap-4 lg:max-w-[min(100%,30rem)] lg:min-w-0">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Create — prompt</p>
             <div className="rounded-2xl border border-white/10 bg-[#101014] p-4">
               <div className="grid grid-cols-2 gap-2">
@@ -1285,9 +1285,8 @@ export default function StudioVideoPanel() {
                 </span>
               </div>
             </div>
-          </div>
 
-          <aside className="studio-params-scroll flex min-w-0 flex-col gap-4 lg:w-[min(100%,17rem)] xl:w-[min(100%,19rem)] lg:shrink-0 lg:max-h-[min(90vh,calc(100vh-10rem))] lg:overflow-y-auto">
+            <div className="studio-params-scroll flex min-w-0 flex-col gap-4 lg:max-h-[min(55vh,calc(100vh-14rem))] lg:overflow-y-auto">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Parameters</p>
             <div className="rounded-2xl border border-white/10 bg-[#101014] p-4 space-y-4">
               <div>
@@ -1465,9 +1464,10 @@ export default function StudioVideoPanel() {
                 <span className="rounded-md bg-white/15 px-2 py-0.5 text-base tabular-nums">{credits}</span>
               </span>
             </Button>
-          </aside>
+            </div>
+          </div>
 
-          <div className="flex h-full min-h-0 min-w-0 flex-[2.35] flex-col">
+          <div className="flex h-full min-h-0 min-w-0 flex-[2.5] lg:flex-[3] flex-col">
             <StudioOutputPane
               title=""
               hasOutput
