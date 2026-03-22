@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useCreditsPlan } from "@/app/_components/CreditsPlanContext";
+import { useCreditsPlan, getPersonalApiKey, isPersonalApiActive } from "@/app/_components/CreditsPlanContext";
 import { Plus, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -77,10 +77,11 @@ async function uploadReferenceFile(file: File): Promise<string> {
   return json.url;
 }
 
-async function pollNanoTask(taskId: string): Promise<string[]> {
+async function pollNanoTask(taskId: string, personalApiKey?: string): Promise<string[]> {
   const max = 90;
+  const keyParam = personalApiKey ? `&personalApiKey=${encodeURIComponent(personalApiKey)}` : "";
   for (let i = 0; i < max; i++) {
-    const res = await fetch(`/api/nanobanana/task?taskId=${encodeURIComponent(taskId)}`, { cache: "no-store" });
+    const res = await fetch(`/api/nanobanana/task?taskId=${encodeURIComponent(taskId)}${keyParam}`, { cache: "no-store" });
     const json = (await res.json()) as {
       data?: { successFlag?: number; response?: Record<string, unknown>; errorMessage?: string };
       error?: string;
@@ -260,15 +261,18 @@ export default function StudioImagePanel() {
       setBilling({ open: true, reason: "plan", blockedId: model });
       return;
     }
-    if (creditsRef.current < totalCredits) {
+    const usingPersonalApi = isPersonalApiActive();
+    if (!usingPersonalApi && creditsRef.current < totalCredits) {
       setBilling({ open: true, reason: "credits", required: totalCredits });
       return;
     }
     const n = Math.min(4, Math.max(1, numImages));
     const jobId = crypto.randomUUID();
     const summary = p.length > 72 ? `${p.slice(0, 72)}…` : p;
-    spendCredits(totalCredits);
-    creditsRef.current = Math.max(0, creditsRef.current - totalCredits);
+    if (!usingPersonalApi) {
+      spendCredits(totalCredits);
+      creditsRef.current = Math.max(0, creditsRef.current - totalCredits);
+    }
     const startedAt = Date.now();
     setHistoryItems((prev) => [
       {
@@ -294,6 +298,7 @@ export default function StudioImagePanel() {
             aspectRatio: aspect,
             resolution,
             numImages: n,
+            personalApiKey: getPersonalApiKey(),
           }),
         });
         const json = (await res.json()) as { taskId?: string; taskIds?: string[]; error?: string };
@@ -306,7 +311,8 @@ export default function StudioImagePanel() {
               : [];
         if (!ids.length) throw new Error("No task id returned");
         toast.message("Generation started", { description: `Polling ${ids.length} task(s)…` });
-        const batches = await Promise.all(ids.map((tid) => pollNanoTask(tid)));
+        const pKey = getPersonalApiKey();
+        const batches = await Promise.all(ids.map((tid) => pollNanoTask(tid, pKey)));
         const urls = batches.flat();
         const doneAt = Date.now();
         setHistoryItems((prev) => {

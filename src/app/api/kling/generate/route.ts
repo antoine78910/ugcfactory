@@ -24,6 +24,7 @@ type Body = {
   mode?: KlingMode;
   /** Kling 3.0 only — multi-shot sequencing */
   multiShots?: boolean;
+  personalApiKey?: string;
 };
 
 function validateDurationForModel(model: string, duration: number | undefined) {
@@ -162,10 +163,13 @@ export async function POST(req: Request) {
       );
     }
 
-    const taskId = await kieMarketCreateTask({
-      model,
-      input,
-    });
+    const personalKey = typeof body.personalApiKey === "string" && body.personalApiKey.trim().length > 0
+      ? body.personalApiKey.trim()
+      : undefined;
+    const taskId = await kieMarketCreateTask(
+      { model, input },
+      personalKey,
+    );
 
     return NextResponse.json({
       taskId,

@@ -119,7 +119,11 @@ export default function SubscriptionPage() {
       const res = await fetch("/api/stripe/checkout/subscription", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ planId: planIdCheckout, billing }),
+        body: JSON.stringify({
+          planId: planIdCheckout,
+          billing,
+          referral: window.linkjolt?.referral ?? "",
+        }),
       });
       const data = (await res.json()) as { url?: string; error?: string };
       if (!res.ok) throw new Error(data.error || "Checkout failed");

@@ -1,79 +1,51 @@
 /**
- * 5-card front arc + slow rotateY drift. Full-bleed width on LP.
- * MP4s in /public/carousel/
+ * Concave arc: 9 panels in a 160° arc, center pushed back (small),
+ * sides come forward (large). 9:16 aspect ratio panels.
+ * Gentle sway animation instead of full spin.
  */
 
 .root {
   position: absolute;
   inset: 0;
-  overflow: hidden;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
-  perspective: 1500px;
-  perspective-origin: 50% 38%;
-  background: radial-gradient(
-    ellipse 100% 48% at 50% 94%,
-    rgba(5, 5, 7, 0.5) 0%,
-    transparent 58%
-  );
+  pointer-events: none;
 }
 
-.stage {
-  position: relative;
+.scene {
+  --pw: 58px;
+  --ph: 103px;
+  --r: 200px;
+
   width: 100%;
-  max-width: none;
-  height: min(520px, 58vw);
-  margin-top: clamp(4.5rem, 16vh, 9rem);
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  perspective: 480px;
+  perspective-origin: 50% 50%;
+}
+
+.arc {
+  position: relative;
+  width: 0;
+  height: 0;
   transform-style: preserve-3d;
+  animation: heroSway 16s ease-in-out infinite;
 }
 
-.inner {
-  --w: clamp(84px, 9.5vw, 132px);
-  --h: clamp(126px, 14.2vw, 198px);
-  --translateZ: clamp(165px, 22vw, 300px);
-  --tiltX: 5deg;
-
+.panel {
   position: absolute;
-  left: 50%;
-  top: 44%;
-  width: var(--w);
-  height: var(--h);
-  margin-left: calc(var(--w) / -2);
-  margin-top: calc(var(--h) / -2);
-  transform-style: preserve-3d;
-  transform-origin: 50% 50%;
-  animation: heroRingDrift 52s linear infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .inner {
-    animation: none;
-  }
-}
-
-@keyframes heroRingDrift {
-  from {
-    transform: perspective(1500px) rotateX(var(--tiltX)) rotateY(0deg);
-  }
-  to {
-    transform: perspective(1500px) rotateX(var(--tiltX)) rotateY(1turn);
-  }
-}
-
-.card {
-  position: absolute;
-  inset: 0;
-  border-radius: 14px;
+  width: var(--pw);
+  height: var(--ph);
+  left: calc(var(--pw) / -2);
+  top: calc(var(--ph) / -2);
+  border-radius: 8px;
   overflow: hidden;
-  transform-style: preserve-3d;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  box-shadow:
-    0 14px 44px rgba(0, 0, 0, 0.5),
-    0 0 0 1px rgba(139, 92, 246, 0.1);
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
-  transform: rotateY(var(--angle)) translateZ(var(--translateZ));
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+  transform: rotateY(var(--angle)) translateZ(calc(-1 * var(--r)));
 }
 
 .video {
@@ -81,5 +53,51 @@
   height: 100%;
   object-fit: cover;
   display: block;
-  pointer-events: none;
+}
+
+/* ── Responsive: bigger radius = wider arc, more panels visible ── */
+
+@media (min-width: 640px) {
+  .scene {
+    --pw: 66px;
+    --ph: 117px;
+    --r: 320px;
+    perspective: 580px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .scene {
+    --pw: 72px;
+    --ph: 128px;
+    --r: 560px;
+    perspective: 780px;
+  }
+}
+
+@media (min-width: 1440px) {
+  .scene {
+    --pw: 78px;
+    --ph: 139px;
+    --r: 700px;
+    perspective: 880px;
+  }
+}
+
+/* ── Sway (gentle ±3° oscillation) ── */
+
+@keyframes heroSway {
+  0%, 100% {
+    transform: rotateX(-2deg) rotateY(3deg);
+  }
+  50% {
+    transform: rotateX(-2deg) rotateY(-3deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arc {
+    animation: none;
+    transform: rotateX(-2deg);
+  }
 }

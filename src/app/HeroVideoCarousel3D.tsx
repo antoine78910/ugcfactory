@@ -13,28 +13,29 @@ const DEFAULT_SRCS = [
   '/carousel/slide-7.mp4',
 ];
 
-const SLOT_COUNT = 5;
-const ARC_DEGREES = [-70, -35, 0, 35, 70] as const;
+const CARD_COUNT = 9;
+const ARC_DEG = 160;
+const HALF = ARC_DEG / 2;
 
 type Props = { srcs?: readonly string[] };
 
 export function HeroVideoCarousel3D({ srcs = DEFAULT_SRCS }: Props) {
   const list = srcs.length ? srcs : DEFAULT_SRCS;
-  const slots = Array.from({ length: SLOT_COUNT }, (_, i) => ({
+
+  const cards = Array.from({ length: CARD_COUNT }, (_, i) => ({
     src: list[i % list.length]!,
-    index: i,
-    angle: `${ARC_DEGREES[i]}deg`,
+    angle: -HALF + (ARC_DEG / (CARD_COUNT - 1)) * i,
   }));
 
   return (
     <div className={styles.root} aria-hidden>
-      <div className={styles.stage}>
-        <div className={styles.inner}>
-          {slots.map(({ src, index, angle }) => (
+      <div className={styles.scene}>
+        <div className={styles.arc}>
+          {cards.map(({ src, angle }, i) => (
             <div
-              key={`${index}-${src}`}
-              className={styles.card}
-              style={{ '--angle': angle } as CSSProperties}
+              key={i}
+              className={styles.panel}
+              style={{ '--angle': `${angle}deg` } as CSSProperties}
             >
               <video
                 className={styles.video}

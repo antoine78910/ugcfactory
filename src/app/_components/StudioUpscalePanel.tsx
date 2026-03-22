@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useCreditsPlan } from "@/app/_components/CreditsPlanContext";
+import { useCreditsPlan, getPersonalApiKey, isPersonalApiActive } from "@/app/_components/CreditsPlanContext";
 import { Sparkles, Upload, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -26,10 +26,11 @@ async function uploadFile(file: File): Promise<string> {
   return json.url;
 }
 
-async function pollKieVideoTask(taskId: string): Promise<string> {
+async function pollKieVideoTask(taskId: string, personalApiKey?: string): Promise<string> {
   const max = 120;
+  const keyParam = personalApiKey ? `&personalApiKey=${encodeURIComponent(personalApiKey)}` : "";
   for (let i = 0; i < max; i++) {
-    const res = await fetch(`/api/kling/status?taskId=${encodeURIComponent(taskId)}`, {
+    const res = await fetch(`/api/kling/status?taskId=${encodeURIComponent(taskId)}${keyParam}`, {
       cache: "no-store",
     });
     const json = (await res.json()) as {
@@ -115,14 +116,17 @@ export default function StudioUpscalePanel() {
       toast.error("Add a video URL or upload a file.");
       return;
     }
-    if (creditsRef.current < credits) {
+    const usingPersonalApi = isPersonalApiActive();
+    if (!usingPersonalApi && creditsRef.current < credits) {
       setBilling({ open: true, required: credits });
       return;
     }
     const jobId = crypto.randomUUID();
     const label = `Topaz ${factor}× · ${durationSec}s`;
-    spendCredits(credits);
-    creditsRef.current = Math.max(0, creditsRef.current - credits);
+    if (!usingPersonalApi) {
+      spendCredits(credits);
+      creditsRef.current = Math.max(0, creditsRef.current - credits);
+    }
     const startedAt = Date.now();
     setHistoryItems((prev) => [
       { id: jobId, kind: "video", status: "generating", label, createdAt: startedAt },
@@ -131,14 +135,15 @@ export default function StudioUpscalePanel() {
 
     void (async () => {
       try {
+        const upPKey = getPersonalApiKey();
         const res = await fetch("/api/kie/upscale/video", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ videoUrl: url, upscaleFactor: factor }),
+          body: JSON.stringify({ videoUrl: url, upscaleFactor: factor, personalApiKey: upPKey }),
         });
         const json = (await res.json()) as { taskId?: string; error?: string };
         if (!res.ok || !json.taskId) throw new Error(json.error || "Upscale request failed");
-        const outUrl = await pollKieVideoTask(json.taskId);
+        const outUrl = await pollKieVideoTask(json.taskId, upPKey);
         const doneAt = Date.now();
         setHistoryItems((prev) => {
           const rest = prev.filter((i) => i.id !== jobId);

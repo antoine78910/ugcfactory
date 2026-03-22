@@ -2,13 +2,17 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Coins, Sparkles, Zap } from "lucide-react";
+import { ArrowRight, Coins, Eye, EyeOff, Key, Sparkles, Zap } from "lucide-react";
 import { toast } from "sonner";
 import StudioShell from "@/app/_components/StudioShell";
 import { consumeCheckoutQueryParams, useCreditsPlan } from "@/app/_components/CreditsPlanContext";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { CREDIT_PACKS } from "@/lib/pricing";
+
+const PERSONAL_API_KEY_LS = "ugc_personal_api_key";
+const PERSONAL_API_ENABLED_LS = "ugc_personal_api_enabled";
 
 type CreditPack = {
   key: string;
@@ -68,6 +72,30 @@ const creditPacks: CreditPack[] = PACK_UI.map((meta, i) => {
 export default function CreditsPage() {
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const { current, total, percentRemaining, planDisplayName } = useCreditsPlan();
+  const [personalApiEnabled, setPersonalApiEnabled] = useState(false);
+  const [personalApiKey, setPersonalApiKey] = useState("");
+  const [showKey, setShowKey] = useState(false);
+
+  useEffect(() => {
+    setPersonalApiEnabled(localStorage.getItem(PERSONAL_API_ENABLED_LS) === "1");
+    setPersonalApiKey(localStorage.getItem(PERSONAL_API_KEY_LS) ?? "");
+  }, []);
+
+  function togglePersonalApi() {
+    const next = !personalApiEnabled;
+    setPersonalApiEnabled(next);
+    localStorage.setItem(PERSONAL_API_ENABLED_LS, next ? "1" : "0");
+    if (!next) {
+      setPersonalApiKey("");
+      localStorage.removeItem(PERSONAL_API_KEY_LS);
+    }
+  }
+
+  function savePersonalApiKey(v: string) {
+    setPersonalApiKey(v);
+    if (v.trim()) localStorage.setItem(PERSONAL_API_KEY_LS, v.trim());
+    else localStorage.removeItem(PERSONAL_API_KEY_LS);
+  }
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -98,7 +126,10 @@ export default function CreditsPage() {
       const res = await fetch("/api/stripe/checkout/credits", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ packKey }),
+        body: JSON.stringify({
+          packKey,
+          referral: window.linkjolt?.referral ?? "",
+        }),
       });
       const data = (await res.json()) as { url?: string; error?: string };
       if (!res.ok) throw new Error(data.error || "Checkout failed");
@@ -249,6 +280,70 @@ export default function CreditsPage() {
                   </div>
                 );
               })}
+            </div>
+          </section>
+
+          <section className="mx-auto max-w-3xl rounded-2xl border border-amber-500/20 bg-gradient-to-br from-amber-500/[0.06] to-transparent p-6 md:p-8">
+            <div className="flex flex-col gap-5">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500/15 text-amber-400">
+                    <Key className="h-4.5 w-4.5" aria-hidden />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-white">Personal API</h3>
+                    <p className="mt-1 text-xs leading-relaxed text-white/45">
+                      Use your own Kie API key for all generations. No platform credits are consumed.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={personalApiEnabled}
+                  onClick={togglePersonalApi}
+                  className={cn(
+                    "relative mt-0.5 inline-flex h-6 w-11 shrink-0 items-center rounded-full border-2 border-transparent transition-colors",
+                    personalApiEnabled ? "bg-amber-500" : "bg-white/15",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform",
+                      personalApiEnabled ? "translate-x-[22px]" : "translate-x-[2px]",
+                    )}
+                  />
+                </button>
+              </div>
+
+              {personalApiEnabled ? (
+                <div className="flex flex-col gap-2">
+                  <label className="text-[11px] font-semibold uppercase tracking-wide text-white/40">
+                    Kie API Key
+                  </label>
+                  <div className="relative">
+                    <Input
+                      type={showKey ? "text" : "password"}
+                      placeholder="sk-..."
+                      value={personalApiKey}
+                      onChange={(e) => savePersonalApiKey(e.target.value)}
+                      className="h-10 border-amber-500/20 bg-black/40 pr-10 font-mono text-sm text-white placeholder:text-white/25 focus-visible:ring-amber-500/40"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowKey(!showKey)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/40 transition hover:text-white/70"
+                    >
+                      {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                  {personalApiKey.trim() ? (
+                    <p className="text-[11px] text-emerald-400/80">Key saved locally. Generations will use your API key.</p>
+                  ) : (
+                    <p className="text-[11px] text-amber-400/60">Enter your key from <a href="https://kie.ai" target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-amber-300">kie.ai</a> to bypass platform credits.</p>
+                  )}
+                </div>
+              ) : null}
             </div>
           </section>
 

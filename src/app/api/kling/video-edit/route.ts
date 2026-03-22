@@ -28,6 +28,7 @@ type Body = {
   autoSettings?: boolean;
   /** O1-style APIs: preserve source audio when supported. */
   keepAudio?: boolean;
+  personalApiKey?: string;
 };
 
 function modeFromQuality(q: string | undefined, auto: boolean | undefined): "std" | "pro" {
@@ -138,10 +139,13 @@ export async function POST(req: Request) {
       keepAudio,
     });
 
-    const taskId = await kieMarketCreateTask({
-      model: kieModel,
-      input,
-    });
+    const personalKey = typeof body.personalApiKey === "string" && body.personalApiKey.trim().length > 0
+      ? body.personalApiKey.trim()
+      : undefined;
+    const taskId = await kieMarketCreateTask(
+      { model: kieModel, input },
+      personalKey,
+    );
 
     return NextResponse.json({
       taskId,

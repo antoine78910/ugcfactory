@@ -21,6 +21,7 @@ type Body = {
   /** Background from motion clip vs character still (Kie `background_source`). */
   backgroundSource?: BackgroundSource;
   prompt?: string;
+  personalApiKey?: string;
 };
 
 /** Kie motion-control example uses `720p`; schema text references std/pro — we send resolution strings. */
@@ -73,10 +74,13 @@ export async function POST(req: Request) {
     };
     if (prompt) input.prompt = prompt.slice(0, 2500);
 
-    const taskId = await kieMarketCreateTask({
-      model: "kling-3.0/motion-control",
-      input,
-    });
+    const personalKey = typeof body.personalApiKey === "string" && body.personalApiKey.trim().length > 0
+      ? body.personalApiKey.trim()
+      : undefined;
+    const taskId = await kieMarketCreateTask(
+      { model: "kling-3.0/motion-control", input },
+      personalKey,
+    );
 
     return NextResponse.json({
       taskId,

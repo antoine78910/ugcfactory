@@ -26,6 +26,7 @@ type Body = {
   numImages?: number;
   resolution?: NanoBananaProResolution;
   aspectRatio?: NanoBananaProAspectRatio;
+  personalApiKey?: string;
 };
 
 function clampNumImages(n: unknown): number {
@@ -76,19 +77,25 @@ export async function POST(req: Request) {
   const resolutionNano = (body.resolution ?? "1K") as KieGoogleImageResolution;
   const kieModel = kieMarketModelForStudioImage(model);
   const aspectFor = body.aspectRatio ?? body.imageSize ?? "auto";
+  const personalKey = typeof body.personalApiKey === "string" && body.personalApiKey.trim().length > 0
+    ? body.personalApiKey.trim()
+    : undefined;
 
   try {
     const runOne = () =>
-      kieMarketCreateTask({
-        model: kieModel,
-        callBackUrl,
-        input: buildKieGoogleImageInput({
-          prompt,
-          aspectRatio: typeof aspectFor === "string" ? aspectFor : "auto",
-          resolution: resolutionNano,
-          imageUrls,
-        }),
-      });
+      kieMarketCreateTask(
+        {
+          model: kieModel,
+          callBackUrl,
+          input: buildKieGoogleImageInput({
+            prompt,
+            aspectRatio: typeof aspectFor === "string" ? aspectFor : "auto",
+            resolution: resolutionNano,
+            imageUrls,
+          }),
+        },
+        personalKey,
+      );
 
     if (num <= 1) {
       const taskId = await runOne();

@@ -34,6 +34,10 @@ export async function POST(req: Request) {
       ? String((body as { billing: unknown }).billing)
       : "monthly";
   const billing = billingRaw === "yearly" ? "yearly" : "monthly";
+  const referral =
+    typeof body === "object" && body !== null && "referral" in body
+      ? String((body as { referral: unknown }).referral).slice(0, 500)
+      : "";
 
   if (!isSubscriptionPlanId(planId)) {
     return NextResponse.json({ error: "Invalid plan" }, { status: 400 });
@@ -67,6 +71,7 @@ export async function POST(req: Request) {
       cancel_url: `${base.replace(/\/$/, "")}/subscription?checkout=cancel`,
       allow_promotion_codes: true,
       ...(customerEmail ? { customer_email: customerEmail } : {}),
+      ...(referral ? { client_reference_id: referral } : {}),
     });
 
     if (!session.url) {

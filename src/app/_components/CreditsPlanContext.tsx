@@ -24,6 +24,21 @@ const LS_CREDITS = "ugc_demo_credits";
 const LS_PLAN = "ugc_demo_plan";
 /** Bucket for % bar when plan is Free (one-off packs). */
 const LS_CAP = "ugc_demo_credits_cap";
+const LS_PERSONAL_API_KEY = "ugc_personal_api_key";
+const LS_PERSONAL_API_ENABLED = "ugc_personal_api_enabled";
+
+/** Returns the user's Kie API key when Personal API mode is active, or undefined. */
+export function getPersonalApiKey(): string | undefined {
+  if (typeof window === "undefined") return undefined;
+  if (localStorage.getItem(LS_PERSONAL_API_ENABLED) !== "1") return undefined;
+  const k = localStorage.getItem(LS_PERSONAL_API_KEY)?.trim();
+  return k && k.length > 0 ? k : undefined;
+}
+
+/** True when the user has Personal API mode enabled with a key set. */
+export function isPersonalApiActive(): boolean {
+  return getPersonalApiKey() !== undefined;
+}
 
 export type AccountPlanId = "free" | SubscriptionPlanId;
 

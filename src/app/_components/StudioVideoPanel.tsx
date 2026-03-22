@@ -17,7 +17,7 @@ import {
   studioSelectItemClass,
   type StudioModelPickerItem,
 } from "@/app/_components/StudioModelPicker";
-import { useCreditsPlan } from "@/app/_components/CreditsPlanContext";
+import { useCreditsPlan, getPersonalApiKey, isPersonalApiActive } from "@/app/_components/CreditsPlanContext";
 import { calculateVideoCredits } from "@/lib/linkToAd/generationCredits";
 import { calculateStudioVideoEditCredits } from "@/lib/pricing";
 import {
@@ -377,9 +377,10 @@ function FrameSlot({
   );
 }
 
-async function pollKlingVideo(taskId: string): Promise<string> {
+async function pollKlingVideo(taskId: string, personalApiKey?: string): Promise<string> {
+  const keyParam = personalApiKey ? `&personalApiKey=${encodeURIComponent(personalApiKey)}` : "";
   for (let i = 0; i < 120; i++) {
-    const res = await fetch(`/api/kling/status?taskId=${encodeURIComponent(taskId)}`, { cache: "no-store" });
+    const res = await fetch(`/api/kling/status?taskId=${encodeURIComponent(taskId)}${keyParam}`, { cache: "no-store" });
     const json = (await res.json()) as {
       data?: { status?: string; response?: string[]; error_message?: string | null };
       error?: string;
@@ -708,15 +709,18 @@ export default function StudioVideoPanel() {
       setBilling({ open: true, reason: "plan", blockedId: editPickerId, studioMode: "video_edit" });
       return;
     }
-    if (creditsRef.current < editCredits) {
+    const usingPersonalApi = isPersonalApiActive();
+    if (!usingPersonalApi && creditsRef.current < editCredits) {
       setBilling({ open: true, reason: "credits", required: editCredits, studioMode: "video_edit" });
       return;
     }
 
     const jobId = crypto.randomUUID();
     const label = p.length > 60 ? `${p.slice(0, 60)}…` : p;
-    spendCredits(editCredits);
-    creditsRef.current = Math.max(0, creditsRef.current - editCredits);
+    if (!usingPersonalApi) {
+      spendCredits(editCredits);
+      creditsRef.current = Math.max(0, creditsRef.current - editCredits);
+    }
     const startedAt = Date.now();
     const poster =
       motionEdit && editMotionImageUrl
@@ -750,6 +754,7 @@ export default function StudioVideoPanel() {
 
     void (async () => {
       try {
+        const editPKey = getPersonalApiKey();
         if (snap.motionEdit) {
           const res = await fetch("/api/kling/motion-control", {
             method: "POST",
@@ -761,12 +766,13 @@ export default function StudioVideoPanel() {
               quality: snap.editKlingMode === "pro" ? "1080p" : "720p",
               backgroundSource: snap.editSceneBackground,
               prompt: snap.prompt,
+              personalApiKey: editPKey,
             }),
           });
           const json = (await res.json()) as { taskId?: string; error?: string };
           if (!res.ok || !json.taskId) throw new Error(json.error || "Motion control failed");
           toast.message("Motion control started", { description: "Polling…" });
-          const url = await pollKlingVideo(json.taskId);
+          const url = await pollKlingVideo(json.taskId, editPKey);
           const doneAt = Date.now();
           setHistoryItems((prev) => {
             const rest = prev.filter((i) => i.id !== jobId);
@@ -799,12 +805,13 @@ export default function StudioVideoPanel() {
             quality: snap.editKlingMode,
             autoSettings: snap.editAutoSettings,
             keepAudio: true,
+            personalApiKey: editPKey,
           }),
         });
         const json = (await res.json()) as { taskId?: string; error?: string };
         if (!res.ok || !json.taskId) throw new Error(json.error || "Video edit failed");
         toast.message("Edit started", { description: "Polling provider…" });
-        const url = await pollKlingVideo(json.taskId);
+        const url = await pollKlingVideo(json.taskId, editPKey);
         const doneAt = Date.now();
         setHistoryItems((prev) => {
           const rest = prev.filter((i) => i.id !== jobId);
@@ -856,15 +863,18 @@ export default function StudioVideoPanel() {
       setBilling({ open: true, reason: "plan", blockedId: modelId, studioMode: "video" });
       return;
     }
-    if (creditsRef.current < credits) {
+    const usingPersonalApiCreate = isPersonalApiActive();
+    if (!usingPersonalApiCreate && creditsRef.current < credits) {
       setBilling({ open: true, reason: "credits", required: credits, studioMode: "video" });
       return;
     }
 
     const jobId = crypto.randomUUID();
     const label = p.length > 60 ? `${p.slice(0, 60)}…` : p;
-    spendCredits(credits);
-    creditsRef.current = Math.max(0, creditsRef.current - credits);
+    if (!usingPersonalApiCreate) {
+      spendCredits(credits);
+      creditsRef.current = Math.max(0, creditsRef.current - credits);
+    }
     const startedAt = Date.now();
     setHistoryItems((prev) => [
       {
@@ -895,6 +905,7 @@ export default function StudioVideoPanel() {
 
     void (async () => {
       try {
+        const pKey = getPersonalApiKey();
         if (snap.family === "sora") {
           const res = await fetch("/api/kling/generate", {
             method: "POST",
@@ -905,12 +916,13 @@ export default function StudioVideoPanel() {
               prompt: snap.prompt,
               imageUrl: snap.startUrl ?? undefined,
               duration: Number(snap.duration),
+              personalApiKey: pKey,
             }),
           });
           const json = (await res.json()) as { taskId?: string; error?: string };
           if (!res.ok || !json.taskId) throw new Error(json.error || "Sora 2 failed");
           toast.message("Sora 2 started", { description: "Rendering…" });
-          const url = await pollKlingVideo(json.taskId);
+          const url = await pollKlingVideo(json.taskId, pKey);
           const doneAt = Date.now();
           setHistoryItems((prev) => {
             const rest = prev.filter((i) => i.id !== jobId);
@@ -989,12 +1001,13 @@ export default function StudioVideoPanel() {
             sound: modelHasAudio(snap.modelId) ? snap.soundOn : undefined,
             mode: isKling30 || isKling26 ? snap.klingMode : undefined,
             multiShots: isKling30 ? snap.multiShot : undefined,
+            personalApiKey: pKey,
           }),
         });
         const json = (await res.json()) as { taskId?: string; error?: string };
         if (!res.ok || !json.taskId) throw new Error(json.error || "Video task failed");
         toast.message("Generation started", { description: "Polling provider…" });
-        const url = await pollKlingVideo(json.taskId);
+        const url = await pollKlingVideo(json.taskId, pKey);
         const doneAt = Date.now();
         setHistoryItems((prev) => {
           const rest = prev.filter((i) => i.id !== jobId);

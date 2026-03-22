@@ -16,8 +16,8 @@ type KieMarketCreateTaskResponse =
   | { code: 200; msg: string; data: { taskId: string } }
   | { code: number; msg: string; data?: unknown };
 
-export async function kieMarketCreateTask(req: KieMarketCreateTaskRequest) {
-  const apiKey = getKieApiKey();
+export async function kieMarketCreateTask(req: KieMarketCreateTaskRequest, overrideApiKey?: string) {
+  const apiKey = overrideApiKey || getKieApiKey();
 
   async function attempt() {
     const res = await fetch(`${API_BASE}/api/v1/jobs/createTask`, {
@@ -79,8 +79,8 @@ type KieMarketRecordInfoResponse =
   | { code: 200; message: string; data: KieMarketRecordInfo }
   | { code: number; message: string; data?: unknown };
 
-export async function kieMarketRecordInfo(taskId: string) {
-  const apiKey = getKieApiKey();
+export async function kieMarketRecordInfo(taskId: string, overrideApiKey?: string) {
+  const apiKey = overrideApiKey || getKieApiKey();
 
   const url = new URL(`${API_BASE}/api/v1/jobs/recordInfo`);
   url.searchParams.set("taskId", taskId);

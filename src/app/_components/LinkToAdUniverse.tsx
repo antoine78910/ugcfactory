@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { toast } from "sonner";
-import { Check, Loader2, Maximize2, RefreshCw, Sparkles, Video, X } from "lucide-react";
+import { Check, ImagePlus, Loader2, Maximize2, PenLine, Plus, RefreshCw, Sparkles, Trash2, Video, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { absolutizeImageUrl } from "@/lib/imageUrl";
 import { pickBestProductUrlForNanoBanana, productUrlsForGpt } from "@/lib/productReferenceImages";
 import {
@@ -185,8 +186,10 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const [neutralUploadUrl, setNeutralUploadUrl] = useState<string | null>(null);
   /** URLs classified as product-only (multi-angle); used for GPT vision + Nano single pick. */
   const [productOnlyImageUrls, setProductOnlyImageUrls] = useState<string[]>([]);
+  const [userPhotoUrls, setUserPhotoUrls] = useState<string[]>([]);
   const [imgError, setImgError] = useState(false);
   const [brandFaviconFailed, setBrandFaviconFailed] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
   /** After user clicks "Generate video from this image", show video prompt + output panels (incl. errors). */
   const [userStartedVideoFromImage, setUserStartedVideoFromImage] = useState(false);
   /**
@@ -215,6 +218,12 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const [lastExtractedJson, setLastExtractedJson] = useState<Record<string, unknown> | null>(null);
   const [angleLabels, setAngleLabels] = useState<[string, string, string]>(["", "", ""]);
   const [selectedAngleIndex, setSelectedAngleIndex] = useState<number | null>(null);
+  const [customAngleInput, setCustomAngleInput] = useState("");
+  const [isCustomAngleLoading, setIsCustomAngleLoading] = useState(false);
+  const [editableScript, setEditableScript] = useState("");
+  const [scriptEditVisible, setScriptEditVisible] = useState(false);
+  const [editableVideoPrompt, setEditableVideoPrompt] = useState("");
+  const [videoPromptEditVisible, setVideoPromptEditVisible] = useState(false);
   /** Saved Nano + Kling pipeline per script angle (inactive slots + hydrate); active angle also in flat state below. */
   const [pipelineByAngle, setPipelineByAngle] = useState<
     [LinkToAdAnglePipelineV1, LinkToAdAnglePipelineV1, LinkToAdAnglePipelineV1]
@@ -435,6 +444,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       confidence,
       neutralUploadUrl,
       productOnlyImageUrls: productOnlyImageUrls.length ? productOnlyImageUrls : undefined,
+      userPhotoUrls: userPhotoUrls.length ? userPhotoUrls : undefined,
       summaryText,
       scriptsText,
       angleLabels,
@@ -457,6 +467,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     confidence,
     neutralUploadUrl,
     productOnlyImageUrls,
+    userPhotoUrls,
     summaryText,
     scriptsText,
     angleLabels,
@@ -539,6 +550,11 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           : snap.cleanCandidate?.url
             ? [snap.cleanCandidate.url]
             : [],
+      );
+      setUserPhotoUrls(
+        (snap as any).userPhotoUrls && Array.isArray((snap as any).userPhotoUrls)
+          ? (snap as any).userPhotoUrls
+          : [],
       );
       setSummaryText(snap.summaryText);
       setScriptsText(snap.scriptsText);
@@ -667,6 +683,71 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     }
   }
 
+  async function uploadAdditionalPhoto(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    setIsWorking(true);
+    try {
+      const fd = new FormData();
+      fd.set("file", files[0]);
+      const res = await fetch("/api/uploads", { method: "POST", body: fd });
+      const raw = await res.text();
+      const parsed = safeParseJson<{ url?: string; error?: string }>(raw);
+      if (!res.ok || !parsed.ok) {
+        throw new Error(parsed.ok ? parsed.value.error || `Upload failed (${res.status})` : parsed.error);
+      }
+      if (!parsed.value.url) throw new Error(parsed.value.error || "Upload failed: missing url");
+      setUserPhotoUrls((prev) => [...prev, parsed.value.url!]);
+      setProductOnlyImageUrls((prev) => [...prev, parsed.value.url!]);
+      toast.success("Photo added");
+    } catch (err) {
+      toast.error("Upload error", { description: err instanceof Error ? err.message : "Upload failed" });
+    } finally {
+      setIsWorking(false);
+    }
+  }
+
+  function removeProductPhoto(url: string) {
+    setProductOnlyImageUrls((prev) => prev.filter((u) => u !== url));
+    setUserPhotoUrls((prev) => prev.filter((u) => u !== url));
+    if (neutralUploadUrl === url) setNeutralUploadUrl(null);
+  }
+
+  async function onAddCustomAngle() {
+    const angle = customAngleInput.trim();
+    if (!angle || !summaryText.trim()) return;
+    setIsCustomAngleLoading(true);
+    try {
+      const res = await fetch("/api/gpt/ugc-custom-angle-script", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          brandBrief: summaryText,
+          customAngle: angle,
+          productImageUrls: resolvedProductUrlsForGpt(),
+          videoDurationSeconds: 15,
+        }),
+      });
+      const json = (await res.json()) as { data?: string; error?: string };
+      if (!res.ok || !json.data) throw new Error(json.error || "Script generation failed");
+      const newScript = json.data.trim();
+      const headlineMatch = newScript.match(/ANGLE_HEADLINE:\s*(.+)/i);
+      const headline = headlineMatch?.[1]?.trim() || angle;
+      setScriptsText((prev) => `${prev}\n\nSCRIPT OPTION ${scriptOptionBodies.length + 1}\n${newScript}`);
+      setAngleLabels((prev) => {
+        const copy = [...prev] as [string, string, string];
+        const nextIdx = copy.findIndex((l) => !l.trim());
+        if (nextIdx >= 0) copy[nextIdx] = headline;
+        return copy;
+      });
+      setCustomAngleInput("");
+      toast.success("Custom angle script generated");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to generate custom angle");
+    } finally {
+      setIsCustomAngleLoading(false);
+    }
+  }
+
   async function onSelectAngle(index: 0 | 1 | 2) {
     const url = storeUrl.trim();
     if (!url || !lastExtractedJson) return;
@@ -696,6 +777,9 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
 
     prevAngleRef.current = index;
     setSelectedAngleIndex(index);
+    const script = selectedAngleScript(scriptsText, index);
+    setEditableScript(script);
+    setScriptEditVisible(false);
 
     const base = latestSnapRef.current;
     if (!base) return;
@@ -752,6 +836,22 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     if (gpt.length > 0) return gpt;
     const u = resolvedPreviewUrl;
     return u && /^https?:\/\//i.test(u) ? [u] : [];
+  }
+
+  function resolvedProductUrlsForGpt(): string[] {
+    const pageUrl = storeUrl.trim();
+    const candidates =
+      productOnlyImageUrls.length > 0
+        ? productOnlyImageUrls
+        : cleanCandidate?.url
+          ? [cleanCandidate.url]
+          : [];
+    return productUrlsForGpt({
+      pageUrl: pageUrl || "",
+      neutralUploadUrl,
+      candidateUrls: candidates,
+      fallbackUrl: fallbackImageUrl,
+    });
   }
 
   /** Resume after a save stopped at brand brief (scripts step failed or interrupted). Runs on the server so navigation does not cancel it. */
@@ -1456,6 +1556,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       if (!res.ok || !json.data) throw new Error(json.error || "Video prompt failed");
       const text = String(json.data);
       setUgcVideoPromptGpt(text);
+      setEditableVideoPrompt(text);
+      setVideoPromptEditVisible(true);
       const idx = nanoBananaSelectedImageIndex;
       if (idx === 0 || idx === 1 || idx === 2) {
         patchKlingSlot(idx, { ugcVideoPrompt: text });
@@ -1810,7 +1912,20 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     setVideoStageMode(true);
     setUserStartedVideoFromImage(true);
     const t = await onGenerateUgcVideoPrompt();
-    if (t?.trim()) await onGenerateKlingVideo(t.trim());
+    if (t?.trim()) {
+      setEditableVideoPrompt(t.trim());
+      setVideoPromptEditVisible(true);
+    }
+  }
+
+  async function handleConfirmVideoGeneration() {
+    const prompt = editableVideoPrompt.trim();
+    if (!prompt) {
+      toast.error("Video prompt is empty.");
+      return;
+    }
+    setVideoPromptEditVisible(false);
+    await onGenerateKlingVideo(prompt);
   }
 
   const primaryBtnClass =
@@ -2098,6 +2213,66 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                   </div>
                 ) : null}
 
+                {productOnlyImageUrls.length > 0 || neutralUploadUrl ? (
+                  <div className="mt-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
+                        Product photos ({productOnlyImageUrls.length})
+                      </span>
+                      <button
+                        type="button"
+                        disabled={isWorking}
+                        className="flex items-center gap-1 rounded-md bg-white/5 px-2 py-1 text-[10px] font-medium text-white/60 transition hover:bg-white/10 hover:text-white/80"
+                        onClick={() => photoInputRef.current?.click()}
+                      >
+                        <ImagePlus className="h-3 w-3" />
+                        Add photo
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {productOnlyImageUrls.map((url, i) => (
+                        <div key={`${url}-${i}`} className="group/photo relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-[#050507]">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={url}
+                            alt={`Product ${i + 1}`}
+                            className="h-full w-full object-cover"
+                            loading="lazy"
+                            referrerPolicy="no-referrer"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeProductPhoto(url)}
+                            className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-md bg-black/70 text-white/60 opacity-0 transition hover:text-red-400 group-hover/photo:opacity-100"
+                            aria-label="Remove"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        disabled={isWorking}
+                        onClick={() => photoInputRef.current?.click()}
+                        className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg border border-dashed border-white/15 bg-white/[0.02] text-white/30 transition hover:border-violet-400/40 hover:text-violet-300"
+                      >
+                        <ImagePlus className="h-5 w-5" />
+                      </button>
+                    </div>
+                    <input
+                      ref={photoInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/*"
+                      className="sr-only"
+                      onChange={(e) => {
+                        void uploadAdditionalPhoto(e.target.files);
+                        e.currentTarget.value = "";
+                      }}
+                      disabled={isWorking}
+                    />
+                  </div>
+                ) : null}
+
                 {showUploadRecommendation ? (
                   <div className="mt-4 rounded-lg border border-violet-500/25 bg-violet-500/[0.08] p-3">
                     <p className="text-sm font-semibold text-violet-200">Upload recommended</p>
@@ -2143,7 +2318,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                 Writing three script angles…
               </div>
             ) : showAnglePicker ? (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 <p className="text-sm font-semibold tracking-tight text-white/90">
                   Choose your AI UGC angle
                 </p>
@@ -2161,6 +2336,34 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                     <p className="mt-2 text-sm leading-snug text-white/85">{angleLabels[i]}</p>
                   </button>
                 ))}
+                </div>
+                <div className="rounded-xl border border-dashed border-white/15 bg-white/[0.02] p-3">
+                  <p className="mb-2 text-xs font-semibold text-white/50">
+                    <Plus className="mr-1 inline h-3 w-3" />
+                    Add a custom angle
+                  </p>
+                  <div className="flex gap-2">
+                    <Input
+                      value={customAngleInput}
+                      onChange={(e) => setCustomAngleInput(e.target.value)}
+                      placeholder="e.g. Morning routine with the product"
+                      className="h-9 flex-1 border-white/10 bg-black/30 text-sm text-white placeholder:text-white/25"
+                      onKeyDown={(e) => { if (e.key === "Enter" && customAngleInput.trim()) void onAddCustomAngle(); }}
+                      disabled={isCustomAngleLoading}
+                    />
+                    <Button
+                      type="button"
+                      disabled={!customAngleInput.trim() || isCustomAngleLoading}
+                      onClick={() => void onAddCustomAngle()}
+                      className="h-9 shrink-0 border border-violet-400/30 bg-violet-500/20 px-3 text-xs font-semibold text-violet-200 hover:bg-violet-500/30"
+                    >
+                      {isCustomAngleLoading ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        "Generate"
+                      )}
+                    </Button>
+                  </div>
                 </div>
               </div>
             ) : (
@@ -2191,7 +2394,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                               type="button"
                               onClick={() => void onSelectNanoBananaImage(i)}
                               className={cn(
-                                "relative aspect-square w-12 shrink-0 overflow-hidden rounded-lg border-2 bg-[#050507] transition-all sm:w-14",
+                                "group/thumb relative aspect-square w-12 shrink-0 overflow-hidden rounded-lg border-2 bg-[#050507] transition-all sm:w-14",
                                 sel
                                   ? "border-violet-400 shadow-[0_0_12px_rgba(139,92,246,0.35)]"
                                   : "border-transparent opacity-80 hover:border-white/20 hover:opacity-100",
@@ -2204,6 +2407,16 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                                 className="h-full w-full object-cover object-center"
                                 loading="lazy"
                               />
+                              <span
+                                role="button"
+                                tabIndex={0}
+                                aria-label="Open full size"
+                                className="absolute left-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-md bg-black/60 text-white opacity-0 transition-opacity group-hover/thumb:opacity-100"
+                                onClick={(e) => { e.stopPropagation(); setNanoImageLightboxUrl(nanoBananaImageUrls[i] ?? null); }}
+                                onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); setNanoImageLightboxUrl(nanoBananaImageUrls[i] ?? null); } }}
+                              >
+                                <Maximize2 className="h-3 w-3" aria-hidden />
+                              </span>
                               {sel ? (
                                 <span className="absolute bottom-0.5 right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-violet-400 text-black shadow">
                                   <Check className="h-2.5 w-2.5" strokeWidth={3} aria-hidden />
@@ -2281,7 +2494,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                               type="button"
                               onClick={() => void onSelectNanoBananaImage(i)}
                               className={cn(
-                                "relative aspect-square w-full min-w-0 overflow-hidden rounded-xl border-2 bg-[#050507] transition-all",
+                                "group/card relative aspect-square w-full min-w-0 overflow-hidden rounded-xl border-2 bg-[#050507] transition-all",
                                 sel
                                   ? "border-violet-400 shadow-[0_0_12px_rgba(139,92,246,0.35)]"
                                   : "border-white/10 opacity-90 hover:border-violet-400/40 hover:opacity-100",
@@ -2294,6 +2507,16 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                                 className="h-full w-full object-cover object-center"
                                 loading="lazy"
                               />
+                              <span
+                                role="button"
+                                tabIndex={0}
+                                aria-label="Open full size"
+                                className="absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-lg bg-black/60 text-white opacity-0 shadow transition-opacity group-hover/card:opacity-100"
+                                onClick={(e) => { e.stopPropagation(); setNanoImageLightboxUrl(nanoBananaImageUrls[i] ?? null); }}
+                                onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); setNanoImageLightboxUrl(nanoBananaImageUrls[i] ?? null); } }}
+                              >
+                                <Maximize2 className="h-4 w-4" aria-hidden />
+                              </span>
                               {sel ? (
                                 <span className="absolute bottom-1 right-1 flex h-5 w-5 items-center justify-center rounded-full bg-violet-400 text-black shadow sm:h-6 sm:w-6">
                                   <Check className="h-3 w-3 sm:h-3.5 sm:w-3.5" strokeWidth={3} aria-hidden />
@@ -2351,9 +2574,33 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                         !isNanoAllImagesSubmitting &&
                         !nanoPollTaskId ? (
                           <>
-                            <p className="text-sm text-white/75">
-                              Angle selected. Generate now prompts + 3 personna visuals.
-                            </p>
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <p className="text-sm text-white/75">
+                                  Review and edit the script before generating images.
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() => setScriptEditVisible(!scriptEditVisible)}
+                                  className="flex items-center gap-1 text-[11px] font-medium text-violet-300/80 transition hover:text-violet-200"
+                                >
+                                  <PenLine className="h-3 w-3" />
+                                  {scriptEditVisible ? "Hide" : "Edit script"}
+                                </button>
+                              </div>
+                              {scriptEditVisible ? (
+                                <Textarea
+                                  value={editableScript}
+                                  onChange={(e) => setEditableScript(e.target.value)}
+                                  className="min-h-[160px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/80 placeholder:text-white/25"
+                                  placeholder="Script content..."
+                                />
+                              ) : (
+                                <div className="max-h-28 overflow-y-auto rounded-lg bg-black/20 p-3 text-xs leading-relaxed text-white/60">
+                                  {editableScript.slice(0, 300)}{editableScript.length > 300 ? "..." : ""}
+                                </div>
+                              )}
+                            </div>
                             <Button
                               type="button"
                               disabled={!resolvedPreviewUrl}
@@ -2409,6 +2656,35 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                   <div className="flex min-w-0 flex-1 flex-col gap-6">
                     {showVideoWorkPanel ? (
                     <>
+                      {videoPromptEditVisible && editableVideoPrompt.trim() && !klingVideoUrl ? (
+                        <div className="rounded-xl border border-violet-500/25 bg-violet-500/[0.06] p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-semibold text-white/90">Review video prompt</p>
+                            <span className="text-[10px] text-white/40">Edit before generating</span>
+                          </div>
+                          <Textarea
+                            value={editableVideoPrompt}
+                            onChange={(e) => setEditableVideoPrompt(e.target.value)}
+                            className="min-h-[100px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/80"
+                          />
+                          <Button
+                            type="button"
+                            disabled={isKlingSubmitting || Boolean(klingPollTaskId) || !editableVideoPrompt.trim()}
+                            onClick={() => void handleConfirmVideoGeneration()}
+                            className={`h-11 w-full max-w-sm ${primaryBtnClass}`}
+                          >
+                            {isKlingSubmitting || klingPollTaskId ? (
+                              <span className="inline-flex items-center gap-2 text-sm font-semibold">
+                                <Loader2 className="h-4 w-4 animate-spin" /> Working…
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-2 text-sm font-semibold">
+                                <Video className="h-4 w-4" /> Generate video
+                              </span>
+                            )}
+                          </Button>
+                        </div>
+                      ) : null}
                       <div className="rounded-xl border border-white/10 bg-black/20 p-4">
                         <p className="text-xs font-semibold uppercase tracking-wide text-white/50">Your video</p>
                         <p className="mt-1 text-xs text-white/45">

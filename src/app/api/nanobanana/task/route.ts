@@ -36,13 +36,14 @@ function normalizeKieTaskToNanoShape(data: {
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const taskId = (searchParams.get("taskId") ?? "").trim();
+  const personalKey = (searchParams.get("personalApiKey") ?? "").trim() || undefined;
 
   if (!taskId) {
     return NextResponse.json({ error: "Missing `taskId`." }, { status: 400 });
   }
 
   try {
-    const raw = await kieMarketRecordInfo(taskId);
+    const raw = await kieMarketRecordInfo(taskId, personalKey);
     const data = normalizeKieTaskToNanoShape(raw);
     return NextResponse.json({ data });
   } catch (err) {

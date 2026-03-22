@@ -6,13 +6,14 @@ import { kieMarketRecordInfo, parseResultUrls } from "@/lib/kieMarket";
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const taskId = (searchParams.get("taskId") ?? "").trim();
+  const personalKey = (searchParams.get("personalApiKey") ?? "").trim() || undefined;
 
   if (!taskId) {
     return NextResponse.json({ error: "Missing `taskId`." }, { status: 400 });
   }
 
   try {
-    const data = await kieMarketRecordInfo(taskId);
+    const data = await kieMarketRecordInfo(taskId, personalKey);
     const urls = parseResultUrls(data.resultJson);
 
     // Normalize to the old shape the UI already understands.

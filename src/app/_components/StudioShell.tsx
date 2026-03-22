@@ -5,7 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
-import { Copy, FolderOpen, Image as ImageIcon, Link2, Maximize2, Video, Joystick } from "lucide-react";
+import { Copy, FolderOpen, Image as ImageIcon, Link2, Maximize2, UserRound, Video, Joystick } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import SidebarAccountMenu from "@/app/_components/SidebarAccountMenu";
 import CreditLowBanner from "@/app/_components/CreditLowBanner";
@@ -14,6 +14,7 @@ import SidebarCreditsBar from "@/app/_components/SidebarCreditsBar";
 
 export type StudioNavSection =
   | "link_to_ad"
+  | "avatar"
   | "motion_control"
   | "image"
   | "video"
@@ -35,6 +36,7 @@ type CreateNavEntry =
 
 const CREATE_NAV: CreateNavEntry[] = [
   { kind: "route", id: "link_to_ad", label: "Link to Ad", icon: Link2 },
+  { kind: "route", id: "avatar", label: "Avatar", icon: UserRound },
   { kind: "soon", label: "Competitors Clone Ad", icon: Copy },
   { kind: "route", id: "motion_control", label: "Motion Control", icon: Joystick },
   { kind: "route", id: "image", label: "Image", icon: ImageIcon },

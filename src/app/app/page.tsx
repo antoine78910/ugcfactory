@@ -19,6 +19,7 @@ import { StudioEmptyExamples, StudioOutputPane } from "@/app/_components/StudioE
 import { StudioGenerationsHistory } from "@/app/_components/StudioGenerationsHistory";
 import type { StudioHistoryItem } from "@/app/_components/StudioGenerationsHistory";
 import { calculateMotionControlCredits } from "@/lib/linkToAd/generationCredits";
+import StudioAvatarPanel from "@/app/_components/StudioAvatarPanel";
 import StudioImagePanel from "@/app/_components/StudioImagePanel";
 import StudioUpscalePanel from "@/app/_components/StudioUpscalePanel";
 import StudioShell from "@/app/_components/StudioShell";
@@ -43,7 +44,7 @@ import {
 import { motionControlUpgradeMessage } from "@/lib/subscriptionModelAccess";
 
 type WizardStep = "url" | "analysis" | "quiz" | "image" | "video";
-type AppSection = "link_to_ad" | "motion_control" | "image" | "video" | "upscale" | "projects";
+type AppSection = "link_to_ad" | "avatar" | "motion_control" | "image" | "video" | "upscale" | "projects";
 
 type Extracted = {
   url: string;
@@ -89,6 +90,7 @@ const UGC_CURRENT_RUN_KEY = "ugc_current_run_id";
 
 const APP_VALID_SECTIONS: AppSection[] = [
   "link_to_ad",
+  "avatar",
   "motion_control",
   "image",
   "video",
@@ -2004,6 +2006,16 @@ export default function AppBrandWizard() {
               </div>
             ) : null}
 
+            {appSection === "avatar" ? (
+              <Card className="gap-2 border-white/10 bg-[#0b0912]/85 py-3 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
+                <CardHeader className="space-y-0 px-6 pb-0 pt-2">
+                  <CardTitle className="text-sm">Avatar Creator</CardTitle>
+                </CardHeader>
+                <CardContent className="px-6 pb-3 pt-0">
+                  <StudioAvatarPanel />
+                </CardContent>
+              </Card>
+            ) : null}
             {appSection === "image" ? (
               <Card className="gap-2 border-white/10 bg-[#0b0912]/85 py-3 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
                 <CardHeader className="space-y-0 px-6 pb-0 pt-2">

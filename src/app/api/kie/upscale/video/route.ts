@@ -9,6 +9,7 @@ type Body = {
   videoUrl: string;
   /** Kie expects string: "1" | "2" | "4" */
   upscaleFactor?: string;
+  personalApiKey?: string;
 };
 
 export async function POST(req: Request) {
@@ -32,15 +33,22 @@ export async function POST(req: Request) {
   const callBackUrl =
     getEnv("NANOBANANA_CALLBACK_URL") ?? `${getAppUrl()}/api/nanobanana/callback`;
 
+  const personalKey = typeof body.personalApiKey === "string" && body.personalApiKey.trim().length > 0
+    ? body.personalApiKey.trim()
+    : undefined;
+
   try {
-    const taskId = await kieMarketCreateTask({
-      model: KIE_TOPAZ_VIDEO_UPSCALE_MODEL,
-      callBackUrl,
-      input: {
-        video_url: videoUrl,
-        upscale_factor: f,
+    const taskId = await kieMarketCreateTask(
+      {
+        model: KIE_TOPAZ_VIDEO_UPSCALE_MODEL,
+        callBackUrl,
+        input: {
+          video_url: videoUrl,
+          upscale_factor: f,
+        },
       },
-    });
+      personalKey,
+    );
 
     return NextResponse.json({
       taskId,

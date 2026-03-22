@@ -44,6 +44,12 @@ export default function RootLayout({
         data-website-id={DATAFAST_WEBSITE_ID}
         data-domain={DATAFAST_DOMAIN}
       />
+      {/* LinkJolt affiliate tracking */}
+      <Script
+        id="linkjolt"
+        src="https://www.linkjolt.io/api/tracking.js?id=NKdBH0Xt51wfjtEIZB5Zg"
+        strategy="afterInteractive"
+      />
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >

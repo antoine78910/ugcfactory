@@ -302,13 +302,11 @@ export default function LandingPage() {
             hoverTrailAmount={0}
           />
         </div>
-        <div className="pointer-events-none absolute inset-0 z-[2]">
-          <HeroVideoCarousel3D srcs={UGC_SLIDES.map((s) => s.src)} />
-        </div>
-        <div className="pointer-events-none absolute inset-0 z-[3] bg-gradient-to-b from-[#050507]/30 via-[#050507]/42 to-[#050507]" />
+        <div className="pointer-events-none absolute inset-0 z-[3] bg-gradient-to-b from-[#050507]/60 via-[#050507]/25 via-40% to-transparent" />
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[3] h-8 bg-gradient-to-b from-transparent to-[#050507]" />
         <div className="pointer-events-none absolute left-1/2 top-0 z-[3] -translate-x-1/2 h-[700px] w-[1000px] rounded-full bg-violet-600/[0.12] blur-[140px]" />
 
-        <div className="relative z-10 mx-auto w-full max-w-6xl px-5 pt-12 pb-10 text-center sm:pt-14 sm:pb-12 md:pt-16">
+        <div className="relative z-10 mx-auto w-full max-w-5xl px-5 pt-4 pb-0 text-center sm:pt-6 md:pt-8">
           <h1 className="mx-auto max-w-4xl px-3 sm:px-6 text-4xl font-extrabold tracking-tight leading-[1.12] sm:text-5xl md:text-6xl">
             Turn any product
             <br />
@@ -329,8 +327,8 @@ export default function LandingPage() {
             />
           </h1>
 
-          <div className="mx-auto mt-6 max-w-3xl sm:mt-7">
-            <p className="mb-2.5 text-sm text-white/55 sm:text-base">
+          <div className="mx-auto mt-5 max-w-xl sm:mt-6">
+            <p className="mb-2 text-sm text-white/55">
               We analyze your site like a top-tier media buyer, and turn it into
               high-converting ads 👇
             </p>
@@ -353,6 +351,14 @@ export default function LandingPage() {
               </Button>
             </div>
             </div>
+          </div>
+
+          {/* Concave arc under the CTA */}
+          <div
+            className="pointer-events-none relative mt-3 h-[min(160px,24svh)] w-screen max-w-[100vw] -translate-x-1/2 left-1/2 overflow-visible sm:mt-3 sm:h-[min(190px,28svh)] lg:mt-2 lg:h-[min(220px,28svh)]"
+            aria-hidden
+          >
+            <HeroVideoCarousel3D srcs={UGC_SLIDES.map((s) => s.src)} />
           </div>
         </div>
       </section>
