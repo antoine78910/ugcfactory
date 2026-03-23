@@ -1081,9 +1081,9 @@ export default function StudioVideoPanel() {
       </div>
 
       {tab === "edit" ? (
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4 lg:min-h-0 lg:max-h-[min(92vh,calc(100vh-7rem))]">
-          <div className="flex min-w-0 flex-1 flex-col gap-2 lg:max-w-[min(100%,24rem)] lg:min-h-0 lg:overflow-hidden">
-            <div className="studio-params-scroll flex min-w-0 flex-col gap-2 lg:min-h-0 lg:max-h-[min(62vh,calc(100vh-12rem))] lg:overflow-y-auto">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4 lg:h-[calc(100dvh-4rem)] lg:min-h-0">
+          <div className="flex min-w-0 w-full flex-col gap-2 lg:basis-[42%] lg:max-w-[48rem] lg:flex-none lg:shrink-0 lg:min-h-0 lg:overflow-hidden">
+            <div className="studio-params-scroll flex min-w-0 flex-col gap-2 lg:h-full lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pb-10">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Edit prompt</p>
             <div className="rounded-2xl border border-white/10 bg-[#101014] p-4 space-y-3">
               {motionEdit ? (
@@ -1256,7 +1256,7 @@ export default function StudioVideoPanel() {
             </div>
           </div>
 
-          <div className="flex h-full min-h-0 min-w-0 flex-[2] lg:flex-[3.25] flex-col lg:min-h-0 lg:overflow-hidden">
+          <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col lg:min-h-0 lg:overflow-hidden">
             <StudioOutputPane
               title=""
               hasOutput
@@ -1272,9 +1272,9 @@ export default function StudioVideoPanel() {
           </div>
         </div>
       ) : (
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4 lg:min-h-0 lg:max-h-[min(92vh,calc(100vh-7rem))]">
-          <div className="flex min-w-0 flex-1 flex-col gap-2 lg:max-w-[min(100%,24rem)] lg:min-h-0 lg:overflow-hidden">
-            <div className="studio-params-scroll flex min-w-0 flex-col gap-2 lg:min-h-0 lg:max-h-[min(62vh,calc(100vh-12rem))] lg:overflow-y-auto">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4 lg:h-[calc(100dvh-4rem)] lg:min-h-0">
+          <div className="flex min-w-0 w-full flex-col gap-2 lg:basis-[42%] lg:max-w-[48rem] lg:flex-none lg:shrink-0 lg:min-h-0 lg:overflow-hidden">
+            <div className="studio-params-scroll flex min-w-0 flex-col gap-2 lg:h-full lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pb-10">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Create prompt</p>
             <div className="rounded-2xl border border-white/10 bg-[#101014] p-4">
               <div className="grid grid-cols-2 gap-2">
@@ -1488,7 +1488,7 @@ export default function StudioVideoPanel() {
             </div>
           </div>
 
-          <div className="flex h-full min-h-0 min-w-0 flex-[2] lg:flex-[3.25] flex-col lg:min-h-0 lg:overflow-hidden">
+          <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col lg:min-h-0 lg:overflow-hidden">
             <StudioOutputPane
               title=""
               hasOutput

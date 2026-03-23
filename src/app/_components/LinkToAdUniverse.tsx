@@ -50,6 +50,15 @@ import { runInitialPipeline } from "@/lib/linkToAd/runInitialPipeline";
 /** Same-origin API calls with session (mirrors server `createInternalFetchFromRequest`). */
 const browserPipelineFetch = ((path: string, init?: RequestInit) => fetch(path, init)) as InternalFetch;
 
+function mergeNanoUrlIntoThreeSlots(prev: string[], slot: 0 | 1 | 2, url: string): string[] {
+  const base: string[] = [0, 1, 2].map((i) => {
+    const v = prev[i];
+    return typeof v === "string" && v.trim() ? v : "";
+  });
+  base[slot] = url;
+  return base;
+}
+
 /** Shimmer sweep on copy + very subtle tilt (spinner beside it supplies the obvious “rotate”). */
 function StatusLineShimmer({ text, className }: { text: string; className?: string }) {
   const reduceMotion = useReducedMotion();
@@ -152,6 +161,19 @@ function compactBrandSummaryForUi(full: string, maxLen = 200): string {
   return `${base.trimEnd()}…`;
 }
 
+function firstHexColor(input: string): string | null {
+  const m = input.match(/#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})\b/);
+  if (!m) return null;
+  const raw = m[0];
+  if (raw.length === 4) {
+    const r = raw[1];
+    const g = raw[2];
+    const b = raw[3];
+    return `#${r}${r}${g}${g}${b}${b}`.toUpperCase();
+  }
+  return raw.toUpperCase();
+}
+
 export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRunsChanged }: LinkToAdUniverseProps) {
   const { planId, current: creditsBalance, spendCredits, grantCredits } = useCreditsPlan();
   /** After a fresh store scan starts, gate later steps against this snapshot so the wallet UI does not “jump” each step. Resync on image/video redo actions only. */
@@ -196,6 +218,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const [imgError, setImgError] = useState(false);
   const [brandFaviconFailed, setBrandFaviconFailed] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
+  /** File input on the Store URL step (optional product photos before scan). */
+  const earlyProductPhotosInputRef = useRef<HTMLInputElement>(null);
   /** After user clicks "Generate video from this image", show video prompt + output panels (incl. errors). */
   const [userStartedVideoFromImage, setUserStartedVideoFromImage] = useState(false);
   /**
@@ -258,6 +282,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const [isNanoPromptsLoading, setIsNanoPromptsLoading] = useState(false);
   const [isNanoImageSubmitting, setIsNanoImageSubmitting] = useState(false);
   const [nanoPollTaskId, setNanoPollTaskId] = useState<string | null>(null);
+  /** Slot index for the in-flight single-image Nano poll (for per-thumb loading UI). */
+  const [nanoPollingSlotIndex, setNanoPollingSlotIndex] = useState<0 | 1 | 2 | null>(null);
   const [isNanoAllImagesSubmitting, setIsNanoAllImagesSubmitting] = useState(false);
   const [isVideoPromptLoading, setIsVideoPromptLoading] = useState(false);
   const [isKlingSubmitting, setIsKlingSubmitting] = useState(false);
@@ -832,6 +858,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       setPipelineByAngle(nextTriple);
       applyPipelineFromSnapshot(load);
       setNanoPollTaskId(null);
+      setNanoPollingSlotIndex(null);
       setKlingPollTaskId(null);
       setKlingPollImageIndex(null);
     }
@@ -1043,6 +1070,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     setUgcVideoPromptGpt("");
     setKlingByRef(createEmptyKlingByReference());
     setNanoPollTaskId(null);
+    setNanoPollingSlotIndex(null);
     setKlingPollTaskId(null);
     setKlingPollImageIndex(null);
     setUserStartedVideoFromImage(false);
@@ -1255,6 +1283,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       if (!res.ok || !json.taskId) throw new Error(json.error || "Image generation failed");
       setNanoBananaTaskId(json.taskId);
       setNanoPollTaskId(json.taskId);
+      setNanoPollingSlotIndex(nanoBananaSelectedPromptIndex);
       const base = latestSnapRef.current;
       if (base && lastExtractedJson) {
         const triple = buildPersistTriplePatchingActive({
@@ -1556,18 +1585,24 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           });
           if (!urls.length) throw new Error("Image ready but URL missing.");
           const first = urls[0];
+          const rawSlot = lastNanoImagePromptIndexRef.current;
+          const pIdx: 0 | 1 | 2 = rawSlot === 0 || rawSlot === 1 || rawSlot === 2 ? rawSlot : 0;
+          let merged: string[] = [];
+          setNanoBananaImageUrls((prev) => {
+            merged = mergeNanoUrlIntoThreeSlots(prev, pIdx, first);
+            return merged;
+          });
           setNanoBananaImageUrl(first);
-          setNanoBananaImageUrls([first]);
-          setNanoBananaSelectedImageIndex(lastNanoImagePromptIndexRef.current);
+          setNanoBananaSelectedImageIndex(pIdx);
           setNanoPollTaskId(null);
+          setNanoPollingSlotIndex(null);
           const url0 = storeUrl.trim();
           const base = latestSnapRef.current;
           if (base && lastExtractedJson && url0) {
             const chosen = lastNanoImagePromptRef.current.trim();
-            const pIdx = lastNanoImagePromptIndexRef.current;
             const triple = buildPersistTriplePatchingActive({
               nanoBananaImageUrl: first,
-              nanoBananaImageUrls: [first],
+              nanoBananaImageUrls: merged,
               nanoBananaSelectedImageIndex: pIdx,
               nanoBananaTaskId: taskId,
             });
@@ -1577,7 +1612,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
               await persistUniverse(universeRunId, url0, extractedTitle, lastExtractedJson, snap, packshotsForSave(), {
                 imagePrompt: chosen || undefined,
                 selectedImageUrl: first,
-                generatedImageUrls: urls.slice(0, 8),
+                generatedImageUrls: merged.filter(Boolean),
               });
             } catch (e) {
               toast.error("Save failed", {
@@ -1597,6 +1632,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           description: err instanceof Error ? err.message : "Unknown error",
         });
         setNanoPollTaskId(null);
+        setNanoPollingSlotIndex(null);
         if (interval) clearInterval(interval);
         interval = null;
       }
@@ -1884,7 +1920,19 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const showContinueScripts =
     Boolean(summaryText.trim() && !scriptsText && lastExtractedJson && stage === "ready" && !isWorking);
   const showI2vPipeline = selectedAngleIndex !== null && scriptsText.trim().length > 0;
-  const nanoHasThreeImages = nanoBananaImageUrls.length === 3;
+  const nanoImageSlots = useMemo((): [string, string, string] => {
+    const a = nanoBananaImageUrls;
+    return [
+      (typeof a[0] === "string" ? a[0] : "").trim(),
+      (typeof a[1] === "string" ? a[1] : "").trim(),
+      (typeof a[2] === "string" ? a[2] : "").trim(),
+    ];
+  }, [nanoBananaImageUrls]);
+  const nanoHasAnyReferenceImage = nanoImageSlots.some(Boolean);
+  const nanoHasThreeImages = nanoImageSlots.every(Boolean);
+  const nanoShowReferenceStrip =
+    Boolean(nanoBananaPromptsRaw.trim()) &&
+    (nanoHasAnyReferenceImage || Boolean(nanoPollTaskId) || isNanoAllImagesSubmitting);
   /** Compact strip + video column (persists when switching reference image). */
   const showVideoStageLayout = Boolean(
     videoStageMode &&
@@ -2054,6 +2102,16 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   }, [storeHostnameResolved]);
 
   const brandSummaryTeaser = useMemo(() => compactBrandSummaryForUi(summaryText), [summaryText]);
+  const brandColorHex = useMemo(() => {
+    const fromSummary = firstHexColor(summaryText);
+    if (fromSummary) return fromSummary;
+    try {
+      const raw = JSON.stringify(lastExtractedJson ?? {});
+      return firstHexColor(raw);
+    } catch {
+      return null;
+    }
+  }, [summaryText, lastExtractedJson]);
 
   return (
     <>
@@ -2190,6 +2248,65 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                 Use the exact product page URL, not just your shop homepage. We need the specific listing to pull the
                 right images and details.
               </p>
+
+              <div className="relative mt-4 rounded-xl border border-white/10 bg-white/[0.02] p-4 pr-14">
+                <span className="absolute right-3 top-3 rounded-md bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white/50">
+                  Optional
+                </span>
+                <p className="text-sm font-medium text-white/85">Product photos</p>
+                <p className="mt-1 max-w-2xl text-xs leading-relaxed text-white/45">
+                  You don&apos;t have to add anything — we automatically find product images on the page. If you want
+                  stronger results, upload several clear shots (different angles, details, packaging, lifestyle). GPT and
+                  image generation use them as extra reference.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {productOnlyImageUrls.map((url, i) => (
+                    <div
+                      key={`early-${url}-${i}`}
+                      className="group/earlyphoto relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-[#050507]"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={url}
+                        alt={`Product reference ${i + 1}`}
+                        className="h-full w-full object-cover"
+                        loading="lazy"
+                        referrerPolicy="no-referrer"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeProductPhoto(url)}
+                        disabled={isWorking}
+                        className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-md bg-black/70 text-white/60 opacity-0 transition hover:text-red-400 group-hover/earlyphoto:opacity-100 disabled:pointer-events-none"
+                        aria-label="Remove photo"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    disabled={isWorking}
+                    onClick={() => earlyProductPhotosInputRef.current?.click()}
+                    className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg border border-dashed border-white/15 bg-white/[0.02] text-white/30 transition hover:border-violet-400/40 hover:text-violet-300 disabled:opacity-50"
+                    aria-label="Add product photos"
+                  >
+                    <ImagePlus className="h-5 w-5" />
+                  </button>
+                </div>
+                <input
+                  ref={earlyProductPhotosInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/*"
+                  multiple
+                  className="sr-only"
+                  onChange={(e) => {
+                    void uploadAdditionalPhoto(e.target.files);
+                    e.currentTarget.value = "";
+                  }}
+                  disabled={isWorking}
+                />
+              </div>
             </div>
           ) : null}
         </div>
@@ -2340,6 +2457,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                       ref={photoInputRef}
                       type="file"
                       accept="image/jpeg,image/png,image/webp,image/*"
+                      multiple
                       className="sr-only"
                       onChange={(e) => {
                         void uploadAdditionalPhoto(e.target.files);
@@ -2396,6 +2514,129 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
               </div>
             ) : showAnglePicker ? (
               <div className="space-y-4">
+                <div className="rounded-xl border border-white/10 bg-white/5 p-3 sm:p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/10 bg-[#0d0a14]">
+                          {brandFaviconSrc && !brandFaviconFailed ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={brandFaviconSrc}
+                              alt=""
+                              width={28}
+                              height={28}
+                              className="h-7 w-7 object-contain"
+                              referrerPolicy="no-referrer"
+                              onError={() => setBrandFaviconFailed(true)}
+                            />
+                          ) : (
+                            <span className="text-sm font-bold uppercase text-violet-300">
+                              {(brandDisplayName.slice(0, 1) || "?").toUpperCase()}
+                            </span>
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold leading-tight text-white">{brandDisplayName}</p>
+                          {storeHostnameResolved ? (
+                            <p className="mt-0.5 truncate text-xs text-white/40">{storeHostnameResolved}</p>
+                          ) : null}
+                        </div>
+                      </div>
+                      <div className="mt-2 flex items-center gap-2">
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Brand color</span>
+                        {brandColorHex ? (
+                          <span className="inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-black/25 px-1.5 py-0.5 text-[10px] text-white/70">
+                            <span
+                              className="h-3 w-3 rounded-sm border border-white/15"
+                              style={{ backgroundColor: brandColorHex }}
+                            />
+                            {brandColorHex}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-white/35">not detected</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-[#050507]">
+                      {resolvedPreviewUrl && !imgError ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          key={resolvedPreviewUrl}
+                          src={resolvedPreviewUrl}
+                          alt="Product"
+                          className="h-full w-full object-cover object-center"
+                          loading="eager"
+                          referrerPolicy="no-referrer"
+                          onError={() => setImgError(true)}
+                        />
+                      ) : (
+                        <div className="flex h-full items-center justify-center px-1 text-center text-[10px] leading-tight text-white/35">
+                          {resolvedPreviewUrl ? "Can't load" : "No image"}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mt-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
+                        Product photos ({productOnlyImageUrls.length})
+                      </span>
+                      <button
+                        type="button"
+                        disabled={isWorking}
+                        className="flex items-center gap-1 rounded-md bg-white/5 px-2 py-1 text-[10px] font-medium text-white/60 transition hover:bg-white/10 hover:text-white/80"
+                        onClick={() => photoInputRef.current?.click()}
+                      >
+                        <ImagePlus className="h-3 w-3" />
+                        Add photo
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {productOnlyImageUrls.map((url, i) => (
+                        <div key={`${url}-${i}`} className="group/photo relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-[#050507]">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={url}
+                            alt={`Product ${i + 1}`}
+                            className="h-full w-full object-cover"
+                            loading="lazy"
+                            referrerPolicy="no-referrer"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeProductPhoto(url)}
+                            className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-md bg-black/70 text-white/60 opacity-0 transition hover:text-red-400 group-hover/photo:opacity-100"
+                            aria-label="Remove"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        disabled={isWorking}
+                        onClick={() => photoInputRef.current?.click()}
+                        className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg border border-dashed border-white/15 bg-white/[0.02] text-white/30 transition hover:border-violet-400/40 hover:text-violet-300"
+                      >
+                        <ImagePlus className="h-5 w-5" />
+                      </button>
+                    </div>
+                    <input
+                      ref={photoInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/*"
+                      multiple
+                      className="sr-only"
+                      onChange={(e) => {
+                        void uploadAdditionalPhoto(e.target.files);
+                        e.currentTarget.value = "";
+                      }}
+                      disabled={isWorking}
+                    />
+                  </div>
+                </div>
                 <p className="text-sm font-semibold tracking-tight text-white/90">
                   Choose your AI UGC angle
                 </p>
@@ -2529,14 +2770,16 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
             <div className="flex min-w-0 flex-col gap-4 lg:w-[min(100%,22rem)] xl:w-[min(100%,26rem)] lg:shrink-0">
               <div className="rounded-xl border border-violet-500/20 bg-black/25 px-3 py-2.5 sm:px-4">
                 <div className="flex flex-col gap-4">
-                  {nanoBananaPromptsRaw.trim() && nanoHasThreeImages ? (
+                  {nanoShowReferenceStrip ? (
                     <div className="flex flex-col gap-2 border-t border-white/10 pt-3">
                       <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-white/45">
                         Reference
                       </span>
                       <div className="flex flex-wrap gap-2">
                         {([0, 1, 2] as const).map((i) => {
+                          const url = nanoImageSlots[i];
                           const sel = nanoBananaSelectedImageIndex === i;
+                          const pollingHere = Boolean(nanoPollTaskId && nanoPollingSlotIndex === i);
                           return (
                             <button
                               key={i}
@@ -2547,25 +2790,38 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                                 sel
                                   ? "border-violet-400 shadow-[0_0_12px_rgba(139,92,246,0.35)]"
                                   : "border-transparent opacity-80 hover:border-white/20 hover:opacity-100",
+                                !url && !pollingHere && "cursor-default opacity-50 hover:opacity-50",
                               )}
                             >
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={nanoBananaImageUrls[i]}
-                                alt={`Reference ${i + 1}`}
-                                className="h-full w-full object-cover object-center"
-                                loading="lazy"
-                              />
-                              <span
-                                role="button"
-                                tabIndex={0}
-                                aria-label="Open full size"
-                                className="absolute left-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-md bg-black/60 text-white opacity-0 transition-opacity group-hover/thumb:opacity-100"
-                                onClick={(e) => { e.stopPropagation(); setNanoImageLightboxUrl(nanoBananaImageUrls[i] ?? null); }}
-                                onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); setNanoImageLightboxUrl(nanoBananaImageUrls[i] ?? null); } }}
-                              >
-                                <Maximize2 className="h-3 w-3" aria-hidden />
-                              </span>
+                              {url ? (
+                                /* eslint-disable-next-line @next/next/no-img-element */
+                                <img
+                                  src={url}
+                                  alt={`Reference ${i + 1}`}
+                                  className="h-full w-full object-cover object-center"
+                                  loading="lazy"
+                                />
+                              ) : pollingHere ? (
+                                <span className="flex h-full w-full items-center justify-center bg-black/40">
+                                  <Loader2 className="h-5 w-5 shrink-0 animate-spin text-violet-300" aria-hidden />
+                                </span>
+                              ) : (
+                                <span className="flex h-full w-full items-center justify-center text-[9px] font-medium uppercase tracking-wide text-white/25">
+                                  —
+                                </span>
+                              )}
+                              {url ? (
+                                <span
+                                  role="button"
+                                  tabIndex={0}
+                                  aria-label="Open full size"
+                                  className="absolute left-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-md bg-black/60 text-white opacity-0 transition-opacity group-hover/thumb:opacity-100"
+                                  onClick={(e) => { e.stopPropagation(); setNanoImageLightboxUrl(url); }}
+                                  onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); setNanoImageLightboxUrl(url); } }}
+                                >
+                                  <Maximize2 className="h-3 w-3" aria-hidden />
+                                </span>
+                              ) : null}
                               {sel ? (
                                 <span className="absolute bottom-0.5 right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-violet-400 text-black shadow">
                                   <Check className="h-2.5 w-2.5" strokeWidth={3} aria-hidden />

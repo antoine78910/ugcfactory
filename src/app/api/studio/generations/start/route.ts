@@ -10,6 +10,7 @@ import {
 } from "@/lib/subscriptionModelAccess";
 import { createStudioKieImageTasks } from "@/lib/studioKieImageTask";
 import type { StudioGenerationRow } from "@/lib/studioGenerationsMap";
+import type { NanoBananaProAspectRatio } from "@/lib/nanobanana";
 
 type Body = {
   kind?: string;
@@ -22,6 +23,8 @@ type Body = {
   resolution?: string;
   numImages?: number;
   personalApiKey?: string;
+  /** Reference image URLs (Studio Image tab) — forwarded to Kie. */
+  imageUrls?: string[];
 };
 
 export async function POST(req: Request) {
@@ -66,50 +69,62 @@ export async function POST(req: Request) {
   const creditsCharged = Math.max(0, Math.floor(Number(body.creditsCharged) || 0));
   const usesPersonalApi = Boolean(personalKey);
 
-  let taskId: string;
+  const refUrls = Array.isArray(body.imageUrls)
+    ? body.imageUrls.filter((u): u is string => typeof u === "string" && u.trim().length > 0)
+    : [];
+
+  let taskIds: string[];
   try {
     const created = await createStudioKieImageTasks({
       prompt,
       model,
       numImages: body.numImages ?? 1,
       resolution: (body.resolution as "1K" | "2K" | "4K" | undefined) ?? "1K",
-      aspectRatio: (body.aspectRatio as "auto" | "1:1" | "3:4" | "4:3" | "9:16" | "16:9" | undefined) ?? "3:4",
+      aspectRatio: (body.aspectRatio as NanoBananaProAspectRatio | undefined) ?? "3:4",
       personalApiKey: body.personalApiKey,
+      imageUrls: refUrls.length > 0 ? refUrls : undefined,
     });
-    const tid = created.taskId ?? created.taskIds?.[0];
-    if (!tid) throw new Error("No task id from provider.");
-    taskId = tid;
+    taskIds =
+      created.taskIds && created.taskIds.length > 0
+        ? created.taskIds
+        : created.taskId
+          ? [created.taskId]
+          : [];
+    if (taskIds.length === 0) throw new Error("No task id from provider.");
   } catch (err) {
     const message = err instanceof Error ? err.message : "Generate failed.";
     return NextResponse.json({ error: message }, { status: 502 });
   }
 
-  const { data: inserted, error: insErr } = await supabase
-    .from("studio_generations")
-    .insert({
-      user_id: user.id,
-      kind,
-      status: "processing",
-      label,
-      external_task_id: taskId,
-      provider: "kie-market",
-      credits_charged: creditsCharged,
-      uses_personal_api: usesPersonalApi,
-    })
-    .select("*")
-    .single();
+  const n = taskIds.length;
+  const baseCharge = n > 0 ? Math.floor(creditsCharged / n) : 0;
+  const remainder = creditsCharged - baseCharge * n;
+  const rowsPayload = taskIds.map((external_task_id, i) => ({
+    user_id: user.id,
+    kind,
+    status: "processing" as const,
+    label,
+    external_task_id,
+    provider: "kie-market",
+    credits_charged: baseCharge + (i === 0 ? remainder : 0),
+    uses_personal_api: usesPersonalApi,
+  }));
+
+  const { data: inserted, error: insErr } = await supabase.from("studio_generations").insert(rowsPayload).select("*");
 
   if (insErr) {
     return NextResponse.json({ error: insErr.message }, { status: 502 });
   }
 
-  const row = inserted as StudioGenerationRow;
+  const rows = (inserted ?? []) as StudioGenerationRow[];
+  const first = rows[0];
   return NextResponse.json({
     data: {
-      id: row.id,
-      taskId,
-      kind: row.kind,
-      label: row.label,
+      id: first?.id,
+      taskId: taskIds[0],
+      kind,
+      label,
+      rows: rows.map((r) => ({ id: r.id, taskId: r.external_task_id })),
     },
   });
 }

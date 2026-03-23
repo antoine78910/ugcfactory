@@ -106,10 +106,31 @@ export async function kieMarketRecordInfo(taskId: string, overrideApiKey?: strin
 export function parseResultUrls(resultJson: string | undefined): string[] {
   if (!resultJson) return [];
   try {
-    const parsed = JSON.parse(resultJson) as { resultUrls?: unknown };
-    const urls = (parsed as any)?.resultUrls;
-    if (!Array.isArray(urls)) return [];
-    return urls.filter((u) => typeof u === "string" && u.length > 0);
+    const parsed = JSON.parse(resultJson) as Record<string, unknown>;
+    const arrays = [
+      parsed.resultUrls,
+      parsed.result_urls,
+      (parsed.data as Record<string, unknown> | undefined)?.resultUrls,
+      parsed.imageUrls,
+      parsed.images,
+      parsed.urls,
+    ];
+    for (const urls of arrays) {
+      if (Array.isArray(urls)) {
+        const u = urls.filter((x): x is string => typeof x === "string" && x.length > 0);
+        if (u.length > 0) return u;
+      }
+    }
+    const single = [
+      parsed.resultImageUrl,
+      parsed.resultUrl,
+      parsed.result_url,
+      parsed.image_url,
+      parsed.imageUrl,
+      parsed.url,
+    ].find((v) => typeof v === "string" && v.length > 0);
+    if (typeof single === "string") return [single];
+    return [];
   } catch {
     return [];
   }

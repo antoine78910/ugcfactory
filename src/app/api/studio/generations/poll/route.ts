@@ -13,6 +13,8 @@ type Body = {
   personalApiKey?: string;
 };
 
+const LIBRARY_KINDS = ["avatar", "studio_image"] as const;
+
 export async function POST(req: Request) {
   const { supabase, user, response } = await requireSupabaseUser();
   if (response) return response;
@@ -28,12 +30,19 @@ export async function POST(req: Request) {
   const personalApiKey = (body.personalApiKey ?? "").trim() || undefined;
 
   try {
-    const { data: processing, error: procErr } = await supabase
+    let procQuery = supabase
       .from("studio_generations")
       .select("*")
       .eq("user_id", user.id)
-      .eq("kind", kind)
       .eq("status", "processing");
+
+    if (kind === "all") {
+      procQuery = procQuery.in("kind", [...LIBRARY_KINDS]);
+    } else {
+      procQuery = procQuery.eq("kind", kind);
+    }
+
+    const { data: processing, error: procErr } = await procQuery;
 
     if (procErr) throw procErr;
 
@@ -45,15 +54,29 @@ export async function POST(req: Request) {
       }
     }
 
-    const refundHints = await sweepStudioRefundHints(supabase, user.id, kind);
+    let refundHints: { jobId: string; credits: number }[] = [];
+    if (kind === "all") {
+      for (const k of LIBRARY_KINDS) {
+        refundHints = refundHints.concat(await sweepStudioRefundHints(supabase, user.id, k));
+      }
+    } else {
+      refundHints = await sweepStudioRefundHints(supabase, user.id, kind);
+    }
 
-    const { data: all, error: listErr } = await supabase
+    let listQuery = supabase
       .from("studio_generations")
       .select("*")
       .eq("user_id", user.id)
-      .eq("kind", kind)
       .order("created_at", { ascending: false })
       .limit(80);
+
+    if (kind === "all") {
+      listQuery = listQuery.in("kind", [...LIBRARY_KINDS]);
+    } else {
+      listQuery = listQuery.eq("kind", kind);
+    }
+
+    const { data: all, error: listErr } = await listQuery;
 
     if (listErr) throw listErr;
 

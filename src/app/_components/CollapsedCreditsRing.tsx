@@ -27,7 +27,8 @@ export function CollapsedCreditsRing({ percentRemaining, indeterminate, critical
   const circ = 2 * Math.PI * ringR;
   const pct = indeterminate ? 0 : Math.max(0, Math.min(100, percentRemaining));
   const offset = circ * (1 - pct / 100);
-  const strokeColor = critical ? "#fb923c" : "#e879f9";
+  // Keep collapsed ring on brand palette, even on low-credit state.
+  const strokeColor = critical ? "#a855f7" : "#e879f9";
 
   return (
     <svg
@@ -39,9 +40,9 @@ export function CollapsedCreditsRing({ percentRemaining, indeterminate, critical
     >
       <defs>
         <radialGradient id={gradId} cx="38%" cy="32%" r="68%">
-          <stop offset="0%" stopColor="#f7fee7" />
-          <stop offset="42%" stopColor="#d9f99d" />
-          <stop offset="100%" stopColor="#fef9c3" />
+          <stop offset="0%" stopColor="#f5f3ff" />
+          <stop offset="42%" stopColor="#ddd6fe" />
+          <stop offset="100%" stopColor="#c4b5fd" />
         </radialGradient>
       </defs>
       <g transform={`translate(${cx},${cy})`}>

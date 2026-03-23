@@ -379,8 +379,8 @@ export default function StudioAvatarPanel() {
 
   return (
     <>
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-4 lg:min-h-0 lg:max-h-[min(92vh,calc(100vh-7rem))]">
-        <div className="flex min-w-0 flex-1 flex-col gap-5 lg:max-w-[min(100%,24rem)] lg:min-h-0 lg:overflow-hidden">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-4 lg:h-[calc(100dvh-4rem)] lg:min-h-0">
+        <div className="flex min-w-0 w-full flex-col gap-5 lg:basis-[42%] lg:max-w-[48rem] lg:flex-none lg:shrink-0 lg:min-h-0 lg:overflow-hidden">
           <div className="flex items-center gap-2.5">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-500/15 text-violet-300">
               <UserRound className="h-4 w-4" />
@@ -424,7 +424,7 @@ export default function StudioAvatarPanel() {
           </div>
         </div>
 
-        <div className="flex h-full min-h-0 min-w-0 w-full flex-[2] flex-col lg:flex-[3.25] lg:min-h-0 lg:overflow-hidden">
+        <div className="flex h-full min-h-0 min-w-0 w-full flex-1 flex-col lg:min-h-0 lg:overflow-hidden">
           <StudioOutputPane
             title=""
             hasOutput

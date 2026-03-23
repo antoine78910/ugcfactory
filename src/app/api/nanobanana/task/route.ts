@@ -3,13 +3,30 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import { kieMarketRecordInfo, parseKieResultMediaUrls } from "@/lib/kieMarket";
 
+function kieStateIsSuccess(state: string): boolean {
+  const s = String(state ?? "").toLowerCase().trim();
+  return s === "success" || s === "completed" || s === "complete" || s === "succeed" || s === "done";
+}
+
+function kieStateIsFail(state: string): boolean {
+  const s = String(state ?? "").toLowerCase().trim();
+  return s === "fail" || s === "failed" || s === "error" || s === "cancelled" || s === "canceled";
+}
+
 function normalizeKieTaskToNanoShape(data: {
   state: string;
   resultJson?: string;
   failMsg?: string;
 }) {
   const urls = parseKieResultMediaUrls(data.resultJson);
-  if (data.state === "success") {
+  if (kieStateIsSuccess(data.state)) {
+    if (urls.length === 0) {
+      return {
+        successFlag: 0 as const,
+        response: {} as Record<string, unknown>,
+        errorMessage: null as string | null,
+      };
+    }
     return {
       successFlag: 1 as const,
       response: {
@@ -19,7 +36,7 @@ function normalizeKieTaskToNanoShape(data: {
       errorMessage: null as string | null,
     };
   }
-  if (data.state === "fail") {
+  if (kieStateIsFail(data.state)) {
     return {
       successFlag: -1 as const,
       response: {} as Record<string, unknown>,

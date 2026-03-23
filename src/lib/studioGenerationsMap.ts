@@ -27,6 +27,7 @@ export function studioGenerationRowToHistoryItem(row: StudioGenerationRow): Stud
       label: row.label || "Avatar",
       mediaUrl: row.result_urls?.[0],
       createdAt,
+      studioGenerationKind: row.kind,
     };
   }
   if (row.status === "failed") {
@@ -38,6 +39,7 @@ export function studioGenerationRowToHistoryItem(row: StudioGenerationRow): Stud
       errorMessage: row.error_message ?? "Generation failed",
       creditsRefunded: Boolean(row.credits_refund_hint_sent),
       createdAt,
+      studioGenerationKind: row.kind,
     };
   }
   return {
@@ -46,5 +48,6 @@ export function studioGenerationRowToHistoryItem(row: StudioGenerationRow): Stud
     status: "generating",
     label: row.label || "Generating…",
     createdAt,
+    studioGenerationKind: row.kind,
   };
 }

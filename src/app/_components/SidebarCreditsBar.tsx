@@ -48,7 +48,6 @@ export default function SidebarCreditsBar({ collapsed = false }: SidebarCreditsB
           className={cn(
             "pointer-events-none absolute inset-0 flex items-center justify-center pt-px text-[10px] font-bold tabular-nums leading-none text-zinc-800/90",
             percentRemaining >= 100 && "text-[9px]",
-            showCta && "text-amber-950/90",
           )}
         >
           {indeterminate ? (

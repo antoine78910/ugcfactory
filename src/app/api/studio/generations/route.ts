@@ -10,26 +10,44 @@ import { sweepStudioRefundHints } from "@/lib/studioGenerationsPoll";
 
 const KIND_DEFAULT = "avatar";
 
+/** Kinds listed together on My Projects (studio library). */
+const STUDIO_LIBRARY_KINDS = ["avatar", "studio_image"] as const;
+
 export async function GET(req: Request) {
   const { supabase, user, response } = await requireSupabaseUser();
   if (response) return response;
 
   const { searchParams } = new URL(req.url);
+  const all = searchParams.get("all") === "1";
   const kind = (searchParams.get("kind") ?? KIND_DEFAULT).trim() || KIND_DEFAULT;
 
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from("studio_generations")
       .select("*")
       .eq("user_id", user.id)
-      .eq("kind", kind)
       .order("created_at", { ascending: false })
       .limit(80);
+
+    if (!all) {
+      query = query.eq("kind", kind);
+    } else {
+      query = query.in("kind", [...STUDIO_LIBRARY_KINDS]);
+    }
+
+    const { data, error } = await query;
 
     if (error) throw error;
 
     const rows = (data ?? []) as StudioGenerationRow[];
-    const refundHints = await sweepStudioRefundHints(supabase, user.id, kind);
+    let refundHints: { jobId: string; credits: number }[] = [];
+    if (all) {
+      for (const k of STUDIO_LIBRARY_KINDS) {
+        refundHints = refundHints.concat(await sweepStudioRefundHints(supabase, user.id, k));
+      }
+    } else {
+      refundHints = await sweepStudioRefundHints(supabase, user.id, kind);
+    }
     const items = rows.map(studioGenerationRowToHistoryItem);
 
     return NextResponse.json({ data: items, refundHints });

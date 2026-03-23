@@ -179,6 +179,50 @@ const economicsIntro = (
   </p>
 );
 
+const LS_STUDIO_IMAGE_HISTORY = "ugc_studio_image_history_v1";
+
+function readLocalStudioImageHistory(): StudioHistoryItem[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(LS_STUDIO_IMAGE_HISTORY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (x): x is StudioHistoryItem =>
+        x != null &&
+        typeof x === "object" &&
+        typeof (x as StudioHistoryItem).id === "string" &&
+        typeof (x as StudioHistoryItem).createdAt === "number",
+    );
+  } catch {
+    return [];
+  }
+}
+
+function writeLocalStudioImageHistory(items: StudioHistoryItem[]) {
+  try {
+    localStorage.setItem(LS_STUDIO_IMAGE_HISTORY, JSON.stringify(items.slice(0, 80)));
+  } catch {
+    /* ignore */
+  }
+}
+
+type RefundHint = { jobId: string; credits: number };
+
+function applyRefundHints(
+  hints: RefundHint[],
+  grantCredits: (n: number) => void,
+  creditsRef: { current: number },
+) {
+  for (const h of hints) {
+    if (h.credits > 0) {
+      grantCredits(h.credits);
+      creditsRef.current += h.credits;
+    }
+  }
+}
+
 export default function StudioImagePanel() {
   const { planId, current: creditsBalance, spendCredits, grantCredits } = useCreditsPlan();
   const creditsRef = useRef(creditsBalance);
@@ -193,11 +237,74 @@ export default function StudioImagePanel() {
   /** Reference image uploads only; does not block Generate. */
   const [refUploadBusy, setRefUploadBusy] = useState(false);
   const [historyItems, setHistoryItems] = useState<StudioHistoryItem[]>([]);
+  /** null = unknown; true = Supabase + server poll; false = guest / local only */
+  const [serverHistory, setServerHistory] = useState<boolean | null>(null);
   type ImageBilling =
     | { open: false }
     | { open: true; reason: "plan"; blockedId: NanoModel }
     | { open: true; reason: "credits"; required: number };
   const [billing, setBilling] = useState<ImageBilling>({ open: false });
+
+  const grantCreditsRef = useRef(grantCredits);
+  grantCreditsRef.current = grantCredits;
+
+  useEffect(() => {
+    void (async () => {
+      const res = await fetch("/api/studio/generations?kind=studio_image", { cache: "no-store" });
+      if (res.status === 401) {
+        setServerHistory(false);
+        setHistoryItems(readLocalStudioImageHistory());
+        return;
+      }
+      if (!res.ok) {
+        setServerHistory(false);
+        setHistoryItems(readLocalStudioImageHistory());
+        return;
+      }
+      const json = (await res.json()) as { data?: StudioHistoryItem[]; refundHints?: RefundHint[] };
+      setServerHistory(true);
+      setHistoryItems(json.data ?? []);
+      const hints = json.refundHints ?? [];
+      if (hints.length) {
+        applyRefundHints(hints, grantCreditsRef.current, creditsRef);
+        toast.message("Credits refunded", { description: "A studio generation failed after charge." });
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (serverHistory !== true) return;
+
+    const tick = () => {
+      void (async () => {
+        const res = await fetch("/api/studio/generations/poll", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            kind: "studio_image",
+            personalApiKey: getPersonalApiKey() ?? undefined,
+          }),
+        });
+        if (!res.ok) return;
+        const json = (await res.json()) as { data?: StudioHistoryItem[]; refundHints?: RefundHint[] };
+        if (Array.isArray(json.data)) setHistoryItems(json.data);
+        const hints = json.refundHints ?? [];
+        if (hints.length) {
+          applyRefundHints(hints, grantCreditsRef.current, creditsRef);
+          toast.message("Credits refunded", { description: "A studio generation failed after charge." });
+        }
+      })();
+    };
+
+    tick();
+    const id = window.setInterval(tick, 4000);
+    return () => window.clearInterval(id);
+  }, [serverHistory]);
+
+  useEffect(() => {
+    if (serverHistory !== false) return;
+    writeLocalStudioImageHistory(historyItems);
+  }, [serverHistory, historyItems]);
 
   const aspectOptions = useMemo(() => {
     if (model === "pro") return ["auto", ...ASPECT_RATIOS_PRO] as const;
@@ -252,6 +359,10 @@ export default function StudioImagePanel() {
   }, []);
 
   const generate = () => {
+    if (serverHistory === null) {
+      toast.message("Still loading your library…", { description: "Wait a moment, then try Generate again." });
+      return;
+    }
     const p = prompt.trim();
     if (!p) {
       toast.error("Describe the scene you imagine.");
@@ -268,26 +379,77 @@ export default function StudioImagePanel() {
       return;
     }
     const n = Math.min(4, Math.max(1, numImages));
-    const jobId = crypto.randomUUID();
     const summary = p.length > 72 ? `${p.slice(0, 72)}…` : p;
     const platformCharge = usingPersonalApi ? 0 : totalCredits;
     if (!usingPersonalApi) {
       spendCredits(totalCredits);
       creditsRef.current = Math.max(0, creditsRef.current - totalCredits);
     }
-    const startedAt = Date.now();
-    setHistoryItems((prev) => [
-      {
-        id: jobId,
-        kind: "image",
-        status: "generating",
-        label: summary,
-        createdAt: startedAt,
-      },
-      ...prev,
-    ]);
 
     void (async () => {
+      if (serverHistory === true) {
+        try {
+          const res = await fetch("/api/studio/generations/start", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              kind: "studio_image",
+              label: summary,
+              accountPlan: planId,
+              creditsCharged: platformCharge,
+              prompt: p,
+              model,
+              aspectRatio: aspect,
+              resolution,
+              numImages: n,
+              imageUrls: refUrls.length ? refUrls : undefined,
+              personalApiKey: getPersonalApiKey(),
+            }),
+          });
+          const json = (await res.json()) as {
+            data?: { id?: string; rows?: { id: string }[]; error?: string };
+            error?: string;
+          };
+          if (!res.ok) throw new Error(json.error || "Start failed");
+          const rowIds = json.data?.rows?.map((r) => r.id) ?? (json.data?.id ? [json.data.id] : []);
+          if (!rowIds.length) throw new Error("No job id");
+          const startedAt = Date.now();
+          setHistoryItems((prev) => {
+            const gens: StudioHistoryItem[] = rowIds.map((id) => ({
+              id,
+              kind: "image",
+              status: "generating",
+              label: summary,
+              createdAt: startedAt,
+              studioGenerationKind: "studio_image",
+            }));
+            const drop = new Set(rowIds);
+            return [...gens, ...prev.filter((i) => !drop.has(i.id))];
+          });
+          toast.message("Generation running", {
+            description: "You can open My Projects — jobs stay in sync. Safe to leave this page.",
+          });
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : "Generation failed";
+          refundPlatformCredits(platformCharge, grantCredits, creditsRef);
+          toast.error(msg);
+        }
+        return;
+      }
+
+      const jobId = crypto.randomUUID();
+      const startedAt = Date.now();
+      setHistoryItems((prev) => [
+        {
+          id: jobId,
+          kind: "image",
+          status: "generating",
+          label: summary,
+          createdAt: startedAt,
+        },
+        ...prev,
+      ]);
+
       try {
         const res = await fetch("/api/nanobanana/generate", {
           method: "POST",
@@ -354,9 +516,9 @@ export default function StudioImagePanel() {
     "h-14 w-full rounded-2xl border border-violet-300/40 bg-violet-500 text-lg font-semibold text-white shadow-[0_6px_0_0_rgba(76,29,149,0.85)] transition-all hover:-translate-y-px hover:bg-violet-400 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.85)] active:translate-y-1 active:shadow-none";
 
   return (
-    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4 lg:min-h-0 lg:max-h-[min(92vh,calc(100vh-7rem))]">
-      <div className="flex min-w-0 flex-1 flex-col gap-2 lg:max-w-[min(100%,24rem)] lg:min-h-0 lg:overflow-hidden">
-        <div className="studio-params-scroll flex min-w-0 flex-col gap-2 lg:min-h-0 lg:max-h-[min(62vh,calc(100vh-12rem))] lg:overflow-y-auto">
+    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4 lg:h-[calc(100dvh-4rem)] lg:min-h-0">
+      <div className="flex min-w-0 w-full flex-col gap-2 lg:basis-[42%] lg:max-w-[48rem] lg:flex-none lg:shrink-0 lg:min-h-0 lg:overflow-hidden">
+        <div className="studio-params-scroll flex min-w-0 flex-col gap-2 lg:h-full lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pb-10">
         <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Create prompt</p>
         <div className="rounded-2xl border border-white/10 bg-[#101014] p-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-white/45">Reference images</p>
@@ -582,7 +744,7 @@ export default function StudioImagePanel() {
         </div>
       </div>
 
-      <div className="flex h-full min-h-0 min-w-0 flex-[2] lg:flex-[3.25] flex-col lg:min-h-0 lg:overflow-hidden">
+      <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col lg:min-h-0 lg:overflow-hidden">
         <StudioOutputPane
           title=""
           hasOutput

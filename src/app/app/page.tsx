@@ -312,6 +312,11 @@ export default function AppBrandWizard() {
   const { planId, current: creditsBalance, spendCredits, grantCredits } = useCreditsPlan();
   const creditsRef = useRef(creditsBalance);
   creditsRef.current = creditsBalance;
+  const grantCreditsRef = useRef(grantCredits);
+  grantCreditsRef.current = grantCredits;
+
+  const [studioLibraryItems, setStudioLibraryItems] = useState<StudioHistoryItem[]>([]);
+  const [studioLibraryLoading, setStudioLibraryLoading] = useState(false);
 
   /** Billable seconds: real clip length, or placeholder so 720p ↔ 1080p updates credits before upload. */
   const MOTION_CREDITS_PLACEHOLDER_SEC = 12;
@@ -528,6 +533,81 @@ export default function AppBrandWizard() {
       setIsLoadingRuns(false);
     }
   }
+
+  const refreshStudioLibrary = useCallback(async () => {
+    setStudioLibraryLoading(true);
+    try {
+      const res = await fetch("/api/studio/generations?all=1", { cache: "no-store" });
+      if (res.status === 401 || !res.ok) {
+        setStudioLibraryItems([]);
+        return;
+      }
+      const json = (await res.json()) as {
+        data?: StudioHistoryItem[];
+        refundHints?: { jobId: string; credits: number }[];
+      };
+      setStudioLibraryItems(json.data ?? []);
+      const hints = json.refundHints ?? [];
+      let anyRefund = false;
+      for (const h of hints) {
+        if (h.credits > 0) {
+          grantCreditsRef.current(h.credits);
+          creditsRef.current += h.credits;
+          anyRefund = true;
+        }
+      }
+      if (anyRefund) {
+        toast.message("Credits refunded", { description: "A studio generation failed after charge." });
+      }
+    } finally {
+      setStudioLibraryLoading(false);
+    }
+  }, []);
+
+  const pollStudioLibraryWhileOnProjects = useCallback(async () => {
+    try {
+      const res = await fetch("/api/studio/generations/poll", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind: "all",
+          personalApiKey: getPersonalApiKey() ?? undefined,
+        }),
+      });
+      if (!res.ok) return;
+      const json = (await res.json()) as {
+        data?: StudioHistoryItem[];
+        refundHints?: { jobId: string; credits: number }[];
+      };
+      if (Array.isArray(json.data)) setStudioLibraryItems(json.data);
+      const hints = json.refundHints ?? [];
+      let anyRefund = false;
+      for (const h of hints) {
+        if (h.credits > 0) {
+          grantCreditsRef.current(h.credits);
+          creditsRef.current += h.credits;
+          anyRefund = true;
+        }
+      }
+      if (anyRefund) {
+        toast.message("Credits refunded", { description: "A studio generation failed after charge." });
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    if (appSection !== "projects") return;
+    void refreshStudioLibrary();
+  }, [appSection, refreshStudioLibrary]);
+
+  useEffect(() => {
+    if (appSection !== "projects") return;
+    void pollStudioLibraryWhileOnProjects();
+    const id = window.setInterval(() => void pollStudioLibraryWhileOnProjects(), 5000);
+    return () => window.clearInterval(id);
+  }, [appSection, pollStudioLibraryWhileOnProjects]);
 
   async function startNewLinkToAdFromProject(
     proj: (typeof projects)[number],
@@ -1448,10 +1528,15 @@ export default function AppBrandWizard() {
                         type="button"
                         size="sm"
                         className="border border-white/10 bg-white/5 text-white hover:bg-white/10"
-                        onClick={refreshMeAndRuns}
-                        disabled={isLoadingRuns}
+                        onClick={() => {
+                          void refreshMeAndRuns();
+                          void refreshStudioLibrary();
+                        }}
+                        disabled={isLoadingRuns || studioLibraryLoading}
                       >
-                        {isLoadingRuns ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                        {isLoadingRuns || studioLibraryLoading ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : null}
                         Refresh
                       </Button>
                       <Button
@@ -1468,10 +1553,87 @@ export default function AppBrandWizard() {
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="space-y-6">
+                  <div className="rounded-xl border border-violet-500/20 bg-violet-500/[0.06] p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-white">Studio library</p>
+                        <p className="mt-1 text-xs leading-relaxed text-white/45">
+                          Image and Avatar generations are saved here while you&apos;re signed in. Open a card to jump
+                          to the studio tab. Items still processing show a spinner until the server finishes.
+                        </p>
+                      </div>
+                      {studioLibraryLoading ? (
+                        <Loader2 className="h-5 w-5 shrink-0 animate-spin text-violet-300" aria-label="Loading" />
+                      ) : null}
+                    </div>
+                    {studioLibraryItems.length === 0 && !studioLibraryLoading ? (
+                      <p className="mt-3 text-xs text-white/40">
+                        No saved studio generations yet (or not signed in). Generate from{" "}
+                        <span className="text-white/55">Image</span> or <span className="text-white/55">Avatar</span> in
+                        Create.
+                      </p>
+                    ) : (
+                      <div className="mt-3 flex gap-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
+                        {studioLibraryItems.map((item) => {
+                          const badge =
+                            item.studioGenerationKind === "avatar"
+                              ? "Avatar"
+                              : item.studioGenerationKind === "studio_image"
+                                ? "Image"
+                                : "Studio";
+                          return (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() =>
+                                setAppSectionNav(item.studioGenerationKind === "avatar" ? "avatar" : "image")
+                              }
+                              className="flex w-[5.75rem] shrink-0 flex-col gap-1 rounded-lg border border-white/10 bg-black/30 p-0.5 text-left transition hover:border-violet-400/40 hover:bg-black/50"
+                            >
+                              <div className="relative aspect-[3/4] w-full overflow-hidden rounded-md bg-[#100d17]">
+                                {item.status === "ready" && item.mediaUrl ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img
+                                    src={item.mediaUrl}
+                                    alt=""
+                                    className="h-full w-full object-cover"
+                                    referrerPolicy="no-referrer"
+                                  />
+                                ) : item.status === "generating" ? (
+                                  <div className="flex h-full w-full flex-col items-center justify-center gap-1 px-1">
+                                    <Loader2 className="h-6 w-6 animate-spin text-violet-300" aria-hidden />
+                                    <span className="text-center text-[8px] font-medium leading-tight text-white/50">
+                                      Generating…
+                                    </span>
+                                  </div>
+                                ) : item.status === "failed" ? (
+                                  <div className="flex h-full items-center justify-center px-1 text-center text-[9px] leading-tight text-red-300/90">
+                                    Failed
+                                  </div>
+                                ) : (
+                                  <div className="flex h-full items-center justify-center text-[10px] text-white/35">
+                                    …
+                                  </div>
+                                )}
+                                <span className="absolute left-0.5 top-0.5 rounded bg-black/75 px-1 py-px text-[7px] font-semibold uppercase tracking-wide text-white/80">
+                                  {badge}
+                                </span>
+                              </div>
+                              <span className="line-clamp-2 px-0.5 text-center text-[9px] leading-tight text-white/50">
+                                {item.label}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
                   {projects.length === 0 ? (
                     <div className="rounded-md border border-white/10 bg-white/5 p-4 text-sm text-white/65">
-                      No projects yet. Start a run to create your first project.
+                      No product projects yet. Use Link to Ad with a store URL to create one — studio generations above
+                      are kept separately.
                     </div>
                   ) : (
                     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -1688,9 +1850,9 @@ export default function AppBrandWizard() {
 
             {appSection === "motion_control" ? (
               <div className="space-y-2">
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4 lg:min-h-0 lg:max-h-[min(92vh,calc(100vh-7rem))]">
-                    <div className="flex min-w-0 flex-1 flex-col lg:max-w-[min(100%,24rem)] lg:min-h-0 lg:overflow-hidden">
-                      <div className="studio-params-scroll flex min-w-0 flex-col gap-2 lg:min-h-0 lg:max-h-[min(62vh,calc(100vh-12rem))] lg:overflow-y-auto">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4 lg:h-[calc(100dvh-4rem)] lg:min-h-0">
+                    <div className="flex min-w-0 w-full flex-col lg:basis-[42%] lg:max-w-[48rem] lg:flex-none lg:shrink-0 lg:min-h-0 lg:overflow-hidden">
+                      <div className="studio-params-scroll flex min-w-0 flex-col gap-2 lg:h-full lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pb-10">
                       <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
                         Motion control
                       </p>
@@ -1985,7 +2147,7 @@ export default function AppBrandWizard() {
                       </div>
                     </div>
 
-                    <div className="flex h-full min-h-0 min-w-0 flex-[2] lg:flex-[3.25] flex-col lg:min-h-0 lg:overflow-hidden">
+                    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col lg:min-h-0 lg:overflow-hidden">
                       <StudioOutputPane
                         title=""
                         hasOutput

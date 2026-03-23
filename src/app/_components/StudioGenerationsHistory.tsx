@@ -19,6 +19,8 @@ export type StudioHistoryItem = {
   /** Show “Credits refunded” pill (e.g. after a failed run) */
   creditsRefunded?: boolean;
   createdAt: number;
+  /** When row comes from `studio_generations` (avatar, studio_image, …). */
+  studioGenerationKind?: string;
 };
 
 function formatHistoryDate(ts: number): string {
