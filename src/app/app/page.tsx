@@ -43,6 +43,7 @@ import {
   universeHasPendingKlingTask,
 } from "@/lib/linkToAdUniverse";
 import { motionControlUpgradeMessage } from "@/lib/subscriptionModelAccess";
+import { clipboardImageFiles } from "@/lib/clipboardImage";
 
 type WizardStep = "url" | "analysis" | "quiz" | "image" | "video";
 type AppSection = "link_to_ad" | "avatar" | "motion_control" | "image" | "video" | "upscale" | "projects";
@@ -372,6 +373,24 @@ export default function AppBrandWizard() {
     }
     throw new Error("Motion control timeout");
   }, []);
+
+  const applyMotionCharacterFile = useCallback((file: File) => {
+    const url = URL.createObjectURL(file);
+    setMotionCharacterImageUrl(url);
+    toast.success("Character image selected", { description: file.name });
+  }, []);
+
+  useEffect(() => {
+    if (appSection !== "motion_control") return;
+    const onPaste = (event: ClipboardEvent) => {
+      const files = clipboardImageFiles(event);
+      if (!files.length) return;
+      event.preventDefault();
+      applyMotionCharacterFile(files[0]);
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [appSection, applyMotionCharacterFile]);
 
   useEffect(() => {
     return () => {
@@ -1921,9 +1940,7 @@ export default function AppBrandWizard() {
                             onChange={(e) => {
                               const f = e.target.files?.[0] ?? null;
                               if (!f) return;
-                              const url = URL.createObjectURL(f);
-                              setMotionCharacterImageUrl(url);
-                              toast.success("Character image selected", { description: f.name });
+                              applyMotionCharacterFile(f);
                               e.currentTarget.value = "";
                             }}
                           />

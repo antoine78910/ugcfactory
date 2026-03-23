@@ -30,6 +30,7 @@ import {
 import { STUDIO_VIDEO_EDIT_PICKER_IDS } from "@/lib/studioVideoEditModels";
 import { loadAvatarUrls } from "@/lib/avatarLibrary";
 import { AvatarPickerDialog } from "@/app/_components/AvatarPickerDialog";
+import { clipboardImageFiles } from "@/lib/clipboardImage";
 
 type VideoTab = "create" | "edit";
 
@@ -712,6 +713,60 @@ export default function StudioVideoPanel() {
     };
     input.click();
   }, [editElementUrls.length]);
+
+  const onPasteImage = useCallback(
+    async (file: File) => {
+      if (tab === "create") {
+        setFrameUploadBusy(true);
+        try {
+          const u = await uploadFile(file);
+          if (!startUrl) {
+            setStartUrl(u);
+            toast.success("Start frame pasted");
+          } else if (!endUrl) {
+            setEndUrl(u);
+            toast.success("End frame pasted");
+          } else {
+            setStartUrl(u);
+            toast.success("Start frame replaced from paste");
+          }
+        } catch (e) {
+          toast.error(e instanceof Error ? e.message : "Upload failed");
+        } finally {
+          setFrameUploadBusy(false);
+        }
+        return;
+      }
+
+      setEditUploadBusy(true);
+      try {
+        const u = await uploadFile(file);
+        if (motionEdit) {
+          setEditMotionImageUrl(u);
+          toast.success("Character image pasted");
+          return;
+        }
+        setEditElementUrls((prev) => (prev.length >= 4 ? prev : [...prev, u]));
+        toast.success("Element image pasted");
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Upload failed");
+      } finally {
+        setEditUploadBusy(false);
+      }
+    },
+    [endUrl, motionEdit, startUrl, tab],
+  );
+
+  useEffect(() => {
+    const onPaste = (event: ClipboardEvent) => {
+      const files = clipboardImageFiles(event);
+      if (!files.length) return;
+      event.preventDefault();
+      void onPasteImage(files[0]);
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [onPasteImage]);
 
   const insertNextImageToken = useCallback(() => {
     const n = Math.min(4, editElementUrls.length + 1);

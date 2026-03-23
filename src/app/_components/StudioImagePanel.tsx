@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 import { canUseStudioImageModel, studioImageUpgradeMessage } from "@/lib/subscriptionModelAccess";
 import { loadAvatarUrls } from "@/lib/avatarLibrary";
 import { AvatarPickerDialog } from "@/app/_components/AvatarPickerDialog";
+import { clipboardImageFiles } from "@/lib/clipboardImage";
 
 const ASPECT_RATIOS_PRO = [
   "1:1",
@@ -300,12 +301,40 @@ export default function StudioImagePanel() {
     input.click();
   }, []);
 
+  const onPasteRefs = useCallback(async (files: File[]) => {
+    if (!files.length) return;
+    setRefUploadBusy(true);
+    try {
+      const urls: string[] = [];
+      for (const f of files.slice(0, 8)) {
+        urls.push(await uploadReferenceFile(f));
+      }
+      setRefUrls((prev) => [...prev, ...urls].slice(0, 12));
+      toast.success(urls.length > 1 ? `${urls.length} reference images pasted` : "Reference image pasted");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Upload failed");
+    } finally {
+      setRefUploadBusy(false);
+    }
+  }, []);
+
   const onUseAvatarRef = useCallback((avatarUrl: string) => {
     const u = avatarUrl.trim();
     if (!u) return;
     setRefUrls((prev) => [u, ...prev.filter((x) => x !== u)].slice(0, 12));
     toast.success("Avatar added as reference");
   }, []);
+
+  useEffect(() => {
+    const onPaste = (event: ClipboardEvent) => {
+      const files = clipboardImageFiles(event);
+      if (!files.length) return;
+      event.preventDefault();
+      void onPasteRefs(files);
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [onPasteRefs]);
 
   const generate = () => {
     if (serverHistory === null) {

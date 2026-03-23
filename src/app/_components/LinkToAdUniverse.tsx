@@ -47,6 +47,7 @@ import type { InternalFetch } from "@/lib/linkToAd/internalFetch";
 import { runInitialPipeline } from "@/lib/linkToAd/runInitialPipeline";
 import { loadAvatarUrls } from "@/lib/avatarLibrary";
 import { AvatarPickerDialog } from "@/app/_components/AvatarPickerDialog";
+import { clipboardImageFiles } from "@/lib/clipboardImage";
 
 /** Same-origin API calls with session (mirrors server `createInternalFetchFromRequest`). */
 const browserPipelineFetch = ((path: string, init?: RequestInit) => fetch(path, init)) as InternalFetch;
@@ -784,9 +785,9 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     [onRunsChanged],
   );
 
-  async function uploadNeutralPhoto(files: FileList | null) {
-    if (!files || files.length === 0) return;
-    const list = Array.from(files);
+  async function uploadNeutralPhoto(files: FileList | File[] | null) {
+    const list = Array.isArray(files) ? files : Array.from(files ?? []);
+    if (!list.length) return;
 
     setIsWorking(true);
     try {
@@ -832,9 +833,9 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     }
   }
 
-  async function uploadAdditionalPhoto(files: FileList | null) {
-    if (!files || files.length === 0) return;
-    const list = Array.from(files);
+  async function uploadAdditionalPhoto(files: FileList | File[] | null) {
+    const list = Array.isArray(files) ? files : Array.from(files ?? []);
+    if (!list.length) return;
     setIsUploadingAdditionalPhotos(true);
     let added = 0;
     let lastError: string | null = null;
@@ -874,6 +875,17 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     setUserPhotoUrls((prev) => prev.filter((u) => u !== url));
     if (neutralUploadUrl === url) setNeutralUploadUrl(null);
   }
+
+  useEffect(() => {
+    const onPaste = (event: ClipboardEvent) => {
+      const files = clipboardImageFiles(event);
+      if (!files.length) return;
+      event.preventDefault();
+      void uploadAdditionalPhoto(files);
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, []);
 
   function addAvatarAsProductPhoto(avatarUrl: string) {
     const u = avatarUrl.trim();
