@@ -45,6 +45,7 @@ import { LINK_TO_AD_LOADING_MESSAGES } from "@/lib/linkToAd/loadingMessageLoops"
 import { CREDITS_LINK_TO_AD_GENERATE_FROM_URL } from "@/lib/linkToAd/generationCredits";
 import type { InternalFetch } from "@/lib/linkToAd/internalFetch";
 import { runInitialPipeline } from "@/lib/linkToAd/runInitialPipeline";
+import { loadLatestAvatarUrl } from "@/lib/avatarLibrary";
 
 /** Same-origin API calls with session (mirrors server `createInternalFetchFromRequest`). */
 const browserPipelineFetch = ((path: string, init?: RequestInit) => fetch(path, init)) as InternalFetch;
@@ -277,6 +278,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   /** URLs classified as product-only (multi-angle); used for GPT vision + Nano single pick. */
   const [productOnlyImageUrls, setProductOnlyImageUrls] = useState<string[]>([]);
   const [userPhotoUrls, setUserPhotoUrls] = useState<string[]>([]);
+  const [latestAvatarUrl, setLatestAvatarUrl] = useState<string | null>(null);
   const [imgError, setImgError] = useState(false);
   const [brandFaviconFailed, setBrandFaviconFailed] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -632,6 +634,17 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     isWorkingRef.current = isWorking;
   }, [isWorking]);
 
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const url = await loadLatestAvatarUrl();
+      if (!cancelled) setLatestAvatarUrl(url);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [productOnlyImageUrls.length, userPhotoUrls.length]);
+
   const hydrateFromRun = useCallback(
     (
       run: {
@@ -858,6 +871,14 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     setProductOnlyImageUrls((prev) => prev.filter((u) => u !== url));
     setUserPhotoUrls((prev) => prev.filter((u) => u !== url));
     if (neutralUploadUrl === url) setNeutralUploadUrl(null);
+  }
+
+  function addLatestAvatarAsProductPhoto() {
+    const u = latestAvatarUrl?.trim();
+    if (!u) return;
+    setUserPhotoUrls((prev) => (prev.includes(u) ? prev : [...prev, u]));
+    setProductOnlyImageUrls((prev) => (prev.includes(u) ? prev : [...prev, u]));
+    toast.success("Avatar photo added");
   }
 
   async function onAddCustomAngle() {
@@ -2392,6 +2413,16 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                   >
                     <ImagePlus className="h-5 w-5" />
                   </button>
+                  {latestAvatarUrl ? (
+                    <button
+                      type="button"
+                      disabled={isWorking || isUploadingAdditionalPhotos}
+                      onClick={addLatestAvatarAsProductPhoto}
+                      className="h-16 rounded-lg border border-white/15 bg-white/[0.02] px-3 text-[11px] font-medium text-white/65 transition hover:border-violet-400/40 hover:text-violet-200 disabled:opacity-50"
+                    >
+                      Upload my avatar
+                    </button>
+                  ) : null}
                 </div>
                 <input
                   ref={earlyProductPhotosInputRef}
@@ -2521,6 +2552,16 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                         <ImagePlus className="h-3 w-3" />
                         Add photo
                       </button>
+                      {latestAvatarUrl ? (
+                        <button
+                          type="button"
+                          disabled={isWorking || isUploadingAdditionalPhotos}
+                          className="ml-2 rounded-md bg-white/5 px-2 py-1 text-[10px] font-medium text-white/60 transition hover:bg-white/10 hover:text-white/80"
+                          onClick={addLatestAvatarAsProductPhoto}
+                        >
+                          Upload my avatar
+                        </button>
+                      ) : null}
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {productOnlyImageUrls.map((url, i) => (
@@ -2692,6 +2733,16 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                         <ImagePlus className="h-3 w-3" />
                         Add photo
                       </button>
+                      {latestAvatarUrl ? (
+                        <button
+                          type="button"
+                          disabled={isWorking || isUploadingAdditionalPhotos}
+                          className="ml-2 rounded-md bg-white/5 px-2 py-1 text-[10px] font-medium text-white/60 transition hover:bg-white/10 hover:text-white/80"
+                          onClick={addLatestAvatarAsProductPhoto}
+                        >
+                          Upload my avatar
+                        </button>
+                      ) : null}
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {productOnlyImageUrls.map((url, i) => (
@@ -2934,6 +2985,16 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                       <ImagePlus className="h-3 w-3" />
                       Add photo
                     </button>
+                    {latestAvatarUrl ? (
+                      <button
+                        type="button"
+                        disabled={isWorking || isUploadingAdditionalPhotos}
+                        className="rounded-md bg-white/5 px-2 py-1 text-[10px] font-medium text-white/60 transition hover:bg-white/10 hover:text-white/80 disabled:opacity-50"
+                        onClick={addLatestAvatarAsProductPhoto}
+                      >
+                        Upload my avatar
+                      </button>
+                    ) : null}
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {productOnlyImageUrls.map((url, i) => (
@@ -3306,14 +3367,14 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                         </p>
                         {klingVideoUrl ? (
                           <>
-                            <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-5">
-                              <div className="mx-auto w-full max-w-[min(100%,300px)] shrink-0 sm:mx-0">
+                            <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-5">
+                              <div className="mx-auto w-[11.5rem] max-w-full shrink-0 sm:mx-0 sm:w-[12.5rem]">
                                 <div className="aspect-[9/16] w-full overflow-hidden rounded-lg border border-white/10 bg-black">
                                   <video
                                     src={klingVideoUrl}
                                     controls
                                     playsInline
-                                    className="h-full w-full object-contain"
+                                    className="h-full w-full object-cover"
                                   />
                                 </div>
                               </div>

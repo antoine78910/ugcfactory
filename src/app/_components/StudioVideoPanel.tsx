@@ -28,6 +28,7 @@ import {
   studioVideoUpgradeMessage,
 } from "@/lib/subscriptionModelAccess";
 import { STUDIO_VIDEO_EDIT_PICKER_IDS } from "@/lib/studioVideoEditModels";
+import { loadLatestAvatarUrl } from "@/lib/avatarLibrary";
 
 type VideoTab = "create" | "edit";
 
@@ -239,7 +240,7 @@ function VideoUploadSlot({
       type="button"
       disabled={disabled}
       onClick={() => (show ? onClear() : onPick())}
-      className="relative flex min-h-[140px] w-full flex-col items-center justify-center rounded-xl border border-dashed border-white/20 bg-[#0c0c10] text-white/50 transition hover:border-violet-400/40 hover:bg-white/[0.03] disabled:opacity-50"
+      className="relative flex min-h-[120px] w-full flex-col items-center justify-center rounded-xl border border-dashed border-white/20 bg-[#0c0c10] text-white/50 transition hover:border-violet-400/40 hover:bg-white/[0.03] disabled:opacity-50"
     >
       {show ? (
         <video
@@ -355,7 +356,7 @@ function FrameSlot({
       type="button"
       disabled={disabled}
       onClick={() => (url ? onClear() : onPick())}
-      className="relative flex aspect-[4/3] w-full flex-col items-center justify-center rounded-xl border border-dashed border-white/20 bg-[#0c0c10] text-white/50 transition hover:border-violet-400/40 hover:bg-white/[0.03] disabled:opacity-50"
+      className="relative flex aspect-[5/4] w-full flex-col items-center justify-center rounded-xl border border-dashed border-white/20 bg-[#0c0c10] text-white/50 transition hover:border-violet-400/40 hover:bg-white/[0.03] disabled:opacity-50"
     >
       {optional ? (
         <span className="absolute right-2 top-2 rounded-md bg-white/10 px-2 py-0.5 text-[10px] font-medium text-white/60">
@@ -465,6 +466,7 @@ export default function StudioVideoPanel() {
   const [editMotionVideoBlobUrl, setEditMotionVideoBlobUrl] = useState<string | null>(null);
   const [editMotionDurationSec, setEditMotionDurationSec] = useState<number | null>(null);
   const [editUploadBusy, setEditUploadBusy] = useState(false);
+  const [latestAvatarUrl, setLatestAvatarUrl] = useState<string | null>(null);
 
   const meta = MODEL_OPTIONS.find((m) => m.id === modelId)!;
   /** Seedance / non-Kling KIE models need a start image; Veo, Sora, Kling 2.6/3.0 text-to-video do not. */
@@ -526,6 +528,17 @@ export default function StudioVideoPanel() {
     };
   }, [editMotionVideoBlobUrl]);
 
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const url = await loadLatestAvatarUrl();
+      if (!cancelled) setLatestAvatarUrl(url);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [historyItems]);
+
   const pickFrame = useCallback((which: "start" | "end") => {
     const input = document.createElement("input");
     input.type = "file";
@@ -547,6 +560,27 @@ export default function StudioVideoPanel() {
     };
     input.click();
   }, []);
+
+  const applyAvatarToStartFrame = useCallback(() => {
+    const u = latestAvatarUrl?.trim();
+    if (!u) return;
+    setStartUrl(u);
+    toast.success("Avatar set as start frame");
+  }, [latestAvatarUrl]);
+
+  const applyAvatarToMotionCharacter = useCallback(() => {
+    const u = latestAvatarUrl?.trim();
+    if (!u) return;
+    setEditMotionImageUrl(u);
+    toast.success("Avatar set as character image");
+  }, [latestAvatarUrl]);
+
+  const applyAvatarToElements = useCallback(() => {
+    const u = latestAvatarUrl?.trim();
+    if (!u) return;
+    setEditElementUrls((prev) => (prev.includes(u) ? prev : [...prev, u].slice(0, 4)));
+    toast.success("Avatar added to elements");
+  }, [latestAvatarUrl]);
 
   const pickEditSourceVideo = useCallback(() => {
     const input = document.createElement("input");
@@ -1052,7 +1086,7 @@ export default function StudioVideoPanel() {
   };
 
   const generateBtnClass =
-    "h-14 w-full rounded-2xl border border-violet-300/40 bg-violet-500 text-lg font-semibold text-white shadow-[0_6px_0_0_rgba(76,29,149,0.85)] transition-all hover:-translate-y-px hover:bg-violet-400 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.85)] active:translate-y-1 active:shadow-none";
+    "h-12 w-full rounded-xl border border-violet-300/40 bg-violet-500 text-base font-semibold text-white shadow-[0_6px_0_0_rgba(76,29,149,0.85)] transition-all hover:-translate-y-px hover:bg-violet-400 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.85)] active:translate-y-1 active:shadow-none";
 
   return (
     <div className="space-y-2">
@@ -1081,11 +1115,11 @@ export default function StudioVideoPanel() {
       </div>
 
       {tab === "edit" ? (
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4 lg:h-[calc(100dvh-4rem)] lg:min-h-0">
+        <div className="flex flex-col gap-3 overflow-x-hidden lg:flex-row lg:items-start lg:gap-4 lg:h-[calc(100dvh-4rem)] lg:min-h-0">
           <div className="flex min-w-0 w-full flex-col gap-2 lg:basis-[34%] lg:max-w-[32rem] lg:flex-none lg:shrink-0 lg:min-h-0 lg:overflow-hidden">
-            <div className="studio-params-scroll flex min-w-0 flex-col gap-2 lg:h-full lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pb-10">
+            <div className="studio-params-scroll flex min-w-0 flex-col gap-2 overflow-y-auto pr-1 lg:h-full lg:min-h-0 lg:flex-1 lg:pb-10">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Edit prompt</p>
-            <div className="rounded-2xl border border-white/10 bg-[#101014] p-4 space-y-3">
+            <div className="rounded-2xl border border-white/10 bg-[#101014] p-3 space-y-3">
               {motionEdit ? (
                 <div className="grid grid-cols-1 gap-2">
                   <FrameSlot
@@ -1105,6 +1139,18 @@ export default function StudioVideoPanel() {
                     hint="Duration: 3–30 secs"
                     onDurationSec={setEditMotionDurationSec}
                   />
+                  {latestAvatarUrl ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="h-9 rounded-lg border border-white/15 bg-white/5 text-xs text-white/75 hover:bg-white/10"
+                      onClick={applyAvatarToMotionCharacter}
+                      disabled={editUploadBusy}
+                    >
+                      Upload my avatar
+                    </Button>
+                  ) : null}
                 </div>
               ) : (
                 <>
@@ -1125,6 +1171,18 @@ export default function StudioVideoPanel() {
                     onAdd={pickElementImage}
                     onRemove={(i) => setEditElementUrls((prev) => prev.filter((_, j) => j !== i))}
                   />
+                  {latestAvatarUrl ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="h-9 rounded-lg border border-white/15 bg-white/5 text-xs text-white/75 hover:bg-white/10"
+                      onClick={applyAvatarToElements}
+                      disabled={editUploadBusy}
+                    >
+                      Upload my avatar
+                    </Button>
+                  ) : null}
                 </>
               )}
               <div>
@@ -1154,7 +1212,7 @@ export default function StudioVideoPanel() {
             </div>
 
             <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Parameters</p>
-            <div className="rounded-2xl border border-white/10 bg-[#101014] p-4 space-y-4">
+            <div className="rounded-2xl border border-white/10 bg-[#101014] p-3 space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <Label className="text-xs text-white/45">Auto settings</Label>
                 <button
@@ -1272,12 +1330,12 @@ export default function StudioVideoPanel() {
           </div>
         </div>
       ) : (
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4 lg:h-[calc(100dvh-4rem)] lg:min-h-0">
+        <div className="flex flex-col gap-3 overflow-x-hidden lg:flex-row lg:items-start lg:gap-4 lg:h-[calc(100dvh-4rem)] lg:min-h-0">
           <div className="flex min-w-0 w-full flex-col gap-2 lg:basis-[34%] lg:max-w-[32rem] lg:flex-none lg:shrink-0 lg:min-h-0 lg:overflow-hidden">
-            <div className="studio-params-scroll flex min-w-0 flex-col gap-2 lg:h-full lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pb-10">
+            <div className="studio-params-scroll flex min-w-0 flex-col gap-2 overflow-y-auto pr-1 lg:h-full lg:min-h-0 lg:flex-1 lg:pb-10">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Create prompt</p>
-            <div className="rounded-2xl border border-white/10 bg-[#101014] p-4">
-              <div className="grid grid-cols-1 gap-2">
+            <div className="rounded-2xl border border-white/10 bg-[#101014] p-3">
+              <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                 <FrameSlot
                   label="Start frame"
                   optional={startFrameOptional}
@@ -1295,6 +1353,18 @@ export default function StudioVideoPanel() {
                   onClear={() => setEndUrl(null)}
                 />
               </div>
+              {latestAvatarUrl ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="mt-2 h-9 rounded-lg border border-white/15 bg-white/5 text-xs text-white/75 hover:bg-white/10"
+                  onClick={applyAvatarToStartFrame}
+                  disabled={frameUploadBusy}
+                >
+                  Upload my avatar
+                </Button>
+              ) : null}
               <Textarea
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
@@ -1310,7 +1380,7 @@ export default function StudioVideoPanel() {
             </div>
 
             <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Parameters</p>
-            <div className="rounded-2xl border border-white/10 bg-[#101014] p-4 space-y-4">
+            <div className="rounded-2xl border border-white/10 bg-[#101014] p-3 space-y-3">
               <div>
                   <StudioModelPicker
                     value={modelId}

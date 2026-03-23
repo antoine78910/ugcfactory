@@ -54,6 +54,7 @@ type Props = {
 export function StudioGenerationsHistory({ items, empty, mediaLabel = "Generation" }: Props) {
   const [view, setView] = useState<"grid" | "list">("grid");
   const [zoom, setZoom] = useState(100);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   const grouped = useMemo(() => groupByDate(items), [items]);
 
@@ -194,11 +195,11 @@ export function StudioGenerationsHistory({ items, empty, mediaLabel = "Generatio
                         </div>
                       ) : null}
                       {item.status === "ready" && item.kind === "image" && item.mediaUrl ? (
-                        <a
-                          href={item.mediaUrl}
-                          target="_blank"
-                          rel="noreferrer"
+                        <button
+                          type="button"
+                          onClick={() => setLightboxUrl(item.mediaUrl ?? null)}
                           className="block h-full w-full"
+                          aria-label="Open image fullscreen"
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
@@ -206,11 +207,10 @@ export function StudioGenerationsHistory({ items, empty, mediaLabel = "Generatio
                             alt=""
                             className="h-full w-full object-cover object-center"
                           />
-                        </a>
+                        </button>
                       ) : null}
                       {item.status === "ready" && item.kind !== "image" && item.mediaUrl ? (
                         <div className="relative h-full w-full bg-black">
-                          {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
                           <video
                             src={item.mediaUrl}
                             className="h-full w-full object-cover"
@@ -275,6 +275,34 @@ export function StudioGenerationsHistory({ items, empty, mediaLabel = "Generatio
           ))}
         </div>
       )}
+      {lightboxUrl ? (
+        <div
+          className="fixed inset-0 z-[220] flex items-center justify-center bg-black/90 p-4 backdrop-blur-[2px]"
+          onClick={() => setLightboxUrl(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Fullscreen image preview"
+        >
+          <button
+            type="button"
+            className="absolute right-3 top-3 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-black/65 text-white transition hover:bg-black/85"
+            onClick={(e) => {
+              e.stopPropagation();
+              setLightboxUrl(null);
+            }}
+            aria-label="Close fullscreen image"
+          >
+            <X className="h-5 w-5" aria-hidden />
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={lightboxUrl}
+            alt="Fullscreen generation preview"
+            className="max-h-[92vh] max-w-[min(100%,1200px)] rounded-xl border border-violet-500/20 object-contain shadow-[0_0_60px_rgba(139,92,246,0.15)]"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

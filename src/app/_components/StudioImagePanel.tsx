@@ -31,6 +31,7 @@ import {
 import { NANO_BANANA_2_ASPECT_RATIOS } from "@/lib/nanobanana";
 import { cn } from "@/lib/utils";
 import { canUseStudioImageModel, studioImageUpgradeMessage } from "@/lib/subscriptionModelAccess";
+import { loadLatestAvatarUrl } from "@/lib/avatarLibrary";
 
 const ASPECT_RATIOS_PRO = [
   "1:1",
@@ -234,6 +235,7 @@ export default function StudioImagePanel() {
   const [resolution, setResolution] = useState<(typeof PRO_RESOLUTIONS)[number]>("2K");
   const [numImages, setNumImages] = useState(1);
   const [refUrls, setRefUrls] = useState<string[]>([]);
+  const [latestAvatarUrl, setLatestAvatarUrl] = useState<string | null>(null);
   /** Reference image uploads only; does not block Generate. */
   const [refUploadBusy, setRefUploadBusy] = useState(false);
   const [historyItems, setHistoryItems] = useState<StudioHistoryItem[]>([]);
@@ -306,6 +308,17 @@ export default function StudioImagePanel() {
     writeLocalStudioImageHistory(historyItems);
   }, [serverHistory, historyItems]);
 
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const url = await loadLatestAvatarUrl();
+      if (!cancelled) setLatestAvatarUrl(url);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [historyItems]);
+
   const aspectOptions = useMemo(() => {
     if (model === "pro") return ["auto", ...ASPECT_RATIOS_PRO] as const;
     return NANO_BANANA_2_ASPECT_RATIOS;
@@ -357,6 +370,13 @@ export default function StudioImagePanel() {
     };
     input.click();
   }, []);
+
+  const onUseAvatarRef = useCallback(() => {
+    const u = latestAvatarUrl?.trim();
+    if (!u) return;
+    setRefUrls((prev) => [u, ...prev.filter((x) => x !== u)].slice(0, 12));
+    toast.success("Avatar added as reference");
+  }, [latestAvatarUrl]);
 
   const generate = () => {
     if (serverHistory === null) {
@@ -534,6 +554,18 @@ export default function StudioImagePanel() {
             >
               <Plus className="h-5 w-5" />
             </Button>
+            {latestAvatarUrl ? (
+              <Button
+                type="button"
+                variant="secondary"
+                className="h-14 rounded-xl border border-white/10 bg-white/5 px-3 text-xs text-white hover:bg-white/10"
+                title="Use latest generated avatar"
+                disabled={refUploadBusy}
+                onClick={onUseAvatarRef}
+              >
+                Upload my avatar
+              </Button>
+            ) : null}
             {refUrls.map((u, i) => (
               <button
                 key={`${u}-${i}`}
