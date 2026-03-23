@@ -2883,6 +2883,72 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                 </div>
               </div>
 
+              {(productOnlyImageUrls.length > 0 || neutralUploadUrl) && (
+                <div className="rounded-xl border border-white/10 bg-white/5 p-3 sm:p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
+                      Product photos ({productOnlyImageUrls.length})
+                    </span>
+                    <button
+                      type="button"
+                      disabled={isWorking || isUploadingAdditionalPhotos}
+                      className="flex items-center gap-1 rounded-md bg-white/5 px-2 py-1 text-[10px] font-medium text-white/60 transition hover:bg-white/10 hover:text-white/80 disabled:opacity-50"
+                      onClick={() => photoInputRef.current?.click()}
+                    >
+                      <ImagePlus className="h-3 w-3" />
+                      Add photo
+                    </button>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {productOnlyImageUrls.map((url, i) => (
+                      <div
+                        key={`${url}-${i}-side`}
+                        className="group/photo2 relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-[#050507]"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={url}
+                          alt={`Product ${i + 1}`}
+                          className="h-full w-full object-cover"
+                          loading="lazy"
+                          referrerPolicy="no-referrer"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeProductPhoto(url)}
+                          className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-md bg-black/70 text-white/60 opacity-0 transition hover:text-red-400 group-hover/photo2:opacity-100"
+                          aria-label="Remove"
+                          disabled={isUploadingAdditionalPhotos}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      disabled={isWorking || isUploadingAdditionalPhotos}
+                      onClick={() => photoInputRef.current?.click()}
+                      className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg border border-dashed border-white/15 bg-white/[0.02] text-white/30 transition hover:border-violet-400/40 hover:text-violet-300 disabled:opacity-50"
+                      aria-label="Add product photos"
+                    >
+                      <ImagePlus className="h-5 w-5" />
+                    </button>
+                  </div>
+                  <input
+                    ref={photoInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/*"
+                    multiple
+                    className="sr-only"
+                    onChange={(e) => {
+                      void uploadAdditionalPhoto(e.target.files);
+                      e.currentTarget.value = "";
+                    }}
+                    disabled={isWorking || isUploadingAdditionalPhotos}
+                  />
+                </div>
+              )}
+
               <div className="rounded-xl border border-violet-500/20 bg-black/25 px-3 py-2.5 sm:px-4">
                 <div className="flex flex-col gap-4">
                   {nanoShowReferenceStrip ? (
