@@ -4,6 +4,7 @@ import Script from "next/script";
 import "./globals.css";
 import { CreditsPlanProvider } from "@/app/_components/CreditsPlanContext";
 import { Toaster } from "@/components/ui/sonner";
+import HeyoInit from "@/app/_components/HeyoInit";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -54,6 +55,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <CreditsPlanProvider>
+          <HeyoInit />
           {children}
         </CreditsPlanProvider>
         <Toaster richColors />

@@ -45,7 +45,8 @@ import { LINK_TO_AD_LOADING_MESSAGES } from "@/lib/linkToAd/loadingMessageLoops"
 import { CREDITS_LINK_TO_AD_GENERATE_FROM_URL } from "@/lib/linkToAd/generationCredits";
 import type { InternalFetch } from "@/lib/linkToAd/internalFetch";
 import { runInitialPipeline } from "@/lib/linkToAd/runInitialPipeline";
-import { loadLatestAvatarUrl } from "@/lib/avatarLibrary";
+import { loadAvatarUrls } from "@/lib/avatarLibrary";
+import { AvatarPickerDialog } from "@/app/_components/AvatarPickerDialog";
 
 /** Same-origin API calls with session (mirrors server `createInternalFetchFromRequest`). */
 const browserPipelineFetch = ((path: string, init?: RequestInit) => fetch(path, init)) as InternalFetch;
@@ -278,7 +279,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   /** URLs classified as product-only (multi-angle); used for GPT vision + Nano single pick. */
   const [productOnlyImageUrls, setProductOnlyImageUrls] = useState<string[]>([]);
   const [userPhotoUrls, setUserPhotoUrls] = useState<string[]>([]);
-  const [latestAvatarUrl, setLatestAvatarUrl] = useState<string | null>(null);
+  const [avatarUrls, setAvatarUrls] = useState<string[]>([]);
+  const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   const [imgError, setImgError] = useState(false);
   const [brandFaviconFailed, setBrandFaviconFailed] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -637,8 +639,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const url = await loadLatestAvatarUrl();
-      if (!cancelled) setLatestAvatarUrl(url);
+      const urls = await loadAvatarUrls();
+      if (!cancelled) setAvatarUrls(urls);
     })();
     return () => {
       cancelled = true;
@@ -873,8 +875,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     if (neutralUploadUrl === url) setNeutralUploadUrl(null);
   }
 
-  function addLatestAvatarAsProductPhoto() {
-    const u = latestAvatarUrl?.trim();
+  function addAvatarAsProductPhoto(avatarUrl: string) {
+    const u = avatarUrl.trim();
     if (!u) return;
     setUserPhotoUrls((prev) => (prev.includes(u) ? prev : [...prev, u]));
     setProductOnlyImageUrls((prev) => (prev.includes(u) ? prev : [...prev, u]));
@@ -2413,11 +2415,11 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                   >
                     <ImagePlus className="h-5 w-5" />
                   </button>
-                  {latestAvatarUrl ? (
+                  {avatarUrls.length > 0 ? (
                     <button
                       type="button"
                       disabled={isWorking || isUploadingAdditionalPhotos}
-                      onClick={addLatestAvatarAsProductPhoto}
+                      onClick={() => setAvatarPickerOpen(true)}
                       className="h-16 rounded-lg border border-white/15 bg-white/[0.02] px-3 text-[11px] font-medium text-white/65 transition hover:border-violet-400/40 hover:text-violet-200 disabled:opacity-50"
                     >
                       Upload my avatar
@@ -2552,12 +2554,12 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                         <ImagePlus className="h-3 w-3" />
                         Add photo
                       </button>
-                      {latestAvatarUrl ? (
+                      {avatarUrls.length > 0 ? (
                         <button
                           type="button"
                           disabled={isWorking || isUploadingAdditionalPhotos}
                           className="ml-2 rounded-md bg-white/5 px-2 py-1 text-[10px] font-medium text-white/60 transition hover:bg-white/10 hover:text-white/80"
-                          onClick={addLatestAvatarAsProductPhoto}
+                          onClick={() => setAvatarPickerOpen(true)}
                         >
                           Upload my avatar
                         </button>
@@ -2733,12 +2735,12 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                         <ImagePlus className="h-3 w-3" />
                         Add photo
                       </button>
-                      {latestAvatarUrl ? (
+                      {avatarUrls.length > 0 ? (
                         <button
                           type="button"
                           disabled={isWorking || isUploadingAdditionalPhotos}
                           className="ml-2 rounded-md bg-white/5 px-2 py-1 text-[10px] font-medium text-white/60 transition hover:bg-white/10 hover:text-white/80"
-                          onClick={addLatestAvatarAsProductPhoto}
+                          onClick={() => setAvatarPickerOpen(true)}
                         >
                           Upload my avatar
                         </button>
@@ -2985,12 +2987,12 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                       <ImagePlus className="h-3 w-3" />
                       Add photo
                     </button>
-                    {latestAvatarUrl ? (
+                    {avatarUrls.length > 0 ? (
                       <button
                         type="button"
                         disabled={isWorking || isUploadingAdditionalPhotos}
                         className="rounded-md bg-white/5 px-2 py-1 text-[10px] font-medium text-white/60 transition hover:bg-white/10 hover:text-white/80 disabled:opacity-50"
-                        onClick={addLatestAvatarAsProductPhoto}
+                        onClick={() => setAvatarPickerOpen(true)}
                       >
                         Upload my avatar
                       </button>
@@ -3613,6 +3615,13 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         }}
       />
     ) : null}
+    <AvatarPickerDialog
+      open={avatarPickerOpen}
+      onOpenChange={setAvatarPickerOpen}
+      avatarUrls={avatarUrls}
+      onPick={addAvatarAsProductPhoto}
+      title="Choose avatar for product photos"
+    />
     </>
   );
 }

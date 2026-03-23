@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { useCreditsPlan, getPersonalApiKey, isPersonalApiActive } from "@/app/_components/CreditsPlanContext";
 import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
 import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
@@ -39,6 +40,7 @@ type AvatarParams = {
   hairStyle: string;
   skinTone: string;
   expression: string;
+  moreDetails: string;
 };
 
 const DEFAULTS: AvatarParams = {
@@ -51,19 +53,24 @@ const DEFAULTS: AvatarParams = {
   hairStyle: "Medium",
   skinTone: "Medium",
   expression: "Smiling",
+  moreDetails: "",
 };
 
 function buildAvatarPrompt(p: AvatarParams): string {
   const sexLower = p.sex.toLowerCase();
+  const details = p.moreDetails.trim();
   return [
     `Ultra-realistic studio portrait of a ${p.age} year old ${sexLower},`,
     `${p.ethnicity} ethnicity, ${p.bodyType.toLowerCase()} body type,`,
     `${p.skinTone.toLowerCase()} skin tone, ${p.eyeColor.toLowerCase()} eyes,`,
     `${p.hairColor.toLowerCase()} ${p.hairStyle.toLowerCase()} hair,`,
     `${p.expression.toLowerCase()} expression.`,
+    details ? `Additional details: ${details}.` : "",
     `Professional UGC creator look, natural lighting, clean background,`,
     `high detail face, 4K portrait, photorealistic.`,
-  ].join(" ");
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 function readLocalAvatarHistory(): StudioHistoryItem[] {
@@ -380,7 +387,7 @@ export default function StudioAvatarPanel() {
   return (
     <>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-4 lg:h-[calc(100dvh-4rem)] lg:min-h-0">
-        <div className="flex min-w-0 w-full flex-col gap-5 lg:basis-[42%] lg:max-w-[48rem] lg:flex-none lg:shrink-0 lg:min-h-0 lg:overflow-hidden">
+        <div className="flex min-w-0 w-full flex-col gap-5 lg:basis-1/4 lg:max-w-[24rem] lg:flex-none lg:shrink-0 lg:min-h-0 lg:overflow-hidden">
           <div className="flex items-center gap-2.5">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-500/15 text-violet-300">
               <UserRound className="h-4 w-4" />
@@ -408,6 +415,17 @@ export default function StudioAvatarPanel() {
             <SelectField label="Hair style" value={params.hairStyle} onValueChange={(v) => set("hairStyle", v)} options={HAIR_STYLE_OPTIONS} />
             <SelectField label="Skin tone" value={params.skinTone} onValueChange={(v) => set("skinTone", v)} options={SKIN_TONE_OPTIONS} />
             <SelectField label="Expression" value={params.expression} onValueChange={(v) => set("expression", v)} options={EXPRESSION_OPTIONS} />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-[11px] font-semibold uppercase tracking-wide text-white/45">More details</Label>
+            <Textarea
+              value={params.moreDetails}
+              onChange={(e) => set("moreDetails", e.target.value)}
+              placeholder="Optional: freckles, makeup style, clothing vibe, accessories, pose, background mood..."
+              className="min-h-[92px] resize-none border-white/10 bg-white/[0.04] text-sm text-white placeholder:text-white/35 focus-visible:ring-0"
+              maxLength={600}
+            />
           </div>
 
           <div className="flex items-center gap-3">

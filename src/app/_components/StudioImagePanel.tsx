@@ -31,7 +31,8 @@ import {
 import { NANO_BANANA_2_ASPECT_RATIOS } from "@/lib/nanobanana";
 import { cn } from "@/lib/utils";
 import { canUseStudioImageModel, studioImageUpgradeMessage } from "@/lib/subscriptionModelAccess";
-import { loadLatestAvatarUrl } from "@/lib/avatarLibrary";
+import { loadAvatarUrls } from "@/lib/avatarLibrary";
+import { AvatarPickerDialog } from "@/app/_components/AvatarPickerDialog";
 
 const ASPECT_RATIOS_PRO = [
   "1:1",
@@ -235,7 +236,8 @@ export default function StudioImagePanel() {
   const [resolution, setResolution] = useState<(typeof PRO_RESOLUTIONS)[number]>("2K");
   const [numImages, setNumImages] = useState(1);
   const [refUrls, setRefUrls] = useState<string[]>([]);
-  const [latestAvatarUrl, setLatestAvatarUrl] = useState<string | null>(null);
+  const [avatarUrls, setAvatarUrls] = useState<string[]>([]);
+  const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   /** Reference image uploads only; does not block Generate. */
   const [refUploadBusy, setRefUploadBusy] = useState(false);
   const [historyItems, setHistoryItems] = useState<StudioHistoryItem[]>([]);
@@ -311,8 +313,8 @@ export default function StudioImagePanel() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const url = await loadLatestAvatarUrl();
-      if (!cancelled) setLatestAvatarUrl(url);
+      const urls = await loadAvatarUrls();
+      if (!cancelled) setAvatarUrls(urls);
     })();
     return () => {
       cancelled = true;
@@ -371,12 +373,12 @@ export default function StudioImagePanel() {
     input.click();
   }, []);
 
-  const onUseAvatarRef = useCallback(() => {
-    const u = latestAvatarUrl?.trim();
+  const onUseAvatarRef = useCallback((avatarUrl: string) => {
+    const u = avatarUrl.trim();
     if (!u) return;
     setRefUrls((prev) => [u, ...prev.filter((x) => x !== u)].slice(0, 12));
     toast.success("Avatar added as reference");
-  }, [latestAvatarUrl]);
+  }, []);
 
   const generate = () => {
     if (serverHistory === null) {
@@ -536,9 +538,9 @@ export default function StudioImagePanel() {
     "h-14 w-full rounded-2xl border border-violet-300/40 bg-violet-500 text-lg font-semibold text-white shadow-[0_6px_0_0_rgba(76,29,149,0.85)] transition-all hover:-translate-y-px hover:bg-violet-400 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.85)] active:translate-y-1 active:shadow-none";
 
   return (
-    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4 lg:h-[calc(100dvh-4rem)] lg:min-h-0">
-      <div className="flex min-w-0 w-full flex-col gap-2 lg:basis-[34%] lg:max-w-[32rem] lg:flex-none lg:shrink-0 lg:min-h-0 lg:overflow-hidden">
-        <div className="studio-params-scroll flex min-w-0 flex-col gap-2 lg:h-full lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pb-10">
+    <div className="flex flex-col gap-3 overflow-x-hidden lg:flex-row lg:items-start lg:gap-4 lg:h-[calc(100dvh-4rem)] lg:min-h-0">
+      <div className="flex min-w-0 w-full flex-col gap-2 lg:basis-1/4 lg:max-w-[24rem] lg:flex-none lg:shrink-0 lg:min-h-0 lg:overflow-hidden">
+        <div className="studio-params-scroll flex min-w-0 max-h-[min(86vh,calc(100dvh-5rem))] flex-col gap-2 overflow-y-auto pr-1 pb-6 lg:h-full lg:min-h-0 lg:max-h-none lg:flex-1 lg:pb-10">
         <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Create prompt</p>
         <div className="rounded-2xl border border-white/10 bg-[#101014] p-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-white/45">Reference images</p>
@@ -554,14 +556,14 @@ export default function StudioImagePanel() {
             >
               <Plus className="h-5 w-5" />
             </Button>
-            {latestAvatarUrl ? (
+            {avatarUrls.length > 0 ? (
               <Button
                 type="button"
                 variant="secondary"
                 className="h-14 rounded-xl border border-white/10 bg-white/5 px-3 text-xs text-white hover:bg-white/10"
-                title="Use latest generated avatar"
+                title="Choose a generated avatar"
                 disabled={refUploadBusy}
-                onClick={onUseAvatarRef}
+                onClick={() => setAvatarPickerOpen(true)}
               >
                 Upload my avatar
               </Button>
@@ -805,6 +807,13 @@ export default function StudioImagePanel() {
               ? { kind: "plan", blockedModelId: billing.blockedId }
               : { kind: "credits", currentCredits: creditsBalance, requiredCredits: billing.required }
         }
+      />
+      <AvatarPickerDialog
+        open={avatarPickerOpen}
+        onOpenChange={setAvatarPickerOpen}
+        avatarUrls={avatarUrls}
+        onPick={onUseAvatarRef}
+        title="Choose avatar for image references"
       />
     </div>
   );

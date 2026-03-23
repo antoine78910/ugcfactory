@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
-import { BookOpen, FolderOpen, Info, LayoutGrid, List, Loader2, Play, X } from "lucide-react";
+import { BookOpen, Download, FolderOpen, Info, LayoutGrid, List, Loader2, Play, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type StudioHistoryMediaKind = "image" | "video" | "motion";
@@ -163,7 +163,7 @@ export function StudioGenerationsHistory({ items, empty, mediaLabel = "Generatio
                   >
                     <div
                       className={cn(
-                        "relative overflow-hidden rounded-xl border border-white/[0.12] bg-[#12121a] shadow-[0_12px_40px_rgba(0,0,0,0.45)]",
+                        "group/media relative overflow-hidden rounded-xl border border-white/[0.12] bg-[#12121a] shadow-[0_12px_40px_rgba(0,0,0,0.45)]",
                         view === "grid" ? "aspect-[9/16] w-full" : "aspect-video w-full sm:aspect-[9/16] sm:w-44 sm:shrink-0",
                       )}
                     >
@@ -195,19 +195,30 @@ export function StudioGenerationsHistory({ items, empty, mediaLabel = "Generatio
                         </div>
                       ) : null}
                       {item.status === "ready" && item.kind === "image" && item.mediaUrl ? (
-                        <button
-                          type="button"
-                          onClick={() => setLightboxUrl(item.mediaUrl ?? null)}
-                          className="block h-full w-full"
-                          aria-label="Open image fullscreen"
-                        >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={item.mediaUrl}
-                            alt=""
-                            className="h-full w-full object-cover object-center"
-                          />
-                        </button>
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setLightboxUrl(item.mediaUrl ?? null)}
+                            className="block h-full w-full"
+                            aria-label="Open image fullscreen"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={item.mediaUrl}
+                              alt=""
+                              className="h-full w-full object-cover object-center"
+                            />
+                          </button>
+                          <a
+                            href={`/api/download?url=${encodeURIComponent(item.mediaUrl)}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white/75 opacity-0 transition hover:bg-black/75 hover:text-white group-hover/media:opacity-100 focus-visible:opacity-100"
+                            aria-label="Download image"
+                            title="Download"
+                          >
+                            <Download className="h-4 w-4" aria-hidden />
+                          </a>
+                        </>
                       ) : null}
                       {item.status === "ready" && item.kind !== "image" && item.mediaUrl ? (
                         <div className="relative h-full w-full bg-black">
@@ -259,7 +270,7 @@ export function StudioGenerationsHistory({ items, empty, mediaLabel = "Generatio
                           ) : null}
                         </div>
                       ) : null}
-                      {item.status === "ready" && item.mediaUrl ? (
+                      {item.status === "ready" && item.mediaUrl && item.kind !== "image" ? (
                         <a
                           href={`/api/download?url=${encodeURIComponent(item.mediaUrl)}`}
                           className="inline-flex text-xs font-medium text-violet-300 underline-offset-2 hover:underline"
