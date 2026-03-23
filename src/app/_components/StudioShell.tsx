@@ -60,7 +60,7 @@ const CREATE_NAV: CreateNavEntry[] = [
 
 function soonRowClass(): string {
   return [
-    "flex w-full min-h-[3.75rem] flex-row items-center justify-between gap-2.5 rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-3.5 text-left",
+    "flex w-full min-h-[3.55rem] flex-row items-center justify-between gap-2.5 rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-3 text-left",
     "cursor-not-allowed select-none pointer-events-none",
   ].join(" ");
 }
@@ -84,7 +84,7 @@ function navRowIconClass(active: boolean): string {
 
 function navButtonClass(active: boolean): string {
   return [
-    "block w-full min-w-0 rounded-lg px-4 py-3.5 text-left text-[14px] font-semibold transition-all cursor-pointer leading-snug",
+    "block w-full min-w-0 rounded-lg px-4 py-3 text-left text-[13px] font-semibold transition-all cursor-pointer leading-snug",
     active
       ? "bg-violet-400 text-black shadow-[0_4px_0_0_rgba(76,29,149,0.95)] hover:bg-violet-300 hover:shadow-[0_5px_0_0_rgba(76,29,149,0.95)] active:translate-y-[2px] active:shadow-none"
       : "border border-white/10 bg-white/5 text-white hover:bg-white/10 hover:border-violet-400/35 shadow-[0_0_12px_rgba(139,92,246,0.08)] hover:shadow-[0_0_20px_rgba(139,92,246,0.15)]",
@@ -234,12 +234,12 @@ function StudioShellInner({
               <p
                 className={cn(
                   "font-semibold uppercase tracking-[0.12em] text-white/45",
-                  navCollapsed ? "sr-only" : "text-xs leading-none",
+                  navCollapsed ? "sr-only" : "text-[11px] leading-none",
                 )}
               >
                 CREATE
               </p>
-              <div className={cn("space-y-2.5", !navCollapsed && "mt-2.5")}>
+              <div className={cn("space-y-2", !navCollapsed && "mt-2")}>
                 {CREATE_NAV.map((entry) => {
                   const NavIcon = entry.icon;
                   if (entry.kind === "soon") {
@@ -248,7 +248,7 @@ function StudioShellInner({
                         key="soon-ad-clone"
                         className={cn(
                           soonRowClass(),
-                          navCollapsed && "!justify-center gap-0 px-1.5 py-3",
+                          navCollapsed && "!justify-center gap-0 px-1.5 py-2.5",
                         )}
                         title={`${entry.label} — coming soon`}
                         aria-disabled="true"
@@ -259,10 +259,10 @@ function StudioShellInner({
                             navCollapsed && "w-auto flex-none justify-center",
                           )}
                         >
-                          <NavIcon className="h-4.5 w-4.5 shrink-0 text-white/30" aria-hidden />
+                          <NavIcon className="h-4 w-4 shrink-0 text-white/30" aria-hidden />
                           <span
                             className={cn(
-                              "min-w-0 truncate text-[14px] font-semibold text-white/40",
+                              "min-w-0 truncate text-[13px] font-semibold text-white/40",
                               navCollapsed && "sr-only",
                             )}
                           >
@@ -287,7 +287,7 @@ function StudioShellInner({
                       <button
                         key={id}
                         type="button"
-                        className={cn(navButtonClass(active), navCollapsed && "px-2.5 py-4")}
+                        className={cn(navButtonClass(active), navCollapsed && "px-2.5 py-3.5")}
                         title={label}
                         onClick={() => onStudioSectionChange!(id)}
                       >
@@ -295,7 +295,7 @@ function StudioShellInner({
                           className={cn("flex min-w-0 items-center gap-2.5", navCollapsed && "justify-center")}
                         >
                           <NavIcon
-                            className={`h-4.5 w-4.5 shrink-0 ${navRowIconClass(active)}`}
+                            className={`h-4 w-4 shrink-0 ${navRowIconClass(active)}`}
                             aria-hidden
                           />
                           <span className={cn("min-w-0 truncate", navCollapsed && "sr-only")}>{label}</span>
@@ -307,12 +307,12 @@ function StudioShellInner({
                     <Link
                       key={id}
                       href={sectionHref(id, studioProjectId ?? null)}
-                      className={cn(navButtonClass(active), navCollapsed && "px-2.5 py-4")}
+                      className={cn(navButtonClass(active), navCollapsed && "px-2.5 py-3.5")}
                       title={label}
                     >
                       <span className={cn("flex min-w-0 items-center gap-2.5", navCollapsed && "justify-center")}>
                         <NavIcon
-                          className={`h-4.5 w-4.5 shrink-0 ${navRowIconClass(active)}`}
+                          className={`h-4 w-4 shrink-0 ${navRowIconClass(active)}`}
                           aria-hidden
                         />
                         <span className={cn("min-w-0 truncate", navCollapsed && "sr-only")}>{label}</span>
@@ -333,14 +333,14 @@ function StudioShellInner({
                     type="button"
                     className={cn(
                       navButtonClass(activeSection === PROJECTS_NAV.id),
-                      navCollapsed && "px-2.5 py-4",
+                      navCollapsed && "px-2.5 py-3.5",
                     )}
                     title={PROJECTS_NAV.label}
                     onClick={() => onStudioSectionChange!(PROJECTS_NAV.id)}
                   >
                     <span className={cn("flex min-w-0 items-center gap-2.5", navCollapsed && "justify-center")}>
                       <ProjectsNavIcon
-                        className={`h-4.5 w-4.5 shrink-0 ${navRowIconClass(activeSection === PROJECTS_NAV.id)}`}
+                        className={`h-4 w-4 shrink-0 ${navRowIconClass(activeSection === PROJECTS_NAV.id)}`}
                         aria-hidden
                       />
                       <span className={cn("min-w-0 truncate", navCollapsed && "sr-only")}>
@@ -353,13 +353,13 @@ function StudioShellInner({
                     href={sectionHref(PROJECTS_NAV.id, studioProjectId ?? null)}
                     className={cn(
                       navButtonClass(activeSection === PROJECTS_NAV.id),
-                      navCollapsed && "px-2.5 py-4",
+                      navCollapsed && "px-2.5 py-3.5",
                     )}
                     title={PROJECTS_NAV.label}
                   >
                     <span className={cn("flex min-w-0 items-center gap-2.5", navCollapsed && "justify-center")}>
                       <ProjectsNavIcon
-                        className={`h-4.5 w-4.5 shrink-0 ${navRowIconClass(activeSection === PROJECTS_NAV.id)}`}
+                        className={`h-4 w-4 shrink-0 ${navRowIconClass(activeSection === PROJECTS_NAV.id)}`}
                         aria-hidden
                       />
                       <span className={cn("min-w-0 truncate", navCollapsed && "sr-only")}>
