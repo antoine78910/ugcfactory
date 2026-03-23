@@ -169,11 +169,7 @@ export default function CreditsPage() {
             </p>
 
             <div className="mx-auto mt-10 max-w-md rounded-2xl border border-violet-500/20 bg-gradient-to-b from-violet-500/[0.08] to-black/20 p-5 shadow-[0_0_40px_rgba(139,92,246,0.08)]">
-              <div className="flex items-center justify-center gap-2 text-xs font-medium uppercase tracking-wide text-white/40">
-                <Coins className="h-3.5 w-3.5 text-violet-400/80" aria-hidden />
-                Your balance
-              </div>
-              <p className="mt-2 text-3xl font-bold tabular-nums text-white sm:text-4xl">
+              <p className="text-3xl font-bold tabular-nums text-white sm:text-4xl">
                 {current.toLocaleString()}{" "}
                 <span className="text-lg font-semibold text-white/40 sm:text-xl">credits</span>
               </p>

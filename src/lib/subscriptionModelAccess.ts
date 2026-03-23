@@ -1,6 +1,6 @@
 /**
  * Which Studio image/video models each subscription tier may use.
- * Higher tiers unlock more expensive models (credits / API cost).
+ * Policy: Starter is restricted; Growth+ gets full model access.
  */
 
 import { isSubscriptionPlanId, type SubscriptionPlanId } from "@/lib/stripe/subscriptionPrices";
@@ -31,7 +31,7 @@ export function parseAccountPlan(raw: unknown): AccountPlanId {
 /** Minimum tier rank required (same index as ORDER). */
 const IMAGE_MIN_RANK: Record<"nano" | "pro", number> = {
   nano: 0,
-  pro: 2, // Growth+
+  pro: 2, // Restricted on Starter; open on Growth+
 };
 
 /** KIE / OpenAI ids used by Studio video panel + Veo API. */
@@ -40,18 +40,18 @@ const VIDEO_MIN_RANK: Record<string, number> = {
   "kling-2.6/video": 1, // Starter+
   "bytedance/seedance-2.0-pro": 2,
   "veo3_fast": 2,
-  "kling-3.0/video": 3,
-  veo3: 3,
-  "openai/sora-2": 3,
+  "kling-3.0/video": 2,
+  veo3: 2,
+  "openai/sora-2": 2,
 };
 
 /** Studio Edit Video tab: picker ids (`studio-edit/…`), not raw Kie strings. */
 const VIDEO_EDIT_PICKER_MIN_RANK: Record<string, number> = {
   "studio-edit/grok": 2,
-  "studio-edit/kling-omni": 3,
-  "studio-edit/kling-o1": 3,
-  "studio-edit/motion": 3,
-  "studio-edit/motion-v3": 3,
+  "studio-edit/kling-omni": 2,
+  "studio-edit/kling-o1": 2,
+  "studio-edit/motion": 2,
+  "studio-edit/motion-v3": 2,
 };
 
 /** Veo checkout body uses these keys; map to same gates as studio ids. */

@@ -79,7 +79,7 @@ const UPSCALE_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
   {
     id: "upscale/video",
     label: "Topaz Video Upscale",
-    icon: "topaz",
+    icon: "google",
     resolution: "Up to 4x",
     durationRange: "1s–10min",
     searchText: "topaz video upscale kie",
@@ -87,7 +87,7 @@ const UPSCALE_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
   {
     id: "upscale/image",
     label: "Topaz Image Upscale",
-    icon: "topaz",
+    icon: "google",
     subtitle: "Coming soon",
     resolution: "High-res image output",
     durationRange: "Single image",

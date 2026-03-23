@@ -151,12 +151,6 @@ export default function SubscriptionPage() {
     }
   }
 
-  const subtitle = useMemo(
-    () =>
-      "Monthly credits, model access, and room to experiment. Pick the tier that matches how often you ship.",
-    [],
-  );
-
   function priceFor(plan: PlanDef) {
     if (billing === "monthly") {
       return { mainLabel: String(plan.monthly), sub: "Billed every month" };
@@ -166,7 +160,7 @@ export default function SubscriptionPage() {
     const mainLabel = Number.isInteger(perMonthEquiv) ? String(perMonthEquiv) : perMonthEquiv.toFixed(2);
     return {
       mainLabel,
-      sub: `Billed yearly ($${yearlyTotal.toLocaleString("en-US")}/yr). Save 50%.`,
+      sub: `Billed yearly ($${yearlyTotal.toLocaleString("en-US")}/yr).`,
     };
   }
 
@@ -201,7 +195,6 @@ export default function SubscriptionPage() {
             <h1 className="mt-3 bg-gradient-to-b from-white via-white to-white/55 bg-clip-text text-3xl font-bold tracking-tight text-transparent sm:text-4xl md:text-[2.75rem] md:leading-[1.08]">
               Grow with a plan that keeps up
             </h1>
-            <p className="mx-auto mt-4 max-w-xl text-sm leading-relaxed text-white/50 md:text-base">{subtitle}</p>
             <p className="mt-4 text-xs text-white/38">
               Need a one-time boost instead?{" "}
               <Link
@@ -234,13 +227,18 @@ export default function SubscriptionPage() {
                   type="button"
                   onClick={() => setBilling("yearly")}
                   className={cn(
-                    "rounded-full px-6 py-2.5 text-sm font-semibold transition-all duration-200",
+                    "rounded-full px-4 py-2 text-sm font-semibold transition-all duration-200",
                     billing === "yearly"
                       ? "bg-violet-500 text-white shadow-[0_4px_20px_rgba(139,92,246,0.35)]"
                       : "text-white/45 hover:text-white/75",
                   )}
                 >
-                  Yearly <span className="text-violet-200/95">−50%</span>
+                  <span className="inline-flex items-center gap-2">
+                    Yearly
+                    <span className="rounded-full border border-emerald-300/45 bg-emerald-400/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-100 shadow-[0_0_16px_rgba(16,185,129,0.28)]">
+                      Save 50%
+                    </span>
+                  </span>
                 </button>
               </div>
             </div>
@@ -312,10 +310,17 @@ export default function SubscriptionPage() {
 
                     <div className="mt-6">
                       <div className="flex flex-wrap items-baseline gap-1">
-                        <span className="text-4xl font-extrabold tabular-nums text-white">${mainLabel}</span>
-                        <span className="text-sm font-medium text-white/40">/mo</span>
+                        <span className="text-5xl font-extrabold tabular-nums leading-none text-white md:text-6xl">
+                          ${mainLabel}
+                        </span>
+                        <span className="text-base font-semibold text-white/55">/mo</span>
                       </div>
                       <p className="mt-2 text-xs leading-snug text-white/38">{sub}</p>
+                      {billing === "yearly" ? (
+                        <p className="mt-2 inline-flex items-center rounded-md border border-emerald-400/35 bg-emerald-500/15 px-2 py-1 text-[11px] font-semibold text-emerald-200">
+                          Save 50% on yearly billing
+                        </p>
+                      ) : null}
                     </div>
 
                     <Button
@@ -438,8 +443,8 @@ export default function SubscriptionPage() {
             <div className="mb-6 text-center">
               <h2 className="text-lg font-bold text-white md:text-xl">Model access</h2>
               <p className="mx-auto mt-2 max-w-2xl text-sm text-white/45">
-                Studio Image &amp; Video use the same rules as in the app. Higher tiers unlock heavier models (larger
-                credit draws).
+                Studio Image &amp; Video use the same rules as in the app. Starter has model restrictions; Growth and
+                above unlock full model access.
               </p>
               <p className="mt-2 text-xs text-white/32">
                 <span className="font-medium text-white/45">Free</span> (with packs) matches{" "}
@@ -531,9 +536,7 @@ export default function SubscriptionPage() {
             </div>
           </section>
 
-          <p className="pb-6 text-center text-[11px] text-white/28">
-            Prices and credits follow <code className="text-white/40">@/lib/pricing</code>. Checkout is powered by Stripe.
-          </p>
+          <p className="pb-6 text-center text-[11px] text-white/28">Checkout is powered by Stripe.</p>
         </div>
       </div>
     </StudioShell>
