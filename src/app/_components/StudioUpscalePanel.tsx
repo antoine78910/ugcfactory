@@ -12,11 +12,7 @@ import { StudioEmptyExamples, StudioOutputPane } from "@/app/_components/StudioE
 import { StudioGenerationsHistory } from "@/app/_components/StudioGenerationsHistory";
 import type { StudioHistoryItem } from "@/app/_components/StudioGenerationsHistory";
 import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
-import {
-  PRICING_BASE,
-  STUDIO_UPSCALE_TOPAZ_VIDEO_ROWS,
-  topazVideoUpscaleCredits,
-} from "@/lib/pricing";
+import { topazVideoUpscaleCredits } from "@/lib/pricing";
 
 async function uploadFile(file: File): Promise<string> {
   const fd = new FormData();
@@ -177,8 +173,6 @@ export default function StudioUpscalePanel() {
     })();
   };
 
-  const row = STUDIO_UPSCALE_TOPAZ_VIDEO_ROWS[0];
-
   return (
     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4 lg:h-[calc(100dvh-4rem)] lg:min-h-0">
       <div className="flex min-w-0 w-full flex-col gap-2 lg:basis-1/4 lg:max-w-[24rem] lg:flex-none lg:shrink-0 lg:min-h-0 lg:overflow-hidden">
@@ -259,78 +253,6 @@ export default function StudioUpscalePanel() {
             </span>
           </Button>
 
-        <details className="group rounded-2xl border border-white/10 bg-[#0c0c10]/90 text-white/80 open:border-violet-500/20">
-          <summary className="cursor-pointer list-none px-4 py-3 text-xs font-semibold uppercase tracking-wide text-white/50 transition hover:text-white/70 [&::-webkit-details-marker]:hidden">
-            <span className="inline-flex w-full items-center justify-between gap-2">
-              Upscale economics (Kie)
-              <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-normal normal-case tracking-normal text-white/40 group-open:text-violet-200/80">
-                Topaz Video
-              </span>
-            </span>
-          </summary>
-          <div className="border-t border-white/10 px-2 pb-3 pt-1">
-            <p className="px-2 pb-2 text-[10px] leading-relaxed text-white/35">
-              Video processing uses the video margin target (
-              <span className="text-white/45">{(PRICING_BASE.target_margins.video * 100).toFixed(0)}%</span>
-              ) in the pricing model; Topaz credits/second are set from Kie COGS vs Fal list.
-            </p>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[600px] border-collapse text-left text-[11px]">
-                <thead>
-                  <tr className="border-b border-white/10 text-[10px] font-semibold uppercase tracking-wider text-white/40">
-                    <th className="px-2 py-2">Model &amp; Modality</th>
-                    <th className="px-2 py-2">Modality</th>
-                    <th className="px-2 py-2">Provider</th>
-                    <th className="px-2 py-2">Credits / unit</th>
-                    <th className="px-2 py-2">Our Price (USD)</th>
-                    <th className="px-2 py-2">Fal Price (USD)</th>
-                    <th className="px-2 py-2">Discount</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {STUDIO_UPSCALE_TOPAZ_VIDEO_ROWS.map((r) => (
-                    <tr key={r.modelAndModality} className="border-b border-white/[0.06]">
-                      <td className="px-2 py-2.5 text-white/85">{r.modelAndModality}</td>
-                      <td className="px-2 py-2.5 text-white/55">{r.modality}</td>
-                      <td className="px-2 py-2.5 text-white/55">{r.provider}</td>
-                      <td className="px-2 py-2.5 tabular-nums text-white/70">
-                        {r.creditsPerUnit}
-                        <span className="ml-1 text-[10px] text-white/35">{r.unitLabel}</span>
-                      </td>
-                      <td className="px-2 py-2.5 tabular-nums text-emerald-200/90">
-                        ${r.ourRetailUsd.toFixed(2)}
-                        <span className="mt-0.5 block text-[9px] font-normal text-white/30">
-                          ({r.creditsPerUnit} cr × ${PRICING_BASE.credit_value_usd}/s)
-                        </span>
-                      </td>
-                      <td className="px-2 py-2.5 tabular-nums text-white/55">
-                        {r.falListUsd != null ? `$${r.falListUsd.toFixed(2)}` : "–"}
-                      </td>
-                      <td className="px-2 py-2.5 tabular-nums text-violet-200/90">
-                        {r.discountVsFalListPct != null ? (
-                          <>
-                            {r.discountVsFalListPct <= 0 ? "−" : "+"}
-                            {Math.abs(r.discountVsFalListPct).toFixed(1)}%{" "}
-                            <span className="text-white/35" aria-hidden>
-                              ↓
-                            </span>
-                          </>
-                        ) : (
-                          "–"
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <p className="mt-2 px-2 text-[10px] leading-relaxed text-white/30">
-              COGS ≈ <span className="tabular-nums text-white/45">${row.cogsUsd.toFixed(2)}</span>/s vs Fal list $
-              {row.falListUsd?.toFixed(2)}/s. Total job: <span className="tabular-nums">{credits}</span> credits for{" "}
-              {durationSec}s.
-            </p>
-          </div>
-        </details>
         </div>
       </div>
 

@@ -19,15 +19,7 @@ import { StudioEmptyExamples, StudioOutputPane } from "@/app/_components/StudioE
 import { StudioGenerationsHistory } from "@/app/_components/StudioGenerationsHistory";
 import type { StudioHistoryItem } from "@/app/_components/StudioGenerationsHistory";
 import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
-import {
-  PRICING_BASE,
-  STUDIO_IMAGE_GROK_IMAGINE_ROWS,
-  STUDIO_IMAGE_GOOGLE_NANO_2_ECONOMICS_ROWS,
-  STUDIO_IMAGE_GOOGLE_NANO_PRO_ECONOMICS_ROWS,
-  STUDIO_IMAGE_SEEDREAM_45_ECONOMICS_ROWS,
-  type StudioImageEconomicsRow,
-  studioImageCreditsPerOutput,
-} from "@/lib/pricing";
+import { studioImageCreditsPerOutput } from "@/lib/pricing";
 import { NANO_BANANA_2_ASPECT_RATIOS } from "@/lib/nanobanana";
 import { cn } from "@/lib/utils";
 import { canUseStudioImageModel, studioImageUpgradeMessage } from "@/lib/subscriptionModelAccess";
@@ -115,71 +107,6 @@ async function pollNanoTask(taskId: string, personalApiKey?: string): Promise<st
   }
   throw new Error("Timeout waiting for NanoBanana.");
 }
-
-function ImageEconomicsTable({ rows }: { rows: StudioImageEconomicsRow[] }) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[640px] border-collapse text-left text-[11px]">
-        <thead>
-          <tr className="border-b border-white/10 text-[10px] font-semibold uppercase tracking-wider text-white/40">
-            <th className="px-2 py-2">Model &amp; Modality</th>
-            <th className="px-2 py-2">Modality</th>
-            <th className="px-2 py-2">Provider</th>
-            <th className="px-2 py-2">Credits / Gen</th>
-            <th className="px-2 py-2">Our Price (USD)</th>
-            <th className="px-2 py-2">Fal Price (USD)</th>
-            <th className="px-2 py-2">Discount</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.key} className="border-b border-white/[0.06] last:border-b-0">
-              <td className="px-2 py-2.5 text-white/85">{row.modelAndModality}</td>
-              <td className="px-2 py-2.5 text-white/55">{row.modality}</td>
-              <td className="px-2 py-2.5 text-white/55">{row.provider}</td>
-              <td className="px-2 py-2.5 tabular-nums text-white/70">
-                {row.creditsPerGen}
-                <span className="ml-1 text-[10px] text-white/35">{row.creditsUnit}</span>
-              </td>
-              <td className="px-2 py-2.5 tabular-nums text-emerald-200/90">
-                ${row.ourRetailUsd.toFixed(4)}
-                <span className="mt-0.5 block text-[9px] font-normal text-white/30">
-                  ({row.creditsPerGen} cr × ${PRICING_BASE.credit_value_usd})
-                </span>
-              </td>
-              <td className="px-2 py-2.5 tabular-nums text-white/55">
-                {row.falListUsd != null ? `$${row.falListUsd.toFixed(2)}` : "–"}
-              </td>
-              <td className="px-2 py-2.5 tabular-nums text-violet-200/90">
-                {row.discountVsFalListPct != null ? (
-                  <>
-                    {row.discountVsFalListPct <= 0 ? "−" : "+"}
-                    {Math.abs(row.discountVsFalListPct).toFixed(1)}%{" "}
-                    <span className="text-white/35" aria-hidden>
-                      ↓
-                    </span>
-                  </>
-                ) : (
-                  "–"
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-const economicsIntro = (
-  <p className="px-2 pb-2 text-[10px] leading-relaxed text-white/35">
-    Studio image generation uses Kie (<code className="text-white/40">nano-banana-2</code> /{" "}
-    <code className="text-white/40">nano-banana-pro</code>) with credits from{" "}
-    <code className="text-white/40">@/lib/pricing</code> (target image margin{" "}
-    <span className="text-white/45">{(PRICING_BASE.target_margins.image * 100).toFixed(0)}%</span>,{" "}
-    {PRICING_BASE.cost_buffer}× buffer on COGS, ${PRICING_BASE.credit_value_usd}/credit).
-  </p>
-);
 
 const LS_STUDIO_IMAGE_HISTORY = "ugc_studio_image_history_v1";
 
@@ -684,97 +611,6 @@ export default function StudioImagePanel() {
           </span>
         </Button>
 
-        <details className="group rounded-xl border border-white/10 bg-[#0c0c10]/90 text-white/80 open:border-violet-500/20">
-          <summary className="cursor-pointer list-none px-3 py-2 text-xs font-semibold uppercase tracking-wide text-white/50 transition hover:text-white/70 [&::-webkit-details-marker]:hidden">
-            <span className="inline-flex w-full items-center justify-between gap-2">
-              Google Nano Banana 2: economics
-              <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-normal normal-case tracking-normal text-white/40 group-open:text-violet-200/80">
-                Kie
-              </span>
-            </span>
-          </summary>
-          <div className="border-t border-white/10 px-2 pb-3 pt-1">
-            {economicsIntro}
-            <ImageEconomicsTable rows={STUDIO_IMAGE_GOOGLE_NANO_2_ECONOMICS_ROWS} />
-          </div>
-        </details>
-
-        <details className="group rounded-xl border border-white/10 bg-[#0c0c10]/90 text-white/80 open:border-violet-500/20">
-          <summary className="cursor-pointer list-none px-3 py-2 text-xs font-semibold uppercase tracking-wide text-white/50 transition hover:text-white/70 [&::-webkit-details-marker]:hidden">
-            <span className="inline-flex w-full items-center justify-between gap-2">
-              Google Nano Banana Pro: economics
-              <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-normal normal-case tracking-normal text-white/40 group-open:text-violet-200/80">
-                Kie
-              </span>
-            </span>
-          </summary>
-          <div className="border-t border-white/10 px-2 pb-3 pt-1">
-            {economicsIntro}
-            <ImageEconomicsTable rows={STUDIO_IMAGE_GOOGLE_NANO_PRO_ECONOMICS_ROWS} />
-          </div>
-        </details>
-
-        <details className="group rounded-xl border border-white/10 bg-[#0c0c10]/90 text-white/80 open:border-violet-500/20">
-          <summary className="cursor-pointer list-none px-3 py-2 text-xs font-semibold uppercase tracking-wide text-white/50 transition hover:text-white/70 [&::-webkit-details-marker]:hidden">
-            <span className="inline-flex w-full items-center justify-between gap-2">
-              Grok Imagine (reference)
-              <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-normal normal-case tracking-normal text-white/40 group-open:text-violet-200/80">
-                Batch
-              </span>
-            </span>
-          </summary>
-          <div className="border-t border-white/10 px-2 pb-3 pt-1">
-            <p className="px-2 pb-2 text-[10px] leading-relaxed text-white/35">
-              Batch pricing from product sheet; Fal list N/A. Not yet exposed as a studio picker.
-            </p>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[520px] border-collapse text-left text-[11px]">
-                <thead>
-                  <tr className="border-b border-white/10 text-[10px] font-semibold uppercase tracking-wider text-white/40">
-                    <th className="px-2 py-2">Model &amp; Modality</th>
-                    <th className="px-2 py-2">Credits</th>
-                    <th className="px-2 py-2">Our Price (USD)</th>
-                    <th className="px-2 py-2">Fal Price</th>
-                    <th className="px-2 py-2">Discount</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {STUDIO_IMAGE_GROK_IMAGINE_ROWS.map((row) => (
-                    <tr key={row.modelAndModality} className="border-b border-white/[0.06] last:border-b-0">
-                      <td className="px-2 py-2.5 text-white/85">{row.modelAndModality}</td>
-                      <td className="px-2 py-2.5 text-white/70">{row.creditsLabel}</td>
-                      <td className="px-2 py-2.5 tabular-nums text-emerald-200/90">${row.ourRetailUsd.toFixed(2)}</td>
-                      <td className="px-2 py-2.5 text-white/45">N/A</td>
-                      <td className="px-2 py-2.5 text-white/45">N/A</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </details>
-
-        <details className="group rounded-xl border border-white/10 bg-[#0c0c10]/90 text-white/80 open:border-violet-500/20">
-          <summary className="cursor-pointer list-none px-3 py-2 text-xs font-semibold uppercase tracking-wide text-white/50 transition hover:text-white/70 [&::-webkit-details-marker]:hidden">
-            <span className="inline-flex w-full items-center justify-between gap-2">
-              Seedream 4.5: economics
-              <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-normal normal-case tracking-normal text-white/40 group-open:text-violet-200/80">
-                2 modalities
-              </span>
-            </span>
-          </summary>
-          <div className="border-t border-white/10 px-2 pb-3 pt-1">
-            {economicsIntro}
-            <ImageEconomicsTable rows={STUDIO_IMAGE_SEEDREAM_45_ECONOMICS_ROWS} />
-            <p className="mt-2 px-2 text-[10px] leading-relaxed text-white/30">
-              Seedream COGS ≈{" "}
-              <span className="tabular-nums text-white/45">
-                ${STUDIO_IMAGE_SEEDREAM_45_ECONOMICS_ROWS[0].cogsUsd.toFixed(4)}
-              </span>{" "}
-              per gen vs Fal list $0.04.
-            </p>
-          </div>
-        </details>
         </div>
       </div>
 

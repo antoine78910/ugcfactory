@@ -1850,8 +1850,8 @@ export default function AppBrandWizard() {
 
             {appSection === "motion_control" ? (
               <div className="space-y-2">
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4 lg:h-[calc(100dvh-4rem)] lg:min-h-0">
-                    <div className="flex min-w-0 w-full flex-col lg:basis-[42%] lg:max-w-[48rem] lg:flex-none lg:shrink-0 lg:min-h-0 lg:overflow-hidden">
+                <div className="flex flex-col gap-3 overflow-x-hidden lg:flex-row lg:items-start lg:gap-4 lg:h-[calc(100dvh-4rem)] lg:min-h-0">
+                    <div className="flex min-w-0 w-full flex-col lg:basis-1/4 lg:max-w-[24rem] lg:flex-none lg:shrink-0 lg:min-h-0 lg:overflow-hidden">
                       <div className="studio-params-scroll flex min-w-0 flex-col gap-2 lg:h-full lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pb-10">
                       <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
                         Motion control
@@ -2147,7 +2147,7 @@ export default function AppBrandWizard() {
                       </div>
                     </div>
 
-                    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col lg:min-h-0 lg:overflow-hidden">
+                    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col lg:basis-3/4 lg:flex-none lg:min-h-0 lg:overflow-hidden">
                       <StudioOutputPane
                         title=""
                         hasOutput
