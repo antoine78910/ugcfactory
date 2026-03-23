@@ -127,7 +127,12 @@
   /* Clear click affordance on interactive controls */
   button:not(:disabled),
   [role="button"]:not([data-disabled]):not([aria-disabled="true"]),
-  summary {
+  a[href],
+  summary,
+  label[for],
+  input[type="button"]:not(:disabled),
+  input[type="submit"]:not(:disabled),
+  input[type="reset"]:not(:disabled) {
     cursor: pointer;
   }
   button:disabled,

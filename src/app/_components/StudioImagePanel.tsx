@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCreditsPlan, getPersonalApiKey, isPersonalApiActive } from "@/app/_components/CreditsPlanContext";
 import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
-import { Plus, Sparkles } from "lucide-react";
+import { Plus, Sparkles, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -516,12 +516,17 @@ export default function StudioImagePanel() {
               <Button
                 type="button"
                 variant="secondary"
-                className="h-14 rounded-xl border border-white/10 bg-white/5 px-3 text-xs text-white hover:bg-white/10"
+                size="icon"
+                className="group relative h-14 w-14 shrink-0 rounded-xl border border-white/10 bg-white/5 text-white hover:bg-white/10"
                 title="Choose a generated avatar"
                 disabled={refUploadBusy}
                 onClick={() => setAvatarPickerOpen(true)}
               >
-                Upload my avatar
+                <UserRound className="h-5 w-5" />
+                <span className="sr-only">Upload avatar</span>
+                <span className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 -translate-x-1/2 translate-y-1 whitespace-nowrap rounded-md border border-white/15 bg-[#0b0b10]/95 px-2 py-1 text-[11px] font-medium text-white/85 opacity-0 shadow-lg transition-all duration-200 ease-out group-hover:translate-y-0 group-hover:opacity-100">
+                  Upload avatar
+                </span>
               </Button>
             ) : null}
             {refUrls.map((u, i) => (

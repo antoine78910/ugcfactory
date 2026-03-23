@@ -234,7 +234,7 @@ function StudioShellInner({
               <p
                 className={cn(
                   "font-semibold uppercase tracking-[0.12em] text-white/45",
-                  navCollapsed ? "sr-only" : "text-[11px] leading-none",
+                  navCollapsed ? "sr-only" : "text-xs leading-none",
                 )}
               >
                 CREATE

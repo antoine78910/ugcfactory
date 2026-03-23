@@ -12,6 +12,7 @@ import { StudioEmptyExamples, StudioOutputPane } from "@/app/_components/StudioE
 import { StudioGenerationsHistory } from "@/app/_components/StudioGenerationsHistory";
 import type { StudioHistoryItem } from "@/app/_components/StudioGenerationsHistory";
 import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
+import { StudioModelPicker, type StudioModelPickerItem } from "@/app/_components/StudioModelPicker";
 import { topazVideoUpscaleCredits } from "@/lib/pricing";
 
 async function uploadFile(file: File): Promise<string> {
@@ -72,6 +73,28 @@ async function registerStudioTask(params: {
 const soonCard =
   "flex flex-col gap-2 rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-left opacity-70";
 
+type UpscalePickerId = "upscale/video" | "upscale/image";
+
+const UPSCALE_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
+  {
+    id: "upscale/video",
+    label: "Topaz Video Upscale",
+    icon: "topaz",
+    resolution: "Up to 4x",
+    durationRange: "1s–10min",
+    searchText: "topaz video upscale kie",
+  },
+  {
+    id: "upscale/image",
+    label: "Topaz Image Upscale",
+    icon: "topaz",
+    subtitle: "Coming soon",
+    resolution: "High-res image output",
+    durationRange: "Single image",
+    searchText: "topaz image upscale",
+  },
+];
+
 export default function StudioUpscalePanel() {
   const { planId, current: creditsBalance, spendCredits, grantCredits } = useCreditsPlan();
   const creditsRef = useRef(creditsBalance);
@@ -80,12 +103,14 @@ export default function StudioUpscalePanel() {
   const [videoUrl, setVideoUrl] = useState("");
   const [durationSec, setDurationSec] = useState(10);
   const [factor, setFactor] = useState<"1" | "2" | "4">("2");
+  const [upscalePickerId, setUpscalePickerId] = useState<UpscalePickerId>("upscale/video");
   const [busy, setBusy] = useState(false);
   const [historyItems, setHistoryItems] = useState<StudioHistoryItem[]>([]);
   type Bill = { open: false } | { open: true; required: number };
   const [billing, setBilling] = useState<Bill>({ open: false });
 
   const credits = useMemo(() => topazVideoUpscaleCredits(durationSec), [durationSec]);
+  const creditsDurationText = `${durationSec}s`;
 
   const probeDuration = useCallback((url: string) => {
     if (!url) return;
@@ -126,9 +151,13 @@ export default function StudioUpscalePanel() {
   };
 
   const generate = () => {
+    if (upscalePickerId === "upscale/image") {
+      toast.message("Topaz Image Upscale is coming soon.");
+      return;
+    }
     const url = videoUrl.trim();
     if (!url || !/^https?:\/\//i.test(url)) {
-      toast.error("Add a video URL or upload a file.");
+      toast.error("Upload a source video first.");
       return;
     }
     const usingPersonalApi = isPersonalApiActive();
@@ -199,9 +228,53 @@ export default function StudioUpscalePanel() {
   };
 
   return (
-    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4 lg:h-[calc(100dvh-4rem)] lg:min-h-0">
-      <div className="flex min-w-0 w-full flex-col gap-2 lg:basis-1/4 lg:max-w-[24rem] lg:flex-none lg:shrink-0 lg:min-h-0 lg:overflow-hidden">
-        <div className="studio-params-scroll flex min-w-0 flex-col gap-2 lg:h-full lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pb-10">
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2 border-b border-white/10 pb-2">
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Upscale</span>
+        <div className="flex gap-1">
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            className={`h-7 rounded-md px-2.5 text-[11px] font-semibold ${upscalePickerId === "upscale/video" ? "bg-white text-black hover:bg-white/90" : "border-white/15 bg-white/5 text-white"}`}
+            onClick={() => setUpscalePickerId("upscale/video")}
+          >
+            Video
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            className={`h-7 rounded-md px-2.5 text-[11px] font-semibold ${upscalePickerId === "upscale/image" ? "bg-white text-black hover:bg-white/90" : "border-white/15 bg-white/5 text-white"}`}
+            onClick={() => {
+              setUpscalePickerId("upscale/image");
+              toast.message("Topaz Image Upscale is coming soon.");
+            }}
+          >
+            Image
+          </Button>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4 lg:h-[calc(100dvh-4rem)] lg:min-h-0">
+        <div className="flex min-w-0 w-full flex-col gap-2 lg:basis-1/4 lg:max-w-[24rem] lg:flex-none lg:shrink-0 lg:min-h-0 lg:overflow-hidden">
+          <div className="studio-params-scroll flex min-w-0 flex-col gap-2 lg:h-full lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pb-10">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Upscale model</p>
+          <div className="rounded-2xl border border-white/10 bg-[#101014] p-3">
+            <StudioModelPicker
+              value={upscalePickerId}
+              items={UPSCALE_MODEL_PICKER_ITEMS}
+              triggerVariant="bar"
+              hideMeta
+              featuredTitle="Upscale models"
+              onChange={(v) => setUpscalePickerId(v as UpscalePickerId)}
+              isItemLocked={(id) => id === "upscale/image"}
+              onLockedPick={() => {
+                toast.message("Topaz Image Upscale is coming soon.");
+              }}
+            />
+          </div>
+
           <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Source &amp; billing</p>
           <div className="rounded-2xl border border-white/10 bg-[#101014] p-4 space-y-3">
             <Label className="text-xs text-white/45">Source video</Label>
@@ -218,24 +291,13 @@ export default function StudioUpscalePanel() {
                 Upload
               </Button>
             </div>
-            <input
-              value={videoUrl}
-              onChange={(e) => setVideoUrl(e.target.value)}
-              placeholder="Or paste HTTPS URL to your video (MP4 / MOV)"
-              className="h-11 w-full rounded-xl border border-white/10 bg-[#0a0a0d] px-3 text-sm text-white placeholder:text-white/35"
-            />
             <div className="grid grid-cols-1 gap-3">
               <div>
-                <Label className="text-xs text-white/45">Duration (billing)</Label>
-                <input
-                  type="number"
-                  min={1}
-                  max={600}
-                  value={durationSec}
-                  onChange={(e) => setDurationSec(Math.max(1, Math.min(600, Number(e.target.value) || 1)))}
-                  className="mt-2 h-11 w-full rounded-xl border border-white/10 bg-[#0a0a0d] px-3 text-sm text-white tabular-nums"
-                />
-                <p className="mt-1 text-[10px] text-white/35">Adjusted from file metadata when possible.</p>
+                <Label className="text-xs text-white/45">Detected duration</Label>
+                <div className="mt-2 h-11 w-full rounded-xl border border-white/10 bg-[#0a0a0d] px-3 text-sm text-white tabular-nums flex items-center">
+                  {creditsDurationText}
+                </div>
+                <p className="mt-1 text-[10px] text-white/35">Auto-detected from uploaded video metadata.</p>
               </div>
               <div>
                 <Label className="text-xs text-white/45">Upscale factor</Label>
@@ -277,38 +339,38 @@ export default function StudioUpscalePanel() {
               <span className="text-sm font-normal text-white/80">credits</span>
             </span>
           </Button>
-
+          </div>
         </div>
-      </div>
 
-      <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col lg:min-h-0 lg:overflow-hidden">
-        <StudioOutputPane
-          title=""
-          hasOutput
-          output={
-            <StudioGenerationsHistory
-              items={historyItems}
-              empty={<StudioEmptyExamples variant="upscale" />}
-              mediaLabel="Video"
-            />
+        <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col lg:min-h-0 lg:overflow-hidden">
+          <StudioOutputPane
+            title=""
+            hasOutput
+            output={
+              <StudioGenerationsHistory
+                items={historyItems}
+                empty={<StudioEmptyExamples variant="upscale" />}
+                mediaLabel="Video"
+              />
+            }
+            empty={null}
+          />
+        </div>
+
+        <StudioBillingDialog
+          open={billing.open}
+          onOpenChange={(o) => {
+            if (!o) setBilling({ open: false });
+          }}
+          planId={planId}
+          studioMode="video"
+          variant={
+            !billing.open
+              ? { kind: "credits", currentCredits: 0, requiredCredits: 0 }
+              : { kind: "credits", currentCredits: creditsBalance, requiredCredits: billing.required }
           }
-          empty={null}
         />
       </div>
-
-      <StudioBillingDialog
-        open={billing.open}
-        onOpenChange={(o) => {
-          if (!o) setBilling({ open: false });
-        }}
-        planId={planId}
-        studioMode="video"
-        variant={
-          !billing.open
-            ? { kind: "credits", currentCredits: 0, requiredCredits: 0 }
-            : { kind: "credits", currentCredits: creditsBalance, requiredCredits: billing.required }
-        }
-      />
     </div>
   );
 }
