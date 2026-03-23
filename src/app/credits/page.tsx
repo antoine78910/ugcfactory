@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Coins, Eye, EyeOff, Key, Sparkles, Zap } from "lucide-react";
+import { ArrowRight, Eye, EyeOff, Key, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import StudioShell from "@/app/_components/StudioShell";
 import { consumeCheckoutQueryParams, useCreditsPlan } from "@/app/_components/CreditsPlanContext";
@@ -71,7 +71,7 @@ const creditPacks: CreditPack[] = PACK_UI.map((meta, i) => {
 
 export default function CreditsPage() {
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
-  const { current, total, percentRemaining, planDisplayName } = useCreditsPlan();
+  const { planDisplayName } = useCreditsPlan();
   const [personalApiEnabled, setPersonalApiEnabled] = useState(false);
   const [personalApiKey, setPersonalApiKey] = useState("");
   const [showKey, setShowKey] = useState(false);
@@ -168,27 +168,9 @@ export default function CreditsPage() {
               .
             </p>
 
-            <div className="mx-auto mt-10 max-w-md rounded-2xl border border-violet-500/20 bg-gradient-to-b from-violet-500/[0.08] to-black/20 p-5 shadow-[0_0_40px_rgba(139,92,246,0.08)]">
-              <p className="text-3xl font-bold tabular-nums text-white sm:text-4xl">
-                {current.toLocaleString()}{" "}
-                <span className="text-lg font-semibold text-white/40 sm:text-xl">credits</span>
-              </p>
-              <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/10">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-400 transition-all duration-500"
-                  style={{ width: `${percentRemaining}%` }}
-                />
-              </div>
-              <p className="mt-2 text-center text-[11px] text-white/35">
-                Plan: <span className="text-white/55">{planDisplayName}</span>
-                {total > 0 ? (
-                  <>
-                    {" "}
-                    · Pool ~{total.toLocaleString()} for the meter
-                  </>
-                ) : null}
-              </p>
-            </div>
+            <p className="mt-4 text-xs text-white/35">
+              Current plan: <span className="text-white/55">{planDisplayName}</span>
+            </p>
           </header>
 
           <section>
@@ -348,27 +330,6 @@ export default function CreditsPage() {
                   )}
                 </div>
               ) : null}
-            </div>
-          </section>
-
-          <section className="mx-auto max-w-3xl rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.04] to-transparent p-6 md:p-8">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <div className="inline-flex items-center gap-2 text-violet-300/90">
-                  <Zap className="h-4 w-4" aria-hidden />
-                  <span className="text-xs font-bold uppercase tracking-wider">Not sure?</span>
-                </div>
-                <p className="mt-2 text-sm text-white/55">
-                  Most creators settle on <span className="font-semibold text-white/75">Boost</span> for volume, or{" "}
-                  <span className="font-semibold text-white/75">Scale</span> when several brands run in parallel.
-                </p>
-              </div>
-              <Link
-                href="/app"
-                className="inline-flex shrink-0 items-center justify-center rounded-xl border border-violet-500/30 bg-violet-500/10 px-5 py-3 text-sm font-semibold text-violet-100 transition hover:border-violet-400/50 hover:bg-violet-500/20"
-              >
-                Back to studio
-              </Link>
             </div>
           </section>
 

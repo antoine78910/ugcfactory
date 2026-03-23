@@ -387,7 +387,7 @@ export default function StudioAvatarPanel() {
   return (
     <>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-4 lg:h-[calc(100dvh-4rem)] lg:min-h-0">
-        <div className="flex min-w-0 w-full flex-col gap-5 lg:basis-1/4 lg:max-w-[24rem] lg:flex-none lg:shrink-0 lg:min-h-0 lg:overflow-hidden">
+        <div className="flex min-w-0 w-full flex-col gap-5 lg:basis-[30%] lg:max-w-[28rem] lg:flex-none lg:shrink-0 lg:min-h-0 lg:overflow-hidden">
           <div className="flex items-center gap-2.5">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-500/15 text-violet-300">
               <UserRound className="h-4 w-4" />
