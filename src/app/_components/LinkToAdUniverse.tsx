@@ -24,8 +24,6 @@ import {
   readUniverseFromExtracted,
   selectedAngleScript,
   snapshotAfterKlingVideoSuccessForAngle,
-  joinScriptOptions,
-  splitScriptOptions,
   teaserFromScriptBlock,
   type KlingReferenceSlotV1,
   type LinkToAdAnglePipelineV1,
@@ -49,6 +47,31 @@ import { runInitialPipeline } from "@/lib/linkToAd/runInitialPipeline";
 
 /** Same-origin API calls with session (mirrors server `createInternalFetchFromRequest`). */
 const browserPipelineFetch = ((path: string, init?: RequestInit) => fetch(path, init)) as InternalFetch;
+
+function splitAllScriptOptions(full: string): string[] {
+  const text = full.replace(/\r\n/g, "\n").trim();
+  if (!text) return [];
+  const re = /SCRIPT\s+OPTION\s*\d+\b/gi;
+  const starts: number[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) starts.push(m.index);
+  if (starts.length === 0) return [text];
+  const out: string[] = [];
+  for (let i = 0; i < starts.length; i++) {
+    const start = starts[i];
+    const end = i + 1 < starts.length ? starts[i + 1] : text.length;
+    out.push(text.slice(start, end).trim());
+  }
+  return out;
+}
+
+function selectedScriptOptionByIndex(full: string, index: number | null): string {
+  if (index === null || index < 0) return "";
+  const all = splitAllScriptOptions(full);
+  if (all[index]) return all[index];
+  const clamped = index === 0 || index === 1 || index === 2 ? index : 2;
+  return selectedAngleScript(full, clamped);
+}
 
 function mergeNanoUrlIntoThreeSlots(prev: string[], slot: 0 | 1 | 2, url: string): string[] {
   const base: string[] = [0, 1, 2].map((i) => {
@@ -206,6 +229,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
 
   const [storeUrl, setStoreUrl] = useState("");
   const [isWorking, setIsWorking] = useState(false);
+  /** Extra product photo uploads should not trigger global "Working..." pipeline state. */
+  const [isUploadingAdditionalPhotos, setIsUploadingAdditionalPhotos] = useState(false);
   const [extractedTitle, setExtractedTitle] = useState<string | null>(null);
 
   const [cleanCandidate, setCleanCandidate] = useState<{ url: string; reason?: string } | null>(null);
@@ -451,7 +476,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const klingMergedSnapRef = useRef<LinkToAdUniverseSnapshotV1 | null>(null);
   const summaryTextRef = useRef("");
   const isWorkingRef = useRef(false);
-  const autoContinueScriptsFiredRef = useRef(false);
   const latestSnapRef = useRef<LinkToAdUniverseSnapshotV1 | null>(null);
   /** Prompt string sent for the current image task (for accurate persist after poll). */
   const lastNanoImagePromptRef = useRef("");
@@ -527,10 +551,19 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
 
   const quality = useMemo(() => confidenceToQuality(confidence ?? undefined), [confidence]);
   const parsedNanoPrompts = useMemo(() => parseThreeLabeledPrompts(nanoBananaPromptsRaw), [nanoBananaPromptsRaw]);
-  const scriptOptionBodies = useMemo((): [string, string, string] => {
-    if (!scriptsText.trim()) return ["", "", ""];
-    return splitScriptOptions(scriptsText);
-  }, [scriptsText]);
+  const scriptOptionBodiesAll = useMemo(() => splitAllScriptOptions(scriptsText), [scriptsText]);
+  const angleOptionCards = useMemo(() => {
+    const count = Math.max(3, scriptOptionBodiesAll.length);
+    return Array.from({ length: count }, (_, i) => {
+      const explicit = i < 3 ? angleLabels[i]?.trim() : "";
+      const body = scriptOptionBodiesAll[i] ?? "";
+      const fallback = body ? teaserFromScriptBlock(body, (i === 0 ? 0 : i === 1 ? 1 : 2) as 0 | 1 | 2) : "";
+      return {
+        index: i,
+        label: explicit || fallback || "…",
+      };
+    });
+  }, [angleLabels, scriptOptionBodiesAll]);
   const displayedProductImageUrl = neutralUploadUrl ?? cleanCandidate?.url ?? fallbackImageUrl ?? null;
 
   const resolvedPreviewUrl = useMemo(() => {
@@ -701,21 +734,44 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
 
   async function uploadNeutralPhoto(files: FileList | null) {
     if (!files || files.length === 0) return;
-    const f = files[0];
+    const list = Array.from(files);
 
     setIsWorking(true);
     try {
-      const fd = new FormData();
-      fd.set("file", f);
-      const res = await fetch("/api/uploads", { method: "POST", body: fd });
-      const raw = await res.text();
-      const parsed = safeParseJson<{ url?: string; error?: string }>(raw);
-      if (!res.ok || !parsed.ok) {
-        throw new Error(parsed.ok ? parsed.value.error || `Upload failed (${res.status})` : parsed.error);
+      const uploaded: string[] = [];
+      let lastError: string | null = null;
+      for (const file of list) {
+        try {
+          const fd = new FormData();
+          fd.set("file", file);
+          const res = await fetch("/api/uploads", { method: "POST", body: fd });
+          const raw = await res.text();
+          const parsed = safeParseJson<{ url?: string; error?: string }>(raw);
+          if (!res.ok || !parsed.ok) {
+            throw new Error(parsed.ok ? parsed.value.error || `Upload failed (${res.status})` : parsed.error);
+          }
+          if (!parsed.value.url) throw new Error(parsed.value.error || "Upload failed: missing url");
+          uploaded.push(parsed.value.url);
+        } catch (err) {
+          lastError = err instanceof Error ? err.message : "Upload failed";
+        }
       }
-      if (!parsed.value.url) throw new Error(parsed.value.error || "Upload failed: missing url");
-      setNeutralUploadUrl(parsed.value.url);
-      toast.success("Neutral product photo uploaded");
+      if (!uploaded.length) throw new Error(lastError || "Upload failed");
+      const [first, ...rest] = uploaded;
+      setNeutralUploadUrl(first);
+      if (uploaded.length > 0) {
+        setUserPhotoUrls((prev) => [...prev, ...uploaded]);
+        setProductOnlyImageUrls((prev) => [...prev, ...uploaded]);
+      }
+      const ok = uploaded.length;
+      const fail = list.length - ok;
+      if (fail > 0) {
+        toast.warning("Photos uploaded", {
+          description: `${ok} uploaded, ${fail} failed${lastError ? ` (${lastError})` : ""}.`,
+        });
+      } else {
+        toast.success(ok === 1 ? "Neutral product photo uploaded" : `${ok} product photos uploaded`);
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Upload failed";
       toast.error("Upload error", { description: message });
@@ -726,24 +782,38 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
 
   async function uploadAdditionalPhoto(files: FileList | null) {
     if (!files || files.length === 0) return;
-    setIsWorking(true);
+    const list = Array.from(files);
+    setIsUploadingAdditionalPhotos(true);
+    let added = 0;
+    let lastError: string | null = null;
     try {
-      const fd = new FormData();
-      fd.set("file", files[0]);
-      const res = await fetch("/api/uploads", { method: "POST", body: fd });
-      const raw = await res.text();
-      const parsed = safeParseJson<{ url?: string; error?: string }>(raw);
-      if (!res.ok || !parsed.ok) {
-        throw new Error(parsed.ok ? parsed.value.error || `Upload failed (${res.status})` : parsed.error);
+      for (const file of list) {
+        try {
+          const fd = new FormData();
+          fd.set("file", file);
+          const res = await fetch("/api/uploads", { method: "POST", body: fd });
+          const raw = await res.text();
+          const parsed = safeParseJson<{ url?: string; error?: string }>(raw);
+          if (!res.ok || !parsed.ok) {
+            throw new Error(parsed.ok ? parsed.value.error || `Upload failed (${res.status})` : parsed.error);
+          }
+          if (!parsed.value.url) throw new Error(parsed.value.error || "Upload failed: missing url");
+          const url = parsed.value.url;
+          setUserPhotoUrls((prev) => [...prev, url]);
+          setProductOnlyImageUrls((prev) => [...prev, url]);
+          added++;
+        } catch (err) {
+          lastError = err instanceof Error ? err.message : "Upload failed";
+        }
       }
-      if (!parsed.value.url) throw new Error(parsed.value.error || "Upload failed: missing url");
-      setUserPhotoUrls((prev) => [...prev, parsed.value.url!]);
-      setProductOnlyImageUrls((prev) => [...prev, parsed.value.url!]);
-      toast.success("Photo added");
-    } catch (err) {
-      toast.error("Upload error", { description: err instanceof Error ? err.message : "Upload failed" });
+      if (added > 0) {
+        toast.success(added > 1 ? `${added} photos added` : "Photo added");
+      }
+      if (lastError && added < list.length) {
+        toast.error("Some uploads failed", { description: lastError });
+      }
     } finally {
-      setIsWorking(false);
+      setIsUploadingAdditionalPhotos(false);
     }
   }
 
@@ -798,25 +868,21 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       toast.error("Script is empty", { description: "Add text or discard and regenerate." });
       return;
     }
-    const parts = splitScriptOptions(scriptsText);
-    const emptyIdx = angleLabels.findIndex((l) => !l.trim());
-    const slot: 0 | 1 | 2 = emptyIdx >= 0 ? (emptyIdx as 0 | 1 | 2) : 2;
-    const newParts: [string, string, string] = [parts[0], parts[1], parts[2]];
-    newParts[slot] = cleanedBody;
-    const merged = joinScriptOptions(newParts);
+    const currentOptions = splitAllScriptOptions(scriptsText);
+    const nextNumber = currentOptions.length + 1;
+    const merged = scriptsText.trim()
+      ? `${scriptsText.trim()}\n\nSCRIPT OPTION ${nextNumber}\n\n${cleanedBody}`
+      : `SCRIPT OPTION 1\n\n${cleanedBody}`;
     const nextLabels: [string, string, string] = [...angleLabels] as [string, string, string];
-    nextLabels[slot] = headline;
+    const firstEmpty = nextLabels.findIndex((l) => !l.trim());
+    if (firstEmpty >= 0 && firstEmpty < 3) nextLabels[firstEmpty as 0 | 1 | 2] = headline;
 
     setScriptsText(merged);
     setAngleLabels(nextLabels);
     setPendingCustomAnglePreview(null);
     setPendingCustomAngleEditing(false);
-    void onSelectAngle(slot, { scriptsText: merged, angleLabels: nextLabels });
-    toast.success(
-      emptyIdx < 0
-        ? "Custom angle added — replaced angle 3; ready to generate."
-        : "Custom angle added — selected; ready to generate.",
-    );
+    void onSelectAngle(nextNumber - 1, { scriptsText: merged, angleLabels: nextLabels });
+    toast.success(`Custom angle added as angle ${nextNumber} — selected; ready to generate.`);
   }
 
   function discardPendingCustomAngle() {
@@ -831,7 +897,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   }
 
   async function onSelectAngle(
-    index: 0 | 1 | 2,
+    index: number,
     opts?: { scriptsText?: string; angleLabels?: [string, string, string] },
   ) {
     const url = storeUrl.trim();
@@ -839,8 +905,11 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
 
     const scriptsSrc = opts?.scriptsText ?? scriptsText;
 
+    const selectedPipelineIdx: 0 | 1 | 2 = index === 0 || index === 1 || index === 2 ? index : 2;
     const prevIdx = prevAngleRef.current;
-    const angleChanged = prevIdx !== null && prevIdx !== index;
+    const prevPipelineIdx: 0 | 1 | 2 | null =
+      prevIdx === 0 || prevIdx === 1 || prevIdx === 2 ? prevIdx : prevIdx !== null ? 2 : null;
+    const angleChanged = prevPipelineIdx !== null && prevPipelineIdx !== selectedPipelineIdx;
 
     let nextTriple: [LinkToAdAnglePipelineV1, LinkToAdAnglePipelineV1, LinkToAdAnglePipelineV1] = [
       cloneAnglePipeline(pipelineByAngle[0]),
@@ -848,11 +917,11 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       cloneAnglePipeline(pipelineByAngle[2]),
     ];
 
-    if (angleChanged && prevIdx !== null) {
-      nextTriple[prevIdx] = captureActivePipeline();
+    if (angleChanged && prevPipelineIdx !== null) {
+      nextTriple[prevPipelineIdx] = captureActivePipeline();
     }
 
-    const load = cloneAnglePipeline(nextTriple[index]);
+    const load = cloneAnglePipeline(nextTriple[selectedPipelineIdx]);
 
     if (angleChanged || prevIdx === null) {
       setPipelineByAngle(nextTriple);
@@ -863,9 +932,9 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       setKlingPollImageIndex(null);
     }
 
-    prevAngleRef.current = index;
+    prevAngleRef.current = selectedPipelineIdx;
     setSelectedAngleIndex(index);
-    const script = selectedAngleScript(scriptsSrc, index);
+    const script = selectedScriptOptionByIndex(scriptsSrc, index);
     setEditableScript(script);
     setScriptEditVisible(false);
 
@@ -878,12 +947,12 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       cloneAnglePipeline(nextTriple[2]),
     ];
     if (angleChanged || prevIdx === null) {
-      persistTriple[index] = cloneAnglePipeline(load);
+      persistTriple[selectedPipelineIdx] = cloneAnglePipeline(load);
     } else {
-      persistTriple[index] = captureActivePipeline();
+      persistTriple[selectedPipelineIdx] = captureActivePipeline();
     }
 
-    const activePipe = persistTriple[index];
+    const activePipe = persistTriple[selectedPipelineIdx];
     const kn = normalizeKlingByReference({
       klingByReferenceIndex: activePipe.klingByReferenceIndex,
       klingVideoUrl: null,
@@ -1141,10 +1210,10 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     }
   }
 
-  async function onGenerateNanoBananaPrompts(angleIdx?: 0 | 1 | 2 | null) {
+  async function onGenerateNanoBananaPrompts(angleIdx?: number | null) {
     const url = storeUrl.trim();
     const idx = angleIdx !== undefined && angleIdx !== null ? angleIdx : selectedAngleIndex;
-    const script = selectedAngleScript(scriptsText, idx);
+    const script = selectedScriptOptionByIndex(scriptsText, idx);
     const candidates =
       productOnlyImageUrls.length > 0
         ? productOnlyImageUrls
@@ -1184,18 +1253,18 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       setNanoBananaSelectedImageIndex(null);
       setKlingByRef(createEmptyKlingByReference());
       const sel = selectedAngleIndex;
+      const selPipelineIdx: 0 | 1 | 2 =
+        sel === 0 || sel === 1 || sel === 2 ? sel : sel !== null ? 2 : 0;
       const triple: [LinkToAdAnglePipelineV1, LinkToAdAnglePipelineV1, LinkToAdAnglePipelineV1] = [
         cloneAnglePipeline(pipelineByAngle[0]),
         cloneAnglePipeline(pipelineByAngle[1]),
         cloneAnglePipeline(pipelineByAngle[2]),
       ];
-      if (sel === 0 || sel === 1 || sel === 2) {
-        triple[sel] = {
-          ...emptyAnglePipeline(),
-          nanoBananaPromptsRaw: text,
-          nanoBananaSelectedPromptIndex: 0,
-        };
-      }
+      triple[selPipelineIdx] = {
+        ...emptyAnglePipeline(),
+        nanoBananaPromptsRaw: text,
+        nanoBananaSelectedPromptIndex: 0,
+      };
       setPipelineByAngle(triple);
       const base = latestSnapRef.current;
       if (base && lastExtractedJson) {
@@ -1649,7 +1718,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
 
   async function onGenerateUgcVideoPrompt(): Promise<string | null> {
     const url = storeUrl.trim();
-    const script = selectedAngleScript(scriptsText, selectedAngleIndex);
+    const script = selectedScriptOptionByIndex(scriptsText, selectedAngleIndex);
     if (!url || !lastExtractedJson || selectedAngleIndex === null || !script.trim()) {
       toast.error("Angle script is missing.");
       return null;
@@ -2018,16 +2087,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
 
   const showUniverseLoading = universeLoadingState.message !== null;
 
-  useEffect(() => {
-    if (!showContinueScripts) {
-      autoContinueScriptsFiredRef.current = false;
-      return;
-    }
-    if (isWorking || autoContinueScriptsFiredRef.current) return;
-    autoContinueScriptsFiredRef.current = true;
-    void onContinueScripts();
-  }, [showContinueScripts, isWorking]);
-
   async function handleGenerateVideoFromSelectedImage() {
     if (nanoBananaSelectedImageIndex === null || !nanoBananaImageUrl?.trim()) {
       toast.error("Select a reference image first.");
@@ -2067,6 +2126,10 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       return;
     }
     if (isWorking) return;
+    if (showContinueScripts) {
+      void onContinueScripts();
+      return;
+    }
     void onRun();
   }
 
@@ -2276,7 +2339,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                       <button
                         type="button"
                         onClick={() => removeProductPhoto(url)}
-                        disabled={isWorking}
+                        disabled={isWorking || isUploadingAdditionalPhotos}
                         className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-md bg-black/70 text-white/60 opacity-0 transition hover:text-red-400 group-hover/earlyphoto:opacity-100 disabled:pointer-events-none"
                         aria-label="Remove photo"
                       >
@@ -2286,7 +2349,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                   ))}
                   <button
                     type="button"
-                    disabled={isWorking}
+                    disabled={isWorking || isUploadingAdditionalPhotos}
                     onClick={() => earlyProductPhotosInputRef.current?.click()}
                     className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg border border-dashed border-white/15 bg-white/[0.02] text-white/30 transition hover:border-violet-400/40 hover:text-violet-300 disabled:opacity-50"
                     aria-label="Add product photos"
@@ -2304,7 +2367,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                     void uploadAdditionalPhoto(e.target.files);
                     e.currentTarget.value = "";
                   }}
-                  disabled={isWorking}
+                  disabled={isWorking || isUploadingAdditionalPhotos}
                 />
               </div>
             </div>
@@ -2415,7 +2478,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                       </span>
                       <button
                         type="button"
-                        disabled={isWorking}
+                        disabled={isWorking || isUploadingAdditionalPhotos}
                         className="flex items-center gap-1 rounded-md bg-white/5 px-2 py-1 text-[10px] font-medium text-white/60 transition hover:bg-white/10 hover:text-white/80"
                         onClick={() => photoInputRef.current?.click()}
                       >
@@ -2446,7 +2509,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                       ))}
                       <button
                         type="button"
-                        disabled={isWorking}
+                        disabled={isWorking || isUploadingAdditionalPhotos}
                         onClick={() => photoInputRef.current?.click()}
                         className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg border border-dashed border-white/15 bg-white/[0.02] text-white/30 transition hover:border-violet-400/40 hover:text-violet-300"
                       >
@@ -2463,7 +2526,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                         void uploadAdditionalPhoto(e.target.files);
                         e.currentTarget.value = "";
                       }}
-                      disabled={isWorking}
+                      disabled={isWorking || isUploadingAdditionalPhotos}
                     />
                   </div>
                 ) : null}
@@ -2477,21 +2540,22 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                         ref={fileInputRef}
                         type="file"
                         accept="image/jpeg,image/png,image/webp,image/*"
+                        multiple
                         className="sr-only"
                         onChange={(e) => {
                           void uploadNeutralPhoto(e.target.files);
                           e.currentTarget.value = "";
                         }}
-                        disabled={isWorking}
+                        disabled={isWorking || isUploadingAdditionalPhotos}
                       />
                       <Button
                         type="button"
                         variant="secondary"
-                        disabled={isWorking}
+                        disabled={isWorking || isUploadingAdditionalPhotos}
                         className="w-full border border-white/10 bg-white/5 text-white hover:bg-white/10 cursor-pointer"
                         onClick={() => fileInputRef.current?.click()}
                       >
-                        Upload neutral product-only photo
+                        Upload neutral product-only photo(s)
                       </Button>
                     </div>
                   </div>
@@ -2633,7 +2697,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                         void uploadAdditionalPhoto(e.target.files);
                         e.currentTarget.value = "";
                       }}
-                      disabled={isWorking}
+                      disabled={isWorking || isUploadingAdditionalPhotos}
                     />
                   </div>
                 </div>
@@ -2641,17 +2705,17 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                   Choose your AI UGC angle
                 </p>
                 <div className="grid gap-3 sm:grid-cols-3">
-                {([0, 1, 2] as const).map((i) => (
+                {angleOptionCards.map((card) => (
                   <button
-                    key={i}
+                    key={card.index}
                     type="button"
-                    onClick={() => void onSelectAngle(i)}
+                    onClick={() => void onSelectAngle(card.index)}
                     className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-4 text-left transition-all hover:border-violet-400/40 hover:bg-white/[0.07]"
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-bold uppercase tracking-wide text-violet-300">Angle {i + 1}</span>
+                      <span className="text-xs font-bold uppercase tracking-wide text-violet-300">Angle {card.index + 1}</span>
                     </div>
-                    <p className="mt-2 text-sm leading-snug text-white/85">{angleLabels[i]}</p>
+                    <p className="mt-2 text-sm leading-snug text-white/85">{card.label}</p>
                   </button>
                 ))}
                 </div>
@@ -2768,6 +2832,57 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:gap-6">
             {/* Left: script angles + reference thumbnails + large image pickers */}
             <div className="flex min-w-0 flex-col gap-4 lg:w-[min(100%,22rem)] xl:w-[min(100%,26rem)] lg:shrink-0">
+              <div className="rounded-xl border border-white/10 bg-white/5 p-3 sm:p-4">
+                <div className="flex items-start gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/10 bg-[#0d0a14]">
+                        {brandFaviconSrc && !brandFaviconFailed ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={brandFaviconSrc}
+                            alt=""
+                            width={28}
+                            height={28}
+                            className="h-7 w-7 object-contain"
+                            referrerPolicy="no-referrer"
+                            onError={() => setBrandFaviconFailed(true)}
+                          />
+                        ) : (
+                          <span className="text-sm font-bold uppercase text-violet-300">
+                            {(brandDisplayName.slice(0, 1) || "?").toUpperCase()}
+                          </span>
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold leading-tight text-white">{brandDisplayName}</p>
+                        {storeHostnameResolved ? (
+                          <p className="mt-0.5 truncate text-xs text-white/40">{storeHostnameResolved}</p>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-[#050507]">
+                    {resolvedPreviewUrl && !imgError ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        key={resolvedPreviewUrl}
+                        src={resolvedPreviewUrl}
+                        alt="Product"
+                        className="h-full w-full object-cover object-center"
+                        loading="eager"
+                        referrerPolicy="no-referrer"
+                        onError={() => setImgError(true)}
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center px-1 text-center text-[10px] leading-tight text-white/35">
+                        {resolvedPreviewUrl ? "Can't load" : "No image"}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               <div className="rounded-xl border border-violet-500/20 bg-black/25 px-3 py-2.5 sm:px-4">
                 <div className="flex flex-col gap-4">
                   {nanoShowReferenceStrip ? (
@@ -2841,11 +2956,9 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                       Script angles
                     </p>
                     <div className="grid grid-cols-1 gap-2">
-                      {([0, 1, 2] as const).map((i) => {
+                      {angleOptionCards.map((card) => {
+                        const i = card.index;
                         const active = selectedAngleIndex === i;
-                        const label = angleLabels[i]?.trim();
-                        const fallback = teaserFromScriptBlock(scriptOptionBodies[i], i);
-                        const body = label || fallback || "…";
                         return (
                           <button
                             key={i}
@@ -2865,7 +2978,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                               ) : null}
                             </span>
                             <p className="mt-1.5 text-xs leading-snug text-white/80 line-clamp-5">
-                              {body}
+                              {card.label}
                             </p>
                           </button>
                         );
