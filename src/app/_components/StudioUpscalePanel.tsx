@@ -51,6 +51,24 @@ async function pollKieVideoTask(taskId: string, personalApiKey?: string): Promis
   throw new Error("Upscale timed out.");
 }
 
+async function registerStudioTask(params: {
+  kind: "studio_upscale";
+  label: string;
+  taskId: string;
+  creditsCharged: number;
+  personalApiKey?: string;
+}) {
+  try {
+    await fetch("/api/studio/generations/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(params),
+    });
+  } catch {
+    /* history registration should not block generation */
+  }
+}
+
 const soonCard =
   "flex flex-col gap-2 rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-left opacity-70";
 
@@ -141,6 +159,13 @@ export default function StudioUpscalePanel() {
         });
         const json = (await res.json()) as { taskId?: string; error?: string };
         if (!res.ok || !json.taskId) throw new Error(json.error || "Upscale request failed");
+        await registerStudioTask({
+          kind: "studio_upscale",
+          label,
+          taskId: json.taskId,
+          creditsCharged: platformCharge,
+          personalApiKey: upPKey,
+        });
         const outUrl = await pollKieVideoTask(json.taskId, upPKey);
         const doneAt = Date.now();
         setHistoryItems((prev) => {

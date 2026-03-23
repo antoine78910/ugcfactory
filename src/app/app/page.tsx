@@ -125,6 +125,24 @@ function normalizeUrl(url: string): string {
   }
 }
 
+async function registerStudioTask(params: {
+  kind: "motion_control";
+  label: string;
+  taskId: string;
+  creditsCharged: number;
+  personalApiKey?: string;
+}) {
+  try {
+    await fetch("/api/studio/generations/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(params),
+    });
+  } catch {
+    /* history registration should not block generation */
+  }
+}
+
 /** Link to Ad Universe snapshot stored under `extracted.__universe`. */
 function runHasLinkToAdUniverse(extracted: unknown): boolean {
   if (!extracted || typeof extracted !== "object") return false;
@@ -1578,8 +1596,9 @@ export default function AppBrandWizard() {
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-white">Studio library</p>
                         <p className="mt-1 text-xs leading-relaxed text-white/45">
-                          Image and Avatar generations are saved here while you&apos;re signed in. Open a card to jump
-                          to the studio tab. Items still processing show a spinner until the server finishes.
+                          All studio generations (Avatar, Image, Video, Motion, Upscale) are saved here while you&apos;re
+                          signed in. Open a card to jump to the right studio tab. Items still processing show a spinner
+                          until the server finishes.
                         </p>
                       </div>
                       {studioLibraryLoading ? (
@@ -1588,36 +1607,57 @@ export default function AppBrandWizard() {
                     </div>
                     {studioLibraryItems.length === 0 && !studioLibraryLoading ? (
                       <p className="mt-3 text-xs text-white/40">
-                        No saved studio generations yet (or not signed in). Generate from{" "}
-                        <span className="text-white/55">Image</span> or <span className="text-white/55">Avatar</span> in
-                        Create.
+                        No saved studio generations yet (or not signed in). Generate from Create to build your library.
                       </p>
                     ) : (
                       <div className="mt-3 flex gap-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
                         {studioLibraryItems.map((item) => {
+                          const kind = item.studioGenerationKind ?? "";
                           const badge =
-                            item.studioGenerationKind === "avatar"
+                            kind === "avatar"
                               ? "Avatar"
-                              : item.studioGenerationKind === "studio_image"
+                              : kind === "studio_image"
                                 ? "Image"
-                                : "Studio";
+                                : kind === "studio_video"
+                                  ? "Video"
+                                  : kind === "motion_control"
+                                    ? "Motion"
+                                    : kind === "studio_upscale"
+                                      ? "Upscale"
+                                      : "Studio";
+                          const targetSection: AppSection =
+                            kind === "avatar"
+                              ? "avatar"
+                              : kind === "studio_image"
+                                ? "image"
+                                : kind === "motion_control"
+                                  ? "motion_control"
+                                  : kind === "studio_upscale"
+                                    ? "upscale"
+                                    : "video";
                           return (
                             <button
                               key={item.id}
                               type="button"
-                              onClick={() =>
-                                setAppSectionNav(item.studioGenerationKind === "avatar" ? "avatar" : "image")
-                              }
+                              onClick={() => setAppSectionNav(targetSection)}
                               className="flex w-[5.75rem] shrink-0 flex-col gap-1 rounded-lg border border-white/10 bg-black/30 p-0.5 text-left transition hover:border-violet-400/40 hover:bg-black/50"
                             >
                               <div className="relative aspect-[3/4] w-full overflow-hidden rounded-md bg-[#100d17]">
-                                {item.status === "ready" && item.mediaUrl ? (
+                                {item.status === "ready" && item.mediaUrl && item.kind === "image" ? (
                                   // eslint-disable-next-line @next/next/no-img-element
                                   <img
                                     src={item.mediaUrl}
                                     alt=""
                                     className="h-full w-full object-cover"
                                     referrerPolicy="no-referrer"
+                                  />
+                                ) : item.status === "ready" && item.mediaUrl && item.kind !== "image" ? (
+                                  <video
+                                    src={item.mediaUrl}
+                                    className="h-full w-full object-cover"
+                                    muted
+                                    playsInline
+                                    preload="metadata"
                                   />
                                 ) : item.status === "generating" ? (
                                   <div className="flex h-full w-full flex-col items-center justify-center gap-1 px-1">
@@ -2105,6 +2145,13 @@ export default function AppBrandWizard() {
                               });
                               const json = (await res.json()) as { taskId?: string; error?: string };
                               if (!res.ok || !json.taskId) throw new Error(json.error || "Motion control failed");
+                              await registerStudioTask({
+                                kind: "motion_control",
+                                label: "Motion control",
+                                taskId: json.taskId,
+                                creditsCharged: platformChargeMotion,
+                                personalApiKey: getPersonalApiKey() ?? undefined,
+                              });
                               toast.message("Rendering…", { description: "Polling Kling Motion Control" });
                               const url = await pollMotionKlingTask(json.taskId);
                               const doneAt = Date.now();

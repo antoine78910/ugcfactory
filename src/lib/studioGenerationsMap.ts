@@ -17,12 +17,19 @@ export type StudioGenerationRow = {
   credits_refund_hint_sent?: boolean;
 };
 
+function rowKindToMediaKind(kind: string): StudioHistoryItem["kind"] {
+  if (kind === "motion_control") return "motion";
+  if (kind === "studio_video" || kind === "studio_upscale") return "video";
+  return "image";
+}
+
 export function studioGenerationRowToHistoryItem(row: StudioGenerationRow): StudioHistoryItem {
   const createdAt = new Date(row.created_at).getTime();
+  const mediaKind = rowKindToMediaKind(row.kind);
   if (row.status === "ready") {
     return {
       id: row.id,
-      kind: "image",
+      kind: mediaKind,
       status: "ready",
       label: row.label || "Avatar",
       mediaUrl: row.result_urls?.[0],
@@ -33,7 +40,7 @@ export function studioGenerationRowToHistoryItem(row: StudioGenerationRow): Stud
   if (row.status === "failed") {
     return {
       id: row.id,
-      kind: "image",
+      kind: mediaKind,
       status: "failed",
       label: row.label || "Failed",
       errorMessage: row.error_message ?? "Generation failed",
@@ -44,7 +51,7 @@ export function studioGenerationRowToHistoryItem(row: StudioGenerationRow): Stud
   }
   return {
     id: row.id,
-    kind: "image",
+    kind: mediaKind,
     status: "generating",
     label: row.label || "Generating…",
     createdAt,

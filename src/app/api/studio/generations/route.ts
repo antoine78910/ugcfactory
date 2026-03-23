@@ -11,7 +11,7 @@ import { sweepStudioRefundHints } from "@/lib/studioGenerationsPoll";
 const KIND_DEFAULT = "avatar";
 
 /** Kinds listed together on My Projects (studio library). */
-const STUDIO_LIBRARY_KINDS = ["avatar", "studio_image"] as const;
+const STUDIO_LIBRARY_KINDS = ["avatar", "studio_image", "studio_video", "studio_upscale", "motion_control"] as const;
 
 export async function GET(req: Request) {
   const { supabase, user, response } = await requireSupabaseUser();

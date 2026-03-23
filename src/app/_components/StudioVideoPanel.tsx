@@ -381,6 +381,24 @@ function FrameSlot({
   );
 }
 
+async function registerStudioTask(params: {
+  kind: "studio_video";
+  label: string;
+  taskId: string;
+  creditsCharged: number;
+  personalApiKey?: string;
+}) {
+  try {
+    await fetch("/api/studio/generations/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(params),
+    });
+  } catch {
+    /* history registration should not block generation */
+  }
+}
+
 async function pollKlingVideo(taskId: string, personalApiKey?: string): Promise<string> {
   const keyParam = personalApiKey ? `&personalApiKey=${encodeURIComponent(personalApiKey)}` : "";
   for (let i = 0; i < 120; i++) {
@@ -881,6 +899,13 @@ export default function StudioVideoPanel() {
           });
           const json = (await res.json()) as { taskId?: string; error?: string };
           if (!res.ok || !json.taskId) throw new Error(json.error || "Motion control failed");
+          await registerStudioTask({
+            kind: "studio_video",
+            label,
+            taskId: json.taskId,
+            creditsCharged: platformChargeEdit,
+            personalApiKey: editPKey,
+          });
           toast.message("Motion control started", { description: "Polling…" });
           const url = await pollKlingVideo(json.taskId, editPKey);
           const doneAt = Date.now();
@@ -920,6 +945,13 @@ export default function StudioVideoPanel() {
         });
         const json = (await res.json()) as { taskId?: string; error?: string };
         if (!res.ok || !json.taskId) throw new Error(json.error || "Video edit failed");
+        await registerStudioTask({
+          kind: "studio_video",
+          label,
+          taskId: json.taskId,
+          creditsCharged: platformChargeEdit,
+          personalApiKey: editPKey,
+        });
         toast.message("Edit started", { description: "Polling provider…" });
         const url = await pollKlingVideo(json.taskId, editPKey);
         const doneAt = Date.now();
@@ -1033,6 +1065,13 @@ export default function StudioVideoPanel() {
           });
           const json = (await res.json()) as { taskId?: string; error?: string };
           if (!res.ok || !json.taskId) throw new Error(json.error || "Sora 2 failed");
+          await registerStudioTask({
+            kind: "studio_video",
+            label,
+            taskId: json.taskId,
+            creditsCharged: platformChargeCreate,
+            personalApiKey: pKey,
+          });
           toast.message("Sora 2 started", { description: "Rendering…" });
           const url = await pollKlingVideo(json.taskId, pKey);
           const doneAt = Date.now();
@@ -1077,6 +1116,13 @@ export default function StudioVideoPanel() {
           });
           const json = (await res.json()) as { taskId?: string; error?: string };
           if (!res.ok || !json.taskId) throw new Error(json.error || "Veo failed");
+          await registerStudioTask({
+            kind: "studio_video",
+            label,
+            taskId: json.taskId,
+            creditsCharged: platformChargeCreate,
+            personalApiKey: pKey,
+          });
           toast.message("Veo started", { description: "Rendering…" });
           const url = await pollVeoVideo(json.taskId, pKey);
           const doneAt = Date.now();
@@ -1119,6 +1165,13 @@ export default function StudioVideoPanel() {
         });
         const json = (await res.json()) as { taskId?: string; error?: string };
         if (!res.ok || !json.taskId) throw new Error(json.error || "Video task failed");
+        await registerStudioTask({
+          kind: "studio_video",
+          label,
+          taskId: json.taskId,
+          creditsCharged: platformChargeCreate,
+          personalApiKey: pKey,
+        });
         toast.message("Generation started", { description: "Polling provider…" });
         const url = await pollKlingVideo(json.taskId, pKey);
         const doneAt = Date.now();

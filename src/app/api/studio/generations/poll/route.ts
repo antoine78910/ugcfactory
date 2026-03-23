@@ -13,7 +13,7 @@ type Body = {
   personalApiKey?: string;
 };
 
-const LIBRARY_KINDS = ["avatar", "studio_image"] as const;
+const LIBRARY_KINDS = ["avatar", "studio_image", "studio_video", "studio_upscale", "motion_control"] as const;
 
 export async function POST(req: Request) {
   const { supabase, user, response } = await requireSupabaseUser();
