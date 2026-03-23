@@ -1038,12 +1038,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       const u = resolvedPreviewUrl;
       return u && /^https?:\/\//i.test(u) ? [u] : [];
     }
-    const candidates =
-      productOnlyImageUrls.length > 0
-        ? productOnlyImageUrls
-        : cleanCandidate?.url
-          ? [cleanCandidate.url]
-          : [];
+    const candidates = buildProductCandidatesForGeneration();
     const gpt = productUrlsForGpt({
       pageUrl,
       neutralUploadUrl,
@@ -1057,18 +1052,33 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
 
   function resolvedProductUrlsForGpt(): string[] {
     const pageUrl = storeUrl.trim();
-    const candidates =
-      productOnlyImageUrls.length > 0
-        ? productOnlyImageUrls
-        : cleanCandidate?.url
-          ? [cleanCandidate.url]
-          : [];
+    const candidates = buildProductCandidatesForGeneration();
     return productUrlsForGpt({
       pageUrl: pageUrl || "",
       neutralUploadUrl,
       candidateUrls: candidates,
       fallbackUrl: fallbackImageUrl,
     });
+  }
+
+  /**
+   * Prefer the most recently uploaded user photos (avatar or manual uploads),
+   * then fall back to discovered product packshots.
+   */
+  function buildProductCandidatesForGeneration(): string[] {
+    const out: string[] = [];
+    const seen = new Set<string>();
+    const push = (u: string) => {
+      const t = (u || "").trim();
+      if (!t || seen.has(t)) return;
+      seen.add(t);
+      out.push(t);
+    };
+
+    for (let i = userPhotoUrls.length - 1; i >= 0; i--) push(userPhotoUrls[i]);
+    for (let i = productOnlyImageUrls.length - 1; i >= 0; i--) push(productOnlyImageUrls[i]);
+    if (out.length === 0 && cleanCandidate?.url) push(cleanCandidate.url);
+    return out;
   }
 
   /** Resume after a save stopped at brand brief (scripts step failed or interrupted). Runs on the server so navigation does not cancel it. */
@@ -1272,12 +1282,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     const url = storeUrl.trim();
     const idx = angleIdx !== undefined && angleIdx !== null ? angleIdx : selectedAngleIndex;
     const script = selectedScriptOptionByIndex(scriptsText, idx);
-    const candidates =
-      productOnlyImageUrls.length > 0
-        ? productOnlyImageUrls
-        : cleanCandidate?.url
-          ? [cleanCandidate.url]
-          : [];
+    const candidates = buildProductCandidatesForGeneration();
     const img = pickBestProductUrlForNanoBanana({
       pageUrl: url,
       neutralUploadUrl,
@@ -1553,12 +1558,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
 
   async function onGenerateNanoBananaImagesFromAllPrompts() {
     const url = storeUrl.trim();
-    const candidates =
-      productOnlyImageUrls.length > 0
-        ? productOnlyImageUrls
-        : cleanCandidate?.url
-          ? [cleanCandidate.url]
-          : [];
+    const candidates = buildProductCandidatesForGeneration();
     const img = pickBestProductUrlForNanoBanana({
       pageUrl: url,
       neutralUploadUrl,
