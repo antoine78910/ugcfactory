@@ -232,6 +232,30 @@
   transition: clip-path 1s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
+/* Link to Ad — image reference assembly loader (3 cards reveal progressively). */
+@keyframes lta-image-arch-reveal {
+  0% {
+    clip-path: inset(0 100% 0 0);
+    opacity: 0.25;
+  }
+  35% {
+    clip-path: inset(45% 0 45% 0);
+    opacity: 0.65;
+  }
+  70% {
+    clip-path: inset(0 0 0 0);
+    opacity: 0.85;
+  }
+  100% {
+    clip-path: inset(0 0 0 0);
+    opacity: 0.7;
+  }
+}
+
+.lta-image-arch-reveal {
+  animation: lta-image-arch-reveal 1.8s ease-in-out infinite;
+}
+
 /**
  * Studio left column (prompt + parameters + actions): one scroll region; no
  * visible scrollbar thumb / resize cursor on the edge.

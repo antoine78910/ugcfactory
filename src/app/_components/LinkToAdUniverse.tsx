@@ -40,6 +40,7 @@ import { WebsiteScanChecklist } from "@/app/_components/WebsiteScanChecklist";
 import { WebsiteScanLoader } from "@/app/_components/WebsiteScanLoader";
 import { TextShimmer } from "@/components/ui/text-shimmer";
 import { cn } from "@/lib/utils";
+import ShapeGrid from "@/app/ShapeGrid";
 import { LINK_TO_AD_LOADING_MESSAGES } from "@/lib/linkToAd/loadingMessageLoops";
 import { CREDITS_LINK_TO_AD_GENERATE_FROM_URL } from "@/lib/linkToAd/generationCredits";
 import type { InternalFetch } from "@/lib/linkToAd/internalFetch";
@@ -103,6 +104,42 @@ function StatusLineShimmer({ text, className }: { text: string; className?: stri
         {text}
       </TextShimmer>
     </motion.span>
+  );
+}
+
+function NanoThreeImageArchitectureLoader() {
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="grid grid-cols-3 gap-2">
+        {([0, 1, 2] as const).map((i) => (
+          <div
+            key={i}
+            className="relative aspect-[3/4] overflow-hidden rounded-xl border border-white/10 bg-black/20"
+            aria-hidden
+          >
+            <ShapeGrid
+              direction="diagonal"
+              speed={0.65}
+              squareSize={14}
+              borderColor="#3b1c6d"
+              hoverFillColor="#2a1252"
+              shape="hexagon"
+              hoverTrailAmount={0}
+              className="absolute inset-0 h-full w-full opacity-75"
+            />
+            <div className="absolute inset-0 bg-gradient-to-b from-violet-500/12 to-transparent animate-pulse" />
+            <div
+              className="absolute inset-0 lta-image-arch-reveal bg-violet-400/15"
+              style={{ animationDelay: `${i * 120}ms` }}
+            />
+            <div className="absolute left-2 top-2 rounded-md border border-white/10 bg-black/40 px-1.5 py-0.5 text-[10px] font-semibold text-white/70">
+              {i + 1}
+            </div>
+          </div>
+        ))}
+      </div>
+      <p className="text-xs font-normal text-white/45">Assembling image architecture…</p>
+    </div>
   );
 }
 
@@ -3199,15 +3236,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                           </>
                         ) : null}
                         {nanoPollTaskId || isNanoAllImagesSubmitting ? (
-                          <div className="flex flex-col gap-1.5 text-sm font-medium text-violet-200">
-                            <span className="inline-flex items-center gap-2">
-                              <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
-                              <span>{LINK_TO_AD_LOADING_MESSAGES.nano_three}</span>
-                            </span>
-                            <span className="text-xs font-normal text-white/45">
-                              This may take several minutes.
-                            </span>
-                          </div>
+                          <NanoThreeImageArchitectureLoader />
                         ) : null}
                       </div>
                     </div>
