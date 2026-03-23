@@ -27,11 +27,35 @@ const LS_CAP = "ugc_demo_credits_cap";
 const LS_PERSONAL_API_KEY = "ugc_personal_api_key";
 const LS_PERSONAL_API_ENABLED = "ugc_personal_api_enabled";
 
+function lsGet(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function lsSet(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* ignore storage errors */
+  }
+}
+
+function lsRemove(key: string) {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    /* ignore storage errors */
+  }
+}
+
 /** Returns the user's Kie API key when Personal API mode is active, or undefined. */
 export function getPersonalApiKey(): string | undefined {
   if (typeof window === "undefined") return undefined;
-  if (localStorage.getItem(LS_PERSONAL_API_ENABLED) !== "1") return undefined;
-  const k = localStorage.getItem(LS_PERSONAL_API_KEY)?.trim();
+  if (lsGet(LS_PERSONAL_API_ENABLED) !== "1") return undefined;
+  const k = lsGet(LS_PERSONAL_API_KEY)?.trim();
   return k && k.length > 0 ? k : undefined;
 }
 
@@ -71,8 +95,8 @@ function readState(): CreditsState {
     return { planId: "free", current: 0, total: 0 };
   }
 
-  const planId = parseAccountPlan(localStorage.getItem(LS_PLAN));
-  let current = Number(localStorage.getItem(LS_CREDITS));
+  const planId = parseAccountPlan(lsGet(LS_PLAN));
+  let current = Number(lsGet(LS_CREDITS));
   if (!Number.isFinite(current) || current < 0) current = 0;
 
   if (planId !== "free") {
@@ -81,7 +105,7 @@ function readState(): CreditsState {
     return { planId, current, total };
   }
 
-  const capRaw = Number(localStorage.getItem(LS_CAP));
+  const capRaw = Number(lsGet(LS_CAP));
   const cap = Number.isFinite(capRaw) && capRaw >= 0 ? capRaw : 0;
   /** Purchased bucket for Free; does not shrink when spending. */
   const total = cap > 0 ? cap : current;
@@ -89,12 +113,12 @@ function readState(): CreditsState {
 }
 
 function persist(state: CreditsState) {
-  localStorage.setItem(LS_PLAN, state.planId);
-  localStorage.setItem(LS_CREDITS, String(state.current));
+  lsSet(LS_PLAN, state.planId);
+  lsSet(LS_CREDITS, String(state.current));
   if (state.planId === "free") {
-    localStorage.setItem(LS_CAP, String(state.total));
+    lsSet(LS_CAP, String(state.total));
   } else {
-    localStorage.removeItem(LS_CAP);
+    lsRemove(LS_CAP);
   }
 }
 
@@ -297,18 +321,18 @@ export function consumeCheckoutQueryParams(pathname: string): boolean {
   const pack = params.get("pack");
   if (onCredits && pack && isCreditPackKey(pack)) {
     const add = creditsForPackKey(pack);
-    const planId = parseAccountPlan(localStorage.getItem(LS_PLAN));
-    let current = Number(localStorage.getItem(LS_CREDITS));
+    const planId = parseAccountPlan(lsGet(LS_PLAN));
+    let current = Number(lsGet(LS_CREDITS));
     if (!Number.isFinite(current) || current < 0) current = 0;
     const nextCurrent = current + add;
     if (planId === "free") {
-      const capRaw = Number(localStorage.getItem(LS_CAP));
+      const capRaw = Number(lsGet(LS_CAP));
       const cap = Number.isFinite(capRaw) && capRaw >= 0 ? capRaw : 0;
       const nextCap = cap + add;
-      localStorage.setItem(LS_CREDITS, String(nextCurrent));
-      localStorage.setItem(LS_CAP, String(nextCap));
+      lsSet(LS_CREDITS, String(nextCurrent));
+      lsSet(LS_CAP, String(nextCap));
     } else {
-      localStorage.setItem(LS_CREDITS, String(nextCurrent));
+      lsSet(LS_CREDITS, String(nextCurrent));
     }
     applied = true;
   }
@@ -316,9 +340,9 @@ export function consumeCheckoutQueryParams(pathname: string): boolean {
   const plan = params.get("plan");
   if (!applied && onSubscription && plan && isSubscriptionPlanId(plan)) {
     const alloc = subscriptionCredits(plan);
-    localStorage.setItem(LS_PLAN, plan);
-    localStorage.setItem(LS_CREDITS, String(alloc));
-    localStorage.removeItem(LS_CAP);
+    lsSet(LS_PLAN, plan);
+    lsSet(LS_CREDITS, String(alloc));
+    lsRemove(LS_CAP);
     applied = true;
   }
 

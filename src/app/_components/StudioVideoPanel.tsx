@@ -477,7 +477,7 @@ export default function StudioVideoPanel() {
   const [editPrompt, setEditPrompt] = useState("");
   const [editAutoSettings, setEditAutoSettings] = useState(true);
   const [editKlingMode, setEditKlingMode] = useState<"std" | "pro">("pro");
-  /** Motion: Kie `background_source` (video backdrop vs still backdrop). */
+  /** Motion `background_source` (video backdrop vs still backdrop). */
   const [editSceneBackground, setEditSceneBackground] = useState<"input_video" | "input_image">(
     "input_video",
   );
@@ -575,7 +575,7 @@ export default function StudioVideoPanel() {
         else setEndUrl(u);
         toast.success("Frame uploaded");
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Upload failed");
+        toast.error("Upload failed. Please try again.");
       } finally {
         setFrameUploadBusy(false);
       }
@@ -637,7 +637,7 @@ export default function StudioVideoPanel() {
         setEditVideoUrl(u);
         toast.success("Video uploaded");
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Upload failed");
+        toast.error("Upload failed. Please try again.");
         URL.revokeObjectURL(blobUrl);
         setEditVideoBlobUrl(null);
       } finally {
@@ -667,7 +667,7 @@ export default function StudioVideoPanel() {
         setEditMotionImageUrl(u);
         toast.success("Image uploaded");
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Upload failed");
+        toast.error("Upload failed. Please try again.");
       } finally {
         setEditUploadBusy(false);
       }
@@ -693,7 +693,7 @@ export default function StudioVideoPanel() {
         setEditMotionVideoUrl(u);
         toast.success("Motion video uploaded");
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Upload failed");
+        toast.error("Upload failed. Please try again.");
         URL.revokeObjectURL(blobUrl);
         setEditMotionVideoBlobUrl(null);
       } finally {
@@ -724,7 +724,7 @@ export default function StudioVideoPanel() {
         setEditElementUrls((prev) => (prev.length >= 4 ? prev : [...prev, u]));
         toast.success("Image added");
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Upload failed");
+        toast.error("Upload failed. Please try again.");
       } finally {
         setEditUploadBusy(false);
       }
@@ -749,7 +749,7 @@ export default function StudioVideoPanel() {
             toast.success("Start frame replaced from paste");
           }
         } catch (e) {
-          toast.error(e instanceof Error ? e.message : "Upload failed");
+          toast.error("Upload failed. Please try again.");
         } finally {
           setFrameUploadBusy(false);
         }
@@ -767,7 +767,7 @@ export default function StudioVideoPanel() {
         setEditElementUrls((prev) => (prev.length >= 4 ? prev : [...prev, u]));
         toast.success("Element image pasted");
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Upload failed");
+        toast.error("Upload failed. Please try again.");
       } finally {
         setEditUploadBusy(false);
       }
@@ -972,7 +972,7 @@ export default function StudioVideoPanel() {
         });
         toast.success("Video ready");
       } catch (e) {
-        const msg = e instanceof Error ? e.message : "Error";
+        const msg = "Something went wrong while generating. Please try again.";
         refundPlatformCredits(platformChargeEdit, grantCredits, creditsRef);
         toast.error(msg);
         setHistoryItems((prev) =>
@@ -1192,7 +1192,7 @@ export default function StudioVideoPanel() {
         });
         toast.success("Video ready");
       } catch (e) {
-        const msg = e instanceof Error ? e.message : "Error";
+        const msg = "Something went wrong while generating. Please try again.";
         refundPlatformCredits(platformChargeCreate, grantCredits, creditsRef);
         toast.error(msg);
         setHistoryItems((prev) =>
@@ -1386,7 +1386,7 @@ export default function StudioVideoPanel() {
                 <div>
                   <Label className="text-xs text-white/45">Quality</Label>
                   <p className="mt-0.5 text-[10px] leading-snug text-white/35">
-                    720p (Std) or 1080p (Pro). Motion Control uses the same Kie quality modes.
+                    720p (Std) or 1080p (Pro). Motion Control uses the same quality modes.
                   </p>
                   <Select
                     value={editKlingMode}
@@ -1411,7 +1411,7 @@ export default function StudioVideoPanel() {
                 <div>
                   <Label className="text-xs text-white/45">Scene control</Label>
                   <p className="mt-0.5 text-[10px] leading-snug text-white/35">
-                    Background driven by the motion clip vs the character still (Kie{" "}
+                    Background driven by the motion clip vs the character still ({" "}
                     <code className="text-white/45">background_source</code>).
                   </p>
                   <Select

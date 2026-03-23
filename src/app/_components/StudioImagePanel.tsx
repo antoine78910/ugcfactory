@@ -293,7 +293,7 @@ export default function StudioImagePanel() {
         setRefUrls((prev) => [...prev, ...urls].slice(0, 12));
         toast.success(`${urls.length} reference image(s) added`);
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Upload failed");
+        toast.error("Upload failed. Please try again.");
       } finally {
         setRefUploadBusy(false);
       }
@@ -312,7 +312,7 @@ export default function StudioImagePanel() {
       setRefUrls((prev) => [...prev, ...urls].slice(0, 12));
       toast.success(urls.length > 1 ? `${urls.length} reference images pasted` : "Reference image pasted");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Upload failed");
+      toast.error("Upload failed. Please try again.");
     } finally {
       setRefUploadBusy(false);
     }
@@ -408,7 +408,7 @@ export default function StudioImagePanel() {
             description: "You can open My Projects — jobs stay in sync. Safe to leave this page.",
           });
         } catch (e) {
-          const msg = e instanceof Error ? e.message : "Generation failed";
+          const msg = "Something went wrong while starting generation. Please try again.";
           refundPlatformCredits(platformCharge, grantCredits, creditsRef);
           toast.error(msg);
         }
@@ -471,7 +471,7 @@ export default function StudioImagePanel() {
         });
         toast.success(ids.length > 1 ? `${urls.length} images ready` : "Image ready");
       } catch (e) {
-        const msg = e instanceof Error ? e.message : "Error";
+        const msg = "Something went wrong while generating. Please try again.";
         refundPlatformCredits(platformCharge, grantCredits, creditsRef);
         toast.error(msg);
         setHistoryItems((prev) =>

@@ -24,7 +24,7 @@ async function uploadFile(file: File): Promise<string> {
   return json.url;
 }
 
-async function pollKieVideoTask(taskId: string, personalApiKey?: string): Promise<string> {
+async function pollUpscaleTask(taskId: string, personalApiKey?: string): Promise<string> {
   const max = 120;
   const keyParam = personalApiKey ? `&personalApiKey=${encodeURIComponent(personalApiKey)}` : "";
   for (let i = 0; i < max; i++) {
@@ -142,7 +142,7 @@ export default function StudioUpscalePanel() {
         setVideoUrl(url);
         toast.success("Video uploaded");
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Upload failed");
+        toast.error("Upload failed. Please try again.");
       } finally {
         setBusy(false);
       }
@@ -195,7 +195,7 @@ export default function StudioUpscalePanel() {
           creditsCharged: platformCharge,
           personalApiKey: upPKey,
         });
-        const outUrl = await pollKieVideoTask(json.taskId, upPKey);
+        const outUrl = await pollUpscaleTask(json.taskId, upPKey);
         const doneAt = Date.now();
         setHistoryItems((prev) => {
           const rest = prev.filter((i) => i.id !== jobId);
@@ -315,13 +315,13 @@ export default function StudioUpscalePanel() {
             </div>
           </div>
 
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">More Kie upscale</p>
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">More upscale options</p>
           <div className={soonCard}>
             <span className="text-xs font-semibold text-white/55">Topaz Image Upscale</span>
-            <span className="text-[10px] text-white/35">Same Kie market family; wiring next.</span>
+            <span className="text-[10px] text-white/35">Coming soon.</span>
           </div>
           <div className={soonCard}>
-            <span className="text-xs font-semibold text-white/55">Other Kie upscalers</span>
+            <span className="text-xs font-semibold text-white/55">Other upscalers</span>
             <span className="text-[10px] text-white/35">New tools will appear here as we enable them.</span>
           </div>
 

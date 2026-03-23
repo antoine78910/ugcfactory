@@ -191,7 +191,7 @@ export default function StudioAvatarPanel() {
   type Bill = { open: false } | { open: true; reason: "credits"; required: number };
   const [billing, setBilling] = useState<Bill>({ open: false });
 
-  const credits = studioImageCreditsPerOutput({ studioModel: "pro", resolution: "1K" });
+  const credits = studioImageCreditsPerOutput({ studioModel: "nano", resolution: "1K" });
 
   const set = useCallback((key: keyof AvatarParams, value: string) => {
     setParams((prev) => ({ ...prev, [key]: value }));
@@ -286,7 +286,7 @@ export default function StudioAvatarPanel() {
               accountPlan: planId,
               creditsCharged: platformCharge,
               prompt,
-              model: "pro",
+              model: "nano",
               aspectRatio: "3:4",
               resolution: "1K",
               numImages: 1,
@@ -306,7 +306,7 @@ export default function StudioAvatarPanel() {
             description: "You can leave this page — it will finish on the server.",
           });
         } catch (e) {
-          const msg = e instanceof Error ? e.message : "Generation failed";
+          const msg = "Something went wrong while starting generation. Please try again.";
           refundPlatformCredits(platformCharge, grantCredits, creditsRef);
           toast.error(msg);
         } finally {
@@ -330,7 +330,7 @@ export default function StudioAvatarPanel() {
           body: JSON.stringify({
             accountPlan: planId,
             prompt,
-            model: "pro",
+            model: "nano",
             aspectRatio: "3:4",
             resolution: "1K",
             numImages: 1,
@@ -360,7 +360,7 @@ export default function StudioAvatarPanel() {
         });
         toast.success("Avatar ready");
       } catch (e) {
-        const msg = e instanceof Error ? e.message : "Generation failed";
+        const msg = "Something went wrong while generating. Please try again.";
         refundPlatformCredits(platformCharge, grantCredits, creditsRef);
         toast.error(msg);
         setHistoryItems((prev) => {
@@ -395,7 +395,7 @@ export default function StudioAvatarPanel() {
             <div>
               <h3 className="text-sm font-bold text-white">Create your avatar</h3>
               <p className="text-xs text-white/45">
-                Configure appearance, then generate with NanoBanana Pro.
+                Configure appearance, then generate with NanoBanana 2.
                 {serverHistory === true
                   ? " Signed in: jobs are saved and keep running if you leave."
                   : serverHistory === false
@@ -437,8 +437,8 @@ export default function StudioAvatarPanel() {
             >
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
               Generate avatar
+              <span className="rounded-md bg-white/15 px-1.5 py-0.5 text-xs tabular-nums">{credits}</span>
             </Button>
-            <span className="text-xs text-white/35">{credits} credits</span>
           </div>
         </div>
 

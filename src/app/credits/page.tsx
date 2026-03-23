@@ -289,8 +289,8 @@ export default function CreditsPage() {
                   <div>
                     <h3 className="text-sm font-bold text-white">Personal API</h3>
                     <p className="mt-1 text-xs leading-relaxed text-white/45">
-                      Use your own Kie API key for all generations. No platform credits are consumed, and all models
-                      are available regardless of subscription tier.
+                      Use your own API key for all generations. No platform credits are consumed, and all models are
+                      available regardless of subscription tier.
                     </p>
                   </div>
                 </div>
@@ -316,7 +316,7 @@ export default function CreditsPage() {
               {personalApiEnabled ? (
                 <div className="flex flex-col gap-2">
                   <label className="text-[11px] font-semibold uppercase tracking-wide text-white/40">
-                    Kie API Key
+                    API Key
                   </label>
                   <div className="relative">
                     <Input
@@ -339,7 +339,7 @@ export default function CreditsPage() {
                       Key saved locally. Generations use your key; plan limits and credit charges are skipped.
                     </p>
                   ) : (
-                    <p className="text-[11px] text-amber-400/60">Enter your key from <a href="https://kie.ai" target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-amber-300">kie.ai</a> to bypass platform credits.</p>
+                    <p className="text-[11px] text-amber-400/60">Enter your API key to bypass platform credits.</p>
                   )}
                 </div>
               ) : null}
