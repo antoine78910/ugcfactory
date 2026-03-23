@@ -303,7 +303,7 @@ function ElementsUploadZone({
           <span className="mt-1 text-xs text-white/40">Up to {max} images or elements</span>
         </button>
       ) : (
-        <div className="grid grid-cols-2 gap-2 pt-6">
+        <div className="grid grid-cols-1 gap-2 pt-6">
           {urls.map((u, i) => (
             <button
               key={`${u}-${i}`}
@@ -1082,12 +1082,12 @@ export default function StudioVideoPanel() {
 
       {tab === "edit" ? (
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4 lg:h-[calc(100dvh-4rem)] lg:min-h-0">
-          <div className="flex min-w-0 w-full flex-col gap-2 lg:basis-[42%] lg:max-w-[48rem] lg:flex-none lg:shrink-0 lg:min-h-0 lg:overflow-hidden">
+          <div className="flex min-w-0 w-full flex-col gap-2 lg:basis-[34%] lg:max-w-[32rem] lg:flex-none lg:shrink-0 lg:min-h-0 lg:overflow-hidden">
             <div className="studio-params-scroll flex min-w-0 flex-col gap-2 lg:h-full lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pb-10">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Edit prompt</p>
             <div className="rounded-2xl border border-white/10 bg-[#101014] p-4 space-y-3">
               {motionEdit ? (
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 gap-2">
                   <FrameSlot
                     label="Character image"
                     url={editMotionImageUrl}
@@ -1273,11 +1273,11 @@ export default function StudioVideoPanel() {
         </div>
       ) : (
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4 lg:h-[calc(100dvh-4rem)] lg:min-h-0">
-          <div className="flex min-w-0 w-full flex-col gap-2 lg:basis-[42%] lg:max-w-[48rem] lg:flex-none lg:shrink-0 lg:min-h-0 lg:overflow-hidden">
+          <div className="flex min-w-0 w-full flex-col gap-2 lg:basis-[34%] lg:max-w-[32rem] lg:flex-none lg:shrink-0 lg:min-h-0 lg:overflow-hidden">
             <div className="studio-params-scroll flex min-w-0 flex-col gap-2 lg:h-full lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pb-10">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Create prompt</p>
             <div className="rounded-2xl border border-white/10 bg-[#101014] p-4">
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 gap-2">
                 <FrameSlot
                   label="Start frame"
                   optional={startFrameOptional}
