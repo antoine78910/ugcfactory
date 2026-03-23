@@ -3083,6 +3083,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                     !isNanoPromptsLoading &&
                     !isNanoAllImagesSubmitting &&
                     !nanoPollTaskId) ||
+                    isNanoPromptsLoading ||
                     nanoPollTaskId ||
                     isNanoAllImagesSubmitting) ? (
                     <div className="shrink-0 rounded-xl border border-white/10 bg-black/25 p-4">
