@@ -1822,7 +1822,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          accountPlan: planId,
           marketModel: "kling-3.0/video",
           prompt: klingPrompt,
           imageUrl: img,
@@ -3429,43 +3428,45 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                         ) : null}
                       </div>
 
-                      <div className="space-y-4 border-t border-white/10 pt-5">
-                        <div>
-                          <p className="text-sm font-semibold text-white/90">Video</p>
-                          <p className="mt-1 text-xs text-white/45">
-                            Motion prompt and final render. You can retry each step if something fails.
-                          </p>
+                      {!(videoPromptEditVisible && editableVideoPrompt.trim() && !klingVideoUrl) ? (
+                        <div className="space-y-4 border-t border-white/10 pt-5">
+                          <div>
+                            <p className="text-sm font-semibold text-white/90">Video</p>
+                            <p className="mt-1 text-xs text-white/45">
+                              Motion prompt and final render. You can retry each step if something fails.
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-white/50">Prompt</p>
+                            {nanoBananaImageUrl &&
+                            userStartedVideoFromImage &&
+                            !ugcVideoPromptGpt.trim() &&
+                            !isVideoPromptLoading &&
+                            selectedAngleIndex !== null ? (
+                              <Button
+                                type="button"
+                                className={`mt-2 h-auto min-h-11 py-2.5 ${primaryBtnClass}`}
+                                onClick={() => {
+                                  void onGenerateUgcVideoPrompt();
+                                }}
+                              >
+                                <span className="text-sm font-semibold leading-tight">Retry video prompt</span>
+                              </Button>
+                            ) : null}
+                            {isVideoPromptLoading ? (
+                              <div className="mt-3 flex items-center gap-2 text-xs text-violet-200">
+                                <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+                                <span>{LINK_TO_AD_LOADING_MESSAGES.video_prompt}</span>
+                              </div>
+                            ) : null}
+                            {ugcVideoPromptGpt ? (
+                              <pre className="mt-3 max-h-[220px] overflow-auto whitespace-pre-wrap rounded-lg border border-white/10 bg-black/30 p-3 text-xs text-white/75">
+                                {ugcVideoPromptGpt}
+                              </pre>
+                            ) : null}
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-xs font-semibold uppercase tracking-wide text-white/50">Prompt</p>
-                          {nanoBananaImageUrl &&
-                          userStartedVideoFromImage &&
-                          !ugcVideoPromptGpt.trim() &&
-                          !isVideoPromptLoading &&
-                          selectedAngleIndex !== null ? (
-                            <Button
-                              type="button"
-                              className={`mt-2 h-auto min-h-11 py-2.5 ${primaryBtnClass}`}
-                              onClick={() => {
-                                void onGenerateUgcVideoPrompt();
-                              }}
-                            >
-                              <span className="text-sm font-semibold leading-tight">Retry video prompt</span>
-                            </Button>
-                          ) : null}
-                          {isVideoPromptLoading ? (
-                            <div className="mt-3 flex items-center gap-2 text-xs text-violet-200">
-                              <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
-                              <span>{LINK_TO_AD_LOADING_MESSAGES.video_prompt}</span>
-                            </div>
-                          ) : null}
-                          {ugcVideoPromptGpt ? (
-                            <pre className="mt-3 max-h-[220px] overflow-auto whitespace-pre-wrap rounded-lg border border-white/10 bg-black/30 p-3 text-xs text-white/75">
-                              {ugcVideoPromptGpt}
-                            </pre>
-                          ) : null}
-                        </div>
-                      </div>
+                      ) : null}
                     </>
                   ) : (
                     <div className="flex min-h-[220px] flex-col items-center justify-center gap-4 rounded-xl border border-white/10 bg-black/20 px-4 py-8 text-center">
