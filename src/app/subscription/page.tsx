@@ -285,7 +285,7 @@ export default function SubscriptionPage() {
                   <div
                     key={plan.id}
                     className={cn(
-                      "relative flex flex-col rounded-2xl border p-6 transition-all duration-300",
+                      "relative flex flex-col overflow-hidden rounded-2xl border p-6 transition-all duration-300",
                       isCurrentPlanCard
                         ? "border-emerald-400/45 bg-gradient-to-b from-emerald-600/[0.14] via-[#0b0914] to-[#06070d] shadow-[0_0_40px_rgba(16,185,129,0.12)]"
                         : plan.highlight
@@ -302,6 +302,11 @@ export default function SubscriptionPage() {
                         {plan.badge}
                       </span>
                     ) : null}
+                    {billing === "yearly" && !isCurrentPlanCard ? (
+                      <span className="pointer-events-none absolute -right-9 top-4 rotate-45 rounded-sm border border-emerald-300/45 bg-emerald-400/25 px-10 py-1 text-[10px] font-extrabold uppercase tracking-[0.12em] text-emerald-50 shadow-[0_0_18px_rgba(16,185,129,0.35)] transition-all duration-300">
+                        Save 50%
+                      </span>
+                    ) : null}
 
                     <div className={cn("mt-2", plan.badge || isCurrentPlanCard ? "mt-3" : "")}>
                       <h2 className="text-xl font-bold text-white">{plan.name}</h2>
@@ -310,10 +315,10 @@ export default function SubscriptionPage() {
 
                     <div className="mt-6">
                       <div className="flex flex-wrap items-baseline gap-1">
-                        <span className="text-5xl font-extrabold tabular-nums leading-none text-white md:text-6xl">
+                        <span className="text-4xl font-extrabold tabular-nums leading-none text-white md:text-5xl">
                           ${mainLabel}
                         </span>
-                        <span className="text-base font-semibold text-white/55">/mo</span>
+                        <span className="text-sm font-semibold text-white/55 md:text-base">/mo</span>
                       </div>
                       <p className="mt-2 text-xs leading-snug text-white/38">{sub}</p>
                       {billing === "yearly" ? (

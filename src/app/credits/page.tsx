@@ -211,12 +211,17 @@ export default function CreditsPage() {
                   <div
                     key={p.key}
                     className={cn(
-                      "relative flex w-full min-w-[min(100%,280px)] max-w-[320px] flex-col rounded-2xl border p-6 transition-all duration-300",
+                      "relative flex w-full min-w-[min(100%,280px)] max-w-[320px] flex-col overflow-hidden rounded-2xl border p-6 transition-all duration-300",
                       featured || value
                         ? "border-violet-400/35 bg-gradient-to-b from-violet-600/[0.14] via-[#0a0a10] to-[#06070d] shadow-[0_0_48px_rgba(139,92,246,0.12),0_8px_0_0_rgba(76,29,149,0.35)]"
                         : "border-white/10 bg-white/[0.03] shadow-[0_0_24px_rgba(0,0,0,0.35)] hover:border-violet-500/25 hover:bg-white/[0.05]",
                     )}
                   >
+                    {p.promoLine.startsWith("Save") ? (
+                      <span className="pointer-events-none absolute -right-9 top-4 rotate-45 rounded-sm border border-emerald-300/45 bg-emerald-400/25 px-10 py-1 text-[10px] font-extrabold uppercase tracking-[0.12em] text-emerald-50 shadow-[0_0_18px_rgba(16,185,129,0.35)] transition-all duration-300">
+                        {p.promoLine}
+                      </span>
+                    ) : null}
                     {p.badge ? (
                       <span
                         className={cn(
@@ -232,7 +237,7 @@ export default function CreditsPage() {
 
                     <div className="mt-1 flex items-baseline justify-between gap-2">
                       <h2 className="text-lg font-bold text-white">{p.name}</h2>
-                      <span className="text-sm font-semibold text-violet-200/90">{p.price}</span>
+                      <span className="text-2xl font-extrabold tabular-nums text-violet-100 sm:text-3xl">{p.price}</span>
                     </div>
 
                     <p className="mt-3 min-h-[2.75rem] text-sm leading-relaxed text-white/50">{p.description}</p>
