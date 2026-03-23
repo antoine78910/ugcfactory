@@ -51,8 +51,8 @@ const MODEL_OPTIONS: { id: VideoModelId; label: string; family: VideoFamily }[] 
   { id: "openai/sora-2", label: "Sora 2", family: "sora" },
   { id: "bytedance/seedance-1.5-pro", label: "Seedance 1.5 Pro", family: "kie" },
   { id: "bytedance/seedance-2.0-pro", label: "Seedance 2.0 Pro", family: "kie" },
-  { id: "veo3_fast", label: "Veo 3 Fast", family: "veo" },
-  { id: "veo3", label: "Veo 3", family: "veo" },
+  { id: "veo3_fast", label: "Veo 3.1 Fast", family: "veo" },
+  { id: "veo3", label: "Veo 3.1", family: "veo" },
 ];
 
 const VIDEO_EDIT_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
@@ -146,14 +146,14 @@ const VIDEO_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
   },
   {
     id: "veo3_fast",
-    label: "Veo 3 Fast",
+    label: "Veo 3.1 Fast",
     icon: "veo",
     resolution: "1080p",
     durationRange: "5–10s",
   },
   {
     id: "veo3",
-    label: "Veo 3",
+    label: "Veo 3.1",
     icon: "veo",
     resolution: "1080p",
     durationRange: "5–10s",

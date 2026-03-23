@@ -23,7 +23,7 @@ const VARIANTS: Record<
     subtitle: "Pick a model, frames and prompt on the left. Outputs stack on this side.",
     examples: [
       { icon: Video, label: "Kling & Seedance", hint: "Text or image-to-video workflows" },
-      { icon: Sparkles, label: "Veo 3", hint: "Optional start / end frames" },
+      { icon: Sparkles, label: "Veo 3.1", hint: "Optional start / end frames" },
       { icon: Clapperboard, label: "9:16 UGC", hint: "Ideal for social vertical formats" },
     ],
   },

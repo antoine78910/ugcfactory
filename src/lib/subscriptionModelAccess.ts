@@ -141,8 +141,8 @@ const STUDIO_VIDEO_LABELS: Record<string, string> = {
   "openai/sora-2": "Sora 2",
   "bytedance/seedance-1.5-pro": "Seedance 1.5 Pro",
   "bytedance/seedance-2.0-pro": "Seedance 2.0 Pro",
-  veo3_fast: "Veo 3 Fast",
-  veo3: "Veo 3",
+  veo3_fast: "Veo 3.1 Fast",
+  veo3: "Veo 3.1",
 };
 
 const STUDIO_VIDEO_EDIT_PICKER_LABELS: Record<string, string> = {
@@ -224,7 +224,7 @@ export function studioVideoEditUpgradeMessage(planId: AccountPlanId, editPickerI
 export function veoUpgradeMessage(planId: AccountPlanId, veoModel: string | undefined): string | null {
   if (canUseVeoApiModel(planId, veoModel)) return null;
   const need = minPlanForVeo(veoModel);
-  const label = (veoModel ?? "veo3_fast") === "veo3" ? "Veo 3" : "Veo 3 Fast";
+  const label = (veoModel ?? "veo3_fast") === "veo3" ? "Veo 3.1" : "Veo 3.1 Fast";
   return upgradePlanMessage(need, label);
 }
 
@@ -272,7 +272,7 @@ export const SUBSCRIPTION_MODEL_MATRIX_ROWS: SubscriptionModelMatrixRow[] = [
   { label: "Kling 2.6: video", tiers: tierBools(VIDEO_MIN_RANK["kling-2.6/video"]) },
   { label: "Seedance 2.0 Pro: video", tiers: tierBools(VIDEO_MIN_RANK["bytedance/seedance-2.0-pro"]) },
   {
-    label: "Veo 3 Fast: video",
+    label: "Veo 3.1 Fast: video",
     badges: [{ text: "Google", className: "bg-amber-500/20 text-amber-200 border-amber-400/30" }],
     tiers: tierBools(VIDEO_MIN_RANK.veo3_fast),
   },
@@ -284,7 +284,7 @@ export const SUBSCRIPTION_MODEL_MATRIX_ROWS: SubscriptionModelMatrixRow[] = [
     ],
     tiers: tierBools(VIDEO_MIN_RANK["kling-3.0/video"]),
   },
-  { label: "Veo 3: video", tiers: tierBools(VIDEO_MIN_RANK.veo3) },
+  { label: "Veo 3.1: video", tiers: tierBools(VIDEO_MIN_RANK.veo3) },
   {
     label: "Sora 2: video",
     badges: [{ text: "OpenAI", className: "bg-sky-500/20 text-sky-200 border-sky-400/30" }],
