@@ -15,7 +15,7 @@
 .scene {
   --pw: 76px;
   --ph: 135px;
-  --r: 320px;
+  --r: 360px;
 
   width: 100%;
   height: 100%;
@@ -23,8 +23,8 @@
   align-items: flex-end;
   justify-content: center;
   padding-bottom: 0.6rem;
-  perspective: 950px;
-  perspective-origin: 50% 22%;
+  perspective: 820px;
+  perspective-origin: 50% 18%;
 }
 
 .ring {
@@ -61,8 +61,8 @@
   .scene {
     --pw: 92px;
     --ph: 164px;
-    --r: 460px;
-    perspective: 1100px;
+    --r: 540px;
+    perspective: 940px;
     padding-bottom: 0.9rem;
   }
 }
@@ -71,8 +71,8 @@
   .scene {
     --pw: 108px;
     --ph: 192px;
-    --r: 620px;
-    perspective: 1300px;
+    --r: 740px;
+    perspective: 1080px;
     padding-bottom: 1.1rem;
   }
 }
@@ -81,8 +81,8 @@
   .scene {
     --pw: 124px;
     --ph: 220px;
-    --r: 760px;
-    perspective: 1500px;
+    --r: 920px;
+    perspective: 1250px;
     padding-bottom: 1.4rem;
   }
 }
@@ -90,16 +90,16 @@
 @keyframes heroSpin {
   from {
     /* Keep the concave look: center reads farther, sides read closer. */
-    transform: translateZ(-220px) rotateX(10deg) rotateY(0deg);
+    transform: translateZ(-300px) rotateX(12deg) rotateY(0deg);
   }
   to {
-    transform: translateZ(-220px) rotateX(10deg) rotateY(-360deg);
+    transform: translateZ(-300px) rotateX(12deg) rotateY(-360deg);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .ring {
     animation: none;
-    transform: translateZ(-220px) rotateX(10deg) rotateY(-18deg);
+    transform: translateZ(-300px) rotateX(12deg) rotateY(-18deg);
   }
 }

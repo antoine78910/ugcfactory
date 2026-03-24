@@ -65,7 +65,7 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
       });
       if (error) throw error;
       toast.success("Signed in");
-      router.push("/app");
+      router.push("/");
       router.refresh();
     } catch (err) {
       toast.error("Sign in error", {
@@ -87,7 +87,7 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
       toast.success("Account created", {
         description: "If email confirmation is enabled, check your inbox.",
       });
-      router.push("/app");
+      router.push("/");
       router.refresh();
     } catch (err) {
       toast.error("Sign up error", {

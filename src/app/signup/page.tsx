@@ -1,4 +1,4 @@
-﻿import { redirect } from "next/navigation";
+import { redirect } from "next/navigation";
 import AuthClient from "@/app/auth/ui";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -8,7 +8,7 @@ export default async function SignUpPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (user) redirect("/app");
+  if (user) redirect("/");
 
   return <AuthClient mode="signup" />;
 }
