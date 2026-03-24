@@ -325,10 +325,164 @@ function angleBlockForEditing(raw: string): { editable: string; headline: string
   return { editable: body, headline };
 }
 
+type UgcFrameworkSec = "HOOK" | "PROBLEM" | "SOLUTION" | "CTA" | "VIDEO_METADATA";
+
+function spokenLinesFromSection(bodyLines: string[]): string {
+  const joined = bodyLines.join("\n").trim();
+  if (!joined) return "";
+  const quotes = [...joined.matchAll(/"([^"]+)"/g)].map((m) => m[1].trim()).filter(Boolean);
+  if (quotes.length) return quotes.join(" ");
+  return joined
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function parseVideoMetadataFieldLines(lines: string[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  const re = /^\s*([a-z][a-z0-9_]*)\s*[:：—\-]\s*(.+)$/i;
+  for (const line of lines) {
+    const m = line.trim().match(re);
+    if (!m) continue;
+    const k = m[1].toLowerCase();
+    const v = m[2].replace(/\s+/g, " ").trim();
+    if (!v) continue;
+    out[k] = out[k] ? `${out[k]} · ${v}` : v;
+  }
+  return out;
+}
+
+/**
+ * UGC scripts-from-brief v4: section headers HOOK / PROBLEM / SOLUTION / CTA (often their own line),
+ * then VIDEO_METADATA key: value lines. This is different from "Hook:" single-line labels.
+ */
+function tryParseUgcScriptFrameworkV4(text: string, headlineHint: string): ScriptFactorBlocks | null {
+  const norm = text.replace(/\r\n/g, "\n");
+  const buf: Record<UgcFrameworkSec, string[]> = {
+    HOOK: [],
+    PROBLEM: [],
+    SOLUTION: [],
+    CTA: [],
+    VIDEO_METADATA: [],
+  };
+  let current: UgcFrameworkSec | null = null;
+  const lines = norm.split("\n");
+
+  for (const raw of lines) {
+    const tl = raw.trim();
+    if (!tl) continue;
+
+    if (/^ANGLE_HEADLINE\s*:/i.test(tl)) {
+      current = null;
+      continue;
+    }
+
+    const hm = tl.match(
+      /^(?:[*•\-]\s*|\d+\.\s*)*(HOOK|PROBLEM|SOLUTION|CTA|VIDEO_METADATA)\b\s*(.*)$/i,
+    );
+    if (hm) {
+      const sec = hm[1].toUpperCase() as UgcFrameworkSec;
+      let rest = hm[2].trim();
+      if (/^[—–\-]/.test(rest) && !rest.includes('"')) rest = "";
+      current = sec;
+      if (rest) buf[sec].push(rest);
+      continue;
+    }
+
+    if (current) buf[current].push(raw.trimEnd());
+  }
+
+  const hasCore =
+    buf.HOOK.length + buf.PROBLEM.length + buf.SOLUTION.length + buf.CTA.length > 0;
+  if (!hasCore) return null;
+
+  const meta = parseVideoMetadataFieldLines(buf.VIDEO_METADATA);
+  const hookSpoken = spokenLinesFromSection(buf.HOOK);
+  const problemSpoken = spokenLinesFromSection(buf.PROBLEM);
+  const solutionSpoken = spokenLinesFromSection(buf.SOLUTION);
+  const ctaSpoken = spokenLinesFromSection(buf.CTA);
+
+  const hint = headlineHint.replace(/\s+/g, " ").trim();
+  let hookOut = "";
+  if (hint && hookSpoken) hookOut = `${hint}\n\n${hookSpoken}`.trim();
+  else hookOut = hint || hookSpoken;
+
+  const proofBits = [meta.props, meta.actions, meta.camera_style, meta.location].filter(Boolean);
+  const toneBits = [meta.tone, meta.energy_level].filter(Boolean);
+
+  return {
+    hook: hookOut,
+    problem: problemSpoken,
+    avatar: meta.persona ?? "",
+    benefits: solutionSpoken,
+    proof: proofBits.join(" · "),
+    offer: "",
+    cta: ctaSpoken,
+    tone: toneBits.join(", "),
+  };
+}
+
+function videoMetadataLinesFromText(text: string): string[] {
+  const m = text.match(
+    /\bVIDEO_METADATA\b\s*\n([\s\S]*?)(?=\n\s*ANGLE_HEADLINE\b|\n\s*SCRIPT\s+OPTION\b|$)/i,
+  );
+  if (!m) return [];
+  return m[1].split("\n");
+}
+
+/** When GPT puts HOOK/PROBLEM/… on one line or spacing differs, still pull (gesture) "spoken" lines. */
+function tryParseUgcQuotedGestures(text: string, headlineHint: string): ScriptFactorBlocks | null {
+  const t = text.replace(/\r\n/g, "\n");
+  const grab = (lab: string) => {
+    const m = t.match(new RegExp(lab + String.raw`\b[\s\S]*?\([^)]*\)\s*"([^"]+)"`, "i"));
+    return m?.[1]?.trim() ?? "";
+  };
+  const hookQ = grab("HOOK");
+  const probQ = grab("PROBLEM");
+  const solQ = grab("SOLUTION");
+  const ctaQ = grab("CTA");
+  if (!hookQ && !probQ && !solQ && !ctaQ) return null;
+
+  const hint = headlineHint.replace(/\s+/g, " ").trim();
+  const meta = parseVideoMetadataFieldLines(videoMetadataLinesFromText(t));
+  const proofBits = [meta.props, meta.actions, meta.camera_style, meta.location].filter(Boolean);
+  const toneBits = [meta.tone, meta.energy_level].filter(Boolean);
+
+  return {
+    hook: hint && hookQ ? `${hint}\n\n${hookQ}`.trim() : hint || hookQ,
+    problem: probQ,
+    avatar: meta.persona ?? "",
+    benefits: solQ,
+    proof: proofBits.join(" · "),
+    offer: "",
+    cta: ctaQ,
+    tone: toneBits.join(", "),
+  };
+}
+
 function splitScriptFactorsForUi(script: string, headlineHint = ""): ScriptFactorBlocks {
   const hint = headlineHint.replace(/\s+/g, " ").trim();
   const clean = script.replace(/\r\n/g, "\n").trim();
   if (!clean && !hint) return { ...EMPTY_SCRIPT_FACTORS };
+
+  if (clean) {
+    const v4 = tryParseUgcScriptFrameworkV4(clean, hint);
+    if (v4) {
+      const hasAny = Object.values(v4).some((v) => String(v).trim().length > 0);
+      if (hasAny) {
+        if (!v4.hook.trim() && hint) v4.hook = hint;
+        return v4;
+      }
+    }
+    const quoted = tryParseUgcQuotedGestures(clean, hint);
+    if (quoted) {
+      const hasAny = Object.values(quoted).some((v) => String(v).trim().length > 0);
+      if (hasAny) {
+        if (!quoted.hook.trim() && hint) quoted.hook = hint;
+        return quoted;
+      }
+    }
+  }
 
   const linePatterns: { re: RegExp; slot: keyof ScriptFactorBlocks }[] = [
     { re: /^(hook|opening|intro)\s*[:：]\s*(.+)$/i, slot: "hook" },
