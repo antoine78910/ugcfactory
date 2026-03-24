@@ -4,6 +4,9 @@ export type LinkToAdUniverseSnapshotV1 = {
   phase: "after_summary" | "after_scripts";
   generationMode?: "automatic" | "custom_ugc";
   customUgcIntent?: string;
+  customUgcTopic?: string;
+  customUgcOffer?: string;
+  customUgcCta?: string;
   cleanCandidate: { url: string; reason?: string } | null;
   fallbackImageUrl: string | null;
   confidence: string | null;
@@ -625,6 +628,9 @@ export function readUniverseFromExtracted(extracted: unknown): LinkToAdUniverseS
         ? (o.generationMode as "automatic" | "custom_ugc")
         : "automatic",
     customUgcIntent: typeof o.customUgcIntent === "string" ? o.customUgcIntent : "",
+    customUgcTopic: typeof o.customUgcTopic === "string" ? o.customUgcTopic : "",
+    customUgcOffer: typeof o.customUgcOffer === "string" ? o.customUgcOffer : "",
+    customUgcCta: typeof o.customUgcCta === "string" ? o.customUgcCta : "",
     cleanCandidate:
       clean && typeof clean === "object" && typeof (clean as { url?: string }).url === "string"
         ? {

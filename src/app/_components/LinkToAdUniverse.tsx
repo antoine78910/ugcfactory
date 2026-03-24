@@ -202,6 +202,17 @@ function withAudioHint(prompt: string) {
   return `${p}\n\nAudio: ON. Include natural spoken voice and subtle ambient sound.`;
 }
 
+function composeCustomUgcIntent(topic: string, offer: string, cta: string): string {
+  const t = topic.trim();
+  const o = offer.trim();
+  const c = cta.trim();
+  const parts: string[] = [];
+  if (t) parts.push(`Creative direction: talk about ${t}.`);
+  if (o) parts.push(`Offer: ${o}.`);
+  if (c) parts.push(`CTA: ${c}.`);
+  return parts.join(" ");
+}
+
 function storeHostname(url: string): string | null {
   const t = url.trim();
   if (!t) return null;
@@ -369,7 +380,9 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const [summaryText, setSummaryText] = useState<string>("");
   const [scriptsText, setScriptsText] = useState<string>("");
   const [generationMode, setGenerationMode] = useState<"automatic" | "custom_ugc">("automatic");
-  const [customUgcIntent, setCustomUgcIntent] = useState("");
+  const [customUgcTopic, setCustomUgcTopic] = useState("");
+  const [customUgcOffer, setCustomUgcOffer] = useState("");
+  const [customUgcCta, setCustomUgcCta] = useState("");
   const [stage, setStage] = useState<
     | "idle"
     | "scanning"
@@ -629,7 +642,10 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       v: 1,
       phase: scriptsText ? "after_scripts" : "after_summary",
       generationMode,
-      customUgcIntent: customUgcIntent.trim(),
+      customUgcIntent: composeCustomUgcIntent(customUgcTopic, customUgcOffer, customUgcCta),
+      customUgcTopic: customUgcTopic.trim(),
+      customUgcOffer: customUgcOffer.trim(),
+      customUgcCta: customUgcCta.trim(),
       cleanCandidate,
       fallbackImageUrl,
       confidence,
@@ -660,7 +676,9 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     productOnlyImageUrls,
     userPhotoUrls,
     generationMode,
-    customUgcIntent,
+    customUgcTopic,
+    customUgcOffer,
+    customUgcCta,
     summaryText,
     scriptsText,
     angleLabels,
@@ -772,7 +790,9 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       setSummaryText(snap.summaryText);
       setScriptsText(snap.scriptsText);
       setGenerationMode(snap.generationMode === "custom_ugc" ? "custom_ugc" : "automatic");
-      setCustomUgcIntent((snap.customUgcIntent ?? "").trim());
+      setCustomUgcTopic(((snap.customUgcTopic ?? "").trim() || (snap.customUgcIntent ?? "").trim()));
+      setCustomUgcOffer((snap.customUgcOffer ?? "").trim());
+      setCustomUgcCta((snap.customUgcCta ?? "").trim());
       setPendingCustomAnglePreview(null);
       setAngleLabels(
         snap.angleLabels[0] && snap.angleLabels[1] && snap.angleLabels[2]
@@ -1360,7 +1380,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           storeUrl: url,
           neutralUploadUrl: userUploadedImageUrl,
           generationMode,
-          customUgcIntent: customUgcIntent.trim(),
+          customUgcIntent: composeCustomUgcIntent(customUgcTopic, customUgcOffer, customUgcCta),
         },
         (step) => setServerPipelineStepIndex(step),
       );
@@ -1456,7 +1476,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           productImageUrl: img,
           avatarImageUrls: avatarRefs,
           generationMode,
-          customUgcIntent: customUgcIntent.trim(),
+          customUgcIntent: composeCustomUgcIntent(customUgcTopic, customUgcOffer, customUgcCta),
         }),
       });
       const json = (await res.json()) as { data?: string; error?: string };
@@ -2507,20 +2527,40 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                     >
                       <p className="text-sm font-semibold">Custom UGC intent</p>
                       <p className="mt-0.5 text-[11px] leading-relaxed text-white/55">
-                        Describe what you want (ex: no talk, just show product).
+                        Add your own creative direction on top of Link to Ad.
                       </p>
                     </button>
                   </div>
                 </div>
                 {generationMode === "custom_ugc" ? (
-                  <div className="space-y-1">
-                    <Label className="text-xs font-semibold text-white/70">Custom UGC direction</Label>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold text-white/70">Parler de quoi dans ta créa</Label>
                     <Textarea
-                      value={customUgcIntent}
-                      onChange={(e) => setCustomUgcIntent(e.target.value)}
-                      placeholder="Example: No talk. Focus on close product details, hands-on demonstration, lifestyle cuts, and clean transitions."
+                      value={customUgcTopic}
+                      onChange={(e) => setCustomUgcTopic(e.target.value)}
+                      placeholder="Ex: no talk, just show texture/results and product usage in real-life shots."
                       className="min-h-[92px] border-white/10 bg-black/30 text-sm text-white/85 placeholder:text-white/30"
                     />
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <div className="space-y-1">
+                        <Label className="text-xs font-semibold text-white/70">Ton offre (optionnel)</Label>
+                        <Input
+                          value={customUgcOffer}
+                          onChange={(e) => setCustomUgcOffer(e.target.value)}
+                          placeholder="Ex: 20% off today / free shipping"
+                          className="h-10 border-white/10 bg-black/30 text-sm text-white/85 placeholder:text-white/30"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs font-semibold text-white/70">CTA (optionnel)</Label>
+                        <Input
+                          value={customUgcCta}
+                          onChange={(e) => setCustomUgcCta(e.target.value)}
+                          placeholder="Ex: Tap to shop now"
+                          className="h-10 border-white/10 bg-black/30 text-sm text-white/85 placeholder:text-white/30"
+                        />
+                      </div>
+                    </div>
                   </div>
                 ) : null}
               </div>
