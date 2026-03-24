@@ -14,6 +14,7 @@ type Body = {
 };
 
 const LIBRARY_KINDS = ["avatar", "studio_image", "studio_video", "studio_upscale", "motion_control"] as const;
+const IN_PROGRESS_STATUSES = ["processing", "generating", "pending", "queued"] as const;
 
 export async function POST(req: Request) {
   const { supabase, user, response } = await requireSupabaseUser();
@@ -34,7 +35,7 @@ export async function POST(req: Request) {
       .from("studio_generations")
       .select("*")
       .eq("user_id", user.id)
-      .eq("status", "processing");
+      .in("status", [...IN_PROGRESS_STATUSES]);
 
     if (kind === "all") {
       procQuery = procQuery.in("kind", [...LIBRARY_KINDS]);

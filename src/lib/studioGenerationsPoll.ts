@@ -13,7 +13,8 @@ export async function pollStudioGenerationRow(
   personalApiKey: string | undefined,
   supabase: SupabaseClient,
 ): Promise<void> {
-  if (row.status !== "processing") return;
+  const status = String(row.status ?? "").toLowerCase();
+  if (!["processing", "generating", "pending", "queued"].includes(status)) return;
 
   const key = row.uses_personal_api ? personalApiKey?.trim() || undefined : undefined;
   if (row.uses_personal_api && !key) return;

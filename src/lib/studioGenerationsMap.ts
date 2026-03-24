@@ -26,7 +26,10 @@ function rowKindToMediaKind(kind: string): StudioHistoryItem["kind"] {
 export function studioGenerationRowToHistoryItem(row: StudioGenerationRow): StudioHistoryItem {
   const createdAt = new Date(row.created_at).getTime();
   const mediaKind = rowKindToMediaKind(row.kind);
-  if (row.status === "ready") {
+  const status = String(row.status ?? "").toLowerCase();
+  const isReady = ["ready", "success", "succeeded", "completed", "done"].includes(status);
+  const isFailed = ["failed", "error", "errored", "cancelled", "canceled"].includes(status);
+  if (isReady) {
     return {
       id: row.id,
       kind: mediaKind,
@@ -37,7 +40,7 @@ export function studioGenerationRowToHistoryItem(row: StudioGenerationRow): Stud
       studioGenerationKind: row.kind,
     };
   }
-  if (row.status === "failed") {
+  if (isFailed) {
     return {
       id: row.id,
       kind: mediaKind,
