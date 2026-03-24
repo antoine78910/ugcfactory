@@ -112,7 +112,6 @@ export default function StudioUpscalePanel() {
   const [billing, setBilling] = useState<Bill>({ open: false });
 
   const credits = useMemo(() => topazVideoUpscaleCredits(durationSec), [durationSec]);
-  const creditsDurationText = `${durationSec}s`;
 
   const probeDuration = useCallback((url: string) => {
     if (!url) return;
@@ -175,7 +174,7 @@ export default function StudioUpscalePanel() {
       return;
     }
     const jobId = crypto.randomUUID();
-    const label = `Topaz ${factor}× · ${durationSec}s`;
+    const label = `Topaz ${factor}×`;
     const platformCharge = usingPersonalApi ? 0 : credits;
     if (!usingPersonalApi) {
       spendCredits(credits);
@@ -314,13 +313,6 @@ export default function StudioUpscalePanel() {
               </div>
             ) : null}
             <div className="grid grid-cols-1 gap-3">
-              <div>
-                <Label className="text-xs text-white/45">Detected duration</Label>
-                <div className="mt-2 h-11 w-full rounded-xl border border-white/10 bg-[#0a0a0d] px-3 text-sm text-white tabular-nums flex items-center">
-                  {creditsDurationText}
-                </div>
-                <p className="mt-1 text-[10px] text-white/35">Auto-detected from uploaded video metadata.</p>
-              </div>
               <div>
                 <Label className="text-xs text-white/45">Upscale factor</Label>
                 <Select value={factor} onValueChange={(v) => setFactor(v as "1" | "2" | "4")}>
