@@ -35,6 +35,7 @@ export async function POST(req: Request) {
       ? String((body as { billing: unknown }).billing)
       : "monthly";
   const billing = billingRaw === "yearly" ? "yearly" : "monthly";
+  /** LinkJolt: `window.linkjolt.referral` → Stripe `client_reference_id` for affiliate attribution. */
   const referral =
     typeof body === "object" && body !== null && "referral" in body
       ? String((body as { referral: unknown }).referral).slice(0, 500)

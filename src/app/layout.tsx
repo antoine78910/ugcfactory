@@ -29,6 +29,8 @@ export const metadata: Metadata = {
 const DATAFAST_WEBSITE_ID =
   process.env.NEXT_PUBLIC_DATAFAST_WEBSITE_ID ?? "dfid_CATofowr0YLBVK8sLAekT";
 const DATAFAST_DOMAIN = process.env.NEXT_PUBLIC_DATAFAST_DOMAIN ?? "youry.io";
+const LINKJOLT_MERCHANT_ID =
+  process.env.NEXT_PUBLIC_LINKJOLT_MERCHANT_ID ?? "NKdBH0Xt51wfjtEIZB5Zg";
 
 export default function RootLayout({
   children,
@@ -45,10 +47,10 @@ export default function RootLayout({
         data-website-id={DATAFAST_WEBSITE_ID}
         data-domain={DATAFAST_DOMAIN}
       />
-      {/* LinkJolt affiliate tracking */}
+      {/* LinkJolt affiliate tracking — referral passed as Stripe Checkout client_reference_id from /credits + /subscription */}
       <Script
         id="linkjolt"
-        src="https://www.linkjolt.io/api/tracking.js?id=NKdBH0Xt51wfjtEIZB5Zg"
+        src={`https://www.linkjolt.io/api/tracking.js?id=${LINKJOLT_MERCHANT_ID}`}
         strategy="afterInteractive"
       />
       <body
