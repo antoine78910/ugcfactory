@@ -156,8 +156,8 @@ export default function SubscriptionPage() {
     if (billing === "monthly") {
       return { mainLabel: String(plan.monthly), sub: "Billed every month" };
     }
-    const perMonthEquiv = plan.monthly * 0.5;
-    const yearlyTotal = plan.monthly * 6;
+    const perMonthEquiv = plan.monthly * 0.7;
+    const yearlyTotal = plan.monthly * 8.4;
     const mainLabel = Number.isInteger(perMonthEquiv) ? String(perMonthEquiv) : perMonthEquiv.toFixed(2);
     return {
       mainLabel,
@@ -237,7 +237,7 @@ export default function SubscriptionPage() {
                   <span className="inline-flex items-center gap-2">
                     Yearly
                     <span className="rounded-full border border-emerald-300/45 bg-emerald-400/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-100 shadow-[0_0_16px_rgba(16,185,129,0.28)]">
-                      Save 50%
+                      Save 30%
                     </span>
                   </span>
                 </button>
@@ -305,7 +305,7 @@ export default function SubscriptionPage() {
                     ) : null}
                     {billing === "yearly" && !isCurrentPlanCard ? (
                       <span className="pointer-events-none absolute -right-9 top-4 rotate-45 rounded-sm border border-emerald-300/45 bg-emerald-400/25 px-10 py-1 text-[10px] font-extrabold uppercase tracking-[0.12em] text-emerald-50 shadow-[0_0_18px_rgba(16,185,129,0.35)] transition-all duration-300">
-                        Save 50%
+                        Save 30%
                       </span>
                     ) : null}
 
@@ -324,7 +324,7 @@ export default function SubscriptionPage() {
                       <p className="mt-2 text-xs leading-snug text-white/38">{sub}</p>
                       {billing === "yearly" ? (
                         <p className="mt-2 inline-flex items-center rounded-md border border-emerald-400/35 bg-emerald-500/15 px-2 py-1 text-[11px] font-semibold text-emerald-200">
-                          Save 50% on yearly billing
+                          Save 30% on yearly billing
                         </p>
                       ) : null}
                     </div>
