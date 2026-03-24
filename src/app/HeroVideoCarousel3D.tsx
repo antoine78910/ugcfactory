@@ -13,7 +13,7 @@ const DEFAULT_SRCS = [
   '/carousel/slide-7.mp4',
 ];
 
-const PANEL_COUNT = 12;
+const PANEL_COUNT = 14;
 const SLICE = 360 / PANEL_COUNT;
 
 type Props = { srcs?: readonly string[] };

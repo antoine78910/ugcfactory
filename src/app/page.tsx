@@ -5,7 +5,6 @@ import Link from "next/link";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import RotatingText from "./RotatingText";
 import ShapeGrid from "./ShapeGrid";
 import { HeroVideoCarousel3D } from "./HeroVideoCarousel3D";
 import { ArrowRight, ChevronDown, Sparkles } from "lucide-react";
@@ -311,29 +310,12 @@ export default function LandingPage() {
 
         <div className="relative z-10 mx-auto w-full max-w-5xl px-5 pt-4 pb-0 text-center sm:pt-6 md:pt-8">
           <h1 className="mx-auto max-w-4xl px-3 sm:px-6 text-4xl font-extrabold tracking-tight leading-[1.12] sm:text-5xl md:text-6xl">
-            Turn any product
-            <br />
-            into realistic
-            <br />
-            <span className="text-white">AI</span>{" "}
-            <RotatingText
-              texts={["Ads", "Ugc", "Reels", "Stories"]}
-              mainClassName="mx-2 inline-flex bg-violet-500/90 text-black overflow-hidden px-2 sm:px-2 md:px-3 py-1 sm:py-1.5 justify-center rounded-xl shadow-[0_0_22px_rgba(139,92,246,0.35)]"
-              staggerFrom={"last"}
-              initial={{ y: "100%" }}
-              animate={{ y: 0 }}
-              exit={{ y: "-120%" }}
-              staggerDuration={0.025}
-              splitLevelClassName="overflow-hidden pb-0.5 sm:pb-1"
-              transition={{ type: "spring", damping: 30, stiffness: 400 }}
-              rotationInterval={2000}
-            />
+            Realistic AI UGC for high-converting ads
           </h1>
 
           <div className="mx-auto mt-5 max-w-xl sm:mt-6">
             <p className="mb-2 text-sm text-white/55">
-              We analyze your site like a top-tier media buyer, and turn it into
-              high-converting ads 👇
+              Discover winning angles and generate authentic videos at scale.
             </p>
             <div className="relative">
               <div className="pointer-events-none absolute -inset-6 rounded-full bg-violet-600/20 blur-2xl" />
@@ -359,7 +341,7 @@ export default function LandingPage() {
 
         {/* 3D video cylinder: full width, below headline in layout, continuous spin */}
         <div
-          className="pointer-events-none absolute inset-x-0 -bottom-5 z-[2] h-[min(340px,50svh)] overflow-visible sm:h-[min(390px,54svh)] lg:h-[min(460px,58svh)]"
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-[2] h-[min(340px,50svh)] overflow-visible sm:h-[min(390px,54svh)] lg:h-[min(460px,58svh)]"
           aria-hidden
         >
           <HeroVideoCarousel3D srcs={UGC_SLIDES.map((s) => s.src)} />
@@ -406,11 +388,11 @@ export default function LandingPage() {
       <section className="overflow-hidden -mt-8 pt-24 pb-10 bg-gradient-to-b from-[#0c0a14]/35 via-[#09080f]/20 to-transparent">
         <div className="mx-auto max-w-6xl px-5 mb-14 text-center">
           <h2 className="text-3xl font-bold tracking-tight sm:text-4xl md:text-5xl">
-            MAKE YOUR PRODUCTS{" "}
-            <span className="bg-gradient-to-r from-violet-400 to-fuchsia-500 bg-clip-text text-transparent">
-              UNSKIPPABLE
-            </span>
+            Turn any product into realistic AI UGC ads
           </h2>
+          <p className="mx-auto mt-4 max-w-3xl text-base leading-relaxed text-white/52 sm:text-lg">
+            Transform simple product shots into authentic, scroll-stopping videos that actually convert.
+          </p>
         </div>
 
         {/* Scrolling reveal carousel: image → video wipe per card */}
@@ -481,10 +463,10 @@ export default function LandingPage() {
           <div className="pointer-events-none absolute -left-16 top-8 h-48 w-48 rounded-full bg-violet-600/8 blur-[60px]" />
 
           <h2 className="relative text-3xl font-extrabold italic tracking-tight sm:text-4xl md:text-5xl">
-            YOUR NEXT AD IS ONE CLICK AWAY
+            YOUR NEXT UGC IS ONE CLICK AWAY
           </h2>
           <p className="relative mx-auto mt-5 max-w-lg text-sm text-white/45 sm:text-base">
-            Turn your product page into your next best-performing ad. Right now.
+            Turn your product page into your next best-performing UGC. Right now.
             What are you waiting for?
           </p>
           <Button
