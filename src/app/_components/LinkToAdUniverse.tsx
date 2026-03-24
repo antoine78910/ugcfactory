@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { toast } from "sonner";
-import { Check, ImagePlus, Loader2, Maximize2, PenLine, Plus, RefreshCw, Sparkles, Trash2, Video, X } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, ImagePlus, Loader2, Maximize2, PenLine, Plus, RefreshCw, Sparkles, Trash2, Video, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -412,6 +412,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   /** Manual edit of headline + script before "Add to my angles". */
   const [pendingCustomAngleEditing, setPendingCustomAngleEditing] = useState(false);
   const [editableScript, setEditableScript] = useState("");
+  const [expandedAngleScripts, setExpandedAngleScripts] = useState<Record<number, boolean>>({});
+  const [angleScriptDrafts, setAngleScriptDrafts] = useState<Record<number, string>>({});
   const [scriptEditVisible, setScriptEditVisible] = useState(false);
   const [scriptFactors, setScriptFactors] = useState<ScriptFactorBlocks>({ ...EMPTY_SCRIPT_FACTORS });
   const [scriptHasEdits, setScriptHasEdits] = useState(false);
@@ -711,7 +713,61 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       };
     });
   }, [angleLabels, scriptOptionBodiesAll]);
+  const composeScriptsFromOptions = useCallback((options: string[]) => {
+    return options
+      .map((opt, idx) => {
+        const body = opt.trim();
+        if (!body) return `SCRIPT OPTION ${idx + 1}`;
+        return body;
+      })
+      .join("\n\n");
+  }, []);
+
+  const saveAngleScriptDraft = useCallback(
+    (index: number) => {
+      const draft = (angleScriptDrafts[index] ?? "").trim();
+      if (!draft) {
+        toast.error("Script cannot be empty.");
+        return;
+      }
+      const nextOptions = [...scriptOptionBodiesAll];
+      while (nextOptions.length <= index) {
+        nextOptions.push(`SCRIPT OPTION ${nextOptions.length + 1}`);
+      }
+      nextOptions[index] = draft;
+      const merged = composeScriptsFromOptions(nextOptions);
+      setScriptsText(merged);
+      if (selectedAngleIndex === index) {
+        const headline = angleLabels[index as 0 | 1 | 2] || "";
+        const editable = angleBlockForEditing(draft, headline);
+        setEditableScript(editable);
+        setScriptFactors(splitScriptFactorsForUi(editable, headline));
+        setScriptHasEdits(true);
+      }
+      toast.success(`Angle ${index + 1} script updated.`);
+    },
+    [
+      angleLabels,
+      angleScriptDrafts,
+      composeScriptsFromOptions,
+      scriptOptionBodiesAll,
+      selectedAngleIndex,
+      setScriptsText,
+    ],
+  );
   const displayedProductImageUrl = neutralUploadUrl ?? cleanCandidate?.url ?? fallbackImageUrl ?? null;
+
+  useEffect(() => {
+    setAngleScriptDrafts((prev) => {
+      const next: Record<number, string> = { ...prev };
+      scriptOptionBodiesAll.forEach((body, idx) => {
+        if (!next[idx] || !next[idx].trim()) {
+          next[idx] = body;
+        }
+      });
+      return next;
+    });
+  }, [scriptOptionBodiesAll]);
 
   const resolvedPreviewUrl = useMemo(() => {
     if (!displayedProductImageUrl) return null;
@@ -3376,28 +3432,65 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                       {angleOptionCards.map((card) => {
                         const i = card.index;
                         const active = selectedAngleIndex === i;
+                        const expanded = Boolean(expandedAngleScripts[i]);
+                        const fullScript = scriptOptionBodiesAll[i] ?? "";
+                        const draft = angleScriptDrafts[i] ?? fullScript;
                         return (
-                          <button
+                          <div
                             key={i}
-                            type="button"
-                            onClick={() => void onSelectAngle(i)}
                             className={cn(
-                              "rounded-xl border px-3 py-2.5 text-left transition-all min-h-[4.5rem]",
+                              "rounded-xl border px-3 py-2.5 transition-all",
                               active
                                 ? "border-violet-400/55 bg-violet-500/[0.14] shadow-[0_0_20px_rgba(139,92,246,0.12)] ring-1 ring-violet-400/25"
                                 : "border-white/10 bg-white/[0.03] hover:border-violet-400/35 hover:bg-white/[0.06]",
                             )}
                           >
-                            <span className="text-[10px] font-bold uppercase tracking-wide text-violet-300">
-                              Angle {i + 1}
-                              {active ? (
-                                <span className="ml-1.5 font-semibold normal-case text-violet-200/90">· active</span>
-                              ) : null}
-                            </span>
-                            <p className="mt-1.5 text-xs leading-snug text-white/80 line-clamp-5">
-                              {card.label}
-                            </p>
-                          </button>
+                            <button type="button" onClick={() => void onSelectAngle(i)} className="w-full text-left">
+                              <span className="text-[10px] font-bold uppercase tracking-wide text-violet-300">
+                                Angle {i + 1}
+                                {active ? (
+                                  <span className="ml-1.5 font-semibold normal-case text-violet-200/90">· active</span>
+                                ) : null}
+                              </span>
+                              <p className="mt-1.5 text-xs leading-snug text-white/80 line-clamp-5">
+                                {card.label}
+                              </p>
+                            </button>
+                            <div className="mt-2 flex items-center justify-between">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setExpandedAngleScripts((prev) => ({ ...prev, [i]: !Boolean(prev[i]) }))
+                                }
+                                className="inline-flex items-center gap-1 text-[11px] font-medium text-violet-200/85 transition hover:text-violet-100"
+                              >
+                                {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                                {expanded ? "Hide full script" : "Show full script"}
+                              </button>
+                            </div>
+                            {expanded ? (
+                              <div className="mt-2 space-y-2 border-t border-white/10 pt-2">
+                                <Textarea
+                                  value={draft}
+                                  onChange={(e) =>
+                                    setAngleScriptDrafts((prev) => ({ ...prev, [i]: e.target.value }))
+                                  }
+                                  className="min-h-[150px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/85"
+                                />
+                                <div className="flex justify-end">
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="secondary"
+                                    className="h-8 border-white/15 bg-white/5 text-xs text-white hover:bg-white/10"
+                                    onClick={() => saveAngleScriptDraft(i)}
+                                  >
+                                    Save this angle
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : null}
+                          </div>
                         );
                       })}
                     </div>
