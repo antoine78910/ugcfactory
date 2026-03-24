@@ -248,16 +248,6 @@ export default function SubscriptionPage() {
             </div>
           </header>
 
-          {billing === "yearly" ? (
-            <p className="mx-auto max-w-2xl rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-4 py-3 text-center text-xs leading-relaxed text-amber-100/90">
-              Yearly billing needs Stripe yearly price IDs. Set{" "}
-              <code className="rounded-md bg-black/30 px-1.5 py-0.5 font-mono text-[10px] text-white/80">
-                STRIPE_PRICE_SUBSCRIPTION_*_YEARLY
-              </code>{" "}
-              in env, or stay on Monthly (ready out of the box).
-            </p>
-          ) : null}
-
           <section>
             <div className="mb-8 flex flex-col items-center gap-2 text-center">
               <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1">

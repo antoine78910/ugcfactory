@@ -24,6 +24,9 @@ export const PRICING_BASE = {
   real_cost_per_credit_usd: 0.0375,
 } as const;
 
+/** Effective $/credit reference from Starter subscription (requested baseline). */
+export const STARTER_CREDIT_VALUE_USD = 29.99 / 250;
+
 /** Credits charged per second of Kling 3.0–style video (dynamic rule). */
 export const KLING_3_VIDEO_CREDITS_PER_SECOND = 2.25;
 
@@ -61,17 +64,19 @@ const SEEDREAM_50_LITE_BASE = computeImageModelFromCostUsd(SEEDREAM_50_LITE_COST
 function googleImageTier(p: {
   model: string;
   cost_usd: number;
-  credits: number;
   fal_list_price_usd: number;
 }) {
+  // Image pricing target: keep ~50–60% margin (default 55%).
+  const our_price_usd = p.cost_usd / (1 - PRICING_BASE.target_margins.image);
+  const credits = Math.max(1, Math.ceil(our_price_usd / STARTER_CREDIT_VALUE_USD));
   const cost_with_buffer = p.cost_usd * PRICING_BASE.cost_buffer;
   return {
     model: p.model,
     cost_usd: p.cost_usd,
     cost_with_buffer,
     target_margin: PRICING_BASE.target_margins.image,
-    price_usd: p.credits * PRICING_BASE.credit_value_usd,
-    credits: p.credits,
+    price_usd: our_price_usd,
+    credits,
     fal_list_price_usd: p.fal_list_price_usd,
   };
 }
@@ -79,31 +84,26 @@ function googleImageTier(p: {
 const GOOGLE_NANO_2_1K = googleImageTier({
   model: "google_nano_banana_2_1k",
   cost_usd: 0.04,
-  credits: 8,
   fal_list_price_usd: 0.08,
 });
 const GOOGLE_NANO_2_2K = googleImageTier({
   model: "google_nano_banana_2_2k",
   cost_usd: 0.06,
-  credits: 12,
   fal_list_price_usd: 0.12,
 });
 const GOOGLE_NANO_2_4K = googleImageTier({
   model: "google_nano_banana_2_4k",
   cost_usd: 0.09,
-  credits: 18,
   fal_list_price_usd: 0.16,
 });
 const GOOGLE_NANO_PRO_12K = googleImageTier({
   model: "google_nano_banana_pro_1k_2k",
   cost_usd: 0.09,
-  credits: 18,
   fal_list_price_usd: 0.15,
 });
 const GOOGLE_NANO_PRO_4K = googleImageTier({
   model: "google_nano_banana_pro_4k",
   cost_usd: 0.12,
-  credits: 24,
   fal_list_price_usd: 0.3,
 });
 
@@ -114,37 +114,25 @@ export const IMAGE_MODEL = {
   google_nano_banana_pro_1k_2k: GOOGLE_NANO_PRO_12K,
   google_nano_banana_pro_4k: GOOGLE_NANO_PRO_4K,
   /** Legacy key — Google nano banana text-to-image (1 price). */
-  nanobanana_standard: {
+  nanobanana_standard: googleImageTier({
     model: "nanobanana_standard",
     cost_usd: 0.02,
-    cost_with_buffer: 0.02 * PRICING_BASE.cost_buffer,
-    target_margin: PRICING_BASE.target_margins.image,
-    price_usd: 0.02,
-    credits: 4,
     fal_list_price_usd: 0.039,
-  },
+  }),
   /**
    * Legacy key used by Link to Ad for 3 reference images.
    * Requested billing: 2 credits per NanoBanana Pro image.
    */
-  nanobanana_pro: {
+  nanobanana_pro: googleImageTier({
     model: "nanobanana_pro",
-    cost_usd: 0.01,
-    cost_with_buffer: 0.01 * PRICING_BASE.cost_buffer,
-    target_margin: PRICING_BASE.target_margins.image,
-    price_usd: 0.01,
-    credits: 2,
+    cost_usd: 0.09,
     fal_list_price_usd: 0.15,
-  },
-  google_nano_banana_edit: {
+  }),
+  google_nano_banana_edit: googleImageTier({
     model: "google_nano_banana_edit",
     cost_usd: 0.02,
-    cost_with_buffer: 0.02 * PRICING_BASE.cost_buffer,
-    target_margin: PRICING_BASE.target_margins.image,
-    price_usd: 0.02,
-    credits: 4,
     fal_list_price_usd: 0.039,
-  },
+  }),
   recraft_remove_background: {
     model: "recraft_remove_background",
     cost_usd: 0,
@@ -159,8 +147,11 @@ export const IMAGE_MODEL = {
     cost_usd: SEEDREAM_45_BASE.cost_usd,
     cost_with_buffer: SEEDREAM_45_BASE.cost_with_buffer,
     target_margin: SEEDREAM_45_BASE.target_margin,
-    price_usd: 0.0325,
-    credits: 6.5,
+    price_usd: SEEDREAM_45_COST_USD / (1 - PRICING_BASE.target_margins.image),
+    credits: Math.max(
+      1,
+      Math.ceil((SEEDREAM_45_COST_USD / (1 - PRICING_BASE.target_margins.image)) / STARTER_CREDIT_VALUE_USD),
+    ),
     fal_list_price_usd: SEEDREAM_45_FAL_LIST_USD,
   },
   seedream_45_image_to_image: {
@@ -168,8 +159,11 @@ export const IMAGE_MODEL = {
     cost_usd: SEEDREAM_45_BASE.cost_usd,
     cost_with_buffer: SEEDREAM_45_BASE.cost_with_buffer,
     target_margin: SEEDREAM_45_BASE.target_margin,
-    price_usd: 0.0325,
-    credits: 6.5,
+    price_usd: SEEDREAM_45_COST_USD / (1 - PRICING_BASE.target_margins.image),
+    credits: Math.max(
+      1,
+      Math.ceil((SEEDREAM_45_COST_USD / (1 - PRICING_BASE.target_margins.image)) / STARTER_CREDIT_VALUE_USD),
+    ),
     fal_list_price_usd: SEEDREAM_45_FAL_LIST_USD,
   },
   seedream_50_lite_text_to_image: {
@@ -177,8 +171,11 @@ export const IMAGE_MODEL = {
     cost_usd: SEEDREAM_50_LITE_BASE.cost_usd,
     cost_with_buffer: SEEDREAM_50_LITE_BASE.cost_with_buffer,
     target_margin: SEEDREAM_50_LITE_BASE.target_margin,
-    price_usd: 0.0275,
-    credits: 5.5,
+    price_usd: SEEDREAM_50_LITE_COST_USD / (1 - PRICING_BASE.target_margins.image),
+    credits: Math.max(
+      1,
+      Math.ceil((SEEDREAM_50_LITE_COST_USD / (1 - PRICING_BASE.target_margins.image)) / STARTER_CREDIT_VALUE_USD),
+    ),
     fal_list_price_usd: SEEDREAM_50_LITE_FAL_LIST_USD,
   },
   seedream_50_lite_image_to_image: {
@@ -186,8 +183,11 @@ export const IMAGE_MODEL = {
     cost_usd: SEEDREAM_50_LITE_BASE.cost_usd,
     cost_with_buffer: SEEDREAM_50_LITE_BASE.cost_with_buffer,
     target_margin: SEEDREAM_50_LITE_BASE.target_margin,
-    price_usd: 0.0275,
-    credits: 5.5,
+    price_usd: SEEDREAM_50_LITE_COST_USD / (1 - PRICING_BASE.target_margins.image),
+    credits: Math.max(
+      1,
+      Math.ceil((SEEDREAM_50_LITE_COST_USD / (1 - PRICING_BASE.target_margins.image)) / STARTER_CREDIT_VALUE_USD),
+    ),
     fal_list_price_usd: SEEDREAM_50_LITE_FAL_LIST_USD,
   },
 } as const;

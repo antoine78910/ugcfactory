@@ -19,7 +19,7 @@ import { StudioEmptyExamples, StudioOutputPane } from "@/app/_components/StudioE
 import { StudioGenerationsHistory } from "@/app/_components/StudioGenerationsHistory";
 import type { StudioHistoryItem } from "@/app/_components/StudioGenerationsHistory";
 import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
-import { studioImageCreditsPerOutput } from "@/lib/pricing";
+import { IMAGE_MODEL, studioImageCreditsPerOutput } from "@/lib/pricing";
 import { NANO_BANANA_2_ASPECT_RATIOS } from "@/lib/nanobanana";
 import { cn } from "@/lib/utils";
 import { canUseStudioImageModel, studioImageUpgradeMessage } from "@/lib/subscriptionModelAccess";
@@ -63,6 +63,16 @@ const IMAGE_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
     durationRange: "Max 4 images",
     searchText: "nanobanana 2 standard google",
   },
+];
+
+const IMAGE_CATALOG_ROWS = [
+  { label: "Seedream 4.5 (text-to-image)", key: "seedream_45_text_to_image" as const },
+  { label: "Seedream 4.5 (image-to-image)", key: "seedream_45_image_to_image" as const },
+  { label: "Seedream 5.0 Lite (text-to-image)", key: "seedream_50_lite_text_to_image" as const },
+  { label: "Seedream 5.0 Lite (image-to-image)", key: "seedream_50_lite_image_to_image" as const },
+  { label: "Google Nano Banana (text-to-image)", key: "nanobanana_standard" as const },
+  { label: "Google Nano Banana Edit (image-to-image)", key: "google_nano_banana_edit" as const },
+  { label: "Recraft Remove Background", key: "recraft_remove_background" as const },
 ];
 
 async function uploadReferenceFile(file: File): Promise<string> {
@@ -608,6 +618,27 @@ export default function StudioImagePanel() {
                 onChange={(v) => setModel(v as NanoModel)}
                 featuredTitle="Image models"
               />
+              <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
+                  New image models (pricing synced)
+                </p>
+                <div className="mt-2 space-y-1.5">
+                  {IMAGE_CATALOG_ROWS.map((row) => {
+                    const m = IMAGE_MODEL[row.key];
+                    return (
+                      <div
+                        key={row.key}
+                        className="flex items-center justify-between gap-2 rounded-md border border-white/5 bg-white/[0.02] px-2 py-1.5"
+                      >
+                        <span className="truncate text-[11px] text-white/70">{row.label}</span>
+                        <span className="shrink-0 rounded border border-violet-400/35 bg-violet-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-violet-100">
+                          {m.credits} cr
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
           </div>
 
           <div>
