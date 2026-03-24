@@ -293,11 +293,84 @@ type ScriptFactorBlocks = {
   tone: string;
 };
 
-function splitScriptFactorsForUi(script: string): ScriptFactorBlocks {
+const EMPTY_SCRIPT_FACTORS: ScriptFactorBlocks = {
+  hook: "",
+  problem: "",
+  avatar: "",
+  benefits: "",
+  proof: "",
+  offer: "",
+  cta: "",
+  tone: "",
+};
+
+function stripScriptOptionPrefix(raw: string): string {
+  return raw.replace(/^\s*SCRIPT\s+OPTION\s*\d+\b\s*/i, "").trim();
+}
+
+/** Remove leading ANGLE_HEADLINE line; return remaining body + extracted headline for Hook. */
+function peelAngleHeadline(block: string): { body: string; headline: string } {
+  const t = block.replace(/\r\n/g, "\n").trim();
+  const m = t.match(/^\s*ANGLE_HEADLINE\s*:\s*(.+)$/im);
+  if (!m) return { body: t, headline: "" };
+  const headline = m[1].replace(/\s+/g, " ").trim();
+  const body = t.replace(/^\s*ANGLE_HEADLINE\s*:\s*.+$/im, "").replace(/^\s*\n+/, "").trim();
+  return { body, headline };
+}
+
+/** Raw angle chunk from storage → text shown in factor editor (no SCRIPT OPTION / headline line noise). */
+function angleBlockForEditing(raw: string): { editable: string; headline: string } {
+  const stripped = stripScriptOptionPrefix(raw);
+  const { body, headline } = peelAngleHeadline(stripped);
+  return { editable: body, headline };
+}
+
+function splitScriptFactorsForUi(script: string, headlineHint = ""): ScriptFactorBlocks {
+  const hint = headlineHint.replace(/\s+/g, " ").trim();
   const clean = script.replace(/\r\n/g, "\n").trim();
-  if (!clean) {
-    return { hook: "", problem: "", avatar: "", benefits: "", proof: "", offer: "", cta: "", tone: "" };
+  if (!clean && !hint) return { ...EMPTY_SCRIPT_FACTORS };
+
+  const linePatterns: { re: RegExp; slot: keyof ScriptFactorBlocks }[] = [
+    { re: /^(hook|opening|intro)\s*[:：]\s*(.+)$/i, slot: "hook" },
+    { re: /^(hook|opening|intro)\s+-\s+(.+)$/i, slot: "hook" },
+    { re: /^(problem|pain\s*point|pain)\s*[:：]\s*(.+)$/i, slot: "problem" },
+    { re: /^(problem|pain\s*point|pain)\s+-\s+(.+)$/i, slot: "problem" },
+    { re: /^(avatar|audience|target)\s*[:：]\s*(.+)$/i, slot: "avatar" },
+    { re: /^(avatar|audience|target)\s+-\s+(.+)$/i, slot: "avatar" },
+    { re: /^(benefits?|value|outcomes?)\s*[:：]\s*(.+)$/i, slot: "benefits" },
+    { re: /^(benefits?|value|outcomes?)\s+-\s+(.+)$/i, slot: "benefits" },
+    { re: /^(proof|credibility|social\s*proof)\s*[:：]\s*(.+)$/i, slot: "proof" },
+    { re: /^(proof|credibility|social\s*proof)\s+-\s+(.+)$/i, slot: "proof" },
+    { re: /^(offer|deal|promo)\s*[:：]\s*(.+)$/i, slot: "offer" },
+    { re: /^(offer|deal|promo)\s+-\s+(.+)$/i, slot: "offer" },
+    { re: /^(cta|call\s*to\s*action)\s*[:：]\s*(.+)$/i, slot: "cta" },
+    { re: /^(cta|call\s*to\s*action)\s+-\s+(.+)$/i, slot: "cta" },
+    { re: /^(tone|style|voice)\s*[:：]\s*(.+)$/i, slot: "tone" },
+    { re: /^(tone|style|voice)\s+-\s+(.+)$/i, slot: "tone" },
+  ];
+
+  const fromLines: ScriptFactorBlocks = { ...EMPTY_SCRIPT_FACTORS };
+  if (clean) {
+    for (const line of clean.split("\n")) {
+      const t = line.trim();
+      if (!t) continue;
+      for (const { re, slot } of linePatterns) {
+        const m = t.match(re);
+        const v = m?.[2]?.trim();
+        if (v) {
+          fromLines[slot] = fromLines[slot] ? `${fromLines[slot]} ${v}` : v;
+          break;
+        }
+      }
+    }
   }
+
+  const anyFromLines = Object.values(fromLines).some(Boolean);
+  if (anyFromLines) {
+    if (!fromLines.hook.trim() && hint) fromLines.hook = hint;
+    return fromLines;
+  }
+
   const lines = clean.split("\n").map((l) => l.trim()).filter(Boolean);
   const joined = lines.join(" ");
   const pick = (re: RegExp): string => {
@@ -314,18 +387,27 @@ function splitScriptFactorsForUi(script: string): ScriptFactorBlocks {
   const tone = pick(/\b(?:tone|style|voice)\s*[:\-]\s*(.+?)$/i);
 
   if (hook || problem || avatar || benefits || proof || offer || cta || tone) {
-    return { hook, problem, avatar, benefits, proof, offer, cta, tone };
+    const out = { hook, problem, avatar, benefits, proof, offer, cta, tone };
+    if (!out.hook && hint) out.hook = hint;
+    return out;
   }
-  return {
-    hook: lines[0] ?? "",
-    problem: lines[1] ?? "",
-    avatar: lines[2] ?? "",
-    benefits: lines[3] ?? "",
-    proof: lines[4] ?? "",
-    offer: lines[5] ?? "",
-    cta: lines[6] ?? "",
-    tone: lines.slice(7).join(" ").trim(),
-  };
+
+  const order: (keyof ScriptFactorBlocks)[] = ["hook", "problem", "avatar", "benefits", "proof", "offer", "cta", "tone"];
+  const paras = clean.split(/\n\s*\n/).map((p) => p.replace(/\s+/g, " ").trim()).filter(Boolean);
+  if (paras.length >= 2) {
+    const out = { ...EMPTY_SCRIPT_FACTORS };
+    const seq = hint ? [hint, ...paras] : paras;
+    for (let i = 0; i < order.length && i < seq.length; i++) {
+      out[order[i]] = seq[i];
+    }
+    return out;
+  }
+
+  if (clean.length > 0) {
+    return { ...EMPTY_SCRIPT_FACTORS, hook: hint ? `${hint}\n\n${clean}`.trim() : clean };
+  }
+
+  return { ...EMPTY_SCRIPT_FACTORS, hook: hint };
 }
 
 function composeScriptFromFactors(parts: ScriptFactorBlocks): string {
@@ -452,16 +534,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const [pendingCustomAngleEditing, setPendingCustomAngleEditing] = useState(false);
   const [editableScript, setEditableScript] = useState("");
   const [scriptEditVisible, setScriptEditVisible] = useState(false);
-  const [scriptFactors, setScriptFactors] = useState<ScriptFactorBlocks>({
-    hook: "",
-    problem: "",
-    avatar: "",
-    benefits: "",
-    proof: "",
-    offer: "",
-    cta: "",
-    tone: "",
-  });
+  const [scriptFactors, setScriptFactors] = useState<ScriptFactorBlocks>({ ...EMPTY_SCRIPT_FACTORS });
   const [scriptHasEdits, setScriptHasEdits] = useState(false);
   const [editableVideoPrompt, setEditableVideoPrompt] = useState("");
   const [videoPromptSections, setVideoPromptSections] = useState<VideoPromptSections>({
@@ -849,6 +922,17 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       } else {
         applyPipelineFromSnapshot(emptyAnglePipeline());
       }
+      if (sAng !== null && sAng >= 0 && snap.scriptsText.trim()) {
+        const raw = selectedScriptOptionByIndex(snap.scriptsText, sAng);
+        const { editable, headline } = angleBlockForEditing(raw);
+        setEditableScript(editable);
+        setScriptFactors(splitScriptFactorsForUi(editable, headline));
+      } else {
+        setEditableScript("");
+        setScriptFactors({ ...EMPTY_SCRIPT_FACTORS });
+      }
+      setScriptHasEdits(false);
+      setScriptEditVisible(false);
       setNanoPollTaskId(null);
       setKlingPollTaskId(null);
       setKlingPollImageIndex(null);
@@ -1169,10 +1253,11 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
 
     prevAngleRef.current = selectedPipelineIdx;
     setSelectedAngleIndex(index);
-    const script = selectedScriptOptionByIndex(scriptsSrc, index);
-    setEditableScript(script);
+    const raw = selectedScriptOptionByIndex(scriptsSrc, index);
+    const { editable, headline } = angleBlockForEditing(raw);
+    setEditableScript(editable);
     setScriptEditVisible(false);
-    setScriptFactors(splitScriptFactorsForUi(script));
+    setScriptFactors(splitScriptFactorsForUi(editable, headline));
     setScriptHasEdits(false);
 
     const base = latestSnapRef.current;
