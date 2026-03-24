@@ -282,6 +282,67 @@ function composeVideoPromptFromSections(sections: VideoPromptSections): string {
   return blocks.join("\n");
 }
 
+type ScriptFactorBlocks = {
+  hook: string;
+  problem: string;
+  avatar: string;
+  benefits: string;
+  proof: string;
+  offer: string;
+  cta: string;
+  tone: string;
+};
+
+function splitScriptFactorsForUi(script: string): ScriptFactorBlocks {
+  const clean = script.replace(/\r\n/g, "\n").trim();
+  if (!clean) {
+    return { hook: "", problem: "", avatar: "", benefits: "", proof: "", offer: "", cta: "", tone: "" };
+  }
+  const lines = clean.split("\n").map((l) => l.trim()).filter(Boolean);
+  const joined = lines.join(" ");
+  const pick = (re: RegExp): string => {
+    const m = joined.match(re);
+    return (m?.[1] ?? "").trim();
+  };
+  const hook = pick(/\b(?:hook|opening|intro)\s*[:\-]\s*(.+?)(?=\s+\b(?:problem|pain|avatar|audience|benefit|proof|offer|cta|call to action|tone)\b\s*[:\-]|$)/i);
+  const problem = pick(/\b(?:problem|pain point|pain)\s*[:\-]\s*(.+?)(?=\s+\b(?:avatar|audience|benefit|proof|offer|cta|call to action|tone)\b\s*[:\-]|$)/i);
+  const avatar = pick(/\b(?:avatar|audience|target)\s*[:\-]\s*(.+?)(?=\s+\b(?:benefit|proof|offer|cta|call to action|tone)\b\s*[:\-]|$)/i);
+  const benefits = pick(/\b(?:benefit|value|outcome)\s*[:\-]\s*(.+?)(?=\s+\b(?:proof|offer|cta|call to action|tone)\b\s*[:\-]|$)/i);
+  const proof = pick(/\b(?:proof|credibility|social proof)\s*[:\-]\s*(.+?)(?=\s+\b(?:offer|cta|call to action|tone)\b\s*[:\-]|$)/i);
+  const offer = pick(/\b(?:offer|deal|promo)\s*[:\-]\s*(.+?)(?=\s+\b(?:cta|call to action|tone)\b\s*[:\-]|$)/i);
+  const cta = pick(/\b(?:cta|call to action)\s*[:\-]\s*(.+?)(?=\s+\b(?:tone)\b\s*[:\-]|$)/i);
+  const tone = pick(/\b(?:tone|style|voice)\s*[:\-]\s*(.+?)$/i);
+
+  if (hook || problem || avatar || benefits || proof || offer || cta || tone) {
+    return { hook, problem, avatar, benefits, proof, offer, cta, tone };
+  }
+  return {
+    hook: lines[0] ?? "",
+    problem: lines[1] ?? "",
+    avatar: lines[2] ?? "",
+    benefits: lines[3] ?? "",
+    proof: lines[4] ?? "",
+    offer: lines[5] ?? "",
+    cta: lines[6] ?? "",
+    tone: lines.slice(7).join(" ").trim(),
+  };
+}
+
+function composeScriptFromFactors(parts: ScriptFactorBlocks): string {
+  return [
+    parts.hook.trim() ? `Hook: ${parts.hook.trim()}` : "",
+    parts.problem.trim() ? `Problem: ${parts.problem.trim()}` : "",
+    parts.avatar.trim() ? `Avatar: ${parts.avatar.trim()}` : "",
+    parts.benefits.trim() ? `Benefits: ${parts.benefits.trim()}` : "",
+    parts.proof.trim() ? `Proof: ${parts.proof.trim()}` : "",
+    parts.offer.trim() ? `Offer: ${parts.offer.trim()}` : "",
+    parts.cta.trim() ? `CTA: ${parts.cta.trim()}` : "",
+    parts.tone.trim() ? `Tone: ${parts.tone.trim()}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 function LinkToAdPendingProductThumbnails({ items }: { items: { id: string; blob: string }[] }) {
   if (!items.length) return null;
   return (
@@ -391,6 +452,17 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const [pendingCustomAngleEditing, setPendingCustomAngleEditing] = useState(false);
   const [editableScript, setEditableScript] = useState("");
   const [scriptEditVisible, setScriptEditVisible] = useState(false);
+  const [scriptFactors, setScriptFactors] = useState<ScriptFactorBlocks>({
+    hook: "",
+    problem: "",
+    avatar: "",
+    benefits: "",
+    proof: "",
+    offer: "",
+    cta: "",
+    tone: "",
+  });
+  const [scriptHasEdits, setScriptHasEdits] = useState(false);
   const [editableVideoPrompt, setEditableVideoPrompt] = useState("");
   const [videoPromptSections, setVideoPromptSections] = useState<VideoPromptSections>({
     direction: "",
@@ -398,6 +470,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     motion: "",
     style: "",
   });
+  const [videoPromptInlineEdit, setVideoPromptInlineEdit] = useState(false);
+  const [videoPromptHasEdits, setVideoPromptHasEdits] = useState(false);
   const [videoPromptEditVisible, setVideoPromptEditVisible] = useState(false);
   /** Saved Nano + Kling pipeline per script angle (inactive slots + hydrate); active angle also in flat state below. */
   const [pipelineByAngle, setPipelineByAngle] = useState<
@@ -1098,6 +1172,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     const script = selectedScriptOptionByIndex(scriptsSrc, index);
     setEditableScript(script);
     setScriptEditVisible(false);
+    setScriptFactors(splitScriptFactorsForUi(script));
+    setScriptHasEdits(false);
 
     const base = latestSnapRef.current;
     if (!base) return;
@@ -1384,7 +1460,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   async function onGenerateNanoBananaPrompts(angleIdx?: number | null) {
     const url = storeUrl.trim();
     const idx = angleIdx !== undefined && angleIdx !== null ? angleIdx : selectedAngleIndex;
-    const script = selectedScriptOptionByIndex(scriptsText, idx);
+    const selectedScript = selectedScriptOptionByIndex(scriptsText, idx);
+    const script = (idx === selectedAngleIndex ? editableScript : selectedScript).trim() || selectedScript;
     const candidates = buildProductCandidatesForGeneration();
     const img = pickBestProductUrlForNanoBanana({
       pageUrl: url,
@@ -1898,6 +1975,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       const nextSections = splitVideoPromptSectionsForUi(text);
       setVideoPromptSections(nextSections);
       setEditableVideoPrompt(composeVideoPromptFromSections(nextSections));
+      setVideoPromptInlineEdit(false);
+      setVideoPromptHasEdits(false);
       setVideoPromptEditVisible(true);
       const idx = nanoBananaSelectedImageIndex;
       if (idx === 0 || idx === 1 || idx === 2) {
@@ -2262,6 +2341,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       const nextSections = splitVideoPromptSectionsForUi(t.trim());
       setVideoPromptSections(nextSections);
       setEditableVideoPrompt(composeVideoPromptFromSections(nextSections));
+      setVideoPromptInlineEdit(false);
+      setVideoPromptHasEdits(false);
       setVideoPromptEditVisible(true);
     }
   }
@@ -3371,27 +3452,77 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                             <div className="space-y-2">
                               <div className="flex items-center justify-between">
                                 <p className="text-sm text-white/75">
-                                  Review and edit the script before generating images.
+                                  Edit only key angle factors before generating images.
                                 </p>
+                                {scriptHasEdits ? (
+                                  <span className="text-[10px] text-violet-200/85">Edited factors ready</span>
+                                ) : null}
                                 <button
                                   type="button"
-                                  onClick={() => setScriptEditVisible(!scriptEditVisible)}
+                                  onClick={() => {
+                                    if (!scriptEditVisible) {
+                                      setScriptFactors(splitScriptFactorsForUi(editableScript));
+                                    }
+                                    setScriptEditVisible(!scriptEditVisible);
+                                  }}
                                   className="flex items-center gap-1 text-[11px] font-medium text-violet-300/80 transition hover:text-violet-200"
                                 >
                                   <PenLine className="h-3 w-3" />
-                                  {scriptEditVisible ? "Hide" : "Edit script"}
+                                  {scriptEditVisible ? "Done editing" : "Edit factors"}
                                 </button>
                               </div>
                               {scriptEditVisible ? (
-                                <Textarea
-                                  value={editableScript}
-                                  onChange={(e) => setEditableScript(e.target.value)}
-                                  className="min-h-[160px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/80 placeholder:text-white/25"
-                                  placeholder="Script content..."
-                                />
+                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                  <div className="space-y-1">
+                                    <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Hook</p>
+                                    <Textarea value={scriptFactors.hook} onChange={(e) => { const next = { ...scriptFactors, hook: e.target.value }; setScriptFactors(next); setEditableScript(composeScriptFromFactors(next)); setScriptHasEdits(true); }} className="min-h-[74px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/80" />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Problem</p>
+                                    <Textarea value={scriptFactors.problem} onChange={(e) => { const next = { ...scriptFactors, problem: e.target.value }; setScriptFactors(next); setEditableScript(composeScriptFromFactors(next)); setScriptHasEdits(true); }} className="min-h-[74px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/80" />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Avatar</p>
+                                    <Textarea value={scriptFactors.avatar} onChange={(e) => { const next = { ...scriptFactors, avatar: e.target.value }; setScriptFactors(next); setEditableScript(composeScriptFromFactors(next)); setScriptHasEdits(true); }} className="min-h-[74px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/80" />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Benefits</p>
+                                    <Textarea value={scriptFactors.benefits} onChange={(e) => { const next = { ...scriptFactors, benefits: e.target.value }; setScriptFactors(next); setEditableScript(composeScriptFromFactors(next)); setScriptHasEdits(true); }} className="min-h-[74px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/80" />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Proof</p>
+                                    <Textarea value={scriptFactors.proof} onChange={(e) => { const next = { ...scriptFactors, proof: e.target.value }; setScriptFactors(next); setEditableScript(composeScriptFromFactors(next)); setScriptHasEdits(true); }} className="min-h-[74px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/80" />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Offer</p>
+                                    <Textarea value={scriptFactors.offer} onChange={(e) => { const next = { ...scriptFactors, offer: e.target.value }; setScriptFactors(next); setEditableScript(composeScriptFromFactors(next)); setScriptHasEdits(true); }} className="min-h-[74px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/80" />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">CTA</p>
+                                    <Textarea value={scriptFactors.cta} onChange={(e) => { const next = { ...scriptFactors, cta: e.target.value }; setScriptFactors(next); setEditableScript(composeScriptFromFactors(next)); setScriptHasEdits(true); }} className="min-h-[74px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/80" />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Tone</p>
+                                    <Textarea value={scriptFactors.tone} onChange={(e) => { const next = { ...scriptFactors, tone: e.target.value }; setScriptFactors(next); setEditableScript(composeScriptFromFactors(next)); setScriptHasEdits(true); }} className="min-h-[74px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/80" />
+                                  </div>
+                                </div>
                               ) : (
-                                <div className="max-h-28 overflow-y-auto rounded-lg bg-black/20 p-3 text-xs leading-relaxed text-white/60">
-                                  {editableScript.slice(0, 300)}{editableScript.length > 300 ? "..." : ""}
+                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                  {([
+                                    ["Hook", scriptFactors.hook],
+                                    ["Problem", scriptFactors.problem],
+                                    ["Avatar", scriptFactors.avatar],
+                                    ["Benefits", scriptFactors.benefits],
+                                    ["Proof", scriptFactors.proof],
+                                    ["Offer", scriptFactors.offer],
+                                    ["CTA", scriptFactors.cta],
+                                    ["Tone", scriptFactors.tone],
+                                  ] as const).map(([label, value]) => (
+                                    <div key={label} className="rounded-lg border border-white/10 bg-black/20 p-2.5">
+                                      <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">{label}</p>
+                                      <p className="mt-1 text-xs leading-relaxed text-white/70 line-clamp-4">{value || "—"}</p>
+                                    </div>
+                                  ))}
                                 </div>
                               )}
                             </div>
@@ -3399,7 +3530,10 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                               type="button"
                               disabled={!resolvedPreviewUrl}
                               className={`h-auto min-h-11 w-full max-w-md py-2.5 ${primaryBtnClass}`}
-                              onClick={() => void onGenerateNanoBananaPrompts(selectedAngleIndex as 0 | 1 | 2)}
+                              onClick={() => {
+                                setScriptHasEdits(false);
+                                void onGenerateNanoBananaPrompts(selectedAngleIndex as 0 | 1 | 2);
+                              }}
                             >
                               <span className="text-sm font-semibold leading-tight">
                                 Generate 3 prompts &amp; images
@@ -3682,31 +3816,120 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                               </div>
                             ) : null}
                             {ugcVideoPromptGpt ? (
-                              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                                <div className="rounded-lg border border-white/10 bg-black/30 p-2.5">
-                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Direction</p>
-                                  <p className="mt-1 text-xs leading-relaxed text-white/75 line-clamp-4">
-                                    {splitVideoPromptSectionsForUi(ugcVideoPromptGpt).direction || "—"}
-                                  </p>
+                              <div className="mt-3 space-y-3">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[10px] text-white/40">
+                                    {videoPromptHasEdits ? "Edited prompt blocks (not rendered yet)" : "Prompt blocks"}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className="text-[11px] font-medium text-violet-300/85 transition hover:text-violet-200"
+                                    onClick={() => {
+                                      if (!videoPromptInlineEdit) {
+                                        setVideoPromptSections(splitVideoPromptSectionsForUi(ugcVideoPromptGpt));
+                                      }
+                                      setVideoPromptInlineEdit((v) => !v);
+                                    }}
+                                  >
+                                    {videoPromptInlineEdit ? "Done editing" : "Edit blocks"}
+                                  </button>
                                 </div>
-                                <div className="rounded-lg border border-white/10 bg-black/30 p-2.5">
-                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Scene</p>
-                                  <p className="mt-1 text-xs leading-relaxed text-white/75 line-clamp-4">
-                                    {splitVideoPromptSectionsForUi(ugcVideoPromptGpt).scene || "—"}
-                                  </p>
+                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                  <div className="rounded-lg border border-white/10 bg-black/30 p-2.5">
+                                    <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Direction</p>
+                                    {videoPromptInlineEdit ? (
+                                      <Textarea
+                                        value={videoPromptSections.direction}
+                                        onChange={(e) => {
+                                          setVideoPromptSections((prev) => ({ ...prev, direction: e.target.value }));
+                                          setVideoPromptHasEdits(true);
+                                        }}
+                                        className="mt-1 min-h-[78px] border-white/10 bg-black/35 text-xs leading-relaxed text-white/80"
+                                      />
+                                    ) : (
+                                      <p className="mt-1 text-xs leading-relaxed text-white/75 line-clamp-4">
+                                        {(videoPromptHasEdits ? videoPromptSections.direction : splitVideoPromptSectionsForUi(ugcVideoPromptGpt).direction) || "—"}
+                                      </p>
+                                    )}
+                                  </div>
+                                  <div className="rounded-lg border border-white/10 bg-black/30 p-2.5">
+                                    <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Scene</p>
+                                    {videoPromptInlineEdit ? (
+                                      <Textarea
+                                        value={videoPromptSections.scene}
+                                        onChange={(e) => {
+                                          setVideoPromptSections((prev) => ({ ...prev, scene: e.target.value }));
+                                          setVideoPromptHasEdits(true);
+                                        }}
+                                        className="mt-1 min-h-[78px] border-white/10 bg-black/35 text-xs leading-relaxed text-white/80"
+                                      />
+                                    ) : (
+                                      <p className="mt-1 text-xs leading-relaxed text-white/75 line-clamp-4">
+                                        {(videoPromptHasEdits ? videoPromptSections.scene : splitVideoPromptSectionsForUi(ugcVideoPromptGpt).scene) || "—"}
+                                      </p>
+                                    )}
+                                  </div>
+                                  <div className="rounded-lg border border-white/10 bg-black/30 p-2.5">
+                                    <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Motion</p>
+                                    {videoPromptInlineEdit ? (
+                                      <Textarea
+                                        value={videoPromptSections.motion}
+                                        onChange={(e) => {
+                                          setVideoPromptSections((prev) => ({ ...prev, motion: e.target.value }));
+                                          setVideoPromptHasEdits(true);
+                                        }}
+                                        className="mt-1 min-h-[78px] border-white/10 bg-black/35 text-xs leading-relaxed text-white/80"
+                                      />
+                                    ) : (
+                                      <p className="mt-1 text-xs leading-relaxed text-white/75 line-clamp-4">
+                                        {(videoPromptHasEdits ? videoPromptSections.motion : splitVideoPromptSectionsForUi(ugcVideoPromptGpt).motion) || "—"}
+                                      </p>
+                                    )}
+                                  </div>
+                                  <div className="rounded-lg border border-white/10 bg-black/30 p-2.5">
+                                    <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Style</p>
+                                    {videoPromptInlineEdit ? (
+                                      <Textarea
+                                        value={videoPromptSections.style}
+                                        onChange={(e) => {
+                                          setVideoPromptSections((prev) => ({ ...prev, style: e.target.value }));
+                                          setVideoPromptHasEdits(true);
+                                        }}
+                                        className="mt-1 min-h-[78px] border-white/10 bg-black/35 text-xs leading-relaxed text-white/80"
+                                      />
+                                    ) : (
+                                      <p className="mt-1 text-xs leading-relaxed text-white/75 line-clamp-4">
+                                        {(videoPromptHasEdits ? videoPromptSections.style : splitVideoPromptSectionsForUi(ugcVideoPromptGpt).style) || "—"}
+                                      </p>
+                                    )}
+                                  </div>
                                 </div>
-                                <div className="rounded-lg border border-white/10 bg-black/30 p-2.5">
-                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Motion</p>
-                                  <p className="mt-1 text-xs leading-relaxed text-white/75 line-clamp-4">
-                                    {splitVideoPromptSectionsForUi(ugcVideoPromptGpt).motion || "—"}
-                                  </p>
-                                </div>
-                                <div className="rounded-lg border border-white/10 bg-black/30 p-2.5">
-                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Style</p>
-                                  <p className="mt-1 text-xs leading-relaxed text-white/75 line-clamp-4">
-                                    {splitVideoPromptSectionsForUi(ugcVideoPromptGpt).style || "—"}
-                                  </p>
-                                </div>
+                                {videoPromptHasEdits ? (
+                                  <Button
+                                    type="button"
+                                    className={`h-auto min-h-11 py-2.5 ${primaryBtnClass}`}
+                                    disabled={
+                                      isKlingSubmitting ||
+                                      Boolean(klingPollTaskId) ||
+                                      !nanoBananaImageUrl ||
+                                      !composeVideoPromptFromSections(videoPromptSections).trim()
+                                    }
+                                    onClick={() => {
+                                      const nextPrompt = composeVideoPromptFromSections(videoPromptSections).trim();
+                                      if (!nextPrompt) return;
+                                      setEditableVideoPrompt(nextPrompt);
+                                      setUgcVideoPromptGpt(nextPrompt);
+                                      setVideoPromptHasEdits(false);
+                                      setVideoPromptInlineEdit(false);
+                                      void onGenerateKlingVideo(nextPrompt);
+                                    }}
+                                  >
+                                    <span className="inline-flex items-center gap-2 text-sm font-semibold leading-tight">
+                                      <RefreshCw className="h-4 w-4 shrink-0" aria-hidden />
+                                      Regenerate video
+                                    </span>
+                                  </Button>
+                                ) : null}
                               </div>
                             ) : null}
                           </div>
