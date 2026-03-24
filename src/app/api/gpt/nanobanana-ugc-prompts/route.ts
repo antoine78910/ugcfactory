@@ -7,6 +7,8 @@ import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 type Body = {
   marketingScript: string;
   productImageUrl: string;
+  /** Optional human/avatar refs to guide persona appearance. */
+  avatarImageUrls?: string[] | null;
 };
 
 const INSTRUCTIONS = `
@@ -240,6 +242,12 @@ export async function POST(req: Request) {
   if (!imageUrl) {
     return NextResponse.json({ error: "Missing or invalid `productImageUrl` (must be http(s))." }, { status: 400 });
   }
+  const avatarRefs = Array.isArray(body?.avatarImageUrls)
+    ? body.avatarImageUrls
+        .map((x) => (typeof x === "string" ? x.trim() : ""))
+        .filter((u): u is string => /^https?:\/\//i.test(u))
+        .slice(0, 3)
+    : [];
 
   const developer = [
     "Follow the instructions in the user message exactly.",
@@ -252,13 +260,17 @@ export async function POST(req: Request) {
     "---",
     "MARKETING SCRIPT (use as the creative brief):",
     script,
+    "",
+    avatarRefs.length
+      ? `AVATAR REFERENCES ATTACHED: ${String(avatarRefs.length)} image(s). Match the person/persona appearance to these references whenever possible.`
+      : "No avatar reference image attached; infer persona from script and product context.",
   ].join("\n");
 
   try {
     const { text } = await openaiResponsesTextWithImages({
       developer,
       userText,
-      imageUrls: [imageUrl],
+      imageUrls: [imageUrl, ...avatarRefs],
     });
     return NextResponse.json({ data: text });
   } catch (err) {

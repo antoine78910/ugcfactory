@@ -1412,6 +1412,11 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     const selectedScript = selectedScriptOptionByIndex(scriptsText, idx);
     const script = (idx === selectedAngleIndex ? editableScript : selectedScript).trim() || selectedScript;
     const candidates = buildProductCandidatesForGeneration();
+    const avatarRefs = userPhotoUrls
+      .map((u) => u.trim())
+      .filter((u, i, arr) => /^https?:\/\//i.test(u) && arr.indexOf(u) === i)
+      .slice(-3)
+      .reverse();
     const img = pickBestProductUrlForNanoBanana({
       pageUrl: url,
       neutralUploadUrl,
@@ -1433,7 +1438,11 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       const res = await fetch("/api/gpt/nanobanana-ugc-prompts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ marketingScript: script, productImageUrl: img }),
+        body: JSON.stringify({
+          marketingScript: script,
+          productImageUrl: img,
+          avatarImageUrls: avatarRefs,
+        }),
       });
       const json = (await res.json()) as { data?: string; error?: string };
       if (!res.ok || !json.data) throw new Error(json.error || "Image prompts failed");
