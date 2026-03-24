@@ -1576,7 +1576,7 @@ export default function AppBrandWizard() {
               <Card className="border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
                 <CardHeader>
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <CardTitle className="text-base">My Projects</CardTitle>
+                    <CardTitle className="text-base">Projects &amp; brands</CardTitle>
                     <div className="flex gap-2">
                       <Button
                         type="button"
@@ -1712,7 +1712,7 @@ export default function AppBrandWizard() {
                       are kept separately.
                     </div>
                   ) : (
-                    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                    <div className="flex flex-col gap-6">
                       {projects.map((proj) => {
                         const latestRun = proj.runs[0];
                         const isUniverse = runHasLinkToAdUniverse(latestRun.extracted);
@@ -1725,20 +1725,35 @@ export default function AppBrandWizard() {
                         return (
                           <div
                             key={proj.normalizedUrl}
-                            className={`group relative overflow-hidden rounded-xl border text-left transition ${
+                            className={`group relative overflow-hidden rounded-2xl border text-left transition ${
                               isActive
-                                ? "border-violet-400/70 bg-violet-500/10"
-                                : "border-white/10 bg-white/5 hover:bg-white/10"
+                                ? "border-violet-400/70 bg-gradient-to-b from-violet-500/[0.12] to-[#0b0912]/90"
+                                : "border-white/10 bg-[#0b0912]/80 hover:border-white/15"
                             }`}
                           >
-                            <div className="flex items-start justify-between gap-2 border-b border-white/10 p-3">
+                            <div className="flex flex-col gap-1 border-b border-white/10 bg-black/20 px-4 py-4 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
                               <div className="min-w-0 flex-1">
-                                <div className="truncate text-sm font-medium">
+                                <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-300/80">
+                                  Brand workspace
+                                </p>
+                                <div className="mt-1 truncate text-base font-semibold text-white">
                                   {proj.title ? proj.title : proj.storeUrl}
                                 </div>
-                                <div className="mt-0.5 text-xs text-white/50">
-                                  {isUniverse ? "Link to Ad" : "Classic"} · {proj.runs.length} generation
-                                  {proj.runs.length > 1 ? "s" : ""}
+                                <a
+                                  href={proj.storeUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="mt-1 block truncate text-xs text-cyan-300/90 underline-offset-2 hover:underline"
+                                >
+                                  {proj.storeUrl}
+                                </a>
+                                <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-white/50">
+                                  <span className="rounded-md border border-white/10 bg-white/5 px-2 py-0.5">
+                                    {isUniverse ? "Link to Ad" : "Classic"}
+                                  </span>
+                                  <span className="rounded-md border border-white/10 bg-white/5 px-2 py-0.5">
+                                    {proj.runs.length} ad{proj.runs.length > 1 ? "s" : ""} / generations
+                                  </span>
                                 </div>
                               </div>
                               <div className="flex shrink-0 items-center gap-1">
@@ -1793,7 +1808,13 @@ export default function AppBrandWizard() {
                                 </Button>
                               </div>
                             </div>
-                            <div className="flex gap-2 overflow-x-auto p-2 pb-3 [-webkit-overflow-scrolling:touch]">
+                            <div className="px-4 pt-2">
+                              <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Your ads</p>
+                              <p className="mt-0.5 text-[11px] text-white/35">
+                                Thumbnails below — click one to continue in Link to Ad with that generation.
+                              </p>
+                            </div>
+                            <div className="flex gap-2 overflow-x-auto px-4 pb-4 pt-2 [-webkit-overflow-scrolling:touch]">
                               {proj.runs.map((run) => {
                                 const runIsUniverse = runHasLinkToAdUniverse(run.extracted);
                                 const prev = runGenerationPreview(run);
@@ -1856,61 +1877,64 @@ export default function AppBrandWizard() {
                               const u = readUniverseFromExtracted(r.extracted);
                               return Boolean(u?.summaryText?.trim() || u?.scriptsText?.trim());
                             }) ? (
-                              <div className="space-y-2 border-t border-white/10 px-2 pb-3 pt-3">
-                                <p className="px-1 text-[11px] font-semibold uppercase tracking-wide text-white/45">
-                                  Generations: brand brief &amp; scripts
-                                </p>
-                                <p className="px-1 text-[10px] leading-snug text-white/40">
-                                  Open a generation in Link to Ad, or edit the brand brief and UGC scripts here. Each has
-                                  its own save button.
-                                </p>
+                              <div className="space-y-4 border-t border-white/10 px-4 pb-5 pt-4">
+                                <div>
+                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
+                                    Brand content &amp; angles
+                                  </p>
+                                  <p className="mt-1 max-w-2xl text-[11px] leading-relaxed text-white/40">
+                                    For each ad below: refine the scan brief, then edit the three marketing angles as
+                                    factors (hook, problem, avatar, …) — no raw script view. Saves sync with Link to Ad.
+                                  </p>
+                                </div>
                                 {proj.runs.map((run) => {
                                   if (!runHasLinkToAdUniverse(run.extracted)) return null;
                                   const snap = readUniverseFromExtracted(run.extracted);
                                   if (!snap) return null;
                                   if (!snap.summaryText?.trim() && !snap.scriptsText?.trim()) return null;
                                   return (
-                                    <details
+                                    <div
                                       key={`universe-edit-${run.id}`}
-                                      className="rounded-lg border border-white/10 bg-black/25 [&_summary::-webkit-details-marker]:hidden"
+                                      className="rounded-xl border border-white/10 bg-black/35 p-4 shadow-sm shadow-black/20"
                                     >
-                                      <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2 text-left text-xs font-medium text-white/75 hover:bg-white/[0.04] hover:text-white/90">
-                                        <span>
-                                          {new Date(run.created_at).toLocaleString(undefined, {
-                                            dateStyle: "medium",
-                                            timeStyle: "short",
-                                          })}
-                                        </span>
-                                        <span className="shrink-0 text-[10px] font-normal text-violet-300/90">
-                                          Show / edit brief &amp; scripts
-                                        </span>
-                                      </summary>
-                                      <div className="border-t border-white/10 p-2">
-                                        <ProjectRunBrandBriefEditor
+                                      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-3">
+                                        <div>
+                                          <p className="text-xs font-semibold text-white/85">
+                                            Ad ·{" "}
+                                            {new Date(run.created_at).toLocaleString(undefined, {
+                                              dateStyle: "medium",
+                                              timeStyle: "short",
+                                            })}
+                                          </p>
+                                          <p className="mt-0.5 text-[10px] text-white/40">
+                                            Brief + three angle factor sets for this generation.
+                                          </p>
+                                        </div>
+                                      </div>
+                                      <ProjectRunBrandBriefEditor
+                                        runId={run.id}
+                                        storeUrl={run.store_url}
+                                        title={run.title}
+                                        extracted={run.extracted}
+                                        summaryText={snap.summaryText}
+                                        onSaved={() => void refreshMeAndRuns()}
+                                      />
+                                      {snap.scriptsText?.trim() ? (
+                                        <ProjectRunScriptsEditor
                                           runId={run.id}
                                           storeUrl={run.store_url}
                                           title={run.title}
                                           extracted={run.extracted}
-                                          summaryText={snap.summaryText}
+                                          scriptsText={snap.scriptsText}
+                                          angleLabels={snap.angleLabels}
                                           onSaved={() => void refreshMeAndRuns()}
                                         />
-                                        {snap.scriptsText?.trim() ? (
-                                          <ProjectRunScriptsEditor
-                                            runId={run.id}
-                                            storeUrl={run.store_url}
-                                            title={run.title}
-                                            extracted={run.extracted}
-                                            scriptsText={snap.scriptsText}
-                                            onSaved={() => void refreshMeAndRuns()}
-                                          />
-                                        ) : (
-                                          <p className="text-[11px] text-white/40">
-                                            Scripts not generated yet for this run. Continue in Link to Ad or use
-                                            Generate.
-                                          </p>
-                                        )}
-                                      </div>
-                                    </details>
+                                      ) : (
+                                        <p className="text-[11px] text-white/40">
+                                          Angles not generated yet for this ad. Open it in Link to Ad and run Generate.
+                                        </p>
+                                      )}
+                                    </div>
                                   );
                                 })}
                               </div>
