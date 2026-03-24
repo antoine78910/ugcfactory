@@ -1,7 +1,12 @@
 export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
-import { kieMarketRecordInfo, parseResultUrls } from "@/lib/kieMarket";
+import {
+  kieMarketRecordInfo,
+  kieRecordStateIsFail,
+  kieRecordStateIsSuccess,
+  parseKieResultMediaUrls,
+} from "@/lib/kieMarket";
 import { isPiapiTaskId, piapiGetSeedanceTask, piapiTaskStatusToLegacy } from "@/lib/piapiSeedance";
 
 export async function GET(req: Request) {
@@ -28,10 +33,10 @@ export async function GET(req: Request) {
     }
 
     const data = await kieMarketRecordInfo(taskId, personalKey);
-    const urls = parseResultUrls(data.resultJson);
+    const urls = parseKieResultMediaUrls(data.resultJson);
 
     // Normalize to the old shape the UI already understands.
-    if (data.state === "success") {
+    if (kieRecordStateIsSuccess(data.state)) {
       return NextResponse.json({
         data: {
           status: "SUCCESS",
@@ -41,7 +46,7 @@ export async function GET(req: Request) {
         },
       });
     }
-    if (data.state === "fail") {
+    if (kieRecordStateIsFail(data.state)) {
       return NextResponse.json({
         data: {
           status: "FAILED",

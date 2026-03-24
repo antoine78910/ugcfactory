@@ -4,6 +4,18 @@ import { kieImageTaskPollOutcome } from "@/lib/kieTaskPoll";
 import type { StudioGenerationRow } from "@/lib/studioGenerationsMap";
 import { isPiapiTaskId, piapiGetSeedanceTask, piapiTaskStatusToLegacy } from "@/lib/piapiSeedance";
 
+/** DB rows we still poll until Kie/PiAPI reports terminal state. */
+export const STUDIO_GENERATION_IN_PROGRESS_STATUSES = [
+  "processing",
+  "generating",
+  "pending",
+  "queued",
+] as const;
+
+function isStudioGenerationInProgressStatus(s: string): boolean {
+  return (STUDIO_GENERATION_IN_PROGRESS_STATUSES as readonly string[]).includes(s);
+}
+
 /**
  * Poll Kie for one processing row and persist success/failure. Does not set credits_refund_hint_sent;
  * use sweepStudioRefundHints after so the client can grant credits once.
@@ -14,7 +26,7 @@ export async function pollStudioGenerationRow(
   supabase: SupabaseClient,
 ): Promise<void> {
   const status = String(row.status ?? "").toLowerCase();
-  if (!["processing", "generating", "pending", "queued"].includes(status)) return;
+  if (!isStudioGenerationInProgressStatus(status)) return;
 
   const key = row.uses_personal_api ? personalApiKey?.trim() || undefined : undefined;
   if (row.uses_personal_api && !key) return;

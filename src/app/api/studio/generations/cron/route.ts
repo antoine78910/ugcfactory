@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { getEnv } from "@/lib/env";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import type { StudioGenerationRow } from "@/lib/studioGenerationsMap";
-import { pollStudioGenerationRow } from "@/lib/studioGenerationsPoll";
+import { pollStudioGenerationRow, STUDIO_GENERATION_IN_PROGRESS_STATUSES } from "@/lib/studioGenerationsPoll";
 
 /**
  * Railway / external cron: poll platform-key studio jobs so generation completes if the user closed the tab.
@@ -32,7 +32,7 @@ export async function POST(req: Request) {
     const { data: rows, error } = await admin
       .from("studio_generations")
       .select("*")
-      .eq("status", "processing")
+      .in("status", [...STUDIO_GENERATION_IN_PROGRESS_STATUSES])
       .eq("uses_personal_api", false)
       .limit(150);
 

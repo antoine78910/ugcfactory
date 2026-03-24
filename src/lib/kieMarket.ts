@@ -75,6 +75,30 @@ export type KieMarketRecordInfo = {
   progress?: number;
 };
 
+/** Kie `recordInfo` sometimes uses `status` instead of `state`, and success synonyms vary by model. */
+export function kieRecordStateIsSuccess(state: string | undefined): boolean {
+  const s = String(state ?? "").toLowerCase().trim();
+  return (
+    s === "success" ||
+    s === "completed" ||
+    s === "complete" ||
+    s === "succeed" ||
+    s === "done" ||
+    s === "finished"
+  );
+}
+
+export function kieRecordStateIsFail(state: string | undefined): boolean {
+  const s = String(state ?? "").toLowerCase().trim();
+  return (
+    s === "fail" ||
+    s === "failed" ||
+    s === "error" ||
+    s === "cancelled" ||
+    s === "canceled"
+  );
+}
+
 type KieMarketRecordInfoResponse =
   | { code: 200; message: string; data: KieMarketRecordInfo }
   | { code: number; message: string; data?: unknown };
@@ -100,7 +124,10 @@ export async function kieMarketRecordInfo(taskId: string, overrideApiKey?: strin
     throw new Error(`KIE recordInfo failed: ${String(msg)}`);
   }
 
-  return (json as Extract<KieMarketRecordInfoResponse, { code: 200 }>).data;
+  const raw = (json as Extract<KieMarketRecordInfoResponse, { code: 200 }>).data;
+  const d = raw as Record<string, unknown>;
+  const mergedState = String(d.state ?? d.status ?? "").trim() || "unknown";
+  return { ...(raw as object), state: mergedState } as KieMarketRecordInfo;
 }
 
 export function parseResultUrls(resultJson: string | undefined): string[] {

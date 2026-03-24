@@ -1,17 +1,12 @@
 export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
-import { kieMarketRecordInfo, parseKieResultMediaUrls } from "@/lib/kieMarket";
-
-function kieStateIsSuccess(state: string): boolean {
-  const s = String(state ?? "").toLowerCase().trim();
-  return s === "success" || s === "completed" || s === "complete" || s === "succeed" || s === "done";
-}
-
-function kieStateIsFail(state: string): boolean {
-  const s = String(state ?? "").toLowerCase().trim();
-  return s === "fail" || s === "failed" || s === "error" || s === "cancelled" || s === "canceled";
-}
+import {
+  kieMarketRecordInfo,
+  kieRecordStateIsFail,
+  kieRecordStateIsSuccess,
+  parseKieResultMediaUrls,
+} from "@/lib/kieMarket";
 
 function normalizeKieTaskToNanoShape(data: {
   state: string;
@@ -19,7 +14,7 @@ function normalizeKieTaskToNanoShape(data: {
   failMsg?: string;
 }) {
   const urls = parseKieResultMediaUrls(data.resultJson);
-  if (kieStateIsSuccess(data.state)) {
+  if (kieRecordStateIsSuccess(data.state)) {
     if (urls.length === 0) {
       return {
         successFlag: 0 as const,
@@ -36,7 +31,7 @@ function normalizeKieTaskToNanoShape(data: {
       errorMessage: null as string | null,
     };
   }
-  if (kieStateIsFail(data.state)) {
+  if (kieRecordStateIsFail(data.state)) {
     return {
       successFlag: -1 as const,
       response: {} as Record<string, unknown>,
