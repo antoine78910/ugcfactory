@@ -257,6 +257,7 @@ export default function AppBrandWizard() {
     runIds: string[];
     label: string;
   } | null>(null);
+  const [selectedProjectNormalizedUrl, setSelectedProjectNormalizedUrl] = useState<string | null>(null);
   const [deleteProjectLoading, setDeleteProjectLoading] = useState(false);
   /** Full-screen “lab” graph: architecture of Link to Ad generations for a store URL. */
   const [projectLab, setProjectLab] = useState<{
@@ -471,6 +472,18 @@ export default function AppBrandWizard() {
     out.sort((a, b) => new Date(b.runs[0].created_at).getTime() - new Date(a.runs[0].created_at).getTime());
     return out;
   }, [savedRuns]);
+
+  const selectedProject = useMemo(
+    () => projects.find((p) => p.normalizedUrl === selectedProjectNormalizedUrl) ?? null,
+    [projects, selectedProjectNormalizedUrl],
+  );
+
+  useEffect(() => {
+    if (!selectedProjectNormalizedUrl) return;
+    if (!projects.some((p) => p.normalizedUrl === selectedProjectNormalizedUrl)) {
+      setSelectedProjectNormalizedUrl(null);
+    }
+  }, [projects, selectedProjectNormalizedUrl]);
 
   function resetForNewProject() {
     setStep("url");
@@ -1713,235 +1726,289 @@ export default function AppBrandWizard() {
                     </div>
                   ) : (
                     <div className="flex flex-col gap-6">
-                      {projects.map((proj) => {
-                        const latestRun = proj.runs[0];
-                        const isUniverse = runHasLinkToAdUniverse(latestRun.extracted);
-                        const isActive =
-                          proj.runs.some(
-                            (r) => runId === r.id || linkToAdResumeRunId === r.id,
-                          ) ||
-                          (storeUrl.trim() && normalizeUrl(storeUrl) === proj.normalizedUrl);
-                        const runIdsInProject = proj.runs.map((r) => r.id);
-                        return (
-                          <div
-                            key={proj.normalizedUrl}
-                            className={`group relative overflow-hidden rounded-2xl border text-left transition ${
-                              isActive
-                                ? "border-violet-400/70 bg-gradient-to-b from-violet-500/[0.12] to-[#0b0912]/90"
-                                : "border-white/10 bg-[#0b0912]/80 hover:border-white/15"
-                            }`}
-                          >
-                            <div className="flex flex-col gap-1 border-b border-white/10 bg-black/20 px-4 py-4 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
-                              <div className="min-w-0 flex-1">
+                      {!selectedProject ? (
+                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                          {projects.map((proj) => {
+                            const latestRun = proj.runs[0];
+                            const isUniverse = runHasLinkToAdUniverse(latestRun.extracted);
+                            const isActive =
+                              proj.runs.some(
+                                (r) => runId === r.id || linkToAdResumeRunId === r.id,
+                              ) ||
+                              (storeUrl.trim() && normalizeUrl(storeUrl) === proj.normalizedUrl);
+                            return (
+                              <button
+                                key={proj.normalizedUrl}
+                                type="button"
+                                onClick={() => setSelectedProjectNormalizedUrl(proj.normalizedUrl)}
+                                className={`group relative overflow-hidden rounded-xl border px-4 py-4 text-left transition ${
+                                  isActive
+                                    ? "border-violet-400/70 bg-gradient-to-b from-violet-500/[0.12] to-[#0b0912]/90"
+                                    : "border-white/10 bg-[#0b0912]/80 hover:border-white/20"
+                                }`}
+                              >
                                 <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-300/80">
-                                  Brand workspace
+                                  Brand
                                 </p>
-                                <div className="mt-1 truncate text-base font-semibold text-white">
+                                <p className="mt-1 truncate text-base font-semibold text-white">
                                   {proj.title ? proj.title : proj.storeUrl}
-                                </div>
-                                <a
-                                  href={proj.storeUrl}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="mt-1 block truncate text-xs text-cyan-300/90 underline-offset-2 hover:underline"
-                                >
-                                  {proj.storeUrl}
-                                </a>
-                                <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-white/50">
+                                </p>
+                                <p className="mt-1 truncate text-xs text-white/45">{proj.storeUrl}</p>
+                                <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-white/55">
                                   <span className="rounded-md border border-white/10 bg-white/5 px-2 py-0.5">
                                     {isUniverse ? "Link to Ad" : "Classic"}
                                   </span>
                                   <span className="rounded-md border border-white/10 bg-white/5 px-2 py-0.5">
-                                    {proj.runs.length} ad{proj.runs.length > 1 ? "s" : ""} / generations
+                                    {proj.runs.length} ad{proj.runs.length > 1 ? "s" : ""}
                                   </span>
                                 </div>
-                              </div>
-                              <div className="flex shrink-0 items-center gap-1">
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        (() => {
+                          const proj = selectedProject;
+                          const latestRun = proj.runs[0];
+                          const isUniverse = runHasLinkToAdUniverse(latestRun.extracted);
+                          const isActive =
+                            proj.runs.some(
+                              (r) => runId === r.id || linkToAdResumeRunId === r.id,
+                            ) ||
+                            (storeUrl.trim() && normalizeUrl(storeUrl) === proj.normalizedUrl);
+                          const runIdsInProject = proj.runs.map((r) => r.id);
+                          return (
+                            <div
+                              key={proj.normalizedUrl}
+                              className={`group relative overflow-hidden rounded-2xl border text-left transition ${
+                                isActive
+                                  ? "border-violet-400/70 bg-gradient-to-b from-violet-500/[0.12] to-[#0b0912]/90"
+                                  : "border-white/10 bg-[#0b0912]/80 hover:border-white/15"
+                              }`}
+                            >
+                              <div className="flex items-center justify-between border-b border-white/10 bg-black/30 px-4 py-3">
                                 <Button
                                   type="button"
-                                  size="icon"
+                                  size="sm"
                                   variant="secondary"
-                                  className="h-9 w-9 border border-cyan-400/35 bg-cyan-500/15 text-cyan-100 hover:bg-cyan-500/30"
-                                  title="Lab view: generation map (zoom, branches)"
-                                  onClick={() =>
-                                    setProjectLab({
-                                      title: proj.title ?? proj.storeUrl,
-                                      storeUrl: proj.storeUrl,
-                                      runs: proj.runs,
-                                    })
-                                  }
+                                  className="border border-white/20 bg-black/50 text-white/85 hover:bg-black/70"
+                                  onClick={() => setSelectedProjectNormalizedUrl(null)}
                                 >
-                                  <GitBranch className="h-4 w-4" strokeWidth={2.25} />
+                                  Back to brands
                                 </Button>
-                                {isUniverse ? (
+                              </div>
+                              <div className="flex flex-col gap-1 border-b border-white/10 bg-black/20 px-4 py-4 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-300/80">
+                                    Brand dashboard
+                                  </p>
+                                  <div className="mt-1 truncate text-base font-semibold text-white">
+                                    {proj.title ? proj.title : proj.storeUrl}
+                                  </div>
+                                  <a
+                                    href={proj.storeUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="mt-1 block truncate text-xs text-cyan-300/90 underline-offset-2 hover:underline"
+                                  >
+                                    {proj.storeUrl}
+                                  </a>
+                                  <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-white/50">
+                                    <span className="rounded-md border border-white/10 bg-white/5 px-2 py-0.5">
+                                      {isUniverse ? "Link to Ad" : "Classic"}
+                                    </span>
+                                    <span className="rounded-md border border-white/10 bg-white/5 px-2 py-0.5">
+                                      {proj.runs.length} ad{proj.runs.length > 1 ? "s" : ""} / generations
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="flex shrink-0 items-center gap-1">
                                   <Button
                                     type="button"
                                     size="icon"
                                     variant="secondary"
-                                    className="h-9 w-9 border border-violet-400/45 bg-violet-500/20 text-white hover:bg-violet-500/35"
-                                    title="New ad: marketing angles"
-                                    disabled={branchingNormalizedUrl === proj.normalizedUrl}
-                                    onClick={() => void startNewLinkToAdFromProject(proj)}
+                                    className="h-9 w-9 border border-cyan-400/35 bg-cyan-500/15 text-cyan-100 hover:bg-cyan-500/30"
+                                    title="Lab view: generation map (zoom, branches)"
+                                    onClick={() =>
+                                      setProjectLab({
+                                        title: proj.title ?? proj.storeUrl,
+                                        storeUrl: proj.storeUrl,
+                                        runs: proj.runs,
+                                      })
+                                    }
                                   >
-                                    {branchingNormalizedUrl === proj.normalizedUrl ? (
-                                      <Loader2 className="h-4 w-4 animate-spin" />
-                                    ) : (
-                                      <Plus className="h-5 w-5" strokeWidth={2.25} />
-                                    )}
+                                    <GitBranch className="h-4 w-4" strokeWidth={2.25} />
                                   </Button>
-                                ) : null}
-                                <Button
-                                  type="button"
-                                  size="icon"
-                                  variant="secondary"
-                                  className="h-9 w-9 border border-white/15 bg-black/60 text-white/80 hover:bg-destructive/90 hover:text-white"
-                                  title="Delete project"
-                                  onClick={() =>
-                                    setDeleteProjectDialog({
-                                      storeUrl: proj.storeUrl,
-                                      runIds: runIdsInProject,
-                                      label: proj.title ? proj.title : proj.storeUrl,
-                                    })
-                                  }
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </div>
-                            <div className="px-4 pt-2">
-                              <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Your ads</p>
-                              <p className="mt-0.5 text-[11px] text-white/35">
-                                Thumbnails below — click one to continue in Link to Ad with that generation.
-                              </p>
-                            </div>
-                            <div className="flex gap-2 overflow-x-auto px-4 pb-4 pt-2 [-webkit-overflow-scrolling:touch]">
-                              {proj.runs.map((run) => {
-                                const runIsUniverse = runHasLinkToAdUniverse(run.extracted);
-                                const prev = runGenerationPreview(run);
-                                const runActive = runId === run.id || linkToAdResumeRunId === run.id;
-                                return (
-                                  <button
-                                    key={run.id}
-                                    type="button"
-                                    onClick={() => {
-                                      if (runIsUniverse) {
-                                        setRunId(run.id);
-                                        if (typeof localStorage !== "undefined") {
-                                          localStorage.setItem(UGC_CURRENT_RUN_KEY, run.id);
-                                        }
-                                        setAppSectionNav("link_to_ad");
-                                        setLinkToAdResumeRunId(run.id);
-                                        return;
-                                      }
-                                      void loadRun(run.id);
-                                    }}
-                                    className={`flex w-[5.75rem] shrink-0 flex-col gap-1 rounded-lg border p-0.5 text-left transition ${
-                                      runActive
-                                        ? "border-violet-400/80 bg-violet-500/15"
-                                        : "border-white/10 bg-black/25 hover:border-white/30"
-                                    }`}
-                                  >
-                                    <div className="relative aspect-[3/4] w-full overflow-hidden rounded-md bg-[#100d17]">
-                                      {prev?.kind === "image" ? (
-                                        // eslint-disable-next-line @next/next/no-img-element
-                                        <img
-                                          src={prev.url}
-                                          alt=""
-                                          className="h-full w-full object-cover"
-                                        />
-                                      ) : prev?.kind === "video" ? (
-                                        <div className="flex h-full w-full items-center justify-center bg-gradient-to-b from-violet-950/90 to-black">
-                                          <Play className="h-7 w-7 text-white/75" fill="currentColor" />
-                                        </div>
-                                      ) : (
-                                        <div className="flex h-full items-center justify-center text-[10px] text-white/35">
-                                          Draft
-                                        </div>
-                                      )}
-                                    </div>
-                                    <span className="truncate px-0.5 text-center text-[10px] leading-tight text-white/50">
-                                      {new Date(run.created_at).toLocaleDateString(undefined, {
-                                        month: "short",
-                                        day: "numeric",
-                                        hour: "2-digit",
-                                        minute: "2-digit",
-                                      })}
-                                    </span>
-                                  </button>
-                                );
-                              })}
-                            </div>
-                            {isUniverse &&
-                            proj.runs.some((r) => {
-                              if (!runHasLinkToAdUniverse(r.extracted)) return false;
-                              const u = readUniverseFromExtracted(r.extracted);
-                              return Boolean(u?.summaryText?.trim() || u?.scriptsText?.trim());
-                            }) ? (
-                              <div className="space-y-4 border-t border-white/10 px-4 pb-5 pt-4">
-                                <div>
-                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
-                                    Brand content &amp; angles
-                                  </p>
-                                  <p className="mt-1 max-w-2xl text-[11px] leading-relaxed text-white/40">
-                                    For each ad below: refine the scan brief, then edit the three marketing angles as
-                                    factors (hook, problem, avatar, …) — no raw script view. Saves sync with Link to Ad.
-                                  </p>
-                                </div>
-                                {proj.runs.map((run) => {
-                                  if (!runHasLinkToAdUniverse(run.extracted)) return null;
-                                  const snap = readUniverseFromExtracted(run.extracted);
-                                  if (!snap) return null;
-                                  if (!snap.summaryText?.trim() && !snap.scriptsText?.trim()) return null;
-                                  return (
-                                    <div
-                                      key={`universe-edit-${run.id}`}
-                                      className="rounded-xl border border-white/10 bg-black/35 p-4 shadow-sm shadow-black/20"
+                                  {isUniverse ? (
+                                    <Button
+                                      type="button"
+                                      size="icon"
+                                      variant="secondary"
+                                      className="h-9 w-9 border border-violet-400/45 bg-violet-500/20 text-white hover:bg-violet-500/35"
+                                      title="New ad: marketing angles"
+                                      disabled={branchingNormalizedUrl === proj.normalizedUrl}
+                                      onClick={() => void startNewLinkToAdFromProject(proj)}
                                     >
-                                      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-3">
-                                        <div>
-                                          <p className="text-xs font-semibold text-white/85">
-                                            Ad ·{" "}
-                                            {new Date(run.created_at).toLocaleString(undefined, {
-                                              dateStyle: "medium",
-                                              timeStyle: "short",
-                                            })}
-                                          </p>
-                                          <p className="mt-0.5 text-[10px] text-white/40">
-                                            Brief + three angle factor sets for this generation.
-                                          </p>
-                                        </div>
+                                      {branchingNormalizedUrl === proj.normalizedUrl ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                      ) : (
+                                        <Plus className="h-5 w-5" strokeWidth={2.25} />
+                                      )}
+                                    </Button>
+                                  ) : null}
+                                  <Button
+                                    type="button"
+                                    size="icon"
+                                    variant="secondary"
+                                    className="h-9 w-9 border border-white/15 bg-black/60 text-white/80 hover:bg-destructive/90 hover:text-white"
+                                    title="Delete project"
+                                    onClick={() =>
+                                      setDeleteProjectDialog({
+                                        storeUrl: proj.storeUrl,
+                                        runIds: runIdsInProject,
+                                        label: proj.title ? proj.title : proj.storeUrl,
+                                      })
+                                    }
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </div>
+                              <div className="px-4 pt-2">
+                                <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Your ads</p>
+                                <p className="mt-0.5 text-[11px] text-white/35">
+                                  Thumbnails below — click one to continue in Link to Ad with that generation.
+                                </p>
+                              </div>
+                              <div className="flex gap-2 overflow-x-auto px-4 pb-4 pt-2 [-webkit-overflow-scrolling:touch]">
+                                {proj.runs.map((run) => {
+                                  const runIsUniverse = runHasLinkToAdUniverse(run.extracted);
+                                  const prev = runGenerationPreview(run);
+                                  const runActive = runId === run.id || linkToAdResumeRunId === run.id;
+                                  return (
+                                    <button
+                                      key={run.id}
+                                      type="button"
+                                      onClick={() => {
+                                        if (runIsUniverse) {
+                                          setRunId(run.id);
+                                          if (typeof localStorage !== "undefined") {
+                                            localStorage.setItem(UGC_CURRENT_RUN_KEY, run.id);
+                                          }
+                                          setAppSectionNav("link_to_ad");
+                                          setLinkToAdResumeRunId(run.id);
+                                          return;
+                                        }
+                                        void loadRun(run.id);
+                                      }}
+                                      className={`flex w-[5.75rem] shrink-0 flex-col gap-1 rounded-lg border p-0.5 text-left transition ${
+                                        runActive
+                                          ? "border-violet-400/80 bg-violet-500/15"
+                                          : "border-white/10 bg-black/25 hover:border-white/30"
+                                      }`}
+                                    >
+                                      <div className="relative aspect-[3/4] w-full overflow-hidden rounded-md bg-[#100d17]">
+                                        {prev?.kind === "image" ? (
+                                          // eslint-disable-next-line @next/next/no-img-element
+                                          <img
+                                            src={prev.url}
+                                            alt=""
+                                            className="h-full w-full object-cover"
+                                          />
+                                        ) : prev?.kind === "video" ? (
+                                          <div className="flex h-full w-full items-center justify-center bg-gradient-to-b from-violet-950/90 to-black">
+                                            <Play className="h-7 w-7 text-white/75" fill="currentColor" />
+                                          </div>
+                                        ) : (
+                                          <div className="flex h-full items-center justify-center text-[10px] text-white/35">
+                                            Draft
+                                          </div>
+                                        )}
                                       </div>
-                                      <ProjectRunBrandBriefEditor
-                                        runId={run.id}
-                                        storeUrl={run.store_url}
-                                        title={run.title}
-                                        extracted={run.extracted}
-                                        summaryText={snap.summaryText}
-                                        onSaved={() => void refreshMeAndRuns()}
-                                      />
-                                      {snap.scriptsText?.trim() ? (
-                                        <ProjectRunScriptsEditor
+                                      <span className="truncate px-0.5 text-center text-[10px] leading-tight text-white/50">
+                                        {new Date(run.created_at).toLocaleDateString(undefined, {
+                                          month: "short",
+                                          day: "numeric",
+                                          hour: "2-digit",
+                                          minute: "2-digit",
+                                        })}
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                              {isUniverse &&
+                              proj.runs.some((r) => {
+                                if (!runHasLinkToAdUniverse(r.extracted)) return false;
+                                const u = readUniverseFromExtracted(r.extracted);
+                                return Boolean(u?.summaryText?.trim() || u?.scriptsText?.trim());
+                              }) ? (
+                                <div className="space-y-4 border-t border-white/10 px-4 pb-5 pt-4">
+                                  <div>
+                                    <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
+                                      Brand content &amp; angles
+                                    </p>
+                                    <p className="mt-1 max-w-2xl text-[11px] leading-relaxed text-white/40">
+                                      For each ad below: refine the scan brief, then edit the three marketing angles as
+                                      factors (hook, problem, avatar, …) — no raw script view. Saves sync with Link to Ad.
+                                    </p>
+                                  </div>
+                                  {proj.runs.map((run) => {
+                                    if (!runHasLinkToAdUniverse(run.extracted)) return null;
+                                    const snap = readUniverseFromExtracted(run.extracted);
+                                    if (!snap) return null;
+                                    if (!snap.summaryText?.trim() && !snap.scriptsText?.trim()) return null;
+                                    return (
+                                      <div
+                                        key={`universe-edit-${run.id}`}
+                                        className="rounded-xl border border-white/10 bg-black/35 p-4 shadow-sm shadow-black/20"
+                                      >
+                                        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-3">
+                                          <div>
+                                            <p className="text-xs font-semibold text-white/85">
+                                              Ad ·{" "}
+                                              {new Date(run.created_at).toLocaleString(undefined, {
+                                                dateStyle: "medium",
+                                                timeStyle: "short",
+                                              })}
+                                            </p>
+                                            <p className="mt-0.5 text-[10px] text-white/40">
+                                              Brief + three angle factor sets for this generation.
+                                            </p>
+                                          </div>
+                                        </div>
+                                        <ProjectRunBrandBriefEditor
                                           runId={run.id}
                                           storeUrl={run.store_url}
                                           title={run.title}
                                           extracted={run.extracted}
-                                          scriptsText={snap.scriptsText}
-                                          angleLabels={snap.angleLabels}
+                                          summaryText={snap.summaryText}
                                           onSaved={() => void refreshMeAndRuns()}
                                         />
-                                      ) : (
-                                        <p className="text-[11px] text-white/40">
-                                          Angles not generated yet for this ad. Open it in Link to Ad and run Generate.
-                                        </p>
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            ) : null}
-                          </div>
-                        );
-                      })}
+                                        {snap.scriptsText?.trim() ? (
+                                          <ProjectRunScriptsEditor
+                                            runId={run.id}
+                                            storeUrl={run.store_url}
+                                            title={run.title}
+                                            extracted={run.extracted}
+                                            scriptsText={snap.scriptsText}
+                                            angleLabels={snap.angleLabels}
+                                            onSaved={() => void refreshMeAndRuns()}
+                                          />
+                                        ) : (
+                                          <p className="text-[11px] text-white/40">
+                                            Angles not generated yet for this ad. Open it in Link to Ad and run Generate.
+                                          </p>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : null}
+                            </div>
+                          );
+                        })()
+                      )}
                     </div>
                   )}
                 </CardContent>

@@ -155,7 +155,7 @@ export function StudioGenerationsHistory({ items, empty, mediaLabel = "Generatio
                     <div
                       className={cn(
                         "group/media relative overflow-hidden rounded-xl border border-white/[0.12] bg-[#12121a] shadow-[0_12px_40px_rgba(0,0,0,0.45)]",
-                        view === "grid" ? "aspect-[9/16] w-full" : "aspect-video w-full sm:aspect-[9/16] sm:w-44 sm:shrink-0",
+                        view === "grid" ? "aspect-[9/16] w-full" : "aspect-[9/16] w-full sm:w-44 sm:shrink-0",
                       )}
                     >
                       {item.status === "generating" ? (
@@ -221,6 +221,15 @@ export function StudioGenerationsHistory({ items, empty, mediaLabel = "Generatio
                             preload="metadata"
                             poster={item.posterUrl}
                           />
+                          <a
+                            href={`/api/download?url=${encodeURIComponent(item.mediaUrl)}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="absolute right-2 top-2 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white/75 opacity-0 transition hover:bg-black/75 hover:text-white group-hover/media:opacity-100 focus-visible:opacity-100"
+                            aria-label="Download video"
+                            title="Download"
+                          >
+                            <Download className="h-4 w-4" aria-hidden />
+                          </a>
                           <div
                             className="pointer-events-none absolute inset-0 flex items-center justify-center bg-gradient-to-t from-black/50 via-transparent to-black/20"
                             aria-hidden
@@ -260,14 +269,6 @@ export function StudioGenerationsHistory({ items, empty, mediaLabel = "Generatio
                             </span>
                           ) : null}
                         </div>
-                      ) : null}
-                      {item.status === "ready" && item.mediaUrl && item.kind !== "image" ? (
-                        <a
-                          href={`/api/download?url=${encodeURIComponent(item.mediaUrl)}`}
-                          className="inline-flex text-xs font-medium text-violet-300 underline-offset-2 hover:underline"
-                        >
-                          Download
-                        </a>
                       ) : null}
                     </div>
                   </article>

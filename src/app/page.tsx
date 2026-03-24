@@ -5,7 +5,6 @@ import Link from "next/link";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { CpuArchitecture } from "@/components/ui/cpu-architecture";
 import ShapeGrid from "./ShapeGrid";
 import { HeroVideoCarousel3D } from "./HeroVideoCarousel3D";
 import { ArrowRight, ChevronDown, Sparkles } from "lucide-react";
@@ -24,7 +23,7 @@ const STEPS = [
     title: "Pick the angle and script",
     description:
       "Select the message you want to test and refine the hook, pain point, benefits, and CTA before generating.",
-    mediaImage: "/carousel/product-2.png",
+    mediaImage: "/steps/step-pick-angle-script.png",
     mediaAlt: "Product and angle selection",
   },
   {
@@ -400,40 +399,14 @@ export default function LandingPage() {
         <div className="relative overflow-hidden">
           <div className="pointer-events-none absolute inset-y-0 left-0 z-20 w-16 bg-gradient-to-r from-[#050507] to-transparent sm:w-28" />
           <div className="pointer-events-none absolute inset-y-0 right-0 z-20 w-16 bg-gradient-to-l from-[#050507] to-transparent sm:w-28" />
-          {/* AI chip + top-fed pulses + center barrier */}
-          <div className="pointer-events-none absolute inset-0 z-[16]" aria-hidden>
-            <div className="absolute left-1/2 top-2.5 h-[180px] w-[min(92vw,820px)] -translate-x-1/2">
-              <div className="absolute left-[4%] top-0 rounded-full border border-cyan-300/35 bg-cyan-400/12 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-cyan-100 shadow-[0_0_14px_rgba(34,211,238,0.3)] animate-[pulse_2.8s_ease-in-out_infinite]">
-                Angles
-              </div>
-              <div className="absolute left-[22%] top-1 rounded-full border border-emerald-300/35 bg-emerald-400/12 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-100 shadow-[0_0_14px_rgba(16,185,129,0.3)] animate-[pulse_3s_ease-in-out_infinite]">
-                Benefits
-              </div>
-              <div className="absolute left-[39%] top-0 rounded-full border border-violet-300/45 bg-violet-500/18 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-violet-100 shadow-[0_0_16px_rgba(139,92,246,0.35)] animate-[pulse_2.4s_ease-in-out_infinite]">
-                Product data
-              </div>
-              <div className="absolute right-[22%] top-1 rounded-full border border-fuchsia-300/35 bg-fuchsia-400/12 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-fuchsia-100 shadow-[0_0_14px_rgba(217,70,239,0.3)] animate-[pulse_3.2s_ease-in-out_infinite]">
-                Objections
-              </div>
-              <div className="absolute right-[4%] top-0 rounded-full border border-sky-300/35 bg-sky-400/12 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-sky-100 shadow-[0_0_14px_rgba(56,189,248,0.3)] animate-[pulse_3.4s_ease-in-out_infinite]">
-                Social proof
-              </div>
-            </div>
-
-            <div className="absolute inset-y-0 left-1/2 w-[2px] -translate-x-1/2 bg-gradient-to-b from-transparent via-violet-300/90 to-transparent shadow-[0_0_18px_rgba(139,92,246,0.55)]" />
-            <div className="absolute inset-y-0 left-1/2 w-[10px] -translate-x-1/2 bg-gradient-to-b from-transparent via-violet-400/30 to-transparent blur-[2px]" />
-
-            <div className="absolute left-1/2 top-1/2 h-[260px] w-[460px] -translate-x-1/2 -translate-y-1/2">
-              <div className="absolute inset-0 rounded-full bg-violet-600/18 blur-3xl" />
-              <div className="absolute inset-0 rounded-[32px] border border-violet-300/20 bg-[#0d0a16]/55 backdrop-blur-[1px]" />
-              <CpuArchitecture
-                text="AI"
-                pulseFromTop
-                lineMarkerSize={20}
-                className="h-full w-full text-violet-200/90 [filter:drop-shadow(0_0_20px_rgba(139,92,246,0.45))]"
-              />
-            </div>
-          </div>
+          <div
+            className="pointer-events-none absolute inset-y-0 left-1/2 z-[16] w-[4px] -translate-x-1/2 bg-gradient-to-b from-transparent via-violet-300/95 to-transparent shadow-[0_0_24px_rgba(139,92,246,0.7)]"
+            aria-hidden
+          />
+          <div
+            className="pointer-events-none absolute inset-y-0 left-1/2 z-[15] w-[14px] -translate-x-1/2 bg-gradient-to-b from-transparent via-violet-400/35 to-transparent blur-[2px]"
+            aria-hidden
+          />
 
           <div
             ref={carouselTrackRef}
