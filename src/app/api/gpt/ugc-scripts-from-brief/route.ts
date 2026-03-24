@@ -15,6 +15,8 @@ type Body = {
   productImageUrls?: string[] | null;
   /** 8 | 15 | 30 — drives max word count per script */
   videoDurationSeconds?: 8 | 15 | 30;
+  generationMode?: "automatic" | "custom_ugc";
+  customUgcIntent?: string | null;
 };
 
 function collectHttpsProductImageUrls(body: Body): string[] {
@@ -307,6 +309,8 @@ export async function POST(req: Request) {
     body?.videoDurationSeconds === 8 || body?.videoDurationSeconds === 30
       ? body.videoDurationSeconds
       : 15;
+  const generationMode = body?.generationMode === "custom_ugc" ? "custom_ugc" : "automatic";
+  const customUgcIntent = body?.customUgcIntent?.trim() || "";
 
   const developer = [
     "You are an expert UGC scriptwriter for AI video (lipsync, shot segmentation, image-to-video).",
@@ -314,6 +318,9 @@ export async function POST(req: Request) {
     "Write all spoken script lines in English (brand brief language style: English).",
     `${durationRules(videoDurationSeconds)} Count only spoken words in HOOK, PROBLEM, SOLUTION, CTA.`,
     "Output plain text only, using the section headings exactly as specified (SCRIPT OPTION 1, VIDEO_METADATA, etc.).",
+    generationMode === "custom_ugc"
+      ? `Generation mode: CUSTOM UGC INTENT. Respect this user intent while still following all structural rules: ${customUgcIntent || "No talk, product-focused visual UGC."}`
+      : "Generation mode: AUTOMATIC (standard Link to Ad).",
     "",
     UGC_SCRIPT_INSTRUCTIONS,
   ].join("\n");
@@ -336,6 +343,9 @@ export async function POST(req: Request) {
     "",
     "The scripts must follow the UGC AI script structure.",
     "Test 3 different marketing angles.",
+    generationMode === "custom_ugc"
+      ? `Custom UGC intent from user: ${customUgcIntent || "No talk, just show the product naturally."}`
+      : "Mode: automatic generation from URL context.",
     "",
     imageNote,
   ].join("\n");
@@ -347,6 +357,8 @@ export async function POST(req: Request) {
       brandBrief,
       imageUrlsJoined: imageUrls.join("|"),
       videoDurationSeconds,
+      generationMode,
+      customUgcIntent,
       storeUrl,
       productTitle,
     });

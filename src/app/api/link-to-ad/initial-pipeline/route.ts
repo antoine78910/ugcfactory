@@ -10,6 +10,8 @@ import { runInitialPipeline } from "@/lib/linkToAd/runInitialPipeline";
 type Body = {
   storeUrl?: string;
   neutralUploadUrl?: string | null;
+  generationMode?: "automatic" | "custom_ugc";
+  customUgcIntent?: string;
 };
 
 export async function POST(req: Request) {
@@ -29,8 +31,11 @@ export async function POST(req: Request) {
         ? body.neutralUploadUrl.trim() || null
         : null;
 
+  const generationMode = body?.generationMode === "custom_ugc" ? "custom_ugc" : "automatic";
+  const customUgcIntent = typeof body?.customUgcIntent === "string" ? body.customUgcIntent.trim() : "";
+
   const f = createInternalFetchFromRequest(req);
-  const result = await runInitialPipeline(f, { storeUrl, neutralUploadUrl });
+  const result = await runInitialPipeline(f, { storeUrl, neutralUploadUrl, generationMode, customUgcIntent });
 
   if (!result.ok) {
     return NextResponse.json(

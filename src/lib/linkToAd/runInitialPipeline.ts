@@ -49,11 +49,18 @@ export type InitialPipelineStepIndex = 0 | 1 | 2 | 3 | 4;
  */
 export async function runInitialPipeline(
   f: InternalFetch,
-  opts: { storeUrl: string; neutralUploadUrl: string | null },
+  opts: {
+    storeUrl: string;
+    neutralUploadUrl: string | null;
+    generationMode?: "automatic" | "custom_ugc";
+    customUgcIntent?: string;
+  },
   onProgress?: (step: InitialPipelineStepIndex) => void,
 ): Promise<InitialPipelineResult> {
   const url = opts.storeUrl.trim();
   const userUploadedImageUrl = opts.neutralUploadUrl;
+  const generationMode = opts.generationMode === "custom_ugc" ? "custom_ugc" : "automatic";
+  const customUgcIntent = (opts.customUgcIntent ?? "").trim();
 
   let activeRunId: string | null = null;
 
@@ -155,6 +162,8 @@ export async function runInitialPipeline(
     const snapAfterSummary: LinkToAdUniverseSnapshotV1 = {
       v: 1,
       phase: "after_summary",
+      generationMode,
+      customUgcIntent,
       cleanCandidate: cleanUrl ? { url: cleanUrl, reason } : null,
       fallbackImageUrl: firstOther?.trim() || images[0] || null,
       confidence: confidenceStr,
@@ -191,6 +200,8 @@ export async function runInitialPipeline(
           productImageUrl: gptImages[0] ?? null,
           productImageUrls: gptImages,
           videoDurationSeconds: 15,
+          generationMode,
+          customUgcIntent,
         }),
       });
       if (!scriptsRes.ok) {
@@ -211,6 +222,8 @@ export async function runInitialPipeline(
       const snapAfterScripts: LinkToAdUniverseSnapshotV1 = {
         v: 1,
         phase: "after_scripts",
+        generationMode,
+        customUgcIntent,
         cleanCandidate: cleanUrl ? { url: cleanUrl, reason } : null,
         fallbackImageUrl: firstOther?.trim() || images[0] || null,
         confidence: confidenceStr,
@@ -274,6 +287,8 @@ export async function runContinueScriptsPipeline(f: InternalFetch, runId: string
   }
 
   const base = cloneExtractedBase(run.extracted);
+  const generationMode = snap.generationMode === "custom_ugc" ? "custom_ugc" : "automatic";
+  const customUgcIntent = (snap.customUgcIntent ?? "").trim();
   const titleForScripts = typeof run.title === "string" ? run.title : null;
   const candidates =
     snap.productOnlyImageUrls && snap.productOnlyImageUrls.length > 0
@@ -298,6 +313,8 @@ export async function runContinueScriptsPipeline(f: InternalFetch, runId: string
         productImageUrl: gptImages[0] ?? null,
         productImageUrls: gptImages,
         videoDurationSeconds: 15,
+        generationMode,
+        customUgcIntent,
       }),
     });
     if (!scriptsRes.ok) {
@@ -313,6 +330,8 @@ export async function runContinueScriptsPipeline(f: InternalFetch, runId: string
     const snapAfterScripts: LinkToAdUniverseSnapshotV1 = {
       v: 1,
       phase: "after_scripts",
+      generationMode,
+      customUgcIntent,
       cleanCandidate: snap.cleanCandidate,
       fallbackImageUrl: snap.fallbackImageUrl,
       confidence: snap.confidence,

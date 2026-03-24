@@ -9,6 +9,8 @@ type Body = {
   productImageUrl: string;
   /** Optional human/avatar refs to guide persona appearance. */
   avatarImageUrls?: string[] | null;
+  generationMode?: "automatic" | "custom_ugc";
+  customUgcIntent?: string | null;
 };
 
 const INSTRUCTIONS = `
@@ -278,6 +280,8 @@ export async function POST(req: Request) {
         .filter((u): u is string => /^https?:\/\//i.test(u))
         .slice(0, 3)
     : [];
+  const generationMode = body?.generationMode === "custom_ugc" ? "custom_ugc" : "automatic";
+  const customUgcIntent = body?.customUgcIntent?.trim() || "";
 
   const developer = [
     "Follow the instructions in the user message exactly.",
@@ -294,6 +298,9 @@ export async function POST(req: Request) {
     avatarRefs.length
       ? `AVATAR REFERENCES ATTACHED: ${String(avatarRefs.length)} image(s). Match the person/persona appearance to these references whenever possible.`
       : "No avatar reference image attached; infer persona from script and product context.",
+    generationMode === "custom_ugc"
+      ? `CUSTOM UGC INTENT: ${customUgcIntent || "No talk, just show the product naturally."}`
+      : "MODE: automatic Link to Ad generation.",
   ].join("\n");
 
   try {

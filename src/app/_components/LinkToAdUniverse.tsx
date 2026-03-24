@@ -368,6 +368,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
 
   const [summaryText, setSummaryText] = useState<string>("");
   const [scriptsText, setScriptsText] = useState<string>("");
+  const [generationMode, setGenerationMode] = useState<"automatic" | "custom_ugc">("automatic");
+  const [customUgcIntent, setCustomUgcIntent] = useState("");
   const [stage, setStage] = useState<
     | "idle"
     | "scanning"
@@ -626,6 +628,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     latestSnapRef.current = {
       v: 1,
       phase: scriptsText ? "after_scripts" : "after_summary",
+      generationMode,
+      customUgcIntent: customUgcIntent.trim(),
       cleanCandidate,
       fallbackImageUrl,
       confidence,
@@ -655,6 +659,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     neutralUploadUrl,
     productOnlyImageUrls,
     userPhotoUrls,
+    generationMode,
+    customUgcIntent,
     summaryText,
     scriptsText,
     angleLabels,
@@ -765,6 +771,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       );
       setSummaryText(snap.summaryText);
       setScriptsText(snap.scriptsText);
+      setGenerationMode(snap.generationMode === "custom_ugc" ? "custom_ugc" : "automatic");
+      setCustomUgcIntent((snap.customUgcIntent ?? "").trim());
       setPendingCustomAnglePreview(null);
       setAngleLabels(
         snap.angleLabels[0] && snap.angleLabels[1] && snap.angleLabels[2]
@@ -1348,7 +1356,12 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       setServerPipelineStepIndex(0);
       const pipeResult = await runInitialPipeline(
         browserPipelineFetch,
-        { storeUrl: url, neutralUploadUrl: userUploadedImageUrl },
+        {
+          storeUrl: url,
+          neutralUploadUrl: userUploadedImageUrl,
+          generationMode,
+          customUgcIntent: customUgcIntent.trim(),
+        },
         (step) => setServerPipelineStepIndex(step),
       );
 
@@ -1442,6 +1455,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           marketingScript: script,
           productImageUrl: img,
           avatarImageUrls: avatarRefs,
+          generationMode,
+          customUgcIntent: customUgcIntent.trim(),
         }),
       });
       const json = (await res.json()) as { data?: string; error?: string };
@@ -2461,6 +2476,54 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           {!showBrandHeaderInsteadOfUrl ? (
             <div>
               <Label className="text-base font-medium text-white/80">Store URL</Label>
+              <div className="mt-3 space-y-3 rounded-xl border border-white/10 bg-white/[0.02] p-3">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-white/55">Mode</p>
+                  <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <button
+                      type="button"
+                      onClick={() => setGenerationMode("automatic")}
+                      className={cn(
+                        "rounded-lg border px-3 py-2 text-left transition",
+                        generationMode === "automatic"
+                          ? "border-violet-400/60 bg-violet-500/15 text-white"
+                          : "border-white/10 bg-black/20 text-white/65 hover:border-white/20",
+                      )}
+                    >
+                      <p className="text-sm font-semibold">Automatic</p>
+                      <p className="mt-0.5 text-[11px] leading-relaxed text-white/55">
+                        Current Link to Ad flow with editable script factors.
+                      </p>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setGenerationMode("custom_ugc")}
+                      className={cn(
+                        "rounded-lg border px-3 py-2 text-left transition",
+                        generationMode === "custom_ugc"
+                          ? "border-violet-400/60 bg-violet-500/15 text-white"
+                          : "border-white/10 bg-black/20 text-white/65 hover:border-white/20",
+                      )}
+                    >
+                      <p className="text-sm font-semibold">Custom UGC intent</p>
+                      <p className="mt-0.5 text-[11px] leading-relaxed text-white/55">
+                        Describe what you want (ex: no talk, just show product).
+                      </p>
+                    </button>
+                  </div>
+                </div>
+                {generationMode === "custom_ugc" ? (
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold text-white/70">Custom UGC direction</Label>
+                    <Textarea
+                      value={customUgcIntent}
+                      onChange={(e) => setCustomUgcIntent(e.target.value)}
+                      placeholder="Example: No talk. Focus on close product details, hands-on demonstration, lifestyle cuts, and clean transitions."
+                      className="min-h-[92px] border-white/10 bg-black/30 text-sm text-white/85 placeholder:text-white/30"
+                    />
+                  </div>
+                ) : null}
+              </div>
               <div className="relative mt-2 flex flex-col gap-3 sm:flex-row sm:items-stretch">
                 {isWorking ? (
                   <div
@@ -3410,7 +3473,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                             <div className="space-y-2">
                               <div className="flex items-center justify-between">
                                 <p className="text-sm text-white/75">
-                                  Edit only key angle factors before generating images.
+                                  Optional: edit the script before generating images.
                                 </p>
                                 {scriptHasEdits ? (
                                   <span className="text-[10px] text-violet-200/85">Edited factors ready</span>
@@ -3426,7 +3489,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                                   className="flex items-center gap-1 text-[11px] font-medium text-violet-300/80 transition hover:text-violet-200"
                                 >
                                   <PenLine className="h-3 w-3" />
-                                  {scriptEditVisible ? "Done editing" : "Edit factors"}
+                                  {scriptEditVisible ? "Done editing" : "Edit the script"}
                                 </button>
                               </div>
                               {scriptEditVisible ? (
@@ -3464,25 +3527,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                                     <Textarea value={scriptFactors.tone} onChange={(e) => { const next = { ...scriptFactors, tone: e.target.value }; setScriptFactors(next); setEditableScript(composeScriptFromFactors(next)); setScriptHasEdits(true); }} className="min-h-[74px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/80" />
                                   </div>
                                 </div>
-                              ) : (
-                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                                  {([
-                                    ["Hook", scriptFactors.hook],
-                                    ["Problem", scriptFactors.problem],
-                                    ["Avatar", scriptFactors.avatar],
-                                    ["Benefits", scriptFactors.benefits],
-                                    ["Proof", scriptFactors.proof],
-                                    ["Offer", scriptFactors.offer],
-                                    ["CTA", scriptFactors.cta],
-                                    ["Tone", scriptFactors.tone],
-                                  ] as const).map(([label, value]) => (
-                                    <div key={label} className="rounded-lg border border-white/10 bg-black/20 p-2.5">
-                                      <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">{label}</p>
-                                      <p className="mt-1 text-xs leading-relaxed text-white/70 line-clamp-4">{value || "—"}</p>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
+                              ) : null}
                             </div>
                             <Button
                               type="button"

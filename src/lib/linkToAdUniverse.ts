@@ -2,6 +2,8 @@
 export type LinkToAdUniverseSnapshotV1 = {
   v: 1;
   phase: "after_summary" | "after_scripts";
+  generationMode?: "automatic" | "custom_ugc";
+  customUgcIntent?: string;
   cleanCandidate: { url: string; reason?: string } | null;
   fallbackImageUrl: string | null;
   confidence: string | null;
@@ -618,6 +620,11 @@ export function readUniverseFromExtracted(extracted: unknown): LinkToAdUniverseS
   const base: LinkToAdUniverseSnapshotV1 = {
     v: 1,
     phase: o.phase === "after_scripts" ? "after_scripts" : "after_summary",
+    generationMode:
+      o.generationMode === "custom_ugc" || o.generationMode === "automatic"
+        ? (o.generationMode as "automatic" | "custom_ugc")
+        : "automatic",
+    customUgcIntent: typeof o.customUgcIntent === "string" ? o.customUgcIntent : "",
     cleanCandidate:
       clean && typeof clean === "object" && typeof (clean as { url?: string }).url === "string"
         ? {
