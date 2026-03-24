@@ -961,7 +961,7 @@ export default function StudioVideoPanel() {
     }
 
     const jobId = crypto.randomUUID();
-    const label = p.length > 60 ? `${p.slice(0, 60)}…` : p;
+    const label = p;
     const platformChargeEdit = usingPersonalApi ? 0 : editCredits;
     if (!usingPersonalApi) {
       spendCredits(editCredits);
@@ -1131,7 +1131,7 @@ export default function StudioVideoPanel() {
     }
 
     const jobId = crypto.randomUUID();
-    const label = p.length > 60 ? `${p.slice(0, 60)}…` : p;
+    const label = p;
     const platformChargeCreate = usingPersonalApiCreate ? 0 : credits;
     if (!usingPersonalApiCreate) {
       spendCredits(credits);
