@@ -39,23 +39,22 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      {/* Datafast analytics; same as snippet in <head>; beforeInteractive injects early */}
-      <Script
-        id="datafast"
-        src="https://datafa.st/js/script.js"
-        strategy="beforeInteractive"
-        data-website-id={DATAFAST_WEBSITE_ID}
-        data-domain={DATAFAST_DOMAIN}
-      />
-      {/* LinkJolt affiliate tracking — referral passed as Stripe Checkout client_reference_id from /credits + /subscription */}
-      <Script
-        id="linkjolt"
-        src={`https://www.linkjolt.io/api/tracking.js?id=${LINKJOLT_MERCHANT_ID}`}
-        strategy="afterInteractive"
-      />
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        {/* Scripts must live inside <body> — direct children of <html> are invalid and cause React hydration #418 */}
+        <Script
+          id="datafast"
+          src="https://datafa.st/js/script.js"
+          strategy="beforeInteractive"
+          data-website-id={DATAFAST_WEBSITE_ID}
+          data-domain={DATAFAST_DOMAIN}
+        />
+        <Script
+          id="linkjolt"
+          src={`https://www.linkjolt.io/api/tracking.js?id=${LINKJOLT_MERCHANT_ID}`}
+          strategy="afterInteractive"
+        />
         <CreditsPlanProvider>
           <HeyoInit />
           {children}
@@ -65,3 +64,4 @@ export default function RootLayout({
     </html>
   );
 }
+
