@@ -237,6 +237,50 @@ function firstHexColor(input: string): string | null {
   return raw.toUpperCase();
 }
 
+type VideoPromptSections = {
+  direction: string;
+  scene: string;
+  motion: string;
+  style: string;
+};
+
+function splitVideoPromptSectionsForUi(prompt: string): VideoPromptSections {
+  const clean = prompt.replace(/\r\n/g, "\n").replace(/\s+/g, " ").trim();
+  if (!clean) return { direction: "", scene: "", motion: "", style: "" };
+  const sentences = (clean.match(/[^.!?]+[.!?]?/g) ?? []).map((s) => s.trim()).filter(Boolean);
+  if (sentences.length >= 4) {
+    return {
+      direction: sentences[0] ?? "",
+      scene: sentences[1] ?? "",
+      motion: sentences[2] ?? "",
+      style: sentences.slice(3).join(" ").trim(),
+    };
+  }
+  if (sentences.length === 3) {
+    return { direction: sentences[0], scene: sentences[1], motion: sentences[2], style: "" };
+  }
+  if (sentences.length === 2) {
+    return { direction: sentences[0], scene: sentences[1], motion: "", style: "" };
+  }
+  const parts = clean.split(",").map((s) => s.trim()).filter(Boolean);
+  return {
+    direction: parts[0] ?? clean,
+    scene: parts[1] ?? "",
+    motion: parts[2] ?? "",
+    style: parts.slice(3).join(", ").trim(),
+  };
+}
+
+function composeVideoPromptFromSections(sections: VideoPromptSections): string {
+  const blocks = [
+    sections.direction.trim() ? `Creative direction: ${sections.direction.trim()}` : "",
+    sections.scene.trim() ? `Scene setup: ${sections.scene.trim()}` : "",
+    sections.motion.trim() ? `Motion cues: ${sections.motion.trim()}` : "",
+    sections.style.trim() ? `Style & constraints: ${sections.style.trim()}` : "",
+  ].filter(Boolean);
+  return blocks.join("\n");
+}
+
 export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRunsChanged }: LinkToAdUniverseProps) {
   const { planId, current: creditsBalance, spendCredits, grantCredits } = useCreditsPlan();
   /** After a fresh store scan starts, gate later steps against this snapshot so the wallet UI does not “jump” each step. Resync on image/video redo actions only. */
@@ -328,6 +372,12 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const [editableScript, setEditableScript] = useState("");
   const [scriptEditVisible, setScriptEditVisible] = useState(false);
   const [editableVideoPrompt, setEditableVideoPrompt] = useState("");
+  const [videoPromptSections, setVideoPromptSections] = useState<VideoPromptSections>({
+    direction: "",
+    scene: "",
+    motion: "",
+    style: "",
+  });
   const [videoPromptEditVisible, setVideoPromptEditVisible] = useState(false);
   /** Saved Nano + Kling pipeline per script angle (inactive slots + hydrate); active angle also in flat state below. */
   const [pipelineByAngle, setPipelineByAngle] = useState<
@@ -1806,7 +1856,9 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       if (!res.ok || !json.data) throw new Error(json.error || "Video prompt failed");
       const text = String(json.data);
       setUgcVideoPromptGpt(text);
-      setEditableVideoPrompt(text);
+      const nextSections = splitVideoPromptSectionsForUi(text);
+      setVideoPromptSections(nextSections);
+      setEditableVideoPrompt(composeVideoPromptFromSections(nextSections));
       setVideoPromptEditVisible(true);
       const idx = nanoBananaSelectedImageIndex;
       if (idx === 0 || idx === 1 || idx === 2) {
@@ -2168,13 +2220,16 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     setUserStartedVideoFromImage(true);
     const t = await onGenerateUgcVideoPrompt();
     if (t?.trim()) {
-      setEditableVideoPrompt(t.trim());
+      const nextSections = splitVideoPromptSectionsForUi(t.trim());
+      setVideoPromptSections(nextSections);
+      setEditableVideoPrompt(composeVideoPromptFromSections(nextSections));
       setVideoPromptEditVisible(true);
     }
   }
 
   async function handleConfirmVideoGeneration() {
-    const prompt = editableVideoPrompt.trim();
+    const prompt = composeVideoPromptFromSections(videoPromptSections).trim();
+    setEditableVideoPrompt(prompt);
     if (!prompt) {
       toast.error("Video prompt is empty.");
       return;
@@ -3347,17 +3402,66 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                       {videoPromptEditVisible && editableVideoPrompt.trim() && !klingVideoUrl ? (
                         <div className="rounded-xl border border-violet-500/25 bg-violet-500/[0.06] p-4 space-y-3">
                           <div className="flex items-center justify-between">
-                            <p className="text-sm font-semibold text-white/90">Review video prompt</p>
-                            <span className="text-[10px] text-white/40">Edit before generating</span>
+                            <p className="text-sm font-semibold text-white/90">Review prompt sections</p>
+                            <span className="text-[10px] text-white/40">Edit blocks before generating</span>
                           </div>
-                          <Textarea
-                            value={editableVideoPrompt}
-                            onChange={(e) => setEditableVideoPrompt(e.target.value)}
-                            className="min-h-[100px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/80"
-                          />
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                            <div className="space-y-1">
+                              <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Direction</p>
+                              <Textarea
+                                value={videoPromptSections.direction}
+                                onChange={(e) => {
+                                  const next = { ...videoPromptSections, direction: e.target.value };
+                                  setVideoPromptSections(next);
+                                  setEditableVideoPrompt(composeVideoPromptFromSections(next));
+                                }}
+                                className="min-h-[88px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/80"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Scene</p>
+                              <Textarea
+                                value={videoPromptSections.scene}
+                                onChange={(e) => {
+                                  const next = { ...videoPromptSections, scene: e.target.value };
+                                  setVideoPromptSections(next);
+                                  setEditableVideoPrompt(composeVideoPromptFromSections(next));
+                                }}
+                                className="min-h-[88px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/80"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Motion</p>
+                              <Textarea
+                                value={videoPromptSections.motion}
+                                onChange={(e) => {
+                                  const next = { ...videoPromptSections, motion: e.target.value };
+                                  setVideoPromptSections(next);
+                                  setEditableVideoPrompt(composeVideoPromptFromSections(next));
+                                }}
+                                className="min-h-[88px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/80"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Style</p>
+                              <Textarea
+                                value={videoPromptSections.style}
+                                onChange={(e) => {
+                                  const next = { ...videoPromptSections, style: e.target.value };
+                                  setVideoPromptSections(next);
+                                  setEditableVideoPrompt(composeVideoPromptFromSections(next));
+                                }}
+                                className="min-h-[88px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/80"
+                              />
+                            </div>
+                          </div>
                           <Button
                             type="button"
-                            disabled={isKlingSubmitting || Boolean(klingPollTaskId) || !editableVideoPrompt.trim()}
+                            disabled={
+                              isKlingSubmitting ||
+                              Boolean(klingPollTaskId) ||
+                              !composeVideoPromptFromSections(videoPromptSections).trim()
+                            }
                             onClick={() => void handleConfirmVideoGeneration()}
                             className={`h-11 w-full max-w-sm ${primaryBtnClass}`}
                           >
@@ -3535,9 +3639,32 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                               </div>
                             ) : null}
                             {ugcVideoPromptGpt ? (
-                              <pre className="mt-3 max-h-[220px] overflow-auto whitespace-pre-wrap rounded-lg border border-white/10 bg-black/30 p-3 text-xs text-white/75">
-                                {ugcVideoPromptGpt}
-                              </pre>
+                              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                <div className="rounded-lg border border-white/10 bg-black/30 p-2.5">
+                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Direction</p>
+                                  <p className="mt-1 text-xs leading-relaxed text-white/75 line-clamp-4">
+                                    {splitVideoPromptSectionsForUi(ugcVideoPromptGpt).direction || "—"}
+                                  </p>
+                                </div>
+                                <div className="rounded-lg border border-white/10 bg-black/30 p-2.5">
+                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Scene</p>
+                                  <p className="mt-1 text-xs leading-relaxed text-white/75 line-clamp-4">
+                                    {splitVideoPromptSectionsForUi(ugcVideoPromptGpt).scene || "—"}
+                                  </p>
+                                </div>
+                                <div className="rounded-lg border border-white/10 bg-black/30 p-2.5">
+                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Motion</p>
+                                  <p className="mt-1 text-xs leading-relaxed text-white/75 line-clamp-4">
+                                    {splitVideoPromptSectionsForUi(ugcVideoPromptGpt).motion || "—"}
+                                  </p>
+                                </div>
+                                <div className="rounded-lg border border-white/10 bg-black/30 p-2.5">
+                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Style</p>
+                                  <p className="mt-1 text-xs leading-relaxed text-white/75 line-clamp-4">
+                                    {splitVideoPromptSectionsForUi(ugcVideoPromptGpt).style || "—"}
+                                  </p>
+                                </div>
+                              </div>
                             ) : null}
                           </div>
                         </div>
