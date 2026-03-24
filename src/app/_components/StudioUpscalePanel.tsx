@@ -14,6 +14,7 @@ import type { StudioHistoryItem } from "@/app/_components/StudioGenerationsHisto
 import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
 import { StudioModelPicker, type StudioModelPickerItem } from "@/app/_components/StudioModelPicker";
 import { topazVideoUpscaleCredits } from "@/lib/pricing";
+import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
 
 async function uploadFile(file: File): Promise<string> {
   const fd = new FormData();
@@ -105,6 +106,7 @@ export default function StudioUpscalePanel() {
   const [factor, setFactor] = useState<"1" | "2" | "4">("2");
   const [upscalePickerId, setUpscalePickerId] = useState<UpscalePickerId>("upscale/video");
   const [busy, setBusy] = useState(false);
+  const [videoPreviewBlob, setVideoPreviewBlob] = useState<string | null>(null);
   const [historyItems, setHistoryItems] = useState<StudioHistoryItem[]>([]);
   type Bill = { open: false } | { open: true; required: number };
   const [billing, setBilling] = useState<Bill>({ open: false });
@@ -136,6 +138,11 @@ export default function StudioUpscalePanel() {
     input.onchange = async () => {
       const f = input.files?.[0];
       if (!f) return;
+      const blobUrl = URL.createObjectURL(f);
+      setVideoPreviewBlob((prev) => {
+        if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
+        return blobUrl;
+      });
       setBusy(true);
       try {
         const url = await uploadFile(f);
@@ -144,6 +151,8 @@ export default function StudioUpscalePanel() {
       } catch (e) {
         toast.error("Upload failed. Please try again.");
       } finally {
+        URL.revokeObjectURL(blobUrl);
+        setVideoPreviewBlob(null);
         setBusy(false);
       }
     };
@@ -291,6 +300,19 @@ export default function StudioUpscalePanel() {
                 Upload
               </Button>
             </div>
+            {videoUrl.trim() || videoPreviewBlob ? (
+              <div className="relative mt-1 aspect-video w-full max-w-md overflow-hidden rounded-xl border border-white/10 bg-black">
+                {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                <video
+                  src={videoUrl.trim() || videoPreviewBlob || undefined}
+                  className="h-full w-full object-cover"
+                  muted
+                  playsInline
+                  preload="metadata"
+                />
+                <UploadBusyOverlay active={busy && Boolean(videoPreviewBlob)} className="rounded-xl" />
+              </div>
+            ) : null}
             <div className="grid grid-cols-1 gap-3">
               <div>
                 <Label className="text-xs text-white/45">Detected duration</Label>

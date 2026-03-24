@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
 import { absolutizeImageUrl } from "@/lib/imageUrl";
 import { pickBestProductUrlForNanoBanana, productUrlsForGpt } from "@/lib/productReferenceImages";
 import {
@@ -281,6 +282,24 @@ function composeVideoPromptFromSections(sections: VideoPromptSections): string {
   return blocks.join("\n");
 }
 
+function LinkToAdPendingProductThumbnails({ items }: { items: { id: string; blob: string }[] }) {
+  if (!items.length) return null;
+  return (
+    <>
+      {items.map((row) => (
+        <div
+          key={row.id}
+          className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-violet-500/35 bg-[#050507]"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={row.blob} alt="" className="h-full w-full object-cover" />
+          <UploadBusyOverlay active className="rounded-lg" />
+        </div>
+      ))}
+    </>
+  );
+}
+
 export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRunsChanged }: LinkToAdUniverseProps) {
   const { planId, current: creditsBalance, spendCredits, grantCredits } = useCreditsPlan();
   /** After a fresh store scan starts, gate later steps against this snapshot so the wallet UI does not “jump” each step. Resync on image/video redo actions only. */
@@ -315,6 +334,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const [isWorking, setIsWorking] = useState(false);
   /** Extra product photo uploads should not trigger global "Working..." pipeline state. */
   const [isUploadingAdditionalPhotos, setIsUploadingAdditionalPhotos] = useState(false);
+  const [pendingProductUploads, setPendingProductUploads] = useState<{ id: string; blob: string }[]>([]);
   const [extractedTitle, setExtractedTitle] = useState<string | null>(null);
 
   const [cleanCandidate, setCleanCandidate] = useState<{ url: string; reason?: string } | null>(null);
@@ -839,14 +859,21 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     const list = Array.isArray(files) ? files : Array.from(files ?? []);
     if (!list.length) return;
 
+    const pendingRows = list.map((file) => ({
+      id: crypto.randomUUID(),
+      blob: URL.createObjectURL(file),
+      file,
+    }));
+    setPendingProductUploads((p) => [...p, ...pendingRows.map(({ id, blob }) => ({ id, blob }))]);
+
     setIsWorking(true);
     try {
       const uploaded: string[] = [];
       let lastError: string | null = null;
-      for (const file of list) {
+      for (const row of pendingRows) {
         try {
           const fd = new FormData();
-          fd.set("file", file);
+          fd.set("file", row.file);
           const res = await fetch("/api/uploads", { method: "POST", body: fd });
           const raw = await res.text();
           const parsed = safeParseJson<{ url?: string; error?: string }>(raw);
@@ -857,6 +884,9 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           uploaded.push(parsed.value.url);
         } catch (err) {
           lastError = err instanceof Error ? err.message : "Upload failed";
+        } finally {
+          URL.revokeObjectURL(row.blob);
+          setPendingProductUploads((p) => p.filter((x) => x.id !== row.id));
         }
       }
       if (!uploaded.length) throw new Error(lastError || "Upload failed");
@@ -886,14 +916,20 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   async function uploadAdditionalPhoto(files: FileList | File[] | null) {
     const list = Array.isArray(files) ? files : Array.from(files ?? []);
     if (!list.length) return;
+    const pendingRows = list.map((file) => ({
+      id: crypto.randomUUID(),
+      blob: URL.createObjectURL(file),
+      file,
+    }));
+    setPendingProductUploads((p) => [...p, ...pendingRows.map(({ id, blob }) => ({ id, blob }))]);
     setIsUploadingAdditionalPhotos(true);
     let added = 0;
     let lastError: string | null = null;
     try {
-      for (const file of list) {
+      for (const row of pendingRows) {
         try {
           const fd = new FormData();
-          fd.set("file", file);
+          fd.set("file", row.file);
           const res = await fetch("/api/uploads", { method: "POST", body: fd });
           const raw = await res.text();
           const parsed = safeParseJson<{ url?: string; error?: string }>(raw);
@@ -907,6 +943,9 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           added++;
         } catch (err) {
           lastError = err instanceof Error ? err.message : "Upload failed";
+        } finally {
+          URL.revokeObjectURL(row.blob);
+          setPendingProductUploads((p) => p.filter((x) => x.id !== row.id));
         }
       }
       if (added > 0) {
@@ -2449,6 +2488,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                   image generation use them as extra reference.
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
+                  <LinkToAdPendingProductThumbnails items={pendingProductUploads} />
                   {productOnlyImageUrls.map((url, i) => (
                     <div
                       key={`early-${url}-${i}`}
@@ -2633,6 +2673,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                       ) : null}
                     </div>
                     <div className="flex flex-wrap gap-2">
+                      <LinkToAdPendingProductThumbnails items={pendingProductUploads} />
                       {productOnlyImageUrls.map((url, i) => (
                         <div key={`${url}-${i}`} className="group/photo relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-[#050507]">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -2814,6 +2855,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                       ) : null}
                     </div>
                     <div className="flex flex-wrap gap-2">
+                      <LinkToAdPendingProductThumbnails items={pendingProductUploads} />
                       {productOnlyImageUrls.map((url, i) => (
                         <div key={`${url}-${i}`} className="group/photo relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-[#050507]">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -3066,6 +3108,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                     ) : null}
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
+                    <LinkToAdPendingProductThumbnails items={pendingProductUploads} />
                     {productOnlyImageUrls.map((url, i) => (
                       <div
                         key={`${url}-${i}-side`}

@@ -31,6 +31,7 @@ import { STUDIO_VIDEO_EDIT_PICKER_IDS } from "@/lib/studioVideoEditModels";
 import { loadAvatarUrls } from "@/lib/avatarLibrary";
 import { AvatarPickerDialog } from "@/app/_components/AvatarPickerDialog";
 import { clipboardImageFiles } from "@/lib/clipboardImage";
+import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
 
 type VideoTab = "create" | "edit";
 
@@ -219,6 +220,7 @@ function isMotionEditPicker(id: string): boolean {
 function VideoUploadSlot({
   url,
   posterUrl,
+  uploading,
   onPick,
   onClear,
   disabled,
@@ -229,6 +231,7 @@ function VideoUploadSlot({
   url: string | null;
   /** Local blob URL for preview while uploading or before remote URL. */
   posterUrl?: string | null;
+  uploading?: boolean;
   onPick: () => void;
   onClear: () => void;
   disabled?: boolean;
@@ -242,22 +245,25 @@ function VideoUploadSlot({
       type="button"
       disabled={disabled}
       onClick={() => (show ? onClear() : onPick())}
-      className="relative flex min-h-[120px] w-full flex-col items-center justify-center rounded-xl border border-dashed border-white/20 bg-[#0c0c10] text-white/50 transition hover:border-violet-400/40 hover:bg-white/[0.03] disabled:opacity-50"
+      className="relative flex min-h-[120px] w-full flex-col items-center justify-center overflow-hidden rounded-xl border border-dashed border-white/20 bg-[#0c0c10] text-white/50 transition hover:border-violet-400/40 hover:bg-white/[0.03] disabled:opacity-50"
     >
       {show ? (
-        <video
-          src={url ?? posterUrl ?? undefined}
-          className="absolute inset-0 h-full w-full rounded-xl object-cover"
-          muted
-          playsInline
-          preload="metadata"
-          onLoadedMetadata={(e) => {
-            const v = e.currentTarget.duration;
-            const n = Number(v);
-            if (!Number.isFinite(n) || n <= 0) onDurationSec?.(null);
-            else onDurationSec?.(n);
-          }}
-        />
+        <>
+          <video
+            src={url ?? posterUrl ?? undefined}
+            className="absolute inset-0 h-full w-full rounded-xl object-cover"
+            muted
+            playsInline
+            preload="metadata"
+            onLoadedMetadata={(e) => {
+              const v = e.currentTarget.duration;
+              const n = Number(v);
+              if (!Number.isFinite(n) || n <= 0) onDurationSec?.(null);
+              else onDurationSec?.(n);
+            }}
+          />
+          <UploadBusyOverlay active={Boolean(uploading)} />
+        </>
       ) : (
         <>
           <span className="mb-2 flex h-12 w-12 items-center justify-center rounded-full border border-white/15 bg-white/[0.06]">
@@ -280,19 +286,23 @@ function ElementsUploadZone({
   onAdd,
   onRemove,
   disabled,
+  pendingPreviewUrl,
+  pendingUploading,
 }: {
   urls: string[];
   max: number;
   onAdd: () => void;
   onRemove: (index: number) => void;
   disabled?: boolean;
+  pendingPreviewUrl?: string | null;
+  pendingUploading?: boolean;
 }) {
   return (
     <div className="relative rounded-xl border border-dashed border-white/20 bg-[#0c0c10] p-3">
       <span className="absolute right-2 top-2 rounded-md bg-white/10 px-2 py-0.5 text-[10px] font-medium text-white/60">
         Optional
       </span>
-      {urls.length === 0 ? (
+      {urls.length === 0 && !pendingPreviewUrl ? (
         <button
           type="button"
           disabled={disabled}
@@ -322,7 +332,14 @@ function ElementsUploadZone({
               </span>
             </button>
           ))}
-          {urls.length < max ? (
+          {pendingPreviewUrl ? (
+            <div className="relative aspect-video overflow-hidden rounded-lg border border-violet-500/30 bg-black/40">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={pendingPreviewUrl} alt="" className="h-full w-full object-cover" />
+              <UploadBusyOverlay active={Boolean(pendingUploading)} />
+            </div>
+          ) : null}
+          {urls.length < max && !pendingPreviewUrl ? (
             <button
               type="button"
               disabled={disabled}
@@ -342,6 +359,8 @@ function FrameSlot({
   label,
   optional,
   url,
+  previewUrl,
+  uploading,
   onPick,
   onClear,
   disabled,
@@ -349,33 +368,40 @@ function FrameSlot({
   label: string;
   optional?: boolean;
   url: string | null;
+  /** Local blob preview while uploading */
+  previewUrl?: string | null;
+  uploading?: boolean;
   onPick: () => void;
   onClear: () => void;
   disabled?: boolean;
 }) {
+  const display = url || previewUrl;
   return (
     <button
       type="button"
       disabled={disabled}
-      onClick={() => (url ? onClear() : onPick())}
-      className="relative flex aspect-[5/4] w-full flex-col items-center justify-center rounded-xl border border-dashed border-white/20 bg-[#0c0c10] text-white/50 transition hover:border-violet-400/40 hover:bg-white/[0.03] disabled:opacity-50"
+      onClick={() => (display ? onClear() : onPick())}
+      className="relative flex aspect-[5/4] w-full flex-col items-center justify-center overflow-hidden rounded-xl border border-dashed border-white/20 bg-[#0c0c10] text-white/50 transition hover:border-violet-400/40 hover:bg-white/[0.03] disabled:opacity-50"
     >
       {optional ? (
-        <span className="absolute right-2 top-2 rounded-md bg-white/10 px-2 py-0.5 text-[10px] font-medium text-white/60">
+        <span className="absolute right-2 top-2 z-[1] rounded-md bg-white/10 px-2 py-0.5 text-[10px] font-medium text-white/60">
           Optional
         </span>
       ) : null}
-      {url ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={url} alt="" className="absolute inset-0 h-full w-full rounded-xl object-cover" />
+      {display ? (
+        <>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={display} alt="" className="absolute inset-0 h-full w-full rounded-xl object-cover" />
+          <UploadBusyOverlay active={Boolean(uploading)} />
+        </>
       ) : (
         <>
           <ImageIcon className="mb-2 h-8 w-8 opacity-50" />
           <span className="text-xs font-medium text-white/45">{label}</span>
         </>
       )}
-      {url ? (
-        <span className="absolute bottom-2 rounded-md bg-black/70 px-2 py-1 text-[10px] text-white">Tap to remove</span>
+      {display ? (
+        <span className="absolute bottom-2 z-[1] rounded-md bg-black/70 px-2 py-1 text-[10px] text-white">Tap to remove</span>
       ) : null}
     </button>
   );
@@ -462,6 +488,9 @@ export default function StudioVideoPanel() {
   const [veoAspect, setVeoAspect] = useState<"16:9" | "9:16" | "Auto">("9:16");
   /** Start/end frame uploads only; does not block Generate. */
   const [frameUploadBusy, setFrameUploadBusy] = useState(false);
+  const [startFramePreviewBlob, setStartFramePreviewBlob] = useState<string | null>(null);
+  const [endFramePreviewBlob, setEndFramePreviewBlob] = useState<string | null>(null);
+  const [frameUploadSlot, setFrameUploadSlot] = useState<"start" | "end" | null>(null);
   const [historyItems, setHistoryItems] = useState<StudioHistoryItem[]>([]);
   type VideoBilling =
     | { open: false }
@@ -486,6 +515,8 @@ export default function StudioVideoPanel() {
   const [editMotionVideoBlobUrl, setEditMotionVideoBlobUrl] = useState<string | null>(null);
   const [editMotionDurationSec, setEditMotionDurationSec] = useState<number | null>(null);
   const [editUploadBusy, setEditUploadBusy] = useState(false);
+  const [motionCharPreviewBlob, setMotionCharPreviewBlob] = useState<string | null>(null);
+  const [elementUploadPreviewBlob, setElementUploadPreviewBlob] = useState<string | null>(null);
   const [avatarUrls, setAvatarUrls] = useState<string[]>([]);
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   const [avatarPickTarget, setAvatarPickTarget] = useState<"create_start" | "edit_motion" | "edit_elements">("create_start");
@@ -551,6 +582,20 @@ export default function StudioVideoPanel() {
   }, [editMotionVideoBlobUrl]);
 
   useEffect(() => {
+    return () => {
+      if (startFramePreviewBlob?.startsWith("blob:")) URL.revokeObjectURL(startFramePreviewBlob);
+      if (endFramePreviewBlob?.startsWith("blob:")) URL.revokeObjectURL(endFramePreviewBlob);
+    };
+  }, [startFramePreviewBlob, endFramePreviewBlob]);
+
+  useEffect(() => {
+    return () => {
+      if (motionCharPreviewBlob?.startsWith("blob:")) URL.revokeObjectURL(motionCharPreviewBlob);
+      if (elementUploadPreviewBlob?.startsWith("blob:")) URL.revokeObjectURL(elementUploadPreviewBlob);
+    };
+  }, [motionCharPreviewBlob, elementUploadPreviewBlob]);
+
+  useEffect(() => {
     let cancelled = false;
     void (async () => {
       const urls = await loadAvatarUrls();
@@ -568,6 +613,19 @@ export default function StudioVideoPanel() {
     input.onchange = async () => {
       const f = input.files?.[0];
       if (!f) return;
+      const blobUrl = URL.createObjectURL(f);
+      setFrameUploadSlot(which);
+      if (which === "start") {
+        setStartFramePreviewBlob((prev) => {
+          if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
+          return blobUrl;
+        });
+      } else {
+        setEndFramePreviewBlob((prev) => {
+          if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
+          return blobUrl;
+        });
+      }
       setFrameUploadBusy(true);
       try {
         const u = await uploadFile(f);
@@ -577,7 +635,11 @@ export default function StudioVideoPanel() {
       } catch (e) {
         toast.error("Upload failed. Please try again.");
       } finally {
+        URL.revokeObjectURL(blobUrl);
+        if (which === "start") setStartFramePreviewBlob(null);
+        else setEndFramePreviewBlob(null);
         setFrameUploadBusy(false);
+        setFrameUploadSlot(null);
       }
     };
     input.click();
@@ -661,6 +723,11 @@ export default function StudioVideoPanel() {
     input.onchange = async () => {
       const f = input.files?.[0];
       if (!f) return;
+      const blobUrl = URL.createObjectURL(f);
+      setMotionCharPreviewBlob((prev) => {
+        if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
+        return blobUrl;
+      });
       setEditUploadBusy(true);
       try {
         const u = await uploadFile(f);
@@ -669,6 +736,8 @@ export default function StudioVideoPanel() {
       } catch (e) {
         toast.error("Upload failed. Please try again.");
       } finally {
+        URL.revokeObjectURL(blobUrl);
+        setMotionCharPreviewBlob(null);
         setEditUploadBusy(false);
       }
     };
@@ -718,6 +787,11 @@ export default function StudioVideoPanel() {
     input.onchange = async () => {
       const f = input.files?.[0];
       if (!f) return;
+      const blobUrl = URL.createObjectURL(f);
+      setElementUploadPreviewBlob((prev) => {
+        if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
+        return blobUrl;
+      });
       setEditUploadBusy(true);
       try {
         const u = await uploadFile(f);
@@ -726,6 +800,8 @@ export default function StudioVideoPanel() {
       } catch (e) {
         toast.error("Upload failed. Please try again.");
       } finally {
+        URL.revokeObjectURL(blobUrl);
+        setElementUploadPreviewBlob(null);
         setEditUploadBusy(false);
       }
     };
@@ -735,6 +811,20 @@ export default function StudioVideoPanel() {
   const onPasteImage = useCallback(
     async (file: File) => {
       if (tab === "create") {
+        const which: "start" | "end" = !startUrl ? "start" : !endUrl ? "end" : "start";
+        const blobUrl = URL.createObjectURL(file);
+        setFrameUploadSlot(which);
+        if (which === "start") {
+          setStartFramePreviewBlob((prev) => {
+            if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
+            return blobUrl;
+          });
+        } else {
+          setEndFramePreviewBlob((prev) => {
+            if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
+            return blobUrl;
+          });
+        }
         setFrameUploadBusy(true);
         try {
           const u = await uploadFile(file);
@@ -751,24 +841,51 @@ export default function StudioVideoPanel() {
         } catch (e) {
           toast.error("Upload failed. Please try again.");
         } finally {
+          URL.revokeObjectURL(blobUrl);
+          if (which === "start") setStartFramePreviewBlob(null);
+          else setEndFramePreviewBlob(null);
           setFrameUploadBusy(false);
+          setFrameUploadSlot(null);
         }
         return;
       }
 
+      if (motionEdit) {
+        const blobUrl = URL.createObjectURL(file);
+        setMotionCharPreviewBlob((prev) => {
+          if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
+          return blobUrl;
+        });
+        setEditUploadBusy(true);
+        try {
+          const u = await uploadFile(file);
+          setEditMotionImageUrl(u);
+          toast.success("Character image pasted");
+        } catch (e) {
+          toast.error("Upload failed. Please try again.");
+        } finally {
+          URL.revokeObjectURL(blobUrl);
+          setMotionCharPreviewBlob(null);
+          setEditUploadBusy(false);
+        }
+        return;
+      }
+
+      const blobUrl = URL.createObjectURL(file);
+      setElementUploadPreviewBlob((prev) => {
+        if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
+        return blobUrl;
+      });
       setEditUploadBusy(true);
       try {
         const u = await uploadFile(file);
-        if (motionEdit) {
-          setEditMotionImageUrl(u);
-          toast.success("Character image pasted");
-          return;
-        }
         setEditElementUrls((prev) => (prev.length >= 4 ? prev : [...prev, u]));
         toast.success("Element image pasted");
       } catch (e) {
         toast.error("Upload failed. Please try again.");
       } finally {
+        URL.revokeObjectURL(blobUrl);
+        setElementUploadPreviewBlob(null);
         setEditUploadBusy(false);
       }
     },
@@ -1251,13 +1368,22 @@ export default function StudioVideoPanel() {
                   <FrameSlot
                     label="Character image"
                     url={editMotionImageUrl}
+                    previewUrl={motionCharPreviewBlob}
+                    uploading={editUploadBusy && Boolean(motionCharPreviewBlob)}
                     disabled={editUploadBusy}
                     onPick={pickMotionCharacter}
-                    onClear={() => setEditMotionImageUrl(null)}
+                    onClear={() => {
+                      setEditMotionImageUrl(null);
+                      setMotionCharPreviewBlob((prev) => {
+                        if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
+                        return null;
+                      });
+                    }}
                   />
                   <VideoUploadSlot
                     url={editMotionVideoUrl}
                     posterUrl={editMotionVideoBlobUrl}
+                    uploading={editUploadBusy && Boolean(editMotionVideoBlobUrl) && !editMotionVideoUrl}
                     disabled={editUploadBusy}
                     onPick={pickMotionReferenceVideo}
                     onClear={clearMotionReferenceVideo}
@@ -1286,6 +1412,7 @@ export default function StudioVideoPanel() {
                   <VideoUploadSlot
                     url={editVideoUrl}
                     posterUrl={editVideoBlobUrl}
+                    uploading={editUploadBusy && Boolean(editVideoBlobUrl) && !editVideoUrl}
                     disabled={editUploadBusy}
                     onPick={pickEditSourceVideo}
                     onClear={clearEditSourceVideo}
@@ -1299,6 +1426,8 @@ export default function StudioVideoPanel() {
                     disabled={editUploadBusy}
                     onAdd={pickElementImage}
                     onRemove={(i) => setEditElementUrls((prev) => prev.filter((_, j) => j !== i))}
+                    pendingPreviewUrl={elementUploadPreviewBlob}
+                    pendingUploading={editUploadBusy && Boolean(elementUploadPreviewBlob)}
                   />
                   {avatarUrls.length > 0 ? (
                     <Button
@@ -1472,17 +1601,33 @@ export default function StudioVideoPanel() {
                   label="Start frame"
                   optional={startFrameOptional}
                   url={startUrl}
+                  previewUrl={startFramePreviewBlob}
+                  uploading={frameUploadBusy && frameUploadSlot === "start"}
                   disabled={frameUploadBusy}
                   onPick={() => pickFrame("start")}
-                  onClear={() => setStartUrl(null)}
+                  onClear={() => {
+                    setStartUrl(null);
+                    setStartFramePreviewBlob((prev) => {
+                      if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
+                      return null;
+                    });
+                  }}
                 />
                 <FrameSlot
                   label="End frame"
                   optional
                   url={endUrl}
+                  previewUrl={endFramePreviewBlob}
+                  uploading={frameUploadBusy && frameUploadSlot === "end"}
                   disabled={frameUploadBusy}
                   onPick={() => pickFrame("end")}
-                  onClear={() => setEndUrl(null)}
+                  onClear={() => {
+                    setEndUrl(null);
+                    setEndFramePreviewBlob((prev) => {
+                      if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
+                      return null;
+                    });
+                  }}
                 />
               </div>
               {avatarUrls.length > 0 ? (

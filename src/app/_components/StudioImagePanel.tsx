@@ -26,6 +26,7 @@ import { canUseStudioImageModel, studioImageUpgradeMessage } from "@/lib/subscri
 import { loadAvatarUrls } from "@/lib/avatarLibrary";
 import { AvatarPickerDialog } from "@/app/_components/AvatarPickerDialog";
 import { clipboardImageFiles } from "@/lib/clipboardImage";
+import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
 
 const ASPECT_RATIOS_PRO = [
   "1:1",
@@ -168,6 +169,7 @@ export default function StudioImagePanel() {
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   /** Reference image uploads only; does not block Generate. */
   const [refUploadBusy, setRefUploadBusy] = useState(false);
+  const [refUploadPreviews, setRefUploadPreviews] = useState<{ id: string; blob: string }[]>([]);
   const [historyItems, setHistoryItems] = useState<StudioHistoryItem[]>([]);
   /** null = unknown; true = Supabase + server poll; false = guest / local only */
   const [serverHistory, setServerHistory] = useState<boolean | null>(null);
@@ -284,16 +286,26 @@ export default function StudioImagePanel() {
     input.onchange = async () => {
       const files = Array.from(input.files ?? []);
       if (!files.length) return;
+      const slice = files.slice(0, 8);
+      const pending = slice.map((f) => ({ id: crypto.randomUUID(), blob: URL.createObjectURL(f), file: f }));
+      setRefUploadPreviews((prev) => [...prev, ...pending.map(({ id, blob }) => ({ id, blob }))]);
       setRefUploadBusy(true);
       try {
         const urls: string[] = [];
-        for (const f of files.slice(0, 8)) {
-          urls.push(await uploadReferenceFile(f));
+        for (const row of pending) {
+          try {
+            urls.push(await uploadReferenceFile(row.file));
+          } catch {
+            toast.error("Upload failed. Please try again.");
+          } finally {
+            URL.revokeObjectURL(row.blob);
+            setRefUploadPreviews((p) => p.filter((x) => x.id !== row.id));
+          }
         }
-        setRefUrls((prev) => [...prev, ...urls].slice(0, 12));
-        toast.success(`${urls.length} reference image(s) added`);
-      } catch (e) {
-        toast.error("Upload failed. Please try again.");
+        if (urls.length) {
+          setRefUrls((prev) => [...prev, ...urls].slice(0, 12));
+          toast.success(`${urls.length} reference image(s) added`);
+        }
       } finally {
         setRefUploadBusy(false);
       }
@@ -303,16 +315,26 @@ export default function StudioImagePanel() {
 
   const onPasteRefs = useCallback(async (files: File[]) => {
     if (!files.length) return;
+    const slice = files.slice(0, 8);
+    const pending = slice.map((f) => ({ id: crypto.randomUUID(), blob: URL.createObjectURL(f), file: f }));
+    setRefUploadPreviews((prev) => [...prev, ...pending.map(({ id, blob }) => ({ id, blob }))]);
     setRefUploadBusy(true);
     try {
       const urls: string[] = [];
-      for (const f of files.slice(0, 8)) {
-        urls.push(await uploadReferenceFile(f));
+      for (const row of pending) {
+        try {
+          urls.push(await uploadReferenceFile(row.file));
+        } catch {
+          toast.error("Upload failed. Please try again.");
+        } finally {
+          URL.revokeObjectURL(row.blob);
+          setRefUploadPreviews((p) => p.filter((x) => x.id !== row.id));
+        }
       }
-      setRefUrls((prev) => [...prev, ...urls].slice(0, 12));
-      toast.success(urls.length > 1 ? `${urls.length} reference images pasted` : "Reference image pasted");
-    } catch (e) {
-      toast.error("Upload failed. Please try again.");
+      if (urls.length) {
+        setRefUrls((prev) => [...prev, ...urls].slice(0, 12));
+        toast.success(urls.length > 1 ? `${urls.length} reference images pasted` : "Reference image pasted");
+      }
     } finally {
       setRefUploadBusy(false);
     }
@@ -529,6 +551,16 @@ export default function StudioImagePanel() {
                 </span>
               </Button>
             ) : null}
+            {refUploadPreviews.map((row) => (
+              <div
+                key={row.id}
+                className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-violet-500/35"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={row.blob} alt="" className="h-full w-full object-cover" />
+                <UploadBusyOverlay active className="rounded-xl" />
+              </div>
+            ))}
             {refUrls.map((u, i) => (
               <button
                 key={`${u}-${i}`}

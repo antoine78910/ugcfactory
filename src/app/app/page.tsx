@@ -44,6 +44,7 @@ import {
 } from "@/lib/linkToAdUniverse";
 import { motionControlUpgradeMessage } from "@/lib/subscriptionModelAccess";
 import { clipboardImageFiles } from "@/lib/clipboardImage";
+import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
 
 type WizardStep = "url" | "analysis" | "quiz" | "image" | "video";
 type AppSection = "link_to_ad" | "avatar" | "motion_control" | "image" | "video" | "upscale" | "projects";
@@ -297,6 +298,7 @@ export default function AppBrandWizard() {
   >([]);
   const [selectedProductImageUrls, setSelectedProductImageUrls] = useState<string[]>([]);
   const [isUploadingPackshots, setIsUploadingPackshots] = useState(false);
+  const [packshotUploadPreviews, setPackshotUploadPreviews] = useState<{ id: string; blob: string }[]>([]);
 
   const [nanoModel, setNanoModel] = useState<NanoModel>("nano");
   const [imagePrompt, setImagePrompt] = useState<string>("");
@@ -315,6 +317,7 @@ export default function AppBrandWizard() {
   const packshotFileInputRef = useRef<HTMLInputElement>(null);
 
   const [motionVideoRefBlobUrl, setMotionVideoRefBlobUrl] = useState<string | null>(null);
+  const [motionVideoPreviewLoading, setMotionVideoPreviewLoading] = useState(false);
   const [motionVideoDetectedDuration, setMotionVideoDetectedDuration] = useState<number | null>(null);
   const [motionCharacterImageUrl, setMotionCharacterImageUrl] = useState<string | null>(null);
   const [motionQuality, setMotionQuality] = useState<string>("720p");
@@ -1171,41 +1174,55 @@ export default function AppBrandWizard() {
 
   async function onUploadPackshots(files: FileList | null) {
     if (!files || files.length === 0) return;
+    const slice = Array.from(files).slice(0, 8);
+    const pendingRows = slice.map((file) => ({
+      id: crypto.randomUUID(),
+      blob: URL.createObjectURL(file),
+      file,
+    }));
+    setPackshotUploadPreviews((p) => [...p, ...pendingRows.map(({ id, blob }) => ({ id, blob }))]);
     setIsUploadingPackshots(true);
     try {
       const urls: string[] = [];
-      for (const f of Array.from(files).slice(0, 8)) {
-        const fd = new FormData();
-        fd.set("file", f);
-        const res = await fetch("/api/uploads", { method: "POST", body: fd });
-        const raw = await res.text();
-        let json: { error?: string; url?: string } = {};
+      for (const row of pendingRows) {
         try {
-          if (raw.length > 0) json = JSON.parse(raw) as { error?: string; url?: string };
-        } catch {
-          throw new Error(
-            res.ok ? "Invalid server response" : `Upload failed (${res.status}): ${raw.slice(0, 200)}`,
-          );
+          const fd = new FormData();
+          fd.set("file", row.file);
+          const res = await fetch("/api/uploads", { method: "POST", body: fd });
+          const raw = await res.text();
+          let json: { error?: string; url?: string } = {};
+          try {
+            if (raw.length > 0) json = JSON.parse(raw) as { error?: string; url?: string };
+          } catch {
+            throw new Error(
+              res.ok ? "Invalid server response" : `Upload failed (${res.status}): ${raw.slice(0, 200)}`,
+            );
+          }
+          if (!res.ok || !json.url) {
+            throw new Error(json.error || `Upload failed for ${row.file.name}`);
+          }
+          urls.push(json.url);
+        } catch (err) {
+          toast.error("Upload error", {
+            description: err instanceof Error ? err.message : "Unknown error",
+          });
+        } finally {
+          URL.revokeObjectURL(row.blob);
+          setPackshotUploadPreviews((p) => p.filter((x) => x.id !== row.id));
         }
-        if (!res.ok || !json.url) {
-          throw new Error(json.error || `Upload failed for ${f.name}`);
-        }
-        urls.push(json.url);
       }
-      setSelectedProductImageUrls((prev) => {
-        const merged = [...prev];
-        for (const u of urls) {
-          if (!merged.includes(u)) merged.push(u);
-        }
-        return merged.slice(0, 8);
-      });
-      toast.success("Packshots uploaded", { description: `${urls.length} image(s)` });
-      await saveRun({ packshotUrls: [...packshotUrls, ...urls].slice(0, 8) });
-      void refreshMeAndRuns();
-    } catch (err) {
-      toast.error("Upload error", {
-        description: err instanceof Error ? err.message : "Unknown error",
-      });
+      if (urls.length) {
+        setSelectedProductImageUrls((prev) => {
+          const merged = [...prev];
+          for (const u of urls) {
+            if (!merged.includes(u)) merged.push(u);
+          }
+          return merged.slice(0, 8);
+        });
+        toast.success("Packshots uploaded", { description: `${urls.length} image(s)` });
+        await saveRun({ packshotUrls: [...packshotUrls, ...urls].slice(0, 8) });
+        void refreshMeAndRuns();
+      }
     } finally {
       setIsUploadingPackshots(false);
     }
@@ -1925,8 +1942,13 @@ export default function AppBrandWizard() {
                             onChange={(e) => {
                               const f = e.target.files?.[0] ?? null;
                               if (!f) return;
+                              setMotionVideoPreviewLoading(true);
+                              setMotionVideoDetectedDuration(null);
                               const blobUrl = URL.createObjectURL(f);
-                              setMotionVideoRefBlobUrl(blobUrl);
+                              setMotionVideoRefBlobUrl((prev) => {
+                                if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
+                                return blobUrl;
+                              });
                               const vid = document.createElement("video");
                               vid.preload = "metadata";
                               vid.onloadedmetadata = () => {
@@ -1936,6 +1958,11 @@ export default function AppBrandWizard() {
                                     ? Math.min(120, Math.max(1, Math.round(raw)))
                                     : null;
                                 setMotionVideoDetectedDuration(dur);
+                                setMotionVideoPreviewLoading(false);
+                                URL.revokeObjectURL(vid.src);
+                              };
+                              vid.onerror = () => {
+                                setMotionVideoPreviewLoading(false);
                                 URL.revokeObjectURL(vid.src);
                               };
                               vid.src = URL.createObjectURL(f);
@@ -1946,7 +1973,7 @@ export default function AppBrandWizard() {
                           <button
                             type="button"
                             onClick={() => motionVideoInputRef.current?.click()}
-                            className="relative flex aspect-[4/3] w-full cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-white/20 bg-[#0c0c10] text-white/50 transition hover:border-violet-400/40 hover:bg-white/[0.03]"
+                            className="relative flex aspect-[4/3] w-full cursor-pointer flex-col items-center justify-center gap-1.5 overflow-hidden rounded-xl border border-dashed border-white/20 bg-[#0c0c10] text-white/50 transition hover:border-violet-400/40 hover:bg-white/[0.03]"
                           >
                             {motionVideoRefBlobUrl ? (
                               <>
@@ -1957,8 +1984,9 @@ export default function AppBrandWizard() {
                                   muted
                                   playsInline
                                 />
+                                <UploadBusyOverlay active={motionVideoPreviewLoading} className="rounded-2xl" />
                                 {motionVideoDetectedDuration ? (
-                                  <span className="absolute bottom-2 rounded-md bg-black/70 px-2 py-1 text-[10px] font-medium text-white">
+                                  <span className="absolute bottom-2 z-[1] rounded-md bg-black/70 px-2 py-1 text-[10px] font-medium text-white">
                                     {motionVideoDetectedDuration}s
                                   </span>
                                 ) : null}
@@ -2603,12 +2631,29 @@ export default function AppBrandWizard() {
                       </Button>
                     </div>
 
-                    {packshotUrls.length > 0 ? (
+                    {packshotUrls.length > 0 || packshotUploadPreviews.length > 0 ? (
                       <div className="mt-3">
                         <div className="text-xs text-muted-foreground mb-2">
-                          Packshots selected: <span className="font-medium">{packshotUrls.length}</span>
+                          Packshots selected:{" "}
+                          <span className="font-medium">{packshotUrls.length}</span>
+                          {packshotUploadPreviews.length > 0 ? (
+                            <span className="text-muted-foreground/80">
+                              {" "}
+                              · uploading {packshotUploadPreviews.length}…
+                            </span>
+                          ) : null}
                         </div>
                         <div className="grid gap-3 sm:grid-cols-4">
+                          {packshotUploadPreviews.map((row) => (
+                            <div
+                              key={row.id}
+                              className="relative h-24 overflow-hidden rounded-md border border-violet-500/40"
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={row.blob} alt="" className="h-full w-full object-cover" />
+                              <UploadBusyOverlay active className="rounded-md" />
+                            </div>
+                          ))}
                           {packshotUrls.slice(0, 8).map((u) => (
                             <button
                               key={u}
