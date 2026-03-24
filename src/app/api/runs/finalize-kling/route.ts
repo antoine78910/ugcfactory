@@ -5,6 +5,7 @@ export const maxDuration = 300;
 import { NextResponse } from "next/server";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { kieMarketRecordInfo, parseResultUrls } from "@/lib/kieMarket";
+import { isPiapiTaskId, piapiGetSeedanceTask, piapiTaskStatusToLegacy } from "@/lib/piapiSeedance";
 import {
   cloneExtractedBase,
   findPendingKlingInUniverse,
@@ -76,17 +77,35 @@ export async function POST(req: Request) {
   const deadline = Date.now() + maxWaitMs;
 
   while (Date.now() < deadline) {
-    let data: Awaited<ReturnType<typeof kieMarketRecordInfo>>;
+    let vUrl = "";
+    let failedMessage = "";
+    let done = false;
     try {
-      data = await kieMarketRecordInfo(taskId);
+      if (isPiapiTaskId(taskId)) {
+        const data = await piapiGetSeedanceTask(taskId);
+        const mapped = piapiTaskStatusToLegacy(data);
+        if (mapped.status === "SUCCESS") {
+          vUrl = mapped.response[0] ?? "";
+          done = true;
+        } else if (mapped.status === "FAILED") {
+          failedMessage = mapped.error_message ?? "Video generation failed.";
+        }
+      } else {
+        const data = await kieMarketRecordInfo(taskId);
+        if (data.state === "success") {
+          const urls = parseResultUrls(data.resultJson);
+          vUrl = urls[0] ?? "";
+          done = true;
+        } else if (data.state === "fail") {
+          failedMessage = data.failMsg ?? "Video generation failed.";
+        }
+      }
     } catch (e) {
-      const message = e instanceof Error ? e.message : "KIE poll failed";
+      const message = e instanceof Error ? e.message : "Provider poll failed";
       return NextResponse.json({ error: message }, { status: 502 });
     }
 
-    if (data.state === "success") {
-      const urls = parseResultUrls(data.resultJson);
-      const vUrl = urls[0];
+    if (done) {
       if (!vUrl) {
         return NextResponse.json({ error: "Task succeeded but no video URL in result." }, { status: 502 });
       }
@@ -111,9 +130,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, videoUrl: vUrl });
     }
 
-    if (data.state === "fail") {
+    if (failedMessage) {
       return NextResponse.json(
-        { error: data.failMsg ?? "Video generation failed.", failed: true },
+        { error: failedMessage, failed: true },
         { status: 502 },
       );
     }

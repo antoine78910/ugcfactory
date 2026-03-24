@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { kieMarketRecordInfo } from "@/lib/kieMarket";
 import { kieImageTaskPollOutcome } from "@/lib/kieTaskPoll";
 import type { StudioGenerationRow } from "@/lib/studioGenerationsMap";
+import { isPiapiTaskId, piapiGetSeedanceTask, piapiTaskStatusToLegacy } from "@/lib/piapiSeedance";
 
 /**
  * Poll Kie for one processing row and persist success/failure. Does not set credits_refund_hint_sent;
@@ -17,8 +18,17 @@ export async function pollStudioGenerationRow(
   const key = row.uses_personal_api ? personalApiKey?.trim() || undefined : undefined;
   if (row.uses_personal_api && !key) return;
 
-  const raw = await kieMarketRecordInfo(row.external_task_id, key);
-  const out = kieImageTaskPollOutcome(raw);
+  let out: { kind: "processing" | "success" | "fail"; urls?: string[]; message?: string };
+  if ((row.provider ?? "").toLowerCase() === "piapi" || isPiapiTaskId(row.external_task_id)) {
+    const raw = await piapiGetSeedanceTask(row.external_task_id);
+    const mapped = piapiTaskStatusToLegacy(raw);
+    if (mapped.status === "IN_PROGRESS") out = { kind: "processing" };
+    else if (mapped.status === "SUCCESS") out = { kind: "success", urls: mapped.response };
+    else out = { kind: "fail", message: mapped.error_message ?? "PiAPI task failed" };
+  } else {
+    const raw = await kieMarketRecordInfo(row.external_task_id, key);
+    out = kieImageTaskPollOutcome(raw);
+  }
 
   if (out.kind === "processing") return;
 

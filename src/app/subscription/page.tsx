@@ -103,7 +103,7 @@ function tierColBg(ti: number): string {
 export default function SubscriptionPage() {
   const [billing, setBilling] = useState<Billing>("monthly");
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
-  const { planId, current, total, planDisplayName, percentRemaining } = useCreditsPlan();
+  const { planId, planDisplayName } = useCreditsPlan();
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -409,19 +409,6 @@ export default function SubscriptionPage() {
                     </p>
                   </div>
                 </div>
-                <div className="rounded-xl border border-white/10 bg-black/30 px-5 py-4 text-left sm:text-right">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-violet-400/90">Credits</p>
-                  <p className="mt-1 text-2xl font-bold tabular-nums text-white">{current.toLocaleString()}</p>
-                  <p className="text-xs text-white/40">available now</p>
-                  {total > 0 ? (
-                    <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10 sm:ml-auto sm:max-w-[140px]">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-400"
-                        style={{ width: `${percentRemaining}%` }}
-                      />
-                    </div>
-                  ) : null}
-                </div>
               </div>
 
               <div className="mt-8 flex flex-wrap gap-3 border-t border-white/10 pt-6">
@@ -432,14 +419,6 @@ export default function SubscriptionPage() {
                   onClick={() => toast.message("Subscription management", { description: "Connect the Stripe customer portal when ready." })}
                 >
                   Manage billing
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="rounded-xl text-red-300/90 hover:bg-red-500/10 hover:text-red-200"
-                  onClick={() => toast("Cancellation", { description: "Hook this to Stripe when the portal is live." })}
-                >
-                  Cancel plan
                 </Button>
               </div>
             </div>

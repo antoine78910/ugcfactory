@@ -1,0 +1,106 @@
+import { requireEnv } from "@/lib/env";
+
+const PIAPI_BASE = "https://api.piapi.ai";
+const PIAPI_TASK_PREFIX = "piapi:";
+
+function getPiApiKey() {
+  return requireEnv("PIAPI_API_KEY");
+}
+
+export function encodePiapiTaskId(taskId: string): string {
+  const t = taskId.trim();
+  return t.startsWith(PIAPI_TASK_PREFIX) ? t : `${PIAPI_TASK_PREFIX}${t}`;
+}
+
+export function decodePiapiTaskId(taskId: string): string {
+  const t = taskId.trim();
+  return t.startsWith(PIAPI_TASK_PREFIX) ? t.slice(PIAPI_TASK_PREFIX.length) : t;
+}
+
+export function isPiapiTaskId(taskId: string): boolean {
+  return taskId.trim().startsWith(PIAPI_TASK_PREFIX);
+}
+
+type PiapiSeedanceTaskType = "seedance-2-preview" | "seedance-2-fast-preview";
+
+export async function piapiCreateSeedanceTask(opts: {
+  taskType: PiapiSeedanceTaskType;
+  prompt: string;
+  imageUrl: string;
+  duration: number;
+  aspectRatio: "16:9" | "9:16" | "1:1";
+}): Promise<string> {
+  const apiKey = getPiApiKey();
+  const res = await fetch(`${PIAPI_BASE}/api/v1/task`, {
+    method: "POST",
+    headers: {
+      "X-API-Key": apiKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "seedance",
+      task_type: opts.taskType,
+      input: {
+        prompt: opts.prompt,
+        duration: opts.duration,
+        aspect_ratio: opts.aspectRatio,
+        image_urls: [opts.imageUrl],
+      },
+    }),
+    cache: "no-store",
+  });
+
+  const json = (await res.json().catch(() => ({}))) as {
+    code?: number;
+    message?: string;
+    data?: { task_id?: string };
+  };
+  const id = json?.data?.task_id?.trim();
+  if (!res.ok || json?.code !== 200 || !id) {
+    throw new Error(`PiAPI seedance create failed: HTTP ${res.status} / ${json?.message ?? "Unknown error"}`);
+  }
+  return id;
+}
+
+export type PiapiSeedanceTask = {
+  task_id: string;
+  status: string;
+  output?: { video?: string | null } | null;
+  error?: { message?: string | null; raw_message?: string | null } | null;
+  logs?: unknown[];
+};
+
+export async function piapiGetSeedanceTask(taskId: string): Promise<PiapiSeedanceTask> {
+  const apiKey = getPiApiKey();
+  const id = decodePiapiTaskId(taskId);
+  const res = await fetch(`${PIAPI_BASE}/api/v1/task/${encodeURIComponent(id)}`, {
+    method: "GET",
+    headers: { "X-API-Key": apiKey },
+    cache: "no-store",
+  });
+  const json = (await res.json().catch(() => ({}))) as {
+    code?: number;
+    message?: string;
+    data?: PiapiSeedanceTask;
+  };
+  if (!res.ok || json?.code !== 200 || !json?.data) {
+    throw new Error(`PiAPI seedance get-task failed: HTTP ${res.status} / ${json?.message ?? "Unknown error"}`);
+  }
+  return json.data;
+}
+
+export function piapiTaskStatusToLegacy(
+  task: PiapiSeedanceTask,
+): { status: "SUCCESS" | "FAILED" | "IN_PROGRESS"; response: string[]; error_message: string | null } {
+  const st = String(task.status ?? "").toLowerCase();
+  const video = typeof task.output?.video === "string" ? task.output.video.trim() : "";
+
+  if ((st === "success" || st === "completed") && video) {
+    return { status: "SUCCESS", response: [video], error_message: null };
+  }
+  if (st === "failed" || st === "fail") {
+    const message = task.error?.message?.trim() || task.error?.raw_message?.trim() || "PiAPI task failed.";
+    return { status: "FAILED", response: [], error_message: message };
+  }
+  return { status: "IN_PROGRESS", response: [], error_message: null };
+}

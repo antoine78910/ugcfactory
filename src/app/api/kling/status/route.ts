@@ -2,6 +2,7 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import { kieMarketRecordInfo, parseResultUrls } from "@/lib/kieMarket";
+import { isPiapiTaskId, piapiGetSeedanceTask, piapiTaskStatusToLegacy } from "@/lib/piapiSeedance";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -13,6 +14,19 @@ export async function GET(req: Request) {
   }
 
   try {
+    if (isPiapiTaskId(taskId)) {
+      const data = await piapiGetSeedanceTask(taskId);
+      const mapped = piapiTaskStatusToLegacy(data);
+      return NextResponse.json({
+        data: {
+          status: mapped.status,
+          response: mapped.response,
+          error_message: mapped.error_message,
+          raw: data,
+        },
+      });
+    }
+
     const data = await kieMarketRecordInfo(taskId, personalKey);
     const urls = parseResultUrls(data.resultJson);
 

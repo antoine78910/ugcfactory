@@ -2,6 +2,7 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import { kieMarketCreateTask } from "@/lib/kieMarket";
+import { encodePiapiTaskId, piapiCreateSeedanceTask } from "@/lib/piapiSeedance";
 import { hasPersonalApiKey } from "@/lib/personalApiBypass";
 import {
   canUseStudioVideoModel,
@@ -49,14 +50,14 @@ function validateDurationForModel(model: string, duration: number | undefined) {
     return;
   }
   if (model === "bytedance/seedance-1.5-pro") {
-    if (duration !== 4 && duration !== 8 && duration !== 12) {
-      throw new Error("Invalid duration for Seedance 1.5 Pro. Must be 4, 8, or 12.");
+    if (duration !== 5 && duration !== 10 && duration !== 15) {
+      throw new Error("Invalid duration for Seedance 1.5 Pro. Must be 5, 10, or 15.");
     }
     return;
   }
   if (model.startsWith("bytedance/seedance-2")) {
-    if (duration < 4 || duration > 15) {
-      throw new Error("Invalid duration for Seedance 2.0. Must be between 4 and 15.");
+    if (duration !== 5 && duration !== 10 && duration !== 15) {
+      throw new Error("Invalid duration for Seedance 2.0. Must be 5, 10, or 15.");
     }
     return;
   }
@@ -154,14 +155,22 @@ export async function POST(req: Request) {
           { status: 400 },
         );
       }
-      input = {
+      // KIE does not reliably support Seedance yet. Route Seedance via PiAPI.
+      const taskType = model === "bytedance/seedance-1.5-pro" ? "seedance-2-fast-preview" : "seedance-2-preview";
+      const duration = Number(body.duration ?? 10);
+      const aspectRatio = body.aspectRatio ?? "9:16";
+      const rawTaskId = await piapiCreateSeedanceTask({
+        taskType,
         prompt,
-        input_urls: [imageUrl],
-        aspect_ratio: body.aspectRatio ?? "9:16",
-        duration: String(body.duration ?? (model === "bytedance/seedance-1.5-pro" ? 8 : 8)),
-        // docs for seedance-1.5-pro uses generate_audio
-        generate_audio: body.sound ?? true,
-      };
+        imageUrl,
+        duration,
+        aspectRatio,
+      });
+      return NextResponse.json({
+        taskId: encodePiapiTaskId(rawTaskId),
+        provider: "piapi",
+        model,
+      });
     } else {
       return NextResponse.json(
         { error: `Unsupported marketModel: ${model}` },

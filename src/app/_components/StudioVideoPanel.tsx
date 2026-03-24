@@ -135,7 +135,7 @@ const VIDEO_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
     label: "Seedance 1.5 Pro",
     icon: "seedance",
     resolution: "720p",
-    durationRange: "4–12s",
+    durationRange: "5–15s",
     searchText: "seedance 1.5 pro bytedance image to video",
   },
   {
@@ -143,7 +143,7 @@ const VIDEO_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
     label: "Seedance 2.0 Pro",
     icon: "seedance",
     resolution: "1080p",
-    durationRange: "4–12s",
+    durationRange: "5–15s",
   },
   {
     id: "veo3_fast",
@@ -184,9 +184,9 @@ function getDurationChoices(modelId: VideoModelId): string[] {
     case "openai/sora-2":
       return ["10", "15"];
     case "bytedance/seedance-1.5-pro":
-      return ["4", "8", "12"];
+      return ["5", "10", "15"];
     case "bytedance/seedance-2.0-pro":
-      return ["4", "6", "8", "10", "12"];
+      return ["5", "10", "15"];
     default:
       return ["5", "10"];
   }
@@ -411,6 +411,7 @@ async function registerStudioTask(params: {
   kind: "studio_video";
   label: string;
   taskId: string;
+  provider?: string;
   creditsCharged: number;
   personalApiKey?: string;
 }) {
@@ -1280,12 +1281,13 @@ export default function StudioVideoPanel() {
             personalApiKey: pKey,
           }),
         });
-        const json = (await res.json()) as { taskId?: string; error?: string };
+        const json = (await res.json()) as { taskId?: string; provider?: string; error?: string };
         if (!res.ok || !json.taskId) throw new Error(json.error || "Video task failed");
         await registerStudioTask({
           kind: "studio_video",
           label,
           taskId: json.taskId,
+          provider: json.provider,
           creditsCharged: platformChargeCreate,
           personalApiKey: pKey,
         });
