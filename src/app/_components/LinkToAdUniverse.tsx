@@ -739,7 +739,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       setScriptsText(merged);
       if (selectedAngleIndex === index) {
         const headline = angleLabels[index as 0 | 1 | 2] || "";
-        const editable = angleBlockForEditing(draft, headline);
+        const { editable } = angleBlockForEditing(draft);
         setEditableScript(editable);
         setScriptFactors(splitScriptFactorsForUi(editable, headline));
         setScriptHasEdits(true);
