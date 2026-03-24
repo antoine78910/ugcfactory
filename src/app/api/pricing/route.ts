@@ -10,6 +10,7 @@ import {
   PRICING_BASE,
   SORA_10S,
   SUBSCRIPTIONS,
+  TOPAZ_IMAGE_UPSCALER,
   TOPAZ_VIDEO_UPSCALER,
   calculateMargin,
   calculateVideoCreditsFromDuration,
@@ -28,6 +29,7 @@ export async function GET() {
     images: IMAGE_MODEL,
     upscale: {
       topaz_video: TOPAZ_VIDEO_UPSCALER,
+      topaz_image: TOPAZ_IMAGE_UPSCALER,
     },
     video: {
       credits_per_second: KLING_3_VIDEO_CREDITS_PER_SECOND,

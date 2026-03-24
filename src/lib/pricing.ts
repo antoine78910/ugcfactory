@@ -136,6 +136,8 @@ export const IMAGE_MODEL = {
 
 /** Kie Market model id — Topaz Video Upscale (1× / 2× / 4×). */
 export const KIE_TOPAZ_VIDEO_UPSCALE_MODEL = "topaz/video-upscale" as const;
+/** Kie Market model id — Topaz Image Upscale (2K / 4K / 8K). */
+export const KIE_TOPAZ_IMAGE_UPSCALE_MODEL = "topaz/image-upscale" as const;
 
 /** Topaz Video Upscaler — negotiated COGS $0.06/s vs Fal list $0.08/s (−25%). */
 export const TOPAZ_VIDEO_UPSCALER = {
@@ -144,6 +146,34 @@ export const TOPAZ_VIDEO_UPSCALER = {
   fal_list_usd_per_second: 0.08,
   /** Billed credits per second (product tier). */
   credits_per_second: 12,
+} as const;
+
+/** Topaz Image Upscaler — fixed per-image pricing tiers (2K / 4K / 8K). */
+export const TOPAZ_IMAGE_UPSCALER = {
+  kie_model: KIE_TOPAZ_IMAGE_UPSCALE_MODEL,
+  tiers: {
+    "2K": {
+      credits_per_image: 10,
+      our_price_usd: 0.05,
+      fal_list_usd: null as number | null,
+      discount_vs_fal_pct: null as number | null,
+      cogs_usd: 0,
+    },
+    "4K": {
+      credits_per_image: 20,
+      our_price_usd: 0.1,
+      fal_list_usd: null as number | null,
+      discount_vs_fal_pct: null as number | null,
+      cogs_usd: 0,
+    },
+    "8K": {
+      credits_per_image: 40,
+      our_price_usd: 0.2,
+      fal_list_usd: null as number | null,
+      discount_vs_fal_pct: null as number | null,
+      cogs_usd: 0,
+    },
+  },
 } as const;
 
 export function topazVideoUpscaleCredits(durationSeconds: number): number {
@@ -326,6 +356,43 @@ export const STUDIO_UPSCALE_TOPAZ_VIDEO_ROWS: StudioUpscaleEconomicsRow[] = [
       TOPAZ_VIDEO_UPSCALER.fal_list_usd_per_second,
     ),
     cogsUsd: TOPAZ_VIDEO_UPSCALER.cost_usd_per_second,
+  },
+];
+
+/** Topaz Image Upscaler — 2K / 4K / 8K fixed per-image rows. */
+export const STUDIO_UPSCALE_TOPAZ_IMAGE_ROWS: StudioUpscaleEconomicsRow[] = [
+  {
+    modelAndModality: "Topaz Image Upscaler, image-upscale, 8K",
+    modality: "image",
+    provider: "Topaz",
+    creditsPerUnit: TOPAZ_IMAGE_UPSCALER.tiers["8K"].credits_per_image,
+    unitLabel: "per image",
+    ourRetailUsd: TOPAZ_IMAGE_UPSCALER.tiers["8K"].our_price_usd,
+    falListUsd: TOPAZ_IMAGE_UPSCALER.tiers["8K"].fal_list_usd,
+    discountVsFalListPct: TOPAZ_IMAGE_UPSCALER.tiers["8K"].discount_vs_fal_pct,
+    cogsUsd: TOPAZ_IMAGE_UPSCALER.tiers["8K"].cogs_usd,
+  },
+  {
+    modelAndModality: "Topaz Image Upscaler, image-upscale, 4K",
+    modality: "image",
+    provider: "Topaz",
+    creditsPerUnit: TOPAZ_IMAGE_UPSCALER.tiers["4K"].credits_per_image,
+    unitLabel: "per image",
+    ourRetailUsd: TOPAZ_IMAGE_UPSCALER.tiers["4K"].our_price_usd,
+    falListUsd: TOPAZ_IMAGE_UPSCALER.tiers["4K"].fal_list_usd,
+    discountVsFalListPct: TOPAZ_IMAGE_UPSCALER.tiers["4K"].discount_vs_fal_pct,
+    cogsUsd: TOPAZ_IMAGE_UPSCALER.tiers["4K"].cogs_usd,
+  },
+  {
+    modelAndModality: "Topaz Image Upscaler, image-upscale, 2K",
+    modality: "image",
+    provider: "Topaz",
+    creditsPerUnit: TOPAZ_IMAGE_UPSCALER.tiers["2K"].credits_per_image,
+    unitLabel: "per image",
+    ourRetailUsd: TOPAZ_IMAGE_UPSCALER.tiers["2K"].our_price_usd,
+    falListUsd: TOPAZ_IMAGE_UPSCALER.tiers["2K"].fal_list_usd,
+    discountVsFalListPct: TOPAZ_IMAGE_UPSCALER.tiers["2K"].discount_vs_fal_pct,
+    cogsUsd: TOPAZ_IMAGE_UPSCALER.tiers["2K"].cogs_usd,
   },
 ];
 
