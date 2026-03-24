@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { CheckCircle2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -165,10 +165,18 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
                 : "Sign up and start turning product pages into scroll-stopping video ads."}
             </p>
 
-            <div className="mt-10 space-y-3 text-sm text-white/60">
-              <p>AI product analysis in seconds</p>
-              <p>Angle-driven scripts and prompts</p>
-              <p>Kling-ready video generation flow</p>
+            <div className="mt-10 space-y-3 text-sm text-white/70">
+              {[
+                "Generate 10+ ad concepts in seconds",
+                "Test faster than your competitors",
+                "Never run out of creatives again",
+                "Scale your ad testing effortlessly",
+              ].map((line) => (
+                <p key={line} className="flex items-center gap-2.5">
+                  <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-300/90" />
+                  <span>{line}</span>
+                </p>
+              ))}
             </div>
           </div>
 

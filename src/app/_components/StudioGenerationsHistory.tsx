@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
-import { BookOpen, Download, FolderOpen, Info, LayoutGrid, List, Loader2, Play, X } from "lucide-react";
+import { Download, FolderOpen, Info, LayoutGrid, List, Loader2, Play, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type StudioHistoryMediaKind = "image" | "video" | "motion";
@@ -69,7 +69,7 @@ export function StudioGenerationsHistory({ items, empty, mediaLabel = "Generatio
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* Top bar: History / How it works + view controls */}
+      {/* Top bar: History + view controls */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-3">
         <div className="flex flex-wrap items-center gap-1">
           <button
@@ -78,15 +78,6 @@ export function StudioGenerationsHistory({ items, empty, mediaLabel = "Generatio
           >
             <FolderOpen className="h-4 w-4 text-white/80" aria-hidden />
             History
-          </button>
-          <button
-            type="button"
-            className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-white/40 transition hover:bg-white/[0.04] hover:text-white/60"
-            disabled
-            title="Coming soon"
-          >
-            <BookOpen className="h-4 w-4" aria-hidden />
-            How it works
           </button>
         </div>
         <div className="flex flex-wrap items-center gap-3">

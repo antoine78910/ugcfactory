@@ -395,12 +395,7 @@ export default function StudioAvatarPanel() {
             <div>
               <h3 className="text-sm font-bold text-white">Create your avatar</h3>
               <p className="text-xs text-white/45">
-                Configure appearance, then generate with NanoBanana 2.
-                {serverHistory === true
-                  ? " Signed in: jobs are saved and keep running if you leave."
-                  : serverHistory === false
-                    ? " Sign in to sync history across devices and run jobs in the background."
-                    : null}
+                Create avatars here, then import them into the other features.
               </p>
             </div>
           </div>

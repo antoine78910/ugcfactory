@@ -8,29 +8,32 @@ import { Input } from "@/components/ui/input";
 import RotatingText from "./RotatingText";
 import ShapeGrid from "./ShapeGrid";
 import { HeroVideoCarousel3D } from "./HeroVideoCarousel3D";
-import { ArrowRight, ChevronDown, Play, Sparkles } from "lucide-react";
+import { ArrowRight, ChevronDown, Sparkles } from "lucide-react";
 
 const STEPS = [
   {
     number: "01",
-    title: "Add Your Product Link",
+    title: "Paste your product URL",
     description:
-      "Paste the URL to your product page. Our AI will automatically scan and extract all your product images, descriptions, logo, and brand colors.",
-    mediaSrc: "/steps/step-1.mp4",
+      "Drop in a product or landing page URL and we instantly extract the assets and product context needed to create ad concepts.",
+    mediaImage: "/steps/step-link-input.png",
+    mediaAlt: "Product URL input field",
   },
   {
     number: "02",
-    title: "Choose Your Ad Style",
+    title: "Pick the angle and script",
     description:
-      "Select a high-performing template from our preset library. Instantly add an engaging AI avatar, and pick a caption style that fits your campaign.",
-    mediaSrc: "/steps/step-2.mp4",
+      "Select the message you want to test and refine the hook, pain point, benefits, and CTA before generating.",
+    mediaImage: "/carousel/product-2.png",
+    mediaAlt: "Product and angle selection",
   },
   {
     number: "03",
-    title: "Generate Your Video",
+    title: "Generate ad-ready videos",
     description:
-      'Click "Generate" and our Click to Ad Generator assembles your assets, script, and avatar into a high-impact video ad.',
-    mediaSrc: "/steps/step-3.mp4",
+      "Launch generation in one click and get ready-to-test creatives you can iterate fast for your paid social campaigns.",
+    mediaImage: "/steps/step-generate-video.png",
+    mediaAlt: "Generated ad video preview",
   },
 ];
 
@@ -356,7 +359,7 @@ export default function LandingPage() {
 
         {/* 3D video cylinder: full width, below headline in layout, continuous spin */}
         <div
-          className="pointer-events-none absolute inset-x-0 bottom-0 z-[2] h-[min(280px,42svh)] overflow-hidden sm:h-[min(320px,45svh)] lg:h-[min(380px,48svh)]"
+          className="pointer-events-none absolute inset-x-0 -bottom-5 z-[2] h-[min(340px,50svh)] overflow-visible sm:h-[min(390px,54svh)] lg:h-[min(460px,58svh)]"
           aria-hidden
         >
           <HeroVideoCarousel3D srcs={UGC_SLIDES.map((s) => s.src)} />
@@ -366,9 +369,6 @@ export default function LandingPage() {
       {/* ── 3 Steps ── */}
       <section className="mx-auto max-w-6xl px-5 py-24 bg-gradient-to-b from-transparent via-[#0c0a14]/25 to-[#0c0a14]/35">
         <div className="mb-14 text-center">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-violet-400">
-            How it works
-          </p>
           <h2 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">
             Create Your AI Video Ad in 3 Easy Steps
           </h2>
@@ -381,11 +381,13 @@ export default function LandingPage() {
               className="group relative rounded-2xl border border-white/[0.06] bg-white/[0.015] p-6 transition-all duration-300 hover:border-violet-500/25 hover:shadow-[0_0_40px_rgba(139,92,246,0.06)]"
             >
               <div className="relative mb-6 aspect-video overflow-hidden rounded-xl border border-white/[0.06] bg-gradient-to-br from-white/[0.03] to-transparent">
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-violet-600/15 text-violet-400 transition-colors group-hover:bg-violet-600/25">
-                    <Play className="h-5 w-5" />
-                  </div>
-                </div>
+                <Image
+                  src={step.mediaImage}
+                  alt={step.mediaAlt}
+                  fill
+                  className="object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+                  sizes="(max-width: 768px) 90vw, 360px"
+                />
               </div>
 
               <span className="text-xs font-bold text-violet-500">
