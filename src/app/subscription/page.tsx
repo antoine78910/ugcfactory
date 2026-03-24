@@ -17,6 +17,9 @@ import {
 import type { AccountPlanId } from "@/app/_components/CreditsPlanContext";
 
 type Billing = "monthly" | "yearly";
+const BILLING_PORTAL_URL =
+  process.env.NEXT_PUBLIC_STRIPE_BILLING_PORTAL_URL ??
+  "https://billing.stripe.com/p/login/14A00icKheIV9ws8ZNfUQ00";
 
 type PlanDef = {
   id: string;
@@ -416,7 +419,7 @@ export default function SubscriptionPage() {
                   type="button"
                   variant="secondary"
                   className="rounded-xl border border-white/15 bg-white/5 text-white hover:bg-white/10"
-                  onClick={() => toast.message("Subscription management", { description: "Connect the Stripe customer portal when ready." })}
+                  onClick={() => window.open(BILLING_PORTAL_URL, "_blank", "noopener,noreferrer")}
                 >
                   Manage billing
                 </Button>

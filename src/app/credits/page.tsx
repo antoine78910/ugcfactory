@@ -275,10 +275,10 @@ export default function CreditsPage() {
                     <Key className="h-4.5 w-4.5" aria-hidden />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-white">Personal API</h3>
+                    <h3 className="text-sm font-bold text-white">KIE API backdoor</h3>
                     <p className="mt-1 text-xs leading-relaxed text-white/45">
-                      Use your own API key for all generations. No platform credits are consumed, and all models are
-                      available regardless of subscription tier.
+                      Use your own KIE API key for generations. No platform credits are consumed, and model tier gates
+                      are bypassed while this mode is enabled.
                     </p>
                   </div>
                 </div>
@@ -304,12 +304,12 @@ export default function CreditsPage() {
               {personalApiEnabled ? (
                 <div className="flex flex-col gap-2">
                   <label className="text-[11px] font-semibold uppercase tracking-wide text-white/40">
-                    API Key
+                    KIE API Key
                   </label>
                   <div className="relative">
                     <Input
                       type={showKey ? "text" : "password"}
-                      placeholder="sk-..."
+                      placeholder="Paste your KIE key..."
                       value={personalApiKey}
                       onChange={(e) => savePersonalApiKey(e.target.value)}
                       className="h-10 border-amber-500/20 bg-black/40 pr-10 font-mono text-sm text-white placeholder:text-white/25 focus-visible:ring-amber-500/40"
@@ -324,7 +324,7 @@ export default function CreditsPage() {
                   </div>
                   {personalApiKey.trim() ? (
                     <p className="text-[11px] text-emerald-400/80">
-                      Key saved locally. Generations use your key; plan limits and credit charges are skipped.
+                      Key saved locally. Generations now use your KIE key and skip platform credit charging.
                     </p>
                   ) : (
                     <p className="text-[11px] text-amber-400/60">Enter your API key to bypass platform credits.</p>
