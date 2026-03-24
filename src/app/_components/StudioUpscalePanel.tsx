@@ -71,9 +71,6 @@ async function registerStudioTask(params: {
   }
 }
 
-const soonCard =
-  "flex flex-col gap-2 rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-left opacity-70";
-
 type UpscalePickerId = "upscale/video" | "upscale/image";
 
 const UPSCALE_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
@@ -327,16 +324,6 @@ export default function StudioUpscalePanel() {
                 </Select>
               </div>
             </div>
-          </div>
-
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">More upscale options</p>
-          <div className={soonCard}>
-            <span className="text-xs font-semibold text-white/55">Topaz Image Upscale</span>
-            <span className="text-[10px] text-white/35">Coming soon.</span>
-          </div>
-          <div className={soonCard}>
-            <span className="text-xs font-semibold text-white/55">Other upscalers</span>
-            <span className="text-[10px] text-white/35">New tools will appear here as we enable them.</span>
           </div>
 
           <Button
