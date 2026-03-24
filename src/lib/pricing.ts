@@ -51,8 +51,11 @@ export function computeImageModelFromCostUsd(costUsd: number): {
 /** Fal public list; negotiated COGS ≈ list × (1 − 0.1875) → $0.0325. */
 export const SEEDREAM_45_FAL_LIST_USD = 0.04;
 export const SEEDREAM_45_COST_USD = 0.0325;
+export const SEEDREAM_50_LITE_FAL_LIST_USD = 0.035;
+export const SEEDREAM_50_LITE_COST_USD = 0.0275;
 
 const SEEDREAM_45_BASE = computeImageModelFromCostUsd(SEEDREAM_45_COST_USD);
+const SEEDREAM_50_LITE_BASE = computeImageModelFromCostUsd(SEEDREAM_50_LITE_COST_USD);
 
 /** Google Nano Banana 2 / Pro on Kie — credits & COGS from provider sheet (Fal list + negotiated COGS). */
 function googleImageTier(p: {
@@ -76,7 +79,7 @@ function googleImageTier(p: {
 const GOOGLE_NANO_2_1K = googleImageTier({
   model: "google_nano_banana_2_1k",
   cost_usd: 0.04,
-  credits: 6,
+  credits: 8,
   fal_list_price_usd: 0.08,
 });
 const GOOGLE_NANO_2_2K = googleImageTier({
@@ -110,17 +113,54 @@ export const IMAGE_MODEL = {
   google_nano_banana_2_4k: GOOGLE_NANO_2_4K,
   google_nano_banana_pro_1k_2k: GOOGLE_NANO_PRO_12K,
   google_nano_banana_pro_4k: GOOGLE_NANO_PRO_4K,
-  /** Legacy key — same tier as Google Nano Banana 2 @ 1K (studio “NanoBanana 2”). */
-  nanobanana_standard: { ...GOOGLE_NANO_2_1K, model: "nanobanana_standard" },
-  /** Legacy key — same tier as Google Nano Banana Pro @ 1K/2K (studio “NanoBanana Pro” default). */
-  nanobanana_pro: { ...GOOGLE_NANO_PRO_12K, model: "nanobanana_pro" },
+  /** Legacy key — Google nano banana text-to-image (1 price). */
+  nanobanana_standard: {
+    model: "nanobanana_standard",
+    cost_usd: 0.02,
+    cost_with_buffer: 0.02 * PRICING_BASE.cost_buffer,
+    target_margin: PRICING_BASE.target_margins.image,
+    price_usd: 0.02,
+    credits: 4,
+    fal_list_price_usd: 0.039,
+  },
+  /**
+   * Legacy key used by Link to Ad for 3 reference images.
+   * Requested billing: 2 credits per NanoBanana Pro image.
+   */
+  nanobanana_pro: {
+    model: "nanobanana_pro",
+    cost_usd: 0.01,
+    cost_with_buffer: 0.01 * PRICING_BASE.cost_buffer,
+    target_margin: PRICING_BASE.target_margins.image,
+    price_usd: 0.01,
+    credits: 2,
+    fal_list_price_usd: 0.15,
+  },
+  google_nano_banana_edit: {
+    model: "google_nano_banana_edit",
+    cost_usd: 0.02,
+    cost_with_buffer: 0.02 * PRICING_BASE.cost_buffer,
+    target_margin: PRICING_BASE.target_margins.image,
+    price_usd: 0.02,
+    credits: 4,
+    fal_list_price_usd: 0.039,
+  },
+  recraft_remove_background: {
+    model: "recraft_remove_background",
+    cost_usd: 0,
+    cost_with_buffer: 0,
+    target_margin: PRICING_BASE.target_margins.image,
+    price_usd: 0,
+    credits: 1,
+    fal_list_price_usd: null as number | null,
+  },
   seedream_45_text_to_image: {
     model: "seedream_45_text_to_image",
     cost_usd: SEEDREAM_45_BASE.cost_usd,
     cost_with_buffer: SEEDREAM_45_BASE.cost_with_buffer,
     target_margin: SEEDREAM_45_BASE.target_margin,
-    price_usd: SEEDREAM_45_BASE.price_usd,
-    credits: SEEDREAM_45_BASE.credits,
+    price_usd: 0.0325,
+    credits: 6.5,
     fal_list_price_usd: SEEDREAM_45_FAL_LIST_USD,
   },
   seedream_45_image_to_image: {
@@ -128,9 +168,27 @@ export const IMAGE_MODEL = {
     cost_usd: SEEDREAM_45_BASE.cost_usd,
     cost_with_buffer: SEEDREAM_45_BASE.cost_with_buffer,
     target_margin: SEEDREAM_45_BASE.target_margin,
-    price_usd: SEEDREAM_45_BASE.price_usd,
-    credits: SEEDREAM_45_BASE.credits,
+    price_usd: 0.0325,
+    credits: 6.5,
     fal_list_price_usd: SEEDREAM_45_FAL_LIST_USD,
+  },
+  seedream_50_lite_text_to_image: {
+    model: "seedream_50_lite_text_to_image",
+    cost_usd: SEEDREAM_50_LITE_BASE.cost_usd,
+    cost_with_buffer: SEEDREAM_50_LITE_BASE.cost_with_buffer,
+    target_margin: SEEDREAM_50_LITE_BASE.target_margin,
+    price_usd: 0.0275,
+    credits: 5.5,
+    fal_list_price_usd: SEEDREAM_50_LITE_FAL_LIST_USD,
+  },
+  seedream_50_lite_image_to_image: {
+    model: "seedream_50_lite_image_to_image",
+    cost_usd: SEEDREAM_50_LITE_BASE.cost_usd,
+    cost_with_buffer: SEEDREAM_50_LITE_BASE.cost_with_buffer,
+    target_margin: SEEDREAM_50_LITE_BASE.target_margin,
+    price_usd: 0.0275,
+    credits: 5.5,
+    fal_list_price_usd: SEEDREAM_50_LITE_FAL_LIST_USD,
   },
 } as const;
 
@@ -220,7 +278,7 @@ function mapImageModelToEconomicsRow(
     provider,
     creditsPerGen: m.credits,
     creditsUnit,
-    ourRetailUsd: m.credits * PRICING_BASE.credit_value_usd,
+    ourRetailUsd: m.price_usd,
     falListUsd: fal,
     discountVsFalListPct: discountPct,
     cogsUsd: m.cost_usd,
@@ -270,6 +328,24 @@ export const STUDIO_IMAGE_GOOGLE_NANO_PRO_ECONOMICS_ROWS: StudioImageEconomicsRo
   ),
 ];
 
+/** Google Nano Banana (legacy one-price + edit one-price). */
+export const STUDIO_IMAGE_GOOGLE_NANO_BASE_ECONOMICS_ROWS: StudioImageEconomicsRow[] = [
+  mapImageModelToEconomicsRow(
+    "nanobanana_standard",
+    "Google nano banana, text-to-image",
+    "image",
+    "Google",
+    "per image",
+  ),
+  mapImageModelToEconomicsRow(
+    "google_nano_banana_edit",
+    "Google nano banana edit, image-to-image",
+    "image",
+    "Google",
+    "per image",
+  ),
+];
+
 /** Rows for Studio Image transparency table (Seedream 4.5). */
 export const STUDIO_IMAGE_SEEDREAM_45_ECONOMICS_ROWS = [
   {
@@ -286,7 +362,7 @@ export const STUDIO_IMAGE_SEEDREAM_45_ECONOMICS_ROWS = [
   },
 ].map((row) => {
   const m = IMAGE_MODEL[row.key];
-  const customerUsd = m.credits * PRICING_BASE.credit_value_usd;
+  const customerUsd = m.price_usd;
   const fal = m.fal_list_price_usd ?? SEEDREAM_45_FAL_LIST_USD;
   const discountPct = wholesaleDiscountVsFalListPct(m.cost_usd, fal);
   return {
@@ -299,6 +375,52 @@ export const STUDIO_IMAGE_SEEDREAM_45_ECONOMICS_ROWS = [
     cogsUsd: m.cost_usd,
   };
 });
+
+/** Seedream 5.0 Lite rows (ByteDance). */
+export const STUDIO_IMAGE_SEEDREAM_50_LITE_ECONOMICS_ROWS = [
+  {
+    key: "seedream_50_lite_image_to_image" as const,
+    modelAndModality: "Seedream 5.0 Lite, image-to-image",
+    modality: "image",
+    provider: "ByteDance",
+  },
+  {
+    key: "seedream_50_lite_text_to_image" as const,
+    modelAndModality: "Seedream 5.0 Lite, text-to-image",
+    modality: "image",
+    provider: "ByteDance",
+  },
+].map((row) => {
+  const m = IMAGE_MODEL[row.key];
+  const customerUsd = m.price_usd;
+  const fal = m.fal_list_price_usd ?? SEEDREAM_50_LITE_FAL_LIST_USD;
+  const discountPct = wholesaleDiscountVsFalListPct(m.cost_usd, fal);
+  return {
+    ...row,
+    creditsPerGen: m.credits,
+    creditsUnit: "per image",
+    ourRetailUsd: customerUsd,
+    falListUsd: fal,
+    discountVsFalListPct: discountPct,
+    cogsUsd: m.cost_usd,
+  };
+});
+
+/** Recraft remove background row. */
+export const STUDIO_IMAGE_RECRAFT_REMOVE_BG_ROWS: StudioImageEconomicsRow[] = [
+  {
+    key: "recraft_remove_background",
+    modelAndModality: "Recraft Remove Background, image-to-image",
+    modality: "image",
+    provider: "Recraft",
+    creditsPerGen: IMAGE_MODEL.recraft_remove_background.credits,
+    creditsUnit: "per image",
+    ourRetailUsd: 0,
+    falListUsd: null,
+    discountVsFalListPct: null,
+    cogsUsd: IMAGE_MODEL.recraft_remove_background.cost_usd,
+  },
+];
 
 export type StudioGrokImagineEconomicsRow = {
   modelAndModality: string;
