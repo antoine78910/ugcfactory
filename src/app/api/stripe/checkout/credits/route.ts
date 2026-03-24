@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { getCreditPackStripePriceId, isCreditPackKey } from "@/lib/stripe/creditPackPrices";
+import { getDataFastStripeMetadata } from "@/lib/stripe/datafastMetadata";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 
 export async function POST(req: Request) {
@@ -50,6 +51,7 @@ export async function POST(req: Request) {
     "http://localhost:3000";
   const stripe = new Stripe(secret, { apiVersion: "2026-02-25.clover" });
   const customerEmail = auth.user.email?.trim();
+  const datafastMeta = await getDataFastStripeMetadata();
 
   try {
     const session = await stripe.checkout.sessions.create({
@@ -58,7 +60,7 @@ export async function POST(req: Request) {
       success_url: `${base.replace(/\/$/, "")}/credits?checkout=success&pack=${encodeURIComponent(packKey)}`,
       cancel_url: `${base.replace(/\/$/, "")}/credits?checkout=cancel`,
       allow_promotion_codes: true,
-      metadata: { credit_pack: packKey },
+      metadata: { credit_pack: packKey, ...datafastMeta },
       ...(customerEmail ? { customer_email: customerEmail } : {}),
       ...(referral ? { client_reference_id: referral } : {}),
     });

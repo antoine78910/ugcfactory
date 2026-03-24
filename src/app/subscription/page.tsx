@@ -130,6 +130,7 @@ export default function SubscriptionPage() {
     try {
       const res = await fetch("/api/stripe/checkout/subscription", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           planId: planIdCheckout,

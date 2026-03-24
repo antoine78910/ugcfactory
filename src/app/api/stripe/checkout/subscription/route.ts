@@ -4,6 +4,7 @@ import {
   getSubscriptionStripePriceId,
   isSubscriptionPlanId,
 } from "@/lib/stripe/subscriptionPrices";
+import { getDataFastStripeMetadata } from "@/lib/stripe/datafastMetadata";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 
 export async function POST(req: Request) {
@@ -62,6 +63,7 @@ export async function POST(req: Request) {
     "http://localhost:3000";
   const stripe = new Stripe(secret, { apiVersion: "2026-02-25.clover" });
   const customerEmail = auth.user.email?.trim();
+  const datafastMeta = await getDataFastStripeMetadata();
 
   try {
     const session = await stripe.checkout.sessions.create({
@@ -70,6 +72,11 @@ export async function POST(req: Request) {
       success_url: `${base.replace(/\/$/, "")}/subscription?checkout=success&plan=${encodeURIComponent(planId)}`,
       cancel_url: `${base.replace(/\/$/, "")}/subscription?checkout=cancel`,
       allow_promotion_codes: true,
+      metadata: {
+        subscription_plan: planId,
+        subscription_billing: billing,
+        ...datafastMeta,
+      },
       ...(customerEmail ? { customer_email: customerEmail } : {}),
       ...(referral ? { client_reference_id: referral } : {}),
     });

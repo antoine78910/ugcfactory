@@ -125,6 +125,7 @@ export default function CreditsPage() {
     try {
       const res = await fetch("/api/stripe/checkout/credits", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           packKey,
