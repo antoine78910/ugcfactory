@@ -27,9 +27,12 @@ export function studioGenerationRowToHistoryItem(row: StudioGenerationRow): Stud
   const createdAt = new Date(row.created_at).getTime();
   const mediaKind = rowKindToMediaKind(row.kind);
   const status = String(row.status ?? "").toLowerCase();
+  const hasUrls = Array.isArray(row.result_urls) && row.result_urls.length > 0;
+  const hasError = typeof row.error_message === "string" && row.error_message.trim().length > 0;
   const isReady = ["ready", "success", "succeeded", "completed", "done"].includes(status);
   const isFailed = ["failed", "error", "errored", "cancelled", "canceled"].includes(status);
-  if (isReady) {
+  // Be defensive: some providers may persist `result_urls` / `error_message` before (or without) normalizing `status`.
+  if (hasUrls || isReady) {
     return {
       id: row.id,
       kind: mediaKind,
@@ -40,7 +43,7 @@ export function studioGenerationRowToHistoryItem(row: StudioGenerationRow): Stud
       studioGenerationKind: row.kind,
     };
   }
-  if (isFailed) {
+  if (hasError || isFailed) {
     return {
       id: row.id,
       kind: mediaKind,
