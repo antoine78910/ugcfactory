@@ -101,6 +101,27 @@ function clampToMaxWords(text: string, maxWords: number): string {
   return parts.slice(0, maxWords).join(" ");
 }
 
+function angleBriefFromScriptOption(raw: string, angleIndex: 0 | 1 | 2): string {
+  const { editable, headline } = angleBlockForEditing(raw);
+  const factors = splitScriptFactorsForUi(editable, headline);
+  const headlineClean = headline.replace(/\s+/g, " ").trim();
+  const hookClean = (factors.hook || "").replace(/\s+/g, " ").trim();
+  const benefitsClean = (factors.benefits || "").replace(/\s+/g, " ").trim();
+
+  // Prefer headline when present (it reads like a real angle).
+  if (headlineClean) return headlineClean;
+
+  // Fall back to a compact, non-structured brief (no HOOK:/PROBLEM:/...).
+  const bits = [hookClean, benefitsClean].filter(Boolean);
+  const joined = bits.join(" ").trim();
+  if (joined) {
+    return joined.length > 160 ? `${joined.slice(0, 160)}…` : joined;
+  }
+
+  // Last resort: existing heuristic teaser.
+  return teaserFromScriptBlock(raw, angleIndex);
+}
+
 function mergeNanoUrlIntoThreeSlots(prev: string[], slot: 0 | 1 | 2, url: string): string[] {
   const base: string[] = [0, 1, 2].map((i) => {
     const v = prev[i];
@@ -748,7 +769,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     return Array.from({ length: count }, (_, i) => {
       const explicit = i < 3 ? angleLabels[i]?.trim() : "";
       const body = scriptOptionBodiesAll[i] ?? "";
-      const fallback = body ? teaserFromScriptBlock(body, (i === 0 ? 0 : i === 1 ? 1 : 2) as 0 | 1 | 2) : "";
+      const fallback = body ? angleBriefFromScriptOption(body, (i === 0 ? 0 : i === 1 ? 1 : 2) as 0 | 1 | 2) : "";
       return {
         index: i,
         label: explicit || fallback || "…",
@@ -3015,20 +3036,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                           ) : null}
                         </div>
                       </div>
-                      <div className="mt-2 flex items-center gap-2">
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Brand color</span>
-                        {brandColorHex ? (
-                          <span className="inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-black/25 px-1.5 py-0.5 text-[10px] text-white/70">
-                            <span
-                              className="h-3 w-3 rounded-sm border border-white/15"
-                              style={{ backgroundColor: brandColorHex }}
-                            />
-                            {brandColorHex}
-                          </span>
-                        ) : (
-                          <span className="text-[10px] text-white/35">not detected</span>
-                        )}
-                      </div>
+                      {/* Brand color intentionally hidden (not useful in Link to Ad UI). */}
                     </div>
                     <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-[#050507]">
                       {resolvedPreviewUrl && !imgError ? (
