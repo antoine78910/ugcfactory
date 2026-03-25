@@ -421,14 +421,12 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   /** URLs classified as product-only (multi-angle); used for GPT vision + Nano single pick. */
   const [productOnlyImageUrls, setProductOnlyImageUrls] = useState<string[]>([]);
   const [userPhotoUrls, setUserPhotoUrls] = useState<string[]>([]);
-  const [userVideoUrls, setUserVideoUrls] = useState<string[]>([]);
   const [avatarPhotoUrls, setAvatarPhotoUrls] = useState<string[]>([]);
   const [avatarUrls, setAvatarUrls] = useState<string[]>([]);
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   const [imgError, setImgError] = useState(false);
   const [brandFaviconFailed, setBrandFaviconFailed] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
-  const videoInputRef = useRef<HTMLInputElement>(null);
   /** File input on the Store URL step (optional product photos before scan). */
   const earlyProductPhotosInputRef = useRef<HTMLInputElement>(null);
   /** After user clicks "Generate video from this image", show video prompt + output panels (incl. errors). */
@@ -747,7 +745,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       neutralUploadUrl,
       productOnlyImageUrls: productOnlyImageUrls.length ? productOnlyImageUrls : undefined,
       userPhotoUrls: userPhotoUrls.length ? userPhotoUrls : undefined,
-      userVideoUrls: userVideoUrls.length ? userVideoUrls : undefined,
       summaryText,
       scriptsText,
       angleLabels,
@@ -771,7 +768,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     neutralUploadUrl,
     productOnlyImageUrls,
     userPhotoUrls,
-    userVideoUrls,
     generationMode,
     customUgcTopic,
     customUgcOffer,
@@ -1099,9 +1095,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           ? (snap as any).userPhotoUrls
           : [],
       );
-      setUserVideoUrls(
-        Array.isArray((snap as any).userVideoUrls) ? ((snap as any).userVideoUrls as string[]) : [],
-      );
       setSummaryText(snap.summaryText);
       setScriptsText(snap.scriptsText);
       setGenerationMode(snap.generationMode === "custom_ugc" ? "custom_ugc" : "automatic");
@@ -1322,46 +1315,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     } finally {
       setIsUploadingAdditionalPhotos(false);
     }
-  }
-
-  async function uploadAdditionalVideo(files: FileList | File[] | null) {
-    const list = Array.isArray(files) ? files : Array.from(files ?? []);
-    if (!list.length) return;
-
-    setIsUploadingAdditionalPhotos(true);
-    try {
-      const uploaded: string[] = [];
-      let lastError: string | null = null;
-      for (const file of list) {
-        try {
-          const fd = new FormData();
-          fd.set("file", file);
-          const res = await fetch("/api/uploads", { method: "POST", body: fd });
-          const raw = await res.text();
-          const parsed = safeParseJson<{ url?: string; error?: string }>(raw);
-          if (!res.ok || !parsed.ok) {
-            throw new Error(parsed.ok ? parsed.value.error || `Upload failed (${res.status})` : parsed.error);
-          }
-          if (!parsed.value.url) throw new Error(parsed.value.error || "Upload failed: missing url");
-          uploaded.push(parsed.value.url);
-        } catch (err) {
-          lastError = err instanceof Error ? err.message : "Upload failed";
-        }
-      }
-      if (uploaded.length) {
-        setUserVideoUrls((prev) => [...prev, ...uploaded].slice(0, 8));
-        toast.success(uploaded.length > 1 ? `${uploaded.length} videos added` : "Video added");
-      }
-      if (lastError && uploaded.length < list.length) {
-        toast.error("Some uploads failed", { description: lastError });
-      }
-    } finally {
-      setIsUploadingAdditionalPhotos(false);
-    }
-  }
-
-  function removeProductVideo(url: string) {
-    setUserVideoUrls((prev) => prev.filter((u) => u !== url));
   }
 
   function removeProductPhoto(url: string) {
@@ -3333,15 +3286,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                         <button
                           type="button"
                           disabled={isWorking || isUploadingAdditionalPhotos}
-                          className="flex items-center gap-1 rounded-md bg-white/5 px-2 py-1 text-[10px] font-medium text-white/60 transition hover:bg-white/10 hover:text-white/80"
-                          onClick={() => videoInputRef.current?.click()}
-                        >
-                          <Video className="h-3 w-3" />
-                          Add video
-                        </button>
-                        <button
-                          type="button"
-                          disabled={isWorking || isUploadingAdditionalPhotos}
                           className="rounded-md bg-white/5 px-2 py-1 text-[10px] font-medium text-white/60 transition hover:bg-white/10 hover:text-white/80"
                           onClick={() => setAvatarPickerOpen(true)}
                           title={avatarUrls.length === 0 ? "Open Studio → Avatar to generate avatars first" : undefined}
@@ -3352,30 +3296,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <LinkToAdPendingProductThumbnails items={pendingProductUploads} />
-                      {userVideoUrls.map((url, i) => (
-                        <div
-                          key={`${url}-${i}-vid`}
-                          className="group/video relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-[#050507]"
-                          title="Uploaded video"
-                        >
-                          {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-                          <video
-                            src={url}
-                            className="h-full w-full object-cover"
-                            muted
-                            playsInline
-                            preload="metadata"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => removeProductVideo(url)}
-                            className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-md bg-black/70 text-white/60 opacity-0 transition hover:text-red-400 group-hover/video:opacity-100"
-                            aria-label="Remove video"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </button>
-                        </div>
-                      ))}
                       {productOnlyImageUrls.map((url, i) => (
                         <div key={`${url}-${i}`} className="group/photo relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-[#050507]">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -3413,18 +3333,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                       className="sr-only"
                       onChange={(e) => {
                         void uploadAdditionalPhoto(e.target.files);
-                        e.currentTarget.value = "";
-                      }}
-                      disabled={isWorking || isUploadingAdditionalPhotos}
-                    />
-                    <input
-                      ref={videoInputRef}
-                      type="file"
-                      accept="video/mp4,video/webm,video/quicktime,video/*"
-                      multiple
-                      className="sr-only"
-                      onChange={(e) => {
-                        void uploadAdditionalVideo(e.target.files);
                         e.currentTarget.value = "";
                       }}
                       disabled={isWorking || isUploadingAdditionalPhotos}
@@ -3504,7 +3412,10 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                           role="button"
                           tabIndex={0}
                           aria-label="Open product image full size"
-                          className="absolute right-1 top-1 z-20 flex h-7 w-7 items-center justify-center rounded-lg bg-black/60 text-white opacity-0 shadow transition-opacity hover:bg-black/70 hover:text-white/90 group-hover:opacity-100"
+                          className={cn(
+                            "absolute top-1 z-20 flex h-7 w-7 items-center justify-center rounded-lg bg-black/60 text-white opacity-0 shadow transition-opacity hover:bg-black/70 hover:text-white/90 group-hover:opacity-100",
+                            isAlgorithmChosenPreview ? "left-1" : "right-1",
+                          )}
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
@@ -3522,22 +3433,15 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                         </span>
                       ) : null}
                   {resolvedPreviewUrl && !imgError && isAlgorithmChosenPreview ? (
-                    <>
-                      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/85 via-black/35 to-transparent px-2 py-1.5">
-                        <p className="text-[10px] font-medium leading-tight text-white/70">
-                          Product photo scraped by our algorithm — you can change it.
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => removeAlgorithmChosenPreview()}
-                        className="absolute right-1 top-1 z-20 flex h-7 w-7 items-center justify-center rounded-lg bg-black/60 text-white/70 shadow transition hover:text-red-300"
-                        aria-label="Remove scraped photo"
-                        title="Remove scraped photo"
-                      >
-                        <Trash2 className="h-4 w-4" aria-hidden />
-                      </button>
-                    </>
+                    <button
+                      type="button"
+                      onClick={() => removeAlgorithmChosenPreview()}
+                      className="absolute right-1 top-1 z-20 flex h-7 w-7 items-center justify-center rounded-lg bg-black/60 text-white/70 shadow transition hover:text-red-300"
+                      aria-label="Remove scraped photo"
+                      title="Remove scraped photo"
+                    >
+                      <Trash2 className="h-4 w-4" aria-hidden />
+                    </button>
                   ) : null}
                     </div>
                   </div>
@@ -3560,15 +3464,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                         <button
                           type="button"
                           disabled={isWorking || isUploadingAdditionalPhotos}
-                          className="flex items-center gap-1 rounded-md bg-white/5 px-2 py-1 text-[10px] font-medium text-white/60 transition hover:bg-white/10 hover:text-white/80"
-                          onClick={() => videoInputRef.current?.click()}
-                        >
-                          <Video className="h-3 w-3" />
-                          Add video
-                        </button>
-                        <button
-                          type="button"
-                          disabled={isWorking || isUploadingAdditionalPhotos}
                           className="rounded-md bg-white/5 px-2 py-1 text-[10px] font-medium text-white/60 transition hover:bg-white/10 hover:text-white/80"
                           onClick={() => setAvatarPickerOpen(true)}
                           title={avatarUrls.length === 0 ? "Open Studio → Avatar to generate avatars first" : undefined}
@@ -3579,30 +3474,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <LinkToAdPendingProductThumbnails items={pendingProductUploads} />
-                      {userVideoUrls.map((url, i) => (
-                        <div
-                          key={`${url}-${i}-vid-ang`}
-                          className="group/video relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-[#050507]"
-                          title="Uploaded video"
-                        >
-                          {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-                          <video
-                            src={url}
-                            className="h-full w-full object-cover"
-                            muted
-                            playsInline
-                            preload="metadata"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => removeProductVideo(url)}
-                            className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-md bg-black/70 text-white/60 opacity-0 transition hover:text-red-400 group-hover/video:opacity-100"
-                            aria-label="Remove video"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </button>
-                        </div>
-                      ))}
                       {productOnlyImageUrls.map((url, i) => (
                         <div key={`${url}-${i}`} className="group/photo relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-[#050507]">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -3640,18 +3511,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                       className="sr-only"
                       onChange={(e) => {
                         void uploadAdditionalPhoto(e.target.files);
-                        e.currentTarget.value = "";
-                      }}
-                      disabled={isWorking || isUploadingAdditionalPhotos}
-                    />
-                    <input
-                      ref={videoInputRef}
-                      type="file"
-                      accept="video/mp4,video/webm,video/quicktime,video/*"
-                      multiple
-                      className="sr-only"
-                      onChange={(e) => {
-                        void uploadAdditionalVideo(e.target.files);
                         e.currentTarget.value = "";
                       }}
                       disabled={isWorking || isUploadingAdditionalPhotos}
@@ -3898,22 +3757,15 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                       </span>
                     ) : null}
                     {resolvedPreviewUrl && !imgError && isAlgorithmChosenPreview ? (
-                      <>
-                        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/85 via-black/35 to-transparent px-2 py-1.5">
-                          <p className="text-[10px] font-medium leading-tight text-white/70">
-                            Product photo scraped by our algorithm — you can change it.
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => removeAlgorithmChosenPreview()}
-                          className="absolute right-1 top-1 z-[25] flex h-7 w-7 items-center justify-center rounded-lg bg-black/60 text-white/70 shadow transition hover:text-red-300"
-                          aria-label="Remove scraped photo"
-                          title="Remove scraped photo"
-                        >
-                          <Trash2 className="h-4 w-4" aria-hidden />
-                        </button>
-                      </>
+                      <button
+                        type="button"
+                        onClick={() => removeAlgorithmChosenPreview()}
+                        className="absolute right-1 top-1 z-[25] flex h-7 w-7 items-center justify-center rounded-lg bg-black/60 text-white/70 shadow transition hover:text-red-300"
+                        aria-label="Remove scraped photo"
+                        title="Remove scraped photo"
+                      >
+                        <Trash2 className="h-4 w-4" aria-hidden />
+                      </button>
                     ) : null}
                   </div>
                 </div>
@@ -3937,15 +3789,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                       <button
                         type="button"
                         disabled={isWorking || isUploadingAdditionalPhotos}
-                        className="flex items-center gap-1 rounded-md bg-white/5 px-2 py-1 text-[10px] font-medium text-white/60 transition hover:bg-white/10 hover:text-white/80 disabled:opacity-50"
-                        onClick={() => videoInputRef.current?.click()}
-                      >
-                        <Video className="h-3 w-3" />
-                        Add video
-                      </button>
-                      <button
-                        type="button"
-                        disabled={isWorking || isUploadingAdditionalPhotos}
                         className="rounded-md bg-white/5 px-2 py-1 text-[10px] font-medium text-white/60 transition hover:bg-white/10 hover:text-white/80 disabled:opacity-50"
                         onClick={() => setAvatarPickerOpen(true)}
                         title={avatarUrls.length === 0 ? "Studio → Avatar: generate an avatar first" : undefined}
@@ -3956,30 +3799,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <LinkToAdPendingProductThumbnails items={pendingProductUploads} />
-                    {userVideoUrls.map((url, i) => (
-                      <div
-                        key={`${url}-${i}-vid-i2v`}
-                        className="group/video relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-[#050507]"
-                        title="Uploaded video"
-                      >
-                        {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-                        <video
-                          src={url}
-                          className="h-full w-full object-cover"
-                          muted
-                          playsInline
-                          preload="metadata"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeProductVideo(url)}
-                          className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-md bg-black/70 text-white/60 opacity-0 transition hover:text-red-400 group-hover/video:opacity-100"
-                          aria-label="Remove video"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
-                      </div>
-                    ))}
                     {productOnlyImageUrls.map((url, i) => (
                       <div
                         key={`${url}-${i}-side`}
@@ -4022,18 +3841,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                     className="sr-only"
                     onChange={(e) => {
                       void uploadAdditionalPhoto(e.target.files);
-                      e.currentTarget.value = "";
-                    }}
-                    disabled={isWorking || isUploadingAdditionalPhotos}
-                  />
-                  <input
-                    ref={videoInputRef}
-                    type="file"
-                    accept="video/mp4,video/webm,video/quicktime,video/*"
-                    multiple
-                    className="sr-only"
-                    onChange={(e) => {
-                      void uploadAdditionalVideo(e.target.files);
                       e.currentTarget.value = "";
                     }}
                     disabled={isWorking || isUploadingAdditionalPhotos}
