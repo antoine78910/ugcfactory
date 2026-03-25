@@ -13,6 +13,7 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const taskId = (searchParams.get("taskId") ?? "").trim();
   const personalKey = (searchParams.get("personalApiKey") ?? "").trim() || undefined;
+  const piapiKey = (searchParams.get("piapiApiKey") ?? "").trim() || undefined;
 
   if (!taskId) {
     return NextResponse.json({ error: "Missing `taskId`." }, { status: 400 });
@@ -20,7 +21,7 @@ export async function GET(req: Request) {
 
   try {
     if (isPiapiTaskId(taskId)) {
-      const data = await piapiGetSeedanceTask(taskId);
+      const data = await piapiGetSeedanceTask(taskId, piapiKey);
       const mapped = piapiTaskStatusToLegacy(data);
       return NextResponse.json({
         data: {

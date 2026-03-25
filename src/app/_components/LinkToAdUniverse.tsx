@@ -33,6 +33,7 @@ import {
 import {
   useCreditsPlan,
   getPersonalApiKey,
+  getPersonalPiapiApiKey,
   isPersonalApiActive,
 } from "@/app/_components/CreditsPlanContext";
 import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
@@ -2068,7 +2069,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     // ~12 minutes max wait (enough for most generations).
     const maxAttempts = Math.ceil((12 * 60 * 1000) / sleepMs);
     const pKey = getPersonalApiKey();
-    const keyParam = pKey ? `&personalApiKey=${encodeURIComponent(pKey)}` : "";
+    const piKey = getPersonalPiapiApiKey();
+    const keyParam = `${pKey ? `&personalApiKey=${encodeURIComponent(pKey)}` : ""}${piKey ? `&piapiApiKey=${encodeURIComponent(piKey)}` : ""}`;
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const res = await fetch(`/api/nanobanana/task?taskId=${encodeURIComponent(taskId)}${keyParam}`, {
         method: "GET",
@@ -2310,7 +2312,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     async function tick() {
       try {
         const nKey = getPersonalApiKey();
-        const nParam = nKey ? `&personalApiKey=${encodeURIComponent(nKey)}` : "";
+        const nPiKey = getPersonalPiapiApiKey();
+        const nParam = `${nKey ? `&personalApiKey=${encodeURIComponent(nKey)}` : ""}${nPiKey ? `&piapiApiKey=${encodeURIComponent(nPiKey)}` : ""}`;
         const res = await fetch(`/api/nanobanana/task?taskId=${encodeURIComponent(taskId)}${nParam}`, { cache: "no-store" });
         const json = (await res.json()) as {
           data?: { successFlag?: number; response?: Record<string, unknown>; errorMessage?: string };
@@ -2486,6 +2489,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           duration: 15,
           aspectRatio: "9:16",
           personalApiKey: getPersonalApiKey(),
+          piapiApiKey: getPersonalPiapiApiKey(),
         }),
       });
       const json = (await res.json()) as { taskId?: string; error?: string };
@@ -2582,7 +2586,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     async function tick() {
       try {
         const kKey = getPersonalApiKey();
-        const kParam = kKey ? `&personalApiKey=${encodeURIComponent(kKey)}` : "";
+        const kPiKey = getPersonalPiapiApiKey();
+        const kParam = `${kKey ? `&personalApiKey=${encodeURIComponent(kKey)}` : ""}${kPiKey ? `&piapiApiKey=${encodeURIComponent(kPiKey)}` : ""}`;
         const res = await fetch(`/api/kling/status?taskId=${encodeURIComponent(taskId)}${kParam}`, { cache: "no-store" });
         const json = (await res.json()) as {
           data?: { status?: string; response?: string[]; error_message?: string };

@@ -27,6 +27,7 @@ type Body = {
   /** Kling 3.0 only — multi-shot sequencing */
   multiShots?: boolean;
   personalApiKey?: string;
+  piapiApiKey?: string;
 };
 
 function validateDurationForModel(model: string, duration: number | undefined) {
@@ -81,8 +82,10 @@ export async function POST(req: Request) {
   }
 
   const personalKey = hasPersonalApiKey(body.personalApiKey) ? body.personalApiKey.trim() : undefined;
+  const piapiKey = hasPersonalApiKey(body.piapiApiKey) ? body.piapiApiKey.trim() : undefined;
   if (
     !personalKey &&
+    !piapiKey &&
     body.accountPlan != null &&
     String(body.accountPlan).trim() !== ""
   ) {
@@ -165,6 +168,7 @@ export async function POST(req: Request) {
         imageUrl,
         duration,
         aspectRatio,
+        overrideApiKey: piapiKey,
       });
       return NextResponse.json({
         taskId: encodePiapiTaskId(rawTaskId),

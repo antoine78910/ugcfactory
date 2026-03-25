@@ -26,6 +26,8 @@ const LS_PLAN = "ugc_demo_plan";
 const LS_CAP = "ugc_demo_credits_cap";
 const LS_PERSONAL_API_KEY = "ugc_personal_api_key";
 const LS_PERSONAL_API_ENABLED = "ugc_personal_api_enabled";
+const LS_PIAPI_PERSONAL_KEY = "ugc_piapi_personal_api_key";
+const LS_PIAPI_PERSONAL_ENABLED = "ugc_piapi_personal_api_enabled";
 
 function lsGet(key: string): string | null {
   try {
@@ -62,6 +64,18 @@ export function getPersonalApiKey(): string | undefined {
 /** True when the user has Personal API mode enabled with a key set. */
 export function isPersonalApiActive(): boolean {
   return getPersonalApiKey() !== undefined;
+}
+
+/** Returns the user's PiAPI key when PiAPI mode is active, or undefined. */
+export function getPersonalPiapiApiKey(): string | undefined {
+  if (typeof window === "undefined") return undefined;
+  if (lsGet(LS_PIAPI_PERSONAL_ENABLED) !== "1") return undefined;
+  const k = lsGet(LS_PIAPI_PERSONAL_KEY)?.trim();
+  return k && k.length > 0 ? k : undefined;
+}
+
+export function isPersonalPiapiActive(): boolean {
+  return getPersonalPiapiApiKey() !== undefined;
 }
 
 export type AccountPlanId = "free" | SubscriptionPlanId;

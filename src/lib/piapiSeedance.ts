@@ -29,8 +29,9 @@ export async function piapiCreateSeedanceTask(opts: {
   imageUrl: string;
   duration: number;
   aspectRatio: "16:9" | "9:16" | "1:1";
+  overrideApiKey?: string;
 }): Promise<string> {
-  const apiKey = getPiApiKey();
+  const apiKey = opts.overrideApiKey?.trim() || getPiApiKey();
   const res = await fetch(`${PIAPI_BASE}/api/v1/task`, {
     method: "POST",
     headers: {
@@ -70,8 +71,8 @@ export type PiapiSeedanceTask = {
   logs?: unknown[];
 };
 
-export async function piapiGetSeedanceTask(taskId: string): Promise<PiapiSeedanceTask> {
-  const apiKey = getPiApiKey();
+export async function piapiGetSeedanceTask(taskId: string, overrideApiKey?: string): Promise<PiapiSeedanceTask> {
+  const apiKey = overrideApiKey?.trim() || getPiApiKey();
   const id = decodePiapiTaskId(taskId);
   const res = await fetch(`${PIAPI_BASE}/api/v1/task/${encodeURIComponent(id)}`, {
     method: "GET",
