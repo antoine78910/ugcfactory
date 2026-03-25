@@ -2722,6 +2722,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   ]);
 
   const showUniverseLoading = universeLoadingState.message !== null;
+  // Image prompt generation already shows status inside the output panel; avoid duplicating it at the top.
+  const showTopUniverseLoading = showUniverseLoading && universeLoadingState.phase !== "nano_prompts";
 
   async function handleGenerateVideoFromSelectedImage() {
     if (nanoBananaSelectedImageIndex === null || !nanoBananaImageUrl?.trim()) {
@@ -2839,7 +2841,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           step3Done={step3Done}
           step4Done={step4Done}
         />
-        {showUniverseLoading ? (
+        {showTopUniverseLoading ? (
           <div className="-mt-2 mb-2 flex min-h-[4.25rem] items-center gap-3 rounded-xl border border-violet-500/15 bg-violet-500/[0.06] px-3 py-3 sm:gap-4 sm:px-4 shadow-[0_0_24px_rgba(139,92,246,0.12)]">
             {isWorking &&
             (stage === "scanning" ||
