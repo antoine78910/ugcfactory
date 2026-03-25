@@ -2187,12 +2187,11 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
         body: JSON.stringify({
-          marketModel: "kling-3.0/video",
+          marketModel: "bytedance/seedance-2.0-pro",
           prompt: klingPrompt,
           imageUrl: img,
-          duration: 12,
-          mode: "std",
-          sound: true,
+          duration: 10,
+          aspectRatio: "9:16",
           personalApiKey: getPersonalApiKey(),
         }),
       });
@@ -2805,75 +2804,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                 right images and details.
               </p>
 
-              <div className="relative mt-4 rounded-xl border border-white/10 bg-white/[0.02] p-4 pr-14">
-                <span className="absolute right-3 top-3 rounded-md bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white/50">
-                  Optional
-                </span>
-                <p className="text-sm font-medium text-white/85">Product photos</p>
-                <p className="mt-1 max-w-2xl text-xs leading-relaxed text-white/45">
-                  You don&apos;t have to add anything — we automatically find product images on the page. If you want
-                  stronger results, upload several clear shots (different angles, details, packaging, lifestyle). GPT and
-                  image generation use them as extra reference.
-                </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <LinkToAdPendingProductThumbnails items={pendingProductUploads} />
-                  {productOnlyImageUrls.map((url, i) => (
-                    <div
-                      key={`early-${url}-${i}`}
-                      className="group/earlyphoto relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-[#050507]"
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={url}
-                        alt={`Product reference ${i + 1}`}
-                        className="h-full w-full object-cover"
-                        loading="lazy"
-                        referrerPolicy="no-referrer"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeProductPhoto(url)}
-                        disabled={isWorking || isUploadingAdditionalPhotos}
-                        className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-md bg-black/70 text-white/60 opacity-0 transition hover:text-red-400 group-hover/earlyphoto:opacity-100 disabled:pointer-events-none"
-                        aria-label="Remove photo"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </button>
-                    </div>
-                  ))}
-                  <button
-                    type="button"
-                    disabled={isWorking || isUploadingAdditionalPhotos}
-                    onClick={() => earlyProductPhotosInputRef.current?.click()}
-                    className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg border border-dashed border-white/15 bg-white/[0.02] text-white/30 transition hover:border-violet-400/40 hover:text-violet-300 disabled:opacity-50"
-                    aria-label="Add product photos"
-                  >
-                    <ImagePlus className="h-5 w-5" />
-                  </button>
-                  {avatarUrls.length > 0 ? (
-                    <button
-                      type="button"
-                      disabled={isWorking || isUploadingAdditionalPhotos}
-                      onClick={() => setAvatarPickerOpen(true)}
-                      className="h-16 rounded-lg border border-white/15 bg-white/[0.02] px-3 text-[11px] font-medium text-white/65 transition hover:border-violet-400/40 hover:text-violet-200 disabled:opacity-50"
-                    >
-                      Upload my avatar
-                    </button>
-                  ) : null}
-                </div>
-                <input
-                  ref={earlyProductPhotosInputRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,image/*"
-                  multiple
-                  className="sr-only"
-                  onChange={(e) => {
-                    void uploadAdditionalPhoto(e.target.files);
-                    e.currentTarget.value = "";
-                  }}
-                  disabled={isWorking || isUploadingAdditionalPhotos}
-                />
-              </div>
+              {/* Product photos + avatar are shown only after brief + scripts are generated (next step),
+                  to keep the URL step focused and avoid accidental generation triggers. */}
             </div>
           ) : null}
         </div>
@@ -2974,7 +2906,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                   </div>
                 ) : null}
 
-                {productOnlyImageUrls.length > 0 || neutralUploadUrl ? (
+                {scriptsText.trim() && (productOnlyImageUrls.length > 0 || neutralUploadUrl) ? (
                   <div className="mt-4 space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
