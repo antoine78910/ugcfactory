@@ -421,12 +421,14 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   /** URLs classified as product-only (multi-angle); used for GPT vision + Nano single pick. */
   const [productOnlyImageUrls, setProductOnlyImageUrls] = useState<string[]>([]);
   const [userPhotoUrls, setUserPhotoUrls] = useState<string[]>([]);
+  const [userVideoUrls, setUserVideoUrls] = useState<string[]>([]);
   const [avatarPhotoUrls, setAvatarPhotoUrls] = useState<string[]>([]);
   const [avatarUrls, setAvatarUrls] = useState<string[]>([]);
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   const [imgError, setImgError] = useState(false);
   const [brandFaviconFailed, setBrandFaviconFailed] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
   /** File input on the Store URL step (optional product photos before scan). */
   const earlyProductPhotosInputRef = useRef<HTMLInputElement>(null);
   /** After user clicks "Generate video from this image", show video prompt + output panels (incl. errors). */
@@ -517,6 +519,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const [klingPollTaskId, setKlingPollTaskId] = useState<string | null>(null);
   /** Lightbox: full reference image (source is often 9:16; grid shows 3:4 crop). */
   const [nanoImageLightboxUrl, setNanoImageLightboxUrl] = useState<string | null>(null);
+  const [productImageLightboxUrl, setProductImageLightboxUrl] = useState<string | null>(null);
   const [expandedAngleBriefs, setExpandedAngleBriefs] = useState<Record<number, boolean>>({});
   const [angleSummaryDrafts, setAngleSummaryDrafts] = useState<Record<number, string>>({});
 
@@ -744,6 +747,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       neutralUploadUrl,
       productOnlyImageUrls: productOnlyImageUrls.length ? productOnlyImageUrls : undefined,
       userPhotoUrls: userPhotoUrls.length ? userPhotoUrls : undefined,
+      userVideoUrls: userVideoUrls.length ? userVideoUrls : undefined,
       summaryText,
       scriptsText,
       angleLabels,
@@ -767,6 +771,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     neutralUploadUrl,
     productOnlyImageUrls,
     userPhotoUrls,
+    userVideoUrls,
     generationMode,
     customUgcTopic,
     customUgcOffer,
@@ -1081,6 +1086,9 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           ? (snap as any).userPhotoUrls
           : [],
       );
+      setUserVideoUrls(
+        Array.isArray((snap as any).userVideoUrls) ? ((snap as any).userVideoUrls as string[]) : [],
+      );
       setSummaryText(snap.summaryText);
       setScriptsText(snap.scriptsText);
       setGenerationMode(snap.generationMode === "custom_ugc" ? "custom_ugc" : "automatic");
@@ -1301,6 +1309,46 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     } finally {
       setIsUploadingAdditionalPhotos(false);
     }
+  }
+
+  async function uploadAdditionalVideo(files: FileList | File[] | null) {
+    const list = Array.isArray(files) ? files : Array.from(files ?? []);
+    if (!list.length) return;
+
+    setIsUploadingAdditionalPhotos(true);
+    try {
+      const uploaded: string[] = [];
+      let lastError: string | null = null;
+      for (const file of list) {
+        try {
+          const fd = new FormData();
+          fd.set("file", file);
+          const res = await fetch("/api/uploads", { method: "POST", body: fd });
+          const raw = await res.text();
+          const parsed = safeParseJson<{ url?: string; error?: string }>(raw);
+          if (!res.ok || !parsed.ok) {
+            throw new Error(parsed.ok ? parsed.value.error || `Upload failed (${res.status})` : parsed.error);
+          }
+          if (!parsed.value.url) throw new Error(parsed.value.error || "Upload failed: missing url");
+          uploaded.push(parsed.value.url);
+        } catch (err) {
+          lastError = err instanceof Error ? err.message : "Upload failed";
+        }
+      }
+      if (uploaded.length) {
+        setUserVideoUrls((prev) => [...prev, ...uploaded].slice(0, 8));
+        toast.success(uploaded.length > 1 ? `${uploaded.length} videos added` : "Video added");
+      }
+      if (lastError && uploaded.length < list.length) {
+        toast.error("Some uploads failed", { description: lastError });
+      }
+    } finally {
+      setIsUploadingAdditionalPhotos(false);
+    }
+  }
+
+  function removeProductVideo(url: string) {
+    setUserVideoUrls((prev) => prev.filter((u) => u !== url));
   }
 
   function removeProductPhoto(url: string) {
@@ -3180,7 +3228,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                       </div>
                     )}
                   </div>
-                  <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-[#050507]">
+                  <div className="group relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-[#050507]">
                     {resolvedPreviewUrl && !imgError ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
@@ -3201,6 +3249,28 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                             : "No image"}
                       </div>
                     )}
+                    {resolvedPreviewUrl && !imgError ? (
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        aria-label="Open product image full size"
+                        className="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-lg bg-black/60 text-white opacity-0 shadow transition-opacity hover:bg-black/70 hover:text-white/90 group-hover:opacity-100"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setProductImageLightboxUrl(resolvedPreviewUrl);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setProductImageLightboxUrl(resolvedPreviewUrl);
+                          }
+                        }}
+                      >
+                        <Maximize2 className="h-4 w-4" aria-hidden />
+                      </span>
+                    ) : null}
                     {resolvedPreviewUrl && !imgError ? (
                       <div className="pointer-events-none absolute bottom-0.5 right-0.5 rounded border border-white/10 bg-black/70 px-1 py-px backdrop-blur-sm">
                         {quality.label === "good" ? (
@@ -3233,32 +3303,67 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
 
                 {scriptsText.trim() && (productOnlyImageUrls.length > 0 || neutralUploadUrl) ? (
                   <div className="mt-4 space-y-2">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
                         Product photos ({productOnlyImageUrls.length})
                       </span>
-                      <button
-                        type="button"
-                        disabled={isWorking || isUploadingAdditionalPhotos}
-                        className="flex items-center gap-1 rounded-md bg-white/5 px-2 py-1 text-[10px] font-medium text-white/60 transition hover:bg-white/10 hover:text-white/80"
-                        onClick={() => photoInputRef.current?.click()}
-                      >
-                        <ImagePlus className="h-3 w-3" />
-                        Add photo
-                      </button>
-                      {avatarUrls.length > 0 ? (
+                      <div className="flex flex-wrap items-center gap-2">
                         <button
                           type="button"
                           disabled={isWorking || isUploadingAdditionalPhotos}
-                          className="ml-2 rounded-md bg-white/5 px-2 py-1 text-[10px] font-medium text-white/60 transition hover:bg-white/10 hover:text-white/80"
-                          onClick={() => setAvatarPickerOpen(true)}
+                          className="flex items-center gap-1 rounded-md bg-white/5 px-2 py-1 text-[10px] font-medium text-white/60 transition hover:bg-white/10 hover:text-white/80"
+                          onClick={() => photoInputRef.current?.click()}
                         >
-                          Upload my avatar
+                          <ImagePlus className="h-3 w-3" />
+                          Add photo
                         </button>
-                      ) : null}
+                        <button
+                          type="button"
+                          disabled={isWorking || isUploadingAdditionalPhotos}
+                          className="flex items-center gap-1 rounded-md bg-white/5 px-2 py-1 text-[10px] font-medium text-white/60 transition hover:bg-white/10 hover:text-white/80"
+                          onClick={() => videoInputRef.current?.click()}
+                        >
+                          <Video className="h-3 w-3" />
+                          Add video
+                        </button>
+                        {avatarUrls.length > 0 ? (
+                          <button
+                            type="button"
+                            disabled={isWorking || isUploadingAdditionalPhotos}
+                            className="rounded-md bg-white/5 px-2 py-1 text-[10px] font-medium text-white/60 transition hover:bg-white/10 hover:text-white/80"
+                            onClick={() => setAvatarPickerOpen(true)}
+                          >
+                            Upload my avatar
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <LinkToAdPendingProductThumbnails items={pendingProductUploads} />
+                      {userVideoUrls.map((url, i) => (
+                        <div
+                          key={`${url}-${i}-vid`}
+                          className="group/video relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-[#050507]"
+                          title="Uploaded video"
+                        >
+                          {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                          <video
+                            src={url}
+                            className="h-full w-full object-cover"
+                            muted
+                            playsInline
+                            preload="metadata"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeProductVideo(url)}
+                            className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-md bg-black/70 text-white/60 opacity-0 transition hover:text-red-400 group-hover/video:opacity-100"
+                            aria-label="Remove video"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))}
                       {productOnlyImageUrls.map((url, i) => (
                         <div key={`${url}-${i}`} className="group/photo relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-[#050507]">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -3296,6 +3401,18 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                       className="sr-only"
                       onChange={(e) => {
                         void uploadAdditionalPhoto(e.target.files);
+                        e.currentTarget.value = "";
+                      }}
+                      disabled={isWorking || isUploadingAdditionalPhotos}
+                    />
+                    <input
+                      ref={videoInputRef}
+                      type="file"
+                      accept="video/mp4,video/webm,video/quicktime,video/*"
+                      multiple
+                      className="sr-only"
+                      onChange={(e) => {
+                        void uploadAdditionalVideo(e.target.files);
                         e.currentTarget.value = "";
                       }}
                       disabled={isWorking || isUploadingAdditionalPhotos}
@@ -3353,7 +3470,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                       </div>
                       {/* Brand color intentionally hidden (not useful in Link to Ad UI). */}
                     </div>
-                    <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-[#050507]">
+                    <div className="group relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-[#050507]">
                       {resolvedPreviewUrl && !imgError ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -3370,6 +3487,28 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                           {resolvedPreviewUrl ? "Can't load" : "No image"}
                         </div>
                       )}
+                      {resolvedPreviewUrl && !imgError ? (
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          aria-label="Open product image full size"
+                          className="absolute right-1 top-1 z-20 flex h-7 w-7 items-center justify-center rounded-lg bg-black/60 text-white opacity-0 shadow transition-opacity hover:bg-black/70 hover:text-white/90 group-hover:opacity-100"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setProductImageLightboxUrl(resolvedPreviewUrl);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setProductImageLightboxUrl(resolvedPreviewUrl);
+                            }
+                          }}
+                        >
+                          <Maximize2 className="h-4 w-4" aria-hidden />
+                        </span>
+                      ) : null}
                   {resolvedPreviewUrl && !imgError && isAlgorithmChosenPreview ? (
                     <>
                       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/85 via-black/35 to-transparent px-2 py-1.5">
@@ -3658,7 +3797,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                       </div>
                     </div>
                   </div>
-                  <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-[#050507]">
+                  <div className="group relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-[#050507]">
                     {resolvedPreviewUrl && !imgError ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
@@ -3675,6 +3814,28 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                         {resolvedPreviewUrl ? "Can't load" : "No image"}
                       </div>
                     )}
+                    {resolvedPreviewUrl && !imgError ? (
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        aria-label="Open product image full size"
+                        className="absolute right-1 top-1 z-20 flex h-7 w-7 items-center justify-center rounded-lg bg-black/60 text-white opacity-0 shadow transition-opacity hover:bg-black/70 hover:text-white/90 group-hover:opacity-100"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setProductImageLightboxUrl(resolvedPreviewUrl);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setProductImageLightboxUrl(resolvedPreviewUrl);
+                          }
+                        }}
+                      >
+                        <Maximize2 className="h-4 w-4" aria-hidden />
+                      </span>
+                    ) : null}
                   </div>
                 </div>
               </div>
@@ -4744,6 +4905,38 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           alt="Full reference image preview"
           className="max-h-[92vh] max-w-[min(100%,1200px)] rounded-xl border border-violet-500/20 object-contain shadow-[0_0_60px_rgba(139,92,246,0.15)]"
           onClick={(e) => e.stopPropagation()}
+        />
+      </div>
+    ) : null}
+
+    {productImageLightboxUrl ? (
+      <div
+        className="fixed inset-0 z-[200] flex items-center justify-center bg-black/88 p-4 backdrop-blur-[2px]"
+        onClick={() => setProductImageLightboxUrl(null)}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Full product image"
+      >
+        <Button
+          type="button"
+          variant="secondary"
+          size="icon"
+          className="absolute right-3 top-3 z-10 h-10 w-10 rounded-full border border-white/20 bg-black/65 text-white shadow-lg hover:bg-black/85"
+          onClick={(e) => {
+            e.stopPropagation();
+            setProductImageLightboxUrl(null);
+          }}
+          aria-label="Close"
+        >
+          <X className="h-5 w-5" aria-hidden />
+        </Button>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={productImageLightboxUrl}
+          alt="Full product image preview"
+          className="max-h-[92vh] max-w-[min(100%,1200px)] rounded-xl border border-violet-500/20 object-contain shadow-[0_0_60px_rgba(139,92,246,0.15)]"
+          onClick={(e) => e.stopPropagation()}
+          referrerPolicy="no-referrer"
         />
       </div>
     ) : null}

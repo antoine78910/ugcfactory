@@ -15,6 +15,8 @@ export type LinkToAdUniverseSnapshotV1 = {
   productOnlyImageUrls?: string[] | null;
   /** User-uploaded additional product photos. */
   userPhotoUrls?: string[] | null;
+  /** Optional user-uploaded product videos (used as extra context before generations). */
+  userVideoUrls?: string[] | null;
   summaryText: string;
   scriptsText: string;
   angleLabels: [string, string, string];
@@ -644,6 +646,10 @@ export function readUniverseFromExtracted(extracted: unknown): LinkToAdUniverseS
     productOnlyImageUrls:
       Array.isArray(o.productOnlyImageUrls) && o.productOnlyImageUrls.every((x) => typeof x === "string")
         ? (o.productOnlyImageUrls as string[])
+        : null,
+    userVideoUrls:
+      Array.isArray(o.userVideoUrls) && o.userVideoUrls.every((x) => typeof x === "string")
+        ? (o.userVideoUrls as string[])
         : null,
     summaryText: typeof o.summaryText === "string" ? o.summaryText : "",
     scriptsText: typeof o.scriptsText === "string" ? o.scriptsText : "",
