@@ -515,6 +515,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   /** Lightbox: full reference image (source is often 9:16; grid shows 3:4 crop). */
   const [nanoImageLightboxUrl, setNanoImageLightboxUrl] = useState<string | null>(null);
   const [expandedAngleBriefs, setExpandedAngleBriefs] = useState<Record<number, boolean>>({});
+  const [angleSummaryDrafts, setAngleSummaryDrafts] = useState<Record<number, string>>({});
 
   const nanoPromptsAbortRef = useRef<AbortController | null>(null);
   const nanoImageAbortRef = useRef<AbortController | null>(null);
@@ -1332,6 +1333,71 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     void onSelectAngle(nextNumber - 1, { scriptsText: merged, angleLabels: nextLabels });
     toast.success(`Custom angle added as angle ${nextNumber} — selected; ready to generate.`);
   }
+
+  function parseAngleSummaryToFactors(text: string) {
+    const lines = String(text || "")
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean);
+    return {
+      hook: lines[0] ?? "",
+      problem: lines[1] ?? "",
+      benefits: lines[2] ?? "",
+      cta: lines[3] ?? "",
+    };
+  }
+
+  const saveAngleSummaryEdit = useCallback(
+    (index: number) => {
+      const draft = (angleSummaryDrafts[index] ?? "").trim();
+      if (!draft) {
+        toast.error("Script cannot be empty.");
+        return;
+      }
+
+      const prevBody = scriptOptionBodiesAll[index] ?? "";
+      const { headline } = angleBlockForEditing(prevBody);
+      const prevEditable = angleBlockForEditing(prevBody).editable;
+      const prevFactors = splitScriptFactorsForUi(prevEditable, headline);
+      const edited = parseAngleSummaryToFactors(draft);
+      const nextFactors = {
+        ...prevFactors,
+        hook: edited.hook,
+        problem: edited.problem,
+        benefits: edited.benefits,
+        cta: edited.cta,
+      };
+
+      const core = composeScriptFromFactors(nextFactors).trim();
+      const withHeadline = headline?.trim() ? `ANGLE_HEADLINE: ${headline.trim()}\n\n${core}` : core;
+      const nextBody = `SCRIPT OPTION ${index + 1}\n\n${withHeadline}`.trim();
+
+      const nextOptions = [...scriptOptionBodiesAll];
+      while (nextOptions.length <= index) nextOptions.push(`SCRIPT OPTION ${nextOptions.length + 1}`);
+      nextOptions[index] = nextBody;
+      const merged = composeScriptsFromOptions(nextOptions);
+      setScriptsText(merged);
+
+      if (selectedAngleIndex === index) {
+        const { editable } = angleBlockForEditing(nextBody);
+        setEditableScript(editable);
+        setScriptFactors(splitScriptFactorsForUi(editable, headline));
+        setScriptHasEdits(true);
+      }
+
+      toast.success(`Angle ${index + 1} updated.`);
+    },
+    [
+      angleSummaryDrafts,
+      composeScriptsFromOptions,
+      scriptOptionBodiesAll,
+      selectedAngleIndex,
+      setScriptsText,
+      setEditableScript,
+      setScriptFactors,
+      setScriptHasEdits,
+    ],
+  );
 
   function discardPendingCustomAngle() {
     const restore = pendingCustomAnglePreview?.sourcePrompt;
@@ -3687,6 +3753,12 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
+                                  if (!Boolean(expandedAngleScripts[i])) {
+                                    setAngleSummaryDrafts((prev) => ({
+                                      ...prev,
+                                      [i]: angleFullSummaryFromScriptOption(fullScript),
+                                    }));
+                                  }
                                   setExpandedAngleScripts((prev) => ({ ...prev, [i]: !Boolean(prev[i]) }));
                                 }}
                                 className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] font-semibold text-white/70 transition hover:border-violet-400/35 hover:bg-white/[0.07] hover:text-white"
@@ -3702,8 +3774,27 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                             </button>
                             {expanded ? (
                               <div className="mt-2 space-y-2 border-t border-white/10 pt-2">
-                                <div className="rounded-lg border border-white/10 bg-black/25 px-3 py-2.5 text-xs leading-relaxed text-white/85 whitespace-pre-wrap">
-                                  {summary}
+                                <Textarea
+                                  value={angleSummaryDrafts[i] ?? summary}
+                                  onChange={(e) => setAngleSummaryDrafts((prev) => ({ ...prev, [i]: e.target.value }))}
+                                  className="min-h-[120px] border-white/10 bg-black/25 text-xs leading-relaxed text-white/85"
+                                  spellCheck
+                                />
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="text-[10px] text-white/45">
+                                    Edit the angle text (Hook, Problem, Solution, CTA). No metadata/persona.
+                                  </p>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      saveAngleSummaryEdit(i);
+                                    }}
+                                    className="h-8 rounded-lg border border-emerald-400/35 bg-emerald-500/20 px-3 text-xs text-white hover:bg-emerald-500/35"
+                                  >
+                                    Save
+                                  </Button>
                                 </div>
                               </div>
                             ) : null}
