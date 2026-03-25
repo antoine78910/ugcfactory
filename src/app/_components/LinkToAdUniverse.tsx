@@ -3468,29 +3468,30 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                                 : "border-white/10 bg-white/[0.03] hover:border-violet-400/35 hover:bg-white/[0.06]",
                             )}
                           >
-                            <button type="button" onClick={() => void onSelectAngle(i)} className="w-full text-left">
+                            <div className="flex items-center justify-between gap-3">
                               <span className="text-[10px] font-bold uppercase tracking-wide text-violet-300">
                                 Angle {i + 1}
                                 {active ? (
                                   <span className="ml-1.5 font-semibold normal-case text-violet-200/90">· active</span>
                                 ) : null}
                               </span>
-                              <p className="mt-1.5 text-xs leading-snug text-white/80 line-clamp-5">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setExpandedAngleScripts((prev) => ({ ...prev, [i]: !Boolean(prev[i]) }));
+                                }}
+                                className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] font-semibold text-white/70 transition hover:border-violet-400/35 hover:bg-white/[0.07] hover:text-white"
+                              >
+                                {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                                {expanded ? "Hide full script" : "View full script"}
+                              </button>
+                            </div>
+                            <button type="button" onClick={() => void onSelectAngle(i)} className="mt-1.5 w-full text-left">
+                              <p className="text-xs leading-snug text-white/80 line-clamp-5">
                                 {card.label}
                               </p>
                             </button>
-                            <div className="mt-2 flex items-center justify-between">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setExpandedAngleScripts((prev) => ({ ...prev, [i]: !Boolean(prev[i]) }))
-                                }
-                                className="inline-flex items-center gap-1 text-[11px] font-medium text-violet-200/85 transition hover:text-violet-100"
-                              >
-                                {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                                {expanded ? "Hide full script" : "Show full script"}
-                              </button>
-                            </div>
                             {expanded ? (
                               <div className="mt-2 space-y-2 border-t border-white/10 pt-2">
                                 <Textarea
