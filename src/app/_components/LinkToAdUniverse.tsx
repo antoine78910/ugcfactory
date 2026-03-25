@@ -85,6 +85,22 @@ function selectedScriptOptionByIndex(full: string, index: number | null): string
   return selectedAngleScript(full, clamped);
 }
 
+function countWords(text: string): number {
+  const t = String(text ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!t) return 0;
+  return t.split(" ").filter(Boolean).length;
+}
+
+function clampToMaxWords(text: string, maxWords: number): string {
+  const raw = String(text ?? "").replace(/\s+/g, " ").trim();
+  if (!raw) return "";
+  const parts = raw.split(" ").filter(Boolean);
+  if (parts.length <= maxWords) return raw;
+  return parts.slice(0, maxWords).join(" ");
+}
+
 function mergeNanoUrlIntoThreeSlots(prev: string[], slot: 0 | 1 | 2, url: string): string[] {
   const base: string[] = [0, 1, 2].map((i) => {
     const v = prev[i];
@@ -713,6 +729,45 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       };
     });
   }, [angleLabels, scriptOptionBodiesAll]);
+
+  const factorWordRules = useMemo(
+    () => ({
+      hook: { min: 3, max: 5, label: "Hook", hint: "3–5 words" },
+      problem: { min: 5, max: 7, label: "Problem", hint: "5–7 words" },
+      benefits: {
+        min: 10,
+        max: 14,
+        label: "Solution",
+        hint: "10–14 words (must include product + main benefit)",
+      },
+      cta: { min: 3, max: 4, label: "CTA", hint: "3–4 words" },
+    }),
+    [],
+  );
+
+  const factorWordCounts = useMemo(() => {
+    return {
+      hook: countWords(scriptFactors.hook),
+      problem: countWords(scriptFactors.problem),
+      benefits: countWords(scriptFactors.benefits),
+      cta: countWords(scriptFactors.cta),
+    };
+  }, [scriptFactors.benefits, scriptFactors.cta, scriptFactors.hook, scriptFactors.problem]);
+
+  const factorWordsValid = useMemo(() => {
+    const check = (k: keyof typeof factorWordRules) => {
+      const c = factorWordCounts[k];
+      const r = factorWordRules[k];
+      return c >= r.min && c <= r.max;
+    };
+    return {
+      hook: check("hook"),
+      problem: check("problem"),
+      benefits: check("benefits"),
+      cta: check("cta"),
+      all: check("hook") && check("problem") && check("benefits") && check("cta"),
+    };
+  }, [factorWordCounts, factorWordRules]);
   const composeScriptsFromOptions = useCallback((options: string[]) => {
     return options
       .map((opt, idx) => {
@@ -3626,22 +3681,109 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                                 </button>
                               </div>
                               {scriptEditVisible ? (
-                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                <>
+                                  <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                                    <p className="text-[11px] font-medium text-white/75">
+                                      Intentionally limited edits (to avoid lip-sync desync or story inconsistencies across the video).
+                                    </p>
+                                    <p className="mt-1 text-[10px] leading-snug text-white/45">
+                                      Hook: 3–5 words · Problem: 5–7 words · Solution: 10–14 words · CTA: 3–4 words
+                                    </p>
+                                  </div>
+                                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                                   <div className="space-y-1">
-                                    <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Hook</p>
-                                    <Textarea value={scriptFactors.hook} onChange={(e) => { const next = { ...scriptFactors, hook: e.target.value }; setScriptFactors(next); setEditableScript(composeScriptFromFactors(next)); setScriptHasEdits(true); }} className="min-h-[74px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/80" />
+                                    <div className="flex items-center justify-between gap-2">
+                                      <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
+                                        {factorWordRules.hook.label}
+                                      </p>
+                                      <span
+                                        className={cn(
+                                          "text-[10px] tabular-nums",
+                                          factorWordsValid.hook ? "text-white/45" : "text-red-200/80",
+                                        )}
+                                      >
+                                        {factorWordCounts.hook}/{factorWordRules.hook.max}
+                                      </span>
+                                    </div>
+                                    <p className="text-[10px] text-white/35">{factorWordRules.hook.hint}</p>
+                                    <Textarea
+                                      value={scriptFactors.hook}
+                                      onChange={(e) => {
+                                        const v = clampToMaxWords(e.target.value, factorWordRules.hook.max);
+                                        const next = { ...scriptFactors, hook: v };
+                                        setScriptFactors(next);
+                                        setEditableScript(composeScriptFromFactors(next));
+                                        setScriptHasEdits(true);
+                                      }}
+                                      className={cn(
+                                        "min-h-[74px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/80",
+                                        !factorWordsValid.hook && "border-red-500/35",
+                                      )}
+                                    />
                                   </div>
                                   <div className="space-y-1">
-                                    <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Problem</p>
-                                    <Textarea value={scriptFactors.problem} onChange={(e) => { const next = { ...scriptFactors, problem: e.target.value }; setScriptFactors(next); setEditableScript(composeScriptFromFactors(next)); setScriptHasEdits(true); }} className="min-h-[74px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/80" />
+                                    <div className="flex items-center justify-between gap-2">
+                                      <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
+                                        {factorWordRules.problem.label}
+                                      </p>
+                                      <span
+                                        className={cn(
+                                          "text-[10px] tabular-nums",
+                                          factorWordsValid.problem ? "text-white/45" : "text-red-200/80",
+                                        )}
+                                      >
+                                        {factorWordCounts.problem}/{factorWordRules.problem.max}
+                                      </span>
+                                    </div>
+                                    <p className="text-[10px] text-white/35">{factorWordRules.problem.hint}</p>
+                                    <Textarea
+                                      value={scriptFactors.problem}
+                                      onChange={(e) => {
+                                        const v = clampToMaxWords(e.target.value, factorWordRules.problem.max);
+                                        const next = { ...scriptFactors, problem: v };
+                                        setScriptFactors(next);
+                                        setEditableScript(composeScriptFromFactors(next));
+                                        setScriptHasEdits(true);
+                                      }}
+                                      className={cn(
+                                        "min-h-[74px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/80",
+                                        !factorWordsValid.problem && "border-red-500/35",
+                                      )}
+                                    />
                                   </div>
                                   <div className="space-y-1">
                                     <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Avatar</p>
                                     <Textarea value={scriptFactors.avatar} onChange={(e) => { const next = { ...scriptFactors, avatar: e.target.value }; setScriptFactors(next); setEditableScript(composeScriptFromFactors(next)); setScriptHasEdits(true); }} className="min-h-[74px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/80" />
                                   </div>
                                   <div className="space-y-1">
-                                    <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Benefits</p>
-                                    <Textarea value={scriptFactors.benefits} onChange={(e) => { const next = { ...scriptFactors, benefits: e.target.value }; setScriptFactors(next); setEditableScript(composeScriptFromFactors(next)); setScriptHasEdits(true); }} className="min-h-[74px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/80" />
+                                    <div className="flex items-center justify-between gap-2">
+                                      <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
+                                        {factorWordRules.benefits.label}
+                                      </p>
+                                      <span
+                                        className={cn(
+                                          "text-[10px] tabular-nums",
+                                          factorWordsValid.benefits ? "text-white/45" : "text-red-200/80",
+                                        )}
+                                      >
+                                        {factorWordCounts.benefits}/{factorWordRules.benefits.max}
+                                      </span>
+                                    </div>
+                                    <p className="text-[10px] text-white/35">{factorWordRules.benefits.hint}</p>
+                                    <Textarea
+                                      value={scriptFactors.benefits}
+                                      onChange={(e) => {
+                                        const v = clampToMaxWords(e.target.value, factorWordRules.benefits.max);
+                                        const next = { ...scriptFactors, benefits: v };
+                                        setScriptFactors(next);
+                                        setEditableScript(composeScriptFromFactors(next));
+                                        setScriptHasEdits(true);
+                                      }}
+                                      className={cn(
+                                        "min-h-[74px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/80",
+                                        !factorWordsValid.benefits && "border-red-500/35",
+                                      )}
+                                    />
                                   </div>
                                   <div className="space-y-1">
                                     <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Proof</p>
@@ -3652,21 +3794,52 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                                     <Textarea value={scriptFactors.offer} onChange={(e) => { const next = { ...scriptFactors, offer: e.target.value }; setScriptFactors(next); setEditableScript(composeScriptFromFactors(next)); setScriptHasEdits(true); }} className="min-h-[74px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/80" />
                                   </div>
                                   <div className="space-y-1">
-                                    <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">CTA</p>
-                                    <Textarea value={scriptFactors.cta} onChange={(e) => { const next = { ...scriptFactors, cta: e.target.value }; setScriptFactors(next); setEditableScript(composeScriptFromFactors(next)); setScriptHasEdits(true); }} className="min-h-[74px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/80" />
+                                    <div className="flex items-center justify-between gap-2">
+                                      <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
+                                        {factorWordRules.cta.label}
+                                      </p>
+                                      <span
+                                        className={cn(
+                                          "text-[10px] tabular-nums",
+                                          factorWordsValid.cta ? "text-white/45" : "text-red-200/80",
+                                        )}
+                                      >
+                                        {factorWordCounts.cta}/{factorWordRules.cta.max}
+                                      </span>
+                                    </div>
+                                    <p className="text-[10px] text-white/35">{factorWordRules.cta.hint}</p>
+                                    <Textarea
+                                      value={scriptFactors.cta}
+                                      onChange={(e) => {
+                                        const v = clampToMaxWords(e.target.value, factorWordRules.cta.max);
+                                        const next = { ...scriptFactors, cta: v };
+                                        setScriptFactors(next);
+                                        setEditableScript(composeScriptFromFactors(next));
+                                        setScriptHasEdits(true);
+                                      }}
+                                      className={cn(
+                                        "min-h-[74px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/80",
+                                        !factorWordsValid.cta && "border-red-500/35",
+                                      )}
+                                    />
                                   </div>
                                   <div className="space-y-1">
                                     <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Tone</p>
                                     <Textarea value={scriptFactors.tone} onChange={(e) => { const next = { ...scriptFactors, tone: e.target.value }; setScriptFactors(next); setEditableScript(composeScriptFromFactors(next)); setScriptHasEdits(true); }} className="min-h-[74px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/80" />
                                   </div>
-                                </div>
+                                  </div>
+                                </>
                               ) : null}
                             </div>
                             <Button
                               type="button"
-                              disabled={!resolvedPreviewUrl}
+                              disabled={!resolvedPreviewUrl || (scriptEditVisible && !factorWordsValid.all)}
                               className={`h-auto min-h-11 w-full max-w-md py-2.5 ${primaryBtnClass}`}
                               onClick={() => {
+                                if (scriptEditVisible && !factorWordsValid.all) {
+                                  toast.error("Please match the required word limits before generating.");
+                                  return;
+                                }
                                 setScriptHasEdits(false);
                                 void onGenerateNanoBananaPrompts(selectedAngleIndex as 0 | 1 | 2);
                               }}
