@@ -16,7 +16,7 @@ import { ProjectRunBrandBriefEditor } from "@/app/_components/ProjectRunBrandBri
 import { ProjectRunScriptsEditor } from "@/app/_components/ProjectRunScriptsEditor";
 import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
 import { StudioEmptyExamples, StudioOutputPane } from "@/app/_components/StudioEmptyExamples";
-import { StudioGenerationsHistory } from "@/app/_components/StudioGenerationsHistory";
+import { isProbablyVideoUrl, StudioGenerationsHistory } from "@/app/_components/StudioGenerationsHistory";
 import type { StudioHistoryItem } from "@/app/_components/StudioGenerationsHistory";
 import { calculateMotionControlCredits } from "@/lib/linkToAd/generationCredits";
 import StudioAvatarPanel from "@/app/_components/StudioAvatarPanel";
@@ -28,7 +28,7 @@ import {
   studioSelectContentClass,
   studioSelectItemClass,
 } from "@/app/_components/StudioModelPicker";
-import { useCreditsPlan, getPersonalApiKey, isPersonalApiActive } from "@/app/_components/CreditsPlanContext";
+import { useCreditsPlan, getPersonalApiKey, getPersonalPiapiApiKey, isPersonalApiActive } from "@/app/_components/CreditsPlanContext";
 import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
 import StudioVideoPanel from "@/app/_components/StudioVideoPanel";
 import {
@@ -625,6 +625,7 @@ export default function AppBrandWizard() {
         body: JSON.stringify({
           kind: "all",
           personalApiKey: getPersonalApiKey() ?? undefined,
+          piapiApiKey: getPersonalPiapiApiKey() ?? undefined,
         }),
       });
       if (!res.ok) return;
@@ -1673,7 +1674,10 @@ export default function AppBrandWizard() {
                               className="flex w-[5.75rem] shrink-0 flex-col gap-1 rounded-lg border border-white/10 bg-black/30 p-0.5 text-left transition hover:border-violet-400/40 hover:bg-black/50"
                             >
                               <div className="relative aspect-[3/4] w-full overflow-hidden rounded-md bg-[#100d17]">
-                                {item.status === "ready" && item.mediaUrl && item.kind === "image" ? (
+                                {item.status === "ready" &&
+                                item.mediaUrl &&
+                                item.kind === "image" &&
+                                !isProbablyVideoUrl(item.mediaUrl) ? (
                                   // eslint-disable-next-line @next/next/no-img-element
                                   <img
                                     src={item.mediaUrl}
@@ -1681,7 +1685,7 @@ export default function AppBrandWizard() {
                                     className="h-full w-full object-cover"
                                     referrerPolicy="no-referrer"
                                   />
-                                ) : item.status === "ready" && item.mediaUrl && item.kind !== "image" ? (
+                                ) : item.status === "ready" && item.mediaUrl && (item.kind !== "image" || isProbablyVideoUrl(item.mediaUrl)) ? (
                                   <video
                                     src={item.mediaUrl}
                                     className="h-full w-full object-cover"

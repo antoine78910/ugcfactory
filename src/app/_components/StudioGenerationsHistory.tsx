@@ -44,7 +44,7 @@ function groupByDate(items: StudioHistoryItem[]): { date: string; rows: StudioHi
   return groups;
 }
 
-function isProbablyVideoUrl(url: string | undefined): boolean {
+export function isProbablyVideoUrl(url: string | undefined): boolean {
   const u = (url || "").trim().toLowerCase();
   if (!u) return false;
   // Common direct video extensions + blob urls.
@@ -158,7 +158,12 @@ export function StudioGenerationsHistory({ items, empty, mediaLabel = "Generatio
                     : "flex flex-col gap-4",
                 )}
               >
-                {rows.map((item) => (
+                {rows.map((item) => {
+                  const canShowResultMedia =
+                    Boolean(item.mediaUrl?.trim()) &&
+                    item.status !== "failed" &&
+                    (item.status === "ready" || item.status === "generating");
+                  return (
                   <article
                     key={item.id}
                     className={cn(
@@ -173,7 +178,7 @@ export function StudioGenerationsHistory({ items, empty, mediaLabel = "Generatio
                         view === "grid" ? "aspect-[9/16] w-full" : "aspect-[9/16] w-full sm:w-44 sm:shrink-0",
                       )}
                     >
-                      {item.status === "generating" ? (
+                      {item.status === "generating" && !item.mediaUrl?.trim() ? (
                         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-gradient-to-b from-[#1a1a24] to-[#0d0d12] p-3">
                           {item.posterUrl ? (
                             // eslint-disable-next-line @next/next/no-img-element
@@ -200,7 +205,7 @@ export function StudioGenerationsHistory({ items, empty, mediaLabel = "Generatio
                           </p>
                         </div>
                       ) : null}
-                      {item.status === "ready" && item.mediaUrl && (item.kind !== "image" || isProbablyVideoUrl(item.mediaUrl)) ? (
+                      {canShowResultMedia && item.mediaUrl && (item.kind !== "image" || isProbablyVideoUrl(item.mediaUrl)) ? (
                         <div className="relative h-full w-full bg-black">
                           <video
                             src={item.mediaUrl}
@@ -230,7 +235,7 @@ export function StudioGenerationsHistory({ items, empty, mediaLabel = "Generatio
                         </div>
                       ) : null}
 
-                      {item.status === "ready" && item.kind === "image" && item.mediaUrl && !isProbablyVideoUrl(item.mediaUrl) ? (
+                      {canShowResultMedia && item.kind === "image" && item.mediaUrl && !isProbablyVideoUrl(item.mediaUrl) ? (
                         <>
                           <button
                             type="button"
@@ -256,7 +261,7 @@ export function StudioGenerationsHistory({ items, empty, mediaLabel = "Generatio
                           </a>
                         </>
                       ) : null}
-                      {item.status === "ready" && !item.mediaUrl && item.posterUrl ? (
+                      {(item.status === "ready" || item.status === "generating") && !item.mediaUrl?.trim() && item.posterUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={item.posterUrl}
@@ -288,7 +293,8 @@ export function StudioGenerationsHistory({ items, empty, mediaLabel = "Generatio
                       ) : null}
                     </div>
                   </article>
-                ))}
+                );
+                })}
               </div>
             </section>
           ))}

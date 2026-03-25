@@ -29,7 +29,12 @@ export async function POST(req: Request) {
   const label = String(body.label ?? "").trim() || "Studio";
   const provider = String(body.provider ?? "kie-market").trim() || "kie-market";
   const creditsCharged = Math.max(0, Math.floor(Number(body.creditsCharged) || 0));
-  const usesPersonalApi = Boolean(String(body.personalApiKey ?? "").trim() || String(body.piapiApiKey ?? "").trim());
+  const hasKiePersonal = Boolean(String(body.personalApiKey ?? "").trim());
+  const hasPiapiPersonal = Boolean(String(body.piapiApiKey ?? "").trim());
+  const providerLc = provider.toLowerCase();
+  /** Do not OR keys across providers — that breaks polling (e.g. KIE key set but PiAPI job never polled). */
+  const usesPersonalApi =
+    providerLc === "piapi" ? hasPiapiPersonal : hasKiePersonal;
   const taskIdsRaw = Array.isArray(body.taskIds) ? body.taskIds : body.taskId ? [body.taskId] : [];
   const taskIds = taskIdsRaw
     .map((x) => String(x ?? "").trim())

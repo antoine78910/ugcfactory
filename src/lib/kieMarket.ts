@@ -172,7 +172,10 @@ export function parseKieResultMediaUrls(resultJson: string | undefined): string[
     const o = JSON.parse(resultJson) as unknown;
     const out: string[] = [];
     function walk(x: unknown): void {
-      if (typeof x === "string" && /^https?:\/\//i.test(x)) out.push(x);
+      if (typeof x === "string") {
+        if (/^https?:\/\//i.test(x)) out.push(x);
+        else if (x.startsWith("//")) out.push(`https:${x}`);
+      }
       else if (Array.isArray(x)) for (const i of x) walk(i);
       else if (x && typeof x === "object") for (const v of Object.values(x)) walk(v);
     }

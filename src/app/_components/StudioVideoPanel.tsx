@@ -419,7 +419,10 @@ async function registerStudioTask(params: {
     await fetch("/api/studio/generations/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(params),
+      body: JSON.stringify({
+        ...params,
+        piapiApiKey: getPersonalPiapiApiKey() ?? undefined,
+      }),
     });
   } catch {
     /* history registration should not block generation */

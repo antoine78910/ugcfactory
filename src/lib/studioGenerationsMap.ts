@@ -1,5 +1,30 @@
 import type { StudioHistoryItem } from "@/app/_components/StudioGenerationsHistory";
 
+/** Normalize `result_urls` from PostgREST (array, JSON string, or single URL string). */
+function normalizeResultUrls(raw: unknown): string[] {
+  if (raw == null) return [];
+  if (Array.isArray(raw)) {
+    return raw.filter((x): x is string => typeof x === "string" && x.trim().length > 0);
+  }
+  if (typeof raw === "string") {
+    const t = raw.trim();
+    if (!t) return [];
+    try {
+      const p = JSON.parse(t) as unknown;
+      if (Array.isArray(p)) {
+        return p.filter((x): x is string => typeof x === "string" && x.trim().length > 0);
+      }
+      if (typeof p === "string" && p.trim()) return [p.trim()];
+    } catch {
+      /* single URL or non-JSON */
+    }
+    if (/^https?:\/\//i.test(t) || t.startsWith("//")) {
+      return [t.startsWith("//") ? `https:${t}` : t];
+    }
+  }
+  return [];
+}
+
 export type StudioGenerationRow = {
   id: string;
   user_id: string;
@@ -27,7 +52,8 @@ export function studioGenerationRowToHistoryItem(row: StudioGenerationRow): Stud
   const createdAt = new Date(row.created_at).getTime();
   const mediaKind = rowKindToMediaKind(row.kind);
   const status = String(row.status ?? "").toLowerCase();
-  const hasUrls = Array.isArray(row.result_urls) && row.result_urls.length > 0;
+  const resultUrls = normalizeResultUrls(row.result_urls as unknown);
+  const hasUrls = resultUrls.length > 0;
   const hasError = typeof row.error_message === "string" && row.error_message.trim().length > 0;
   const isReady = ["ready", "success", "succeeded", "completed", "done"].includes(status);
   const isFailed = ["failed", "error", "errored", "cancelled", "canceled"].includes(status);
@@ -38,7 +64,7 @@ export function studioGenerationRowToHistoryItem(row: StudioGenerationRow): Stud
       kind: mediaKind,
       status: "ready",
       label: row.label || "Avatar",
-      mediaUrl: row.result_urls?.[0],
+      mediaUrl: resultUrls[0],
       createdAt,
       studioGenerationKind: row.kind,
     };

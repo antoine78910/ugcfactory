@@ -30,18 +30,20 @@ export async function pollStudioGenerationRow(
   if (!isStudioGenerationInProgressStatus(status)) return;
 
   const kieKey = row.uses_personal_api ? personalApiKey?.trim() || undefined : undefined;
-  const piKey = row.uses_personal_api ? piapiApiKey?.trim() || undefined : undefined;
 
   let out: { kind: "processing" | "success" | "fail"; urls?: string[]; message?: string };
   if ((row.provider ?? "").toLowerCase() === "piapi" || isPiapiTaskId(row.external_task_id)) {
-    if (row.uses_personal_api && !piKey) return;
-    const raw = await piapiGetSeedanceTask(row.external_task_id, piKey);
+    /** Prefer user PiAPI key when present; otherwise platform key (piapiGetSeedanceTask fallback). */
+    const raw = await piapiGetSeedanceTask(row.external_task_id, piapiApiKey?.trim() || undefined);
     const mapped = piapiTaskStatusToLegacy(raw);
     if (mapped.status === "IN_PROGRESS") out = { kind: "processing" };
     else if (mapped.status === "SUCCESS") out = { kind: "success", urls: mapped.response };
     else out = { kind: "fail", message: mapped.error_message ?? "PiAPI task failed" };
   } else {
-    if (row.uses_personal_api && !kieKey) return;
+    /**
+     * Platform jobs: always use platform KIE key (override undefined).
+     * Personal jobs: use browser key when present; if missing, fall back to platform (fixes mis-flagged rows).
+     */
     const raw = await kieMarketRecordInfo(row.external_task_id, kieKey);
     out = kieImageTaskPollOutcome(raw);
   }
