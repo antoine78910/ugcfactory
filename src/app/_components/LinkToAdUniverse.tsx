@@ -2110,9 +2110,10 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   async function runNanoBananaProThreeSequential(
     img: string,
     prompts: [string, string, string],
-  ): Promise<{ urlsByPrompt: string[]; lastTaskId: string | null }> {
+  ): Promise<{ urlsByPrompt: string[]; lastTaskId: string | null; taskIds: string[] }> {
     const urlsByPrompt: string[] = [];
     let lastTaskId: string | null = null;
+    const taskIds: string[] = [];
     for (let i = 0; i < 3; i++) {
       const prompt = prompts[i];
       lastNanoImagePromptRef.current = prompt;
@@ -2133,10 +2134,11 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       const json = (await res.json()) as { taskId?: string; error?: string };
       if (!res.ok || !json.taskId) throw new Error(json.error || "Image generation failed");
       lastTaskId = json.taskId;
+      taskIds.push(json.taskId);
       const urls = await pollNanoBananaTaskForUrls(json.taskId);
       urlsByPrompt[i] = urls[0];
     }
-    return { urlsByPrompt, lastTaskId };
+    return { urlsByPrompt, lastTaskId, taskIds };
   }
 
   async function persistNanoThreeGeneratedImages(
@@ -2210,7 +2212,23 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       nanoThreeAbortRef.current?.abort();
       const controller = new AbortController();
       nanoThreeAbortRef.current = controller;
-      const { urlsByPrompt, lastTaskId } = await runNanoBananaProThreeSequential(img, prompts as [string, string, string]);
+      const { urlsByPrompt, lastTaskId, taskIds } = await runNanoBananaProThreeSequential(img, prompts as [string, string, string]);
+      try {
+        await fetch("/api/studio/generations/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            kind: "studio_image",
+            label: `Link to Ad · Angle ${selectedAngleIndex + 1}`,
+            taskIds,
+            provider: "kie-market",
+            creditsCharged: 0,
+            personalApiKey: getPersonalApiKey(),
+          }),
+        });
+      } catch {
+        /* ignore history registration */
+      }
 
       if (!urlsByPrompt[0] || !urlsByPrompt[1] || !urlsByPrompt[2]) {
         throw new Error("Image generation did not produce 3 images.");
@@ -2494,6 +2512,27 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       });
       const json = (await res.json()) as { taskId?: string; error?: string };
       if (!res.ok || !json.taskId) throw new Error(json.error || "Video generation failed");
+      try {
+        const angLabel =
+          selectedAngleIndex === 0 || selectedAngleIndex === 1 || selectedAngleIndex === 2
+            ? `Link to Ad · Angle ${selectedAngleIndex + 1}`
+            : "Link to Ad · Video";
+        await fetch("/api/studio/generations/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            kind: "studio_video",
+            label: angLabel,
+            taskId: json.taskId,
+            provider: "piapi",
+            creditsCharged: 0,
+            personalApiKey: getPersonalApiKey(),
+            piapiApiKey: getPersonalPiapiApiKey(),
+          }),
+        });
+      } catch {
+        /* ignore history registration */
+      }
       const nextSlots = klingByRef.map((s, i) => ({
         ...s,
         history: [...(s.history || [])],

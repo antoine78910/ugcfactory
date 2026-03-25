@@ -17,7 +17,7 @@ import {
   studioSelectItemClass,
   type StudioModelPickerItem,
 } from "@/app/_components/StudioModelPicker";
-import { useCreditsPlan, getPersonalApiKey, isPersonalApiActive } from "@/app/_components/CreditsPlanContext";
+import { useCreditsPlan, getPersonalApiKey, getPersonalPiapiApiKey, isPersonalApiActive } from "@/app/_components/CreditsPlanContext";
 import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
 import { calculateVideoCredits } from "@/lib/linkToAd/generationCredits";
 import { calculateStudioVideoEditCredits } from "@/lib/pricing";
@@ -473,6 +473,7 @@ async function pollVeoVideo(taskId: string, personalApiKey?: string): Promise<st
 
 export default function StudioVideoPanel() {
   const { planId, current: creditsBalance, spendCredits, grantCredits } = useCreditsPlan();
+  const [serverHistory, setServerHistory] = useState<boolean | null>(null);
   const creditsRef = useRef(creditsBalance);
   creditsRef.current = creditsBalance;
 
@@ -493,6 +494,64 @@ export default function StudioVideoPanel() {
   const [endFramePreviewBlob, setEndFramePreviewBlob] = useState<string | null>(null);
   const [frameUploadSlot, setFrameUploadSlot] = useState<"start" | "end" | null>(null);
   const [historyItems, setHistoryItems] = useState<StudioHistoryItem[]>([]);
+  const grantCreditsRef = useRef(grantCredits);
+  grantCreditsRef.current = grantCredits;
+
+  useEffect(() => {
+    void (async () => {
+      const res = await fetch("/api/studio/generations?kind=studio_video", { cache: "no-store" });
+      if (res.status === 401) {
+        setServerHistory(false);
+        return;
+      }
+      if (!res.ok) {
+        setServerHistory(false);
+        return;
+      }
+      const json = (await res.json()) as { data?: StudioHistoryItem[]; refundHints?: { jobId: string; credits: number }[] };
+      setServerHistory(true);
+      setHistoryItems(json.data ?? []);
+      const hints = json.refundHints ?? [];
+      if (hints.length) {
+        for (const h of hints) {
+          if (h.credits > 0) grantCreditsRef.current(h.credits);
+        }
+        toast.message("Credits refunded", { description: "A studio generation failed after charge." });
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (serverHistory !== true) return;
+
+    const tick = () => {
+      void (async () => {
+        const res = await fetch("/api/studio/generations/poll", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            kind: "studio_video",
+            personalApiKey: getPersonalApiKey() ?? undefined,
+            piapiApiKey: getPersonalPiapiApiKey() ?? undefined,
+          }),
+        });
+        if (!res.ok) return;
+        const json = (await res.json()) as { data?: StudioHistoryItem[]; refundHints?: { jobId: string; credits: number }[] };
+        if (Array.isArray(json.data)) setHistoryItems(json.data);
+        const hints = json.refundHints ?? [];
+        if (hints.length) {
+          for (const h of hints) {
+            if (h.credits > 0) grantCreditsRef.current(h.credits);
+          }
+          toast.message("Credits refunded", { description: "A studio generation failed after charge." });
+        }
+      })();
+    };
+
+    tick();
+    const id = window.setInterval(tick, 4000);
+    return () => window.clearInterval(id);
+  }, [serverHistory]);
   type VideoBilling =
     | { open: false }
     | { open: true; reason: "plan"; blockedId: string; studioMode: "video" | "video_edit" }

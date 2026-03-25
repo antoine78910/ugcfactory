@@ -15,6 +15,7 @@ import {
 type Body = {
   kind?: string;
   personalApiKey?: string;
+  piapiApiKey?: string;
 };
 
 const LIBRARY_KINDS = ["avatar", "studio_image", "studio_video", "studio_upscale", "motion_control"] as const;
@@ -32,6 +33,7 @@ export async function POST(req: Request) {
 
   const kind = (body.kind ?? "avatar").trim() || "avatar";
   const personalApiKey = (body.personalApiKey ?? "").trim() || undefined;
+  const piapiApiKey = (body.piapiApiKey ?? "").trim() || undefined;
 
   try {
     let procQuery = supabase
@@ -52,7 +54,7 @@ export async function POST(req: Request) {
 
     for (const row of (processing ?? []) as StudioGenerationRow[]) {
       try {
-        await pollStudioGenerationRow(row, personalApiKey, supabase);
+        await pollStudioGenerationRow(row, personalApiKey, piapiApiKey, supabase);
       } catch {
         /* one bad poll should not block others */
       }

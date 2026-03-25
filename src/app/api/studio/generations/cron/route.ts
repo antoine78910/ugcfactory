@@ -41,7 +41,7 @@ export async function POST(req: Request) {
     let pollErrors = 0;
     for (const row of (rows ?? []) as StudioGenerationRow[]) {
       try {
-        await pollStudioGenerationRow(row, undefined, admin);
+        await pollStudioGenerationRow(row, undefined, undefined, admin);
       } catch {
         pollErrors++;
       }

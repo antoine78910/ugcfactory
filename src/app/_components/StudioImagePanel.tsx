@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useCreditsPlan, getPersonalApiKey, isPersonalApiActive } from "@/app/_components/CreditsPlanContext";
+import { useCreditsPlan, getPersonalApiKey, getPersonalPiapiApiKey, isPersonalApiActive } from "@/app/_components/CreditsPlanContext";
 import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
 import { Plus, Sparkles, UserRound } from "lucide-react";
 import { toast } from "sonner";
@@ -290,6 +290,7 @@ export default function StudioImagePanel() {
           body: JSON.stringify({
             kind: "studio_image",
             personalApiKey: getPersonalApiKey() ?? undefined,
+            piapiApiKey: getPersonalPiapiApiKey() ?? undefined,
           }),
         });
         if (!res.ok) return;

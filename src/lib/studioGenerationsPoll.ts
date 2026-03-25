@@ -23,23 +23,26 @@ function isStudioGenerationInProgressStatus(s: string): boolean {
 export async function pollStudioGenerationRow(
   row: StudioGenerationRow,
   personalApiKey: string | undefined,
+  piapiApiKey: string | undefined,
   supabase: SupabaseClient,
 ): Promise<void> {
   const status = String(row.status ?? "").toLowerCase();
   if (!isStudioGenerationInProgressStatus(status)) return;
 
-  const key = row.uses_personal_api ? personalApiKey?.trim() || undefined : undefined;
-  if (row.uses_personal_api && !key) return;
+  const kieKey = row.uses_personal_api ? personalApiKey?.trim() || undefined : undefined;
+  const piKey = row.uses_personal_api ? piapiApiKey?.trim() || undefined : undefined;
 
   let out: { kind: "processing" | "success" | "fail"; urls?: string[]; message?: string };
   if ((row.provider ?? "").toLowerCase() === "piapi" || isPiapiTaskId(row.external_task_id)) {
-    const raw = await piapiGetSeedanceTask(row.external_task_id);
+    if (row.uses_personal_api && !piKey) return;
+    const raw = await piapiGetSeedanceTask(row.external_task_id, piKey);
     const mapped = piapiTaskStatusToLegacy(raw);
     if (mapped.status === "IN_PROGRESS") out = { kind: "processing" };
     else if (mapped.status === "SUCCESS") out = { kind: "success", urls: mapped.response };
     else out = { kind: "fail", message: mapped.error_message ?? "PiAPI task failed" };
   } else {
-    const raw = await kieMarketRecordInfo(row.external_task_id, key);
+    if (row.uses_personal_api && !kieKey) return;
+    const raw = await kieMarketRecordInfo(row.external_task_id, kieKey);
     out = kieImageTaskPollOutcome(raw);
   }
 
