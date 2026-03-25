@@ -22,6 +22,7 @@ import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
 import { studioImageCreditsPerOutput } from "@/lib/pricing";
 import { NANO_BANANA_2_ASPECT_RATIOS } from "@/lib/nanobanana";
 import { dedupeStudioImageHistoryByMediaUrl } from "@/lib/studioHistoryDedupe";
+import { readStudioHistoryLocal, writeStudioHistoryLocal } from "@/lib/studioHistoryLocalStorage";
 import { userMessageFromCaughtError } from "@/lib/generationUserMessage";
 import { cn } from "@/lib/utils";
 import { canUseStudioImageModel, studioImageUpgradeMessage } from "@/lib/subscriptionModelAccess";
@@ -187,33 +188,6 @@ async function pollNanoTask(taskId: string, personalApiKey?: string): Promise<st
 
 const LS_STUDIO_IMAGE_HISTORY = "ugc_studio_image_history_v1";
 
-function readLocalStudioImageHistory(): StudioHistoryItem[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(LS_STUDIO_IMAGE_HISTORY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (x): x is StudioHistoryItem =>
-        x != null &&
-        typeof x === "object" &&
-        typeof (x as StudioHistoryItem).id === "string" &&
-        typeof (x as StudioHistoryItem).createdAt === "number",
-    );
-  } catch {
-    return [];
-  }
-}
-
-function writeLocalStudioImageHistory(items: StudioHistoryItem[]) {
-  try {
-    localStorage.setItem(LS_STUDIO_IMAGE_HISTORY, JSON.stringify(items.slice(0, 80)));
-  } catch {
-    /* ignore */
-  }
-}
-
 type RefundHint = { jobId: string; credits: number };
 
 function applyRefundHints(
@@ -262,12 +236,12 @@ export default function StudioImagePanel() {
       const res = await fetch("/api/studio/generations?kind=studio_image", { cache: "no-store" });
       if (res.status === 401) {
         setServerHistory(false);
-        setHistoryItems(readLocalStudioImageHistory());
+        setHistoryItems(readStudioHistoryLocal(LS_STUDIO_IMAGE_HISTORY));
         return;
       }
       if (!res.ok) {
         setServerHistory(false);
-        setHistoryItems(readLocalStudioImageHistory());
+        setHistoryItems(readStudioHistoryLocal(LS_STUDIO_IMAGE_HISTORY));
         return;
       }
       const json = (await res.json()) as { data?: StudioHistoryItem[]; refundHints?: RefundHint[] };
@@ -312,8 +286,8 @@ export default function StudioImagePanel() {
   }, [serverHistory]);
 
   useEffect(() => {
-    if (serverHistory !== false) return;
-    writeLocalStudioImageHistory(historyItems);
+    if (serverHistory === null) return;
+    writeStudioHistoryLocal(LS_STUDIO_IMAGE_HISTORY, historyItems);
   }, [serverHistory, historyItems]);
 
   useEffect(() => {

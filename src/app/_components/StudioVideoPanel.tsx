@@ -33,6 +33,9 @@ import { loadAvatarUrls } from "@/lib/avatarLibrary";
 import { AvatarPickerDialog } from "@/app/_components/AvatarPickerDialog";
 import { clipboardImageFiles } from "@/lib/clipboardImage";
 import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
+import { readStudioHistoryLocal, writeStudioHistoryLocal } from "@/lib/studioHistoryLocalStorage";
+
+const LS_STUDIO_VIDEO_HISTORY = "ugc_studio_video_history_v1";
 
 type VideoTab = "create" | "edit";
 
@@ -506,10 +509,12 @@ export default function StudioVideoPanel() {
       const res = await fetch("/api/studio/generations?kind=studio_video", { cache: "no-store" });
       if (res.status === 401) {
         setServerHistory(false);
+        setHistoryItems(readStudioHistoryLocal(LS_STUDIO_VIDEO_HISTORY));
         return;
       }
       if (!res.ok) {
         setServerHistory(false);
+        setHistoryItems(readStudioHistoryLocal(LS_STUDIO_VIDEO_HISTORY));
         return;
       }
       const json = (await res.json()) as { data?: StudioHistoryItem[]; refundHints?: { jobId: string; credits: number }[] };
@@ -556,6 +561,12 @@ export default function StudioVideoPanel() {
     const id = window.setInterval(tick, 4000);
     return () => window.clearInterval(id);
   }, [serverHistory]);
+
+  useEffect(() => {
+    if (serverHistory === null) return;
+    writeStudioHistoryLocal(LS_STUDIO_VIDEO_HISTORY, historyItems);
+  }, [serverHistory, historyItems]);
+
   type VideoBilling =
     | { open: false }
     | { open: true; reason: "plan"; blockedId: string; studioMode: "video" | "video_edit" }
