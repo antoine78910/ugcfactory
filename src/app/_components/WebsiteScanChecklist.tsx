@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { TextShimmer } from "@/components/ui/text-shimmer";
 
 /** Matches {@link runInitialPipeline} order (extract → classify → brief → save → scripts → save). */
 const STEPS = [
@@ -124,7 +125,7 @@ export function WebsiteScanChecklist({ stage, isWorking, className, serverPipeli
         className,
       )}
     >
-      <ul className="space-y-3">
+      <ul className="space-y-2.5">
         {STEPS.map((label, i) => {
           const s = states[i];
           return (
@@ -146,16 +147,26 @@ export function WebsiteScanChecklist({ stage, isWorking, className, serverPipeli
                   <span className="h-2 w-2 rounded-full bg-white/15" />
                 )}
               </span>
-              <span
-                className={cn(
-                  "text-sm font-medium leading-tight transition-colors duration-700 ease-out",
-                  s === "done" && "text-white",
-                  s === "active" && "text-white",
-                  s === "pending" && "text-white/38",
-                )}
-              >
-                {label}
-              </span>
+              {s === "active" ? (
+                <TextShimmer
+                  as="span"
+                  className="text-sm font-semibold leading-tight dark:[--base-color:rgba(210,200,255,0.55)] dark:[--base-gradient-color:#faf5ff]"
+                  duration={2.2}
+                  spread={1.4}
+                >
+                  {label}
+                </TextShimmer>
+              ) : (
+                <span
+                  className={cn(
+                    "text-sm font-medium leading-tight transition-colors duration-700 ease-out",
+                    s === "done" && "text-white/90",
+                    s === "pending" && "text-white/38",
+                  )}
+                >
+                  {label}
+                </span>
+              )}
             </li>
           );
         })}
