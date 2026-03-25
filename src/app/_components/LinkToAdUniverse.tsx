@@ -873,6 +873,48 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   );
   const displayedProductImageUrl = neutralUploadUrl ?? cleanCandidate?.url ?? fallbackImageUrl ?? null;
 
+  const resolveMaybeRelativeUrl = useCallback(
+    (url: string | null | undefined): string | null => {
+      const u = (url || "").trim();
+      if (!u) return null;
+      if (/^https?:\/\//i.test(u)) return u;
+      const base = storeUrl.trim();
+      if (!base) return u;
+      return absolutizeImageUrl(u, base) ?? u;
+    },
+    [storeUrl],
+  );
+
+  const resolvedPreviewUrl = useMemo(() => {
+    if (!displayedProductImageUrl) return null;
+    if (/^https?:\/\//i.test(displayedProductImageUrl)) return displayedProductImageUrl;
+    const base = storeUrl.trim();
+    if (!base) return displayedProductImageUrl;
+    return absolutizeImageUrl(displayedProductImageUrl, base) ?? displayedProductImageUrl;
+  }, [displayedProductImageUrl, storeUrl]);
+
+  const resolvedCleanCandidateUrl = useMemo(() => resolveMaybeRelativeUrl(cleanCandidate?.url), [cleanCandidate?.url, resolveMaybeRelativeUrl]);
+  const resolvedFallbackImageUrl = useMemo(() => resolveMaybeRelativeUrl(fallbackImageUrl), [fallbackImageUrl, resolveMaybeRelativeUrl]);
+  const resolvedNeutralUploadUrl = useMemo(() => resolveMaybeRelativeUrl(neutralUploadUrl), [neutralUploadUrl, resolveMaybeRelativeUrl]);
+
+  const isAlgorithmChosenPreview = useMemo(() => {
+    const cur = (resolvedPreviewUrl || "").trim();
+    if (!cur) return false;
+    if (resolvedNeutralUploadUrl && cur === resolvedNeutralUploadUrl) return false;
+    return (resolvedCleanCandidateUrl && cur === resolvedCleanCandidateUrl) || (resolvedFallbackImageUrl && cur === resolvedFallbackImageUrl);
+  }, [resolvedCleanCandidateUrl, resolvedFallbackImageUrl, resolvedNeutralUploadUrl, resolvedPreviewUrl]);
+
+  const removeAlgorithmChosenPreview = useCallback(() => {
+    const cur = (resolvedPreviewUrl || "").trim();
+    if (!cur) return;
+    if (resolvedCleanCandidateUrl && cur === resolvedCleanCandidateUrl) setCleanCandidate(null);
+    if (resolvedFallbackImageUrl && cur === resolvedFallbackImageUrl) setFallbackImageUrl(null);
+    setProductOnlyImageUrls((prev) => prev.filter((u) => {
+      const ru = resolveMaybeRelativeUrl(u);
+      return ru ? ru !== cur : true;
+    }));
+  }, [resolveMaybeRelativeUrl, resolvedCleanCandidateUrl, resolvedFallbackImageUrl, resolvedPreviewUrl]);
+
   useEffect(() => {
     setAngleScriptDrafts((prev) => {
       const next: Record<number, string> = { ...prev };
@@ -884,14 +926,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       return next;
     });
   }, [scriptOptionBodiesAll]);
-
-  const resolvedPreviewUrl = useMemo(() => {
-    if (!displayedProductImageUrl) return null;
-    if (/^https?:\/\//i.test(displayedProductImageUrl)) return displayedProductImageUrl;
-    const base = storeUrl.trim();
-    if (!base) return displayedProductImageUrl;
-    return absolutizeImageUrl(displayedProductImageUrl, base) ?? displayedProductImageUrl;
-  }, [displayedProductImageUrl, storeUrl]);
 
   useEffect(() => {
     setImgError(false);
@@ -2476,7 +2510,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     };
   }, [klingPollTaskId, klingPollImageIndex]);
 
-  const showUploadRecommendation = quality.label === "medium" || quality.label === "bad";
   const showAnglePicker = Boolean(scriptsText && angleLabels[0] && angleLabels[1] && angleLabels[2]);
   const showContinueScripts =
     Boolean(summaryText.trim() && !scriptsText && lastExtractedJson && stage === "ready" && !isWorking);
@@ -2836,18 +2869,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                 </div>
               ) : null}
               <div className="relative mt-2 flex flex-col gap-3 sm:flex-row sm:items-stretch">
-                {isWorking ? (
-                  <div
-                    className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-[#0b0912]/70 backdrop-blur-[2px]"
-                    aria-live="polite"
-                    aria-busy="true"
-                  >
-                    <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-violet-500/35 bg-[#0b0912]/95 px-5 py-3 shadow-[0_6px_0_0_rgba(76,29,149,0.75)]">
-                      <Loader2 className="h-6 w-6 shrink-0 animate-spin text-violet-300" aria-label="Loading" />
-                      <span className="text-xs font-medium text-white/70">Scanning your site…</span>
-                    </div>
-                  </div>
-                ) : null}
                 <Input
                   value={storeUrl}
                   onChange={(e) => setStoreUrl(e.target.value)}
@@ -3068,35 +3089,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                   </div>
                 ) : null}
 
-                {showUploadRecommendation ? (
-                  <div className="mt-4 rounded-lg border border-violet-500/25 bg-violet-500/[0.08] p-3">
-                    <p className="text-sm font-semibold text-violet-200">Upload recommended</p>
-                    <p className="mt-1 text-xs text-white/55">{quality.help}</p>
-                    <div className="mt-3">
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp,image/*"
-                        multiple
-                        className="sr-only"
-                        onChange={(e) => {
-                          void uploadNeutralPhoto(e.target.files);
-                          e.currentTarget.value = "";
-                        }}
-                        disabled={isWorking || isUploadingAdditionalPhotos}
-                      />
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        disabled={isWorking || isUploadingAdditionalPhotos}
-                        className="w-full border border-white/10 bg-white/5 text-white hover:bg-white/10 cursor-pointer"
-                        onClick={() => fileInputRef.current?.click()}
-                      >
-                        Upload neutral product-only photo(s)
-                      </Button>
-                    </div>
-                  </div>
-                ) : null}
+                {/* Upload recommendation removed (too noisy); users can add photos after scripts. */}
               </div>
             </div>
           </div>
@@ -3163,6 +3156,24 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                           {resolvedPreviewUrl ? "Can't load" : "No image"}
                         </div>
                       )}
+                  {resolvedPreviewUrl && !imgError && isAlgorithmChosenPreview ? (
+                    <>
+                      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/85 via-black/35 to-transparent px-2 py-1.5">
+                        <p className="text-[10px] font-medium leading-tight text-white/70">
+                          Product photo scraped by our algorithm — you can change it.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeAlgorithmChosenPreview()}
+                        className="absolute right-1 top-1 z-20 flex h-7 w-7 items-center justify-center rounded-lg bg-black/60 text-white/70 shadow transition hover:text-red-300"
+                        aria-label="Remove scraped photo"
+                        title="Remove scraped photo"
+                      >
+                        <Trash2 className="h-4 w-4" aria-hidden />
+                      </button>
+                    </>
+                  ) : null}
                     </div>
                   </div>
 
