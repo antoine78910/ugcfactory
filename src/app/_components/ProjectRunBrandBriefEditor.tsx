@@ -57,7 +57,7 @@ export function ProjectRunBrandBriefEditor({
       });
       const json = (await res.json()) as { runId?: string; error?: string };
       if (!res.ok || !json.runId) throw new Error(json.error || "Save failed");
-      toast.success("Brand brief updated");
+      toast.success("Product brief updated");
       onSaved();
     } catch (e) {
       toast.error("Save failed", { description: e instanceof Error ? e.message : "" });
@@ -69,7 +69,7 @@ export function ProjectRunBrandBriefEditor({
   return (
     <div className="mb-4 space-y-3 border-b border-white/10 pb-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs font-semibold text-white/80">Brand brief</p>
+        <p className="text-xs font-semibold text-white/80">Product brief</p>
         <Button
           type="button"
           size="sm"
@@ -82,11 +82,11 @@ export function ProjectRunBrandBriefEditor({
         </Button>
       </div>
       <p className="text-[11px] leading-snug text-white/45">
-        Full brand analysis used for scripts and context. Edit for a tighter positioning before regenerating or continuing
-        in Link to Ad.
+        Full product analysis used for scripts and context. Edit for tighter positioning before regenerating or continuing in
+        Link to Ad.
       </p>
       <div className="space-y-1">
-        <Label className="text-[11px] text-white/55">Brand brief (from URL scan)</Label>
+        <Label className="text-[11px] text-white/55">Product brief (from URL scan)</Label>
         <Textarea
           value={text}
           onChange={(e) => setText(e.target.value)}

@@ -9,7 +9,7 @@ import { TextShimmer } from "@/components/ui/text-shimmer";
 const STEPS = [
   "Fetch the store page",
   "Analyze product images",
-  "Write brand brief (from the site)",
+  "Write product brief (from the site)",
   "Generate 3 UGC script angles",
   "Save your project",
 ] as const;

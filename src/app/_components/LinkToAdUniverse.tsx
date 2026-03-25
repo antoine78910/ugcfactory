@@ -1454,6 +1454,97 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     }
   }
 
+  async function onRegenerateMarketingAngles() {
+    const url = storeUrl.trim();
+    if (!url || !lastExtractedJson || !summaryText.trim()) {
+      toast.error("Incomplete data to regenerate angles.");
+      return;
+    }
+    if (!universeRunId) {
+      toast.error("No saved project yet. Run Generate from URL first.");
+      return;
+    }
+
+    setIsWorking(true);
+    setStage("writing_scripts");
+    try {
+      const res = await fetch("/api/gpt/ugc-scripts-from-brief", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          storeUrl: url,
+          productTitle: extractedTitle,
+          brandBrief: summaryText.trim(),
+          productImageUrls: resolvedProductUrlsForGpt(),
+          videoDurationSeconds: 15,
+          generationMode,
+          customUgcIntent: composeCustomUgcIntent(customUgcTopic, customUgcOffer, customUgcCta),
+        }),
+      });
+      const json = (await res.json()) as { data?: string; error?: string };
+      if (!res.ok || !json.data) throw new Error(json.error || "Regenerate scripts failed");
+      const nextScripts = String(json.data);
+      const nextLabels = deriveAngleLabelsFromScripts(nextScripts);
+
+      // Reset downstream generations to avoid mixing prompts/images/videos across different scripts.
+      setScriptsText(nextScripts);
+      setAngleLabels(nextLabels);
+      setSelectedAngleIndex(0);
+      setNanoBananaPromptsRaw("");
+      setNanoBananaSelectedPromptIndex(0);
+      setNanoBananaTaskId(null);
+      setNanoBananaImageUrl(null);
+      setNanoBananaImageUrls([]);
+      setNanoBananaSelectedImageIndex(null);
+      setUgcVideoPromptGpt("");
+      setKlingByRef(createEmptyKlingByReference());
+      setNanoPollTaskId(null);
+      setNanoPollingSlotIndex(null);
+      setKlingPollTaskId(null);
+      setKlingPollImageIndex(null);
+      setUserStartedVideoFromImage(false);
+      setVideoStageMode(false);
+      prevAngleRef.current = null;
+      setPipelineByAngle([emptyAnglePipeline(), emptyAnglePipeline(), emptyAnglePipeline()]);
+
+      // Persist updated scripts back to the project.
+      const base = latestSnapRef.current;
+      if (base) {
+        const activePipe = emptyAnglePipeline();
+        const kn = normalizeKlingByReference({
+          klingByReferenceIndex: activePipe.klingByReferenceIndex,
+          klingVideoUrl: null,
+          klingTaskId: null,
+          nanoBananaSelectedImageIndex: activePipe.nanoBananaSelectedImageIndex,
+        });
+        const snap: LinkToAdUniverseSnapshotV1 = {
+          ...base,
+          scriptsText: nextScripts,
+          angleLabels: nextLabels,
+          selectedAngleIndex: 0,
+          linkToAdPipelineByAngle: [emptyAnglePipeline(), emptyAnglePipeline(), emptyAnglePipeline()],
+          ...flattenAnglePipeToTopLevel(activePipe, kn),
+        };
+        try {
+          await persistUniverse(universeRunId, url, extractedTitle, lastExtractedJson, snap, packshotsForSave());
+        } catch {
+          /* ignore */
+        }
+      }
+
+      // Hydrate editor state for angle 1.
+      void onSelectAngle(0, { scriptsText: nextScripts, angleLabels: nextLabels });
+      toast.success("3 new angles ready");
+      setStage("ready");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Regenerate failed";
+      toast.warning("Could not regenerate angles", { description: msg });
+      setStage("ready");
+    } finally {
+      setIsWorking(false);
+    }
+  }
+
   async function onRun(opts?: { bypassSavedProject?: boolean }) {
     const url = storeUrl.trim();
     if (!url) {
@@ -3145,6 +3236,19 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                 <p className="text-sm font-semibold tracking-tight text-white/90">
                   Choose your AI UGC angle
                 </p>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs text-white/45">You can regenerate a fresh set anytime.</p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    disabled={isWorking || stage === "writing_scripts"}
+                    onClick={() => void onRegenerateMarketingAngles()}
+                    className="h-8 rounded-lg border border-white/10 bg-white/5 px-3 text-xs text-white/75 hover:bg-white/10"
+                  >
+                    Regenerate 3 new angles
+                  </Button>
+                </div>
                 <div className="grid gap-3 sm:grid-cols-3">
                 {angleOptionCards.map((card) => (
                   <button
