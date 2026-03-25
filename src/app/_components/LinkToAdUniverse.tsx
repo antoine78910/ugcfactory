@@ -420,6 +420,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   /** URLs classified as product-only (multi-angle); used for GPT vision + Nano single pick. */
   const [productOnlyImageUrls, setProductOnlyImageUrls] = useState<string[]>([]);
   const [userPhotoUrls, setUserPhotoUrls] = useState<string[]>([]);
+  const [avatarPhotoUrls, setAvatarPhotoUrls] = useState<string[]>([]);
   const [avatarUrls, setAvatarUrls] = useState<string[]>([]);
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   const [imgError, setImgError] = useState(false);
@@ -786,6 +787,18 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const quality = useMemo(() => confidenceToQuality(confidence ?? undefined), [confidence]);
   const parsedNanoPrompts = useMemo(() => parseThreeLabeledPrompts(nanoBananaPromptsRaw), [nanoBananaPromptsRaw]);
   const scriptOptionBodiesAll = useMemo(() => splitAllScriptOptions(scriptsText), [scriptsText]);
+  const hasAvatarPhoto = avatarPhotoUrls.length > 0;
+  const sanitizeAngleLabelForAvatar = useCallback((text: string): string => {
+    const t0 = String(text || "");
+    if (!t0.trim()) return "";
+    let t = t0;
+    // Remove common demographic descriptors that can conflict with avatar reference image.
+    t = t.replace(/\b\d{1,2}\s*[- ]?\s*(?:year\s*old|yo|y\/o)\s+(?:woman|man|female|male|girl|boy|creator|mom|dad)\b/gi, "");
+    t = t.replace(/\b(?:a|an)\s+\d{1,2}\s*[- ]?\s*(?:year\s*old|yo|y\/o)\b/gi, "");
+    // Clean up leftover punctuation/spaces.
+    t = t.replace(/\s{2,}/g, " ").replace(/\s+,/g, ",").replace(/^[\s,.-]+|[\s,.-]+$/g, "").trim();
+    return t || t0.trim();
+  }, []);
   const angleOptionCards = useMemo(() => {
     const count = Math.max(3, scriptOptionBodiesAll.length);
     return Array.from({ length: count }, (_, i) => {
@@ -794,15 +807,18 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       const parts = body
         ? angleBriefPartsFromScriptOption(body, (i === 0 ? 0 : i === 1 ? 1 : 2) as 0 | 1 | 2)
         : { brief: "", full: "", canExpand: false };
-      const fallback = parts.brief;
+      const explicitSafe = hasAvatarPhoto ? sanitizeAngleLabelForAvatar(explicit) : explicit;
+      const fallbackSafe = hasAvatarPhoto ? sanitizeAngleLabelForAvatar(parts.brief) : parts.brief;
+      const fullSafe = hasAvatarPhoto ? sanitizeAngleLabelForAvatar(parts.full) : parts.full;
+      const fallback = fallbackSafe;
       return {
         index: i,
-        label: explicit || fallback || "…",
-        fullLabel: explicit || parts.full || fallback || "…",
-        canExpand: Boolean(!explicit && parts.canExpand && parts.full && parts.full !== (explicit || fallback)),
+        label: explicitSafe || fallback || "…",
+        fullLabel: explicitSafe || fullSafe || fallback || "…",
+        canExpand: Boolean(!explicitSafe && parts.canExpand && fullSafe && fullSafe !== (explicitSafe || fallback)),
       };
     });
-  }, [angleLabels, scriptOptionBodiesAll]);
+  }, [angleLabels, hasAvatarPhoto, sanitizeAngleLabelForAvatar, scriptOptionBodiesAll]);
 
   const factorWordRules = useMemo(
     () => ({
@@ -1231,6 +1247,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   function removeProductPhoto(url: string) {
     setProductOnlyImageUrls((prev) => prev.filter((u) => u !== url));
     setUserPhotoUrls((prev) => prev.filter((u) => u !== url));
+    setAvatarPhotoUrls((prev) => prev.filter((u) => u !== url));
     if (neutralUploadUrl === url) setNeutralUploadUrl(null);
   }
 
@@ -1250,6 +1267,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     if (!u) return;
     setUserPhotoUrls((prev) => (prev.includes(u) ? prev : [...prev, u]));
     setProductOnlyImageUrls((prev) => (prev.includes(u) ? prev : [...prev, u]));
+    setAvatarPhotoUrls((prev) => (prev.includes(u) ? prev : [...prev, u]));
     toast.success("Avatar photo added");
   }
 
