@@ -59,7 +59,11 @@ export function AvatarPickerDialog({
               ))}
             </div>
           ) : (
-            <p className="text-sm text-white/55">No generated avatars found yet.</p>
+            <p className="text-sm leading-relaxed text-white/55">
+              No avatars in your library yet. Open{" "}
+              <span className="font-medium text-white/75">Create → Avatar</span> in the app, generate an avatar, then
+              come back here — or refresh after saving.
+            </p>
           )}
 
           <div className="mt-5 flex justify-end">
