@@ -101,11 +101,6 @@ function clampToMaxWords(text: string, maxWords: number): string {
   return parts.slice(0, maxWords).join(" ");
 }
 
-function confirmBeforeGenerate(message: string): boolean {
-  if (typeof window === "undefined") return true;
-  return window.confirm(message);
-}
-
 function mergeNanoUrlIntoThreeSlots(prev: string[], slot: 0 | 1 | 2, url: string): string[] {
   const base: string[] = [0, 1, 2].map((i) => {
     const v = prev[i];
@@ -1606,13 +1601,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       toast.error("HTTPS product image is required (missing preview or relative URL).");
       return;
     }
-    if (
-      !confirmBeforeGenerate(
-        "Generate 3 image prompts now?\n\nThis will use your current script (limited edits) and product image references.",
-      )
-    ) {
-      return;
-    }
     setIsNanoPromptsLoading(true);
     setIsNanoAllImagesSubmitting(false);
     let text = "";
@@ -1694,7 +1682,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       toast.error("Product image missing or not HTTPS.");
       return;
     }
-    if (!confirmBeforeGenerate("Generate this reference image now?")) return;
     setIsNanoImageSubmitting(true);
     lastNanoImagePromptRef.current = prompt;
     lastNanoImagePromptIndexRef.current = nanoBananaSelectedPromptIndex;
@@ -1888,14 +1875,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       toast.error("Some image prompts are missing.");
       return;
     }
-    if (
-      !confirmBeforeGenerate(
-        "Generate the 3 reference images now?\n\nThis will start image generation tasks. You can cancel while it runs.",
-      )
-    ) {
-      return;
-    }
-
     setIsNanoAllImagesSubmitting(true);
     try {
       nanoThreeAbortRef.current?.abort();
@@ -2098,13 +2077,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       toast.error("Angle script is missing.");
       return null;
     }
-    if (
-      !confirmBeforeGenerate(
-        "Generate a video prompt for this image now?\n\nYou'll be able to review and edit the prompt blocks before starting the final video render.",
-      )
-    ) {
-      return null;
-    }
     setIsVideoPromptLoading(true);
     try {
       videoPromptAbortRef.current?.abort();
@@ -2168,13 +2140,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       toast.error("Reference image and video prompt are required.");
       return;
     }
-    if (
-      !confirmBeforeGenerate(
-        "Start video generation now?\n\nThis will launch the render job. Make sure your prompt is final.",
-      )
-    ) {
-      return;
-    }
     setIsKlingSubmitting(true);
     const klingPrompt = withAudioHint(prompt);
     lastKlingVideoPromptRef.current = klingPrompt;
@@ -2190,7 +2155,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           marketModel: "bytedance/seedance-2.0-pro",
           prompt: klingPrompt,
           imageUrl: img,
-          duration: 10,
+          duration: 15,
           aspectRatio: "9:16",
           personalApiKey: getPersonalApiKey(),
         }),
@@ -2532,13 +2497,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       return;
     }
     if (isWorking) return;
-    if (
-      !confirmBeforeGenerate(
-        "Start Link to Ad generation now?\n\nWe'll scan the page, draft 3 angles, and save the project.",
-      )
-    ) {
-      return;
-    }
     if (showContinueScripts) {
       void onContinueScripts();
       return;
