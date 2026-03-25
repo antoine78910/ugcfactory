@@ -101,6 +101,11 @@ function clampToMaxWords(text: string, maxWords: number): string {
   return parts.slice(0, maxWords).join(" ");
 }
 
+function confirmBeforeGenerate(message: string): boolean {
+  if (typeof window === "undefined") return true;
+  return window.confirm(message);
+}
+
 function mergeNanoUrlIntoThreeSlots(prev: string[], slot: 0 | 1 | 2, url: string): string[] {
   const base: string[] = [0, 1, 2].map((i) => {
     const v = prev[i];
@@ -471,6 +476,32 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const [klingPollTaskId, setKlingPollTaskId] = useState<string | null>(null);
   /** Lightbox: full reference image (source is often 9:16; grid shows 3:4 crop). */
   const [nanoImageLightboxUrl, setNanoImageLightboxUrl] = useState<string | null>(null);
+
+  const nanoPromptsAbortRef = useRef<AbortController | null>(null);
+  const nanoImageAbortRef = useRef<AbortController | null>(null);
+  const nanoThreeAbortRef = useRef<AbortController | null>(null);
+  const videoPromptAbortRef = useRef<AbortController | null>(null);
+  const klingAbortRef = useRef<AbortController | null>(null);
+
+  const cancelCurrentGeneration = useCallback(() => {
+    nanoPromptsAbortRef.current?.abort();
+    nanoImageAbortRef.current?.abort();
+    nanoThreeAbortRef.current?.abort();
+    videoPromptAbortRef.current?.abort();
+    klingAbortRef.current?.abort();
+
+    setIsNanoPromptsLoading(false);
+    setIsNanoImageSubmitting(false);
+    setIsNanoAllImagesSubmitting(false);
+    setIsVideoPromptLoading(false);
+    setIsKlingSubmitting(false);
+
+    setNanoPollTaskId(null);
+    setNanoPollingSlotIndex(null);
+    setKlingPollTaskId(null);
+    setKlingPollImageIndex(null);
+    toast.message("Generation cancelled", { description: "Stopped polling and aborted pending requests." });
+  }, []);
 
   const selImg = nanoBananaSelectedImageIndex;
   const activeKlingSlot = useMemo(() => {
@@ -1575,13 +1606,24 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       toast.error("HTTPS product image is required (missing preview or relative URL).");
       return;
     }
+    if (
+      !confirmBeforeGenerate(
+        "Generate 3 image prompts now?\n\nThis will use your current script (limited edits) and product image references.",
+      )
+    ) {
+      return;
+    }
     setIsNanoPromptsLoading(true);
     setIsNanoAllImagesSubmitting(false);
     let text = "";
     try {
+      nanoPromptsAbortRef.current?.abort();
+      const controller = new AbortController();
+      nanoPromptsAbortRef.current = controller;
       const res = await fetch("/api/gpt/nanobanana-ugc-prompts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           marketingScript: script,
           productImageUrl: img,
@@ -1620,35 +1662,9 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           imagePrompt: text,
         });
       }
-      toast.success("3 image prompts saved. Starting generation…");
-
-      const rawTri = parseThreeLabeledPrompts(text);
-      const prompts: [string, string, string] = [rawTri[0].trim(), rawTri[1].trim(), rawTri[2].trim()];
-      if (!prompts[0] || !prompts[1] || !prompts[2]) {
-        toast.warning("Prompts saved", {
-          description: "Could not parse all 3 prompts. Use Regenerate if needed.",
-        });
-        return;
-      }
-
-      setIsNanoAllImagesSubmitting(true);
-      try {
-        const { urlsByPrompt, lastTaskId } = await runNanoBananaProThreeSequential(img, prompts);
-        if (!urlsByPrompt[0] || !urlsByPrompt[1] || !urlsByPrompt[2]) {
-          throw new Error("Image generation did not return 3 images.");
-        }
-        await persistNanoThreeGeneratedImages(url, prompts, urlsByPrompt, lastTaskId);
-        toast.success("3 reference images ready");
-      } catch (imgErr) {
-        toast.error("Image generation", {
-          description:
-            (imgErr instanceof Error ? imgErr.message : "Unknown error") +
-            " Prompts are saved; you can retry.",
-        });
-      } finally {
-        setIsNanoAllImagesSubmitting(false);
-      }
+      toast.success("3 image prompts saved.");
     } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") return;
       toast.error("Image prompts", { description: e instanceof Error ? e.message : "Unknown error" });
     } finally {
       setIsNanoPromptsLoading(false);
@@ -1678,13 +1694,18 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       toast.error("Product image missing or not HTTPS.");
       return;
     }
+    if (!confirmBeforeGenerate("Generate this reference image now?")) return;
     setIsNanoImageSubmitting(true);
     lastNanoImagePromptRef.current = prompt;
     lastNanoImagePromptIndexRef.current = nanoBananaSelectedPromptIndex;
     try {
+      nanoImageAbortRef.current?.abort();
+      const controller = new AbortController();
+      nanoImageAbortRef.current = controller;
       const res = await fetch("/api/nanobanana/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           accountPlan: planId,
           model: "pro",
@@ -1716,6 +1737,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       }
       toast.success("Image generation started");
     } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") return;
       toast.error("Image generation", {
         description: e instanceof Error ? e.message : "Unknown error",
       });
@@ -1866,9 +1888,19 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       toast.error("Some image prompts are missing.");
       return;
     }
+    if (
+      !confirmBeforeGenerate(
+        "Generate the 3 reference images now?\n\nThis will start image generation tasks. You can cancel while it runs.",
+      )
+    ) {
+      return;
+    }
 
     setIsNanoAllImagesSubmitting(true);
     try {
+      nanoThreeAbortRef.current?.abort();
+      const controller = new AbortController();
+      nanoThreeAbortRef.current = controller;
       const { urlsByPrompt, lastTaskId } = await runNanoBananaProThreeSequential(img, prompts as [string, string, string]);
 
       if (!urlsByPrompt[0] || !urlsByPrompt[1] || !urlsByPrompt[2]) {
@@ -1879,6 +1911,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
 
       toast.success("3 images generated");
     } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") return;
       toast.error("Image generation", {
         description: e instanceof Error ? e.message : "Unknown error",
       });
@@ -2065,11 +2098,22 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       toast.error("Angle script is missing.");
       return null;
     }
+    if (
+      !confirmBeforeGenerate(
+        "Generate a video prompt for this image now?\n\nYou'll be able to review and edit the prompt blocks before starting the final video render.",
+      )
+    ) {
+      return null;
+    }
     setIsVideoPromptLoading(true);
     try {
+      videoPromptAbortRef.current?.abort();
+      const controller = new AbortController();
+      videoPromptAbortRef.current = controller;
       const res = await fetch("/api/gpt/ugc-i2v-prompt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({ angleScript: script }),
       });
       const json = (await res.json()) as { data?: string; error?: string };
@@ -2107,6 +2151,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       toast.success("Video prompt saved");
       return text;
     } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") return null;
       toast.error("Video prompt", { description: e instanceof Error ? e.message : "Unknown error" });
       return null;
     } finally {
@@ -2123,13 +2168,24 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       toast.error("Reference image and video prompt are required.");
       return;
     }
+    if (
+      !confirmBeforeGenerate(
+        "Start video generation now?\n\nThis will launch the render job. Make sure your prompt is final.",
+      )
+    ) {
+      return;
+    }
     setIsKlingSubmitting(true);
     const klingPrompt = withAudioHint(prompt);
     lastKlingVideoPromptRef.current = klingPrompt;
     try {
+      klingAbortRef.current?.abort();
+      const controller = new AbortController();
+      klingAbortRef.current = controller;
       const res = await fetch("/api/kling/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           marketModel: "kling-3.0/video",
           prompt: klingPrompt,
@@ -2182,6 +2238,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       }
       toast.success("Video generation started");
     } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") return;
       toast.error("Video", { description: e instanceof Error ? e.message : "Unknown error" });
     } finally {
       setIsKlingSubmitting(false);
@@ -2476,6 +2533,13 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       return;
     }
     if (isWorking) return;
+    if (
+      !confirmBeforeGenerate(
+        "Start Link to Ad generation now?\n\nWe'll scan the page, draft 3 angles, and save the project.",
+      )
+    ) {
+      return;
+    }
     if (showContinueScripts) {
       void onContinueScripts();
       return;
@@ -2599,6 +2663,17 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                     </span>
                   ) : null}
                 </div>
+                {showUniverseLoading ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    className="h-9 rounded-lg border border-white/15 bg-white/5 text-xs text-white/75 hover:bg-white/10"
+                    onClick={() => cancelCurrentGeneration()}
+                  >
+                    Cancel
+                  </Button>
+                ) : null}
               </div>
             )}
           </div>
@@ -2645,7 +2720,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                 </div>
                 {generationMode === "custom_ugc" ? (
                   <div className="space-y-2">
-                    <Label className="text-xs font-semibold text-white/70">Parler de quoi dans ta créa</Label>
+                    <Label className="text-xs font-semibold text-white/70">What should your UGC focus on?</Label>
                     <Textarea
                       value={customUgcTopic}
                       onChange={(e) => setCustomUgcTopic(e.target.value)}
@@ -2654,7 +2729,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                     />
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       <div className="space-y-1">
-                        <Label className="text-xs font-semibold text-white/70">Ton offre (optionnel)</Label>
+                        <Label className="text-xs font-semibold text-white/70">Your offer (optional)</Label>
                         <Input
                           value={customUgcOffer}
                           onChange={(e) => setCustomUgcOffer(e.target.value)}
@@ -2663,7 +2738,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                         />
                       </div>
                       <div className="space-y-1">
-                        <Label className="text-xs font-semibold text-white/70">CTA (optionnel)</Label>
+                        <Label className="text-xs font-semibold text-white/70">CTA (optional)</Label>
                         <Input
                           value={customUgcCta}
                           onChange={(e) => setCustomUgcCta(e.target.value)}
@@ -3844,9 +3919,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                                 void onGenerateNanoBananaPrompts(selectedAngleIndex as 0 | 1 | 2);
                               }}
                             >
-                              <span className="text-sm font-semibold leading-tight">
-                                Generate 3 prompts &amp; images
-                              </span>
+                              <span className="text-sm font-semibold leading-tight">Generate 3 prompts</span>
                             </Button>
                           </>
                         ) : null}
