@@ -2639,74 +2639,76 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           {!showBrandHeaderInsteadOfUrl ? (
             <div>
               <Label className="text-base font-medium text-white/80">Store URL</Label>
-              <div className="mt-3 space-y-3 rounded-xl border border-white/10 bg-white/[0.02] p-3">
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-white/55">Mode</p>
-                  <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    <button
-                      type="button"
-                      onClick={() => setGenerationMode("automatic")}
-                      className={cn(
-                        "rounded-lg border px-3 py-2 text-left transition",
-                        generationMode === "automatic"
-                          ? "border-violet-400/60 bg-violet-500/15 text-white"
-                          : "border-white/10 bg-black/20 text-white/65 hover:border-white/20",
-                      )}
-                    >
-                      <p className="text-sm font-semibold">Automatic</p>
-                      <p className="mt-0.5 text-[11px] leading-relaxed text-white/55">
-                        Current Link to Ad flow with editable script factors.
-                      </p>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setGenerationMode("custom_ugc")}
-                      className={cn(
-                        "rounded-lg border px-3 py-2 text-left transition",
-                        generationMode === "custom_ugc"
-                          ? "border-violet-400/60 bg-violet-500/15 text-white"
-                          : "border-white/10 bg-black/20 text-white/65 hover:border-white/20",
-                      )}
-                    >
-                      <p className="text-sm font-semibold">Custom UGC intent</p>
-                      <p className="mt-0.5 text-[11px] leading-relaxed text-white/55">
-                        Add your own creative direction on top of Link to Ad.
-                      </p>
-                    </button>
-                  </div>
-                </div>
-                {generationMode === "custom_ugc" ? (
-                  <div className="space-y-2">
-                    <Label className="text-xs font-semibold text-white/70">What should your UGC focus on?</Label>
-                    <Textarea
-                      value={customUgcTopic}
-                      onChange={(e) => setCustomUgcTopic(e.target.value)}
-                      placeholder="Ex: no talk, just show texture/results and product usage in real-life shots."
-                      className="min-h-[92px] border-white/10 bg-black/30 text-sm text-white/85 placeholder:text-white/30"
-                    />
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      <div className="space-y-1">
-                        <Label className="text-xs font-semibold text-white/70">Your offer (optional)</Label>
-                        <Input
-                          value={customUgcOffer}
-                          onChange={(e) => setCustomUgcOffer(e.target.value)}
-                          placeholder="Ex: 20% off today / free shipping"
-                          className="h-10 border-white/10 bg-black/30 text-sm text-white/85 placeholder:text-white/30"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs font-semibold text-white/70">CTA (optional)</Label>
-                        <Input
-                          value={customUgcCta}
-                          onChange={(e) => setCustomUgcCta(e.target.value)}
-                          placeholder="Ex: Tap to shop now"
-                          className="h-10 border-white/10 bg-black/30 text-sm text-white/85 placeholder:text-white/30"
-                        />
-                      </div>
+              {!isWorking ? (
+                <div className="mt-3 space-y-3 rounded-xl border border-white/10 bg-white/[0.02] p-3">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-white/55">Mode</p>
+                    <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <button
+                        type="button"
+                        onClick={() => setGenerationMode("automatic")}
+                        className={cn(
+                          "rounded-lg border px-3 py-2 text-left transition",
+                          generationMode === "automatic"
+                            ? "border-violet-400/60 bg-violet-500/15 text-white"
+                            : "border-white/10 bg-black/20 text-white/65 hover:border-white/20",
+                        )}
+                      >
+                        <p className="text-sm font-semibold">Automatic</p>
+                        <p className="mt-0.5 text-[11px] leading-relaxed text-white/55">
+                          Current Link to Ad flow with editable script factors.
+                        </p>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setGenerationMode("custom_ugc")}
+                        className={cn(
+                          "rounded-lg border px-3 py-2 text-left transition",
+                          generationMode === "custom_ugc"
+                            ? "border-violet-400/60 bg-violet-500/15 text-white"
+                            : "border-white/10 bg-black/20 text-white/65 hover:border-white/20",
+                        )}
+                      >
+                        <p className="text-sm font-semibold">Custom UGC intent</p>
+                        <p className="mt-0.5 text-[11px] leading-relaxed text-white/55">
+                          Add your own creative direction on top of Link to Ad.
+                        </p>
+                      </button>
                     </div>
                   </div>
-                ) : null}
-              </div>
+                  {generationMode === "custom_ugc" ? (
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold text-white/70">What should your UGC focus on?</Label>
+                      <Textarea
+                        value={customUgcTopic}
+                        onChange={(e) => setCustomUgcTopic(e.target.value)}
+                        placeholder="Ex: no talk, just show texture/results and product usage in real-life shots."
+                        className="min-h-[92px] border-white/10 bg-black/30 text-sm text-white/85 placeholder:text-white/30"
+                      />
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <div className="space-y-1">
+                          <Label className="text-xs font-semibold text-white/70">Your offer (optional)</Label>
+                          <Input
+                            value={customUgcOffer}
+                            onChange={(e) => setCustomUgcOffer(e.target.value)}
+                            placeholder="Ex: 20% off today / free shipping"
+                            className="h-10 border-white/10 bg-black/30 text-sm text-white/85 placeholder:text-white/30"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs font-semibold text-white/70">CTA (optional)</Label>
+                          <Input
+                            value={customUgcCta}
+                            onChange={(e) => setCustomUgcCta(e.target.value)}
+                            placeholder="Ex: Tap to shop now"
+                            className="h-10 border-white/10 bg-black/30 text-sm text-white/85 placeholder:text-white/30"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
               <div className="relative mt-2 flex flex-col gap-3 sm:flex-row sm:items-stretch">
                 {isWorking ? (
                   <div
@@ -2714,8 +2716,9 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                     aria-live="polite"
                     aria-busy="true"
                   >
-                    <div className="flex items-center justify-center rounded-2xl border border-violet-500/35 bg-[#0b0912]/95 px-5 py-3 shadow-[0_6px_0_0_rgba(76,29,149,0.75)]">
+                    <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-violet-500/35 bg-[#0b0912]/95 px-5 py-3 shadow-[0_6px_0_0_rgba(76,29,149,0.75)]">
                       <Loader2 className="h-6 w-6 shrink-0 animate-spin text-violet-300" aria-label="Loading" />
+                      <span className="text-xs font-medium text-white/70">Scanning your site…</span>
                     </div>
                   </div>
                 ) : null}
