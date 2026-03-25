@@ -9,6 +9,7 @@ import {
 } from "@/lib/kie";
 import { hasPersonalApiKey } from "@/lib/personalApiBypass";
 import { canUseVeoApiModel, parseAccountPlan, veoUpgradeMessage } from "@/lib/subscriptionModelAccess";
+import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
 
 type Body = {
   accountPlan?: string;
@@ -83,8 +84,9 @@ export async function POST(req: Request) {
       imageCount: normalizedImageUrls.length,
     });
   } catch (err) {
+    logGenerationFailure("kie/veo/generate", err);
     const message = err instanceof Error ? err.message : "Unknown error.";
-    return NextResponse.json({ error: message }, { status: 502 });
+    return NextResponse.json({ error: userFacingProviderErrorOrDefault(message) }, { status: 502 });
   }
 }
 

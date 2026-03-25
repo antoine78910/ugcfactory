@@ -9,6 +9,7 @@ import {
   parseAccountPlan,
   studioImageUpgradeMessage,
 } from "@/lib/subscriptionModelAccess";
+import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
 
 type Body = {
   accountPlan?: string;
@@ -75,7 +76,8 @@ export async function POST(req: Request) {
     }
     return NextResponse.json({ taskIds, model, provider: "kie-market", kieModel });
   } catch (err) {
+    logGenerationFailure("nanobanana/generate", err);
     const message = err instanceof Error ? err.message : "Unknown error.";
-    return NextResponse.json({ error: message }, { status: 502 });
+    return NextResponse.json({ error: userFacingProviderErrorOrDefault(message) }, { status: 502 });
   }
 }

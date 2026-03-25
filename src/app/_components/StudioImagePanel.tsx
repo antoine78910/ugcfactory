@@ -21,6 +21,8 @@ import type { StudioHistoryItem } from "@/app/_components/StudioGenerationsHisto
 import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
 import { studioImageCreditsPerOutput } from "@/lib/pricing";
 import { NANO_BANANA_2_ASPECT_RATIOS } from "@/lib/nanobanana";
+import { dedupeStudioImageHistoryByMediaUrl } from "@/lib/studioHistoryDedupe";
+import { userMessageFromCaughtError } from "@/lib/generationUserMessage";
 import { cn } from "@/lib/utils";
 import { canUseStudioImageModel, studioImageUpgradeMessage } from "@/lib/subscriptionModelAccess";
 import { loadAvatarUrls } from "@/lib/avatarLibrary";
@@ -352,6 +354,195 @@ export default function StudioImagePanel() {
   );
   const totalCredits = numImages * perImageCredits;
 
+  const displayHistoryItems = useMemo(() => dedupeStudioImageHistoryByMediaUrl(historyItems), [historyItems]);
+
+  const dismissFailedHistoryItem = useCallback((id: string) => {
+    setHistoryItems((prev) => prev.filter((i) => i.id !== id));
+  }, []);
+
+  const proAspectOptionsFull = useMemo(() => ["auto", ...ASPECT_RATIOS_PRO] as const, []);
+
+  type RunGenOpts = {
+    prompt: string;
+    model: NanoModel;
+    aspect: string;
+    resolution: (typeof PRO_RESOLUTIONS)[number];
+    numImages: number;
+    refUrls: string[];
+    /** Mirror values into the left sidebar (e.g. after lightbox edit). */
+    syncSidebar?: boolean;
+  };
+
+  function runImageGeneration(opts: RunGenOpts) {
+    if (serverHistory === null) {
+      toast.message("Still loading your library…", { description: "Wait a moment, then try Generate again." });
+      return;
+    }
+    const p = opts.prompt.trim();
+    if (!p) {
+      toast.error("Describe the scene you imagine.");
+      return;
+    }
+    if (opts.syncSidebar) {
+      setPrompt(opts.prompt);
+      setModel(opts.model);
+      setAspect(opts.aspect);
+      setResolution(opts.resolution);
+      setNumImages(opts.numImages);
+      setRefUrls(opts.refUrls);
+    }
+    const gate = studioImageUpgradeMessage(planId, opts.model);
+    if (!isPersonalApiActive() && gate) {
+      setBilling({ open: true, reason: "plan", blockedId: opts.model });
+      return;
+    }
+    const usingPersonalApi = isPersonalApiActive();
+    const n = Math.min(4, Math.max(1, opts.numImages));
+    const perOut = studioImageCreditsPerOutput({
+      studioModel: opts.model,
+      resolution: opts.resolution,
+    });
+    const chargeTotal = n * perOut;
+    if (!usingPersonalApi && creditsRef.current < chargeTotal) {
+      setBilling({ open: true, reason: "credits", required: chargeTotal });
+      return;
+    }
+    const summary = p;
+    const platformCharge = usingPersonalApi ? 0 : chargeTotal;
+    if (!usingPersonalApi) {
+      spendCredits(chargeTotal);
+      creditsRef.current = Math.max(0, creditsRef.current - chargeTotal);
+    }
+
+    void (async () => {
+      if (serverHistory === true) {
+        try {
+          const res = await fetch("/api/studio/generations/start", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              kind: "studio_image",
+              label: summary,
+              accountPlan: planId,
+              creditsCharged: platformCharge,
+              prompt: p,
+              model: opts.model,
+              aspectRatio: opts.aspect,
+              resolution: opts.resolution,
+              numImages: n,
+              imageUrls: opts.refUrls.length ? opts.refUrls : undefined,
+              personalApiKey: getPersonalApiKey(),
+            }),
+          });
+          const json = (await res.json()) as {
+            data?: { id?: string; rows?: { id: string }[]; error?: string };
+            error?: string;
+          };
+          if (!res.ok) throw new Error(json.error || "Start failed");
+          const rowIds = json.data?.rows?.map((r) => r.id) ?? (json.data?.id ? [json.data.id] : []);
+          if (!rowIds.length) throw new Error("No job id");
+          const startedAt = Date.now();
+          setHistoryItems((prev) => {
+            const gens: StudioHistoryItem[] = rowIds.map((id) => ({
+              id,
+              kind: "image",
+              status: "generating",
+              label: summary,
+              createdAt: startedAt,
+              studioGenerationKind: "studio_image",
+            }));
+            const drop = new Set(rowIds);
+            return [...gens, ...prev.filter((i) => !drop.has(i.id))];
+          });
+          toast.message("Generation running", {
+            description: "You can open My Projects — jobs stay in sync. Safe to leave this page.",
+          });
+        } catch (e) {
+          const msg = userMessageFromCaughtError(
+            e,
+            "Something went wrong while starting generation. Please try again.",
+          );
+          refundPlatformCredits(platformCharge, grantCredits, creditsRef);
+          toast.error(msg);
+        }
+        return;
+      }
+
+      const jobId = crypto.randomUUID();
+      const startedAt = Date.now();
+      setHistoryItems((prev) => [
+        {
+          id: jobId,
+          kind: "image",
+          status: "generating",
+          label: summary,
+          createdAt: startedAt,
+        },
+        ...prev,
+      ]);
+
+      try {
+        const res = await fetch("/api/nanobanana/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            accountPlan: planId,
+            prompt: p,
+            model: opts.model,
+            imageUrls: opts.refUrls.length ? opts.refUrls : undefined,
+            aspectRatio: opts.aspect,
+            resolution: opts.resolution,
+            numImages: n,
+            personalApiKey: getPersonalApiKey(),
+          }),
+        });
+        const json = (await res.json()) as { taskId?: string; taskIds?: string[]; error?: string };
+        if (!res.ok) throw new Error(json.error || "Generate failed");
+        const ids =
+          Array.isArray(json.taskIds) && json.taskIds.length > 0
+            ? json.taskIds
+            : json.taskId
+              ? [json.taskId]
+              : [];
+        if (!ids.length) throw new Error("No task id returned");
+        toast.message("Generation started", { description: `Polling ${ids.length} task(s)…` });
+        const pKey = getPersonalApiKey();
+        const batches = await Promise.all(ids.map((tid) => pollNanoTask(tid, pKey)));
+        const urls = batches.flat();
+        const doneAt = Date.now();
+        setHistoryItems((prev) => {
+          const rest = prev.filter((i) => i.id !== jobId);
+          const adds: StudioHistoryItem[] = urls.map((u, idx) => ({
+            id: `${jobId}-done-${idx}-${doneAt}`,
+            kind: "image",
+            status: "ready",
+            label: summary,
+            mediaUrl: u,
+            createdAt: doneAt,
+          }));
+          return [...adds, ...rest];
+        });
+        toast.success(ids.length > 1 ? `${urls.length} images ready` : "Image ready");
+      } catch (e) {
+        const msg = userMessageFromCaughtError(e, "Something went wrong while generating. Please try again.");
+        refundPlatformCredits(platformCharge, grantCredits, creditsRef);
+        toast.error(msg);
+        setHistoryItems((prev) =>
+          prev.map((i) =>
+            i.id === jobId && i.status === "generating"
+              ? {
+                  ...i,
+                  status: "failed",
+                  errorMessage: msg,
+                  creditsRefunded: platformCharge > 0,
+                }
+              : i,
+          ),
+        );
+      }
+    })();
+  }
+
   const onAddRefs = useCallback(() => {
     const input = document.createElement("input");
     input.type = "file";
@@ -433,157 +624,15 @@ export default function StudioImagePanel() {
   }, [onPasteRefs]);
 
   const generate = () => {
-    if (serverHistory === null) {
-      toast.message("Still loading your library…", { description: "Wait a moment, then try Generate again." });
-      return;
-    }
-    const p = prompt.trim();
-    if (!p) {
-      toast.error("Describe the scene you imagine.");
-      return;
-    }
-    const gate = studioImageUpgradeMessage(planId, model);
-    if (!isPersonalApiActive() && gate) {
-      setBilling({ open: true, reason: "plan", blockedId: model });
-      return;
-    }
-    const usingPersonalApi = isPersonalApiActive();
-    if (!usingPersonalApi && creditsRef.current < totalCredits) {
-      setBilling({ open: true, reason: "credits", required: totalCredits });
-      return;
-    }
-    const n = Math.min(4, Math.max(1, numImages));
-    const summary = p;
-    const platformCharge = usingPersonalApi ? 0 : totalCredits;
-    if (!usingPersonalApi) {
-      spendCredits(totalCredits);
-      creditsRef.current = Math.max(0, creditsRef.current - totalCredits);
-    }
-
-    void (async () => {
-      if (serverHistory === true) {
-        try {
-          const res = await fetch("/api/studio/generations/start", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              kind: "studio_image",
-              label: summary,
-              accountPlan: planId,
-              creditsCharged: platformCharge,
-              prompt: p,
-              model,
-              aspectRatio: aspect,
-              resolution,
-              numImages: n,
-              imageUrls: refUrls.length ? refUrls : undefined,
-              personalApiKey: getPersonalApiKey(),
-            }),
-          });
-          const json = (await res.json()) as {
-            data?: { id?: string; rows?: { id: string }[]; error?: string };
-            error?: string;
-          };
-          if (!res.ok) throw new Error(json.error || "Start failed");
-          const rowIds = json.data?.rows?.map((r) => r.id) ?? (json.data?.id ? [json.data.id] : []);
-          if (!rowIds.length) throw new Error("No job id");
-          const startedAt = Date.now();
-          setHistoryItems((prev) => {
-            const gens: StudioHistoryItem[] = rowIds.map((id) => ({
-              id,
-              kind: "image",
-              status: "generating",
-              label: summary,
-              createdAt: startedAt,
-              studioGenerationKind: "studio_image",
-            }));
-            const drop = new Set(rowIds);
-            return [...gens, ...prev.filter((i) => !drop.has(i.id))];
-          });
-          toast.message("Generation running", {
-            description: "You can open My Projects — jobs stay in sync. Safe to leave this page.",
-          });
-        } catch (e) {
-          const msg = "Something went wrong while starting generation. Please try again.";
-          refundPlatformCredits(platformCharge, grantCredits, creditsRef);
-          toast.error(msg);
-        }
-        return;
-      }
-
-      const jobId = crypto.randomUUID();
-      const startedAt = Date.now();
-      setHistoryItems((prev) => [
-        {
-          id: jobId,
-          kind: "image",
-          status: "generating",
-          label: summary,
-          createdAt: startedAt,
-        },
-        ...prev,
-      ]);
-
-      try {
-        const res = await fetch("/api/nanobanana/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            accountPlan: planId,
-            prompt: p,
-            model,
-            imageUrls: refUrls.length ? refUrls : undefined,
-            aspectRatio: aspect,
-            resolution,
-            numImages: n,
-            personalApiKey: getPersonalApiKey(),
-          }),
-        });
-        const json = (await res.json()) as { taskId?: string; taskIds?: string[]; error?: string };
-        if (!res.ok) throw new Error(json.error || "Generate failed");
-        const ids =
-          Array.isArray(json.taskIds) && json.taskIds.length > 0
-            ? json.taskIds
-            : json.taskId
-              ? [json.taskId]
-              : [];
-        if (!ids.length) throw new Error("No task id returned");
-        toast.message("Generation started", { description: `Polling ${ids.length} task(s)…` });
-        const pKey = getPersonalApiKey();
-        const batches = await Promise.all(ids.map((tid) => pollNanoTask(tid, pKey)));
-        const urls = batches.flat();
-        const doneAt = Date.now();
-        setHistoryItems((prev) => {
-          const rest = prev.filter((i) => i.id !== jobId);
-          const adds: StudioHistoryItem[] = urls.map((u, idx) => ({
-            id: `${jobId}-done-${idx}-${doneAt}`,
-            kind: "image",
-            status: "ready",
-            label: summary,
-            mediaUrl: u,
-            createdAt: doneAt,
-          }));
-          return [...adds, ...rest];
-        });
-        toast.success(ids.length > 1 ? `${urls.length} images ready` : "Image ready");
-      } catch (e) {
-        const msg = "Something went wrong while generating. Please try again.";
-        refundPlatformCredits(platformCharge, grantCredits, creditsRef);
-        toast.error(msg);
-        setHistoryItems((prev) =>
-          prev.map((i) =>
-            i.id === jobId && i.status === "generating"
-              ? {
-                  ...i,
-                  status: "failed",
-                  errorMessage: msg,
-                  creditsRefunded: platformCharge > 0,
-                }
-              : i,
-          ),
-        );
-      }
-    })();
+    runImageGeneration({
+      prompt: prompt.trim(),
+      model,
+      aspect,
+      resolution,
+      numImages,
+      refUrls,
+      syncSidebar: false,
+    });
   };
 
   const generateBtnClass =
@@ -767,9 +816,31 @@ export default function StudioImagePanel() {
           hasOutput
           output={
             <StudioGenerationsHistory
-              items={historyItems}
+              items={displayHistoryItems}
               empty={<StudioEmptyExamples variant="image" />}
               mediaLabel="Image"
+              failedAutoDismiss
+              onDismissFailed={dismissFailedHistoryItem}
+              imageLightboxEdit={{
+                nanoAspectOptions: NANO_BANANA_2_ASPECT_RATIOS,
+                proAspectOptions: proAspectOptionsFull,
+                resolutionOptions: PRO_RESOLUTIONS,
+                seedModel: model,
+                seedAspect: aspect,
+                seedResolution: resolution,
+                creditsFor: (m, r) => studioImageCreditsPerOutput({ studioModel: m, resolution: r }),
+                onSubmitEdit: ({ sourceUrl, prompt: editP, model: m, aspectRatio, resolution: res }) => {
+                  runImageGeneration({
+                    prompt: editP,
+                    model: m,
+                    aspect: aspectRatio,
+                    resolution: res,
+                    numImages: 1,
+                    refUrls: [sourceUrl],
+                    syncSidebar: true,
+                  });
+                },
+              }}
             />
           }
           empty={null}

@@ -8,6 +8,7 @@ import {
   parseKieResultMediaUrls,
 } from "@/lib/kieMarket";
 import { isPiapiTaskId, piapiGetSeedanceTask, piapiTaskStatusToLegacy } from "@/lib/piapiSeedance";
+import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -23,11 +24,16 @@ export async function GET(req: Request) {
     if (isPiapiTaskId(taskId)) {
       const data = await piapiGetSeedanceTask(taskId, piapiKey);
       const mapped = piapiTaskStatusToLegacy(data);
+      if (mapped.status === "FAILED" && mapped.error_message) {
+        logGenerationFailure("kling/status", mapped.error_message, { taskId, provider: "piapi" });
+      }
       return NextResponse.json({
         data: {
           status: mapped.status,
           response: mapped.response,
-          error_message: mapped.error_message,
+          error_message: mapped.error_message
+            ? userFacingProviderErrorOrDefault(mapped.error_message)
+            : mapped.error_message,
           raw: data,
         },
       });
@@ -48,11 +54,13 @@ export async function GET(req: Request) {
       });
     }
     if (kieRecordStateIsFail(data.state)) {
+      const rawFail = data.failMsg ?? "Task failed";
+      logGenerationFailure("kling/status", rawFail, { taskId, provider: "kie-market" });
       return NextResponse.json({
         data: {
           status: "FAILED",
           response: [],
-          error_message: data.failMsg ?? "Task failed",
+          error_message: userFacingProviderErrorOrDefault(rawFail),
           raw: data,
         },
       });
@@ -66,8 +74,9 @@ export async function GET(req: Request) {
       },
     });
   } catch (err) {
+    logGenerationFailure("kling/status", err, { taskId });
     const message = err instanceof Error ? err.message : "Unknown error.";
-    return NextResponse.json({ error: message }, { status: 502 });
+    return NextResponse.json({ error: userFacingProviderErrorOrDefault(message) }, { status: 502 });
   }
 }
 

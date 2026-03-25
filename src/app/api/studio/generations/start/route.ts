@@ -11,6 +11,7 @@ import {
 import { createStudioKieImageTasks } from "@/lib/studioKieImageTask";
 import type { StudioGenerationRow } from "@/lib/studioGenerationsMap";
 import type { NanoBananaProAspectRatio } from "@/lib/nanobanana";
+import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
 
 type Body = {
   kind?: string;
@@ -92,8 +93,9 @@ export async function POST(req: Request) {
           : [];
     if (taskIds.length === 0) throw new Error("No task id from provider.");
   } catch (err) {
+    logGenerationFailure("studio/generations/start", err, { kind });
     const message = err instanceof Error ? err.message : "Generate failed.";
-    return NextResponse.json({ error: message }, { status: 502 });
+    return NextResponse.json({ error: userFacingProviderErrorOrDefault(message) }, { status: 502 });
   }
 
   const n = taskIds.length;
@@ -113,7 +115,8 @@ export async function POST(req: Request) {
   const { data: inserted, error: insErr } = await supabase.from("studio_generations").insert(rowsPayload).select("*");
 
   if (insErr) {
-    return NextResponse.json({ error: insErr.message }, { status: 502 });
+    logGenerationFailure("studio/generations/start", insErr, { kind, step: "insert" });
+    return NextResponse.json({ error: "Could not save your generation job. Please try again." }, { status: 502 });
   }
 
   const rows = (inserted ?? []) as StudioGenerationRow[];

@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { kieMarketRecordInfo } from "@/lib/kieMarket";
 import { kieImageTaskPollOutcome } from "@/lib/kieTaskPoll";
 import type { StudioGenerationRow } from "@/lib/studioGenerationsMap";
+import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
 import { isPiapiTaskId, piapiGetSeedanceTask, piapiTaskStatusToLegacy } from "@/lib/piapiSeedance";
 
 /** DB rows we still poll until Kie/PiAPI reports terminal state. */
@@ -63,11 +64,19 @@ export async function pollStudioGenerationRow(
     return;
   }
 
+  const rawFail = out.message ?? "Generation failed";
+  logGenerationFailure("studioGenerationsPoll", rawFail, {
+    rowId: row.id,
+    kind: row.kind,
+    externalTaskId: row.external_task_id,
+    provider: row.provider,
+  });
+
   const { error } = await supabase
     .from("studio_generations")
     .update({
       status: "failed",
-      error_message: out.message,
+      error_message: userFacingProviderErrorOrDefault(rawFail, "Generation failed"),
       result_urls: null,
     })
     .eq("id", row.id);

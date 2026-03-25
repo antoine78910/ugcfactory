@@ -1,4 +1,5 @@
 import type { StudioHistoryItem } from "@/app/_components/StudioGenerationsHistory";
+import { userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
 
 /** Normalize `result_urls` from PostgREST (array, JSON string, or single URL string). */
 function normalizeResultUrls(raw: unknown): string[] {
@@ -75,7 +76,7 @@ export function studioGenerationRowToHistoryItem(row: StudioGenerationRow): Stud
       kind: mediaKind,
       status: "failed",
       label: row.label || "Failed",
-      errorMessage: row.error_message ?? "Generation failed",
+      errorMessage: userFacingProviderErrorOrDefault(row.error_message, "Generation failed"),
       creditsRefunded: Boolean(row.credits_refund_hint_sent),
       createdAt,
       studioGenerationKind: row.kind,

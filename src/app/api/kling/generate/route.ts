@@ -9,6 +9,7 @@ import {
   parseAccountPlan,
   studioVideoUpgradeMessage,
 } from "@/lib/subscriptionModelAccess";
+import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
 
 type KlingAspectRatio = "16:9" | "9:16" | "1:1";
 type KlingMode = "std" | "pro";
@@ -193,8 +194,9 @@ export async function POST(req: Request) {
       model,
     });
   } catch (err) {
+    logGenerationFailure("kling/generate", err, { model });
     const message = err instanceof Error ? err.message : "Unknown error.";
-    return NextResponse.json({ error: message }, { status: 502 });
+    return NextResponse.json({ error: userFacingProviderErrorOrDefault(message) }, { status: 502 });
   }
 }
 

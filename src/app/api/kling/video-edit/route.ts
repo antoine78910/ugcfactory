@@ -13,6 +13,7 @@ import {
   resolveKieModelForEditPicker,
   studioVideoEditRouteKind,
 } from "@/lib/studioVideoEditModels";
+import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
 
 type Body = {
   accountPlan?: string;
@@ -157,7 +158,8 @@ export async function POST(req: Request) {
       editPickerId: pickerId,
     });
   } catch (err) {
+    logGenerationFailure("kling/video-edit", err);
     const message = err instanceof Error ? err.message : "Unknown error.";
-    return NextResponse.json({ error: message }, { status: 502 });
+    return NextResponse.json({ error: userFacingProviderErrorOrDefault(message) }, { status: 502 });
   }
 }

@@ -8,6 +8,7 @@ import {
   parseAccountPlan,
   motionControlUpgradeMessage,
 } from "@/lib/subscriptionModelAccess";
+import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
 
 type BackgroundSource = "input_video" | "input_image";
 
@@ -91,7 +92,8 @@ export async function POST(req: Request) {
       model: "kling-3.0/motion-control",
     });
   } catch (err) {
+    logGenerationFailure("kling/motion-control", err);
     const message = err instanceof Error ? err.message : "Unknown error.";
-    return NextResponse.json({ error: message }, { status: 502 });
+    return NextResponse.json({ error: userFacingProviderErrorOrDefault(message) }, { status: 502 });
   }
 }

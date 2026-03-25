@@ -1,8 +1,13 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
-import { Download, FolderOpen, Info, LayoutGrid, List, Loader2, Play, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Download, FolderOpen, Info, LayoutGrid, List, Loader2, Play, Sparkles, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 export type StudioHistoryMediaKind = "image" | "video" | "motion";
 
@@ -59,17 +64,143 @@ export function isProbablyVideoUrl(url: string | undefined): boolean {
   );
 }
 
+/** Image tab: edit open image with same KIE fields as Studio (nano-banana-2 / nano-banana-pro + image_input). */
+export type StudioImageLightboxEditConfig = {
+  nanoAspectOptions: readonly string[];
+  proAspectOptions: readonly string[];
+  resolutionOptions: readonly ("1K" | "2K" | "4K")[];
+  seedModel: "nano" | "pro";
+  seedAspect: string;
+  seedResolution: "1K" | "2K" | "4K";
+  creditsFor: (model: "nano" | "pro", resolution: "1K" | "2K" | "4K") => number;
+  onSubmitEdit: (payload: {
+    sourceUrl: string;
+    prompt: string;
+    model: "nano" | "pro";
+    aspectRatio: string;
+    resolution: "1K" | "2K" | "4K";
+  }) => void;
+};
+
 type Props = {
   items: StudioHistoryItem[];
   empty: ReactNode;
   /** Shown in generating subtitle */
   mediaLabel?: string;
+  /** Studio Images: Nano Banana image-to-image from history lightbox */
+  imageLightboxEdit?: StudioImageLightboxEditConfig;
+  /**
+   * Failed rows fade out after `delayMs`, then `onDismissFailed(id)` is called so the parent can remove them.
+   * Defaults: delay 3s, fade ~700ms.
+   */
+  failedAutoDismiss?: boolean | { delayMs?: number; fadeMs?: number };
+  onDismissFailed?: (id: string) => void;
 };
 
-export function StudioGenerationsHistory({ items, empty, mediaLabel = "Generation" }: Props) {
+export function StudioGenerationsHistory({
+  items,
+  empty,
+  mediaLabel = "Generation",
+  imageLightboxEdit,
+  failedAutoDismiss,
+  onDismissFailed,
+}: Props) {
   const [view, setView] = useState<"grid" | "list">("grid");
   const [zoom, setZoom] = useState(100);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [editPrompt, setEditPrompt] = useState("");
+  const [editModel, setEditModel] = useState<"nano" | "pro">("pro");
+  const [editAspect, setEditAspect] = useState("3:4");
+  const [editResolution, setEditResolution] = useState<"1K" | "2K" | "4K">("2K");
+
+  useEffect(() => {
+    if (!lightboxUrl || !imageLightboxEdit) return;
+    setEditPrompt("");
+    setEditModel(imageLightboxEdit.seedModel);
+    setEditAspect(imageLightboxEdit.seedAspect);
+    setEditResolution(imageLightboxEdit.seedResolution);
+  }, [lightboxUrl, imageLightboxEdit]);
+
+  const editAspectOptions = useMemo(
+    () => (editModel === "pro" ? imageLightboxEdit?.proAspectOptions ?? [] : imageLightboxEdit?.nanoAspectOptions ?? []),
+    [editModel, imageLightboxEdit],
+  );
+
+  useEffect(() => {
+    if (!lightboxUrl || !imageLightboxEdit) return;
+    const allowed = new Set(editAspectOptions as readonly string[]);
+    if (allowed.size > 0 && !allowed.has(editAspect)) {
+      setEditAspect(editModel === "pro" ? "3:4" : "auto");
+    }
+  }, [editModel, editAspect, editAspectOptions, lightboxUrl, imageLightboxEdit]);
+
+  const failedDismissCfg = useMemo(() => {
+    if (!failedAutoDismiss) return null;
+    if (failedAutoDismiss === true) return { delayMs: 3000, fadeMs: 700 };
+    return {
+      delayMs: failedAutoDismiss.delayMs ?? 3000,
+      fadeMs: failedAutoDismiss.fadeMs ?? 700,
+    };
+  }, [failedAutoDismiss]);
+
+  const [fadingFailedIds, setFadingFailedIds] = useState<Record<string, boolean>>({});
+  const failedDismissTimersRef = useRef<
+    Map<string, { fade: ReturnType<typeof setTimeout>; remove: ReturnType<typeof setTimeout> }>
+  >(new Map());
+  const onDismissFailedRef = useRef(onDismissFailed);
+  onDismissFailedRef.current = onDismissFailed;
+
+  useEffect(() => {
+    if (!failedDismissCfg || !onDismissFailed) return;
+
+    const failedIds = new Set(items.filter((i) => i.status === "failed").map((i) => i.id));
+
+    for (const [id, t] of failedDismissTimersRef.current) {
+      if (!failedIds.has(id)) {
+        clearTimeout(t.fade);
+        clearTimeout(t.remove);
+        failedDismissTimersRef.current.delete(id);
+        setFadingFailedIds((prev) => {
+          if (!prev[id]) return prev;
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+      }
+    }
+
+    const { delayMs, fadeMs } = failedDismissCfg;
+    for (const id of failedIds) {
+      if (failedDismissTimersRef.current.has(id)) continue;
+
+      const fadeTimer = setTimeout(() => {
+        setFadingFailedIds((prev) => ({ ...prev, [id]: true }));
+      }, delayMs);
+
+      const removeTimer = setTimeout(() => {
+        failedDismissTimersRef.current.delete(id);
+        onDismissFailedRef.current?.(id);
+        setFadingFailedIds((prev) => {
+          if (!prev[id]) return prev;
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+      }, delayMs + fadeMs);
+
+      failedDismissTimersRef.current.set(id, { fade: fadeTimer, remove: removeTimer });
+    }
+  }, [items, failedDismissCfg, onDismissFailed]);
+
+  useEffect(() => {
+    return () => {
+      for (const t of failedDismissTimersRef.current.values()) {
+        clearTimeout(t.fade);
+        clearTimeout(t.remove);
+      }
+      failedDismissTimersRef.current.clear();
+    };
+  }, []);
 
   const grouped = useMemo(() => groupByDate(items), [items]);
 
@@ -163,6 +294,9 @@ export function StudioGenerationsHistory({ items, empty, mediaLabel = "Generatio
                     Boolean(item.mediaUrl?.trim()) &&
                     item.status !== "failed" &&
                     (item.status === "ready" || item.status === "generating");
+                  const failedAutoFade =
+                    Boolean(failedDismissCfg && item.status === "failed" && onDismissFailed);
+                  const isFadingOutFailed = Boolean(failedAutoFade && fadingFailedIds[item.id]);
                   return (
                   <article
                     key={item.id}
@@ -170,7 +304,18 @@ export function StudioGenerationsHistory({ items, empty, mediaLabel = "Generatio
                       "flex flex-col gap-2",
                       view === "list" && "sm:flex-row sm:items-stretch sm:gap-4",
                       cardWidthClass,
+                      failedAutoFade && "ease-in-out will-change-[opacity,transform]",
+                      failedAutoFade && !isFadingOutFailed && "opacity-100",
+                      failedAutoFade && isFadingOutFailed && "translate-y-1 scale-[0.98] opacity-0",
                     )}
+                    style={
+                      failedAutoFade && failedDismissCfg
+                        ? {
+                            transitionProperty: "opacity, transform",
+                            transitionDuration: `${failedDismissCfg.fadeMs}ms`,
+                          }
+                        : undefined
+                    }
                   >
                     <div
                       className={cn(
@@ -200,9 +345,14 @@ export function StudioGenerationsHistory({ items, empty, mediaLabel = "Generatio
                           <div className="flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-black/40">
                             <X className="h-6 w-6 text-white/35" strokeWidth={2} />
                           </div>
-                          <p className="text-center text-[11px] leading-snug text-white/45">
-                            {item.errorMessage || "Generation failed"}
-                          </p>
+                          <div className="max-h-[min(11rem,42%)] w-full space-y-1 overflow-y-auto px-1">
+                            <p className="text-center text-[9px] font-semibold uppercase tracking-wider text-white/35">
+                              Reason
+                            </p>
+                            <p className="text-center text-[11px] leading-snug text-white/55">
+                              {item.errorMessage || "Generation failed"}
+                            </p>
+                          </div>
                         </div>
                       ) : null}
                       {canShowResultMedia && item.mediaUrl && (item.kind !== "image" || isProbablyVideoUrl(item.mediaUrl)) ? (
@@ -310,7 +460,7 @@ export function StudioGenerationsHistory({ items, empty, mediaLabel = "Generatio
         >
           <button
             type="button"
-            className="absolute right-3 top-3 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-black/65 text-white transition hover:bg-black/85"
+            className="absolute right-3 top-3 z-[222] inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-black/65 text-white transition hover:bg-black/85"
             onClick={(e) => {
               e.stopPropagation();
               setLightboxUrl(null);
@@ -319,13 +469,111 @@ export function StudioGenerationsHistory({ items, empty, mediaLabel = "Generatio
           >
             <X className="h-5 w-5" aria-hidden />
           </button>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={lightboxUrl}
-            alt="Fullscreen generation preview"
-            className="max-h-[92vh] max-w-[min(100%,1200px)] rounded-xl border border-violet-500/20 object-contain shadow-[0_0_60px_rgba(139,92,246,0.15)]"
+          <div
+            className="flex max-h-[92vh] w-full max-w-3xl flex-col gap-4 overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
-          />
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={lightboxUrl}
+              alt="Fullscreen generation preview"
+              className="max-h-[min(52vh,520px)] w-full shrink-0 rounded-xl border border-violet-500/20 object-contain object-center shadow-[0_0_60px_rgba(139,92,246,0.15)]"
+            />
+            {imageLightboxEdit && lightboxUrl && !isProbablyVideoUrl(lightboxUrl) ? (
+              <div className="rounded-xl border border-white/10 bg-[#14141c] p-4 shadow-lg">
+                <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-white/90">
+                  <Sparkles className="h-4 w-4 text-violet-300" aria-hidden />
+                  Edit with Nano Banana (image → image, KIE)
+                </div>
+                <p className="mb-3 text-[11px] leading-snug text-white/45">
+                  Uses the same API as Studio: <span className="text-white/60">prompt</span>,{" "}
+                  <span className="text-white/60">aspect_ratio</span>, <span className="text-white/60">resolution</span>, and{" "}
+                  <span className="text-white/60">image_input</span> = this image.
+                </p>
+                <div className="space-y-3">
+                  <div>
+                    <Label className="text-[10px] uppercase tracking-wide text-white/40">Edit prompt</Label>
+                    <Textarea
+                      value={editPrompt}
+                      onChange={(e) => setEditPrompt(e.target.value)}
+                      placeholder="Describe what to change (e.g. swap background, add props, fix lighting…)"
+                      className="mt-1.5 min-h-[88px] border-white/10 bg-black/40 text-sm text-white placeholder:text-white/30"
+                      rows={3}
+                    />
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div>
+                      <Label className="text-[10px] uppercase tracking-wide text-white/40">Model</Label>
+                      <Select value={editModel} onValueChange={(v) => setEditModel(v as "nano" | "pro")}>
+                        <SelectTrigger className="mt-1.5 h-10 border-white/15 bg-black/40 text-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="nano">Nano Banana 2</SelectItem>
+                          <SelectItem value="pro">Nano Banana Pro</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-[10px] uppercase tracking-wide text-white/40">Aspect ratio</Label>
+                      <Select value={editAspect} onValueChange={setEditAspect}>
+                        <SelectTrigger className="mt-1.5 h-10 border-white/15 bg-black/40 text-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-[min(280px,50vh)]">
+                          {editAspectOptions.map((r) => (
+                            <SelectItem key={r} value={r}>
+                              {r}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-[10px] uppercase tracking-wide text-white/40">Resolution</Label>
+                      <Select
+                        value={editResolution}
+                        onValueChange={(v) => setEditResolution(v as "1K" | "2K" | "4K")}
+                      >
+                        <SelectTrigger className="mt-1.5 h-10 border-white/15 bg-black/40 text-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(imageLightboxEdit.resolutionOptions ?? ["1K", "2K", "4K"]).map((r) => (
+                            <SelectItem key={r} value={r}>
+                              {r}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    className="h-11 w-full border border-violet-400/40 bg-violet-600 text-white hover:bg-violet-500"
+                    onClick={() => {
+                      const p = editPrompt.trim();
+                      if (!p) {
+                        toast.error("Enter an edit prompt.");
+                        return;
+                      }
+                      if (!lightboxUrl) return;
+                      imageLightboxEdit.onSubmitEdit({
+                        sourceUrl: lightboxUrl,
+                        prompt: p,
+                        model: editModel,
+                        aspectRatio: editAspect,
+                        resolution: editResolution,
+                      });
+                      setLightboxUrl(null);
+                    }}
+                  >
+                    Run edit · {imageLightboxEdit.creditsFor(editModel, editResolution)} credits
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+          </div>
         </div>
       ) : null}
     </div>

@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { StudioEmptyExamples, StudioOutputPane } from "@/app/_components/StudioEmptyExamples";
 import { StudioGenerationsHistory } from "@/app/_components/StudioGenerationsHistory";
+import { userMessageFromCaughtError } from "@/lib/generationUserMessage";
 import type { StudioHistoryItem } from "@/app/_components/StudioGenerationsHistory";
 import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
 import {
@@ -1152,7 +1153,7 @@ export default function StudioVideoPanel() {
         });
         toast.success("Video ready");
       } catch (e) {
-        const msg = "Something went wrong while generating. Please try again.";
+        const msg = userMessageFromCaughtError(e, "Something went wrong while generating. Please try again.");
         refundPlatformCredits(platformChargeEdit, grantCredits, creditsRef);
         toast.error(msg);
         setHistoryItems((prev) =>
@@ -1373,7 +1374,7 @@ export default function StudioVideoPanel() {
         });
         toast.success("Video ready");
       } catch (e) {
-        const msg = "Something went wrong while generating. Please try again.";
+        const msg = userMessageFromCaughtError(e, "Something went wrong while generating. Please try again.");
         refundPlatformCredits(platformChargeCreate, grantCredits, creditsRef);
         toast.error(msg);
         setHistoryItems((prev) =>

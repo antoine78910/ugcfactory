@@ -7,6 +7,7 @@ import {
   kieRecordStateIsSuccess,
   parseKieResultMediaUrls,
 } from "@/lib/kieMarket";
+import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
 
 function normalizeKieTaskToNanoShape(data: {
   state: string;
@@ -56,10 +57,18 @@ export async function GET(req: Request) {
 
   try {
     const raw = await kieMarketRecordInfo(taskId, personalKey);
+    if (kieRecordStateIsFail(raw.state) && raw.failMsg) {
+      logGenerationFailure("nanobanana/task", raw.failMsg, { taskId });
+    }
     const data = normalizeKieTaskToNanoShape(raw);
-    return NextResponse.json({ data });
+    const safe =
+      data.successFlag === -1 && data.errorMessage
+        ? { ...data, errorMessage: userFacingProviderErrorOrDefault(data.errorMessage) }
+        : data;
+    return NextResponse.json({ data: safe });
   } catch (err) {
+    logGenerationFailure("nanobanana/task", err, { taskId });
     const message = err instanceof Error ? err.message : "Unknown error.";
-    return NextResponse.json({ error: message }, { status: 502 });
+    return NextResponse.json({ error: userFacingProviderErrorOrDefault(message) }, { status: 502 });
   }
 }
