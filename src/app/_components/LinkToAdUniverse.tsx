@@ -122,6 +122,20 @@ function angleBriefFromScriptOption(raw: string, angleIndex: 0 | 1 | 2): string 
   return teaserFromScriptBlock(raw, angleIndex);
 }
 
+function angleFullSummaryFromScriptOption(raw: string): string {
+  const { editable, headline } = angleBlockForEditing(raw);
+  const factors = splitScriptFactorsForUi(editable, headline);
+  const lines = [
+    factors.hook?.trim(),
+    factors.problem?.trim(),
+    factors.benefits?.trim(),
+    factors.cta?.trim(),
+  ].filter(Boolean) as string[];
+
+  const text = lines.join("\n");
+  return text || editable.trim() || raw.trim();
+}
+
 function mergeNanoUrlIntoThreeSlots(prev: string[], slot: 0 | 1 | 2, url: string): string[] {
   const base: string[] = [0, 1, 2].map((i) => {
     const v = prev[i];
@@ -3465,7 +3479,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                         const active = selectedAngleIndex === i;
                         const expanded = Boolean(expandedAngleScripts[i]);
                         const fullScript = scriptOptionBodiesAll[i] ?? "";
-                        const draft = angleScriptDrafts[i] ?? fullScript;
+                        const summary = angleFullSummaryFromScriptOption(fullScript);
                         return (
                           <div
                             key={i}
@@ -3502,23 +3516,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                             </button>
                             {expanded ? (
                               <div className="mt-2 space-y-2 border-t border-white/10 pt-2">
-                                <Textarea
-                                  value={draft}
-                                  onChange={(e) =>
-                                    setAngleScriptDrafts((prev) => ({ ...prev, [i]: e.target.value }))
-                                  }
-                                  className="min-h-[150px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/85"
-                                />
-                                <div className="flex justify-end">
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="secondary"
-                                    className="h-8 border-white/15 bg-white/5 text-xs text-white hover:bg-white/10"
-                                    onClick={() => saveAngleScriptDraft(i)}
-                                  >
-                                    Save this angle
-                                  </Button>
+                                <div className="rounded-lg border border-white/10 bg-black/25 px-3 py-2.5 text-xs leading-relaxed text-white/85 whitespace-pre-wrap">
+                                  {summary}
                                 </div>
                               </div>
                             ) : null}
@@ -3535,6 +3534,25 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
             <div className="flex min-w-0 flex-1 flex-col gap-4">
               {!showVideoStageLayout ? (
                 <div className="flex flex-col gap-4 rounded-xl border border-violet-500/25 bg-violet-500/[0.06] p-4">
+                  {showUniverseLoading && universeLoadingState.message ? (
+                    <div className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/25 px-3 py-2.5">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <Loader2 className="h-4 w-4 shrink-0 animate-spin text-violet-300" aria-hidden />
+                        <span className="truncate text-xs font-medium text-white/75">
+                          {universeLoadingState.message}
+                        </span>
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        className="h-8 shrink-0 rounded-lg border border-white/15 bg-white/5 px-3 text-xs text-white/75 hover:bg-white/10"
+                        onClick={() => cancelCurrentGeneration()}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  ) : null}
                   {nanoBananaPromptsRaw && nanoHasThreeImages ? (
                     <div className="space-y-4">
                       <div>
