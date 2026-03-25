@@ -2889,6 +2889,9 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
               <p className="mt-2 max-w-xl text-[11px] leading-snug text-white/40">
                 Use the exact product page URL, not just your shop homepage. We need the specific listing to pull the
                 right images and details.
+                <span className="mt-1 block">
+                  This is for one product only. To test another product, create a new Link to Ad with that product URL.
+                </span>
               </p>
 
               {/* Product photos + avatar are shown only after brief + scripts are generated (next step),
