@@ -44,6 +44,21 @@ function groupByDate(items: StudioHistoryItem[]): { date: string; rows: StudioHi
   return groups;
 }
 
+function isProbablyVideoUrl(url: string | undefined): boolean {
+  const u = (url || "").trim().toLowerCase();
+  if (!u) return false;
+  // Common direct video extensions + blob urls.
+  if (u.startsWith("blob:")) return true;
+  return (
+    u.includes(".mp4") ||
+    u.includes(".mov") ||
+    u.includes(".webm") ||
+    u.includes("video/mp4") ||
+    u.includes("video/quicktime") ||
+    u.includes("video/webm")
+  );
+}
+
 type Props = {
   items: StudioHistoryItem[];
   empty: ReactNode;
@@ -185,33 +200,7 @@ export function StudioGenerationsHistory({ items, empty, mediaLabel = "Generatio
                           </p>
                         </div>
                       ) : null}
-                      {item.status === "ready" && item.kind === "image" && item.mediaUrl ? (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => setLightboxUrl(item.mediaUrl ?? null)}
-                            className="block h-full w-full"
-                            aria-label="Open image fullscreen"
-                          >
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={item.mediaUrl}
-                              alt=""
-                              className="h-full w-full object-cover object-center"
-                            />
-                          </button>
-                          <a
-                            href={`/api/download?url=${encodeURIComponent(item.mediaUrl)}`}
-                            onClick={(e) => e.stopPropagation()}
-                            className="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white/75 opacity-0 transition hover:bg-black/75 hover:text-white group-hover/media:opacity-100 focus-visible:opacity-100"
-                            aria-label="Download image"
-                            title="Download"
-                          >
-                            <Download className="h-4 w-4" aria-hidden />
-                          </a>
-                        </>
-                      ) : null}
-                      {item.status === "ready" && item.kind !== "image" && item.mediaUrl ? (
+                      {item.status === "ready" && item.mediaUrl && (item.kind !== "image" || isProbablyVideoUrl(item.mediaUrl)) ? (
                         <div className="relative h-full w-full bg-black">
                           <video
                             src={item.mediaUrl}
@@ -239,6 +228,33 @@ export function StudioGenerationsHistory({ items, empty, mediaLabel = "Generatio
                             </span>
                           </div>
                         </div>
+                      ) : null}
+
+                      {item.status === "ready" && item.kind === "image" && item.mediaUrl && !isProbablyVideoUrl(item.mediaUrl) ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setLightboxUrl(item.mediaUrl ?? null)}
+                            className="block h-full w-full"
+                            aria-label="Open image fullscreen"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={item.mediaUrl}
+                              alt=""
+                              className="h-full w-full object-cover object-center"
+                            />
+                          </button>
+                          <a
+                            href={`/api/download?url=${encodeURIComponent(item.mediaUrl)}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white/75 opacity-0 transition hover:bg-black/75 hover:text-white group-hover/media:opacity-100 focus-visible:opacity-100"
+                            aria-label="Download image"
+                            title="Download"
+                          >
+                            <Download className="h-4 w-4" aria-hidden />
+                          </a>
+                        </>
                       ) : null}
                       {item.status === "ready" && !item.mediaUrl && item.posterUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
