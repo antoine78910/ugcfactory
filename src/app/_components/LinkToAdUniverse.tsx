@@ -498,6 +498,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const [nanoBananaImageUrls, setNanoBananaImageUrls] = useState<string[]>([]);
   const [nanoBananaSelectedImageIndex, setNanoBananaSelectedImageIndex] = useState<0 | 1 | 2 | null>(null);
   const [ugcVideoPromptGpt, setUgcVideoPromptGpt] = useState("");
+  const [nanoPromptDrafts, setNanoPromptDrafts] = useState<[string, string, string]>(["", "", ""]);
+  const [nanoPromptHasEdits, setNanoPromptHasEdits] = useState(false);
   /** Per reference image (0–2): Kling video URL, task id, history, saved motion prompt. */
   const [klingByRef, setKlingByRef] = useState<KlingReferenceSlotV1[]>(() => createEmptyKlingByReference());
   /** Which reference index the active Kling poll belongs to (single global poll). */
@@ -820,6 +822,61 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       };
     });
   }, [angleLabels, hasAvatarPhoto, sanitizeAngleLabelForAvatar, scriptOptionBodiesAll]);
+
+  useEffect(() => {
+    setNanoPromptDrafts([parsedNanoPrompts[0] ?? "", parsedNanoPrompts[1] ?? "", parsedNanoPrompts[2] ?? ""]);
+    setNanoPromptHasEdits(false);
+  }, [nanoBananaPromptsRaw]);
+
+  async function saveEditedNanoPrompts() {
+    const [p1, p2, p3] = nanoPromptDrafts.map((p) => String(p || "").trim()) as [string, string, string];
+    if (!p1 || !p2 || !p3) {
+      toast.error("All 3 prompts are required.");
+      return;
+    }
+    const composed = `PROMPT 1\n${p1}\n\nPROMPT 2\n${p2}\n\nPROMPT 3\n${p3}`.trim();
+    setNanoBananaPromptsRaw(composed);
+    setNanoPromptHasEdits(false);
+    // Prompts changed → reset downstream to avoid mismatched references.
+    setNanoBananaTaskId(null);
+    setNanoBananaImageUrl(null);
+    setNanoBananaImageUrls([]);
+    setNanoBananaSelectedImageIndex(null);
+    setUgcVideoPromptGpt("");
+    setKlingByRef(createEmptyKlingByReference());
+    setNanoPollTaskId(null);
+    setNanoPollingSlotIndex(null);
+    setKlingPollTaskId(null);
+    setKlingPollImageIndex(null);
+    setUserStartedVideoFromImage(false);
+    setVideoStageMode(false);
+
+    const url0 = storeUrl.trim();
+    const base = latestSnapRef.current;
+    if (base && lastExtractedJson && url0) {
+      const snap: LinkToAdUniverseSnapshotV1 = {
+        ...base,
+        nanoBananaPromptsRaw: composed,
+        nanoBananaSelectedPromptIndex: 0,
+        nanoBananaTaskId: null,
+        nanoBananaImageUrl: null,
+        nanoBananaImageUrls: undefined,
+        nanoBananaSelectedImageIndex: null,
+        ugcVideoPromptGpt: "",
+        klingTaskId: null,
+        klingVideoUrl: null,
+        klingByReferenceIndex: undefined,
+      };
+      try {
+        await persistUniverse(universeRunId, url0, extractedTitle, lastExtractedJson, snap, packshotsForSave(), {
+          imagePrompt: composed,
+        });
+      } catch {
+        /* ignore */
+      }
+    }
+    toast.success("Image prompts updated");
+  }
 
   const factorWordRules = useMemo(
     () => ({
@@ -3849,11 +3906,35 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                             <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-white/45">
                               Prompt {i + 1}
                             </p>
-                            <p className="whitespace-pre-wrap">{parsedNanoPrompts[i]?.trim() || "—"}</p>
+                            <Textarea
+                              value={nanoPromptDrafts[i] ?? ""}
+                              onChange={(e) => {
+                                const next: [string, string, string] = [...nanoPromptDrafts] as [string, string, string];
+                                next[i] = e.target.value;
+                                setNanoPromptDrafts(next);
+                                setNanoPromptHasEdits(true);
+                              }}
+                              className="min-h-[96px] border-white/10 bg-black/25 text-xs leading-relaxed text-white/85"
+                              spellCheck
+                            />
                           </div>
                         ))}
                       </div>
                       <div className="flex flex-col gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            disabled={!nanoPromptHasEdits}
+                            onClick={() => void saveEditedNanoPrompts()}
+                            className="h-10 rounded-lg border border-emerald-400/35 bg-emerald-500/20 px-4 text-xs text-white hover:bg-emerald-500/35 disabled:opacity-50"
+                          >
+                            Save prompts
+                          </Button>
+                          <p className="text-xs text-white/45">
+                            Edit your prompts, save, then generate images.
+                          </p>
+                        </div>
                         <Button
                           type="button"
                           disabled={isNanoAllImagesSubmitting || !selectedAngleIndex || !nanoBananaPromptsRaw.trim()}
