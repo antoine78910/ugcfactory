@@ -101,7 +101,10 @@ function clampToMaxWords(text: string, maxWords: number): string {
   return parts.slice(0, maxWords).join(" ");
 }
 
-function angleBriefFromScriptOption(raw: string, angleIndex: 0 | 1 | 2): string {
+function angleBriefPartsFromScriptOption(
+  raw: string,
+  angleIndex: 0 | 1 | 2,
+): { brief: string; full: string; canExpand: boolean } {
   const { editable, headline } = angleBlockForEditing(raw);
   const factors = splitScriptFactorsForUi(editable, headline);
   const headlineClean = headline.replace(/\s+/g, " ").trim();
@@ -109,17 +112,21 @@ function angleBriefFromScriptOption(raw: string, angleIndex: 0 | 1 | 2): string 
   const benefitsClean = (factors.benefits || "").replace(/\s+/g, " ").trim();
 
   // Prefer headline when present (it reads like a real angle).
-  if (headlineClean) return headlineClean;
+  if (headlineClean) return { brief: headlineClean, full: headlineClean, canExpand: false };
 
   // Fall back to a compact, non-structured brief (no HOOK:/PROBLEM:/...).
   const bits = [hookClean, benefitsClean].filter(Boolean);
   const joined = bits.join(" ").trim();
   if (joined) {
-    return joined.length > 160 ? `${joined.slice(0, 160)}…` : joined;
+    const canExpand = joined.length > 160;
+    return { brief: canExpand ? `${joined.slice(0, 160)}…` : joined, full: joined, canExpand };
   }
 
   // Last resort: existing heuristic teaser.
-  return teaserFromScriptBlock(raw, angleIndex);
+  const teaser = teaserFromScriptBlock(raw, angleIndex);
+  // teaserFromScriptBlock can also append an ellipsis — give a show-all if it's long.
+  const canExpand = teaser.length > 160 || /…$/.test(teaser) || /\.{3}$/.test(teaser);
+  return { brief: teaser, full: teaser, canExpand };
 }
 
 function angleFullSummaryFromScriptOption(raw: string): string {
@@ -506,6 +513,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const [klingPollTaskId, setKlingPollTaskId] = useState<string | null>(null);
   /** Lightbox: full reference image (source is often 9:16; grid shows 3:4 crop). */
   const [nanoImageLightboxUrl, setNanoImageLightboxUrl] = useState<string | null>(null);
+  const [expandedAngleBriefs, setExpandedAngleBriefs] = useState<Record<number, boolean>>({});
 
   const nanoPromptsAbortRef = useRef<AbortController | null>(null);
   const nanoImageAbortRef = useRef<AbortController | null>(null);
@@ -783,10 +791,15 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     return Array.from({ length: count }, (_, i) => {
       const explicit = i < 3 ? angleLabels[i]?.trim() : "";
       const body = scriptOptionBodiesAll[i] ?? "";
-      const fallback = body ? angleBriefFromScriptOption(body, (i === 0 ? 0 : i === 1 ? 1 : 2) as 0 | 1 | 2) : "";
+      const parts = body
+        ? angleBriefPartsFromScriptOption(body, (i === 0 ? 0 : i === 1 ? 1 : 2) as 0 | 1 | 2)
+        : { brief: "", full: "", canExpand: false };
+      const fallback = parts.brief;
       return {
         index: i,
         label: explicit || fallback || "…",
+        fullLabel: explicit || parts.full || fallback || "…",
+        canExpand: Boolean(!explicit && parts.canExpand && parts.full && parts.full !== (explicit || fallback)),
       };
     });
   }, [angleLabels, scriptOptionBodiesAll]);
@@ -1499,6 +1512,13 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       return;
     }
 
+    const walletNow = creditsBalanceRef.current;
+    setLtaFrozenCredits(walletNow);
+    if (!spendLtaCreditsIfEnough(2)) {
+      setLtaFrozenCredits(null);
+      return;
+    }
+
     setIsWorking(true);
     setStage("writing_scripts");
     try {
@@ -1509,6 +1529,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           storeUrl: url,
           productTitle: extractedTitle,
           brandBrief: summaryText.trim(),
+          previousScriptsText: scriptsText.trim(),
           productImageUrls: resolvedProductUrlsForGpt(),
           videoDurationSeconds: 15,
           generationMode,
@@ -1571,6 +1592,12 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       toast.success("3 new angles ready");
       setStage("ready");
     } catch (err) {
+      // Refund credits if regeneration fails.
+      if (!isPersonalApiActive()) {
+        grantCredits(2);
+        creditsBalanceRef.current += 2;
+        setLtaFrozenCredits(null);
+      }
       const msg = err instanceof Error ? err.message : "Regenerate failed";
       toast.warning("Could not regenerate angles", { description: msg });
       setStage("ready");
@@ -3255,12 +3282,12 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                   <Button
                     type="button"
                     size="sm"
-                    variant="secondary"
                     disabled={isWorking || stage === "writing_scripts"}
                     onClick={() => void onRegenerateMarketingAngles()}
-                    className="h-8 rounded-lg border border-white/10 bg-white/5 px-3 text-xs text-white/75 hover:bg-white/10"
+                    className={`${primaryBtnClass} h-auto min-h-12 shrink-0 px-4 py-2 text-sm inline-flex flex-col items-center justify-center gap-0.5`}
                   >
-                    Regenerate 3 new angles
+                    <span className="font-semibold leading-tight">Regenerate 3 new angles</span>
+                    <span className="text-[11px] font-semibold text-black/70">2 credits</span>
                   </Button>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-3">
@@ -3274,7 +3301,30 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-xs font-bold uppercase tracking-wide text-violet-300">Angle {card.index + 1}</span>
                     </div>
-                    <p className="mt-2 text-sm leading-snug text-white/85">{card.label}</p>
+                    <p className={cn("mt-2 text-sm leading-snug text-white/85", !expandedAngleBriefs[card.index] && card.canExpand && "line-clamp-3")}>
+                      {expandedAngleBriefs[card.index] ? card.fullLabel : card.label}
+                    </p>
+                    {card.canExpand ? (
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        className="mt-2 inline-flex text-[11px] font-medium text-violet-300/80 hover:text-violet-200"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setExpandedAngleBriefs((prev) => ({ ...prev, [card.index]: !Boolean(prev[card.index]) }));
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setExpandedAngleBriefs((prev) => ({ ...prev, [card.index]: !Boolean(prev[card.index]) }));
+                          }
+                        }}
+                      >
+                        {expandedAngleBriefs[card.index] ? "Show less" : "Show all"}
+                      </span>
+                    ) : null}
                   </button>
                 ))}
                 </div>

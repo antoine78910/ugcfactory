@@ -9,6 +9,8 @@ type Body = {
   storeUrl?: string;
   productTitle?: string | null;
   brandBrief: string;
+  /** Optional: pass prior scripts to avoid repeating the same angles. */
+  previousScriptsText?: string | null;
   /** @deprecated Prefer `productImageUrls`; kept for older clients */
   productImageUrl?: string | null;
   /** Up to 3 HTTPS product references (multi-angle) for GPT vision */
@@ -311,6 +313,7 @@ export async function POST(req: Request) {
       : 15;
   const generationMode = body?.generationMode === "custom_ugc" ? "custom_ugc" : "automatic";
   const customUgcIntent = body?.customUgcIntent?.trim() || "";
+  const previousScriptsText = body?.previousScriptsText?.trim() || "";
 
   const developer = [
     "You are an expert UGC scriptwriter for AI video (lipsync, shot segmentation, image-to-video).",
@@ -321,6 +324,9 @@ export async function POST(req: Request) {
     generationMode === "custom_ugc"
       ? `Generation mode: CUSTOM UGC INTENT. Respect this user intent while still following all structural rules: ${customUgcIntent || "No talk, product-focused visual UGC."}`
       : "Generation mode: AUTOMATIC (standard Link to Ad).",
+    previousScriptsText
+      ? "Important: generate 3 NEW angles that are meaningfully different from the previous set. Do NOT reuse the same headline/hook/problem/benefits/CTA, and avoid similar phrasing."
+      : "",
     "",
     UGC_SCRIPT_INSTRUCTIONS,
   ].join("\n");
@@ -337,6 +343,9 @@ export async function POST(req: Request) {
     "",
     "Brand brief (que l'on aura crée):",
     brandBrief,
+    previousScriptsText ? "" : "",
+    previousScriptsText ? "Previous angles (do NOT repeat these; create 3 different angles):" : "",
+    previousScriptsText ? previousScriptsText : "",
     "",
     "Language: english",
     `Video length: ${String(videoDurationSeconds)} seconds`,
@@ -352,9 +361,10 @@ export async function POST(req: Request) {
 
   try {
     const cacheKey = makeCacheKey({
-      v: 1,
+      v: 2,
       kind: "ugc_scripts_from_brief",
       brandBrief,
+      previousScriptsText,
       imageUrlsJoined: imageUrls.join("|"),
       videoDurationSeconds,
       generationMode,
