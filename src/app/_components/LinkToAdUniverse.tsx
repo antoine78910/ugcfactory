@@ -3553,6 +3553,43 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                       </Button>
                     </div>
                   ) : null}
+                  {nanoBananaPromptsRaw && !nanoHasThreeImages ? (
+                    <div className="space-y-4">
+                      <div>
+                        <h3 className="text-lg font-semibold tracking-tight text-white sm:text-xl">Image prompts</h3>
+                        <p className="mt-2 text-sm leading-snug text-white/70">
+                          Your 3 prompts are ready. Next, generate the 3 reference images.
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        {([0, 1, 2] as const).map((i) => (
+                          <div
+                            key={i}
+                            className="rounded-xl border border-white/10 bg-black/25 px-3 py-2.5 text-xs leading-relaxed text-white/85"
+                          >
+                            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-white/45">
+                              Prompt {i + 1}
+                            </p>
+                            <p className="whitespace-pre-wrap">{parsedNanoPrompts[i]?.trim() || "—"}</p>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <Button
+                          type="button"
+                          disabled={isNanoAllImagesSubmitting || !selectedAngleIndex || !nanoBananaPromptsRaw.trim()}
+                          onClick={() => void onGenerateNanoBananaImagesFromAllPrompts()}
+                          className={`h-auto min-h-12 w-full max-w-md flex-col gap-1 py-2.5 ${primaryBtnClass}`}
+                        >
+                          <span className="text-sm font-semibold leading-tight">Generate 3 images</span>
+                        </Button>
+                        <p className="text-xs text-white/45">
+                          You can cancel while it runs. Images will appear here as soon as they’re ready.
+                        </p>
+                      </div>
+                    </div>
+                  ) : null}
+
                   {nanoBananaPromptsRaw && nanoHasThreeImages ? (
                     <div className="space-y-4">
                       <div>
