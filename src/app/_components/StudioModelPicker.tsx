@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Check,
   ChevronDown,
@@ -103,7 +104,13 @@ function ModelPickerPanelBody({
   showSearch?: boolean;
 }) {
   return (
-    <div className={cn("flex min-h-0 flex-col", variant === "sheet" && "h-full")}>
+    <div
+      className={cn(
+        "flex min-h-0 flex-col",
+        variant === "sheet" && "h-full",
+        variant === "dropdown" && "h-full max-h-full",
+      )}
+    >
       {showSearch ? (
         <div
           className={cn(
@@ -142,7 +149,7 @@ function ModelPickerPanelBody({
           className={cn(
             "studio-params-scroll min-h-0 flex-1 overflow-y-auto pb-3",
             variant === "dropdown"
-              ? cn("max-h-[min(52vh,20rem)] px-1", showSearch || !hideMeta ? "pt-1" : "pt-2")
+              ? cn("px-1", showSearch || !hideMeta ? "pt-1" : "pt-2")
               : cn("px-3", showSearch ? "pt-3" : "pt-4"),
           )}
         >
@@ -250,6 +257,13 @@ export function StudioModelPicker({
   const [q, setQ] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
+  const dropdownPanelRef = useRef<HTMLDivElement>(null);
+  const [dropdownLayout, setDropdownLayout] = useState<{
+    top: number;
+    left: number;
+    width: number;
+    maxHeight: number;
+  } | null>(null);
 
   const selected = useMemo(() => items.find((i) => i.id === value), [items, value]);
 
@@ -262,14 +276,52 @@ export function StudioModelPicker({
     });
   }, [items, q]);
 
+  useLayoutEffect(() => {
+    if (!open || panelMode !== "dropdown") {
+      setDropdownLayout(null);
+      return;
+    }
+    const measure = () => {
+      const el = rootRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const gap = 8;
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const maxPanel = Math.min(352, vw - 24);
+      const w = Math.min(Math.max(r.width, 260), maxPanel);
+      let left = align === "end" ? r.right - w : r.left;
+      left = Math.max(12, Math.min(left, vw - w - 12));
+      const top = r.bottom + gap;
+      const maxHeight = Math.min(vh - top - 16, vh * 0.72, 448);
+      setDropdownLayout({ top, left, width: w, maxHeight });
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    window.addEventListener("scroll", measure, true);
+    return () => {
+      window.removeEventListener("resize", measure);
+      window.removeEventListener("scroll", measure, true);
+    };
+  }, [open, panelMode, align]);
+
   useEffect(() => {
     if (!open || panelMode !== "dropdown") return;
     const onDoc = (e: MouseEvent) => {
-      const el = rootRef.current;
-      if (el && !el.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (rootRef.current?.contains(t)) return;
+      if (dropdownPanelRef.current?.contains(t)) return;
+      setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
     };
     document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
   }, [open, panelMode]);
 
   useEffect(() => {
@@ -384,28 +436,37 @@ export function StudioModelPicker({
         )}
       </button>
 
-      {open && panelMode === "dropdown" ? (
-        <div
-          className={cn(
-            "absolute z-[80] mt-2 max-h-[min(70vh,28rem)] w-[min(calc(100vw-1.5rem),22rem)] overflow-hidden rounded-xl border border-white/10 bg-[#121214] p-2 shadow-[0_16px_48px_rgba(0,0,0,0.65)]",
-            align === "end" ? "right-0" : "left-0",
-          )}
-        >
-          <ModelPickerPanelBody
-            q={q}
-            setQ={setQ}
-            featuredTitle={featuredTitle}
-            filtered={filtered}
-            value={value}
-            isItemLocked={isItemLocked}
-            onLockedPick={onLockedPick}
-            pick={pick}
-            setOpen={setOpen}
-            hideMeta={hideMeta}
-            showSearch={showSearch}
-          />
-        </div>
-      ) : null}
+      {open && panelMode === "dropdown" && dropdownLayout && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              ref={dropdownPanelRef}
+              className="fixed z-[120] flex min-h-0 flex-col overflow-hidden rounded-xl border border-white/10 bg-[#121214] p-2 shadow-[0_16px_48px_rgba(0,0,0,0.65)]"
+              style={{
+                top: dropdownLayout.top,
+                left: dropdownLayout.left,
+                width: dropdownLayout.width,
+                maxHeight: dropdownLayout.maxHeight,
+              }}
+              role="listbox"
+              aria-label="Choose model"
+            >
+              <ModelPickerPanelBody
+                q={q}
+                setQ={setQ}
+                featuredTitle={featuredTitle}
+                filtered={filtered}
+                value={value}
+                isItemLocked={isItemLocked}
+                onLockedPick={onLockedPick}
+                pick={pick}
+                setOpen={setOpen}
+                hideMeta={hideMeta}
+                showSearch={showSearch}
+              />
+            </div>,
+            document.body,
+          )
+        : null}
 
       {open && panelMode === "sheet" ? (
         <>

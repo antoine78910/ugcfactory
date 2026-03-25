@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AtSign, CirclePlus, ImageIcon, Sparkles, VideoIcon } from "lucide-react";
+import { AtSign, CirclePlus, Expand, ImageIcon, Shrink, Sparkles, VideoIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -34,6 +34,7 @@ import { AvatarPickerDialog } from "@/app/_components/AvatarPickerDialog";
 import { clipboardImageFiles } from "@/lib/clipboardImage";
 import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
 import { readStudioHistoryLocal, writeStudioHistoryLocal } from "@/lib/studioHistoryLocalStorage";
+import { cn } from "@/lib/utils";
 
 const LS_STUDIO_VIDEO_HISTORY = "ugc_studio_video_history_v1";
 
@@ -500,6 +501,8 @@ export default function StudioVideoPanel() {
   const [startFramePreviewBlob, setStartFramePreviewBlob] = useState<string | null>(null);
   const [endFramePreviewBlob, setEndFramePreviewBlob] = useState<string | null>(null);
   const [frameUploadSlot, setFrameUploadSlot] = useState<"start" | "end" | null>(null);
+  /** Widen the history / preview column on large screens (not fullscreen). */
+  const [wideVideoPreview, setWideVideoPreview] = useState(false);
   const [historyItems, setHistoryItems] = useState<StudioHistoryItem[]>([]);
   const grantCreditsRef = useRef(grantCredits);
   grantCreditsRef.current = grantCredits;
@@ -1404,6 +1407,54 @@ export default function StudioVideoPanel() {
     })();
   };
 
+  const paramsColumnClass = wideVideoPreview
+    ? "flex min-w-0 w-full flex-col gap-2 lg:basis-[22%] lg:max-w-[16rem] lg:min-w-[12rem] lg:flex-none lg:shrink-0 lg:min-h-0 lg:overflow-hidden"
+    : "flex min-w-0 w-full flex-col gap-2 lg:basis-[30%] lg:max-w-[28rem] lg:flex-none lg:shrink-0 lg:min-h-0 lg:overflow-hidden";
+
+  const outputHistoryColumn = (
+    <div
+      className={cn(
+        "flex h-full min-h-0 min-w-0 flex-1 flex-col lg:min-h-0 lg:overflow-hidden",
+        wideVideoPreview && "lg:min-h-[min(68vh,720px)]",
+      )}
+    >
+      <div className="mb-1 flex shrink-0 items-center justify-end gap-2 lg:mb-2">
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          className="h-8 rounded-lg border border-white/15 bg-white/5 px-3 text-[11px] font-medium text-white/80 hover:bg-white/10"
+          onClick={() => setWideVideoPreview((v) => !v)}
+          aria-pressed={wideVideoPreview}
+        >
+          {wideVideoPreview ? (
+            <span className="inline-flex items-center gap-1.5">
+              <Shrink className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              Default layout
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5">
+              <Expand className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              Larger preview
+            </span>
+          )}
+        </Button>
+      </div>
+      <StudioOutputPane
+        title=""
+        hasOutput
+        output={
+          <StudioGenerationsHistory
+            items={historyItems}
+            empty={<StudioEmptyExamples variant="video" />}
+            mediaLabel="Video"
+          />
+        }
+        empty={null}
+      />
+    </div>
+  );
+
   const generateBtnClass =
     "h-12 w-full rounded-xl border border-violet-300/40 bg-violet-500 text-base font-semibold text-white shadow-[0_6px_0_0_rgba(76,29,149,0.85)] transition-all hover:-translate-y-px hover:bg-violet-400 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.85)] active:translate-y-1 active:shadow-none";
 
@@ -1435,7 +1486,7 @@ export default function StudioVideoPanel() {
 
       {tab === "edit" ? (
         <div className="flex flex-col gap-3 overflow-x-hidden lg:flex-row lg:items-start lg:gap-4 lg:h-[calc(100dvh-4rem)] lg:min-h-0">
-          <div className="flex min-w-0 w-full flex-col gap-2 lg:basis-[30%] lg:max-w-[28rem] lg:flex-none lg:shrink-0 lg:min-h-0 lg:overflow-hidden">
+          <div className={paramsColumnClass}>
             <div className="studio-params-scroll flex min-w-0 flex-col gap-2 overflow-y-auto pr-1 lg:h-full lg:min-h-0 lg:flex-1 lg:pb-10">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Edit prompt</p>
             <div className="rounded-2xl border border-white/10 bg-[#101014] p-3 space-y-3">
@@ -1575,6 +1626,7 @@ export default function StudioVideoPanel() {
                     value={editPickerId}
                     items={VIDEO_EDIT_MODEL_PICKER_ITEMS}
                     triggerVariant="bar"
+                    panelMode="dropdown"
                     hideMeta
                     isItemLocked={(id) =>
                       !isPersonalApiActive() && !canUseStudioVideoEditPicker(planId, id)
@@ -1651,24 +1703,11 @@ export default function StudioVideoPanel() {
             </div>
           </div>
 
-          <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col lg:min-h-0 lg:overflow-hidden">
-            <StudioOutputPane
-              title=""
-              hasOutput
-              output={
-                <StudioGenerationsHistory
-                  items={historyItems}
-                  empty={<StudioEmptyExamples variant="video" />}
-                  mediaLabel="Video"
-                />
-              }
-              empty={null}
-            />
-          </div>
+          {outputHistoryColumn}
         </div>
       ) : (
         <div className="flex flex-col gap-3 overflow-x-hidden lg:flex-row lg:items-start lg:gap-4 lg:h-[calc(100dvh-4rem)] lg:min-h-0">
-          <div className="flex min-w-0 w-full flex-col gap-2 lg:basis-[30%] lg:max-w-[28rem] lg:flex-none lg:shrink-0 lg:min-h-0 lg:overflow-hidden">
+          <div className={paramsColumnClass}>
             <div className="studio-params-scroll flex min-w-0 flex-col gap-2 overflow-y-auto pr-1 lg:h-full lg:min-h-0 lg:flex-1 lg:pb-10">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Create prompt</p>
             <div className="rounded-2xl border border-white/10 bg-[#101014] p-3">
@@ -1742,6 +1781,7 @@ export default function StudioVideoPanel() {
                     value={modelId}
                     items={VIDEO_MODEL_PICKER_ITEMS}
                     triggerVariant="bar"
+                    panelMode="dropdown"
                     hideMeta
                     isItemLocked={(id) =>
                       !isPersonalApiActive() && !canUseStudioVideoModel(planId, id)
@@ -1914,20 +1954,7 @@ export default function StudioVideoPanel() {
             </div>
           </div>
 
-          <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col lg:min-h-0 lg:overflow-hidden">
-            <StudioOutputPane
-              title=""
-              hasOutput
-              output={
-                <StudioGenerationsHistory
-                  items={historyItems}
-                  empty={<StudioEmptyExamples variant="video" />}
-                  mediaLabel="Video"
-                />
-              }
-              empty={null}
-            />
-          </div>
+          {outputHistoryColumn}
         </div>
       )}
 

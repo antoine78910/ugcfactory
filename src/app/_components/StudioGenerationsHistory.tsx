@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Download, FolderOpen, Info, LayoutGrid, List, Loader2, Play, Sparkles, X } from "lucide-react";
+import { Download, FolderOpen, Info, LayoutGrid, List, Loader2, Play, Sparkles, Wand2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -82,6 +82,14 @@ export type StudioImageLightboxEditConfig = {
   }) => void;
 };
 
+/** Studio Images: Topaz image upscale (KIE) from history lightbox. */
+export type StudioImageLightboxUpscaleConfig = {
+  upscaleFactorOptions?: readonly ("1" | "2" | "4" | "8")[];
+  seedFactor?: "1" | "2" | "4" | "8";
+  creditsFor: (factor: string) => number;
+  onSubmitUpscale: (payload: { sourceUrl: string; upscaleFactor: string }) => void;
+};
+
 type Props = {
   items: StudioHistoryItem[];
   empty: ReactNode;
@@ -89,6 +97,7 @@ type Props = {
   mediaLabel?: string;
   /** Studio Images: Nano Banana image-to-image from history lightbox */
   imageLightboxEdit?: StudioImageLightboxEditConfig;
+  imageLightboxUpscale?: StudioImageLightboxUpscaleConfig;
   /**
    * Failed rows fade out after `delayMs`, then `onDismissFailed(id)` is called so the parent can remove them.
    * Defaults: delay 3s, fade ~700ms.
@@ -102,6 +111,7 @@ export function StudioGenerationsHistory({
   empty,
   mediaLabel = "Generation",
   imageLightboxEdit,
+  imageLightboxUpscale,
   failedAutoDismiss,
   onDismissFailed,
 }: Props) {
@@ -112,6 +122,7 @@ export function StudioGenerationsHistory({
   const [editModel, setEditModel] = useState<"nano" | "pro">("pro");
   const [editAspect, setEditAspect] = useState("3:4");
   const [editResolution, setEditResolution] = useState<"1K" | "2K" | "4K">("2K");
+  const [upscaleFactor, setUpscaleFactor] = useState<"1" | "2" | "4" | "8">("2");
 
   useEffect(() => {
     if (!lightboxUrl || !imageLightboxEdit) return;
@@ -120,6 +131,12 @@ export function StudioGenerationsHistory({
     setEditAspect(imageLightboxEdit.seedAspect);
     setEditResolution(imageLightboxEdit.seedResolution);
   }, [lightboxUrl, imageLightboxEdit]);
+
+  useEffect(() => {
+    if (!lightboxUrl || !imageLightboxUpscale) return;
+    const seed = imageLightboxUpscale.seedFactor ?? "2";
+    setUpscaleFactor(seed);
+  }, [lightboxUrl, imageLightboxUpscale]);
 
   const editAspectOptions = useMemo(
     () => (editModel === "pro" ? imageLightboxEdit?.proAspectOptions ?? [] : imageLightboxEdit?.nanoAspectOptions ?? []),
@@ -452,7 +469,7 @@ export function StudioGenerationsHistory({
       )}
       {lightboxUrl ? (
         <div
-          className="fixed inset-0 z-[220] flex items-center justify-center bg-black/90 p-4 backdrop-blur-[2px]"
+          className="fixed inset-0 z-[220] flex items-center justify-center bg-black/88 p-2 backdrop-blur-[2px] transition-opacity duration-300 ease-out sm:p-4"
           onClick={() => setLightboxUrl(null)}
           role="dialog"
           aria-modal="true"
@@ -460,7 +477,7 @@ export function StudioGenerationsHistory({
         >
           <button
             type="button"
-            className="absolute right-3 top-3 z-[222] inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-black/65 text-white transition hover:bg-black/85"
+            className="absolute right-2 top-2 z-[222] inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-black/65 text-white transition-colors duration-200 hover:bg-black/85 sm:right-4 sm:top-4"
             onClick={(e) => {
               e.stopPropagation();
               setLightboxUrl(null);
@@ -470,108 +487,171 @@ export function StudioGenerationsHistory({
             <X className="h-5 w-5" aria-hidden />
           </button>
           <div
-            className="flex max-h-[92vh] w-full max-w-3xl flex-col gap-4 overflow-y-auto"
+            className={cn(
+              "flex min-h-0 w-full max-w-[min(1400px,calc(100vw-1rem))] flex-col gap-4 duration-300 ease-out lg:max-h-[min(92vh,920px)] lg:flex-row lg:items-stretch lg:gap-5",
+              "translate-y-0 opacity-100 transition-[opacity,transform] motion-reduce:transition-none",
+            )}
             onClick={(e) => e.stopPropagation()}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={lightboxUrl}
-              alt="Fullscreen generation preview"
-              className="max-h-[min(52vh,520px)] w-full shrink-0 rounded-xl border border-violet-500/20 object-contain object-center shadow-[0_0_60px_rgba(139,92,246,0.15)]"
-            />
-            {imageLightboxEdit && lightboxUrl && !isProbablyVideoUrl(lightboxUrl) ? (
-              <div className="rounded-xl border border-white/10 bg-[#14141c] p-4 shadow-lg">
-                <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-white/90">
-                  <Sparkles className="h-4 w-4 text-violet-300" aria-hidden />
-                  Edit with Nano Banana (image → image, KIE)
-                </div>
-                <p className="mb-3 text-[11px] leading-snug text-white/45">
-                  Uses the same API as Studio: <span className="text-white/60">prompt</span>,{" "}
-                  <span className="text-white/60">aspect_ratio</span>, <span className="text-white/60">resolution</span>, and{" "}
-                  <span className="text-white/60">image_input</span> = this image.
-                </p>
-                <div className="space-y-3">
-                  <div>
-                    <Label className="text-[10px] uppercase tracking-wide text-white/40">Edit prompt</Label>
-                    <Textarea
-                      value={editPrompt}
-                      onChange={(e) => setEditPrompt(e.target.value)}
-                      placeholder="Describe what to change (e.g. swap background, add props, fix lighting…)"
-                      className="mt-1.5 min-h-[88px] border-white/10 bg-black/40 text-sm text-white placeholder:text-white/30"
-                      rows={3}
-                    />
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <div>
-                      <Label className="text-[10px] uppercase tracking-wide text-white/40">Model</Label>
-                      <Select value={editModel} onValueChange={(v) => setEditModel(v as "nano" | "pro")}>
-                        <SelectTrigger className="mt-1.5 h-10 border-white/15 bg-black/40 text-white">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="nano">Nano Banana 2</SelectItem>
-                          <SelectItem value="pro">Nano Banana Pro</SelectItem>
-                        </SelectContent>
-                      </Select>
+            <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center rounded-2xl border border-white/[0.12] bg-gradient-to-b from-[#16161f]/90 to-black/60 p-2 shadow-[0_24px_80px_rgba(0,0,0,0.55)] transition-shadow duration-300 ease-out sm:p-4 lg:min-h-[min(88vh,900px)]">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={lightboxUrl}
+                alt="Fullscreen generation preview"
+                className="max-h-[min(78vh,880px)] w-full max-w-full object-contain object-center transition-transform duration-300 ease-out lg:max-h-[min(88vh,900px)]"
+              />
+            </div>
+            {lightboxUrl &&
+            !isProbablyVideoUrl(lightboxUrl) &&
+            (imageLightboxUpscale || imageLightboxEdit) ? (
+              <aside
+                className={cn(
+                  "flex max-h-[min(52vh,480px)] w-full shrink-0 flex-col gap-4 overflow-y-auto rounded-2xl border border-white/[0.12] bg-[#121218]/96 p-4 shadow-xl transition-[opacity,transform,box-shadow] duration-300 ease-out motion-reduce:transition-none lg:max-h-none lg:w-[min(100%,22rem)] lg:max-w-[22rem]",
+                )}
+              >
+                {imageLightboxUpscale ? (
+                  <div className="rounded-xl border border-white/10 bg-[#14141c]/80 p-3.5">
+                    <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-white/90">
+                      <Wand2 className="h-4 w-4 text-emerald-300/90" aria-hidden />
+                      Topaz image upscale (KIE)
                     </div>
-                    <div>
-                      <Label className="text-[10px] uppercase tracking-wide text-white/40">Aspect ratio</Label>
-                      <Select value={editAspect} onValueChange={setEditAspect}>
-                        <SelectTrigger className="mt-1.5 h-10 border-white/15 bg-black/40 text-white">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-[min(280px,50vh)]">
-                          {editAspectOptions.map((r) => (
-                            <SelectItem key={r} value={r}>
-                              {r}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label className="text-[10px] uppercase tracking-wide text-white/40">Resolution</Label>
-                      <Select
-                        value={editResolution}
-                        onValueChange={(v) => setEditResolution(v as "1K" | "2K" | "4K")}
+                    <p className="mb-3 text-[11px] leading-snug text-white/45">
+                      Sharper, higher-resolution output. Billing follows the selected scale (2K / 4K / 8K tier).
+                    </p>
+                    <div className="space-y-3">
+                      <div>
+                        <Label className="text-[10px] uppercase tracking-wide text-white/40">Upscale factor</Label>
+                        <Select
+                          value={upscaleFactor}
+                          onValueChange={(v) => setUpscaleFactor(v as "1" | "2" | "4" | "8")}
+                        >
+                          <SelectTrigger className="mt-1.5 h-10 border-white/15 bg-black/40 text-white">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {(imageLightboxUpscale.upscaleFactorOptions ?? (["1", "2", "4", "8"] as const)).map(
+                              (opt) => (
+                                <SelectItem key={opt} value={opt}>
+                                  {opt}×
+                                </SelectItem>
+                              ),
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <Button
+                        type="button"
+                        className="h-11 w-full border border-emerald-500/35 bg-emerald-700/90 text-white transition-colors duration-200 hover:bg-emerald-600"
+                        onClick={() => {
+                          if (!lightboxUrl) return;
+                          imageLightboxUpscale.onSubmitUpscale({
+                            sourceUrl: lightboxUrl,
+                            upscaleFactor,
+                          });
+                          setLightboxUrl(null);
+                        }}
                       >
-                        <SelectTrigger className="mt-1.5 h-10 border-white/15 bg-black/40 text-white">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {(imageLightboxEdit.resolutionOptions ?? ["1K", "2K", "4K"]).map((r) => (
-                            <SelectItem key={r} value={r}>
-                              {r}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        Run upscale · {imageLightboxUpscale.creditsFor(upscaleFactor)} credits
+                      </Button>
                     </div>
                   </div>
-                  <Button
-                    type="button"
-                    className="h-11 w-full border border-violet-400/40 bg-violet-600 text-white hover:bg-violet-500"
-                    onClick={() => {
-                      const p = editPrompt.trim();
-                      if (!p) {
-                        toast.error("Enter an edit prompt.");
-                        return;
-                      }
-                      if (!lightboxUrl) return;
-                      imageLightboxEdit.onSubmitEdit({
-                        sourceUrl: lightboxUrl,
-                        prompt: p,
-                        model: editModel,
-                        aspectRatio: editAspect,
-                        resolution: editResolution,
-                      });
-                      setLightboxUrl(null);
-                    }}
-                  >
-                    Run edit · {imageLightboxEdit.creditsFor(editModel, editResolution)} credits
-                  </Button>
-                </div>
-              </div>
+                ) : null}
+
+                {imageLightboxEdit ? (
+                  <div className="rounded-xl border border-white/10 bg-[#14141c]/80 p-3.5">
+                    <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-white/90">
+                      <Sparkles className="h-4 w-4 text-violet-300" aria-hidden />
+                      Edit with Nano Banana (image → image, KIE)
+                    </div>
+                    <p className="mb-3 text-[11px] leading-snug text-white/45">
+                      Uses the same API as Studio: <span className="text-white/60">prompt</span>,{" "}
+                      <span className="text-white/60">aspect_ratio</span>, <span className="text-white/60">resolution</span>, and{" "}
+                      <span className="text-white/60">image_input</span> = this image.
+                    </p>
+                    <div className="space-y-3">
+                      <div>
+                        <Label className="text-[10px] uppercase tracking-wide text-white/40">Edit prompt</Label>
+                        <Textarea
+                          value={editPrompt}
+                          onChange={(e) => setEditPrompt(e.target.value)}
+                          placeholder="Describe what to change (e.g. swap background, add props, fix lighting…)"
+                          className="mt-1.5 min-h-[88px] border-white/10 bg-black/40 text-sm text-white placeholder:text-white/30"
+                          rows={3}
+                        />
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-1">
+                        <div>
+                          <Label className="text-[10px] uppercase tracking-wide text-white/40">Model</Label>
+                          <Select value={editModel} onValueChange={(v) => setEditModel(v as "nano" | "pro")}>
+                            <SelectTrigger className="mt-1.5 h-10 border-white/15 bg-black/40 text-white">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="nano">Nano Banana 2</SelectItem>
+                              <SelectItem value="pro">Nano Banana Pro</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label className="text-[10px] uppercase tracking-wide text-white/40">Aspect ratio</Label>
+                          <Select value={editAspect} onValueChange={setEditAspect}>
+                            <SelectTrigger className="mt-1.5 h-10 border-white/15 bg-black/40 text-white">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="max-h-[min(280px,50vh)]">
+                              {editAspectOptions.map((r) => (
+                                <SelectItem key={r} value={r}>
+                                  {r}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label className="text-[10px] uppercase tracking-wide text-white/40">Resolution</Label>
+                          <Select
+                            value={editResolution}
+                            onValueChange={(v) => setEditResolution(v as "1K" | "2K" | "4K")}
+                          >
+                            <SelectTrigger className="mt-1.5 h-10 border-white/15 bg-black/40 text-white">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {(imageLightboxEdit.resolutionOptions ?? ["1K", "2K", "4K"]).map((r) => (
+                                <SelectItem key={r} value={r}>
+                                  {r}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        className="h-11 w-full border border-violet-400/40 bg-violet-600 text-white transition-colors duration-200 hover:bg-violet-500"
+                        onClick={() => {
+                          const p = editPrompt.trim();
+                          if (!p) {
+                            toast.error("Enter an edit prompt.");
+                            return;
+                          }
+                          if (!lightboxUrl) return;
+                          imageLightboxEdit.onSubmitEdit({
+                            sourceUrl: lightboxUrl,
+                            prompt: p,
+                            model: editModel,
+                            aspectRatio: editAspect,
+                            resolution: editResolution,
+                          });
+                          setLightboxUrl(null);
+                        }}
+                      >
+                        Run edit · {imageLightboxEdit.creditsFor(editModel, editResolution)} credits
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+              </aside>
             ) : null}
           </div>
         </div>

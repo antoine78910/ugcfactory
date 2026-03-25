@@ -20,6 +20,20 @@ type Body = {
 
 const LIBRARY_KINDS = ["avatar", "studio_image", "studio_video", "studio_upscale", "motion_control"] as const;
 
+const ALLOWED_POLL_KINDS = new Set<string>(LIBRARY_KINDS);
+const POLL_KIND_DEFAULT = "avatar";
+
+function resolvePollKinds(kind: string): string[] | "all" {
+  const t = kind.trim();
+  if (t === "all") return "all";
+  const parts = t.split(",").map((s) => s.trim()).filter(Boolean);
+  const kinds = parts.filter((k) => ALLOWED_POLL_KINDS.has(k));
+  if (kinds.length === 0) {
+    return ALLOWED_POLL_KINDS.has(t) ? [t] : [POLL_KIND_DEFAULT];
+  }
+  return kinds;
+}
+
 export async function POST(req: Request) {
   const { supabase, user, response } = await requireSupabaseUser();
   if (response) return response;
@@ -42,10 +56,13 @@ export async function POST(req: Request) {
       .eq("user_id", user.id)
       .in("status", [...STUDIO_GENERATION_IN_PROGRESS_STATUSES]);
 
-    if (kind === "all") {
+    const resolvedKinds = resolvePollKinds(kind);
+    if (resolvedKinds === "all") {
       procQuery = procQuery.in("kind", [...LIBRARY_KINDS]);
+    } else if (resolvedKinds.length === 1) {
+      procQuery = procQuery.eq("kind", resolvedKinds[0]!);
     } else {
-      procQuery = procQuery.eq("kind", kind);
+      procQuery = procQuery.in("kind", resolvedKinds);
     }
 
     const { data: processing, error: procErr } = await procQuery;
@@ -61,12 +78,14 @@ export async function POST(req: Request) {
     }
 
     let refundHints: { jobId: string; credits: number }[] = [];
-    if (kind === "all") {
+    if (resolvedKinds === "all") {
       for (const k of LIBRARY_KINDS) {
         refundHints = refundHints.concat(await sweepStudioRefundHints(supabase, user.id, k));
       }
     } else {
-      refundHints = await sweepStudioRefundHints(supabase, user.id, kind);
+      for (const k of resolvedKinds) {
+        refundHints = refundHints.concat(await sweepStudioRefundHints(supabase, user.id, k));
+      }
     }
 
     let listQuery = supabase
@@ -76,10 +95,12 @@ export async function POST(req: Request) {
       .order("created_at", { ascending: false })
       .limit(80);
 
-    if (kind === "all") {
+    if (resolvedKinds === "all") {
       listQuery = listQuery.in("kind", [...LIBRARY_KINDS]);
+    } else if (resolvedKinds.length === 1) {
+      listQuery = listQuery.eq("kind", resolvedKinds[0]!);
     } else {
-      listQuery = listQuery.eq("kind", kind);
+      listQuery = listQuery.in("kind", resolvedKinds);
     }
 
     const { data: all, error: listErr } = await listQuery;

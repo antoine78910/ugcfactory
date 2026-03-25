@@ -13,13 +13,24 @@ const KIND_DEFAULT = "avatar";
 /** Kinds listed together on My Projects (studio library). */
 const STUDIO_LIBRARY_KINDS = ["avatar", "studio_image", "studio_video", "studio_upscale", "motion_control"] as const;
 
+const ALLOWED_KINDS = new Set<string>(STUDIO_LIBRARY_KINDS);
+
+function parseKindParam(kindParam: string): { mode: "all" } | { kinds: string[] } {
+  const t = (kindParam || KIND_DEFAULT).trim() || KIND_DEFAULT;
+  if (t === "all") return { mode: "all" };
+  const parts = t.split(",").map((s) => s.trim()).filter(Boolean);
+  const kinds = parts.filter((k) => ALLOWED_KINDS.has(k));
+  if (kinds.length === 0) return { kinds: [KIND_DEFAULT] };
+  return { kinds };
+}
+
 export async function GET(req: Request) {
   const { supabase, user, response } = await requireSupabaseUser();
   if (response) return response;
 
   const { searchParams } = new URL(req.url);
   const all = searchParams.get("all") === "1";
-  const kind = (searchParams.get("kind") ?? KIND_DEFAULT).trim() || KIND_DEFAULT;
+  const kindRaw = (searchParams.get("kind") ?? KIND_DEFAULT).trim() || KIND_DEFAULT;
 
   try {
     let query = supabase
@@ -29,10 +40,17 @@ export async function GET(req: Request) {
       .order("created_at", { ascending: false })
       .limit(80);
 
-    if (!all) {
-      query = query.eq("kind", kind);
-    } else {
+    if (all) {
       query = query.in("kind", [...STUDIO_LIBRARY_KINDS]);
+    } else {
+      const parsed = parseKindParam(kindRaw);
+      if ("mode" in parsed) {
+        query = query.in("kind", [...STUDIO_LIBRARY_KINDS]);
+      } else if (parsed.kinds.length === 1) {
+        query = query.eq("kind", parsed.kinds[0]!);
+      } else {
+        query = query.in("kind", parsed.kinds);
+      }
     }
 
     const { data, error } = await query;
@@ -46,7 +64,16 @@ export async function GET(req: Request) {
         refundHints = refundHints.concat(await sweepStudioRefundHints(supabase, user.id, k));
       }
     } else {
-      refundHints = await sweepStudioRefundHints(supabase, user.id, kind);
+      const parsed = parseKindParam(kindRaw);
+      if ("mode" in parsed) {
+        for (const k of STUDIO_LIBRARY_KINDS) {
+          refundHints = refundHints.concat(await sweepStudioRefundHints(supabase, user.id, k));
+        }
+      } else {
+        for (const k of parsed.kinds) {
+          refundHints = refundHints.concat(await sweepStudioRefundHints(supabase, user.id, k));
+        }
+      }
     }
     const items = rows.map(studioGenerationRowToHistoryItem);
 

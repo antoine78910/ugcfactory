@@ -19,7 +19,7 @@ import { StudioEmptyExamples, StudioOutputPane } from "@/app/_components/StudioE
 import { StudioGenerationsHistory } from "@/app/_components/StudioGenerationsHistory";
 import type { StudioHistoryItem } from "@/app/_components/StudioGenerationsHistory";
 import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
-import { studioImageCreditsPerOutput } from "@/lib/pricing";
+import { studioImageCreditsPerOutput, topazImageUpscaleCredits } from "@/lib/pricing";
 import { NANO_BANANA_2_ASPECT_RATIOS } from "@/lib/nanobanana";
 import { dedupeStudioImageHistoryByMediaUrl } from "@/lib/studioHistoryDedupe";
 import { readStudioHistoryLocal, writeStudioHistoryLocal } from "@/lib/studioHistoryLocalStorage";
@@ -188,6 +188,37 @@ async function pollNanoTask(taskId: string, personalApiKey?: string): Promise<st
 
 const LS_STUDIO_IMAGE_HISTORY = "ugc_studio_image_history_v1";
 
+/** Supabase list + poll: main image jobs plus Topaz image upscales registered as `studio_upscale`. */
+const STUDIO_IMAGE_LIBRARY_KIND_PARAM = "studio_image,studio_upscale";
+
+async function pollKieMarketFirstUrl(taskId: string, personalApiKey?: string): Promise<string> {
+  const max = 120;
+  const keyParam = personalApiKey ? `&personalApiKey=${encodeURIComponent(personalApiKey)}` : "";
+  for (let i = 0; i < max; i++) {
+    const res = await fetch(`/api/kling/status?taskId=${encodeURIComponent(taskId)}${keyParam}`, {
+      cache: "no-store",
+    });
+    const json = (await res.json()) as {
+      data?: { status?: string; response?: string[]; error_message?: string | null };
+      error?: string;
+    };
+    if (!res.ok || !json.data) throw new Error(json.error || "Poll failed");
+    const st = json.data.status ?? "IN_PROGRESS";
+    if (st === "IN_PROGRESS") {
+      await new Promise((r) => setTimeout(r, 3000));
+      continue;
+    }
+    if (st === "SUCCESS") {
+      const urls = json.data.response ?? [];
+      const u = urls[0];
+      if (!u || typeof u !== "string") throw new Error("Job finished but no output URL.");
+      return u;
+    }
+    throw new Error(json.data.error_message || "Generation failed.");
+  }
+  throw new Error("Timed out waiting for result.");
+}
+
 type RefundHint = { jobId: string; credits: number };
 
 function applyRefundHints(
@@ -233,7 +264,10 @@ export default function StudioImagePanel() {
 
   useEffect(() => {
     void (async () => {
-      const res = await fetch("/api/studio/generations?kind=studio_image", { cache: "no-store" });
+      const res = await fetch(
+        `/api/studio/generations?kind=${encodeURIComponent(STUDIO_IMAGE_LIBRARY_KIND_PARAM)}`,
+        { cache: "no-store" },
+      );
       if (res.status === 401) {
         setServerHistory(false);
         setHistoryItems(readStudioHistoryLocal(LS_STUDIO_IMAGE_HISTORY));
@@ -255,6 +289,150 @@ export default function StudioImagePanel() {
     })();
   }, []);
 
+  const runImageUpscale = useCallback(
+    (opts: { sourceUrl: string; upscaleFactor: string }) => {
+      const url = opts.sourceUrl.trim();
+      const f = opts.upscaleFactor.trim();
+      if (!url) return;
+      if (!["1", "2", "4", "8"].includes(f)) {
+        toast.error("Invalid upscale factor.");
+        return;
+      }
+      if (serverHistory === null) {
+        toast.message("Still loading your library…", { description: "Wait a moment, then try again." });
+        return;
+      }
+
+      const usingPersonalApi = isPersonalApiActive();
+      const charge = topazImageUpscaleCredits(f);
+      if (!usingPersonalApi && creditsRef.current < charge) {
+        setBilling({ open: true, reason: "credits", required: charge });
+        return;
+      }
+
+      const platformCharge = usingPersonalApi ? 0 : charge;
+      if (!usingPersonalApi) {
+        spendCredits(charge);
+        creditsRef.current = Math.max(0, creditsRef.current - charge);
+      }
+
+      const label = `Topaz ${f}× image`;
+
+      void (async () => {
+        const pKey = getPersonalApiKey() ?? undefined;
+
+        if (serverHistory === true) {
+          try {
+            const res = await fetch("/api/kie/upscale/image", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ imageUrl: url, upscaleFactor: f, personalApiKey: pKey }),
+            });
+            const json = (await res.json()) as { taskId?: string; error?: string };
+            if (!res.ok || !json.taskId) throw new Error(json.error || "Upscale request failed");
+
+            const regRes = await fetch("/api/studio/generations/register", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                kind: "studio_upscale",
+                label,
+                taskId: json.taskId,
+                creditsCharged: platformCharge,
+                personalApiKey: pKey,
+              }),
+            });
+            const regJson = (await regRes.json()) as {
+              data?: { rows?: { id: string }[] };
+              error?: string;
+            };
+            if (!regRes.ok || !regJson.data?.rows?.length) {
+              throw new Error(regJson.error || "Failed to register job");
+            }
+            const rowId = String(regJson.data.rows[0]!.id);
+            const startedAt = Date.now();
+            setHistoryItems((prev) => {
+              const row: StudioHistoryItem = {
+                id: rowId,
+                kind: "image",
+                status: "generating",
+                label,
+                createdAt: startedAt,
+                studioGenerationKind: "studio_upscale",
+              };
+              return [row, ...prev.filter((i) => i.id !== rowId)];
+            });
+            toast.message("Image upscale running", {
+              description: "You can leave this page — it will appear in history when ready.",
+            });
+          } catch (e) {
+            const msg = userMessageFromCaughtError(e, "Something went wrong while starting upscale.");
+            refundPlatformCredits(platformCharge, grantCredits, creditsRef);
+            toast.error(msg);
+          }
+          return;
+        }
+
+        const jobId = crypto.randomUUID();
+        const startedAt = Date.now();
+        setHistoryItems((prev) => [
+          {
+            id: jobId,
+            kind: "image",
+            status: "generating",
+            label,
+            createdAt: startedAt,
+          },
+          ...prev,
+        ]);
+
+        try {
+          const res = await fetch("/api/kie/upscale/image", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ imageUrl: url, upscaleFactor: f, personalApiKey: pKey }),
+          });
+          const json = (await res.json()) as { taskId?: string; error?: string };
+          if (!res.ok || !json.taskId) throw new Error(json.error || "Upscale request failed");
+          const outUrl = await pollKieMarketFirstUrl(json.taskId, pKey);
+          const doneAt = Date.now();
+          setHistoryItems((prev) => {
+            const rest = prev.filter((i) => i.id !== jobId);
+            return [
+              {
+                id: `${jobId}-done-${doneAt}`,
+                kind: "image",
+                status: "ready",
+                label,
+                mediaUrl: outUrl,
+                createdAt: doneAt,
+              },
+              ...rest,
+            ];
+          });
+          toast.success("Upscaled image ready");
+        } catch (e) {
+          const msg = userMessageFromCaughtError(e, "Something went wrong while upscaling.");
+          refundPlatformCredits(platformCharge, grantCredits, creditsRef);
+          toast.error(msg);
+          setHistoryItems((prev) =>
+            prev.map((i) =>
+              i.id === jobId && i.status === "generating"
+                ? {
+                    ...i,
+                    status: "failed",
+                    errorMessage: msg,
+                    creditsRefunded: platformCharge > 0,
+                  }
+                : i,
+            ),
+          );
+        }
+      })();
+    },
+    [serverHistory, spendCredits, grantCredits],
+  );
+
   useEffect(() => {
     if (serverHistory !== true) return;
 
@@ -264,7 +442,7 @@ export default function StudioImagePanel() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            kind: "studio_image",
+            kind: STUDIO_IMAGE_LIBRARY_KIND_PARAM,
             personalApiKey: getPersonalApiKey() ?? undefined,
             piapiApiKey: getPersonalPiapiApiKey() ?? undefined,
           }),
@@ -795,6 +973,11 @@ export default function StudioImagePanel() {
               mediaLabel="Image"
               failedAutoDismiss
               onDismissFailed={dismissFailedHistoryItem}
+              imageLightboxUpscale={{
+                seedFactor: "2",
+                creditsFor: (factor) => topazImageUpscaleCredits(factor),
+                onSubmitUpscale: runImageUpscale,
+              }}
               imageLightboxEdit={{
                 nanoAspectOptions: NANO_BANANA_2_ASPECT_RATIOS,
                 proAspectOptions: proAspectOptionsFull,

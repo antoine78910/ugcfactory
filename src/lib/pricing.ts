@@ -239,6 +239,14 @@ export function topazVideoUpscaleCredits(durationSeconds: number): number {
   return Math.max(1, Math.ceil(d * TOPAZ_VIDEO_UPSCALER.credits_per_second));
 }
 
+/** Topaz image upscale (Kie): factor 1 / 2 → 2K tier, 4 → 4K, 8 → 8K credits. */
+export function topazImageUpscaleCredits(factor: string): number {
+  const f = factor.trim();
+  if (f === "8") return TOPAZ_IMAGE_UPSCALER.tiers["8K"].credits_per_image;
+  if (f === "4") return TOPAZ_IMAGE_UPSCALER.tiers["4K"].credits_per_image;
+  return TOPAZ_IMAGE_UPSCALER.tiers["2K"].credits_per_image;
+}
+
 /** Wholesale discount vs Fal list: (cost_usd − fal_list) / fal_list. */
 export function wholesaleDiscountVsFalListPct(costUsd: number, falListUsd: number): number {
   if (!(falListUsd > 0)) return 0;
