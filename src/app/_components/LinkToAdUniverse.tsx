@@ -3937,7 +3937,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                         </div>
                         <Button
                           type="button"
-                          disabled={isNanoAllImagesSubmitting || !selectedAngleIndex || !nanoBananaPromptsRaw.trim()}
+                          disabled={isNanoAllImagesSubmitting || selectedAngleIndex === null || !nanoBananaPromptsRaw.trim()}
                           onClick={() => void onGenerateNanoBananaImagesFromAllPrompts()}
                           className={`h-auto min-h-12 w-full max-w-md flex-col gap-1 py-2.5 ${primaryBtnClass}`}
                         >
