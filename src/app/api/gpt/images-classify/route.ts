@@ -79,9 +79,10 @@ export async function POST(req: Request) {
         ? await claudeMessagesTextWithImages({ system: developer, user: userText, imageUrls: ranked, maxTokens: 1200 })
         : (await openaiResponsesTextWithImages({ developer, userText, imageUrls: ranked })).text;
 
+    const cleaned = text.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
     let parsed: unknown;
     try {
-      parsed = JSON.parse(text) as unknown;
+      parsed = JSON.parse(cleaned) as unknown;
     } catch {
       return NextResponse.json({ error: "Model returned non-JSON.", raw: text }, { status: 502 });
     }
