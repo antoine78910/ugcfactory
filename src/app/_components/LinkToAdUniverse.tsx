@@ -1608,8 +1608,41 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
 
     for (let i = userPhotoUrls.length - 1; i >= 0; i--) push(userPhotoUrls[i]);
     for (let i = productOnlyImageUrls.length - 1; i >= 0; i--) push(productOnlyImageUrls[i]);
-    if (out.length === 0 && cleanCandidate?.url) push(cleanCandidate.url);
+    if (cleanCandidate?.url) push(cleanCandidate.url);
     return out;
+  }
+
+  /**
+   * URLs for NanoBanana / GPT product vision: packshots only (not avatar refs).
+   * Avatars belong in `avatarImageUrls`, not as the primary product reference.
+   */
+  function buildProductPackshotCandidatesForNano(): string[] {
+    const out: string[] = [];
+    const seen = new Set<string>();
+    const push = (u: string) => {
+      const t = (u || "").trim();
+      if (!t || seen.has(t)) return;
+      seen.add(t);
+      out.push(t);
+    };
+    for (let i = productOnlyImageUrls.length - 1; i >= 0; i--) push(productOnlyImageUrls[i]);
+    if (cleanCandidate?.url) push(cleanCandidate.url);
+    return out;
+  }
+
+  /** Same image logic as the preview when possible (avoids “button enabled but no HTTPS product” mismatches). */
+  function resolveNanoProductImageUrl(): string | null {
+    const pageUrl = storeUrl.trim();
+    const fromPick = pickBestProductUrlForNanoBanana({
+      pageUrl,
+      neutralUploadUrl,
+      candidateUrls: buildProductPackshotCandidatesForNano(),
+      fallbackUrl: fallbackImageUrl,
+    });
+    if (fromPick && /^https?:\/\//i.test(fromPick)) return fromPick;
+    const preview = (resolvedPreviewUrl || "").trim();
+    if (preview && /^https?:\/\//i.test(preview)) return preview;
+    return null;
   }
 
   /** Resume after a save stopped at brand brief (scripts step failed or interrupted). Runs on the server so navigation does not cancel it. */
@@ -1924,18 +1957,12 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     const idx = angleIdx !== undefined && angleIdx !== null ? angleIdx : selectedAngleIndex;
     const selectedScript = selectedScriptOptionByIndex(scriptsText, idx);
     const script = (idx === selectedAngleIndex ? editableScript : selectedScript).trim() || selectedScript;
-    const candidates = buildProductCandidatesForGeneration();
     const avatarRefs = userPhotoUrls
       .map((u) => u.trim())
       .filter((u, i, arr) => /^https?:\/\//i.test(u) && arr.indexOf(u) === i)
       .slice(-3)
       .reverse();
-    const img = pickBestProductUrlForNanoBanana({
-      pageUrl: url,
-      neutralUploadUrl,
-      candidateUrls: candidates,
-      fallbackUrl: fallbackImageUrl,
-    });
+    const img = resolveNanoProductImageUrl();
     if (!url || !lastExtractedJson || idx === null || !script.trim()) {
       toast.error("Pick an angle and make sure the script is ready.");
       return;
@@ -2004,18 +2031,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
 
   async function onGenerateNanoBananaImage() {
     const url = storeUrl.trim();
-    const candidates =
-      productOnlyImageUrls.length > 0
-        ? productOnlyImageUrls
-        : cleanCandidate?.url
-          ? [cleanCandidate.url]
-          : [];
-    const img = pickBestProductUrlForNanoBanana({
-      pageUrl: url,
-      neutralUploadUrl,
-      candidateUrls: candidates,
-      fallbackUrl: fallbackImageUrl,
-    });
+    const img = resolveNanoProductImageUrl();
     const prompt = parsedNanoPrompts[nanoBananaSelectedPromptIndex]?.trim();
     if (!url || !lastExtractedJson || !prompt) {
       toast.error("Generate the 3 image prompts first, then choose a valid prompt.");
@@ -2197,13 +2213,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
 
   async function onGenerateNanoBananaImagesFromAllPrompts() {
     const url = storeUrl.trim();
-    const candidates = buildProductCandidatesForGeneration();
-    const img = pickBestProductUrlForNanoBanana({
-      pageUrl: url,
-      neutralUploadUrl,
-      candidateUrls: candidates,
-      fallbackUrl: fallbackImageUrl,
-    });
+    const img = resolveNanoProductImageUrl();
     if (!url || !lastExtractedJson || selectedAngleIndex === null) {
       toast.error("Project not ready to generate images.");
       return;
@@ -4360,15 +4370,25 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                             </div>
                             <Button
                               type="button"
-                              disabled={!resolvedPreviewUrl || (scriptEditVisible && !factorWordsValid.all)}
+                              disabled={
+                                !resolvedPreviewUrl ||
+                                (scriptEditVisible && !factorWordsValid.all) ||
+                                isNanoPromptsLoading ||
+                                isWorking ||
+                                Boolean(nanoPollTaskId)
+                              }
                               className={`h-auto min-h-11 w-full max-w-md py-2.5 ${primaryBtnClass}`}
                               onClick={() => {
                                 if (scriptEditVisible && !factorWordsValid.all) {
                                   toast.error("Please match the required word limits before generating.");
                                   return;
                                 }
+                                if (selectedAngleIndex === null || selectedAngleIndex === undefined) {
+                                  toast.error("Pick an angle (1, 2, or 3) first.");
+                                  return;
+                                }
                                 setScriptHasEdits(false);
-                                void onGenerateNanoBananaPrompts(selectedAngleIndex as 0 | 1 | 2);
+                                void onGenerateNanoBananaPrompts(selectedAngleIndex);
                               }}
                             >
                               <span className="text-sm font-semibold leading-tight">Generate 3 prompts</span>

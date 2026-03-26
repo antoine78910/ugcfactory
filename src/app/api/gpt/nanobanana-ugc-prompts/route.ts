@@ -309,7 +309,14 @@ export async function POST(req: Request) {
       userText,
       imageUrls: [imageUrl, ...avatarRefs],
     });
-    return NextResponse.json({ data: text });
+    const trimmed = String(text ?? "").trim();
+    if (!trimmed) {
+      return NextResponse.json(
+        { error: "The model returned no prompt text. Try again or adjust the script." },
+        { status: 502 },
+      );
+    }
+    return NextResponse.json({ data: trimmed });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error.";
     return NextResponse.json({ error: message }, { status: 502 });
