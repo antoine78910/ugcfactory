@@ -53,7 +53,10 @@ async function persistStudioMediaUrls(opts: {
   urls: string[];
 }): Promise<string[] | null> {
   const admin = createSupabaseServiceClient();
-  if (!admin) return null;
+  if (!admin) {
+    console.warn("[persistStudioMedia] No admin client (SUPABASE_SERVICE_ROLE_KEY missing?) — skipping persistence");
+    return null;
+  }
 
   const out: string[] = [];
   for (let i = 0; i < opts.urls.length; i++) {
@@ -61,31 +64,50 @@ async function persistStudioMediaUrls(opts: {
     if (!src || !/^https?:\/\//i.test(src)) continue;
 
     try {
+      console.log(`[persistStudioMedia] Downloading ${src.slice(0, 120)}…`);
       const res = await fetch(src, { cache: "no-store" });
-      if (!res.ok) continue;
+      if (!res.ok) {
+        console.warn(`[persistStudioMedia] Download failed: HTTP ${res.status} for ${src.slice(0, 120)}`);
+        continue;
+      }
       const bytes = await res.arrayBuffer();
       const buffer = Buffer.from(bytes);
-      if (buffer.length === 0) continue;
+      if (buffer.length === 0) {
+        console.warn("[persistStudioMedia] Downloaded 0 bytes — skipping");
+        continue;
+      }
 
-      const ext = guessExtensionFromContentType(res.headers.get("content-type")) || guessExtensionFromUrl(src) || "";
+      const ct = res.headers.get("content-type") ?? "";
+      const ext = guessExtensionFromContentType(ct) || guessExtensionFromUrl(src) || "";
       const filename = `${crypto.randomUUID()}${ext}`;
       const storagePath = `${opts.userId}/${opts.rowId}/${i + 1}-${filename}`;
 
+      console.log(`[persistStudioMedia] Uploading ${(buffer.length / 1024).toFixed(0)} KB → ${STUDIO_MEDIA_BUCKET}/${storagePath}`);
+
       const { data, error } = await admin.storage.from(STUDIO_MEDIA_BUCKET).upload(storagePath, buffer, {
-        contentType: res.headers.get("content-type") ?? undefined,
+        contentType: ct || undefined,
         upsert: false,
       });
-      if (error || !data?.path) continue;
+      if (error) {
+        console.error(`[persistStudioMedia] Upload error:`, error.message ?? error);
+        continue;
+      }
+      if (!data?.path) {
+        console.warn("[persistStudioMedia] Upload returned no path");
+        continue;
+      }
 
       const {
         data: { publicUrl },
       } = admin.storage.from(STUDIO_MEDIA_BUCKET).getPublicUrl(data.path);
+      console.log(`[persistStudioMedia] ✓ Persisted → ${publicUrl?.slice(0, 120)}`);
       if (publicUrl) out.push(publicUrl);
-    } catch {
-      // Best-effort persistence: ignore individual URL failures.
+    } catch (err) {
+      console.error(`[persistStudioMedia] Exception for ${src.slice(0, 80)}:`, err instanceof Error ? err.message : err);
     }
   }
 
+  console.log(`[persistStudioMedia] row=${opts.rowId} persisted=${out.length}/${opts.urls.length}`);
   return out.length ? out : null;
 }
 
