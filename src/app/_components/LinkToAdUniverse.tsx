@@ -178,14 +178,23 @@ function StatusLineShimmer({ text, className }: { text: string; className?: stri
 }
 
 function NanoThreeImageArchitectureLoader() {
+  const reduceMotion = useReducedMotion();
   return (
     <div className="flex flex-col gap-3">
       <div className="grid grid-cols-3 gap-2">
         {([0, 1, 2] as const).map((i) => (
-          <div
+          <motion.div
             key={i}
             className="relative aspect-[3/4] overflow-hidden rounded-xl border border-white/10 bg-black/20"
             aria-hidden
+            initial={reduceMotion ? undefined : { opacity: 0.6, y: 8 }}
+            animate={reduceMotion ? undefined : { opacity: [0.65, 1, 0.65], y: [4, 0, 4] }}
+            transition={{
+              duration: 2.1,
+              delay: i * 0.12,
+              repeat: Infinity,
+              ease: "easeInOut",
+            }}
           >
             <ShapeGrid
               direction="diagonal"
@@ -197,18 +206,27 @@ function NanoThreeImageArchitectureLoader() {
               hoverTrailAmount={0}
               className="absolute inset-0 h-full w-full opacity-75"
             />
-            <div className="absolute inset-0 bg-gradient-to-b from-violet-500/12 to-transparent animate-pulse" />
-            <div
-              className="absolute inset-0 lta-image-arch-reveal bg-violet-400/15"
-              style={{ animationDelay: `${i * 120}ms` }}
+            <motion.div
+              className="absolute -left-[40%] top-0 h-full w-[45%] bg-gradient-to-r from-transparent via-violet-300/16 to-transparent"
+              animate={reduceMotion ? undefined : { x: ["0%", "300%"] }}
+              transition={{
+                duration: 1.8,
+                delay: i * 0.18,
+                repeat: Infinity,
+                ease: "linear",
+              }}
             />
+            <div className="absolute inset-0 bg-gradient-to-b from-violet-500/10 via-transparent to-violet-900/20" />
             <div className="absolute left-2 top-2 rounded-md border border-white/10 bg-black/40 px-1.5 py-0.5 text-[10px] font-semibold text-white/70">
               {i + 1}
             </div>
-          </div>
+          </motion.div>
         ))}
       </div>
-      <p className="text-xs font-normal text-white/45">Assembling image architecture…</p>
+      <div className="flex items-center gap-2 text-xs font-normal text-white/45">
+        <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-300/80" aria-hidden />
+        <span>Generating photo concepts…</span>
+      </div>
     </div>
   );
 }
