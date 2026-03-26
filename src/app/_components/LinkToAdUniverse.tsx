@@ -2994,46 +2994,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         <div className="flex flex-wrap items-center justify-between gap-3">
           <CardTitle className="text-base">Link to Ad</CardTitle>
           <div className="flex items-center gap-3">
-            {/* Video model picker */}
-            <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] p-1">
-              {(Object.keys(LINK_TO_AD_VIDEO_MODELS) as LinkToAdVideoModelId[]).map((id) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setVideoModel(id)}
-                  disabled={isWorking}
-                  className={cn(
-                    "rounded-md px-2.5 py-1 text-[11px] font-semibold transition whitespace-nowrap",
-                    videoModel === id
-                      ? "bg-violet-500/15 text-white border border-violet-400/60"
-                      : "bg-black/20 text-white/65 hover:border-white/20 border border-white/10",
-                  )}
-                >
-                  {LINK_TO_AD_VIDEO_MODELS[id].label}
-                </button>
-              ))}
-            </div>
-            {/* Duration picker */}
-            <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] p-1">
-              {[5, 10].map((d) => (
-                <button
-                  key={d}
-                  type="button"
-                  onClick={() => setVideoDuration(d)}
-                  disabled={isWorking}
-                  className={cn(
-                    "rounded-md px-2.5 py-1 text-[11px] font-semibold transition",
-                    videoDuration === d
-                      ? "bg-violet-500/15 text-white border border-violet-400/60"
-                      : "bg-black/20 text-white/65 hover:border-white/20 border border-white/10",
-                  )}
-                >
-                  {d}s
-                </button>
-              ))}
-            </div>
-            {/* Credits indicator */}
-            <span className="text-[11px] font-medium text-white/50">{ltaVideoOnlyCredits} cr</span>
             {stage === "error" ? (
               <div className="flex items-center gap-2 text-xs text-red-300/90">
                 <span className="rounded-full border border-red-400/30 bg-red-500/10 px-2 py-1">Error</span>
@@ -3117,6 +3077,52 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
             )}
           </div>
         ) : null}
+        {/* Video model + duration pickers */}
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="space-y-1">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Video model</p>
+            <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] p-1">
+              {(Object.keys(LINK_TO_AD_VIDEO_MODELS) as LinkToAdVideoModelId[]).map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setVideoModel(id)}
+                  disabled={isWorking}
+                  className={cn(
+                    "rounded-md px-3 py-1.5 text-xs font-semibold transition whitespace-nowrap",
+                    videoModel === id
+                      ? "bg-violet-500/15 text-white border border-violet-400/60"
+                      : "bg-black/20 text-white/65 hover:border-white/20 border border-white/10",
+                  )}
+                >
+                  {LINK_TO_AD_VIDEO_MODELS[id].label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-1">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Duration</p>
+            <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] p-1">
+              {[5, 10, 15].map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => setVideoDuration(d)}
+                  disabled={isWorking}
+                  className={cn(
+                    "rounded-md px-3 py-1.5 text-xs font-semibold transition",
+                    videoDuration === d
+                      ? "bg-violet-500/15 text-white border border-violet-400/60"
+                      : "bg-black/20 text-white/65 hover:border-white/20 border border-white/10",
+                  )}
+                >
+                  {d}s
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
         <div className="space-y-3">
           {!showBrandHeaderInsteadOfUrl ? (
             <div>
