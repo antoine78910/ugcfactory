@@ -316,7 +316,7 @@ export async function POST(req: Request) {
   const generationMode = body?.generationMode === "custom_ugc" ? "custom_ugc" : "automatic";
   const customUgcIntent = body?.customUgcIntent?.trim() || "";
   const previousScriptsText = body?.previousScriptsText?.trim() || "";
-  const provider: "gpt" | "claude" = body?.provider === "claude" ? "claude" : "gpt";
+  const provider: "gpt" | "claude" = body?.provider === "gpt" ? "gpt" : "claude";
 
   const developer = [
     "You are an expert UGC scriptwriter for AI video (lipsync, shot segmentation, image-to-video).",

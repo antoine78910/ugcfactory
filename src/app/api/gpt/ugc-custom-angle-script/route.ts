@@ -34,7 +34,7 @@ export async function POST(req: Request) {
   const body = (await req.json().catch(() => null)) as Body | null;
   const brandBrief = body?.brandBrief?.trim();
   const customAngle = body?.customAngle?.trim();
-  const provider: "gpt" | "claude" = body?.provider === "claude" ? "claude" : "gpt";
+  const provider: "gpt" | "claude" = body?.provider === "gpt" ? "gpt" : "claude";
   if (!brandBrief || !customAngle) {
     return NextResponse.json({ error: "Missing `brandBrief` or `customAngle`." }, { status: 400 });
   }

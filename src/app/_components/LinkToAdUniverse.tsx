@@ -51,7 +51,14 @@ import {
 } from "@/lib/linkToAdScriptFactors";
 import ShapeGrid from "@/app/ShapeGrid";
 import { LINK_TO_AD_LOADING_MESSAGES } from "@/lib/linkToAd/loadingMessageLoops";
-import { CREDITS_LINK_TO_AD_GENERATE_FROM_URL } from "@/lib/linkToAd/generationCredits";
+import {
+  creditsLinkToAdFullPipeline,
+  creditsLinkToAdVideoFromImage,
+  LINK_TO_AD_VIDEO_MODELS,
+  LINK_TO_AD_DEFAULT_VIDEO_MODEL,
+  LINK_TO_AD_DEFAULT_VIDEO_DURATION_SEC,
+  type LinkToAdVideoModelId,
+} from "@/lib/linkToAd/generationCredits";
 import type { InternalFetch } from "@/lib/linkToAd/internalFetch";
 import { runInitialPipeline } from "@/lib/linkToAd/runInitialPipeline";
 import { loadAvatarUrls } from "@/lib/avatarLibrary";
@@ -459,15 +466,10 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const [summaryText, setSummaryText] = useState<string>("");
   const [scriptsText, setScriptsText] = useState<string>("");
   const [generationMode, setGenerationMode] = useState<"automatic" | "custom_ugc">("automatic");
-  const [scriptProvider, setScriptProviderRaw] = useState<"gpt" | "claude">(() => {
-    if (typeof window === "undefined") return "gpt";
-    try { const v = localStorage.getItem("youry-ai-provider"); if (v === "claude") return "claude"; } catch {}
-    return "gpt";
-  });
-  const setScriptProvider = useCallback((v: "gpt" | "claude") => {
-    setScriptProviderRaw(v);
-    try { localStorage.setItem("youry-ai-provider", v); } catch {}
-  }, []);
+  const scriptProvider = "claude" as const;
+
+  const [videoModel, setVideoModel] = useState<LinkToAdVideoModelId>(LINK_TO_AD_DEFAULT_VIDEO_MODEL);
+  const [videoDuration, setVideoDuration] = useState<number>(LINK_TO_AD_DEFAULT_VIDEO_DURATION_SEC);
   const [customUgcTopic, setCustomUgcTopic] = useState("");
   const [customUgcOffer, setCustomUgcOffer] = useState("");
   const [customUgcCta, setCustomUgcCta] = useState("");
@@ -1861,18 +1863,18 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     }
 
     const walletNow = creditsBalanceRef.current;
-    if (walletNow < CREDITS_LINK_TO_AD_GENERATE_FROM_URL) {
+    if (walletNow < ltaGenerateCredits) {
       setIsWorking(false);
       setStage("idle");
       setLtaCreditModal({
         current: walletNow,
-        required: CREDITS_LINK_TO_AD_GENERATE_FROM_URL,
+        required: ltaGenerateCredits,
       });
       return;
     }
     let chargedFullBundle = false;
     setLtaFrozenCredits(walletNow);
-    if (!spendLtaCreditsIfEnough(CREDITS_LINK_TO_AD_GENERATE_FROM_URL)) {
+    if (!spendLtaCreditsIfEnough(ltaGenerateCredits)) {
       setIsWorking(false);
       setStage("idle");
       setLtaFrozenCredits(null);
@@ -1970,8 +1972,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       onRunsChanged?.();
     } catch (err) {
       if (chargedFullBundle) {
-        grantCredits(CREDITS_LINK_TO_AD_GENERATE_FROM_URL);
-        creditsBalanceRef.current += CREDITS_LINK_TO_AD_GENERATE_FROM_URL;
+        grantCredits(ltaGenerateCredits);
+        creditsBalanceRef.current += ltaGenerateCredits;
         setLtaFrozenCredits(null);
       }
       setStage("error");
@@ -2557,10 +2559,10 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
         body: JSON.stringify({
-          marketModel: "bytedance/seedance-2.0-pro",
+          marketModel: LINK_TO_AD_VIDEO_MODELS[videoModel].marketModel,
           prompt: klingPrompt,
           imageUrl: img,
-          duration: 15,
+          duration: videoDuration,
           aspectRatio: "9:16",
           personalApiKey: getPersonalApiKey(),
           piapiApiKey: getPersonalPiapiApiKey(),
@@ -2813,6 +2815,15 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         klingVideoUrl),
   );
 
+  const ltaGenerateCredits = useMemo(
+    () => creditsLinkToAdFullPipeline(videoModel, videoDuration),
+    [videoModel, videoDuration],
+  );
+  const ltaVideoOnlyCredits = useMemo(
+    () => creditsLinkToAdVideoFromImage(videoModel, videoDuration),
+    [videoModel, videoDuration],
+  );
+
   const step1Done = Boolean(summaryText.trim() && resolvedPreviewUrl);
   const step2Done = Boolean(scriptsText.trim() && selectedAngleIndex !== null);
   const step3Done = Boolean(nanoHasThreeImages && nanoBananaImageUrl);
@@ -2983,34 +2994,46 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         <div className="flex flex-wrap items-center justify-between gap-3">
           <CardTitle className="text-base">Link to Ad</CardTitle>
           <div className="flex items-center gap-3">
+            {/* Video model picker */}
             <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] p-1">
-              <button
-                type="button"
-                onClick={() => setScriptProvider("gpt")}
-                disabled={isWorking}
-                className={cn(
-                  "rounded-md px-3 py-1 text-xs font-semibold transition",
-                  scriptProvider === "gpt"
-                    ? "bg-violet-500/15 text-white border border-violet-400/60"
-                    : "bg-black/20 text-white/65 hover:border-white/20 border border-white/10",
-                )}
-              >
-                GPT
-              </button>
-              <button
-                type="button"
-                onClick={() => setScriptProvider("claude")}
-                disabled={isWorking}
-                className={cn(
-                  "rounded-md px-3 py-1 text-xs font-semibold transition",
-                  scriptProvider === "claude"
-                    ? "bg-violet-500/15 text-white border border-violet-400/60"
-                    : "bg-black/20 text-white/65 hover:border-white/20 border border-white/10",
-                )}
-              >
-                Claude
-              </button>
+              {(Object.keys(LINK_TO_AD_VIDEO_MODELS) as LinkToAdVideoModelId[]).map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setVideoModel(id)}
+                  disabled={isWorking}
+                  className={cn(
+                    "rounded-md px-2.5 py-1 text-[11px] font-semibold transition whitespace-nowrap",
+                    videoModel === id
+                      ? "bg-violet-500/15 text-white border border-violet-400/60"
+                      : "bg-black/20 text-white/65 hover:border-white/20 border border-white/10",
+                  )}
+                >
+                  {LINK_TO_AD_VIDEO_MODELS[id].label}
+                </button>
+              ))}
             </div>
+            {/* Duration picker */}
+            <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] p-1">
+              {[5, 10].map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => setVideoDuration(d)}
+                  disabled={isWorking}
+                  className={cn(
+                    "rounded-md px-2.5 py-1 text-[11px] font-semibold transition",
+                    videoDuration === d
+                      ? "bg-violet-500/15 text-white border border-violet-400/60"
+                      : "bg-black/20 text-white/65 hover:border-white/20 border border-white/10",
+                  )}
+                >
+                  {d}s
+                </button>
+              ))}
+            </div>
+            {/* Credits indicator */}
+            <span className="text-[11px] font-medium text-white/50">{ltaVideoOnlyCredits} cr</span>
             {stage === "error" ? (
               <div className="flex items-center gap-2 text-xs text-red-300/90">
                 <span className="rounded-full border border-red-400/30 bg-red-500/10 px-2 py-1">Error</span>
@@ -3201,7 +3224,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                         Generate
                       </span>
                       <span className="text-[11px] font-semibold text-black/70">
-                        {CREDITS_LINK_TO_AD_GENERATE_FROM_URL} credits
+                        {ltaGenerateCredits} credits
                       </span>
                     </>
                   )}

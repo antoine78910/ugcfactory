@@ -5,10 +5,14 @@
 
 import {
   AD_CREDITS,
+  CLAUDE_AI_CREDITS,
   IMAGE_MODEL,
+  LINK_TO_AD_VIDEO_MODELS,
+  type LinkToAdVideoModelId,
   calculateMotionControlCreditsFromDuration,
   calculateVideoCreditsForModel,
   calculateVideoCreditsFromDuration,
+  linkToAdVideoCredits,
 } from "@/lib/pricing";
 
 // ---------------------------------------------------------------------------
@@ -20,35 +24,41 @@ export const CREDITS_NANO_STANDARD_PER_IMAGE = IMAGE_MODEL.nanobanana_standard.c
 export const CREDITS_LINK_TO_AD_THREE_REF_IMAGES = CREDITS_NANO_PRO_PER_IMAGE * 3;
 
 /**
- * Shown on first “Generate” from store URL (site scan + brand + UGC scripts GPT).
+ * Shown on first "Generate" from store URL (site scan + brand + UGC scripts).
  * Tune when API routes deduct credits per step.
  */
 export const CREDITS_LINK_TO_AD_STORE_SCAN = 8;
 
-/** GPT step: motion / UGC video prompt (Link to Ad). Shown on “Retry video prompt”. */
-export const CREDITS_LINK_TO_AD_VIDEO_PROMPT_GPT = 2;
+/** Claude AI step: video prompt generation. */
+export const CREDITS_LINK_TO_AD_VIDEO_PROMPT_AI = CLAUDE_AI_CREDITS;
 
 // ---------------------------------------------------------------------------
-// Video (Link to Ad default clip length 12s → ceil(12 × 2.25) = 27)
+// Video — dynamic pricing by model + duration (Link to Ad)
 // ---------------------------------------------------------------------------
 
-export const LINK_TO_AD_VIDEO_DURATION_SEC = 12;
-export const CREDITS_KLING_LINK_TO_AD_VIDEO = calculateVideoCreditsFromDuration(
-  LINK_TO_AD_VIDEO_DURATION_SEC,
-);
+export { linkToAdVideoCredits, LINK_TO_AD_VIDEO_MODELS };
+export type { LinkToAdVideoModelId };
 
-/** One-shot “Generate video from this image” = motion prompt GPT + default Kling clip. */
-export const CREDITS_LINK_TO_AD_VIDEO_FROM_IMAGE =
-  CREDITS_LINK_TO_AD_VIDEO_PROMPT_GPT + CREDITS_KLING_LINK_TO_AD_VIDEO;
+export const LINK_TO_AD_DEFAULT_VIDEO_MODEL: LinkToAdVideoModelId = "seedance";
+export const LINK_TO_AD_DEFAULT_VIDEO_DURATION_SEC = 10;
 
-/** Scan + 3 reference images + one default Link-to-Ad video (happy path). */
-export const CREDITS_LINK_TO_AD_FULL_PIPELINE =
-  CREDITS_LINK_TO_AD_STORE_SCAN +
-  CREDITS_LINK_TO_AD_THREE_REF_IMAGES +
-  CREDITS_LINK_TO_AD_VIDEO_FROM_IMAGE;
+export function creditsLinkToAdVideoFromImage(
+  model: LinkToAdVideoModelId,
+  durationSec: number,
+): number {
+  return linkToAdVideoCredits(model, durationSec);
+}
 
-/** Same as `CREDITS_LINK_TO_AD_FULL_PIPELINE` — debited on Link-to-Ad “Generate” from URL (must match the button). */
-export const CREDITS_LINK_TO_AD_GENERATE_FROM_URL = CREDITS_LINK_TO_AD_FULL_PIPELINE;
+export function creditsLinkToAdFullPipeline(
+  model: LinkToAdVideoModelId,
+  durationSec: number,
+): number {
+  return (
+    CREDITS_LINK_TO_AD_STORE_SCAN +
+    CREDITS_LINK_TO_AD_THREE_REF_IMAGES +
+    creditsLinkToAdVideoFromImage(model, durationSec)
+  );
+}
 
 /** Full ad bundle — backend must bill this fixed amount, not sum of parts. */
 export { AD_CREDITS as CREDITS_AD_GENERATION };

@@ -34,7 +34,7 @@ export async function POST(req: Request) {
 
   const generationMode = body?.generationMode === "custom_ugc" ? "custom_ugc" : "automatic";
   const customUgcIntent = typeof body?.customUgcIntent === "string" ? body.customUgcIntent.trim() : "";
-  const aiProvider: "gpt" | "claude" = body?.aiProvider === "claude" ? "claude" : "gpt";
+  const aiProvider: "gpt" | "claude" = body?.aiProvider === "gpt" ? "gpt" : "claude";
 
   const f = createInternalFetchFromRequest(req);
   const result = await runInitialPipeline(f, { storeUrl, neutralUploadUrl, generationMode, customUgcIntent, aiProvider });

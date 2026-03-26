@@ -31,6 +31,25 @@ export const STARTER_CREDIT_VALUE_USD = 29.99 / 250;
 export const KLING_3_VIDEO_CREDITS_PER_SECOND = 2.25;
 
 // ---------------------------------------------------------------------------
+// Link to Ad — video model pricing (fixed reference: 15s)
+// ---------------------------------------------------------------------------
+
+export const LINK_TO_AD_VIDEO_MODELS = {
+  seedance: { label: "Seedance 2.0", creditsFor15s: 60, marketModel: "bytedance/seedance-2.0-pro" },
+  kling: { label: "Kling 3.0", creditsFor15s: 40, marketModel: "kling-3.0/video" },
+} as const;
+
+export type LinkToAdVideoModelId = keyof typeof LINK_TO_AD_VIDEO_MODELS;
+
+export const CLAUDE_AI_CREDITS = 5;
+
+export function linkToAdVideoCredits(model: LinkToAdVideoModelId, durationSec: number): number {
+  const base = LINK_TO_AD_VIDEO_MODELS[model].creditsFor15s;
+  const perSecond = base / 15;
+  return Math.max(1, Math.ceil(durationSec * perSecond)) + CLAUDE_AI_CREDITS;
+}
+
+// ---------------------------------------------------------------------------
 // Images (fixed credits)
 // ---------------------------------------------------------------------------
 

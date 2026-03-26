@@ -58,7 +58,7 @@ export async function POST(req: Request) {
     "CRITICAL: Every `url` you return MUST be copied EXACTLY from the image URLs listed in the user message (character-for-character). Do not invent, shorten, or paraphrase URLs.",
   ].join("\n");
 
-  const provider: "gpt" | "claude" = body?.provider === "claude" ? "claude" : "gpt";
+  const provider: "gpt" | "claude" = body?.provider === "gpt" ? "gpt" : "claude";
 
   try {
     const cacheKey = makeCacheKey({ v: 2, pageUrl: body.pageUrl, ranked, provider });

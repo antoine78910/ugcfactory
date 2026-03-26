@@ -161,7 +161,7 @@ export async function POST(req: Request) {
 
   const body = (await req.json().catch(() => null)) as Body | null;
   const angleScript = body?.angleScript?.trim();
-  const provider: "gpt" | "claude" = body?.provider === "claude" ? "claude" : "gpt";
+  const provider: "gpt" | "claude" = body?.provider === "gpt" ? "gpt" : "claude";
   if (!angleScript) {
     return NextResponse.json({ error: "Missing `angleScript`." }, { status: 400 });
   }
