@@ -139,8 +139,8 @@ export default function CreditLowBanner() {
   return (
     <>
       {bannerVisible ? (
-        <div className="fixed bottom-5 right-5 z-[250] flex max-w-[min(480px,calc(100vw-2.5rem))] items-center gap-3 rounded-xl border border-fuchsia-500/25 bg-gradient-to-r from-fuchsia-600/20 via-[#141414] to-[#141414] px-4 py-3 shadow-[0_8px_32px_rgba(0,0,0,0.6)]">
-          <Zap className="h-4 w-4 shrink-0 text-fuchsia-400" aria-hidden />
+        <div className="fixed bottom-20 right-5 z-[250] flex max-w-[min(480px,calc(100vw-2.5rem))] items-center gap-3 rounded-xl border border-violet-500/20 bg-gradient-to-r from-violet-600/15 via-[#141414] to-[#141414] px-4 py-3 shadow-[0_8px_32px_rgba(0,0,0,0.6)]">
+          <Zap className="h-4 w-4 shrink-0 text-violet-400" aria-hidden />
           <p className="min-w-0 flex-1 text-sm font-medium text-white">
             <span className="font-bold">Credits are running low!</span>{" "}
             <span className="text-white/65">{progressLabel}</span>
@@ -148,7 +148,7 @@ export default function CreditLowBanner() {
           <button
             type="button"
             onClick={() => setShowModal(true)}
-            className="shrink-0 rounded-lg bg-fuchsia-400 px-4 py-1.5 text-xs font-bold text-black transition hover:bg-fuchsia-300 shadow-[0_0_20px_rgba(236,72,153,0.35)]"
+            className="shrink-0 rounded-lg bg-violet-500 px-4 py-1.5 text-xs font-bold text-white transition hover:bg-violet-400"
           >
             Upgrade
           </button>

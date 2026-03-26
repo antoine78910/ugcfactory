@@ -78,7 +78,7 @@ export default function SidebarCreditsBar({ collapsed = false }: SidebarCreditsB
           <span
             className={cn(
               "text-[11px] font-bold tabular-nums leading-none",
-              showCta ? "text-fuchsia-200" : "text-white/90",
+              showCta ? "text-rose-200/80" : "text-white/90",
             )}
           >
             {total > 0 ? (
@@ -103,7 +103,7 @@ export default function SidebarCreditsBar({ collapsed = false }: SidebarCreditsB
             className={cn(
               "h-full rounded-full transition-[width] duration-300 ease-out",
               showCta
-                ? "bg-gradient-to-r from-fuchsia-500 to-pink-500 shadow-[0_0_18px_rgba(236,72,153,0.35)]"
+                ? "bg-gradient-to-r from-violet-500 to-rose-400"
                 : "bg-gradient-to-r from-violet-500 to-fuchsia-500",
             )}
             style={{ width: `${fillPct}%` }}
@@ -125,13 +125,13 @@ export default function SidebarCreditsBar({ collapsed = false }: SidebarCreditsB
 
       {showCta ? (
         <div className="mt-1.5 flex flex-col gap-1 border-t border-white/10 pt-1.5">
-          <p className="text-[9px] font-medium leading-snug text-fuchsia-200/90">
+          <p className="text-[9px] font-medium leading-snug text-rose-200/70">
             Low balance — top up or upgrade.
           </p>
           <div className="flex gap-1.5">
             <Link
               href="/subscription"
-              className="flex-1 rounded-md bg-fuchsia-400 py-1 text-center text-[10px] font-bold text-black transition hover:bg-fuchsia-300 shadow-[0_0_18px_rgba(236,72,153,0.35)]"
+              className="flex-1 rounded-md bg-violet-500 py-1 text-center text-[10px] font-bold text-white transition hover:bg-violet-400"
             >
               Upgrade
             </Link>
