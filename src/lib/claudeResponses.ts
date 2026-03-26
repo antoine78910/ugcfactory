@@ -1,9 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { requireEnv } from "@/lib/env";
 
-export type ClaudeModel = "claude-3-5-sonnet-latest";
+export type ClaudeModel = "claude-3-5-sonnet-20241022";
 
-const DEFAULT_MODEL: ClaudeModel = "claude-3-5-sonnet-latest";
+const DEFAULT_MODEL: ClaudeModel = "claude-3-5-sonnet-20241022";
 
 function extractTextFromAnthropicMessage(message: any): string {
   const blocks = Array.isArray(message?.content) ? message.content : [];
