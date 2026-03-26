@@ -2,6 +2,7 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import { openaiResponsesTextWithImages } from "@/lib/openaiResponses";
+import { claudeMessagesTextWithImages } from "@/lib/claudeResponses";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { makeCacheKey } from "@/lib/gptCache";
 import { matchUrlToCandidates } from "@/lib/imageUrl";
@@ -9,6 +10,7 @@ import { matchUrlToCandidates } from "@/lib/imageUrl";
 type Body = {
   pageUrl: string;
   imageUrls: string[];
+  provider?: "gpt" | "claude";
 };
 
 function scoreUrl(u: string) {
@@ -56,8 +58,10 @@ export async function POST(req: Request) {
     "CRITICAL: Every `url` you return MUST be copied EXACTLY from the image URLs listed in the user message (character-for-character). Do not invent, shorten, or paraphrase URLs.",
   ].join("\n");
 
+  const provider: "gpt" | "claude" = body?.provider === "claude" ? "claude" : "gpt";
+
   try {
-    const cacheKey = makeCacheKey({ v: 2, pageUrl: body.pageUrl, ranked });
+    const cacheKey = makeCacheKey({ v: 2, pageUrl: body.pageUrl, ranked, provider });
     try {
       const { data: hit } = await supabase
         .from("gpt_cache")
@@ -70,11 +74,10 @@ export async function POST(req: Request) {
       // ignore cache failures
     }
 
-    const { text } = await openaiResponsesTextWithImages({
-      developer,
-      userText,
-      imageUrls: ranked,
-    });
+    const text =
+      provider === "claude"
+        ? await claudeMessagesTextWithImages({ system: developer, user: userText, imageUrls: ranked, maxTokens: 1200 })
+        : (await openaiResponsesTextWithImages({ developer, userText, imageUrls: ranked })).text;
 
     let parsed: unknown;
     try {

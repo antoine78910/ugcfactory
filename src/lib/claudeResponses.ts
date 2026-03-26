@@ -28,7 +28,7 @@ export async function claudeMessagesText(opts: {
 
   const message = await client.messages.create({
     model: opts.model ?? DEFAULT_MODEL,
-    max_tokens: opts.maxTokens ?? 1024,
+    max_tokens: opts.maxTokens ?? 4096,
     system: opts.system,
     messages: [
       {
@@ -65,7 +65,7 @@ export async function claudeMessagesTextWithImages(opts: {
 
   const message = await client.messages.create({
     model: opts.model ?? DEFAULT_MODEL,
-    max_tokens: opts.maxTokens ?? 1200,
+    max_tokens: opts.maxTokens ?? 4096,
     system: opts.system,
     messages: [
       {

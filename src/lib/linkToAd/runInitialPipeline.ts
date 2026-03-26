@@ -99,7 +99,7 @@ export async function runInitialPipeline(
     report(1);
     const classifyRes = await f("/api/gpt/images-classify", {
       method: "POST",
-      body: JSON.stringify({ pageUrl: url, imageUrls: images }),
+      body: JSON.stringify({ pageUrl: url, imageUrls: images, provider: aiProvider }),
     });
     if (!classifyRes.ok) {
       const raw = await classifyRes.text().catch(() => "");
@@ -145,7 +145,7 @@ export async function runInitialPipeline(
     report(2);
     const summaryRes = await f("/api/gpt/brand-url-summary", {
       method: "POST",
-      body: JSON.stringify({ url }),
+      body: JSON.stringify({ url, provider: aiProvider }),
     });
     if (!summaryRes.ok) {
       const raw = await summaryRes.text().catch(() => "");
