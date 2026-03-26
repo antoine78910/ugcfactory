@@ -290,9 +290,30 @@ export function StudioModelPicker({
       const vh = window.innerHeight;
       const maxPanel = Math.min(352, vw - 24);
       const w = Math.min(Math.max(r.width, 260), maxPanel);
-      let left = align === "end" ? r.right - w : r.left;
+      // By default, dropdown lists open below the trigger.
+      // For our Studio sidebars, opening to the *right* avoids covering other parameters.
+      const rightSpace = vw - r.right - gap;
+      const leftSpace = r.left - gap;
+      const canOpenRight = rightSpace >= w;
+      const canOpenLeft = leftSpace >= w;
+
+      let left: number;
+      let top: number;
+
+      if (panelMode === "dropdown" && canOpenRight && align === "end") {
+        left = r.right + gap;
+        top = r.top;
+      } else if (panelMode === "dropdown" && canOpenLeft && align === "start") {
+        left = r.left - gap - w;
+        top = r.top;
+      } else {
+        // Vertical fallback: open below trigger.
+        left = align === "end" ? r.right - w : r.left;
+        top = r.bottom + gap;
+      }
+
       left = Math.max(12, Math.min(left, vw - w - 12));
-      const top = r.bottom + gap;
+      top = Math.max(12, Math.min(top, vh - 16));
       const maxHeight = Math.min(vh - top - 16, vh * 0.72, 448);
       setDropdownLayout({ top, left, width: w, maxHeight });
     };
