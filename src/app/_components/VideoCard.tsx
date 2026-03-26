@@ -9,11 +9,27 @@ type VideoCardProps = {
   poster?: string;
   className?: string;
   aspectClassName?: string;
+  /** When provided, opens an external lightbox instead of the built-in one. */
+  onOpenFullscreen?: () => void;
+  /** Defaults to true. Set to false to disable internal fullscreen lightbox. */
+  enableLightbox?: boolean;
 };
 
-export default function VideoCard({ src, poster, className, aspectClassName = "aspect-[9/16]" }: VideoCardProps) {
+export default function VideoCard({
+  src,
+  poster,
+  className,
+  aspectClassName = "aspect-[9/16]",
+  onOpenFullscreen,
+  enableLightbox = true,
+}: VideoCardProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [lightbox, setLightbox] = useState(false);
+
+  const openFullscreen = () => {
+    if (typeof onOpenFullscreen === "function") return onOpenFullscreen();
+    if (enableLightbox !== false) setLightbox(true);
+  };
 
   const handleMouseEnter = useCallback(() => {
     const v = videoRef.current;
@@ -46,12 +62,12 @@ export default function VideoCard({ src, poster, className, aspectClassName = "a
           preload="metadata"
           loop
           className="h-full w-full cursor-pointer object-cover"
-          onClick={() => setLightbox(true)}
+          onClick={openFullscreen}
         />
 
         <button
           type="button"
-          onClick={() => setLightbox(true)}
+          onClick={openFullscreen}
           className="absolute inset-0 z-10 cursor-pointer"
           aria-label="Open video fullscreen"
         />
@@ -68,7 +84,7 @@ export default function VideoCard({ src, poster, className, aspectClassName = "a
 
         <button
           type="button"
-          onClick={() => setLightbox(true)}
+          onClick={openFullscreen}
           className="absolute bottom-2 right-2 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white/75 opacity-0 transition hover:bg-black/75 hover:text-white group-hover/vc:opacity-100 focus-visible:opacity-100"
           aria-label="Fullscreen"
           title="Fullscreen"
@@ -77,7 +93,7 @@ export default function VideoCard({ src, poster, className, aspectClassName = "a
         </button>
       </div>
 
-      {lightbox ? (
+      {enableLightbox !== false && lightbox ? (
         <div
           className="fixed inset-0 z-[500] flex items-center justify-center bg-black/90 backdrop-blur-sm"
           onClick={() => setLightbox(false)}

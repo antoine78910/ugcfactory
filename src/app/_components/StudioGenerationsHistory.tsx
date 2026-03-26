@@ -118,7 +118,12 @@ export function StudioGenerationsHistory({
 }: Props) {
   const [view, setView] = useState<"grid" | "list">("grid");
   const [zoom, setZoom] = useState(100);
-  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [lightboxItem, setLightboxItem] = useState<{
+    url: string;
+    poster?: string;
+    kind: "image" | "video";
+    prompt: string;
+  } | null>(null);
   const [editPrompt, setEditPrompt] = useState("");
   const [editModel, setEditModel] = useState<"nano" | "pro">("pro");
   const [editAspect, setEditAspect] = useState("3:4");
@@ -126,18 +131,18 @@ export function StudioGenerationsHistory({
   const [upscaleFactor, setUpscaleFactor] = useState<"1" | "2" | "4" | "8">("2");
 
   useEffect(() => {
-    if (!lightboxUrl || !imageLightboxEdit) return;
+    if (!lightboxItem?.url || !imageLightboxEdit) return;
     setEditPrompt("");
     setEditModel(imageLightboxEdit.seedModel);
     setEditAspect(imageLightboxEdit.seedAspect);
     setEditResolution(imageLightboxEdit.seedResolution);
-  }, [lightboxUrl, imageLightboxEdit]);
+  }, [lightboxItem?.url, imageLightboxEdit]);
 
   useEffect(() => {
-    if (!lightboxUrl || !imageLightboxUpscale) return;
+    if (!lightboxItem?.url || !imageLightboxUpscale) return;
     const seed = imageLightboxUpscale.seedFactor ?? "2";
     setUpscaleFactor(seed);
-  }, [lightboxUrl, imageLightboxUpscale]);
+  }, [lightboxItem?.url, imageLightboxUpscale]);
 
   const editAspectOptions = useMemo(
     () => (editModel === "pro" ? imageLightboxEdit?.proAspectOptions ?? [] : imageLightboxEdit?.nanoAspectOptions ?? []),
@@ -145,12 +150,12 @@ export function StudioGenerationsHistory({
   );
 
   useEffect(() => {
-    if (!lightboxUrl || !imageLightboxEdit) return;
+    if (!lightboxItem?.url || !imageLightboxEdit) return;
     const allowed = new Set(editAspectOptions as readonly string[]);
     if (allowed.size > 0 && !allowed.has(editAspect)) {
       setEditAspect(editModel === "pro" ? "3:4" : "auto");
     }
-  }, [editModel, editAspect, editAspectOptions, lightboxUrl, imageLightboxEdit]);
+  }, [editModel, editAspect, editAspectOptions, lightboxItem?.url, imageLightboxEdit]);
 
   const failedDismissCfg = useMemo(() => {
     if (!failedAutoDismiss) return null;
@@ -379,6 +384,15 @@ export function StudioGenerationsHistory({
                           poster={item.posterUrl}
                           className="h-full w-full rounded-none border-0"
                           aspectClassName=""
+                          enableLightbox={false}
+                          onOpenFullscreen={() => {
+                            setLightboxItem({
+                              url: item.mediaUrl!,
+                              poster: item.posterUrl,
+                              kind: "video",
+                              prompt: item.label || "",
+                            });
+                          }}
                         />
                       ) : null}
 
@@ -386,7 +400,15 @@ export function StudioGenerationsHistory({
                         <>
                           <button
                             type="button"
-                            onClick={() => setLightboxUrl(item.mediaUrl ?? null)}
+                            onClick={() => {
+                              if (!item.mediaUrl) return;
+                              setLightboxItem({
+                                url: item.mediaUrl,
+                                poster: item.posterUrl,
+                                kind: "image",
+                                prompt: item.label || "",
+                              });
+                            }}
                             className="block h-full w-full"
                             aria-label="Open image fullscreen"
                           >
@@ -447,10 +469,10 @@ export function StudioGenerationsHistory({
           ))}
         </div>
       )}
-      {lightboxUrl ? (
+      {lightboxItem ? (
         <div
           className="fixed inset-0 z-[220] flex items-center justify-center bg-black/88 p-2 backdrop-blur-[2px] transition-opacity duration-300 ease-out sm:p-4"
-          onClick={() => setLightboxUrl(null)}
+          onClick={() => setLightboxItem(null)}
           role="dialog"
           aria-modal="true"
           aria-label="Fullscreen image preview"
@@ -460,7 +482,7 @@ export function StudioGenerationsHistory({
             className="absolute right-2 top-2 z-[222] inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-black/65 text-white transition-colors duration-200 hover:bg-black/85 sm:right-4 sm:top-4"
             onClick={(e) => {
               e.stopPropagation();
-              setLightboxUrl(null);
+              setLightboxItem(null);
             }}
             aria-label="Close fullscreen image"
           >
@@ -474,21 +496,53 @@ export function StudioGenerationsHistory({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center rounded-2xl border border-white/[0.12] bg-gradient-to-b from-[#16161f]/90 to-black/60 p-2 shadow-[0_24px_80px_rgba(0,0,0,0.55)] transition-shadow duration-300 ease-out sm:p-4 lg:min-h-[min(88vh,900px)]">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={lightboxUrl}
-                alt="Fullscreen generation preview"
-                className="max-h-[min(78vh,880px)] w-full max-w-full object-contain object-center transition-transform duration-300 ease-out lg:max-h-[min(88vh,900px)]"
-              />
+              {lightboxItem.kind === "video" || isProbablyVideoUrl(lightboxItem.url) ? (
+                // eslint-disable-next-line jsx-a11y/media-has-caption
+                <video
+                  src={lightboxItem.url}
+                  poster={lightboxItem.poster}
+                  controls
+                  autoPlay
+                  playsInline
+                  className="max-h-[min(78vh,880px)] w-full max-w-full rounded-lg object-contain object-center lg:max-h-[min(88vh,900px)]"
+                />
+              ) : (
+                <>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={lightboxItem.url}
+                    alt="Fullscreen generation preview"
+                    className="max-h-[min(78vh,880px)] w-full max-w-full object-contain object-center transition-transform duration-300 ease-out lg:max-h-[min(88vh,900px)]"
+                  />
+                </>
+              )}
             </div>
-            {lightboxUrl &&
-            !isProbablyVideoUrl(lightboxUrl) &&
-            (imageLightboxUpscale || imageLightboxEdit) ? (
-              <aside
-                className={cn(
-                  "flex max-h-[min(52vh,480px)] w-full shrink-0 flex-col gap-4 overflow-y-auto rounded-2xl border border-white/[0.12] bg-[#121218]/96 p-4 shadow-xl transition-[opacity,transform,box-shadow] duration-300 ease-out motion-reduce:transition-none lg:max-h-none lg:w-[min(100%,22rem)] lg:max-w-[22rem]",
-                )}
-              >
+
+            <aside
+              className={cn(
+                "flex max-h-[min(52vh,480px)] w-full shrink-0 flex-col gap-4 overflow-y-auto rounded-2xl border border-white/[0.12] bg-[#121218]/96 p-4 shadow-xl transition-[opacity,transform,box-shadow] duration-300 ease-out motion-reduce:transition-none lg:max-h-none lg:w-[min(100%,22rem)] lg:max-w-[22rem]",
+              )}
+            >
+              <div className="rounded-xl border border-white/10 bg-[#14141c]/80 p-3.5">
+                <div className="mb-2 text-sm font-semibold text-white/90">Prompt</div>
+                <p className="whitespace-pre-wrap break-words text-[12px] leading-snug text-white/60">
+                  {lightboxItem.prompt?.trim() ? lightboxItem.prompt.trim() : "—"}
+                </p>
+                <div className="mt-3 flex gap-2">
+                  <a
+                    href={`/api/download?url=${encodeURIComponent(lightboxItem.url)}`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="flex-1 rounded-md border border-white/15 bg-white/[0.06] px-3 py-2 text-center text-[11px] font-semibold text-white/80 transition hover:bg-white/[0.1]"
+                  >
+                    Download
+                  </a>
+                </div>
+              </div>
+
+              {lightboxItem.kind === "image" &&
+              !isProbablyVideoUrl(lightboxItem.url) &&
+              (imageLightboxUpscale || imageLightboxEdit) ? (
+                <>
                 {imageLightboxUpscale ? (
                   <div className="rounded-xl border border-white/10 bg-[#14141c]/80 p-3.5">
                     <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-white/90">
@@ -523,12 +577,12 @@ export function StudioGenerationsHistory({
                         type="button"
                         className="h-11 w-full border border-emerald-500/35 bg-emerald-700/90 text-white transition-colors duration-200 hover:bg-emerald-600"
                         onClick={() => {
-                          if (!lightboxUrl) return;
+                          if (!lightboxItem?.url) return;
                           imageLightboxUpscale.onSubmitUpscale({
-                            sourceUrl: lightboxUrl,
+                            sourceUrl: lightboxItem.url,
                             upscaleFactor,
                           });
-                          setLightboxUrl(null);
+                          setLightboxItem(null);
                         }}
                       >
                         Run upscale · {imageLightboxUpscale.creditsFor(upscaleFactor)} credits
@@ -615,15 +669,15 @@ export function StudioGenerationsHistory({
                             toast.error("Enter an edit prompt.");
                             return;
                           }
-                          if (!lightboxUrl) return;
+                          if (!lightboxItem?.url) return;
                           imageLightboxEdit.onSubmitEdit({
-                            sourceUrl: lightboxUrl,
+                            sourceUrl: lightboxItem.url,
                             prompt: p,
                             model: editModel,
                             aspectRatio: editAspect,
                             resolution: editResolution,
                           });
-                          setLightboxUrl(null);
+                          setLightboxItem(null);
                         }}
                       >
                         Run edit · {imageLightboxEdit.creditsFor(editModel, editResolution)} credits
@@ -631,8 +685,9 @@ export function StudioGenerationsHistory({
                     </div>
                   </div>
                 ) : null}
-              </aside>
-            ) : null}
+                </>
+              ) : null}
+            </aside>
           </div>
         </div>
       ) : null}
