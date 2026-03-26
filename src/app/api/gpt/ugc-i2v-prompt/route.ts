@@ -3,10 +3,12 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import { openaiResponsesText } from "@/lib/openaiResponses";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
+import { claudeMessagesText } from "@/lib/claudeResponses";
 
 type Body = {
   /** Full UGC script for the chosen angle (includes VOICE PROFILE etc.) */
   angleScript: string;
+  provider?: "gpt" | "claude";
 };
 
 const INSTRUCTIONS = `
@@ -159,6 +161,7 @@ export async function POST(req: Request) {
 
   const body = (await req.json().catch(() => null)) as Body | null;
   const angleScript = body?.angleScript?.trim();
+  const provider: "gpt" | "claude" = body?.provider === "claude" ? "claude" : "gpt";
   if (!angleScript) {
     return NextResponse.json({ error: "Missing `angleScript`." }, { status: 400 });
   }
@@ -178,8 +181,11 @@ export async function POST(req: Request) {
   ].join("\n");
 
   try {
-    const { text } = await openaiResponsesText({ developer, user });
-    return NextResponse.json({ data: text });
+    const text =
+      provider === "claude"
+        ? await claudeMessagesText({ system: developer, user })
+        : (await openaiResponsesText({ developer, user })).text;
+    return NextResponse.json({ data: String(text ?? "").trim() });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error.";
     return NextResponse.json({ error: message }, { status: 502 });

@@ -12,6 +12,7 @@ type Body = {
   neutralUploadUrl?: string | null;
   generationMode?: "automatic" | "custom_ugc";
   customUgcIntent?: string;
+  aiProvider?: "gpt" | "claude";
 };
 
 export async function POST(req: Request) {
@@ -33,9 +34,10 @@ export async function POST(req: Request) {
 
   const generationMode = body?.generationMode === "custom_ugc" ? "custom_ugc" : "automatic";
   const customUgcIntent = typeof body?.customUgcIntent === "string" ? body.customUgcIntent.trim() : "";
+  const aiProvider: "gpt" | "claude" = body?.aiProvider === "claude" ? "claude" : "gpt";
 
   const f = createInternalFetchFromRequest(req);
-  const result = await runInitialPipeline(f, { storeUrl, neutralUploadUrl, generationMode, customUgcIntent });
+  const result = await runInitialPipeline(f, { storeUrl, neutralUploadUrl, generationMode, customUgcIntent, aiProvider });
 
   if (!result.ok) {
     return NextResponse.json(

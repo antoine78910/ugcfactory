@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { openaiResponsesText, openaiResponsesTextWithImages } from "@/lib/openaiResponses";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { makeCacheKey } from "@/lib/gptCache";
+import { claudeMessagesText, claudeMessagesTextWithImages } from "@/lib/claudeResponses";
 
 type Body = {
   storeUrl?: string;
@@ -19,6 +20,7 @@ type Body = {
   videoDurationSeconds?: 8 | 15 | 30;
   generationMode?: "automatic" | "custom_ugc";
   customUgcIntent?: string | null;
+  provider?: "gpt" | "claude";
 };
 
 function collectHttpsProductImageUrls(body: Body): string[] {
@@ -314,6 +316,7 @@ export async function POST(req: Request) {
   const generationMode = body?.generationMode === "custom_ugc" ? "custom_ugc" : "automatic";
   const customUgcIntent = body?.customUgcIntent?.trim() || "";
   const previousScriptsText = body?.previousScriptsText?.trim() || "";
+  const provider: "gpt" | "claude" = body?.provider === "claude" ? "claude" : "gpt";
 
   const developer = [
     "You are an expert UGC scriptwriter for AI video (lipsync, shot segmentation, image-to-video).",
@@ -363,6 +366,7 @@ export async function POST(req: Request) {
     const cacheKey = makeCacheKey({
       v: 2,
       kind: "ugc_scripts_from_brief",
+      provider,
       brandBrief,
       previousScriptsText,
       imageUrlsJoined: imageUrls.join("|"),
@@ -390,14 +394,14 @@ export async function POST(req: Request) {
       // ignore cache read errors
     }
 
-    const { text } =
-      imageUrls.length > 0
-        ? await openaiResponsesTextWithImages({
-            developer,
-            userText: userPayload,
-            imageUrls: imageUrls,
-          })
-        : await openaiResponsesText({ developer, user: userPayload });
+    const text =
+      provider === "claude"
+        ? imageUrls.length > 0
+          ? await claudeMessagesTextWithImages({ system: developer, user: userPayload, imageUrls })
+          : await claudeMessagesText({ system: developer, user: userPayload })
+        : imageUrls.length > 0
+          ? (await openaiResponsesTextWithImages({ developer, userText: userPayload, imageUrls })).text
+          : (await openaiResponsesText({ developer, user: userPayload })).text;
 
     try {
       await supabase
@@ -413,7 +417,7 @@ export async function POST(req: Request) {
       // ignore cache insert failures
     }
 
-    return NextResponse.json({ data: text });
+    return NextResponse.json({ data: String(text ?? "").trim() });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error.";
     return NextResponse.json({ error: message }, { status: 502 });

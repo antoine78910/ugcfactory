@@ -54,6 +54,7 @@ export async function runInitialPipeline(
     neutralUploadUrl: string | null;
     generationMode?: "automatic" | "custom_ugc";
     customUgcIntent?: string;
+    aiProvider?: "gpt" | "claude";
   },
   onProgress?: (step: InitialPipelineStepIndex) => void,
 ): Promise<InitialPipelineResult> {
@@ -61,6 +62,7 @@ export async function runInitialPipeline(
   const userUploadedImageUrl = opts.neutralUploadUrl;
   const generationMode = opts.generationMode === "custom_ugc" ? "custom_ugc" : "automatic";
   const customUgcIntent = (opts.customUgcIntent ?? "").trim();
+  const aiProvider = opts.aiProvider === "claude" ? "claude" : "gpt";
 
   let activeRunId: string | null = null;
 
@@ -164,6 +166,7 @@ export async function runInitialPipeline(
       phase: "after_summary",
       generationMode,
       customUgcIntent,
+      aiProvider,
       cleanCandidate: cleanUrl ? { url: cleanUrl, reason } : null,
       fallbackImageUrl: firstOther?.trim() || images[0] || null,
       confidence: confidenceStr,
@@ -202,6 +205,7 @@ export async function runInitialPipeline(
           videoDurationSeconds: 15,
           generationMode,
           customUgcIntent,
+          provider: aiProvider,
         }),
       });
       if (!scriptsRes.ok) {
@@ -224,6 +228,7 @@ export async function runInitialPipeline(
         phase: "after_scripts",
         generationMode,
         customUgcIntent,
+        aiProvider,
         cleanCandidate: cleanUrl ? { url: cleanUrl, reason } : null,
         fallbackImageUrl: firstOther?.trim() || images[0] || null,
         confidence: confidenceStr,
@@ -285,6 +290,7 @@ export async function runContinueScriptsPipeline(f: InternalFetch, runId: string
   if (!snap || !snap.summaryText.trim()) {
     return { ok: false, error: "Incomplete data to generate scripts.", runId: run.id };
   }
+  const aiProvider = snap.aiProvider === "claude" ? "claude" : "gpt";
 
   const base = cloneExtractedBase(run.extracted);
   const generationMode = snap.generationMode === "custom_ugc" ? "custom_ugc" : "automatic";
@@ -315,6 +321,7 @@ export async function runContinueScriptsPipeline(f: InternalFetch, runId: string
         videoDurationSeconds: 15,
         generationMode,
         customUgcIntent,
+        provider: aiProvider,
       }),
     });
     if (!scriptsRes.ok) {

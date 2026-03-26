@@ -3,12 +3,14 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import { openaiResponsesText, openaiResponsesTextWithImages } from "@/lib/openaiResponses";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
+import { claudeMessagesText, claudeMessagesTextWithImages } from "@/lib/claudeResponses";
 
 type Body = {
   brandBrief: string;
   customAngle: string;
   productImageUrls?: string[] | null;
   videoDurationSeconds?: 8 | 15 | 30;
+  provider?: "gpt" | "claude";
 };
 
 function collectHttpsUrls(urls: unknown): string[] {
@@ -32,6 +34,7 @@ export async function POST(req: Request) {
   const body = (await req.json().catch(() => null)) as Body | null;
   const brandBrief = body?.brandBrief?.trim();
   const customAngle = body?.customAngle?.trim();
+  const provider: "gpt" | "claude" = body?.provider === "claude" ? "claude" : "gpt";
   if (!brandBrief || !customAngle) {
     return NextResponse.json({ error: "Missing `brandBrief` or `customAngle`." }, { status: 400 });
   }
@@ -78,16 +81,18 @@ export async function POST(req: Request) {
   ].join("\n");
 
   try {
-    const { text } =
-      imageUrls.length > 0
-        ? await openaiResponsesTextWithImages({
-            developer,
-            userText: userPayload,
-            imageUrls,
-          })
-        : await openaiResponsesText({ developer, user: userPayload });
+    const text =
+      provider === "claude"
+        ? imageUrls.length > 0
+          ? await claudeMessagesTextWithImages({ system: developer, user: userPayload, imageUrls })
+          : await claudeMessagesText({ system: developer, user: userPayload })
+        : (
+            imageUrls.length > 0
+              ? await openaiResponsesTextWithImages({ developer, userText: userPayload, imageUrls })
+              : await openaiResponsesText({ developer, user: userPayload })
+          ).text;
 
-    return NextResponse.json({ data: text });
+    return NextResponse.json({ data: text.trim() });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error.";
     return NextResponse.json({ error: message }, { status: 502 });

@@ -3,6 +3,7 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import { openaiResponsesTextWithImages } from "@/lib/openaiResponses";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
+import { claudeMessagesTextWithImages } from "@/lib/claudeResponses";
 
 type Body = {
   marketingScript: string;
@@ -11,6 +12,7 @@ type Body = {
   avatarImageUrls?: string[] | null;
   generationMode?: "automatic" | "custom_ugc";
   customUgcIntent?: string | null;
+  provider?: "gpt" | "claude";
 };
 
 const INSTRUCTIONS = `
@@ -282,6 +284,7 @@ export async function POST(req: Request) {
     : [];
   const generationMode = body?.generationMode === "custom_ugc" ? "custom_ugc" : "automatic";
   const customUgcIntent = body?.customUgcIntent?.trim() || "";
+  const provider: "gpt" | "claude" = body?.provider === "claude" ? "claude" : "gpt";
 
   const developer = [
     "Follow the instructions in the user message exactly.",
@@ -304,11 +307,19 @@ export async function POST(req: Request) {
   ].join("\n");
 
   try {
-    const { text } = await openaiResponsesTextWithImages({
-      developer,
-      userText,
-      imageUrls: [imageUrl, ...avatarRefs],
-    });
+    const text =
+      provider === "claude"
+        ? await claudeMessagesTextWithImages({
+            system: developer,
+            user: userText,
+            imageUrls: [imageUrl, ...avatarRefs],
+          })
+        : (await openaiResponsesTextWithImages({
+            developer,
+            userText,
+            imageUrls: [imageUrl, ...avatarRefs],
+          })).text;
+
     const trimmed = String(text ?? "").trim();
     if (!trimmed) {
       return NextResponse.json(

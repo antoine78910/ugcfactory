@@ -440,6 +440,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const [summaryText, setSummaryText] = useState<string>("");
   const [scriptsText, setScriptsText] = useState<string>("");
   const [generationMode, setGenerationMode] = useState<"automatic" | "custom_ugc">("automatic");
+  const [scriptProvider, setScriptProvider] = useState<"gpt" | "claude">("gpt");
   const [customUgcTopic, setCustomUgcTopic] = useState("");
   const [customUgcOffer, setCustomUgcOffer] = useState("");
   const [customUgcCta, setCustomUgcCta] = useState("");
@@ -1357,6 +1358,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           customAngle: angle,
           productImageUrls: resolvedProductUrlsForGpt(),
           videoDurationSeconds: 15,
+          provider: scriptProvider,
         }),
       });
       const json = (await res.json()) as { data?: string; error?: string };
@@ -1723,6 +1725,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           videoDurationSeconds: 15,
           generationMode,
           customUgcIntent: composeCustomUgcIntent(customUgcTopic, customUgcOffer, customUgcCta),
+          provider: scriptProvider,
         }),
       });
       const json = (await res.json()) as { data?: string; error?: string };
@@ -1894,6 +1897,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           neutralUploadUrl: userUploadedImageUrl,
           generationMode,
           customUgcIntent: composeCustomUgcIntent(customUgcTopic, customUgcOffer, customUgcCta),
+          aiProvider: scriptProvider,
         },
         (step) => setServerPipelineStepIndex(step),
       );
@@ -1988,6 +1992,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           avatarImageUrls: avatarRefs,
           generationMode,
           customUgcIntent: composeCustomUgcIntent(customUgcTopic, customUgcOffer, customUgcCta),
+          provider: scriptProvider,
         }),
       });
       const json = (await res.json()) as { data?: string; error?: string };
@@ -2459,7 +2464,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
-        body: JSON.stringify({ angleScript: script }),
+        body: JSON.stringify({ angleScript: script, provider: scriptProvider }),
       });
       const json = (await res.json()) as { data?: string; error?: string };
       if (!res.ok || !json.data) throw new Error(json.error || "Video prompt failed");
@@ -2950,11 +2955,41 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <CardTitle className="text-base">Link to Ad</CardTitle>
-          {stage === "error" ? (
-            <div className="flex items-center gap-2 text-xs text-red-300/90">
-              <span className="rounded-full border border-red-400/30 bg-red-500/10 px-2 py-1">Error</span>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] p-1">
+              <button
+                type="button"
+                onClick={() => setScriptProvider("gpt")}
+                disabled={isWorking}
+                className={cn(
+                  "rounded-md px-3 py-1 text-xs font-semibold transition",
+                  scriptProvider === "gpt"
+                    ? "bg-violet-500/15 text-white border border-violet-400/60"
+                    : "bg-black/20 text-white/65 hover:border-white/20 border border-white/10",
+                )}
+              >
+                GPT
+              </button>
+              <button
+                type="button"
+                onClick={() => setScriptProvider("claude")}
+                disabled={isWorking}
+                className={cn(
+                  "rounded-md px-3 py-1 text-xs font-semibold transition",
+                  scriptProvider === "claude"
+                    ? "bg-violet-500/15 text-white border border-violet-400/60"
+                    : "bg-black/20 text-white/65 hover:border-white/20 border border-white/10",
+                )}
+              >
+                Claude
+              </button>
             </div>
-          ) : null}
+            {stage === "error" ? (
+              <div className="flex items-center gap-2 text-xs text-red-300/90">
+                <span className="rounded-full border border-red-400/30 bg-red-500/10 px-2 py-1">Error</span>
+              </div>
+            ) : null}
+          </div>
         </div>
       </CardHeader>
 
