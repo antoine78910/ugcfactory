@@ -459,7 +459,15 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const [summaryText, setSummaryText] = useState<string>("");
   const [scriptsText, setScriptsText] = useState<string>("");
   const [generationMode, setGenerationMode] = useState<"automatic" | "custom_ugc">("automatic");
-  const [scriptProvider, setScriptProvider] = useState<"gpt" | "claude">("gpt");
+  const [scriptProvider, setScriptProviderRaw] = useState<"gpt" | "claude">(() => {
+    if (typeof window === "undefined") return "gpt";
+    try { const v = localStorage.getItem("youry-ai-provider"); if (v === "claude") return "claude"; } catch {}
+    return "gpt";
+  });
+  const setScriptProvider = useCallback((v: "gpt" | "claude") => {
+    setScriptProviderRaw(v);
+    try { localStorage.setItem("youry-ai-provider", v); } catch {}
+  }, []);
   const [customUgcTopic, setCustomUgcTopic] = useState("");
   const [customUgcOffer, setCustomUgcOffer] = useState("");
   const [customUgcCta, setCustomUgcCta] = useState("");
