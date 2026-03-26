@@ -100,15 +100,6 @@ export default function VideoCard({ src, poster, className, aspectClassName = "a
               playsInline
               className="max-h-[90vh] max-w-[90vw] rounded-lg"
             />
-
-            <a
-              href={`/api/download?url=${encodeURIComponent(src)}`}
-              className="absolute bottom-4 right-4 z-20 inline-flex items-center gap-2 rounded-lg border border-white/15 bg-black/70 px-3 py-2 text-xs font-semibold text-white transition hover:bg-black/90"
-              aria-label="Download video"
-            >
-              <Download className="h-4 w-4" aria-hidden />
-              Download
-            </a>
           </div>
         </div>
       ) : null}
