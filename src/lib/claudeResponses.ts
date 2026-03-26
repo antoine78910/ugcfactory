@@ -43,6 +43,59 @@ export async function claudeMessagesText(opts: {
   return text;
 }
 
+type ImageBlock =
+  | { type: "image"; source: { type: "url"; url: string } }
+  | { type: "image"; source: { type: "base64"; media_type: string; data: string } };
+
+const ALLOWED_MEDIA_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+]);
+
+function guessMediaType(url: string, contentType: string | null): string {
+  const ct = (contentType ?? "").split(";")[0]!.trim().toLowerCase();
+  if (ALLOWED_MEDIA_TYPES.has(ct)) return ct;
+  const lower = url.toLowerCase();
+  if (lower.includes(".png")) return "image/png";
+  if (lower.includes(".webp")) return "image/webp";
+  if (lower.includes(".gif")) return "image/gif";
+  return "image/jpeg";
+}
+
+async function toImageBlock(rawUrl: string): Promise<ImageBlock | null> {
+  const u = (rawUrl ?? "").trim();
+  if (!u) return null;
+
+  if (/^https:\/\//i.test(u)) {
+    return { type: "image", source: { type: "url", url: u } };
+  }
+
+  if (/^http:\/\//i.test(u)) {
+    const httpsUrl = u.replace(/^http:\/\//i, "https://");
+    try {
+      const probe = await fetch(httpsUrl, { method: "HEAD", signal: AbortSignal.timeout(5_000) });
+      if (probe.ok) {
+        return { type: "image", source: { type: "url", url: httpsUrl } };
+      }
+    } catch { /* HTTPS upgrade failed, fall through to base64 */ }
+
+    try {
+      const res = await fetch(u, { signal: AbortSignal.timeout(10_000) });
+      if (!res.ok) return null;
+      const buf = Buffer.from(await res.arrayBuffer());
+      if (buf.length === 0 || buf.length > 20_000_000) return null;
+      const mediaType = guessMediaType(u, res.headers.get("content-type"));
+      return { type: "image", source: { type: "base64", media_type: mediaType, data: buf.toString("base64") } };
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
 export async function claudeMessagesTextWithImages(opts: {
   system?: string;
   user: string;
@@ -53,14 +106,13 @@ export async function claudeMessagesTextWithImages(opts: {
   const apiKey = requireEnv("ANTHROPIC_API_KEY");
   const client = new Anthropic({ apiKey });
 
-  const contentBlocks: Array<{ type: "text"; text: string } | { type: "image"; source: { type: "url"; url: string } }> = [
+  const contentBlocks: Array<{ type: "text"; text: string } | ImageBlock> = [
     { type: "text", text: opts.user },
   ];
 
-  for (const url of opts.imageUrls.slice(0, 12)) {
-    const u = (url ?? "").trim();
-    if (!u) continue;
-    contentBlocks.push({ type: "image", source: { type: "url", url: u } });
+  const imageResults = await Promise.all(opts.imageUrls.slice(0, 12).map(toImageBlock));
+  for (const block of imageResults) {
+    if (block) contentBlocks.push(block);
   }
 
   const message = await client.messages.create({
@@ -70,7 +122,7 @@ export async function claudeMessagesTextWithImages(opts: {
     messages: [
       {
         role: "user",
-        content: contentBlocks,
+        content: contentBlocks as any,
       },
     ],
   });
