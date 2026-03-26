@@ -4,6 +4,7 @@ import { kieImageTaskPollOutcome } from "@/lib/kieTaskPoll";
 import type { StudioGenerationRow } from "@/lib/studioGenerationsMap";
 import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
 import { isPiapiTaskId, piapiGetSeedanceTask, piapiTaskStatusToLegacy } from "@/lib/piapiSeedance";
+import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 
 /** DB rows we still poll until Kie/PiAPI reports terminal state. */
 export const STUDIO_GENERATION_IN_PROGRESS_STATUSES = [
@@ -15,6 +16,77 @@ export const STUDIO_GENERATION_IN_PROGRESS_STATUSES = [
 
 function isStudioGenerationInProgressStatus(s: string): boolean {
   return (STUDIO_GENERATION_IN_PROGRESS_STATUSES as readonly string[]).includes(s);
+}
+
+const STUDIO_MEDIA_BUCKET = "studio-media";
+
+function guessExtensionFromUrl(url: string): string {
+  const u = url.trim();
+  if (!u) return "";
+  const lower = u.toLowerCase();
+  if (lower.includes(".mp4")) return ".mp4";
+  if (lower.includes(".mov")) return ".mov";
+  if (lower.includes(".webm")) return ".webm";
+  if (lower.includes(".png")) return ".png";
+  if (lower.includes(".webp")) return ".webp";
+  if (lower.includes(".jpg") || lower.includes(".jpeg")) return ".jpg";
+  return "";
+}
+
+function guessExtensionFromContentType(contentType: string | null): string {
+  const ct = (contentType ?? "").toLowerCase();
+  if (!ct) return "";
+  const map: Record<string, string> = {
+    "video/mp4": ".mp4",
+    "video/quicktime": ".mov",
+    "video/webm": ".webm",
+    "image/png": ".png",
+    "image/webp": ".webp",
+    "image/jpeg": ".jpg",
+  };
+  return map[ct] ?? "";
+}
+
+async function persistStudioMediaUrls(opts: {
+  userId: string;
+  rowId: string;
+  urls: string[];
+}): Promise<string[] | null> {
+  const admin = createSupabaseServiceClient();
+  if (!admin) return null;
+
+  const out: string[] = [];
+  for (let i = 0; i < opts.urls.length; i++) {
+    const src = (opts.urls[i] ?? "").trim();
+    if (!src || !/^https?:\/\//i.test(src)) continue;
+
+    try {
+      const res = await fetch(src, { cache: "no-store" });
+      if (!res.ok) continue;
+      const bytes = await res.arrayBuffer();
+      const buffer = Buffer.from(bytes);
+      if (buffer.length === 0) continue;
+
+      const ext = guessExtensionFromContentType(res.headers.get("content-type")) || guessExtensionFromUrl(src) || "";
+      const filename = `${crypto.randomUUID()}${ext}`;
+      const storagePath = `${opts.userId}/${opts.rowId}/${i + 1}-${filename}`;
+
+      const { data, error } = await admin.storage.from(STUDIO_MEDIA_BUCKET).upload(storagePath, buffer, {
+        contentType: res.headers.get("content-type") ?? undefined,
+        upsert: false,
+      });
+      if (error || !data?.path) continue;
+
+      const {
+        data: { publicUrl },
+      } = admin.storage.from(STUDIO_MEDIA_BUCKET).getPublicUrl(data.path);
+      if (publicUrl) out.push(publicUrl);
+    } catch {
+      // Best-effort persistence: ignore individual URL failures.
+    }
+  }
+
+  return out.length ? out : null;
 }
 
 /**
@@ -52,11 +124,16 @@ export async function pollStudioGenerationRow(
   if (out.kind === "processing") return;
 
   if (out.kind === "success") {
+    const persisted = await persistStudioMediaUrls({
+      userId: row.user_id,
+      rowId: row.id,
+      urls: out.urls ?? [],
+    });
     const { error } = await supabase
       .from("studio_generations")
       .update({
         status: "ready",
-        result_urls: out.urls,
+        result_urls: persisted ?? out.urls,
         error_message: null,
       })
       .eq("id", row.id);
