@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Download, FolderOpen, Info, LayoutGrid, List, Loader2, Play, Sparkles, Wand2, X } from "lucide-react";
+import { Download, FolderOpen, Info, LayoutGrid, List, Loader2, Sparkles, Wand2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import VideoCard from "@/app/_components/VideoCard";
 
 export type StudioHistoryMediaKind = "image" | "video" | "motion";
 
@@ -373,33 +374,12 @@ export function StudioGenerationsHistory({
                         </div>
                       ) : null}
                       {canShowResultMedia && item.mediaUrl && (item.kind !== "image" || isProbablyVideoUrl(item.mediaUrl)) ? (
-                        <div className="relative h-full w-full bg-black">
-                          <video
-                            src={item.mediaUrl}
-                            className="h-full w-full object-cover"
-                            controls
-                            playsInline
-                            preload="metadata"
-                            poster={item.posterUrl}
-                          />
-                          <a
-                            href={`/api/download?url=${encodeURIComponent(item.mediaUrl)}`}
-                            onClick={(e) => e.stopPropagation()}
-                            className="absolute right-2 top-2 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white/75 opacity-0 transition hover:bg-black/75 hover:text-white group-hover/media:opacity-100 focus-visible:opacity-100"
-                            aria-label="Download video"
-                            title="Download"
-                          >
-                            <Download className="h-4 w-4" aria-hidden />
-                          </a>
-                          <div
-                            className="pointer-events-none absolute inset-0 flex items-center justify-center bg-gradient-to-t from-black/50 via-transparent to-black/20"
-                            aria-hidden
-                          >
-                            <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white/90 text-black shadow-lg ring-2 ring-black/20">
-                              <Play className="ml-0.5 h-5 w-5" fill="currentColor" />
-                            </span>
-                          </div>
-                        </div>
+                        <VideoCard
+                          src={item.mediaUrl}
+                          poster={item.posterUrl}
+                          className="h-full w-full rounded-none border-0"
+                          aspectClassName=""
+                        />
                       ) : null}
 
                       {canShowResultMedia && item.kind === "image" && item.mediaUrl && !isProbablyVideoUrl(item.mediaUrl) ? (

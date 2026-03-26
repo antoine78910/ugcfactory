@@ -57,6 +57,7 @@ import { runInitialPipeline } from "@/lib/linkToAd/runInitialPipeline";
 import { loadAvatarUrls } from "@/lib/avatarLibrary";
 import { AvatarPickerDialog } from "@/app/_components/AvatarPickerDialog";
 import { clipboardImageFiles } from "@/lib/clipboardImage";
+import VideoCard from "@/app/_components/VideoCard";
 
 /** Same-origin API calls with session (mirrors server `createInternalFetchFromRequest`). */
 const browserPipelineFetch = ((path: string, init?: RequestInit) => fetch(path, init)) as InternalFetch;
@@ -4571,14 +4572,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                           <>
                             <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-5">
                               <div className="mx-auto w-[11.5rem] max-w-full shrink-0 sm:mx-0 sm:w-[12.5rem]">
-                                <div className="aspect-[9/16] w-full overflow-hidden rounded-lg border border-white/10 bg-black">
-                                  <video
-                                    src={klingVideoUrl}
-                                    controls
-                                    playsInline
-                                    className="h-full w-full object-cover"
-                                  />
-                                </div>
+                                <VideoCard src={klingVideoUrl} />
                               </div>
                               <div className="flex w-full flex-col justify-center gap-2 sm:w-auto sm:min-w-[11rem] sm:flex-1">
                                 <Button
