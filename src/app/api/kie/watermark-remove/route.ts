@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { getAppUrl, getEnv } from "@/lib/env";
 import { kieMarketCreateTask } from "@/lib/kieMarket";
 
-const KIE_WATERMARK_REMOVE_MODEL = "sora-2/watermark-remover";
+const KIE_WATERMARK_REMOVE_MODEL = "sora-watermark-remover";
 
 type Body = {
   videoUrl: string;
