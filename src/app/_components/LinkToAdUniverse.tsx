@@ -110,6 +110,18 @@ function clampToMaxWords(text: string, maxWords: number): string {
   return parts.slice(0, maxWords).join(" ");
 }
 
+function fnv1aHash(input: string): string {
+  // Tiny deterministic hash for “did references change?” checks.
+  // (Avoid expensive crypto; collisions are extremely unlikely for this use.)
+  let h = 0x811c9dc5;
+  for (let i = 0; i < input.length; i++) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  // Unsigned 32-bit to hex.
+  return (h >>> 0).toString(16);
+}
+
 function angleBriefPartsFromScriptOption(
   raw: string,
   angleIndex: 0 | 1 | 2,
@@ -666,6 +678,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const [productImageLightboxUrl, setProductImageLightboxUrl] = useState<string | null>(null);
   const [expandedAngleBriefs, setExpandedAngleBriefs] = useState<Record<number, boolean>>({});
   const [angleSummaryDrafts, setAngleSummaryDrafts] = useState<Record<number, string>>({});
+
+  const nanoBananaPromptsSignatureRef = useRef<string | null>(null);
 
   const nanoPromptsAbortRef = useRef<AbortController | null>(null);
   const nanoImageAbortRef = useRef<AbortController | null>(null);
@@ -2155,7 +2169,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     }
   }
 
-  async function onGenerateNanoBananaPrompts(angleIdx?: number | null) {
+  async function onGenerateNanoBananaPrompts(angleIdx?: number | null): Promise<string | null> {
     const url = storeUrl.trim();
     const idx = angleIdx !== undefined && angleIdx !== null ? angleIdx : selectedAngleIndex;
     const selectedScript = selectedScriptOptionByIndex(scriptsText, idx);
@@ -2166,13 +2180,14 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       .slice(-3)
       .reverse();
     const img = resolveNanoProductImageUrl();
+    const signature = `script:${fnv1aHash(script)}|img:${img ?? ""}|avatars:${avatarRefs.join(",")}|provider:${scriptProvider}`;
     if (!url || !lastExtractedJson || idx === null || !script.trim()) {
       toast.error("Pick an angle and make sure the script is ready.");
-      return;
+      return null;
     }
     if (!img || !/^https?:\/\//i.test(img)) {
       toast.error("HTTPS product image is required (missing preview or relative URL).");
-      return;
+      return null;
     }
     setIsNanoPromptsLoading(true);
     setIsNanoAllImagesSubmitting(false);
@@ -2225,9 +2240,12 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         });
       }
       toast.success("3 image prompts saved.");
+      nanoBananaPromptsSignatureRef.current = signature;
+      return text;
     } catch (e) {
-      if (e instanceof DOMException && e.name === "AbortError") return;
+      if (e instanceof DOMException && e.name === "AbortError") return null;
       toast.error("Image prompts", { description: e instanceof Error ? e.message : "Unknown error" });
+      return null;
     } finally {
       setIsNanoPromptsLoading(false);
     }
@@ -2417,24 +2435,56 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
 
   async function onGenerateNanoBananaImagesFromAllPrompts() {
     const url = storeUrl.trim();
-    const img = resolveNanoProductImageUrl();
-    if (!url || !lastExtractedJson || selectedAngleIndex === null) {
+    const idx = selectedAngleIndex;
+    if (!url || !lastExtractedJson || idx === null) {
       toast.error("Project not ready to generate images.");
       return;
     }
+    const img = resolveNanoProductImageUrl();
     if (!img || !/^https?:\/\//i.test(img)) {
       toast.error("HTTPS product image is required to generate images.");
       return;
     }
-    if (!nanoBananaPromptsRaw.trim()) {
-      toast.error("Generate the 3 image prompts first.");
-      return;
+
+    // If the user changed product/persona reference images since we last generated prompts,
+    // regenerate the 3 NanoBanana prompts so the “New 3 images” takes the latest refs into account.
+    const selectedScript = selectedScriptOptionByIndex(scriptsText, idx);
+    const script = (idx === selectedAngleIndex ? editableScript : selectedScript).trim() || selectedScript;
+    const avatarRefs = personaPhotoUrls
+      .map((u) => u.trim())
+      .filter((u, i, arr) => /^https?:\/\//i.test(u) && arr.indexOf(u) === i)
+      .slice(-3)
+      .reverse();
+    const signature = `script:${fnv1aHash(script)}|img:${img}|avatars:${avatarRefs.join(",")}|provider:${scriptProvider}`;
+
+    let promptsText = nanoBananaPromptsRaw;
+    const signatureMatches = promptsText.trim().length > 0 && nanoBananaPromptsSignatureRef.current === signature;
+    if (!signatureMatches) {
+      const nextPrompts = await onGenerateNanoBananaPrompts(idx);
+      if (!nextPrompts) return;
+      promptsText = nextPrompts;
     }
-    const prompts = parsedNanoPrompts.map((p) => p.trim());
+
+    const prompts = parseThreeLabeledPrompts(promptsText).map((p) => p.trim());
     if (!prompts[0] || !prompts[1] || !prompts[2]) {
       toast.error("Some image prompts are missing.");
       return;
     }
+
+    // Reset old images + downstream state so we don't “reuse” previous results.
+    setNanoBananaImageUrl(null);
+    setNanoBananaImageUrls([]);
+    setNanoBananaSelectedImageIndex(null);
+    setNanoBananaSelectedPromptIndex(0);
+    setNanoBananaTaskId(null);
+    setNanoPollTaskId(null);
+    setNanoPollingSlotIndex(null);
+
+    setKlingByRef(createEmptyKlingByReference());
+    setUgcVideoPromptGpt("");
+    setUserStartedVideoFromImage(false);
+    setVideoStageMode(false);
+
     setIsNanoAllImagesSubmitting(true);
     try {
       nanoThreeAbortRef.current?.abort();
@@ -2447,7 +2497,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             kind: "studio_image",
-            label: `Link to Ad · Angle ${selectedAngleIndex + 1}`,
+            label: `Link to Ad · Angle ${idx + 1}`,
             taskIds,
             provider: "kie-market",
             creditsCharged: 0,
