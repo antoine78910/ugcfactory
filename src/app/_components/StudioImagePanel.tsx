@@ -873,6 +873,7 @@ export default function StudioImagePanel() {
                 value={model}
                 items={IMAGE_MODEL_PICKER_ITEMS}
                 triggerVariant="bar"
+                panelMode="dropdown"
                 hideMeta
                 isItemLocked={(id) =>
                   COMING_SOON_IMAGE_MODEL_IDS.has(id) ||

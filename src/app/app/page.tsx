@@ -22,6 +22,7 @@ import { calculateMotionControlCredits } from "@/lib/linkToAd/generationCredits"
 import StudioAvatarPanel from "@/app/_components/StudioAvatarPanel";
 import StudioImagePanel from "@/app/_components/StudioImagePanel";
 import StudioUpscalePanel from "@/app/_components/StudioUpscalePanel";
+import WatermarkRemoverPanel from "@/app/_components/WatermarkRemoverPanel";
 import StudioShell from "@/app/_components/StudioShell";
 import {
   StudioSingleModelCard,
@@ -47,7 +48,7 @@ import { clipboardImageFiles } from "@/lib/clipboardImage";
 import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
 
 type WizardStep = "url" | "analysis" | "quiz" | "image" | "video";
-type AppSection = "link_to_ad" | "avatar" | "motion_control" | "image" | "video" | "upscale" | "projects";
+type AppSection = "link_to_ad" | "avatar" | "motion_control" | "image" | "video" | "upscale" | "watermark" | "projects";
 
 type Extracted = {
   url: string;
@@ -98,6 +99,7 @@ const APP_VALID_SECTIONS: AppSection[] = [
   "image",
   "video",
   "upscale",
+  "watermark",
   "projects",
 ];
 
@@ -2406,6 +2408,16 @@ export default function AppBrandWizard() {
                 </CardHeader>
                 <CardContent className="px-6 pb-3 pt-0">
                   <StudioUpscalePanel />
+                </CardContent>
+              </Card>
+            ) : null}
+            {appSection === "watermark" ? (
+              <Card className="gap-2 border-white/10 bg-[#0b0912]/85 py-3 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
+                <CardHeader className="space-y-0 px-6 pb-0 pt-2">
+                  <CardTitle className="text-sm">Watermark Remover</CardTitle>
+                </CardHeader>
+                <CardContent className="px-6 pb-3 pt-0">
+                  <WatermarkRemoverPanel />
                 </CardContent>
               </Card>
             ) : null}

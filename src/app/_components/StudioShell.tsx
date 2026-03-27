@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Copy,
+  Droplets,
   FolderOpen,
   Image as ImageIcon,
   Link2,
@@ -33,6 +34,7 @@ export type StudioNavSection =
   | "image"
   | "video"
   | "upscale"
+  | "watermark"
   | "projects";
 
 type Props = {
@@ -56,6 +58,7 @@ const CREATE_NAV: CreateNavEntry[] = [
   { kind: "route", id: "image", label: "Image", icon: ImageIcon },
   { kind: "route", id: "video", label: "Video", icon: Video },
   { kind: "route", id: "upscale", label: "Upscale", icon: Maximize2 },
+  { kind: "route", id: "watermark", label: "Watermark Remover", icon: Droplets },
 ];
 
 function soonRowClass(): string {
