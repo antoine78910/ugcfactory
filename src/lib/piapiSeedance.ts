@@ -22,6 +22,7 @@ export function isPiapiTaskId(taskId: string): boolean {
 }
 
 type PiapiSeedanceTaskType = "seedance-2-preview" | "seedance-2-fast-preview";
+type PiapiSoraTaskType = "remove-watermark";
 
 export async function piapiCreateSeedanceTask(opts: {
   taskType: PiapiSeedanceTaskType;
@@ -63,10 +64,62 @@ export async function piapiCreateSeedanceTask(opts: {
   return id;
 }
 
+export async function piapiCreateSoraRemoveWatermarkTask(opts: {
+  videoUrl: string;
+  overrideApiKey?: string;
+  webhookEndpoint?: string;
+}): Promise<string> {
+  const apiKey = opts.overrideApiKey?.trim() || getPiApiKey();
+  const res = await fetch(`${PIAPI_BASE}/api/v1/task`, {
+    method: "POST",
+    headers: {
+      "X-API-Key": apiKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "sora2",
+      task_type: "remove-watermark" satisfies PiapiSoraTaskType,
+      input: {
+        video_url: opts.videoUrl,
+      },
+      config: {
+        ...(opts.webhookEndpoint
+          ? {
+              webhook_config: {
+                endpoint: opts.webhookEndpoint,
+                secret: "",
+              },
+            }
+          : {}),
+      },
+    }),
+    cache: "no-store",
+  });
+
+  const json = (await res.json().catch(() => ({}))) as {
+    code?: number;
+    message?: string;
+    data?: { task_id?: string };
+  };
+  const id = json?.data?.task_id?.trim();
+  if (!res.ok || json?.code !== 200 || !id) {
+    throw new Error(`PiAPI sora remove-watermark create failed: HTTP ${res.status} / ${json?.message ?? "Unknown error"}`);
+  }
+  return id;
+}
+
 export type PiapiSeedanceTask = {
   task_id: string;
   status: string;
   output?: { video?: string | null } | null;
+  error?: { message?: string | null; raw_message?: string | null } | null;
+  logs?: unknown[];
+};
+
+export type PiapiGenericTask = {
+  task_id: string;
+  status: string;
+  output?: Record<string, unknown> | null;
   error?: { message?: string | null; raw_message?: string | null } | null;
   logs?: unknown[];
 };
@@ -90,11 +143,70 @@ export async function piapiGetSeedanceTask(taskId: string, overrideApiKey?: stri
   return json.data;
 }
 
+export async function piapiGetTask(taskId: string, overrideApiKey?: string): Promise<PiapiGenericTask> {
+  const apiKey = overrideApiKey?.trim() || getPiApiKey();
+  const id = decodePiapiTaskId(taskId);
+  const res = await fetch(`${PIAPI_BASE}/api/v1/task/${encodeURIComponent(id)}`, {
+    method: "GET",
+    headers: { "X-API-Key": apiKey },
+    cache: "no-store",
+  });
+  const json = (await res.json().catch(() => ({}))) as {
+    code?: number;
+    message?: string;
+    data?: PiapiGenericTask;
+  };
+  if (!res.ok || json?.code !== 200 || !json?.data) {
+    throw new Error(`PiAPI get-task failed: HTTP ${res.status} / ${json?.message ?? "Unknown error"}`);
+  }
+  return json.data;
+}
+
 export function piapiTaskStatusToLegacy(
   task: PiapiSeedanceTask,
 ): { status: "SUCCESS" | "FAILED" | "IN_PROGRESS"; response: string[]; error_message: string | null } {
   const st = String(task.status ?? "").toLowerCase();
   const video = typeof task.output?.video === "string" ? task.output.video.trim() : "";
+
+  if ((st === "success" || st === "completed") && video) {
+    return { status: "SUCCESS", response: [video], error_message: null };
+  }
+  if (st === "failed" || st === "fail") {
+    const message = task.error?.message?.trim() || task.error?.raw_message?.trim() || "PiAPI task failed.";
+    return { status: "FAILED", response: [], error_message: message };
+  }
+  return { status: "IN_PROGRESS", response: [], error_message: null };
+}
+
+function firstUrlFromUnknown(x: unknown): string | null {
+  if (!x) return null;
+  if (typeof x === "string") return x.trim() || null;
+  if (Array.isArray(x)) {
+    for (const v of x) {
+      const u = firstUrlFromUnknown(v);
+      if (u) return u;
+    }
+    return null;
+  }
+  if (typeof x === "object") {
+    for (const v of Object.values(x as Record<string, unknown>)) {
+      const u = firstUrlFromUnknown(v);
+      if (u) return u;
+    }
+  }
+  return null;
+}
+
+export function piapiGenericTaskStatusToLegacy(
+  task: PiapiGenericTask,
+): { status: "SUCCESS" | "FAILED" | "IN_PROGRESS"; response: string[]; error_message: string | null } {
+  const st = String(task.status ?? "").toLowerCase();
+  const output = task.output ?? {};
+  const video =
+    firstUrlFromUnknown((output as Record<string, unknown>).video) ??
+    firstUrlFromUnknown((output as Record<string, unknown>).video_url) ??
+    firstUrlFromUnknown((output as Record<string, unknown>).video_urls) ??
+    firstUrlFromUnknown(output);
 
   if ((st === "success" || st === "completed") && video) {
     return { status: "SUCCESS", response: [video], error_message: null };

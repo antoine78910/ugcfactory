@@ -7,7 +7,7 @@ import {
   kieRecordStateIsSuccess,
   parseKieResultMediaUrls,
 } from "@/lib/kieMarket";
-import { isPiapiTaskId, piapiGetSeedanceTask, piapiTaskStatusToLegacy } from "@/lib/piapiSeedance";
+import { isPiapiTaskId, piapiGenericTaskStatusToLegacy, piapiGetTask } from "@/lib/piapiSeedance";
 import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
 
 export async function GET(req: Request) {
@@ -22,8 +22,8 @@ export async function GET(req: Request) {
 
   try {
     if (isPiapiTaskId(taskId)) {
-      const data = await piapiGetSeedanceTask(taskId, piapiKey);
-      const mapped = piapiTaskStatusToLegacy(data);
+      const data = await piapiGetTask(taskId, piapiKey);
+      const mapped = piapiGenericTaskStatusToLegacy(data);
       if (mapped.status === "FAILED" && mapped.error_message) {
         logGenerationFailure("kling/status", mapped.error_message, { taskId, provider: "piapi" });
       }
