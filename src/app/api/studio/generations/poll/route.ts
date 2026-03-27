@@ -10,6 +10,7 @@ import {
   sweepStudioRefundHints,
 } from "@/lib/studioGenerationsPoll";
 import { serverLog } from "@/lib/serverLog";
+import { markStaleInProgressStudioGenerationsFailedForUser } from "@/lib/studioGenerationsStale";
 
 export const runtime = "nodejs";
 
@@ -60,6 +61,8 @@ export async function POST(req: Request) {
   const piapiApiKey = (body.piapiApiKey ?? "").trim() || undefined;
 
   try {
+    await markStaleInProgressStudioGenerationsFailedForUser(supabase, user.id);
+
     const resolvedKinds = resolvePollKinds(kind);
 
     let procQuery = supabase

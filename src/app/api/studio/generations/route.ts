@@ -7,6 +7,7 @@ import {
   type StudioGenerationRow,
 } from "@/lib/studioGenerationsMap";
 import { sweepStudioRefundHints } from "@/lib/studioGenerationsPoll";
+import { markStaleInProgressStudioGenerationsFailedForUser } from "@/lib/studioGenerationsStale";
 
 const KIND_DEFAULT = "avatar";
 
@@ -33,6 +34,8 @@ export async function GET(req: Request) {
   const kindRaw = (searchParams.get("kind") ?? KIND_DEFAULT).trim() || KIND_DEFAULT;
 
   try {
+    await markStaleInProgressStudioGenerationsFailedForUser(supabase, user.id);
+
     let query = supabase
       .from("studio_generations")
       .select("*")

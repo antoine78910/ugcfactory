@@ -5,6 +5,7 @@ import { getEnv } from "@/lib/env";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import type { StudioGenerationRow } from "@/lib/studioGenerationsMap";
 import { pollStudioGenerationRow, STUDIO_GENERATION_IN_PROGRESS_STATUSES } from "@/lib/studioGenerationsPoll";
+import { markStaleInProgressStudioGenerationsFailedAll } from "@/lib/studioGenerationsStale";
 import { serverLog } from "@/lib/serverLog";
 
 /**
@@ -49,12 +50,19 @@ export async function POST(req: Request) {
     }
 
     const n = (rows ?? []).length;
-    if (n > 0 || pollErrors > 0) {
-      serverLog("studio_generations_cron_tick", { polled: n, pollErrors });
+
+    const stale = await markStaleInProgressStudioGenerationsFailedAll(admin);
+    if (stale.count > 0) {
+      serverLog("studio_generations_stale_expired", { count: stale.count });
+    }
+
+    if (n > 0 || pollErrors > 0 || stale.count > 0) {
+      serverLog("studio_generations_cron_tick", { polled: n, pollErrors, staleExpired: stale.count });
     }
     return NextResponse.json({
       polled: n,
       pollErrors,
+      staleExpired: stale.count,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error.";
