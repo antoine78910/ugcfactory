@@ -100,6 +100,7 @@ export default function WatermarkRemoverPanel() {
   creditsRef.current = creditsBalance;
 
   const [videoUrl, setVideoUrl] = useState("");
+  const [videoUrlInput, setVideoUrlInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [videoPreviewBlob, setVideoPreviewBlob] = useState<string | null>(null);
   const [historyItems, setHistoryItems] = useState<StudioHistoryItem[]>([]);
@@ -124,6 +125,8 @@ export default function WatermarkRemoverPanel() {
       try {
         const url = await uploadVideoFile(f);
         setVideoUrl(url);
+        // Keep the uploaded source URL private in the UI input.
+        setVideoUrlInput("");
         toast.success("Video uploaded");
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Upload failed. Please try again.");
@@ -239,8 +242,12 @@ export default function WatermarkRemoverPanel() {
                 </Button>
               </div>
               <Input
-                value={videoUrl}
-                onChange={(e) => setVideoUrl(e.target.value)}
+                value={videoUrlInput}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setVideoUrlInput(next);
+                  setVideoUrl(next);
+                }}
                 placeholder="https://..."
                 className="h-11 rounded-xl border-white/15 bg-[#0a0a0d] text-sm text-white placeholder:text-white/30"
               />
@@ -266,7 +273,7 @@ export default function WatermarkRemoverPanel() {
                 </div>
               ) : null}
               <p className="text-[10px] leading-snug text-white/35">
-                Powered by PiAPI Sora2 remove-watermark.
+                Powered by Sora 2.
               </p>
             </div>
 
