@@ -5,6 +5,7 @@ import { getEnv } from "@/lib/env";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import type { StudioGenerationRow } from "@/lib/studioGenerationsMap";
 import { pollStudioGenerationRow, STUDIO_GENERATION_IN_PROGRESS_STATUSES } from "@/lib/studioGenerationsPoll";
+import { serverLog } from "@/lib/serverLog";
 
 /**
  * Railway / external cron: poll platform-key studio jobs so generation completes if the user closed the tab.
@@ -47,8 +48,12 @@ export async function POST(req: Request) {
       }
     }
 
+    const n = (rows ?? []).length;
+    if (n > 0 || pollErrors > 0) {
+      serverLog("studio_generations_cron_tick", { polled: n, pollErrors });
+    }
     return NextResponse.json({
-      polled: (rows ?? []).length,
+      polled: n,
       pollErrors,
     });
   } catch (err) {

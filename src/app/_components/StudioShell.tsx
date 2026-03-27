@@ -21,6 +21,7 @@ import {
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import SidebarAccountMenu from "@/app/_components/SidebarAccountMenu";
 import CreditLowBanner from "@/app/_components/CreditLowBanner";
+import StudioGenerationsBackgroundPoll from "@/app/_components/StudioGenerationsBackgroundPoll";
 import { useCreditsPlan } from "@/app/_components/CreditsPlanContext";
 import SidebarCreditsBar from "@/app/_components/SidebarCreditsBar";
 import { cn } from "@/lib/utils";
@@ -388,6 +389,7 @@ function StudioShellInner({
         {children}
       </main>
 
+      <StudioGenerationsBackgroundPoll />
       <CreditLowBanner />
     </div>
   );

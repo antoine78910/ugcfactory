@@ -32,6 +32,9 @@ export function userFacingProviderError(raw: string | null | undefined): string 
   if (/timeout|timed out|deadline exceeded|\b504\b|gateway time/i.test(lower)) {
     return "The request timed out. Try again.";
   }
+  if (/internal error|server exception|temporar(y)?\s+(error|failure)|try again later/i.test(lower)) {
+    return "The image provider had a temporary error. Wait a few seconds and try again.";
+  }
   if (/credit|balance|quota|insufficient|payment required|\b402\b/.test(lower)) {
     return "Provider credits or quota issue. Check your API key or billing.";
   }

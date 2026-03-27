@@ -11,6 +11,7 @@ import {
   STUDIO_GENERATION_IN_PROGRESS_STATUSES,
   sweepStudioRefundHints,
 } from "@/lib/studioGenerationsPoll";
+import { serverLog } from "@/lib/serverLog";
 
 type Body = {
   kind?: string;
@@ -69,14 +70,14 @@ export async function POST(req: Request) {
 
     if (procErr) throw procErr;
 
-    for (const row of (processing ?? []) as StudioGenerationRow[]) {
+    const processingRows = (processing ?? []) as StudioGenerationRow[];
+    for (const row of processingRows) {
       try {
         await pollStudioGenerationRow(row, personalApiKey, piapiApiKey, supabase);
       } catch {
         /* one bad poll should not block others */
       }
     }
-
     let refundHints: { jobId: string; credits: number }[] = [];
     if (resolvedKinds === "all") {
       for (const k of LIBRARY_KINDS) {
@@ -86,6 +87,10 @@ export async function POST(req: Request) {
       for (const k of resolvedKinds) {
         refundHints = refundHints.concat(await sweepStudioRefundHints(supabase, user.id, k));
       }
+    }
+
+    if (refundHints.length > 0) {
+      serverLog("studio_generations_refund_hints", { count: refundHints.length, kind });
     }
 
     let listQuery = supabase

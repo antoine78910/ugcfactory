@@ -19,50 +19,69 @@ type KieMarketCreateTaskResponse =
 export async function kieMarketCreateTask(req: KieMarketCreateTaskRequest, overrideApiKey?: string) {
   const apiKey = overrideApiKey || getKieApiKey();
 
-  async function attempt() {
-    const res = await fetch(`${API_BASE}/api/v1/jobs/createTask`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(req),
-      cache: "no-store",
-    });
+  /** KIE often returns HTTP 200 with code=500 ("internal error", "Server exception", etc.) — retry with backoff. */
+  const maxAttempts = 4;
+  const backoffBeforeAttemptMs = [0, 700, 1500, 2800];
 
-    const json = (await res.json()) as KieMarketCreateTaskResponse;
-    const taskId = (json as unknown as { data?: { taskId?: unknown } })?.data
-      ?.taskId;
+  let lastError: Error | null = null;
 
-    return { res, json, taskId };
-  }
-
-  const first = await attempt();
-
-  // KIE sometimes returns HTTP 200 with code=500 "Server exception" transiently.
-  if (
-    first.res.ok &&
-    first.json.code === 500 &&
-    typeof first.json.msg === "string" &&
-    first.json.msg.toLowerCase().includes("server exception")
-  ) {
-    await new Promise((r) => setTimeout(r, 800));
-    const second = await attempt();
-    if (second.res.ok && second.json.code === 200 && typeof second.taskId === "string") {
-      return second.taskId;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    if (backoffBeforeAttemptMs[attempt]! > 0) {
+      await new Promise((r) => setTimeout(r, backoffBeforeAttemptMs[attempt]));
     }
-    throw new Error(
-      `KIE createTask failed: HTTP ${second.res.status} / code ${second.json.code} / ${second.json.msg}`,
-    );
+
+    let res: Response;
+    try {
+      res = await fetch(`${API_BASE}/api/v1/jobs/createTask`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(req),
+        cache: "no-store",
+      });
+    } catch (e) {
+      lastError = e instanceof Error ? e : new Error(String(e));
+      if (attempt < maxAttempts - 1) continue;
+      throw lastError;
+    }
+
+    let json: KieMarketCreateTaskResponse;
+    try {
+      json = (await res.json()) as KieMarketCreateTaskResponse;
+    } catch {
+      lastError = new Error(`KIE createTask: response was not JSON (HTTP ${res.status})`);
+      if (attempt < maxAttempts - 1) continue;
+      throw lastError;
+    }
+
+    const taskId = (json as unknown as { data?: { taskId?: unknown } })?.data?.taskId;
+    const msg = typeof json.msg === "string" ? json.msg : "";
+    const code = json.code;
+
+    if (res.ok && code === 200 && typeof taskId === "string") {
+      return taskId;
+    }
+
+    const msgLc = msg.toLowerCase();
+    const retryable =
+      (res.ok && (code === 500 || code === 502 || code === 503)) ||
+      (!res.ok && (res.status === 429 || res.status === 502 || res.status === 503 || res.status === 504)) ||
+      /server exception|internal error|temporar|timeout|try again|busy|overload|rate limit|gateway|bad gateway/i.test(
+        msgLc,
+      );
+
+    lastError = new Error(`KIE createTask failed: HTTP ${res.status} / code ${code} / ${msg}`);
+
+    if (retryable && attempt < maxAttempts - 1) {
+      continue;
+    }
+
+    throw lastError;
   }
 
-  if (!first.res.ok || first.json.code !== 200 || typeof first.taskId !== "string") {
-    throw new Error(
-      `KIE createTask failed: HTTP ${first.res.status} / code ${first.json.code} / ${first.json.msg}`,
-    );
-  }
-
-  return first.taskId;
+  throw lastError ?? new Error("KIE createTask failed after retries.");
 }
 
 export type KieMarketRecordInfo = {

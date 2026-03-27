@@ -557,6 +557,25 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     [spendCredits],
   );
 
+  const registerLinkToAdStudioImage = useCallback(async (taskId: string, label: string) => {
+    try {
+      await fetch("/api/studio/generations/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind: "studio_image",
+          label,
+          taskId,
+          provider: "kie-market",
+          creditsCharged: 0,
+          personalApiKey: getPersonalApiKey(),
+        }),
+      });
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   const [storeUrl, setStoreUrl] = useState("");
   const [isWorking, setIsWorking] = useState(false);
   /** Extra product photo uploads should not trigger global "Working..." pipeline state. */
@@ -874,6 +893,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const lastKlingVideoPromptRef = useRef("");
   /** Avoid infinite resume loop if KIE poll fails after returning to the page. */
   const klingResumeAttemptedRef = useRef(false);
+  /** Same for single-image Nano poll after hydrate clears `nanoPollTaskId`. */
+  const nanoResumeAttemptedRef = useRef(false);
 
   useEffect(() => {
     const idx = nanoBananaSelectedImageIndex;
@@ -2289,6 +2310,9 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       setNanoBananaTaskId(json.taskId);
       setNanoPollTaskId(json.taskId);
       setNanoPollingSlotIndex(nanoBananaSelectedPromptIndex);
+      const angleIdx =
+        selectedAngleIndex === 0 || selectedAngleIndex === 1 || selectedAngleIndex === 2 ? selectedAngleIndex : 0;
+      void registerLinkToAdStudioImage(json.taskId, `Link to Ad · Angle ${angleIdx + 1} · image`);
       const base = latestSnapRef.current;
       if (base && lastExtractedJson) {
         const triple = buildPersistTriplePatchingActive({
@@ -2314,7 +2338,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     }
   }
 
-  async function pollNanoBananaTaskForUrls(taskId: string): Promise<string[]> {
+  async function pollNanoBananaTaskForUrls(taskId: string, signal?: AbortSignal): Promise<string[]> {
     // Poll NanoBanana task until successFlag indicates completion.
     // We keep it simple for pro image generation: take the first URL from the response.
     const sleepMs = 4000;
@@ -2324,9 +2348,13 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     const piKey = getPersonalPiapiApiKey();
     const keyParam = `${pKey ? `&personalApiKey=${encodeURIComponent(pKey)}` : ""}${piKey ? `&piapiApiKey=${encodeURIComponent(piKey)}` : ""}`;
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      if (signal?.aborted) {
+        throw new DOMException("Aborted", "AbortError");
+      }
       const res = await fetch(`/api/nanobanana/task?taskId=${encodeURIComponent(taskId)}${keyParam}`, {
         method: "GET",
         cache: "no-store",
+        signal,
       });
       const json = (await res.json()) as any;
       if (!res.ok || !json.data) throw new Error(json.error || "Generation status check failed");
@@ -2358,38 +2386,61 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     throw new Error("Image generation timed out.");
   }
 
-  /** Run 3 NanoBanana Pro jobs sequentially; returns URLs in prompt order. */
-  async function runNanoBananaProThreeSequential(
+  /** Run 3 NanoBanana Pro jobs in parallel: 3 separate createTask calls, then poll all tasks together (faster than sequential). */
+  async function runNanoBananaProThreeParallel(
     img: string,
     prompts: [string, string, string],
+    opts?: { labelPrefix?: string },
+    signal?: AbortSignal,
   ): Promise<{ urlsByPrompt: string[]; lastTaskId: string | null; taskIds: string[] }> {
-    const urlsByPrompt: string[] = [];
-    let lastTaskId: string | null = null;
-    const taskIds: string[] = [];
-    for (let i = 0; i < 3; i++) {
-      const prompt = prompts[i];
-      lastNanoImagePromptRef.current = prompt;
-      lastNanoImagePromptIndexRef.current = i as 0 | 1 | 2;
+    const bodyBase = {
+      accountPlan: planId,
+      model: "pro" as const,
+      imageUrls: [img],
+      resolution: "4K" as const,
+      aspectRatio: "9:16" as const,
+      personalApiKey: getPersonalApiKey(),
+    };
+
+    async function generateOne(prompt: string, i: 0 | 1 | 2): Promise<string> {
       const res = await fetch("/api/nanobanana/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          accountPlan: planId,
-          model: "pro",
-          prompt,
-          imageUrls: [img],
-          resolution: "4K",
-          aspectRatio: "9:16",
-          personalApiKey: getPersonalApiKey(),
-        }),
+        signal,
+        body: JSON.stringify({ ...bodyBase, prompt }),
       });
       const json = (await res.json()) as { taskId?: string; error?: string };
       if (!res.ok || !json.taskId) throw new Error(json.error || "Image generation failed");
-      lastTaskId = json.taskId;
-      taskIds.push(json.taskId);
-      const urls = await pollNanoBananaTaskForUrls(json.taskId);
-      urlsByPrompt[i] = urls[0];
+      void registerLinkToAdStudioImage(
+        json.taskId,
+        opts?.labelPrefix ? `${opts.labelPrefix} · ${i + 1}/3` : `Link to Ad · Nano ${i + 1}/3`,
+      );
+      return json.taskId;
     }
+
+    const taskIds = await Promise.all([
+      generateOne(prompts[0], 0),
+      generateOne(prompts[1], 1),
+      generateOne(prompts[2], 2),
+    ]);
+
+    const lastTaskId = taskIds[2] ?? null;
+
+    const polled = await Promise.all(
+      taskIds.map((tid, index) =>
+        pollNanoBananaTaskForUrls(tid, signal).then((urls) => {
+          lastNanoImagePromptRef.current = prompts[index]!;
+          lastNanoImagePromptIndexRef.current = index as 0 | 1 | 2;
+          return { index: index as 0 | 1 | 2, urls };
+        }),
+      ),
+    );
+
+    const urlsByPrompt: string[] = ["", "", ""];
+    for (const { index, urls } of polled) {
+      urlsByPrompt[index] = urls[0] ?? "";
+    }
+
     return { urlsByPrompt, lastTaskId, taskIds };
   }
 
@@ -2490,23 +2541,12 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       nanoThreeAbortRef.current?.abort();
       const controller = new AbortController();
       nanoThreeAbortRef.current = controller;
-      const { urlsByPrompt, lastTaskId, taskIds } = await runNanoBananaProThreeSequential(img, prompts as [string, string, string]);
-      try {
-        await fetch("/api/studio/generations/register", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            kind: "studio_image",
-            label: `Link to Ad · Angle ${idx + 1}`,
-            taskIds,
-            provider: "kie-market",
-            creditsCharged: 0,
-            personalApiKey: getPersonalApiKey(),
-          }),
-        });
-      } catch {
-        /* ignore history registration */
-      }
+      const { urlsByPrompt, lastTaskId } = await runNanoBananaProThreeParallel(
+        img,
+        prompts as [string, string, string],
+        { labelPrefix: `Link to Ad · Angle ${idx + 1}` },
+        controller.signal,
+      );
 
       if (!urlsByPrompt[0] || !urlsByPrompt[1] || !urlsByPrompt[2]) {
         throw new Error("Image generation did not produce 3 images.");
@@ -2862,6 +2902,43 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     () => klingByRef.map((s) => `${s.taskId ?? ""}|${s.videoUrl ?? ""}`).join(";"),
     [klingByRef],
   );
+
+  const nanoResumeSignature = useMemo(
+    () => `${nanoBananaTaskId ?? ""}|${nanoBananaImageUrl ?? ""}|${nanoBananaImageUrls.join("|")}`,
+    [nanoBananaTaskId, nanoBananaImageUrl, nanoBananaImageUrls],
+  );
+
+  useEffect(() => {
+    nanoResumeAttemptedRef.current = false;
+  }, [nanoResumeSignature]);
+
+  /** Resume Nano single-image poll after hydrate (hydrate clears `nanoPollTaskId`). */
+  useEffect(() => {
+    if (nanoPollTaskId) return;
+    if (isNanoAllImagesSubmitting) return;
+    if (isNanoImageSubmitting) return;
+    if (nanoResumeAttemptedRef.current) return;
+    const tid = nanoBananaTaskId?.trim();
+    if (!tid) return;
+    if (nanoBananaImageUrl) return;
+    if (nanoBananaImageUrls.some((u) => Boolean(u?.trim()))) return;
+    nanoResumeAttemptedRef.current = true;
+    setNanoPollTaskId(tid);
+    const slot =
+      nanoBananaSelectedPromptIndex === 0 || nanoBananaSelectedPromptIndex === 1 || nanoBananaSelectedPromptIndex === 2
+        ? nanoBananaSelectedPromptIndex
+        : 0;
+    lastNanoImagePromptIndexRef.current = slot;
+    setNanoPollingSlotIndex(slot);
+  }, [
+    nanoPollTaskId,
+    isNanoAllImagesSubmitting,
+    isNanoImageSubmitting,
+    nanoBananaTaskId,
+    nanoBananaImageUrl,
+    nanoBananaImageUrls,
+    nanoBananaSelectedPromptIndex,
+  ]);
 
   useEffect(() => {
     klingResumeAttemptedRef.current = false;

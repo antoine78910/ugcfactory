@@ -10,6 +10,8 @@ import {
   studioImageUpgradeMessage,
 } from "@/lib/subscriptionModelAccess";
 import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
+import { serverLog } from "@/lib/serverLog";
+import { getEnv } from "@/lib/env";
 
 type Body = {
   accountPlan?: string;
@@ -40,6 +42,13 @@ export async function POST(req: Request) {
 
   const model = body.model ?? "nano";
   const personalKey = hasPersonalApiKey(body.personalApiKey) ? body.personalApiKey.trim() : undefined;
+  if (!personalKey && !getEnv("KIE_API_KEY")?.trim()) {
+    serverLog("nanobanana_generate_config", { error: "missing_kie_key" });
+    return NextResponse.json(
+      { error: "Image generation is not configured on the server (missing KIE_API_KEY). Add a personal API key in settings or configure the platform key." },
+      { status: 503 },
+    );
+  }
   if (
     !personalKey &&
     body.accountPlan != null &&
@@ -72,8 +81,14 @@ export async function POST(req: Request) {
       personalApiKey: body.personalApiKey,
     });
     if (taskId) {
+      serverLog("nanobanana_generate_ok", { model, kieModel, hasTaskId: true });
       return NextResponse.json({ taskId, model, provider: "kie-market", kieModel });
     }
+    serverLog("nanobanana_generate_ok", {
+      model,
+      kieModel,
+      taskCount: Array.isArray(taskIds) ? taskIds.length : 0,
+    });
     return NextResponse.json({ taskIds, model, provider: "kie-market", kieModel });
   } catch (err) {
     logGenerationFailure("nanobanana/generate", err);

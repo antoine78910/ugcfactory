@@ -2,6 +2,7 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
+import { serverLog } from "@/lib/serverLog";
 
 type Body = {
   kind?: string;
@@ -59,9 +60,13 @@ export async function POST(req: Request) {
   }));
 
   const { data, error } = await supabase.from("studio_generations").insert(payload).select("id, external_task_id");
-  if (error) return NextResponse.json({ error: error.message }, { status: 502 });
+  if (error) {
+    serverLog("studio_generations_register_failed", { kind, count: n, message: error.message });
+    return NextResponse.json({ error: error.message }, { status: 502 });
+  }
 
   const rows = Array.isArray(data) ? data : [];
+  serverLog("studio_generations_register_ok", { kind, rows: rows.length, provider });
   return NextResponse.json({
     data: {
       rows: rows.map((r) => ({ id: String(r.id), taskId: String(r.external_task_id) })),
