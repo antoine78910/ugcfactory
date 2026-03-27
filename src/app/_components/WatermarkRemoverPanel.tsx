@@ -16,13 +16,32 @@ import VideoCard from "@/app/_components/VideoCard";
 
 const WATERMARK_REMOVE_CREDITS = 15;
 
-async function uploadFile(file: File): Promise<string> {
-  const fd = new FormData();
-  fd.set("file", file);
-  const res = await fetch("/api/uploads", { method: "POST", body: fd });
-  const json = (await res.json()) as { url?: string; error?: string };
-  if (!res.ok || !json.url) throw new Error(json.error || "Upload failed");
-  return json.url;
+async function uploadVideoFile(file: File): Promise<string> {
+  const signRes = await fetch("/api/uploads/signed-url", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ filename: file.name, contentType: file.type || "video/mp4" }),
+  });
+  const signJson = (await signRes.json()) as {
+    signedUrl?: string;
+    token?: string;
+    publicUrl?: string;
+    error?: string;
+  };
+  if (!signRes.ok || !signJson.signedUrl) {
+    throw new Error(signJson.error || "Could not get upload URL");
+  }
+
+  const uploadRes = await fetch(signJson.signedUrl, {
+    method: "PUT",
+    headers: { "Content-Type": file.type || "video/mp4" },
+    body: file,
+  });
+  if (!uploadRes.ok) {
+    throw new Error(`Upload failed (${uploadRes.status})`);
+  }
+
+  return signJson.publicUrl!;
 }
 
 async function pollTask(taskId: string, personalApiKey?: string): Promise<string> {
@@ -100,11 +119,11 @@ export default function WatermarkRemoverPanel() {
       });
       setBusy(true);
       try {
-        const url = await uploadFile(f);
+        const url = await uploadVideoFile(f);
         setVideoUrl(url);
         toast.success("Video uploaded");
-      } catch {
-        toast.error("Upload failed. Please try again.");
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Upload failed. Please try again.");
       } finally {
         URL.revokeObjectURL(blobUrl);
         setVideoPreviewBlob(null);

@@ -1,4 +1,5 @@
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 import { NextResponse } from "next/server";
 import path from "path";
@@ -8,6 +9,7 @@ import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 
 const STORAGE_BUCKET = "ugc-uploads";
+const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
 
 export async function POST(req: Request) {
   try {
@@ -21,6 +23,13 @@ export async function POST(req: Request) {
       return NextResponse.json(
         { error: "Missing `file` in multipart form data." },
         { status: 400 },
+      );
+    }
+
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json(
+        { error: `File too large (${Math.round(file.size / 1024 / 1024)}MB). Maximum is 100MB.` },
+        { status: 413 },
       );
     }
 
