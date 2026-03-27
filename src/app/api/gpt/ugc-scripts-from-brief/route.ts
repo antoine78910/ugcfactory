@@ -16,6 +16,8 @@ type Body = {
   productImageUrl?: string | null;
   /** Up to 3 HTTPS product references (multi-angle) for GPT vision */
   productImageUrls?: string[] | null;
+  /** Optional persona/avatar reference images — when present, scripts skip text persona description. */
+  avatarImageUrls?: string[] | null;
   /** 8 | 15 | 30 — drives max word count per script */
   videoDurationSeconds?: 8 | 15 | 30;
   generationMode?: "automatic" | "custom_ugc";
@@ -308,6 +310,12 @@ export async function POST(req: Request) {
   const productTitle = body?.productTitle?.trim() || null;
   const imageUrls = collectHttpsProductImageUrls(body ?? ({} as Body));
   const imageUrl = imageUrls[0] ?? null;
+  const avatarRefs = Array.isArray(body?.avatarImageUrls)
+    ? body.avatarImageUrls
+        .map((x) => (typeof x === "string" ? x.trim() : ""))
+        .filter((u): u is string => /^https?:\/\//i.test(u))
+        .slice(0, 3)
+    : [];
 
   const videoDurationSeconds: 8 | 15 | 30 =
     body?.videoDurationSeconds === 8 || body?.videoDurationSeconds === 30
@@ -341,6 +349,10 @@ export async function POST(req: Request) {
         ? `I am attaching ${String(imageUrls.length)} product reference images (different angles when available) so you understand shape, branding, and packaging.`
         : "I am also attaching the product image for reference.";
 
+  const avatarNote = avatarRefs.length > 0
+    ? `AVATAR/PERSONA REFERENCE IMAGES ATTACHED: ${String(avatarRefs.length)} image(s). This is the person who will appear in the video. Match their appearance exactly. Do NOT describe their physical appearance in the script text — the image is the visual source of truth. Set avatar_source: REFERENCE IMAGE.`
+    : "No avatar/persona reference image attached. Describe the persona fully in each script and set avatar_source: TEXT GENERATED.";
+
   const userPayload = [
     "Create 3 UGC video scripts for this product.",
     "",
@@ -360,16 +372,19 @@ export async function POST(req: Request) {
       : "Mode: automatic generation from URL context.",
     "",
     imageNote,
+    "",
+    avatarNote,
   ].join("\n");
 
   try {
     const cacheKey = makeCacheKey({
-      v: 2,
+      v: 3,
       kind: "ugc_scripts_from_brief",
       provider,
       brandBrief,
       previousScriptsText,
       imageUrlsJoined: imageUrls.join("|"),
+      avatarUrlsJoined: avatarRefs.join("|"),
       videoDurationSeconds,
       generationMode,
       customUgcIntent,
@@ -394,13 +409,14 @@ export async function POST(req: Request) {
       // ignore cache read errors
     }
 
+    const allImageUrls = [...imageUrls, ...avatarRefs];
     const text =
       provider === "claude"
-        ? imageUrls.length > 0
-          ? await claudeMessagesTextWithImages({ system: developer, user: userPayload, imageUrls })
+        ? allImageUrls.length > 0
+          ? await claudeMessagesTextWithImages({ system: developer, user: userPayload, imageUrls: allImageUrls })
           : await claudeMessagesText({ system: developer, user: userPayload })
-        : imageUrls.length > 0
-          ? (await openaiResponsesTextWithImages({ developer, userText: userPayload, imageUrls })).text
+        : allImageUrls.length > 0
+          ? (await openaiResponsesTextWithImages({ developer, userText: userPayload, imageUrls: allImageUrls })).text
           : (await openaiResponsesText({ developer, user: userPayload })).text;
 
     try {

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { toast } from "sonner";
-import { Check, ChevronDown, ChevronUp, ImagePlus, Loader2, Maximize2, PenLine, Plus, RefreshCw, Sparkles, Trash2, Video, X } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, ImagePlus, Loader2, Maximize2, PenLine, Plus, RefreshCw, Sparkles, Trash2, User, Video, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -403,6 +403,118 @@ function LinkToAdPendingProductThumbnails({ items }: { items: { id: string; blob
   );
 }
 
+function PersonaPhotoSection({
+  personaPhotoUrls,
+  pendingPersonaUploads,
+  isUploading,
+  isWorking,
+  onUploadClick,
+  onAvatarPickerOpen,
+  avatarUrlsCount,
+  onRemove,
+}: {
+  personaPhotoUrls: string[];
+  pendingPersonaUploads: { id: string; blob: string }[];
+  isUploading: boolean;
+  isWorking: boolean;
+  onUploadClick: () => void;
+  onAvatarPickerOpen: () => void;
+  avatarUrlsCount: number;
+  onRemove: (url: string) => void;
+}) {
+  return (
+    <div className="mt-3 space-y-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-white/45">
+          <User className="h-3 w-3" />
+          Persona / Avatar
+          <span className="rounded bg-white/5 px-1.5 py-0.5 text-[9px] font-medium normal-case tracking-normal text-white/30">
+            Optional
+          </span>
+        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            disabled={isWorking || isUploading}
+            className="flex items-center gap-1 rounded-md bg-white/5 px-2 py-1 text-[10px] font-medium text-white/60 transition hover:bg-white/10 hover:text-white/80 disabled:opacity-50"
+            onClick={onUploadClick}
+          >
+            <ImagePlus className="h-3 w-3" />
+            Upload photo
+          </button>
+          <button
+            type="button"
+            disabled={isWorking || isUploading}
+            className="rounded-md bg-white/5 px-2 py-1 text-[10px] font-medium text-white/60 transition hover:bg-white/10 hover:text-white/80 disabled:opacity-50"
+            onClick={onAvatarPickerOpen}
+            title={avatarUrlsCount === 0 ? "Studio → Avatar: generate an avatar first" : undefined}
+          >
+            Use avatar
+          </button>
+        </div>
+      </div>
+      {personaPhotoUrls.length > 0 || pendingPersonaUploads.length > 0 ? (
+        <div className="flex flex-wrap gap-2">
+          {pendingPersonaUploads.map((row) => (
+            <div
+              key={row.id}
+              className="relative h-14 w-14 shrink-0 overflow-hidden rounded-full border-2 border-violet-500/35 bg-[#050507]"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={row.blob} alt="" className="h-full w-full object-cover" />
+              <UploadBusyOverlay active className="rounded-full" />
+            </div>
+          ))}
+          {personaPhotoUrls.map((url, i) => (
+            <div key={`persona-${url}-${i}`} className="group/persona relative h-14 w-14 shrink-0 overflow-hidden rounded-full border-2 border-violet-400/30 bg-[#050507]">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={url}
+                alt={`Persona ${i + 1}`}
+                className="h-full w-full object-cover"
+                loading="lazy"
+                referrerPolicy="no-referrer"
+              />
+              <button
+                type="button"
+                onClick={() => onRemove(url)}
+                className="absolute right-0 top-0 flex h-4 w-4 items-center justify-center rounded-full bg-black/80 text-white/60 opacity-0 transition hover:text-red-400 group-hover/persona:opacity-100"
+                aria-label="Remove"
+              >
+                <X className="h-2.5 w-2.5" />
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            disabled={isWorking || isUploading}
+            onClick={onUploadClick}
+            className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border-2 border-dashed border-white/15 bg-white/[0.02] text-white/30 transition hover:border-violet-400/40 hover:text-violet-300 disabled:opacity-50"
+            aria-label="Add persona photo"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          disabled={isWorking || isUploading}
+          onClick={onUploadClick}
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-3 text-xs text-white/35 transition hover:border-violet-400/30 hover:text-white/50 disabled:opacity-50"
+        >
+          <User className="h-4 w-4" />
+          Add a person or avatar to appear in the video
+        </button>
+      )}
+      {personaPhotoUrls.length > 0 && (
+        <p className="text-[10px] leading-relaxed text-violet-300/60">
+          The persona photo will be used as visual reference — avatar description will be skipped in the script.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRunsChanged }: LinkToAdUniverseProps) {
   const { planId, current: creditsBalance, spendCredits, grantCredits } = useCreditsPlan();
   /** After a fresh store scan starts, gate later steps against this snapshot so the wallet UI does not “jump” each step. Resync on image/video redo actions only. */
@@ -450,6 +562,10 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const [avatarPhotoUrls, setAvatarPhotoUrls] = useState<string[]>([]);
   const [avatarUrls, setAvatarUrls] = useState<string[]>([]);
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
+  const [personaPhotoUrls, setPersonaPhotoUrls] = useState<string[]>([]);
+  const [pendingPersonaUploads, setPendingPersonaUploads] = useState<{ id: string; blob: string }[]>([]);
+  const [isUploadingPersonaPhotos, setIsUploadingPersonaPhotos] = useState(false);
+  const personaPhotoInputRef = useRef<HTMLInputElement>(null);
   const [imgError, setImgError] = useState(false);
   const [brandFaviconFailed, setBrandFaviconFailed] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -823,6 +939,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const parsedNanoPrompts = useMemo(() => parseThreeLabeledPrompts(nanoBananaPromptsRaw), [nanoBananaPromptsRaw]);
   const scriptOptionBodiesAll = useMemo(() => splitAllScriptOptions(scriptsText), [scriptsText]);
   const hasAvatarPhoto = avatarPhotoUrls.length > 0;
+  const hasPersonaPhoto = personaPhotoUrls.length > 0;
   const sanitizeAngleLabelForAvatar = useCallback((text: string): string => {
     const t0 = String(text || "");
     if (!t0.trim()) return "";
@@ -842,9 +959,10 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       const parts = body
         ? angleBriefPartsFromScriptOption(body, (i === 0 ? 0 : i === 1 ? 1 : 2) as 0 | 1 | 2)
         : { brief: "", full: "", canExpand: false };
-      const explicitSafe = hasAvatarPhoto ? sanitizeAngleLabelForAvatar(explicit) : explicit;
-      const fallbackSafe = hasAvatarPhoto ? sanitizeAngleLabelForAvatar(parts.brief) : parts.brief;
-      const fullSafe = hasAvatarPhoto ? sanitizeAngleLabelForAvatar(parts.full) : parts.full;
+      const shouldSanitize = hasAvatarPhoto || hasPersonaPhoto;
+      const explicitSafe = shouldSanitize ? sanitizeAngleLabelForAvatar(explicit) : explicit;
+      const fallbackSafe = shouldSanitize ? sanitizeAngleLabelForAvatar(parts.brief) : parts.brief;
+      const fullSafe = shouldSanitize ? sanitizeAngleLabelForAvatar(parts.full) : parts.full;
       const fallback = fallbackSafe;
       return {
         index: i,
@@ -853,7 +971,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         canExpand: Boolean(!explicitSafe && parts.canExpand && fullSafe && fullSafe !== (explicitSafe || fallback)),
       };
     });
-  }, [angleLabels, hasAvatarPhoto, sanitizeAngleLabelForAvatar, scriptOptionBodiesAll]);
+  }, [angleLabels, hasAvatarPhoto, hasPersonaPhoto, sanitizeAngleLabelForAvatar, scriptOptionBodiesAll]);
 
   useEffect(() => {
     setNanoPromptDrafts([parsedNanoPrompts[0] ?? "", parsedNanoPrompts[1] ?? "", parsedNanoPrompts[2] ?? ""]);
@@ -1354,6 +1472,53 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     if (neutralUploadUrl === url) setNeutralUploadUrl(null);
   }
 
+  async function uploadPersonaPhoto(files: FileList | File[] | null) {
+    const list = Array.isArray(files) ? files : Array.from(files ?? []);
+    if (!list.length) return;
+    const pendingRows = list.map((file) => ({
+      id: crypto.randomUUID(),
+      blob: URL.createObjectURL(file),
+      file,
+    }));
+    setPendingPersonaUploads((p) => [...p, ...pendingRows.map(({ id, blob }) => ({ id, blob }))]);
+    setIsUploadingPersonaPhotos(true);
+    let added = 0;
+    let lastError: string | null = null;
+    try {
+      for (const row of pendingRows) {
+        try {
+          const fd = new FormData();
+          fd.set("file", row.file);
+          const res = await fetch("/api/uploads", { method: "POST", body: fd });
+          const raw = await res.text();
+          const parsed = safeParseJson<{ url?: string; error?: string }>(raw);
+          if (!res.ok || !parsed.ok) {
+            throw new Error(parsed.ok ? parsed.value.error || `Upload failed (${res.status})` : parsed.error);
+          }
+          if (!parsed.value.url) throw new Error(parsed.value.error || "Upload failed: missing url");
+          const url = parsed.value.url;
+          setPersonaPhotoUrls((prev) => (prev.includes(url) ? prev : [...prev, url]));
+          setUserPhotoUrls((prev) => (prev.includes(url) ? prev : [...prev, url]));
+          added++;
+        } catch (err) {
+          lastError = err instanceof Error ? err.message : "Upload failed";
+        } finally {
+          URL.revokeObjectURL(row.blob);
+          setPendingPersonaUploads((p) => p.filter((x) => x.id !== row.id));
+        }
+      }
+      if (added > 0) toast.success(added > 1 ? `${added} persona photos added` : "Persona photo added");
+      if (lastError && added < list.length) toast.error("Some uploads failed", { description: lastError });
+    } finally {
+      setIsUploadingPersonaPhotos(false);
+    }
+  }
+
+  function removePersonaPhoto(url: string) {
+    setPersonaPhotoUrls((prev) => prev.filter((u) => u !== url));
+    setUserPhotoUrls((prev) => prev.filter((u) => u !== url));
+  }
+
   useEffect(() => {
     const onPaste = (event: ClipboardEvent) => {
       const files = clipboardImageFiles(event);
@@ -1365,13 +1530,13 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     return () => window.removeEventListener("paste", onPaste);
   }, []);
 
-  function addAvatarAsProductPhoto(avatarUrl: string) {
+  function addAvatarAsPersonaPhoto(avatarUrl: string) {
     const u = avatarUrl.trim();
     if (!u) return;
+    setPersonaPhotoUrls((prev) => (prev.includes(u) ? prev : [...prev, u]));
     setUserPhotoUrls((prev) => (prev.includes(u) ? prev : [...prev, u]));
-    setProductOnlyImageUrls((prev) => (prev.includes(u) ? prev : [...prev, u]));
     setAvatarPhotoUrls((prev) => (prev.includes(u) ? prev : [...prev, u]));
-    toast.success("Avatar photo added");
+    toast.success("Persona avatar added");
   }
 
   async function onAddCustomAngle() {
@@ -1742,6 +1907,10 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     setIsWorking(true);
     setStage("writing_scripts");
     try {
+      const personaRefs = personaPhotoUrls
+        .map((u) => u.trim())
+        .filter((u, i, arr) => /^https?:\/\//i.test(u) && arr.indexOf(u) === i)
+        .slice(0, 3);
       const res = await fetch("/api/gpt/ugc-scripts-from-brief", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1751,6 +1920,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           brandBrief: summaryText.trim(),
           previousScriptsText: scriptsText.trim(),
           productImageUrls: resolvedProductUrlsForGpt(),
+          avatarImageUrls: personaRefs.length > 0 ? personaRefs : undefined,
           videoDurationSeconds: 15,
           generationMode,
           customUgcIntent: composeCustomUgcIntent(customUgcTopic, customUgcOffer, customUgcCta),
@@ -1990,7 +2160,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     const idx = angleIdx !== undefined && angleIdx !== null ? angleIdx : selectedAngleIndex;
     const selectedScript = selectedScriptOptionByIndex(scriptsText, idx);
     const script = (idx === selectedAngleIndex ? editableScript : selectedScript).trim() || selectedScript;
-    const avatarRefs = userPhotoUrls
+    const avatarRefs = personaPhotoUrls
       .map((u) => u.trim())
       .filter((u, i, arr) => /^https?:\/\//i.test(u) && arr.indexOf(u) === i)
       .slice(-3)
@@ -3374,26 +3544,15 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                       <span className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
                         Product photos ({productOnlyImageUrls.length})
                       </span>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <button
-                          type="button"
-                          disabled={isWorking || isUploadingAdditionalPhotos}
-                          className="flex items-center gap-1 rounded-md bg-white/5 px-2 py-1 text-[10px] font-medium text-white/60 transition hover:bg-white/10 hover:text-white/80"
-                          onClick={() => photoInputRef.current?.click()}
-                        >
-                          <ImagePlus className="h-3 w-3" />
-                          Add photo
-                        </button>
-                        <button
-                          type="button"
-                          disabled={isWorking || isUploadingAdditionalPhotos}
-                          className="rounded-md bg-white/5 px-2 py-1 text-[10px] font-medium text-white/60 transition hover:bg-white/10 hover:text-white/80"
-                          onClick={() => setAvatarPickerOpen(true)}
-                          title={avatarUrls.length === 0 ? "Open Studio → Avatar to generate avatars first" : undefined}
-                        >
-                          Use avatar
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        disabled={isWorking || isUploadingAdditionalPhotos}
+                        className="flex items-center gap-1 rounded-md bg-white/5 px-2 py-1 text-[10px] font-medium text-white/60 transition hover:bg-white/10 hover:text-white/80"
+                        onClick={() => photoInputRef.current?.click()}
+                      >
+                        <ImagePlus className="h-3 w-3" />
+                        Add photo
+                      </button>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <LinkToAdPendingProductThumbnails items={pendingProductUploads} />
@@ -3438,10 +3597,30 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                       }}
                       disabled={isWorking || isUploadingAdditionalPhotos}
                     />
+                    <PersonaPhotoSection
+                      personaPhotoUrls={personaPhotoUrls}
+                      pendingPersonaUploads={pendingPersonaUploads}
+                      isUploading={isUploadingPersonaPhotos}
+                      isWorking={isWorking}
+                      onUploadClick={() => personaPhotoInputRef.current?.click()}
+                      onAvatarPickerOpen={() => setAvatarPickerOpen(true)}
+                      avatarUrlsCount={avatarUrls.length}
+                      onRemove={removePersonaPhoto}
+                    />
+                    <input
+                      ref={personaPhotoInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/*"
+                      multiple
+                      className="sr-only"
+                      onChange={(e) => {
+                        void uploadPersonaPhoto(e.target.files);
+                        e.currentTarget.value = "";
+                      }}
+                      disabled={isWorking || isUploadingPersonaPhotos}
+                    />
                   </div>
                 ) : null}
-
-                {/* Upload recommendation removed (too noisy); users can add photos after scripts. */}
               </div>
             </div>
           </div>
@@ -3552,26 +3731,15 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                       <span className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
                         Product photos ({productOnlyImageUrls.length})
                       </span>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <button
-                          type="button"
-                          disabled={isWorking}
-                          className="flex items-center gap-1 rounded-md bg-white/5 px-2 py-1 text-[10px] font-medium text-white/60 transition hover:bg-white/10 hover:text-white/80"
-                          onClick={() => photoInputRef.current?.click()}
-                        >
-                          <ImagePlus className="h-3 w-3" />
-                          Add photo
-                        </button>
-                        <button
-                          type="button"
-                          disabled={isWorking || isUploadingAdditionalPhotos}
-                          className="rounded-md bg-white/5 px-2 py-1 text-[10px] font-medium text-white/60 transition hover:bg-white/10 hover:text-white/80"
-                          onClick={() => setAvatarPickerOpen(true)}
-                          title={avatarUrls.length === 0 ? "Open Studio → Avatar to generate avatars first" : undefined}
-                        >
-                          Use avatar
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        disabled={isWorking}
+                        className="flex items-center gap-1 rounded-md bg-white/5 px-2 py-1 text-[10px] font-medium text-white/60 transition hover:bg-white/10 hover:text-white/80"
+                        onClick={() => photoInputRef.current?.click()}
+                      >
+                        <ImagePlus className="h-3 w-3" />
+                        Add photo
+                      </button>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <LinkToAdPendingProductThumbnails items={pendingProductUploads} />
@@ -3615,6 +3783,28 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                         e.currentTarget.value = "";
                       }}
                       disabled={isWorking || isUploadingAdditionalPhotos}
+                    />
+                    <PersonaPhotoSection
+                      personaPhotoUrls={personaPhotoUrls}
+                      pendingPersonaUploads={pendingPersonaUploads}
+                      isUploading={isUploadingPersonaPhotos}
+                      isWorking={isWorking}
+                      onUploadClick={() => personaPhotoInputRef.current?.click()}
+                      onAvatarPickerOpen={() => setAvatarPickerOpen(true)}
+                      avatarUrlsCount={avatarUrls.length}
+                      onRemove={removePersonaPhoto}
+                    />
+                    <input
+                      ref={personaPhotoInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/*"
+                      multiple
+                      className="sr-only"
+                      onChange={(e) => {
+                        void uploadPersonaPhoto(e.target.files);
+                        e.currentTarget.value = "";
+                      }}
+                      disabled={isWorking || isUploadingPersonaPhotos}
                     />
                   </div>
                 </div>
@@ -3877,26 +4067,15 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                     <span className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
                       Product photos ({productOnlyImageUrls.length})
                     </span>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        disabled={isWorking || isUploadingAdditionalPhotos}
-                        className="flex items-center gap-1 rounded-md bg-white/5 px-2 py-1 text-[10px] font-medium text-white/60 transition hover:bg-white/10 hover:text-white/80 disabled:opacity-50"
-                        onClick={() => photoInputRef.current?.click()}
-                      >
-                        <ImagePlus className="h-3 w-3" />
-                        Add photo
-                      </button>
-                      <button
-                        type="button"
-                        disabled={isWorking || isUploadingAdditionalPhotos}
-                        className="rounded-md bg-white/5 px-2 py-1 text-[10px] font-medium text-white/60 transition hover:bg-white/10 hover:text-white/80 disabled:opacity-50"
-                        onClick={() => setAvatarPickerOpen(true)}
-                        title={avatarUrls.length === 0 ? "Studio → Avatar: generate an avatar first" : undefined}
-                      >
-                        Use avatar
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      disabled={isWorking || isUploadingAdditionalPhotos}
+                      className="flex items-center gap-1 rounded-md bg-white/5 px-2 py-1 text-[10px] font-medium text-white/60 transition hover:bg-white/10 hover:text-white/80 disabled:opacity-50"
+                      onClick={() => photoInputRef.current?.click()}
+                    >
+                      <ImagePlus className="h-3 w-3" />
+                      Add photo
+                    </button>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <LinkToAdPendingProductThumbnails items={pendingProductUploads} />
@@ -3945,6 +4124,28 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                       e.currentTarget.value = "";
                     }}
                     disabled={isWorking || isUploadingAdditionalPhotos}
+                  />
+                  <PersonaPhotoSection
+                    personaPhotoUrls={personaPhotoUrls}
+                    pendingPersonaUploads={pendingPersonaUploads}
+                    isUploading={isUploadingPersonaPhotos}
+                    isWorking={isWorking}
+                    onUploadClick={() => personaPhotoInputRef.current?.click()}
+                    onAvatarPickerOpen={() => setAvatarPickerOpen(true)}
+                    avatarUrlsCount={avatarUrls.length}
+                    onRemove={removePersonaPhoto}
+                  />
+                  <input
+                    ref={personaPhotoInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/*"
+                    multiple
+                    className="sr-only"
+                    onChange={(e) => {
+                      void uploadPersonaPhoto(e.target.files);
+                      e.currentTarget.value = "";
+                    }}
+                    disabled={isWorking || isUploadingPersonaPhotos}
                   />
                 </div>
 
@@ -4380,8 +4581,22 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                                     />
                                   </div>
                                   <div className="space-y-1">
-                                    <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Avatar</p>
-                                    <Textarea value={scriptFactors.avatar} onChange={(e) => { const next = { ...scriptFactors, avatar: e.target.value }; setScriptFactors(next); setEditableScript(composeScriptFromFactors(next)); setScriptHasEdits(true); }} className="min-h-[74px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/80" />
+                                    <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Avatar / Persona</p>
+                                    {hasPersonaPhoto ? (
+                                      <div className="flex items-center gap-2 rounded-lg border border-violet-500/20 bg-violet-500/[0.06] px-3 py-2.5">
+                                        <div className="flex -space-x-2">
+                                          {personaPhotoUrls.slice(0, 3).map((url, i) => (
+                                            /* eslint-disable-next-line @next/next/no-img-element */
+                                            <img key={`factor-persona-${i}`} src={url} alt="" className="h-8 w-8 rounded-full border-2 border-[#0d0a14] object-cover" referrerPolicy="no-referrer" />
+                                          ))}
+                                        </div>
+                                        <p className="text-[11px] leading-snug text-violet-300/80">
+                                          Using uploaded persona photo — appearance will match the reference image.
+                                        </p>
+                                      </div>
+                                    ) : (
+                                      <Textarea value={scriptFactors.avatar} onChange={(e) => { const next = { ...scriptFactors, avatar: e.target.value }; setScriptFactors(next); setEditableScript(composeScriptFromFactors(next)); setScriptHasEdits(true); }} className="min-h-[74px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/80" />
+                                    )}
                                   </div>
                                   <div className="space-y-1">
                                     <div className="flex items-center justify-between gap-2">
@@ -4994,8 +5209,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       open={avatarPickerOpen}
       onOpenChange={setAvatarPickerOpen}
       avatarUrls={avatarUrls}
-      onPick={addAvatarAsProductPhoto}
-      title="Choose avatar for product photos"
+      onPick={addAvatarAsPersonaPhoto}
+      title="Choose persona / avatar"
     />
     </>
   );
