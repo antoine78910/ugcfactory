@@ -6,6 +6,17 @@ import { kieMarketCreateTask } from "@/lib/kieMarket";
 
 const KIE_WATERMARK_REMOVE_MODEL = "sora-watermark-remover";
 
+/** Per KIE docs: only OpenAI Sora share pages, not arbitrary MP4 URLs. */
+function isSoraWatermarkSourceUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "https:") return false;
+    return u.hostname.toLowerCase() === "sora.chatgpt.com";
+  } catch {
+    return false;
+  }
+}
+
 type Body = {
   videoUrl: string;
   personalApiKey?: string;
@@ -23,6 +34,21 @@ export async function POST(req: Request) {
   if (!videoUrl || !/^https?:\/\//i.test(videoUrl)) {
     return NextResponse.json(
       { error: "Missing or invalid `videoUrl` (HTTPS)." },
+      { status: 400 },
+    );
+  }
+  if (videoUrl.length > 500) {
+    return NextResponse.json(
+      { error: "`videoUrl` must be at most 500 characters (KIE limit)." },
+      { status: 400 },
+    );
+  }
+  if (!isSoraWatermarkSourceUrl(videoUrl)) {
+    return NextResponse.json(
+      {
+        error:
+          "This tool only accepts a Sora 2 share link from OpenAI (URL must start with https://sora.chatgpt.com/…). Uploading an MP4 file does not work — paste the share link from the Sora app instead.",
+      },
       { status: 400 },
     );
   }
