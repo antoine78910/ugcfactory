@@ -1,5 +1,3 @@
-export const runtime = "nodejs";
-
 import { NextResponse } from "next/server";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import {
@@ -13,6 +11,14 @@ import {
 } from "@/lib/studioGenerationsPoll";
 import { serverLog } from "@/lib/serverLog";
 
+export const runtime = "nodejs";
+
+/**
+ * Vercel serverless: Hobby ~10s max unless project uses Pro Fluid Compute with a higher limit.
+ * Poll touches DB + KIE/PiAPI + optional download/re-upload of media per row — keep row cap below.
+ */
+export const maxDuration = 60;
+
 type Body = {
   kind?: string;
   personalApiKey?: string;
@@ -20,6 +26,9 @@ type Body = {
 };
 
 const LIBRARY_KINDS = ["avatar", "studio_image", "studio_video", "studio_upscale", "motion_control"] as const;
+
+/** Avoid Vercel timeouts when many jobs are in flight (each row may download+re-upload media). */
+const MAX_ROWS_TO_POLL_PER_REQUEST = 8;
 
 const ALLOWED_POLL_KINDS = new Set<string>(LIBRARY_KINDS);
 const POLL_KIND_DEFAULT = "avatar";
@@ -51,13 +60,14 @@ export async function POST(req: Request) {
   const piapiApiKey = (body.piapiApiKey ?? "").trim() || undefined;
 
   try {
+    const resolvedKinds = resolvePollKinds(kind);
+
     let procQuery = supabase
       .from("studio_generations")
       .select("*")
       .eq("user_id", user.id)
       .in("status", [...STUDIO_GENERATION_IN_PROGRESS_STATUSES]);
 
-    const resolvedKinds = resolvePollKinds(kind);
     if (resolvedKinds === "all") {
       procQuery = procQuery.in("kind", [...LIBRARY_KINDS]);
     } else if (resolvedKinds.length === 1) {
@@ -65,6 +75,8 @@ export async function POST(req: Request) {
     } else {
       procQuery = procQuery.in("kind", resolvedKinds);
     }
+
+    procQuery = procQuery.order("created_at", { ascending: true }).limit(MAX_ROWS_TO_POLL_PER_REQUEST);
 
     const { data: processing, error: procErr } = await procQuery;
 
@@ -78,16 +90,19 @@ export async function POST(req: Request) {
         /* one bad poll should not block others */
       }
     }
-    let refundHints: { jobId: string; credits: number }[] = [];
-    if (resolvedKinds === "all") {
-      for (const k of LIBRARY_KINDS) {
-        refundHints = refundHints.concat(await sweepStudioRefundHints(supabase, user.id, k));
-      }
-    } else {
-      for (const k of resolvedKinds) {
-        refundHints = refundHints.concat(await sweepStudioRefundHints(supabase, user.id, k));
-      }
-    }
+    const kindsToSweep =
+      resolvedKinds === "all" ? [...LIBRARY_KINDS] : resolvedKinds;
+    const sweepChunks = await Promise.all(
+      kindsToSweep.map(async (k) => {
+        try {
+          return await sweepStudioRefundHints(supabase, user.id, k);
+        } catch (e) {
+          console.error("[studio/generations/poll] sweepStudioRefundHints", k, e);
+          return [] as { jobId: string; credits: number }[];
+        }
+      }),
+    );
+    const refundHints = sweepChunks.flat();
 
     if (refundHints.length > 0) {
       serverLog("studio_generations_refund_hints", { count: refundHints.length, kind });
@@ -116,6 +131,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ data: items, refundHints });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error.";
+    serverLog("studio_generations_poll_error", { message: message.slice(0, 240) });
     return NextResponse.json({ error: message }, { status: 502 });
   }
 }

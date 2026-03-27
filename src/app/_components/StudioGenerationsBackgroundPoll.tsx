@@ -27,7 +27,8 @@ const POLL_INTERVAL_MS = 8000;
 
 /**
  * Polls in-flight studio jobs (all library kinds) while the user navigates inside /app.
- * Individual panels may also poll; duplicate polls are cheap and keep history/refunds consistent.
+ * Hits the same Next.js origin as the UI (e.g. Vercel serverless `/api/...`). Railway is only involved
+ * if you deploy the app there or point a cron job at that URL.
  */
 export default function StudioGenerationsBackgroundPoll() {
   const { grantCredits, current: creditsBalance } = useCreditsPlan();

@@ -107,6 +107,14 @@ export async function POST(req: Request) {
       }
     } catch (e) {
       const message = e instanceof Error ? e.message : "Provider poll failed";
+      // Transient network / provider blip: keep polling instead of failing the whole request.
+      const transient =
+        /fetch|network|timeout|econnreset|econnrefused|socket|502|503|504/i.test(message) ||
+        /failed to fetch/i.test(message);
+      if (transient) {
+        await new Promise((r) => setTimeout(r, sleepMs));
+        continue;
+      }
       return NextResponse.json({ error: message }, { status: 502 });
     }
 
