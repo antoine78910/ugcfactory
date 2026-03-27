@@ -2386,61 +2386,48 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     throw new Error("Image generation timed out.");
   }
 
-  /** Run 3 NanoBanana Pro jobs in parallel: 3 separate createTask calls, then poll all tasks together (faster than sequential). */
-  async function runNanoBananaProThreeParallel(
+  /**
+   * Run 3 NanoBanana Pro jobs one after another (same billing model as before: 3 distinct prompts ⇒ 3
+   * provider tasks; parallel did not reduce cost and was not faster enough for Link to Ad).
+   */
+  async function runNanoBananaProThreeSequential(
     img: string,
     prompts: [string, string, string],
     opts?: { labelPrefix?: string },
     signal?: AbortSignal,
   ): Promise<{ urlsByPrompt: string[]; lastTaskId: string | null; taskIds: string[] }> {
-    const bodyBase = {
-      accountPlan: planId,
-      model: "pro" as const,
-      imageUrls: [img],
-      resolution: "4K" as const,
-      aspectRatio: "9:16" as const,
-      personalApiKey: getPersonalApiKey(),
-    };
-
-    async function generateOne(prompt: string, i: 0 | 1 | 2): Promise<string> {
+    const urlsByPrompt: string[] = [];
+    let lastTaskId: string | null = null;
+    const taskIds: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const prompt = prompts[i];
+      lastNanoImagePromptRef.current = prompt;
+      lastNanoImagePromptIndexRef.current = i as 0 | 1 | 2;
       const res = await fetch("/api/nanobanana/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal,
-        body: JSON.stringify({ ...bodyBase, prompt }),
+        body: JSON.stringify({
+          accountPlan: planId,
+          model: "pro",
+          prompt,
+          imageUrls: [img],
+          resolution: "4K",
+          aspectRatio: "9:16",
+          personalApiKey: getPersonalApiKey(),
+        }),
       });
       const json = (await res.json()) as { taskId?: string; error?: string };
       if (!res.ok || !json.taskId) throw new Error(json.error || "Image generation failed");
+      lastTaskId = json.taskId;
+      taskIds.push(json.taskId);
       void registerLinkToAdStudioImage(
         json.taskId,
         opts?.labelPrefix ? `${opts.labelPrefix} · ${i + 1}/3` : `Link to Ad · Nano ${i + 1}/3`,
       );
-      return json.taskId;
+      const urls = await pollNanoBananaTaskForUrls(json.taskId, signal);
+      urlsByPrompt[i] = urls[0];
     }
-
-    const taskIds = await Promise.all([
-      generateOne(prompts[0], 0),
-      generateOne(prompts[1], 1),
-      generateOne(prompts[2], 2),
-    ]);
-
-    const lastTaskId = taskIds[2] ?? null;
-
-    const polled = await Promise.all(
-      taskIds.map((tid, index) =>
-        pollNanoBananaTaskForUrls(tid, signal).then((urls) => {
-          lastNanoImagePromptRef.current = prompts[index]!;
-          lastNanoImagePromptIndexRef.current = index as 0 | 1 | 2;
-          return { index: index as 0 | 1 | 2, urls };
-        }),
-      ),
-    );
-
-    const urlsByPrompt: string[] = ["", "", ""];
-    for (const { index, urls } of polled) {
-      urlsByPrompt[index] = urls[0] ?? "";
-    }
-
     return { urlsByPrompt, lastTaskId, taskIds };
   }
 
@@ -2541,7 +2528,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       nanoThreeAbortRef.current?.abort();
       const controller = new AbortController();
       nanoThreeAbortRef.current = controller;
-      const { urlsByPrompt, lastTaskId } = await runNanoBananaProThreeParallel(
+      const { urlsByPrompt, lastTaskId } = await runNanoBananaProThreeSequential(
         img,
         prompts as [string, string, string],
         { labelPrefix: `Link to Ad · Angle ${idx + 1}` },
