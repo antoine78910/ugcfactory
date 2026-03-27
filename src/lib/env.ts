@@ -10,7 +10,10 @@ export function requireEnv(name: string): string {
 }
 
 export function getAppUrl(): string {
-  const url = getEnv("APP_URL") ?? "http://localhost:3000";
+  const url =
+    getEnv("APP_URL") ??
+    getEnv("NEXT_PUBLIC_APP_URL") ??
+    "http://localhost:3000";
   return url.endsWith("/") ? url.slice(0, -1) : url;
 }
 

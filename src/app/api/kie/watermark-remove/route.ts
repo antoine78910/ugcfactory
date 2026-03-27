@@ -27,8 +27,9 @@ export async function POST(req: Request) {
     );
   }
 
+  const appUrl = getAppUrl();
   const callBackUrl =
-    getEnv("NANOBANANA_CALLBACK_URL") ?? `${getAppUrl()}/api/nanobanana/callback`;
+    getEnv("NANOBANANA_CALLBACK_URL") ?? `${appUrl}/api/nanobanana/callback`;
 
   const personalKey =
     typeof body.personalApiKey === "string" && body.personalApiKey.trim().length > 0
@@ -40,7 +41,7 @@ export async function POST(req: Request) {
       {
         model: KIE_WATERMARK_REMOVE_MODEL,
         callBackUrl,
-        input: { video_url: videoUrl },
+        input: { video_url: videoUrl, upload_method: "s3" },
       },
       personalKey,
     );
