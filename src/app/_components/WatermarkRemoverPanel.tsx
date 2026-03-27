@@ -14,7 +14,7 @@ import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
 import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
 import VideoCard from "@/app/_components/VideoCard";
 
-const WATERMARK_REMOVE_CREDITS = 15;
+const WATERMARK_REMOVE_CREDITS = 10;
 
 async function uploadVideoFile(file: File): Promise<string> {
   const signRes = await fetch("/api/uploads/signed-url", {
