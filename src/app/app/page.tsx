@@ -308,6 +308,7 @@ export default function AppBrandWizard() {
   const packshotFileInputRef = useRef<HTMLInputElement>(null);
 
   const [motionVideoRefBlobUrl, setMotionVideoRefBlobUrl] = useState<string | null>(null);
+  const [motionVideoPosterUrl, setMotionVideoPosterUrl] = useState<string | null>(null);
   const [motionVideoPreviewLoading, setMotionVideoPreviewLoading] = useState(false);
   const [motionVideoDetectedDuration, setMotionVideoDetectedDuration] = useState<number | null>(null);
   const [motionCharacterImageUrl, setMotionCharacterImageUrl] = useState<string | null>(null);
@@ -413,12 +414,116 @@ export default function AppBrandWizard() {
 
   useEffect(() => {
     return () => {
+      if (motionVideoPosterUrl?.startsWith("blob:")) URL.revokeObjectURL(motionVideoPosterUrl);
+    };
+  }, [motionVideoPosterUrl]);
+
+  /** First-frame JPEG poster so the tile is not black before the <video> paints a frame (codec / seek quirks). */
+  useEffect(() => {
+    if (!motionVideoRefBlobUrl) {
+      setMotionVideoPosterUrl(null);
+      return;
+    }
+
+    setMotionVideoPosterUrl(null);
+
+    let cancelled = false;
+    let playAttempts = 0;
+    const video = document.createElement("video");
+    video.muted = true;
+    video.playsInline = true;
+    video.setAttribute("playsinline", "");
+    video.preload = "auto";
+    video.src = motionVideoRefBlobUrl;
+
+    const captureFrame = () => {
+      if (cancelled) return;
+      const w = video.videoWidth;
+      const h = video.videoHeight;
+      if (w > 0 && h > 0) {
+        const canvas = document.createElement("canvas");
+        const maxSide = 720;
+        const scale = Math.min(1, maxSide / Math.max(w, h));
+        canvas.width = Math.round(w * scale);
+        canvas.height = Math.round(h * scale);
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+        try {
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        } catch {
+          return;
+        }
+        canvas.toBlob(
+          (blob) => {
+            if (cancelled || !blob) return;
+            setMotionVideoPosterUrl(URL.createObjectURL(blob));
+          },
+          "image/jpeg",
+          0.82,
+        );
+        return;
+      }
+      if (playAttempts >= 3) return;
+      playAttempts += 1;
+      void video
+        .play()
+        .then(() => {
+          if (cancelled) return;
+          video.pause();
+          requestAnimationFrame(() => captureFrame());
+        })
+        .catch(() => {
+          /* ignore */
+        });
+    };
+
+    const onSeeked = () => {
+      if (cancelled) return;
+      captureFrame();
+    };
+
+    const onLoadedData = () => {
+      if (cancelled) return;
+      try {
+        const d = video.duration;
+        const t =
+          Number.isFinite(d) && d > 0
+            ? Math.min(0.25, Math.max(0.001, d * 0.02))
+            : 0.05;
+        video.currentTime = t;
+      } catch {
+        captureFrame();
+      }
+    };
+
+    video.addEventListener("seeked", onSeeked);
+    video.addEventListener("loadeddata", onLoadedData);
+    video.addEventListener("error", () => {
+      /* keep poster null */
+    });
+
+    if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+      onLoadedData();
+    }
+
+    return () => {
+      cancelled = true;
+      video.removeEventListener("seeked", onSeeked);
+      video.removeEventListener("loadeddata", onLoadedData);
+      video.removeAttribute("src");
+      video.load();
+    };
+  }, [motionVideoRefBlobUrl]);
+
+  useEffect(() => {
+    return () => {
       if (motionCharacterImageUrl?.startsWith("blob:")) URL.revokeObjectURL(motionCharacterImageUrl);
     };
   }, [motionCharacterImageUrl]);
 
   const clearMotionVideoReference = useCallback(() => {
     setMotionVideoRefBlobUrl(null);
+    setMotionVideoPosterUrl(null);
     setMotionVideoDetectedDuration(null);
     setMotionVideoPreviewLoading(false);
   }, []);
@@ -2118,7 +2223,8 @@ export default function AppBrandWizard() {
                                   <video
                                     key={motionVideoRefBlobUrl}
                                     src={motionVideoRefBlobUrl}
-                                    className="absolute inset-0 z-0 h-full w-full object-cover"
+                                    poster={motionVideoPosterUrl ?? undefined}
+                                    className="absolute inset-0 z-[1] h-full w-full object-cover"
                                     muted
                                     playsInline
                                     preload="auto"

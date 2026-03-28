@@ -39,8 +39,8 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
 
   if (!HAS_SUPABASE_ENV) {
     return (
-      <div className="min-h-screen bg-[#050507] text-white">
-        <main className="mx-auto max-w-xl px-5 py-16">
+      <div className="min-h-[100dvh] min-h-screen overflow-x-hidden bg-[#050507] text-white">
+        <main className="mx-auto max-w-xl px-4 py-12 pb-[max(3rem,env(safe-area-inset-bottom))] pt-[max(3rem,env(safe-area-inset-top))] sm:px-5 sm:py-16">
           <div className="rounded-2xl border border-amber-400/40 bg-amber-500/5 p-6 text-sm text-white/80">
             <p className="font-semibold text-amber-300">Missing Supabase config</p>
             <p className="mt-3">
@@ -139,33 +139,36 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
     "h-11 w-full rounded-2xl bg-violet-400 text-black font-semibold border border-violet-200/40 shadow-[0_6px_0_0_rgba(76,29,149,0.9)] transition-all hover:-translate-y-[1px] hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9)] active:translate-y-[6px] active:shadow-[0_0_0_0_rgba(76,29,149,0.9)]";
 
   return (
-    <div className="min-h-screen bg-[#050507] text-white">
-      <div className="pointer-events-none absolute left-1/2 top-0 -z-0 h-[520px] w-[900px] -translate-x-1/2 rounded-full bg-violet-600/15 blur-[140px]" />
+    <div className="min-h-[100dvh] min-h-screen overflow-x-hidden bg-[#050507] text-white">
+      <div
+        className="pointer-events-none absolute left-1/2 top-0 -z-0 h-[min(420px,70vh)] w-[min(100vw,900px)] max-w-[100vw] -translate-x-1/2 rounded-full bg-violet-600/15 blur-[100px] sm:h-[520px] sm:blur-[140px]"
+        aria-hidden
+      />
 
-      <main className="relative z-10 mx-auto flex min-h-screen max-w-6xl items-center justify-center px-5 py-14">
-        <div className="grid w-full max-w-5xl overflow-hidden rounded-3xl border border-white/10 bg-white/[0.02] backdrop-blur-xl md:grid-cols-[1.05fr_1fr]">
-          <div className="border-b border-white/10 p-8 md:border-b-0 md:border-r">
+      <main className="relative z-10 mx-auto flex min-h-[100dvh] min-h-screen w-full max-w-6xl items-stretch justify-center px-4 py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))] sm:items-center sm:px-5 sm:py-14">
+        <div className="grid w-full min-w-0 max-w-5xl self-center overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02] backdrop-blur-xl sm:rounded-3xl md:grid-cols-[1.05fr_1fr]">
+          <div className="min-w-0 border-b border-white/10 p-5 sm:p-8 md:border-b-0 md:border-r">
             <Link href="/" className="inline-flex items-center">
               <Image
                 src="/youry-logo.png"
                 alt="Youry"
                 width={174}
                 height={52}
-              className="h-9 w-auto sm:h-10"
+                className="h-9 w-auto sm:h-10"
                 priority
               />
             </Link>
 
-            <h1 className="mt-8 text-3xl font-extrabold tracking-tight sm:text-4xl">
+            <h1 className="mt-6 text-2xl font-extrabold tracking-tight sm:mt-8 sm:text-3xl md:text-4xl">
               {isSignIn ? "Welcome back" : "Create your account"}
             </h1>
-            <p className="mt-3 max-w-sm text-sm text-white/55">
+            <p className="mt-3 max-w-sm text-sm leading-relaxed text-white/55">
               {isSignIn
                 ? "Sign in to continue building high-converting video ads in minutes."
                 : "Sign up and start turning product pages into scroll-stopping video ads."}
             </p>
 
-            <div className="mt-10 space-y-3 text-sm text-white/70">
+            <div className="mt-6 space-y-2.5 text-sm text-white/70 sm:mt-10 sm:space-y-3">
               {[
                 "Cut your creative production costs by 10x",
                 "Generate 10+ ad concepts in seconds",
@@ -173,15 +176,15 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
                 "Never run out of creatives again",
                 "Scale your ad testing effortlessly",
               ].map((line) => (
-                <p key={line} className="flex items-center gap-2.5">
-                  <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-300/90" />
-                  <span>{line}</span>
+                <p key={line} className="flex items-start gap-2.5">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300/90" />
+                  <span className="min-w-0 break-words">{line}</span>
                 </p>
               ))}
             </div>
           </div>
 
-          <div className="p-8">
+          <div className="min-w-0 p-5 sm:p-8">
             <form
               className="space-y-4"
               onSubmit={(e) => {
@@ -201,7 +204,7 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@domain.com"
-                  className="h-11 border-white/15 bg-white/[0.03] text-white placeholder:text-white/30"
+                  className="h-11 border-white/15 bg-white/[0.03] text-base text-white placeholder:text-white/30 md:text-sm"
                 />
               </div>
 
@@ -217,7 +220,7 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
                   onChange={(e) => setPassword(e.target.value)}
                   type="password"
                   placeholder="••••••••"
-                  className="h-11 border-white/15 bg-white/[0.03] text-white placeholder:text-white/30"
+                  className="h-11 border-white/15 bg-white/[0.03] text-base text-white placeholder:text-white/30 md:text-sm"
                 />
               </div>
 

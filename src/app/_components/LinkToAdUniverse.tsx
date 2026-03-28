@@ -3373,13 +3373,22 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                   onClick={() => setVideoModel(id)}
                   disabled={isWorking}
                   className={cn(
-                    "rounded-md px-3 py-1.5 text-xs font-semibold transition whitespace-nowrap",
+                    "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition whitespace-nowrap",
                     videoModel === id
                       ? "bg-violet-500/15 text-white border border-violet-400/60"
                       : "bg-black/20 text-white/65 hover:border-white/20 border border-white/10",
                   )}
                 >
                   {LINK_TO_AD_VIDEO_MODELS[id].label}
+                  {id === "seedance" ? (
+                    <span
+                      className="inline-flex items-center gap-1 rounded-full border border-teal-400/35 bg-teal-500/[0.12] px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-teal-200/90"
+                      title="Recommended for sharpest motion and lipsync"
+                    >
+                      <span className="h-1 w-1 shrink-0 rounded-full bg-teal-400" aria-hidden />
+                      Best results
+                    </span>
+                  ) : null}
                 </button>
               ))}
             </div>
@@ -3406,29 +3415,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
             </div>
           </div>
         </div>
-
-        {videoModel === "seedance" ? (
-          <div className="rounded-xl border border-teal-500/25 bg-gradient-to-br from-teal-500/[0.07] to-transparent px-3 py-2.5 sm:px-3.5">
-            <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-teal-200/85">
-              <Sparkles className="h-3 w-3 shrink-0 text-teal-300/90" aria-hidden />
-              Best results — Seedance
-            </p>
-            <ul className="mt-2 space-y-1 text-[11px] leading-snug text-white/50">
-              <li className="flex gap-2">
-                <span className="shrink-0 text-teal-400/80">·</span>
-                <span>Sharp reference: clear face and product, stable framing, no heavy blur or tiny subject in frame.</span>
-              </li>
-              <li className="flex gap-2">
-                <span className="shrink-0 text-teal-400/80">·</span>
-                <span>Motion prompt = movement, gestures, and dialogue only — scene and style stay tied to the image.</span>
-              </li>
-              <li className="flex gap-2">
-                <span className="shrink-0 text-teal-400/80">·</span>
-                <span>10–15s often gives cleaner motion and lipsync than very short durations.</span>
-              </li>
-            </ul>
-          </div>
-        ) : null}
 
         <div className="space-y-3">
           {!showBrandHeaderInsteadOfUrl ? (

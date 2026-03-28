@@ -38,7 +38,8 @@ const IMAGE_MIN_RANK: Record<"nano" | "pro", number> = {
 const VIDEO_MIN_RANK: Record<string, number> = {
   "bytedance/seedance-1.5-pro": 0,
   "kling-2.6/video": 1, // Starter+
-  "bytedance/seedance-2.0-pro": 2,
+  /** Same as 1.5: available on every plan (credits still apply). */
+  "bytedance/seedance-2.0-pro": 0,
   "veo3_fast": 2,
   "kling-3.0/video": 2,
   veo3: 2,
