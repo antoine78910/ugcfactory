@@ -40,6 +40,7 @@ import { AvatarPickerDialog } from "@/app/_components/AvatarPickerDialog";
 import { clipboardImageFiles } from "@/lib/clipboardImage";
 import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
 import { readStudioHistoryLocal, writeStudioHistoryLocal } from "@/lib/studioHistoryLocalStorage";
+import { uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
 import { cn } from "@/lib/utils";
 
 const LS_STUDIO_VIDEO_HISTORY = "ugc_studio_video_history_v1";
@@ -216,12 +217,7 @@ function modelHasMultiShot(id: VideoModelId): boolean {
 }
 
 async function uploadFile(file: File): Promise<string> {
-  const fd = new FormData();
-  fd.set("file", file);
-  const res = await fetch("/api/uploads", { method: "POST", body: fd });
-  const json = (await res.json()) as { url?: string; error?: string };
-  if (!res.ok || !json.url) throw new Error(json.error || "Upload failed");
-  return json.url;
+  return uploadFileToCdn(file);
 }
 
 function isMotionEditPicker(id: string): boolean {

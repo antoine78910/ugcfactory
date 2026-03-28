@@ -52,6 +52,7 @@ import {
 import { motionControlUpgradeMessage } from "@/lib/subscriptionModelAccess";
 import { clipboardImageFiles } from "@/lib/clipboardImage";
 import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
+import { uploadBlobUrlToCdn } from "@/lib/uploadBlobUrlToCdn";
 
 type WizardStep = "url" | "analysis" | "quiz" | "image" | "video";
 type AppSection = "link_to_ad" | "avatar" | "motion_control" | "image" | "video" | "upscale" | "projects";
@@ -352,18 +353,6 @@ export default function AppBrandWizard() {
       }),
     [motionQuality, motionBillableSeconds],
   );
-
-  const uploadBlobUrlToCdn = useCallback(async (blobUrl: string, filename: string, fallbackMime: string) => {
-    const resFetch = await fetch(blobUrl);
-    const blob = await resFetch.blob();
-    const type = blob.type || fallbackMime;
-    const fd = new FormData();
-    fd.set("file", new File([blob], filename, { type }));
-    const res = await fetch("/api/uploads", { method: "POST", body: fd });
-    const json = (await res.json()) as { url?: string; error?: string };
-    if (!res.ok || !json.url) throw new Error(json.error || "Upload failed");
-    return json.url;
-  }, []);
 
   const pollMotionKlingTask = useCallback(async (taskId: string) => {
     for (let i = 0; i < 120; i++) {

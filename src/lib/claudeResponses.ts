@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import sharp from "sharp";
 import { requireEnv } from "@/lib/env";
 
 export type ClaudeModel = "claude-sonnet-4-5-20250929" | "claude-sonnet-4-6";
@@ -43,57 +44,63 @@ export async function claudeMessagesText(opts: {
   return text;
 }
 
-type ImageBlock =
-  | { type: "image"; source: { type: "url"; url: string } }
-  | { type: "image"; source: { type: "base64"; media_type: string; data: string } };
+type ImageBlock = { type: "image"; source: { type: "base64"; media_type: string; data: string } };
 
-const ALLOWED_MEDIA_TYPES = new Set([
-  "image/jpeg",
-  "image/png",
-  "image/gif",
-  "image/webp",
-]);
+const FETCH_IMAGE_HEADERS = {
+  "User-Agent": "Mozilla/5.0 (compatible; UGC-Studio/1.0)",
+  Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+} as const;
 
-function guessMediaType(url: string, contentType: string | null): string {
-  const ct = (contentType ?? "").split(";")[0]!.trim().toLowerCase();
-  if (ALLOWED_MEDIA_TYPES.has(ct)) return ct;
-  const lower = url.toLowerCase();
-  if (lower.includes(".png")) return "image/png";
-  if (lower.includes(".webp")) return "image/webp";
-  if (lower.includes(".gif")) return "image/gif";
-  return "image/jpeg";
-}
-
+/** Fetch remote image and emit Claude-safe JPEG (Anthropic rejects AVIF, many SVGs, wrong Content-Types, etc.). */
 async function toImageBlock(rawUrl: string): Promise<ImageBlock | null> {
-  const u = (rawUrl ?? "").trim();
+  let u = (rawUrl ?? "").trim();
   if (!u) return null;
 
-  if (/^https:\/\//i.test(u)) {
-    return { type: "image", source: { type: "url", url: u } };
-  }
-
   if (/^http:\/\//i.test(u)) {
-    const httpsUrl = u.replace(/^http:\/\//i, "https://");
+    const upgraded = u.replace(/^http:\/\//i, "https://");
     try {
-      const probe = await fetch(httpsUrl, { method: "HEAD", signal: AbortSignal.timeout(5_000) });
-      if (probe.ok) {
-        return { type: "image", source: { type: "url", url: httpsUrl } };
-      }
-    } catch { /* HTTPS upgrade failed, fall through to base64 */ }
-
-    try {
-      const res = await fetch(u, { signal: AbortSignal.timeout(10_000) });
-      if (!res.ok) return null;
-      const buf = Buffer.from(await res.arrayBuffer());
-      if (buf.length === 0 || buf.length > 20_000_000) return null;
-      const mediaType = guessMediaType(u, res.headers.get("content-type"));
-      return { type: "image", source: { type: "base64", media_type: mediaType, data: buf.toString("base64") } };
+      const head = await fetch(upgraded, { method: "HEAD", signal: AbortSignal.timeout(5_000) });
+      if (head.ok) u = upgraded;
     } catch {
-      return null;
+      /* keep http */
     }
   }
 
-  return null;
+  if (!/^https?:\/\//i.test(u)) return null;
+
+  try {
+    const res = await fetch(u, {
+      signal: AbortSignal.timeout(20_000),
+      redirect: "follow",
+      headers: FETCH_IMAGE_HEADERS,
+    });
+    if (!res.ok) return null;
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.length === 0 || buf.length > 25 * 1024 * 1024) return null;
+
+    const meta = await sharp(buf).metadata();
+    if (!meta.width || !meta.height) return null;
+
+    const maxSide = 4096;
+    let pipeline = sharp(buf).rotate();
+    if (meta.width > maxSide || meta.height > maxSide) {
+      pipeline = sharp(buf).rotate().resize(maxSide, maxSide, { fit: "inside", withoutEnlargement: true });
+    }
+
+    const jpeg = await pipeline.jpeg({ quality: 86, mozjpeg: true }).toBuffer();
+    if (jpeg.length === 0) return null;
+
+    return {
+      type: "image",
+      source: {
+        type: "base64",
+        media_type: "image/jpeg",
+        data: jpeg.toString("base64"),
+      },
+    };
+  } catch {
+    return null;
+  }
 }
 
 export async function claudeMessagesTextWithImages(opts: {
@@ -110,9 +117,19 @@ export async function claudeMessagesTextWithImages(opts: {
     { type: "text", text: opts.user },
   ];
 
-  const imageResults = await Promise.all(opts.imageUrls.slice(0, 12).map(toImageBlock));
+  const requested = opts.imageUrls.slice(0, 12).map((x) => String(x).trim()).filter(Boolean);
+  const imageResults = await Promise.all(requested.map(toImageBlock));
+  let imageCount = 0;
   for (const block of imageResults) {
-    if (block) contentBlocks.push(block);
+    if (block) {
+      contentBlocks.push(block);
+      imageCount += 1;
+    }
+  }
+  if (requested.length > 0 && imageCount === 0) {
+    throw new Error(
+      "No page images could be sent to the vision model (unsupported format, blocked URL, or timeout). Try again or switch classify provider to GPT in settings if available.",
+    );
   }
 
   const message = await client.messages.create({
