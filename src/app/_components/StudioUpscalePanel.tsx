@@ -101,18 +101,30 @@ export default function StudioUpscalePanel() {
     if (!url) return;
     const v = document.createElement("video");
     v.preload = "metadata";
+    v.muted = true;
     v.onloadedmetadata = () => {
       const d = Number(v.duration);
       if (Number.isFinite(d) && d > 0) setDurationSec(Math.min(600, Math.max(1, Math.ceil(d))));
-      v.src = "";
+      v.removeAttribute("src");
+      v.load();
     };
     v.onerror = () => {};
     v.src = url;
   }, []);
 
+  /** Revoke blob URLs only after React drops them from state (never revoke while <video> still points at the blob). */
   useEffect(() => {
-    if (videoUrl) probeDuration(videoUrl);
-  }, [videoUrl, probeDuration]);
+    return () => {
+      if (videoPreviewBlob?.startsWith("blob:")) URL.revokeObjectURL(videoPreviewBlob);
+    };
+  }, [videoPreviewBlob]);
+
+  /** Blob preview wins while present (upload in progress or failed), then hosted URL. */
+  const previewSrc = videoPreviewBlob || videoUrl.trim() || "";
+
+  useEffect(() => {
+    if (previewSrc) probeDuration(previewSrc);
+  }, [previewSrc, probeDuration]);
 
   const onPickVideo = () => {
     const input = document.createElement("input");
@@ -122,20 +134,16 @@ export default function StudioUpscalePanel() {
       const f = input.files?.[0];
       if (!f) return;
       const blobUrl = URL.createObjectURL(f);
-      setVideoPreviewBlob((prev) => {
-        if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
-        return blobUrl;
-      });
+      setVideoPreviewBlob(blobUrl);
       setBusy(true);
       try {
         const url = await uploadFile(f);
         setVideoUrl(url);
         toast.success("Video uploaded");
+        setVideoPreviewBlob(null);
       } catch (e) {
         toast.error("Upload failed. Please try again.");
       } finally {
-        URL.revokeObjectURL(blobUrl);
-        setVideoPreviewBlob(null);
         setBusy(false);
       }
     };
@@ -292,17 +300,40 @@ export default function StudioUpscalePanel() {
                 Upload
               </Button>
             </div>
-            {videoUrl.trim() || videoPreviewBlob ? (
-              <div className="relative mt-1 aspect-video w-full max-w-md overflow-hidden rounded-xl border border-white/10 bg-black">
-                {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-                <video
-                  src={videoUrl.trim() || videoPreviewBlob || undefined}
-                  className="h-full w-full object-cover"
-                  muted
-                  playsInline
-                  preload="metadata"
-                />
-                <UploadBusyOverlay active={busy && Boolean(videoPreviewBlob)} className="rounded-xl" />
+            {previewSrc ? (
+              <div className="relative mt-1 w-full max-w-md space-y-1.5">
+                <div className="relative overflow-hidden rounded-xl border border-white/10 bg-black">
+                  {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                  <video
+                    key={previewSrc}
+                    src={previewSrc}
+                    className="aspect-video max-h-[min(52vh,420px)] w-full bg-black object-contain"
+                    controls
+                    playsInline
+                    preload="metadata"
+                    onLoadedData={(ev) => {
+                      const v = ev.currentTarget;
+                      if (!v.src.startsWith("blob:")) return;
+                      try {
+                        if (v.readyState < 2) return;
+                        const d = v.duration;
+                        const t =
+                          Number.isFinite(d) && d > 0
+                            ? Math.min(0.12, Math.max(0.02, d * 0.02))
+                            : 0.05;
+                        v.currentTime = t;
+                      } catch {
+                        /* ignore seek errors */
+                      }
+                    }}
+                  />
+                  <UploadBusyOverlay active={busy} className="rounded-xl" />
+                </div>
+                <p className="text-[10px] leading-snug text-white/40">
+                  {videoUrl.trim() && !videoPreviewBlob
+                    ? "Use the player controls to play, pause, and scrub your uploaded clip."
+                    : "Preview before upload finishes. After upload, use the controls to check the hosted file."}
+                </p>
               </div>
             ) : null}
             <div className="grid grid-cols-1 gap-3">

@@ -404,12 +404,28 @@ export default function AppBrandWizard() {
     return () => window.removeEventListener("paste", onPaste);
   }, [appSection, applyMotionCharacterFile]);
 
+  /** Revoke motion video blob only when this URL is replaced or cleared (not when the other slot changes). */
+  useEffect(() => {
+    return () => {
+      if (motionVideoRefBlobUrl?.startsWith("blob:")) URL.revokeObjectURL(motionVideoRefBlobUrl);
+    };
+  }, [motionVideoRefBlobUrl]);
+
   useEffect(() => {
     return () => {
       if (motionCharacterImageUrl?.startsWith("blob:")) URL.revokeObjectURL(motionCharacterImageUrl);
-      if (motionVideoRefBlobUrl?.startsWith("blob:")) URL.revokeObjectURL(motionVideoRefBlobUrl);
     };
-  }, [motionCharacterImageUrl, motionVideoRefBlobUrl]);
+  }, [motionCharacterImageUrl]);
+
+  const clearMotionVideoReference = useCallback(() => {
+    setMotionVideoRefBlobUrl(null);
+    setMotionVideoDetectedDuration(null);
+    setMotionVideoPreviewLoading(false);
+  }, []);
+
+  const clearMotionCharacterImage = useCallback(() => {
+    setMotionCharacterImageUrl(null);
+  }, []);
 
   const currentProductName = useMemo(() => {
     const fromAnalysis = safeString(analysis?.step1_rawSheet ?? "");
@@ -2062,12 +2078,10 @@ export default function AppBrandWizard() {
                               setMotionVideoPreviewLoading(true);
                               setMotionVideoDetectedDuration(null);
                               const blobUrl = URL.createObjectURL(f);
-                              setMotionVideoRefBlobUrl((prev) => {
-                                if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
-                                return blobUrl;
-                              });
+                              setMotionVideoRefBlobUrl(blobUrl);
                               const vid = document.createElement("video");
                               vid.preload = "metadata";
+                              vid.muted = true;
                               vid.onloadedmetadata = () => {
                                 const raw = Number(vid.duration);
                                 const dur =
@@ -2076,46 +2090,83 @@ export default function AppBrandWizard() {
                                     : null;
                                 setMotionVideoDetectedDuration(dur);
                                 setMotionVideoPreviewLoading(false);
-                                URL.revokeObjectURL(vid.src);
                               };
                               vid.onerror = () => {
                                 setMotionVideoPreviewLoading(false);
-                                URL.revokeObjectURL(vid.src);
                               };
-                              vid.src = URL.createObjectURL(f);
+                              vid.src = blobUrl;
                               toast.success("Video reference selected", { description: f.name });
                               e.currentTarget.value = "";
                             }}
                           />
-                          <button
-                            type="button"
-                            onClick={() => motionVideoInputRef.current?.click()}
-                            className="relative flex aspect-[4/3] w-full cursor-pointer flex-col items-center justify-center gap-1.5 overflow-hidden rounded-xl border border-dashed border-white/20 bg-[#0c0c10] text-white/50 transition hover:border-violet-400/40 hover:bg-white/[0.03]"
-                          >
+                          <div className="relative">
+                            <div
+                              role="button"
+                              tabIndex={0}
+                              onKeyDown={(ev) => {
+                                if (ev.key === "Enter" || ev.key === " ") {
+                                  ev.preventDefault();
+                                  motionVideoInputRef.current?.click();
+                                }
+                              }}
+                              onClick={() => motionVideoInputRef.current?.click()}
+                              className="relative flex aspect-[4/3] w-full cursor-pointer flex-col items-center justify-center gap-1.5 overflow-hidden rounded-xl border border-dashed border-white/20 bg-[#0c0c10] text-white/50 transition hover:border-violet-400/40 hover:bg-white/[0.03]"
+                            >
+                              {motionVideoRefBlobUrl ? (
+                                <>
+                                  {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                                  <video
+                                    key={motionVideoRefBlobUrl}
+                                    src={motionVideoRefBlobUrl}
+                                    className="absolute inset-0 z-0 h-full w-full object-cover"
+                                    muted
+                                    playsInline
+                                    preload="auto"
+                                    onLoadedData={(ev) => {
+                                      const v = ev.currentTarget;
+                                      try {
+                                        if (v.readyState < 2) return;
+                                        const d = v.duration;
+                                        const t =
+                                          Number.isFinite(d) && d > 0
+                                            ? Math.min(0.12, Math.max(0.02, d * 0.02))
+                                            : 0.05;
+                                        v.currentTime = t;
+                                      } catch {
+                                        /* ignore seek errors */
+                                      }
+                                    }}
+                                  />
+                                  <UploadBusyOverlay active={motionVideoPreviewLoading} className="rounded-xl" />
+                                  {motionVideoDetectedDuration ? (
+                                    <span className="absolute bottom-2 z-[1] rounded-md bg-black/70 px-2 py-1 text-[10px] font-medium text-white">
+                                      {motionVideoDetectedDuration}s
+                                    </span>
+                                  ) : null}
+                                </>
+                              ) : (
+                                <>
+                                  <Play className="h-8 w-8 opacity-50" />
+                                  <span className="text-xs font-medium text-white/45">Add motion to copy</span>
+                                  <span className="text-[10px] text-white/30">Video duration: 3–30 seconds</span>
+                                </>
+                              )}
+                            </div>
                             {motionVideoRefBlobUrl ? (
-                              <>
-                                {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-                                <video
-                                  src={motionVideoRefBlobUrl}
-                                  className="absolute inset-0 h-full w-full rounded-2xl object-cover"
-                                  muted
-                                  playsInline
-                                />
-                                <UploadBusyOverlay active={motionVideoPreviewLoading} className="rounded-2xl" />
-                                {motionVideoDetectedDuration ? (
-                                  <span className="absolute bottom-2 z-[1] rounded-md bg-black/70 px-2 py-1 text-[10px] font-medium text-white">
-                                    {motionVideoDetectedDuration}s
-                                  </span>
-                                ) : null}
-                              </>
-                            ) : (
-                              <>
-                                <Play className="h-8 w-8 opacity-50" />
-                                <span className="text-xs font-medium text-white/45">Add motion to copy</span>
-                                <span className="text-[10px] text-white/30">Video duration: 3–30 seconds</span>
-                              </>
-                            )}
-                          </button>
+                              <button
+                                type="button"
+                                aria-label="Remove motion reference video"
+                                className="absolute right-1.5 top-1.5 z-[5] flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-black/70 text-white/90 shadow-md backdrop-blur-sm transition hover:bg-red-500/90 hover:text-white"
+                                onClick={(ev) => {
+                                  ev.preventDefault();
+                                  ev.stopPropagation();
+                                  clearMotionVideoReference();
+                                }}
+                              >
+                                <X className="h-4 w-4" aria-hidden />
+                              </button>
+                            ) : null}
+                          </div>
 
                           <input
                             ref={motionCharacterInputRef}
@@ -2129,26 +2180,49 @@ export default function AppBrandWizard() {
                               e.currentTarget.value = "";
                             }}
                           />
-                          <button
-                            type="button"
-                            onClick={() => motionCharacterInputRef.current?.click()}
-                            className="relative flex aspect-[4/3] w-full cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-white/20 bg-[#0c0c10] text-white/50 transition hover:border-violet-400/40 hover:bg-white/[0.03]"
-                          >
+                          <div className="relative">
+                            <div
+                              role="button"
+                              tabIndex={0}
+                              onKeyDown={(ev) => {
+                                if (ev.key === "Enter" || ev.key === " ") {
+                                  ev.preventDefault();
+                                  motionCharacterInputRef.current?.click();
+                                }
+                              }}
+                              onClick={() => motionCharacterInputRef.current?.click()}
+                              className="relative flex aspect-[4/3] w-full cursor-pointer flex-col items-center justify-center gap-1.5 overflow-hidden rounded-xl border border-dashed border-white/20 bg-[#0c0c10] text-white/50 transition hover:border-violet-400/40 hover:bg-white/[0.03]"
+                            >
+                              {motionCharacterImageUrl ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={motionCharacterImageUrl}
+                                  alt="Character"
+                                  className="absolute inset-0 h-full w-full object-cover"
+                                />
+                              ) : (
+                                <>
+                                  <Plus className="h-8 w-8 opacity-50" />
+                                  <span className="text-xs font-medium text-white/45">Add your character</span>
+                                  <span className="text-[10px] text-white/30">Image with visible face and body</span>
+                                </>
+                              )}
+                            </div>
                             {motionCharacterImageUrl ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={motionCharacterImageUrl}
-                                alt="Character"
-                                className="absolute inset-0 h-full w-full rounded-2xl object-cover"
-                              />
-                            ) : (
-                              <>
-                                <Plus className="h-8 w-8 opacity-50" />
-                                <span className="text-xs font-medium text-white/45">Add your character</span>
-                                <span className="text-[10px] text-white/30">Image with visible face and body</span>
-                              </>
-                            )}
-                          </button>
+                              <button
+                                type="button"
+                                aria-label="Remove character image"
+                                className="absolute right-1.5 top-1.5 z-[5] flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-black/70 text-white/90 shadow-md backdrop-blur-sm transition hover:bg-red-500/90 hover:text-white"
+                                onClick={(ev) => {
+                                  ev.preventDefault();
+                                  ev.stopPropagation();
+                                  clearMotionCharacterImage();
+                                }}
+                              >
+                                <X className="h-4 w-4" aria-hidden />
+                              </button>
+                            ) : null}
+                          </div>
                         </div>
 
                         <div className="space-y-2">

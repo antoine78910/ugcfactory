@@ -250,44 +250,85 @@ function VideoUploadSlot({
   hint: string;
   onDurationSec?: (sec: number | null) => void;
 }) {
-  const show = url || posterUrl;
+  const hosted = url?.trim() ?? "";
+  const displaySrc = (hosted || posterUrl || "").trim() || null;
+  const isBlobPreview = Boolean(displaySrc?.startsWith("blob:"));
+
+  if (!displaySrc) {
+    return (
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={onPick}
+        className="relative flex min-h-[120px] w-full flex-col items-center justify-center overflow-hidden rounded-xl border border-dashed border-white/20 bg-[#0c0c10] text-white/50 transition hover:border-violet-400/40 hover:bg-white/[0.03] disabled:opacity-50"
+      >
+        <span className="mb-2 flex h-12 w-12 items-center justify-center rounded-full border border-white/15 bg-white/[0.06]">
+          <VideoIcon className="h-6 w-6 opacity-60" />
+        </span>
+        <span className="px-3 text-center text-sm font-semibold text-white/85">{requiredLabel}</span>
+        <span className="mt-1 px-3 text-center text-xs text-white/40">{hint}</span>
+      </button>
+    );
+  }
+
   return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={() => (show ? onClear() : onPick())}
-      className="relative flex min-h-[120px] w-full flex-col items-center justify-center overflow-hidden rounded-xl border border-dashed border-white/20 bg-[#0c0c10] text-white/50 transition hover:border-violet-400/40 hover:bg-white/[0.03] disabled:opacity-50"
-    >
-      {show ? (
-        <>
-          <video
-            src={url ?? posterUrl ?? undefined}
-            className="absolute inset-0 h-full w-full rounded-xl object-cover"
-            muted
-            playsInline
-            preload="metadata"
-            onLoadedMetadata={(e) => {
-              const v = e.currentTarget.duration;
-              const n = Number(v);
-              if (!Number.isFinite(n) || n <= 0) onDurationSec?.(null);
-              else onDurationSec?.(n);
-            }}
-          />
-          <UploadBusyOverlay active={Boolean(uploading)} />
-        </>
-      ) : (
-        <>
-          <span className="mb-2 flex h-12 w-12 items-center justify-center rounded-full border border-white/15 bg-white/[0.06]">
-            <VideoIcon className="h-6 w-6 opacity-60" />
-          </span>
-          <span className="px-3 text-center text-sm font-semibold text-white/85">{requiredLabel}</span>
-          <span className="mt-1 px-3 text-center text-xs text-white/40">{hint}</span>
-        </>
-      )}
-      {show ? (
-        <span className="absolute bottom-2 rounded-md bg-black/70 px-2 py-1 text-[10px] text-white">Tap to remove</span>
-      ) : null}
-    </button>
+    <div className="overflow-hidden rounded-xl border border-white/15 bg-black">
+      <div className="relative aspect-video max-h-[min(48vh,380px)] w-full bg-black">
+        {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+        <video
+          key={displaySrc}
+          src={displaySrc}
+          className="absolute inset-0 h-full w-full object-contain"
+          controls
+          playsInline
+          preload={hosted ? "metadata" : "auto"}
+          onLoadedMetadata={(e) => {
+            const v = e.currentTarget.duration;
+            const n = Number(v);
+            if (!Number.isFinite(n) || n <= 0) onDurationSec?.(null);
+            else onDurationSec?.(n);
+          }}
+          onLoadedData={(e) => {
+            if (!isBlobPreview) return;
+            const v = e.currentTarget;
+            try {
+              if (v.readyState < 2) return;
+              const d = v.duration;
+              const t =
+                Number.isFinite(d) && d > 0
+                  ? Math.min(0.12, Math.max(0.02, d * 0.02))
+                  : 0.05;
+              v.currentTime = t;
+            } catch {
+              /* ignore seek errors */
+            }
+          }}
+        />
+        <UploadBusyOverlay active={Boolean(uploading)} className="rounded-t-xl" />
+      </div>
+      <div className="flex gap-2 border-t border-white/10 bg-[#0c0c10] p-2">
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          disabled={disabled}
+          className="h-9 flex-1 rounded-lg border border-white/15 bg-white/5 text-xs text-white/85 hover:bg-white/10"
+          onClick={onPick}
+        >
+          Replace
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          disabled={disabled}
+          className="h-9 rounded-lg border border-red-400/25 bg-red-500/15 text-xs text-red-100 hover:bg-red-500/25"
+          onClick={onClear}
+        >
+          Remove
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -668,16 +709,26 @@ export default function StudioVideoPanel() {
   useEffect(() => {
     return () => {
       if (startFramePreviewBlob?.startsWith("blob:")) URL.revokeObjectURL(startFramePreviewBlob);
+    };
+  }, [startFramePreviewBlob]);
+
+  useEffect(() => {
+    return () => {
       if (endFramePreviewBlob?.startsWith("blob:")) URL.revokeObjectURL(endFramePreviewBlob);
     };
-  }, [startFramePreviewBlob, endFramePreviewBlob]);
+  }, [endFramePreviewBlob]);
 
   useEffect(() => {
     return () => {
       if (motionCharPreviewBlob?.startsWith("blob:")) URL.revokeObjectURL(motionCharPreviewBlob);
+    };
+  }, [motionCharPreviewBlob]);
+
+  useEffect(() => {
+    return () => {
       if (elementUploadPreviewBlob?.startsWith("blob:")) URL.revokeObjectURL(elementUploadPreviewBlob);
     };
-  }, [motionCharPreviewBlob, elementUploadPreviewBlob]);
+  }, [elementUploadPreviewBlob]);
 
   useEffect(() => {
     let cancelled = false;
@@ -772,7 +823,6 @@ export default function StudioVideoPanel() {
     input.onchange = async () => {
       const f = input.files?.[0];
       if (!f) return;
-      if (editVideoBlobUrl?.startsWith("blob:")) URL.revokeObjectURL(editVideoBlobUrl);
       const blobUrl = URL.createObjectURL(f);
       setEditVideoBlobUrl(blobUrl);
       setEditVideoUrl(null);
@@ -781,17 +831,17 @@ export default function StudioVideoPanel() {
       try {
         const u = await uploadFile(f);
         setEditVideoUrl(u);
+        setEditVideoBlobUrl(null);
         toast.success("Video uploaded");
       } catch (e) {
         toast.error("Upload failed. Please try again.");
-        URL.revokeObjectURL(blobUrl);
         setEditVideoBlobUrl(null);
       } finally {
         setEditUploadBusy(false);
       }
     };
     input.click();
-  }, [editVideoBlobUrl]);
+  }, []);
 
   const clearEditSourceVideo = useCallback(() => {
     if (editVideoBlobUrl?.startsWith("blob:")) URL.revokeObjectURL(editVideoBlobUrl);
@@ -835,7 +885,6 @@ export default function StudioVideoPanel() {
     input.onchange = async () => {
       const f = input.files?.[0];
       if (!f) return;
-      if (editMotionVideoBlobUrl?.startsWith("blob:")) URL.revokeObjectURL(editMotionVideoBlobUrl);
       const blobUrl = URL.createObjectURL(f);
       setEditMotionVideoBlobUrl(blobUrl);
       setEditMotionVideoUrl(null);
@@ -844,17 +893,17 @@ export default function StudioVideoPanel() {
       try {
         const u = await uploadFile(f);
         setEditMotionVideoUrl(u);
+        setEditMotionVideoBlobUrl(null);
         toast.success("Motion video uploaded");
       } catch (e) {
         toast.error("Upload failed. Please try again.");
-        URL.revokeObjectURL(blobUrl);
         setEditMotionVideoBlobUrl(null);
       } finally {
         setEditUploadBusy(false);
       }
     };
     input.click();
-  }, [editMotionVideoBlobUrl]);
+  }, []);
 
   const clearMotionReferenceVideo = useCallback(() => {
     if (editMotionVideoBlobUrl?.startsWith("blob:")) URL.revokeObjectURL(editMotionVideoBlobUrl);
