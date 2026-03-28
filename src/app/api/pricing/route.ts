@@ -43,12 +43,5 @@ export async function GET() {
       composition: AD_GENERATION_COMPOSITION,
       economics: AD_GENERATION_ECONOMICS,
     },
-    margin_helpers: {
-      note: "Per spec: cost ≈ credits * 0.0375 USD, revenue ≈ credits * 0.15 USD",
-      sample_credits: sampleCredits,
-      revenue_usd: sampleCredits * PRICING_BASE.credit_value_usd,
-      cost_usd: sampleCredits * PRICING_BASE.real_cost_per_credit_usd,
-      margin_ratio: calculateMargin(sampleCredits),
-    },
   });
 }

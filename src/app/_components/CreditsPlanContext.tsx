@@ -78,6 +78,15 @@ export function isPersonalPiapiActive(): boolean {
   return getPersonalPiapiApiKey() !== undefined;
 }
 
+/**
+ * When either personal KIE or PiAPI key is enabled, skip platform credit charges and
+ * balance checks in the studio (you bill the provider directly). Configure keys on
+ * `/credits` or `/apitest` (allowlisted accounts).
+ */
+export function isPlatformCreditBypassActive(): boolean {
+  return isPersonalApiActive() || isPersonalPiapiActive();
+}
+
 export type AccountPlanId = "free" | SubscriptionPlanId;
 
 function subscriptionCredits(planId: SubscriptionPlanId): number {

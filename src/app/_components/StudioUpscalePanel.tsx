@@ -1,7 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useCreditsPlan, getPersonalApiKey, isPersonalApiActive } from "@/app/_components/CreditsPlanContext";
+import {
+  useCreditsPlan,
+  getPersonalApiKey,
+  isPlatformCreditBypassActive,
+} from "@/app/_components/CreditsPlanContext";
 import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
 import { Sparkles, Upload, Wand2 } from "lucide-react";
 import { toast } from "sonner";
@@ -14,6 +18,7 @@ import type { StudioHistoryItem } from "@/app/_components/StudioGenerationsHisto
 import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
 import { StudioModelPicker, type StudioModelPickerItem } from "@/app/_components/StudioModelPicker";
 import { topazVideoUpscaleCredits } from "@/lib/pricing";
+import { registerStudioGenerationClient } from "@/lib/registerStudioGenerationClient";
 import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
 
 async function uploadFile(file: File): Promise<string> {
@@ -51,24 +56,6 @@ async function pollUpscaleTask(taskId: string, personalApiKey?: string): Promise
     throw new Error(json.data.error_message || "Upscale failed.");
   }
   throw new Error("Upscale timed out.");
-}
-
-async function registerStudioTask(params: {
-  kind: "studio_upscale";
-  label: string;
-  taskId: string;
-  creditsCharged: number;
-  personalApiKey?: string;
-}) {
-  try {
-    await fetch("/api/studio/generations/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(params),
-    });
-  } catch {
-    /* history registration should not block generation */
-  }
 }
 
 type UpscalePickerId = "upscale/video" | "upscale/image";
@@ -165,15 +152,15 @@ export default function StudioUpscalePanel() {
       toast.error("Upload a source video first.");
       return;
     }
-    const usingPersonalApi = isPersonalApiActive();
-    if (!usingPersonalApi && creditsRef.current < credits) {
+    const creditBypass = isPlatformCreditBypassActive();
+    if (!creditBypass && creditsRef.current < credits) {
       setBilling({ open: true, required: credits });
       return;
     }
     const jobId = crypto.randomUUID();
     const label = `Topaz ${factor}×`;
-    const platformCharge = usingPersonalApi ? 0 : credits;
-    if (!usingPersonalApi) {
+    const platformCharge = creditBypass ? 0 : credits;
+    if (!creditBypass) {
       spendCredits(credits);
       creditsRef.current = Math.max(0, creditsRef.current - credits);
     }
@@ -193,25 +180,34 @@ export default function StudioUpscalePanel() {
         });
         const json = (await res.json()) as { taskId?: string; error?: string };
         if (!res.ok || !json.taskId) throw new Error(json.error || "Upscale request failed");
-        await registerStudioTask({
+        const rowId = await registerStudioGenerationClient({
           kind: "studio_upscale",
           label,
           taskId: json.taskId,
           creditsCharged: platformCharge,
           personalApiKey: upPKey,
         });
+        if (rowId) {
+          setHistoryItems((prev) =>
+            prev.map((i) =>
+              i.id === jobId ? { ...i, id: rowId, studioGenerationKind: "studio_upscale" } : i,
+            ),
+          );
+        }
         const outUrl = await pollUpscaleTask(json.taskId, upPKey);
         const doneAt = Date.now();
+        const persistId = rowId ?? jobId;
         setHistoryItems((prev) => {
-          const rest = prev.filter((i) => i.id !== jobId);
+          const rest = prev.filter((i) => i.id !== jobId && i.id !== rowId);
           return [
             {
-              id: `${jobId}-done-${doneAt}`,
+              id: persistId,
               kind: "video",
               status: "ready",
               label,
               mediaUrl: outUrl,
               createdAt: doneAt,
+              studioGenerationKind: "studio_upscale",
             },
             ...rest,
           ];
@@ -352,6 +348,7 @@ export default function StudioUpscalePanel() {
                 items={historyItems}
                 empty={<StudioEmptyExamples variant="upscale" />}
                 mediaLabel="Video"
+                onItemDeleted={(id) => setHistoryItems((prev) => prev.filter((i) => i.id !== id))}
               />
             }
             empty={null}

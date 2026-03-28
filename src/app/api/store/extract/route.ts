@@ -2,6 +2,19 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import * as cheerio from "cheerio";
+import { requireSupabaseUser } from "@/lib/supabase/requireUser";
+
+/** Reject requests targeting private/internal IP ranges (SSRF protection). */
+function isPrivateHost(hostname: string): boolean {
+  if (/^127\./.test(hostname)) return true;
+  if (/^10\./.test(hostname)) return true;
+  if (/^192\.168\./.test(hostname)) return true;
+  if (/^172\.(1[6-9]|2\d|3[01])\./.test(hostname)) return true;
+  if (/^169\.254\./.test(hostname)) return true;
+  if (hostname === "localhost") return true;
+  if (hostname === "::1" || hostname === "[::1]") return true;
+  return false;
+}
 
 function normalizeUrl(u: string) {
   const url = new URL(u);
@@ -98,6 +111,9 @@ function pickAround(text: string, keyword: string, windowChars = 900) {
 }
 
 export async function POST(req: Request) {
+  const { response } = await requireSupabaseUser();
+  if (response) return response;
+
   const body = (await req.json().catch(() => null)) as { url?: string } | null;
   const rawUrl = (body?.url ?? "").trim();
   if (!rawUrl) return NextResponse.json({ error: "Missing `url`." }, { status: 400 });
@@ -109,18 +125,39 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid URL." }, { status: 400 });
   }
 
+  // SSRF protection: reject internal/private hosts
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return NextResponse.json({ error: "Only http(s) URLs are allowed." }, { status: 400 });
+    }
+    if (isPrivateHost(parsed.hostname)) {
+      return NextResponse.json({ error: "URL not allowed." }, { status: 400 });
+    }
+  } catch {
+    return NextResponse.json({ error: "Invalid URL." }, { status: 400 });
+  }
+
   let html: string;
   try {
-    const res = await fetch(url, {
-      method: "GET",
-      redirect: "follow",
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123 Safari/537.36",
-        Accept: "text/html,application/xhtml+xml",
-      },
-      cache: "no-store",
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15_000);
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: "GET",
+        redirect: "follow",
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123 Safari/537.36",
+          Accept: "text/html,application/xhtml+xml",
+        },
+        cache: "no-store",
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
     if (!res.ok) {
       const t = await res.text().catch(() => "");
       return NextResponse.json(

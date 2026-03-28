@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Download, FolderOpen, Info, LayoutGrid, List, Loader2, Sparkles, Wand2, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Download, FolderOpen, Info, LayoutGrid, List, Loader2, Sparkles, Trash2, Wand2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import VideoCard from "@/app/_components/VideoCard";
+import { isStudioGenerationRowId } from "@/lib/studioGenerationRowId";
 
 export type StudioHistoryMediaKind = "image" | "video" | "motion";
 
@@ -105,6 +106,8 @@ type Props = {
    */
   failedAutoDismiss?: boolean | { delayMs?: number; fadeMs?: number };
   onDismissFailed?: (id: string) => void;
+  /** Remove item from UI; when the row is saved in Supabase, it is deleted on the server first. */
+  onItemDeleted?: (id: string) => void;
 };
 
 export function StudioGenerationsHistory({
@@ -115,15 +118,18 @@ export function StudioGenerationsHistory({
   imageLightboxUpscale,
   failedAutoDismiss,
   onDismissFailed,
+  onItemDeleted,
 }: Props) {
   const [view, setView] = useState<"grid" | "list">("grid");
   const [zoom, setZoom] = useState(100);
   const [lightboxItem, setLightboxItem] = useState<{
+    sourceId: string;
     url: string;
     poster?: string;
     kind: "image" | "video";
     prompt: string;
   } | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editPrompt, setEditPrompt] = useState("");
   const [editModel, setEditModel] = useState<"nano" | "pro">("pro");
   const [editAspect, setEditAspect] = useState("3:4");
@@ -225,6 +231,44 @@ export function StudioGenerationsHistory({
     };
   }, []);
 
+  const deleteHistoryEntry = useCallback(
+    async (id: string, studioGenerationKind?: string) => {
+      if (!onItemDeleted) return;
+      if (!window.confirm("Remove this generation from your library?")) return;
+      setDeletingId(id);
+      try {
+        const needsServer =
+          Boolean(studioGenerationKind) || isStudioGenerationRowId(id);
+        if (needsServer) {
+          const res = await fetch(`/api/studio/generations/${encodeURIComponent(id)}`, {
+            method: "DELETE",
+          });
+          if (res.status === 401) {
+            toast.error("Sign in to remove saved generations.");
+            return;
+          }
+          if (!res.ok && res.status !== 404) {
+            const j = (await res.json().catch(() => ({}))) as { error?: string };
+            toast.error(typeof j.error === "string" && j.error.trim() ? j.error : "Could not delete.");
+            return;
+          }
+        }
+        onItemDeleted(id);
+        setLightboxItem((prev) => (prev?.sourceId === id ? null : prev));
+      } finally {
+        setDeletingId(null);
+      }
+    },
+    [onItemDeleted],
+  );
+
+  const handleDeleteItem = useCallback(
+    (item: StudioHistoryItem) => {
+      void deleteHistoryEntry(item.id, item.studioGenerationKind);
+    },
+    [deleteHistoryEntry],
+  );
+
   const grouped = useMemo(() => groupByDate(items), [items]);
 
   const cardWidthClass =
@@ -237,7 +281,7 @@ export function StudioGenerationsHistory({
       : "w-full shrink-0";
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col">
       {/* Top bar: History + view controls */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-3">
         <div className="flex flex-wrap items-center gap-1">
@@ -290,12 +334,13 @@ export function StudioGenerationsHistory({
         </div>
       </div>
 
-      {items.length === 0 ? (
-        <div className="mt-4 flex min-h-[min(360px,50vh)] flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-white/10 bg-black/20 p-6">
-          {empty}
-        </div>
-      ) : (
-        <div className="mt-4 min-h-0 flex-1 space-y-8 overflow-y-auto pr-1">
+      <div className="studio-sidebar-scroll mt-4 min-h-0 flex-1 overflow-y-auto">
+        {items.length === 0 ? (
+          <div className="flex min-h-[min(360px,50vh)] flex-col items-center justify-center rounded-xl border border-dashed border-white/10 bg-black/20 p-6">
+            {empty}
+          </div>
+        ) : (
+          <div className="space-y-8">
           {grouped.map(({ date, rows }) => (
             <section key={date}>
               <div className="mb-3 flex items-center gap-3">
@@ -346,6 +391,25 @@ export function StudioGenerationsHistory({
                         view === "grid" ? "aspect-[9/16] w-full" : "aspect-[9/16] w-full sm:w-44 sm:shrink-0",
                       )}
                     >
+                      {onItemDeleted ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void handleDeleteItem(item);
+                          }}
+                          disabled={deletingId === item.id}
+                          className="absolute left-2 top-2 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-black/65 text-white/80 opacity-0 shadow-sm backdrop-blur-sm transition hover:bg-red-950/80 hover:text-white group-hover/media:opacity-100 focus-visible:opacity-100 disabled:pointer-events-none disabled:opacity-40"
+                          aria-label="Remove from library"
+                          title="Remove from library"
+                        >
+                          {deletingId === item.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                          ) : (
+                            <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                          )}
+                        </button>
+                      ) : null}
                       {item.status === "generating" && !item.mediaUrl?.trim() ? (
                         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-gradient-to-b from-[#1a1a24] to-[#0d0d12] p-3">
                           {item.posterUrl ? (
@@ -368,7 +432,7 @@ export function StudioGenerationsHistory({
                           <div className="flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-black/40">
                             <X className="h-6 w-6 text-white/35" strokeWidth={2} />
                           </div>
-                          <div className="max-h-[min(11rem,42%)] w-full space-y-1 overflow-y-auto px-1">
+                          <div className="studio-sidebar-scroll max-h-[min(11rem,42%)] w-full space-y-1 overflow-y-auto px-1">
                             <p className="text-center text-[9px] font-semibold uppercase tracking-wider text-white/35">
                               Reason
                             </p>
@@ -387,6 +451,7 @@ export function StudioGenerationsHistory({
                           enableLightbox={false}
                           onOpenFullscreen={() => {
                             setLightboxItem({
+                              sourceId: item.id,
                               url: item.mediaUrl!,
                               poster: item.posterUrl,
                               kind: "video",
@@ -403,6 +468,7 @@ export function StudioGenerationsHistory({
                             onClick={() => {
                               if (!item.mediaUrl) return;
                               setLightboxItem({
+                                sourceId: item.id,
                                 url: item.mediaUrl,
                                 poster: item.posterUrl,
                                 kind: "image",
@@ -467,8 +533,9 @@ export function StudioGenerationsHistory({
               </div>
             </section>
           ))}
-        </div>
-      )}
+          </div>
+        )}
+      </div>
       {lightboxItem ? (
         <div
           className="fixed inset-0 z-[220] flex items-center justify-center bg-black/88 p-2 backdrop-blur-[2px] transition-opacity duration-300 ease-out sm:p-4"
@@ -520,7 +587,7 @@ export function StudioGenerationsHistory({
 
             <aside
               className={cn(
-                "flex max-h-[min(52vh,480px)] w-full shrink-0 flex-col gap-4 overflow-y-auto rounded-2xl border border-white/[0.12] bg-[#121218]/96 p-4 shadow-xl transition-[opacity,transform,box-shadow] duration-300 ease-out motion-reduce:transition-none lg:max-h-none lg:w-[min(100%,22rem)] lg:max-w-[22rem]",
+                "studio-sidebar-scroll flex max-h-[min(52vh,480px)] w-full shrink-0 flex-col gap-4 overflow-y-auto rounded-2xl border border-white/[0.12] bg-[#121218]/96 p-4 shadow-xl transition-[opacity,transform,box-shadow] duration-300 ease-out motion-reduce:transition-none lg:max-h-none lg:w-[min(100%,22rem)] lg:max-w-[22rem]",
               )}
             >
               <div className="rounded-xl border border-white/10 bg-[#14141c]/80 p-3.5">
@@ -528,14 +595,33 @@ export function StudioGenerationsHistory({
                 <p className="whitespace-pre-wrap break-words text-[12px] leading-snug text-white/60">
                   {lightboxItem.prompt?.trim() ? lightboxItem.prompt.trim() : "—"}
                 </p>
-                <div className="mt-3 flex gap-2">
+                <div className="mt-3 flex flex-wrap gap-2">
                   <a
                     href={`/api/download?url=${encodeURIComponent(lightboxItem.url)}`}
                     onClick={(e) => e.stopPropagation()}
-                    className="flex-1 rounded-md border border-white/15 bg-white/[0.06] px-3 py-2 text-center text-[11px] font-semibold text-white/80 transition hover:bg-white/[0.1]"
+                    className="min-w-0 flex-1 rounded-md border border-white/15 bg-white/[0.06] px-3 py-2 text-center text-[11px] font-semibold text-white/80 transition hover:bg-white/[0.1]"
                   >
                     Download
                   </a>
+                  {onItemDeleted ? (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const rowKind = items.find((i) => i.id === lightboxItem.sourceId)?.studioGenerationKind;
+                        void deleteHistoryEntry(lightboxItem.sourceId, rowKind);
+                      }}
+                      disabled={deletingId === lightboxItem.sourceId}
+                      className="inline-flex flex-1 min-w-[7rem] items-center justify-center gap-1.5 rounded-md border border-red-500/35 bg-red-950/40 px-3 py-2 text-center text-[11px] font-semibold text-red-100/90 transition hover:bg-red-900/50 disabled:opacity-40"
+                    >
+                      {deletingId === lightboxItem.sourceId ? (
+                        <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden />
+                      ) : (
+                        <Trash2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                      )}
+                      Remove
+                    </button>
+                  ) : null}
                 </div>
               </div>
 

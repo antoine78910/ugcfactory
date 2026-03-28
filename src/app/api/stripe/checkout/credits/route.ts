@@ -61,7 +61,7 @@ export async function POST(req: Request) {
       success_url: `${base.replace(/\/$/, "")}/credits?checkout=success&pack=${encodeURIComponent(packKey)}`,
       cancel_url: `${base.replace(/\/$/, "")}/credits?checkout=cancel`,
       allow_promotion_codes: true,
-      metadata: { credit_pack: packKey, ...datafastMeta },
+      metadata: { user_id: auth.user.id, credit_pack: packKey, ...datafastMeta },
       ...(customerEmail ? { customer_email: customerEmail } : {}),
       ...(referral ? { client_reference_id: referral } : {}),
     });

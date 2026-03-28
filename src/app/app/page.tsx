@@ -22,15 +22,21 @@ import { calculateMotionControlCredits } from "@/lib/linkToAd/generationCredits"
 import StudioAvatarPanel from "@/app/_components/StudioAvatarPanel";
 import StudioImagePanel from "@/app/_components/StudioImagePanel";
 import StudioUpscalePanel from "@/app/_components/StudioUpscalePanel";
-import WatermarkRemoverPanel from "@/app/_components/WatermarkRemoverPanel";
 import StudioShell from "@/app/_components/StudioShell";
 import {
   StudioSingleModelCard,
   studioSelectContentClass,
   studioSelectItemClass,
 } from "@/app/_components/StudioModelPicker";
-import { useCreditsPlan, getPersonalApiKey, getPersonalPiapiApiKey, isPersonalApiActive } from "@/app/_components/CreditsPlanContext";
+import {
+  useCreditsPlan,
+  getPersonalApiKey,
+  getPersonalPiapiApiKey,
+  isPersonalApiActive,
+  isPlatformCreditBypassActive,
+} from "@/app/_components/CreditsPlanContext";
 import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
+import { registerStudioGenerationClient } from "@/lib/registerStudioGenerationClient";
 import StudioVideoPanel from "@/app/_components/StudioVideoPanel";
 import {
   packshotUrlsForGpt,
@@ -48,7 +54,7 @@ import { clipboardImageFiles } from "@/lib/clipboardImage";
 import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
 
 type WizardStep = "url" | "analysis" | "quiz" | "image" | "video";
-type AppSection = "link_to_ad" | "avatar" | "motion_control" | "image" | "video" | "upscale" | "watermark" | "projects";
+type AppSection = "link_to_ad" | "avatar" | "motion_control" | "image" | "video" | "upscale" | "projects";
 
 type Extracted = {
   url: string;
@@ -99,12 +105,12 @@ const APP_VALID_SECTIONS: AppSection[] = [
   "image",
   "video",
   "upscale",
-  "watermark",
   "projects",
 ];
 
 function sectionFromSearchParams(sp: URLSearchParams): AppSection {
   const s = sp.get("section");
+  if (s === "watermark") return "video";
   if (s && APP_VALID_SECTIONS.includes(s as AppSection)) return s as AppSection;
   return "link_to_ad";
 }
@@ -125,24 +131,6 @@ function normalizeUrl(url: string): string {
     const t = url.trim();
     const noSlash = t.endsWith("/") ? t.slice(0, -1) : t;
     return noSlash.toLowerCase();
-  }
-}
-
-async function registerStudioTask(params: {
-  kind: "motion_control";
-  label: string;
-  taskId: string;
-  creditsCharged: number;
-  personalApiKey?: string;
-}) {
-  try {
-    await fetch("/api/studio/generations/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(params),
-    });
-  } catch {
-    /* history registration should not block generation */
   }
 }
 
@@ -1630,8 +1618,8 @@ export default function AppBrandWizard() {
                         <p className="text-sm font-semibold text-white">Studio library</p>
                         <p className="mt-1 text-xs leading-relaxed text-white/45">
                           All studio generations (Avatar, Image, Video, Motion, Upscale) are saved here while you&apos;re
-                          signed in. Open a card to jump to the right studio tab. Items still processing show a spinner
-                          until the server finishes.
+                          signed in. Open a card to jump to the right studio tab. Use the trash control to remove an
+                          entry. Items still processing show a spinner until the server finishes.
                         </p>
                       </div>
                       {studioLibraryLoading ? (
@@ -1657,7 +1645,9 @@ export default function AppBrandWizard() {
                                     ? "Motion"
                                     : kind === "studio_upscale"
                                       ? "Upscale"
-                                      : "Studio";
+                                      : kind === "studio_watermark"
+                                        ? "Video"
+                                        : "Studio";
                           const targetSection: AppSection =
                             kind === "avatar"
                               ? "avatar"
@@ -1669,11 +1659,11 @@ export default function AppBrandWizard() {
                                     ? "upscale"
                                     : "video";
                           return (
+                            <div key={item.id} className="relative w-[5.75rem] shrink-0">
                             <button
-                              key={item.id}
                               type="button"
                               onClick={() => setAppSectionNav(targetSection)}
-                              className="flex w-[5.75rem] shrink-0 flex-col gap-1 rounded-lg border border-white/10 bg-black/30 p-0.5 text-left transition hover:border-violet-400/40 hover:bg-black/50"
+                              className="flex w-full flex-col gap-1 rounded-lg border border-white/10 bg-black/30 p-0.5 text-left transition hover:border-violet-400/40 hover:bg-black/50"
                             >
                               <div className="relative aspect-[3/4] w-full overflow-hidden rounded-md bg-[#100d17]">
                                 {item.status === "ready" &&
@@ -1719,6 +1709,36 @@ export default function AppBrandWizard() {
                                 {item.label}
                               </span>
                             </button>
+                            <button
+                              type="button"
+                              className="absolute -right-1 -top-1 z-10 inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/20 bg-black/90 text-white/75 shadow-md hover:bg-red-950/95 hover:text-white"
+                              aria-label="Remove generation"
+                              title="Remove from library"
+                              onClick={async (e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                if (!window.confirm("Remove this generation from your library?")) return;
+                                const res = await fetch(
+                                  `/api/studio/generations/${encodeURIComponent(item.id)}`,
+                                  { method: "DELETE" },
+                                );
+                                if (res.status === 401) {
+                                  toast.error("Sign in to remove saved generations.");
+                                  return;
+                                }
+                                if (!res.ok && res.status !== 404) {
+                                  const j = (await res.json().catch(() => ({}))) as { error?: string };
+                                  toast.error(
+                                    typeof j.error === "string" && j.error.trim() ? j.error : "Could not delete.",
+                                  );
+                                  return;
+                                }
+                                setStudioLibraryItems((prev) => prev.filter((i) => i.id !== item.id));
+                              }}
+                            >
+                              <Trash2 className="h-3 w-3" aria-hidden />
+                            </button>
+                            </div>
                           );
                         })}
                       </div>
@@ -2205,6 +2225,7 @@ export default function AppBrandWizard() {
                         onClick={() => {
                           const mcGate = motionControlUpgradeMessage(planId);
                           const motionPersonal = isPersonalApiActive();
+                          const motionCreditBypass = isPlatformCreditBypassActive();
                           if (!motionPersonal && mcGate) {
                             setMotionBilling({ open: true, reason: "plan" });
                             return;
@@ -2217,7 +2238,7 @@ export default function AppBrandWizard() {
                             toast.error("Please choose a video reference first.");
                             return;
                           }
-                          if (!motionPersonal && creditsRef.current < motionCredits) {
+                          if (!motionCreditBypass && creditsRef.current < motionCredits) {
                             setMotionBilling({ open: true, reason: "credits", required: motionCredits });
                             return;
                           }
@@ -2237,8 +2258,8 @@ export default function AppBrandWizard() {
                             },
                             ...prev,
                           ]);
-                          const platformChargeMotion = motionPersonal ? 0 : motionCredits;
-                          if (!motionPersonal) {
+                          const platformChargeMotion = motionCreditBypass ? 0 : motionCredits;
+                          if (!motionCreditBypass) {
                             spendCredits(motionCredits);
                             creditsRef.current = Math.max(0, creditsRef.current - motionCredits);
                           }
@@ -2270,27 +2291,38 @@ export default function AppBrandWizard() {
                               });
                               const json = (await res.json()) as { taskId?: string; error?: string };
                               if (!res.ok || !json.taskId) throw new Error(json.error || "Motion control failed");
-                              await registerStudioTask({
+                              const rowId = await registerStudioGenerationClient({
                                 kind: "motion_control",
                                 label: "Motion control",
                                 taskId: json.taskId,
                                 creditsCharged: platformChargeMotion,
                                 personalApiKey: getPersonalApiKey() ?? undefined,
                               });
+                              if (rowId) {
+                                setMotionHistoryItems((prev) =>
+                                  prev.map((i) =>
+                                    i.id === jobId
+                                      ? { ...i, id: rowId, studioGenerationKind: "motion_control" }
+                                      : i,
+                                  ),
+                                );
+                              }
                               toast.message("Rendering…", { description: "Polling Kling Motion Control" });
                               const url = await pollMotionKlingTask(json.taskId);
                               const doneAt = Date.now();
+                              const persistId = rowId ?? jobId;
                               setMotionHistoryItems((prev) => {
-                                const rest = prev.filter((i) => i.id !== jobId);
+                                const rest = prev.filter((i) => i.id !== jobId && i.id !== rowId);
                                 return [
                                   {
-                                    id: `${jobId}-done-${doneAt}`,
+                                    id: persistId,
                                     kind: "motion",
                                     status: "ready",
                                     label: "Motion control",
                                     mediaUrl: url,
                                     posterUrl: poster,
                                     createdAt: doneAt,
+                                    studioGenerationKind: "motion_control",
                                   },
                                   ...rest,
                                 ];
@@ -2345,6 +2377,9 @@ export default function AppBrandWizard() {
                             items={motionHistoryItems}
                             empty={<StudioEmptyExamples variant="motion" />}
                             mediaLabel="Motion"
+                            onItemDeleted={(id) =>
+                              setMotionHistoryItems((prev) => prev.filter((i) => i.id !== id))
+                            }
                           />
                         }
                         empty={null}
@@ -2408,16 +2443,6 @@ export default function AppBrandWizard() {
                 </CardHeader>
                 <CardContent className="px-6 pb-3 pt-0">
                   <StudioUpscalePanel />
-                </CardContent>
-              </Card>
-            ) : null}
-            {appSection === "watermark" ? (
-              <Card className="gap-2 border-white/10 bg-[#0b0912]/85 py-3 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
-                <CardHeader className="space-y-0 px-6 pb-0 pt-2">
-                  <CardTitle className="text-sm">Watermark Remover</CardTitle>
-                </CardHeader>
-                <CardContent className="px-6 pb-3 pt-0">
-                  <WatermarkRemoverPanel />
                 </CardContent>
               </Card>
             ) : null}

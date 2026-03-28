@@ -1,0 +1,59 @@
+/**
+ * Response headers for Lighthouse “Best practices” / hardening.
+ * Third-party cookies (Heyo, Datafast, Linkjolt) cannot be removed from our code — only vendors can migrate to first-party / CHIPS.
+ */
+
+const CSP_PARTS = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'self'",
+  // Next.js + Tailwind need inline; eval sometimes in dev / legacy chunks
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://datafa.st https://www.linkjolt.io https://linkjolt.io https://heyo.so https://*.heyo.so https://cdn.heyo.so https://js.stripe.com https://*.stripe.com https://browser.sentry-cdn.com",
+  "style-src 'self' 'unsafe-inline' https://heyo.so https://*.heyo.so https://cdn.heyo.so",
+  "img-src 'self' data: blob: https:",
+  "font-src 'self' data: https://fonts.gstatic.com",
+  "connect-src 'self' https://datafa.st https://*.datafa.st https://www.linkjolt.io https://linkjolt.io https://heyo.so https://*.heyo.so https://cdn.heyo.so https://*.supabase.co wss://*.supabase.co https://api.stripe.com https://*.stripe.com https://m.stripe.network https://q.stripe.com https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://*.ingest.de.sentry.io https://*.sentry.io",
+  "frame-src 'self' https://heyo.so https://*.heyo.so https://cdn.heyo.so https://js.stripe.com https://hooks.stripe.com https://*.stripe.com",
+  "object-src 'none'",
+  "worker-src 'self' blob:",
+];
+
+export function contentSecurityPolicy(): string {
+  const p = [...CSP_PARTS];
+  if (process.env.VERCEL_ENV === "production") {
+    p.push("upgrade-insecure-requests");
+  }
+  return p.join("; ");
+}
+
+export function securityHeadersList(): { key: string; value: string }[] {
+  const list: { key: string; value: string }[] = [
+    { key: "X-DNS-Prefetch-Control", value: "on" },
+    { key: "X-Content-Type-Options", value: "nosniff" },
+    { key: "X-Frame-Options", value: "SAMEORIGIN" },
+    {
+      key: "Referrer-Policy",
+      value: "strict-origin-when-cross-origin",
+    },
+    {
+      key: "Permissions-Policy",
+      value: "camera=(), microphone=(), geolocation=()",
+    },
+    // Safer than strict same-origin for OAuth / checkout popups
+    {
+      key: "Cross-Origin-Opener-Policy",
+      value: "same-origin-allow-popups",
+    },
+    { key: "Content-Security-Policy", value: contentSecurityPolicy() },
+  ];
+
+  if (process.env.VERCEL_ENV === "production") {
+    list.push({
+      key: "Strict-Transport-Security",
+      value: "max-age=63072000; includeSubDomains; preload",
+    });
+  }
+
+  return list;
+}

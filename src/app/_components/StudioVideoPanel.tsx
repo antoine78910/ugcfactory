@@ -18,7 +18,13 @@ import {
   studioSelectItemClass,
   type StudioModelPickerItem,
 } from "@/app/_components/StudioModelPicker";
-import { useCreditsPlan, getPersonalApiKey, getPersonalPiapiApiKey, isPersonalApiActive } from "@/app/_components/CreditsPlanContext";
+import {
+  useCreditsPlan,
+  getPersonalApiKey,
+  getPersonalPiapiApiKey,
+  isPersonalApiActive,
+  isPlatformCreditBypassActive,
+} from "@/app/_components/CreditsPlanContext";
 import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
 import { calculateVideoCredits } from "@/lib/linkToAd/generationCredits";
 import { calculateStudioVideoEditCredits } from "@/lib/pricing";
@@ -1031,16 +1037,16 @@ export default function StudioVideoPanel() {
       setBilling({ open: true, reason: "plan", blockedId: editPickerId, studioMode: "video_edit" });
       return;
     }
-    const usingPersonalApi = isPersonalApiActive();
-    if (!usingPersonalApi && creditsRef.current < editCredits) {
+    const creditBypass = isPlatformCreditBypassActive();
+    if (!creditBypass && creditsRef.current < editCredits) {
       setBilling({ open: true, reason: "credits", required: editCredits, studioMode: "video_edit" });
       return;
     }
 
     const jobId = crypto.randomUUID();
     const label = p;
-    const platformChargeEdit = usingPersonalApi ? 0 : editCredits;
-    if (!usingPersonalApi) {
+    const platformChargeEdit = creditBypass ? 0 : editCredits;
+    if (!creditBypass) {
       spendCredits(editCredits);
       creditsRef.current = Math.max(0, creditsRef.current - editCredits);
     }
@@ -1201,16 +1207,16 @@ export default function StudioVideoPanel() {
       setBilling({ open: true, reason: "plan", blockedId: modelId, studioMode: "video" });
       return;
     }
-    const usingPersonalApiCreate = isPersonalApiActive();
-    if (!usingPersonalApiCreate && creditsRef.current < credits) {
+    const creditBypassCreate = isPlatformCreditBypassActive();
+    if (!creditBypassCreate && creditsRef.current < credits) {
       setBilling({ open: true, reason: "credits", required: credits, studioMode: "video" });
       return;
     }
 
     const jobId = crypto.randomUUID();
     const label = p;
-    const platformChargeCreate = usingPersonalApiCreate ? 0 : credits;
-    if (!usingPersonalApiCreate) {
+    const platformChargeCreate = creditBypassCreate ? 0 : credits;
+    if (!creditBypassCreate) {
       spendCredits(credits);
       creditsRef.current = Math.max(0, creditsRef.current - credits);
     }
@@ -1448,6 +1454,7 @@ export default function StudioVideoPanel() {
             items={historyItems}
             empty={<StudioEmptyExamples variant="video" />}
             mediaLabel="Video"
+            onItemDeleted={(id) => setHistoryItems((prev) => prev.filter((i) => i.id !== id))}
           />
         }
         empty={null}
@@ -1487,7 +1494,7 @@ export default function StudioVideoPanel() {
       {tab === "edit" ? (
         <div className="flex flex-col gap-3 overflow-x-hidden lg:flex-row lg:items-start lg:gap-4 lg:h-[calc(100dvh-4rem)] lg:min-h-0">
           <div className={paramsColumnClass}>
-            <div className="studio-params-scroll flex min-w-0 flex-col gap-2 overflow-y-auto pr-1 lg:h-full lg:min-h-0 lg:flex-1 lg:pb-10">
+            <div className="studio-params-scroll flex min-w-0 flex-col gap-2 overflow-y-auto lg:h-full lg:min-h-0 lg:flex-1 lg:pb-10">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Edit prompt</p>
             <div className="rounded-2xl border border-white/10 bg-[#101014] p-3 space-y-3">
               {motionEdit ? (
@@ -1708,7 +1715,7 @@ export default function StudioVideoPanel() {
       ) : (
         <div className="flex flex-col gap-3 overflow-x-hidden lg:flex-row lg:items-start lg:gap-4 lg:h-[calc(100dvh-4rem)] lg:min-h-0">
           <div className={paramsColumnClass}>
-            <div className="studio-params-scroll flex min-w-0 flex-col gap-2 overflow-y-auto pr-1 lg:h-full lg:min-h-0 lg:flex-1 lg:pb-10">
+            <div className="studio-params-scroll flex min-w-0 flex-col gap-2 overflow-y-auto lg:h-full lg:min-h-0 lg:flex-1 lg:pb-10">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Create prompt</p>
             <div className="rounded-2xl border border-white/10 bg-[#101014] p-3">
               <div className="grid grid-cols-1 gap-2 md:grid-cols-2">

@@ -171,7 +171,7 @@ export default function CreditsPage() {
 
   return (
     <StudioShell>
-      <div className="relative min-w-0 overflow-hidden">
+      <div className="relative min-w-0 overflow-x-hidden">
         <div className="pointer-events-none absolute left-1/2 top-0 h-[420px] w-[900px] -translate-x-1/2 rounded-full bg-violet-600/12 blur-[120px]" />
         <div className="pointer-events-none absolute -right-20 top-1/3 h-72 w-72 rounded-full bg-fuchsia-600/8 blur-[100px]" />
 
@@ -208,25 +208,38 @@ export default function CreditsPage() {
               <p className="max-w-md text-sm text-white/45">Larger packs include a better price per credit.</p>
             </div>
 
-            <div className="flex flex-wrap justify-center gap-5">
+            <div className="flex flex-wrap justify-center gap-5 px-3 pt-6 pb-1 sm:px-8 sm:pt-7 md:px-12">
               {creditPacks.map((p) => {
                 const featured = p.key === "most-popular";
                 const value = p.badge === "Best value";
+                const savePercentMatch = /^Save\s+(\d+)%$/i.exec(p.promoLine);
+                const savePercent = savePercentMatch?.[1] ?? null;
 
                 return (
                   <div
                     key={p.key}
                     className={cn(
-                      "relative flex w-full min-w-[min(100%,280px)] max-w-[320px] flex-col overflow-hidden rounded-2xl border p-6 transition-all duration-300",
+                      "relative flex w-full min-w-[min(100%,280px)] max-w-[320px] flex-col rounded-2xl border p-6 transition-all duration-300",
                       featured || value
                         ? "border-violet-400/35 bg-gradient-to-b from-violet-600/[0.14] via-[#0a0a10] to-[#06070d] shadow-[0_0_48px_rgba(139,92,246,0.12),0_8px_0_0_rgba(76,29,149,0.35)]"
                         : "border-white/10 bg-white/[0.03] shadow-[0_0_24px_rgba(0,0,0,0.35)] hover:border-violet-500/25 hover:bg-white/[0.05]",
                     )}
                   >
-                    {p.promoLine.startsWith("Save") ? (
-                      <span className="pointer-events-none absolute -right-9 top-4 rotate-45 rounded-sm border border-emerald-300/45 bg-emerald-400/25 px-10 py-1 text-[10px] font-extrabold uppercase tracking-[0.12em] text-emerald-50 shadow-[0_0_18px_rgba(16,185,129,0.35)] transition-all duration-300">
-                        {p.promoLine}
-                      </span>
+                    {savePercent ? (
+                      <div
+                        className={cn(
+                          "pointer-events-none absolute z-[2] flex items-baseline gap-1 rounded-full border border-emerald-400/20 bg-emerald-950/40 px-3 py-1.5 shadow-[0_4px_24px_rgba(16,185,129,0.12),inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-xl transition-[transform,box-shadow] duration-300 ease-out",
+                          p.badge ? "right-3 top-10 sm:top-9" : "right-3 top-3",
+                        )}
+                        aria-label={p.promoLine}
+                      >
+                        <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-emerald-200/75">
+                          Save
+                        </span>
+                        <span className="text-base font-bold tabular-nums leading-none text-emerald-50">
+                          {savePercent}%
+                        </span>
+                      </div>
                     ) : null}
                     {p.badge ? (
                       <span
@@ -254,14 +267,18 @@ export default function CreditsPage() {
                         {p.credits.toLocaleString()}
                         <span className="ml-1.5 text-base font-semibold text-white/40">credits</span>
                       </p>
-                      <p
-                        className={cn(
-                          "mt-2 text-xs font-semibold",
-                          p.promoLine === "Entry pack" ? "text-white/40" : "text-violet-300/85",
-                        )}
-                      >
-                        {p.promoLine}
-                      </p>
+                      {savePercent ? (
+                        <p className="mt-2 text-xs font-medium text-white/35">Better price per credit</p>
+                      ) : (
+                        <p
+                          className={cn(
+                            "mt-2 text-xs font-semibold",
+                            p.promoLine === "Entry pack" ? "text-white/40" : "text-violet-300/85",
+                          )}
+                        >
+                          {p.promoLine}
+                        </p>
+                      )}
                     </div>
 
                     <Button

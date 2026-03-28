@@ -167,6 +167,7 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
 
             <div className="mt-10 space-y-3 text-sm text-white/70">
               {[
+                "Cut your creative production costs by 10x",
                 "Generate 10+ ad concepts in seconds",
                 "Test faster than your competitors",
                 "Never run out of creatives again",

@@ -9,6 +9,8 @@ import {
   motionControlUpgradeMessage,
 } from "@/lib/subscriptionModelAccess";
 import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
+import { requireSupabaseUser } from "@/lib/supabase/requireUser";
+import { getUserPlan } from "@/lib/supabase/getUserPlan";
 
 type BackgroundSource = "input_video" | "input_image";
 
@@ -35,6 +37,9 @@ function motionModeFromQuality(q: string | undefined): string {
 }
 
 export async function POST(req: Request) {
+  const { supabase, user, response } = await requireSupabaseUser();
+  if (response) return response;
+
   let body: Body;
   try {
     body = (await req.json()) as Body;
@@ -49,12 +54,9 @@ export async function POST(req: Request) {
   }
 
   const personalKey = hasPersonalApiKey(body.personalApiKey) ? body.personalApiKey.trim() : undefined;
-  if (
-    !personalKey &&
-    body.accountPlan != null &&
-    String(body.accountPlan).trim() !== ""
-  ) {
-    const accountPlan = parseAccountPlan(body.accountPlan);
+  if (!personalKey) {
+    const dbPlan = await getUserPlan(supabase, user.id);
+    const accountPlan = dbPlan !== "free" ? dbPlan : parseAccountPlan(body.accountPlan);
     if (!canUseMotionControl(accountPlan)) {
       return NextResponse.json(
         {

@@ -10,6 +10,8 @@ import {
 import { hasPersonalApiKey } from "@/lib/personalApiBypass";
 import { canUseVeoApiModel, parseAccountPlan, veoUpgradeMessage } from "@/lib/subscriptionModelAccess";
 import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
+import { requireSupabaseUser } from "@/lib/supabase/requireUser";
+import { getUserPlan } from "@/lib/supabase/getUserPlan";
 
 type Body = {
   accountPlan?: string;
@@ -25,6 +27,9 @@ type Body = {
 };
 
 export async function POST(req: Request) {
+  const { supabase, user, response } = await requireSupabaseUser();
+  if (response) return response;
+
   const body = (await req.json().catch(() => null)) as Body | null;
 
   const prompt = (body?.prompt ?? "").trim();
@@ -45,12 +50,9 @@ export async function POST(req: Request) {
   const veoModel = body?.model ?? "veo3_fast";
   const personalKey =
     body && hasPersonalApiKey(body.personalApiKey) ? body.personalApiKey.trim() : undefined;
-  if (
-    !personalKey &&
-    body?.accountPlan != null &&
-    String(body.accountPlan).trim() !== ""
-  ) {
-    const accountPlan = parseAccountPlan(body.accountPlan);
+  if (!personalKey) {
+    const dbPlan = await getUserPlan(supabase, user.id);
+    const accountPlan = dbPlan !== "free" ? dbPlan : parseAccountPlan(body?.accountPlan);
     if (!canUseVeoApiModel(accountPlan, veoModel)) {
       return NextResponse.json(
         {

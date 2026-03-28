@@ -53,8 +53,8 @@ export function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
-    // Skip Next internals/static files and API routes.
-    "/((?!api|_next/static|_next/image|favicon.ico|.*\\..*).*)",
+    // Skip Sentry tunnel (ad-blocker bypass), API, Next internals, static files.
+    "/((?!api|monitoring|_next/static|_next/image|favicon.ico|.*\\..*).*)",
   ],
 };
 

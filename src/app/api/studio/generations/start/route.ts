@@ -12,12 +12,26 @@ import { createStudioKieImageTasks } from "@/lib/studioKieImageTask";
 import type { StudioGenerationRow } from "@/lib/studioGenerationsMap";
 import type { NanoBananaProAspectRatio } from "@/lib/nanobanana";
 import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
+import { IMAGE_MODEL } from "@/lib/pricing";
+import { getUserPlan } from "@/lib/supabase/getUserPlan";
+
+/** Calculate credits server-side; never trust the client-provided value. */
+function computeImageCredits(model: "nano" | "pro", resolution: string, numImages: number): number {
+  let perImage: number;
+  if (model === "pro") {
+    perImage = resolution === "4K" ? IMAGE_MODEL.google_nano_banana_pro_4k.credits : IMAGE_MODEL.google_nano_banana_pro_1k_2k.credits;
+  } else {
+    if (resolution === "4K") perImage = IMAGE_MODEL.google_nano_banana_2_4k.credits;
+    else if (resolution === "2K") perImage = IMAGE_MODEL.google_nano_banana_2_2k.credits;
+    else perImage = IMAGE_MODEL.google_nano_banana_2_1k.credits;
+  }
+  return perImage * Math.max(1, numImages);
+}
 
 type Body = {
   kind?: string;
   label?: string;
   accountPlan?: string;
-  creditsCharged?: number;
   prompt: string;
   model?: "nano" | "pro";
   aspectRatio?: string;
@@ -48,12 +62,9 @@ export async function POST(req: Request) {
 
   const model = body.model ?? "nano";
   const personalKey = hasPersonalApiKey(body.personalApiKey) ? body.personalApiKey!.trim() : undefined;
-  if (
-    !personalKey &&
-    body.accountPlan != null &&
-    String(body.accountPlan).trim() !== ""
-  ) {
-    const accountPlan = parseAccountPlan(body.accountPlan);
+  if (!personalKey) {
+    const dbPlan = await getUserPlan(supabase, user.id);
+    const accountPlan = dbPlan !== "free" ? dbPlan : parseAccountPlan(body.accountPlan);
     if (!canUseStudioImageModel(accountPlan, model)) {
       return NextResponse.json(
         {
@@ -67,8 +78,11 @@ export async function POST(req: Request) {
     }
   }
 
-  const creditsCharged = Math.max(0, Math.floor(Number(body.creditsCharged) || 0));
   const usesPersonalApi = Boolean(personalKey);
+  // Calculate credits server-side — never trust the client-provided value
+  const numImages = Math.max(1, Math.min(Number(body.numImages) || 1, 10));
+  const resolution = (body.resolution as "1K" | "2K" | "4K" | undefined) ?? "1K";
+  const creditsCharged = usesPersonalApi ? 0 : computeImageCredits(model, resolution, numImages);
 
   const refUrls = Array.isArray(body.imageUrls)
     ? body.imageUrls.filter((u): u is string => typeof u === "string" && u.trim().length > 0)

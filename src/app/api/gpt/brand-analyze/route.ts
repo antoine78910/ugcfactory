@@ -90,7 +90,7 @@ export async function POST(req: Request) {
       parsed = JSON.parse(text);
     } catch {
       return NextResponse.json(
-        { error: "Model returned non-JSON.", raw: text.slice(0, 4000) },
+        { error: "Model returned non-JSON." },
         { status: 502 },
       );
     }

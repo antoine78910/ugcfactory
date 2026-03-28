@@ -74,6 +74,7 @@ export async function POST(req: Request) {
       cancel_url: `${base.replace(/\/$/, "")}/subscription?checkout=cancel`,
       allow_promotion_codes: true,
       metadata: {
+        user_id: auth.user.id,
         subscription_plan: planId,
         subscription_billing: billing,
         ...datafastMeta,

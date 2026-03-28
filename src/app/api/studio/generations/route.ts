@@ -12,7 +12,14 @@ import { markStaleInProgressStudioGenerationsFailedForUser } from "@/lib/studioG
 const KIND_DEFAULT = "avatar";
 
 /** Kinds listed together on My Projects (studio library). */
-const STUDIO_LIBRARY_KINDS = ["avatar", "studio_image", "studio_video", "studio_upscale", "motion_control"] as const;
+const STUDIO_LIBRARY_KINDS = [
+  "avatar",
+  "studio_image",
+  "studio_video",
+  "studio_upscale",
+  "motion_control",
+  "studio_watermark",
+] as const;
 
 const ALLOWED_KINDS = new Set<string>(STUDIO_LIBRARY_KINDS);
 

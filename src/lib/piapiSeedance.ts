@@ -22,7 +22,6 @@ export function isPiapiTaskId(taskId: string): boolean {
 }
 
 type PiapiSeedanceTaskType = "seedance-2-preview" | "seedance-2-fast-preview";
-type PiapiSoraTaskType = "remove-watermark";
 
 export async function piapiCreateSeedanceTask(opts: {
   taskType: PiapiSeedanceTaskType;
@@ -60,50 +59,6 @@ export async function piapiCreateSeedanceTask(opts: {
   const id = json?.data?.task_id?.trim();
   if (!res.ok || json?.code !== 200 || !id) {
     throw new Error(`PiAPI seedance create failed: HTTP ${res.status} / ${json?.message ?? "Unknown error"}`);
-  }
-  return id;
-}
-
-export async function piapiCreateSoraRemoveWatermarkTask(opts: {
-  videoUrl: string;
-  overrideApiKey?: string;
-  webhookEndpoint?: string;
-}): Promise<string> {
-  const apiKey = opts.overrideApiKey?.trim() || getPiApiKey();
-  const res = await fetch(`${PIAPI_BASE}/api/v1/task`, {
-    method: "POST",
-    headers: {
-      "X-API-Key": apiKey,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "sora2",
-      task_type: "remove-watermark" satisfies PiapiSoraTaskType,
-      input: {
-        video_url: opts.videoUrl,
-      },
-      config: {
-        ...(opts.webhookEndpoint
-          ? {
-              webhook_config: {
-                endpoint: opts.webhookEndpoint,
-                secret: "",
-              },
-            }
-          : {}),
-      },
-    }),
-    cache: "no-store",
-  });
-
-  const json = (await res.json().catch(() => ({}))) as {
-    code?: number;
-    message?: string;
-    data?: { task_id?: string };
-  };
-  const id = json?.data?.task_id?.trim();
-  if (!res.ok || json?.code !== 200 || !id) {
-    throw new Error(`PiAPI sora remove-watermark create failed: HTTP ${res.status} / ${json?.message ?? "Unknown error"}`);
   }
   return id;
 }

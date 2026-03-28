@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { Clapperboard, ImageIcon, Sparkles, Video } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 type StudioEmptyVariant = "image" | "video" | "motion" | "upscale";
 
@@ -92,7 +93,17 @@ export function StudioOutputPane({
       {title ? (
         <p className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-white/45">{title}</p>
       ) : null}
-      <div className={title ? "mt-3 min-h-0 flex-1 overflow-y-auto" : "min-h-0 flex-1 overflow-y-auto"}>
+      {/*
+        When `hasOutput` is history UI, avoid nested overflow-y (double scrollbars): the child
+        owns scrolling. Empty / short content still scrolls in this wrapper.
+      */}
+      <div
+        className={cn(
+          "min-h-0 flex-1 flex flex-col",
+          title && "mt-3",
+          hasOutput ? "min-h-0 overflow-hidden" : "studio-sidebar-scroll overflow-y-auto",
+        )}
+      >
         {hasOutput ? output : empty}
       </div>
     </div>

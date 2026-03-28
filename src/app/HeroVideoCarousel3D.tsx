@@ -26,8 +26,10 @@ const MAX_PLAYING = 5;
 /** Min overlap (px²) with the hero band to count as a play candidate. */
 const MIN_VISIBLE_AREA = 700;
 
-/** Don’t run visibility sync every frame — less layout + fewer play/pause flaps. */
-const SYNC_MS = 110;
+/**
+ * Visibility sync interval — higher = fewer getBoundingClientRect calls (less forced layout).
+ */
+const SYNC_MS = 200;
 
 /** Consecutive “out of top-N” samples before pausing (× SYNC_MS ≈ delay). */
 const PAUSE_AFTER_TICKS = 3;
@@ -46,14 +48,19 @@ export function HeroVideoCarousel3D({ srcs = DEFAULT_SRCS }: Props) {
     const grace = new Map<HTMLVideoElement, number>();
     let raf = 0;
     let lastSync = 0;
+    let running = false;
+
+    const pauseAll = () => {
+      for (const v of root.querySelectorAll<HTMLVideoElement>('video')) v.pause();
+    };
 
     const runSync = () => {
       if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-        for (const v of root.querySelectorAll<HTMLVideoElement>('video')) v.pause();
+        pauseAll();
         return;
       }
       if (document.visibilityState !== 'visible') {
-        for (const v of root.querySelectorAll<HTMLVideoElement>('video')) v.pause();
+        pauseAll();
         return;
       }
 
@@ -99,26 +106,52 @@ export function HeroVideoCarousel3D({ srcs = DEFAULT_SRCS }: Props) {
     };
 
     const loop = (t: number) => {
+      if (!running) return;
       if (t - lastSync >= SYNC_MS) {
         lastSync = t;
         runSync();
       }
       raf = requestAnimationFrame(loop);
     };
-    raf = requestAnimationFrame(loop);
+
+    const start = () => {
+      if (running) return;
+      running = true;
+      lastSync = 0;
+      raf = requestAnimationFrame(loop);
+    };
+
+    const stop = () => {
+      running = false;
+      cancelAnimationFrame(raf);
+      pauseAll();
+    };
+
+    const io = new IntersectionObserver(
+      ([e]) => {
+        if (e.isIntersecting) start();
+        else stop();
+      },
+      { root: null, rootMargin: '120px 0px', threshold: 0 },
+    );
+    io.observe(root);
+
+    if (typeof window !== 'undefined') {
+      const rect = root.getBoundingClientRect();
+      const vh = window.innerHeight;
+      if (rect.top < vh && rect.bottom > 0) start();
+    }
 
     const onVis = () => {
-      if (document.visibilityState !== 'visible') {
-        for (const v of root.querySelectorAll<HTMLVideoElement>('video')) v.pause();
-      }
+      if (document.visibilityState !== 'visible') pauseAll();
     };
     document.addEventListener('visibilitychange', onVis);
 
     return () => {
-      cancelAnimationFrame(raf);
+      io.disconnect();
+      stop();
       document.removeEventListener('visibilitychange', onVis);
       grace.clear();
-      for (const v of root.querySelectorAll<HTMLVideoElement>('video')) v.pause();
     };
   }, []);
 
@@ -165,7 +198,7 @@ export function HeroVideoCarousel3D({ srcs = DEFAULT_SRCS }: Props) {
                 muted
                 loop
                 playsInline
-                preload="metadata"
+                preload="none"
                 disableRemotePlayback
                 onEnded={handleEnded}
                 onLoadedMetadata={handleLoadedMetadata}

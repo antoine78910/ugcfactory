@@ -113,7 +113,8 @@ function RevealSlide({
   registryRef,
 }: {
   imageSrc: string;
-  videoSrc: string;
+  /** `null` until the reveal section is near the viewport — avoids ~30MB+ of carousel MP4 on first paint. */
+  videoSrc: string | null;
   imageAlt: string;
   slideIndex: number;
   registryRef: MutableRefObject<(RevealRegistryEntry | null)[]>;
@@ -155,14 +156,19 @@ function RevealSlide({
           WebkitBackfaceVisibility: "hidden",
         }}
       >
-        <video
-          src={videoSrc}
-          autoPlay
-          loop
-          muted
-          playsInline
-          className="h-full w-full object-cover"
-        />
+        {videoSrc ? (
+          <video
+            src={videoSrc}
+            autoPlay
+            loop
+            muted
+            playsInline
+            preload="none"
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <div className="h-full w-full bg-black/40" aria-hidden />
+        )}
       </div>
     </div>
   );
@@ -170,11 +176,26 @@ function RevealSlide({
 
 export default function LandingPage() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const [revealVideosReady, setRevealVideosReady] = useState(false);
   const carouselTrackRef = useRef<HTMLDivElement>(null);
   const carouselSetRef = useRef<HTMLDivElement>(null);
+  const revealSectionRef = useRef<HTMLElement | null>(null);
   const revealRegistryRef = useRef<(RevealRegistryEntry | null)[]>(
     Array.from({ length: REVEAL_SLIDE_TOTAL }, () => null),
   );
+
+  useEffect(() => {
+    const el = revealSectionRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) setRevealVideosReady(true);
+      },
+      { root: null, rootMargin: "480px 0px", threshold: 0 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
 
   // Single RAF for all reveal slides; avoids desync / invalid clip-path when width≈0 (fixes video bleeding or missing video).
   useEffect(() => {
@@ -302,9 +323,14 @@ export default function LandingPage() {
 
       {/* ── Hero (texture behind headline: Turn any product / AI Reels…) ── */}
       <section className="relative min-h-[min(92svh,880px)] overflow-hidden">
-        <div
-          className="pointer-events-none absolute inset-0 z-0 bg-cover bg-center bg-no-repeat"
-          style={{ backgroundImage: "url(/hero-bg-texture.png)" }}
+        <Image
+          src="/hero-bg-texture.png"
+          alt=""
+          fill
+          priority
+          fetchPriority="high"
+          sizes="100vw"
+          className="pointer-events-none z-0 object-cover"
           aria-hidden
         />
         <div className="pointer-events-none absolute inset-0 z-[3] bg-gradient-to-b from-[#050507]/60 via-[#050507]/25 via-40% to-transparent" />
@@ -374,6 +400,7 @@ export default function LandingPage() {
                   src={step.mediaImage}
                   alt={step.mediaAlt}
                   fill
+                  loading={step.number === "01" ? "eager" : "lazy"}
                   className="object-cover transition-transform duration-300 group-hover:scale-[1.02]"
                   sizes="(max-width: 768px) 90vw, 360px"
                 />
@@ -392,7 +419,10 @@ export default function LandingPage() {
       </section>
 
       {/* ── Carousel: Product → Electric Band → UGC (pulled up toward hero 3D strip) ── */}
-      <section className="overflow-hidden -mt-14 pt-14 pb-10 sm:-mt-20 sm:pt-16 bg-gradient-to-b from-[#0c0a14]/35 via-[#09080f]/20 to-transparent">
+      <section
+        ref={revealSectionRef}
+        className="overflow-hidden -mt-14 pt-14 pb-10 sm:-mt-20 sm:pt-16 bg-gradient-to-b from-[#0c0a14]/35 via-[#09080f]/20 to-transparent"
+      >
         <div className="mx-auto max-w-6xl px-5 mb-14 text-center">
           <h2 className="text-3xl font-bold tracking-tight sm:text-4xl md:text-5xl">
             Turn any product into realistic AI UGC ads
@@ -427,7 +457,7 @@ export default function LandingPage() {
                   slideIndex={i}
                   registryRef={revealRegistryRef}
                   imageSrc={item.product.src}
-                  videoSrc={item.slide.src}
+                  videoSrc={revealVideosReady ? item.slide.src : null}
                   imageAlt={item.product.alt}
                 />
               ))}
@@ -439,7 +469,7 @@ export default function LandingPage() {
                   slideIndex={i + PAIRED_CAROUSEL_ITEMS.length}
                   registryRef={revealRegistryRef}
                   imageSrc={item.product.src}
-                  videoSrc={item.slide.src}
+                  videoSrc={revealVideosReady ? item.slide.src : null}
                   imageAlt={item.product.alt}
                 />
               ))}

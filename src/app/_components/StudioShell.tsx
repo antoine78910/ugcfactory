@@ -9,7 +9,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Copy,
-  Droplets,
   FolderOpen,
   Image as ImageIcon,
   Link2,
@@ -35,7 +34,6 @@ export type StudioNavSection =
   | "image"
   | "video"
   | "upscale"
-  | "watermark"
   | "projects";
 
 type Props = {
@@ -59,7 +57,6 @@ const CREATE_NAV: CreateNavEntry[] = [
   { kind: "route", id: "image", label: "Image", icon: ImageIcon },
   { kind: "route", id: "video", label: "Video", icon: Video },
   { kind: "route", id: "upscale", label: "Upscale", icon: Maximize2 },
-  { kind: "route", id: "watermark", label: "Watermark Remover", icon: Droplets },
 ];
 
 function soonRowClass(): string {
@@ -176,18 +173,16 @@ function StudioShellInner({
               navCollapsed ? "space-y-2 px-0" : "space-y-3",
             )}
           >
-            <div
-              className={cn(
-                "flex items-center gap-1.5",
-                navCollapsed ? "flex-col justify-center" : "flex-row",
-              )}
-            >
-              <Link
-                href="/app"
-                className={cn("inline-block shrink-0", navCollapsed && "flex justify-center")}
-                title="Youry home"
+            {navCollapsed ? (
+              <div
+                className="group relative mx-auto h-8 w-8 shrink-0"
+                title="Hover logo to expand menu"
               >
-                {navCollapsed ? (
+                <Link
+                  href="/app"
+                  className="relative z-0 block h-8 w-8"
+                  title="Youry home"
+                >
                   <Image
                     src="/icon.png"
                     alt="Youry"
@@ -196,39 +191,58 @@ function StudioShellInner({
                     className="h-8 w-8 rounded-lg object-cover"
                     priority
                   />
-                ) : (
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setNavCollapsed(false)}
+                  className={cn(
+                    "absolute inset-0 z-10 flex items-center justify-center rounded-lg",
+                    "border border-violet-400/45 bg-[#050507]/90 text-white shadow-sm backdrop-blur-sm",
+                    "opacity-0 pointer-events-none transition-opacity duration-150",
+                    "group-hover:pointer-events-auto group-hover:opacity-100",
+                    "focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60",
+                  )}
+                  title="Expand menu"
+                  aria-expanded={false}
+                  aria-label="Expand menu"
+                >
+                  <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+                </button>
+              </div>
+            ) : (
+              <div className="flex w-full min-w-0 items-center justify-between gap-2">
+                <Link
+                  href="/app"
+                  className="inline-block min-w-0 shrink"
+                  title="Youry home"
+                >
                   <Image
                     src="/youry-logo.png"
                     alt="Youry"
                     width={174}
                     height={52}
-                    className="h-8 w-auto"
+                    className="h-8 w-auto max-w-[min(100%,11rem)]"
                     priority
                   />
-                )}
-              </Link>
-              <button
-                type="button"
-                onClick={() => setNavCollapsed((c) => !c)}
-                className={cn(
-                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.06] text-white/70 transition hover:border-violet-400/35 hover:bg-white/[0.1] hover:text-white",
-                  navCollapsed && "mt-0.5",
-                )}
-                title={navCollapsed ? "Expand menu" : "Collapse menu"}
-                aria-expanded={!navCollapsed}
-                aria-label={navCollapsed ? "Expand menu" : "Collapse menu"}
-              >
-                {navCollapsed ? (
-                  <ChevronRight className="h-3.5 w-3.5" aria-hidden />
-                ) : (
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setNavCollapsed(true)}
+                  className={cn(
+                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.06] text-white/70 transition hover:border-violet-400/35 hover:bg-white/[0.1] hover:text-white",
+                  )}
+                  title="Collapse menu"
+                  aria-expanded={true}
+                  aria-label="Collapse menu"
+                >
                   <ChevronLeft className="h-3.5 w-3.5" aria-hidden />
-                )}
-              </button>
-            </div>
+                </button>
+              </div>
+            )}
             <SidebarCreditsBar collapsed={navCollapsed} />
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+          <div className="studio-sidebar-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
             <div
               className={cn(
                 "rounded-xl border border-white/10 bg-[#0b0912]/85",

@@ -34,7 +34,7 @@ import {
   useCreditsPlan,
   getPersonalApiKey,
   getPersonalPiapiApiKey,
-  isPersonalApiActive,
+  isPlatformCreditBypassActive,
 } from "@/app/_components/CreditsPlanContext";
 import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
 import { LinkToAdUniverseStepper } from "@/app/_components/LinkToAdUniverseStepper";
@@ -542,7 +542,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   /** Deduct from wallet once on URL Generate; keep ref/frozen in sync with that charge. */
   const spendLtaCreditsIfEnough = useCallback(
     (cost: number): boolean => {
-      if (isPersonalApiActive()) return true;
+      if (isPlatformCreditBypassActive()) return true;
       const k = Math.max(0, Math.floor(cost));
       if (k <= 0) return true;
       if (creditsBalanceRef.current < k) {
@@ -2019,7 +2019,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       setStage("ready");
     } catch (err) {
       // Refund credits if regeneration fails.
-      if (!isPersonalApiActive()) {
+      if (!isPlatformCreditBypassActive()) {
         grantCredits(2);
         creditsBalanceRef.current += 2;
         setLtaFrozenCredits(null);

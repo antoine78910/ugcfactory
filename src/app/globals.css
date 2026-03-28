@@ -262,14 +262,16 @@
 }
 
 /**
- * Studio left column (prompt + parameters + actions): one scroll region; no
- * visible scrollbar thumb / resize cursor on the edge.
+ * Studio scroll regions: wheel / trackpad / touch still scroll; native scrollbar
+ * hidden so it does not reserve width or show the resize-like thumb on the edge.
  */
-.studio-params-scroll {
+.studio-params-scroll,
+.studio-sidebar-scroll {
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
-.studio-params-scroll::-webkit-scrollbar {
+.studio-params-scroll::-webkit-scrollbar,
+.studio-sidebar-scroll::-webkit-scrollbar {
   display: none;
   width: 0;
   height: 0;

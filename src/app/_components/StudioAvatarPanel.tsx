@@ -7,7 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { useCreditsPlan, getPersonalApiKey, isPersonalApiActive } from "@/app/_components/CreditsPlanContext";
+import {
+  useCreditsPlan,
+  getPersonalApiKey,
+  isPlatformCreditBypassActive,
+} from "@/app/_components/CreditsPlanContext";
 import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
 import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
 import { StudioOutputPane } from "@/app/_components/StudioEmptyExamples";
@@ -259,13 +263,13 @@ export default function StudioAvatarPanel() {
   }, [serverHistory, historyItems]);
 
   const generate = useCallback(() => {
-    const usingPersonalApi = isPersonalApiActive();
-    if (!usingPersonalApi && creditsRef.current < credits) {
+    const creditBypass = isPlatformCreditBypassActive();
+    if (!creditBypass && creditsRef.current < credits) {
       setBilling({ open: true, reason: "credits", required: credits });
       return;
     }
-    const platformCharge = usingPersonalApi ? 0 : credits;
-    if (!usingPersonalApi) {
+    const platformCharge = creditBypass ? 0 : credits;
+    if (!creditBypass) {
       spendCredits(credits);
       creditsRef.current = Math.max(0, creditsRef.current - credits);
     }
@@ -446,6 +450,7 @@ export default function StudioAvatarPanel() {
                 items={historyItems}
                 empty={<p className="py-8 text-center text-xs text-white/30">Generated avatars will appear here.</p>}
                 mediaLabel="Avatar"
+                onItemDeleted={(id) => setHistoryItems((prev) => prev.filter((i) => i.id !== id))}
               />
             }
             empty={null}

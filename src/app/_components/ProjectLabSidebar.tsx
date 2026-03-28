@@ -278,7 +278,7 @@ export function ProjectLabSidebar({
         <p className="mt-0.5 text-[10px] text-white/40">Tree of generated nodes plus your layout.</p>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-2">
+      <div className="studio-sidebar-scroll min-h-0 flex-1 overflow-y-auto p-2">
         <p className="mb-1 px-1 text-[9px] font-semibold uppercase tracking-wide text-white/35">Project data</p>
         <TreeRow
           depth={0}

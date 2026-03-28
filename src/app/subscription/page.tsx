@@ -270,7 +270,7 @@ export default function SubscriptionPage() {
               ) : null}
             </div>
 
-            <div className={cn("mx-auto grid max-w-6xl gap-5", planGridClass)}>
+            <div className={cn("mx-auto grid max-w-6xl gap-5 pt-3", planGridClass)}>
               {visiblePlans.map((plan) => {
                 const { mainLabel, sub } = priceFor(plan);
                 const isCurrentPlanCard = isSubscribed && plan.id === planId;
@@ -279,7 +279,7 @@ export default function SubscriptionPage() {
                   <div
                     key={plan.id}
                     className={cn(
-                      "relative flex flex-col overflow-hidden rounded-2xl border p-6 transition-all duration-300",
+                      "relative flex flex-col rounded-2xl border p-6 transition-all duration-300",
                       isCurrentPlanCard
                         ? "border-emerald-400/45 bg-gradient-to-b from-emerald-600/[0.14] via-[#0b0914] to-[#06070d] shadow-[0_0_40px_rgba(16,185,129,0.12)]"
                         : plan.highlight

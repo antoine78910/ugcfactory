@@ -43,10 +43,11 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         {/* Scripts must live inside <body> — direct children of <html> are invalid and cause React hydration #418 */}
+        {/* afterInteractive: avoids blocking first paint / main thread vs beforeInteractive */}
         <Script
           id="datafast"
           src="https://datafa.st/js/script.js"
-          strategy="beforeInteractive"
+          strategy="afterInteractive"
           data-website-id={DATAFAST_WEBSITE_ID}
           data-domain={DATAFAST_DOMAIN}
         />

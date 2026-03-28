@@ -21,7 +21,18 @@ export async function POST(req: Request) {
 
   const auth = req.headers.get("authorization")?.trim() ?? "";
   const bearer = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
-  if (bearer !== secret) {
+
+  // Use constant-time comparison to prevent timing attacks
+  let authorized = false;
+  try {
+    const { timingSafeEqual } = await import("node:crypto");
+    const a = Buffer.from(bearer);
+    const b = Buffer.from(secret);
+    authorized = a.length === b.length && timingSafeEqual(a, b);
+  } catch {
+    authorized = false;
+  }
+  if (!authorized) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

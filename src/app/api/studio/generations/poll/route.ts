@@ -26,7 +26,14 @@ type Body = {
   piapiApiKey?: string;
 };
 
-const LIBRARY_KINDS = ["avatar", "studio_image", "studio_video", "studio_upscale", "motion_control"] as const;
+const LIBRARY_KINDS = [
+  "avatar",
+  "studio_image",
+  "studio_video",
+  "studio_upscale",
+  "motion_control",
+  "studio_watermark",
+] as const;
 
 /** Avoid Vercel timeouts when many jobs are in flight (each row may download+re-upload media). */
 const MAX_ROWS_TO_POLL_PER_REQUEST = 8;

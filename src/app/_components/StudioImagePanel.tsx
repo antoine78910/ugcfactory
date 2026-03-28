@@ -1,7 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useCreditsPlan, getPersonalApiKey, getPersonalPiapiApiKey, isPersonalApiActive } from "@/app/_components/CreditsPlanContext";
+import {
+  useCreditsPlan,
+  getPersonalApiKey,
+  getPersonalPiapiApiKey,
+  isPersonalApiActive,
+  isPlatformCreditBypassActive,
+} from "@/app/_components/CreditsPlanContext";
 import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
 import { Plus, Sparkles, UserRound } from "lucide-react";
 import { toast } from "sonner";
@@ -303,15 +309,15 @@ export default function StudioImagePanel() {
         return;
       }
 
-      const usingPersonalApi = isPersonalApiActive();
+      const creditBypass = isPlatformCreditBypassActive();
       const charge = topazImageUpscaleCredits(f);
-      if (!usingPersonalApi && creditsRef.current < charge) {
+      if (!creditBypass && creditsRef.current < charge) {
         setBilling({ open: true, reason: "credits", required: charge });
         return;
       }
 
-      const platformCharge = usingPersonalApi ? 0 : charge;
-      if (!usingPersonalApi) {
+      const platformCharge = creditBypass ? 0 : charge;
+      if (!creditBypass) {
         spendCredits(charge);
         creditsRef.current = Math.max(0, creditsRef.current - charge);
       }
@@ -548,20 +554,20 @@ export default function StudioImagePanel() {
       setBilling({ open: true, reason: "plan", blockedId: opts.model });
       return;
     }
-    const usingPersonalApi = isPersonalApiActive();
+    const creditBypass = isPlatformCreditBypassActive();
     const n = Math.min(4, Math.max(1, opts.numImages));
     const perOut = studioImageCreditsPerOutput({
       studioModel: opts.model,
       resolution: opts.resolution,
     });
     const chargeTotal = n * perOut;
-    if (!usingPersonalApi && creditsRef.current < chargeTotal) {
+    if (!creditBypass && creditsRef.current < chargeTotal) {
       setBilling({ open: true, reason: "credits", required: chargeTotal });
       return;
     }
     const summary = p;
-    const platformCharge = usingPersonalApi ? 0 : chargeTotal;
-    if (!usingPersonalApi) {
+    const platformCharge = creditBypass ? 0 : chargeTotal;
+    if (!creditBypass) {
       spendCredits(chargeTotal);
       creditsRef.current = Math.max(0, creditsRef.current - chargeTotal);
     }
@@ -793,7 +799,7 @@ export default function StudioImagePanel() {
   return (
     <div className="flex flex-col gap-3 overflow-x-hidden lg:flex-row lg:items-start lg:gap-4 lg:h-[calc(100dvh-4rem)] lg:min-h-0">
       <div className="flex min-w-0 w-full flex-col gap-2 lg:basis-[30%] lg:max-w-[28rem] lg:flex-none lg:shrink-0 lg:min-h-0 lg:overflow-hidden">
-        <div className="studio-params-scroll flex min-w-0 max-h-[min(86vh,calc(100dvh-5rem))] flex-col gap-2 overflow-y-auto pr-1 pb-6 lg:h-full lg:min-h-0 lg:max-h-none lg:flex-1 lg:pb-10">
+        <div className="studio-params-scroll flex min-w-0 max-h-[min(86vh,calc(100dvh-5rem))] flex-col gap-2 overflow-y-auto pb-6 lg:h-full lg:min-h-0 lg:max-h-none lg:flex-1 lg:pb-10">
         <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Create prompt</p>
         <div className="rounded-2xl border border-white/10 bg-[#101014] p-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-white/45">Reference images</p>
@@ -974,6 +980,7 @@ export default function StudioImagePanel() {
               mediaLabel="Image"
               failedAutoDismiss
               onDismissFailed={dismissFailedHistoryItem}
+              onItemDeleted={(id) => setHistoryItems((prev) => prev.filter((i) => i.id !== id))}
               imageLightboxUpscale={{
                 seedFactor: "2",
                 creditsFor: (factor) => topazImageUpscaleCredits(factor),
