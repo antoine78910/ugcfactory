@@ -313,7 +313,11 @@ export default function LandingPage() {
 
         <div className="relative z-10 mx-auto w-full max-w-5xl px-5 pt-4 pb-0 text-center sm:pt-6 md:pt-8">
           <h1 className="mx-auto max-w-4xl px-3 sm:px-6 text-4xl font-extrabold tracking-tight leading-[1.12] sm:text-5xl md:text-6xl">
-            Realistic AI UGC for high-converting ads
+            Realistic AI UGC for{' '}
+            <span className="whitespace-nowrap">
+              <span className="text-violet-400">high-converting</span>
+              &nbsp;ads
+            </span>
           </h1>
 
           <div className="mx-auto mt-5 max-w-xl sm:mt-6">
