@@ -214,6 +214,63 @@ REALISM ANCHORS (always include)
 - Slight handheld camera movement
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+VIDEO QUALITY RULE (CRITICAL)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Always specify these video quality parameters in every prompt.
+The goal is the highest possible video quality — sharp, clean,
+cinematic-level resolution with authentic smartphone realism.
+
+CAMERA DEVICE:
+→ Shot on iPhone 17 Pro Max, main rear 48MP Fusion camera
+→ Apple ProRes RAW video format
+→ 4K resolution at 120fps for maximum motion clarity
+→ Dolby Vision HDR with Apple Log 2 wide color gamut
+→ A19 Pro chip image processing pipeline
+→ Sensor-shift optical image stabilization
+
+SENSOR & SHARPNESS:
+→ Maximum sensor sharpness — every detail resolved
+→ Zero digital noise, zero grain, zero compression artifacts
+→ Micro-detail preserved on skin pores, hair strands,
+  fabric texture, and product label text
+→ Crystal clear edge definition on all elements in frame
+→ No digital softening, no AI beauty processing, no smoothing
+→ Updated Photonic Engine — natural detail preserved,
+  noise reduced, color accuracy maximized
+
+DEPTH & FOCUS:
+→ Tack sharp focus on subject's face and product
+→ Natural smartphone depth of field on background —
+  soft but fully identifiable, never artificially blurred
+→ Focus lock maintained throughout — no focus drift,
+  no breathing, no rack focus unless written in script
+
+COLOR & EXPOSURE:
+→ Dolby Vision wide color gamut — vivid but true-to-life
+→ Apple Log 2 — maximum dynamic range, rich midtones
+→ Skin tones warm, accurate, and three-dimensional
+→ Perfect exposure balance — no blown highlights,
+  no crushed shadows, no clipping
+→ Natural color temperature matching scene lighting
+→ No color grading, no filter, no LUT applied
+→ Blacks deep, whites clean, midtones rich and detailed
+
+STABILIZATION & MOTION:
+→ Smooth natural handheld movement —
+  organic micro-drift, never locked off, never shaky
+→ Natural optical image stabilization —
+  fluid motion without robotic artificial smoothing
+→ Motion is smooth at 120fps — zero motion blur on speech,
+  zero stutter on gestures
+
+AUDIO QUALITY:
+→ Recorded with iPhone 17 Pro Max spatial audio microphones
+→ Voice captured with studio-level clarity
+→ Zero background hiss, zero wind distortion on voice
+→ Natural room tone preserved underneath clean voice capture
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 AUDIO RULES (CRITICAL)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -289,6 +346,13 @@ Structure in this order:
 5. Full dialogue block with all speech imperfections preserved exactly
 6. Ambient sound description matched to scene location (1 sentence)
 7. Stability and realism anchors (1–2 sentences)
+8. Video quality line — always the last line of the prompt:
+   "Shot on iPhone 17 Pro Max, Apple ProRes RAW, 4K 120fps,
+   Dolby Vision HDR, Apple Log 2, A19 Pro Photonic Engine,
+   spatial audio, tack sharp focus, zero grain, zero filter,
+   maximum sensor detail, natural skin texture fully preserved,
+   product label fully legible, clean accurate color rendering,
+   organic handheld micro-movement, no artificial stabilization."
 
 Do not describe the scene, environment, or visual style.
 These already exist in the reference image.
@@ -309,7 +373,7 @@ export async function POST(req: Request) {
 
   const developer = [
     "You output a single compact image-to-video prompt as plain text.",
-    "No section headings in the output. One continuous cinematic description (120–180 words).",
+    "No section headings in the output. One continuous cinematic description: ~120–180 words for motion, dialogue, and ambient sound, then end with the exact mandatory video quality line from OUTPUT FORMAT step 8 in the user instructions.",
     "Follow every rule in the instructions in the user message.",
   ].join("\n");
 

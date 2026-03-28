@@ -227,10 +227,7 @@ export default function CreditsPage() {
                   >
                     {savePercent ? (
                       <div
-                        className={cn(
-                          "pointer-events-none absolute z-[2] flex items-baseline gap-1 rounded-full border border-emerald-400/20 bg-emerald-950/40 px-3 py-1.5 shadow-[0_4px_24px_rgba(16,185,129,0.12),inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-xl transition-[transform,box-shadow] duration-300 ease-out",
-                          p.badge ? "right-3 top-10 sm:top-9" : "right-3 top-3",
-                        )}
+                        className="pointer-events-none absolute left-0 top-0 z-[4] flex -translate-x-1/2 -translate-y-1/2 items-baseline gap-1 rounded-full border border-emerald-400/25 bg-emerald-950/50 px-3 py-1.5 shadow-[0_6px_28px_rgba(16,185,129,0.2),inset_0_1px_0_rgba(255,255,255,0.1)] backdrop-blur-xl transition-[transform,box-shadow] duration-300 ease-out"
                         aria-label={p.promoLine}
                       >
                         <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-emerald-200/75">
@@ -254,7 +251,12 @@ export default function CreditsPage() {
                       </span>
                     ) : null}
 
-                    <div className="mt-1 flex items-baseline justify-between gap-2">
+                    <div
+                      className={cn(
+                        "mt-1 flex items-baseline justify-between gap-2",
+                        savePercent && "pl-[2.75rem] pt-0.5 sm:pl-[3.25rem]",
+                      )}
+                    >
                       <h2 className="text-lg font-bold text-white">{p.name}</h2>
                       <span className="text-2xl font-extrabold tabular-nums text-violet-100 sm:text-3xl">{p.price}</span>
                     </div>
