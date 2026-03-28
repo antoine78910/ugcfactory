@@ -46,10 +46,15 @@ async function uploadViaSupabaseDirect(file: File): Promise<string> {
 
   const name = file.name || "upload";
   const dot = name.lastIndexOf(".");
+  const mime = file.type || "";
   const ext =
-    dot >= 0 ? name.slice(dot).toLowerCase() : extFromMime(file.type) || "";
+    dot >= 0
+      ? name.slice(dot).toLowerCase()
+      : extFromMime(mime) ||
+        (mime.startsWith("image/") ? ".jpg" : "") ||
+        (mime.startsWith("video/") ? ".mp4" : "");
 
-  const path = `${userData.user.id}/${crypto.randomUUID()}${ext}`;
+  const path = `${userData.user.id}/${crypto.randomUUID()}${ext || (mime.startsWith("image/") ? ".jpg" : ".bin")}`;
 
   const { data, error } = await supabase.storage.from(BUCKET).upload(path, file, {
     contentType: file.type || undefined,

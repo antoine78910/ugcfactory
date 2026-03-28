@@ -1,5 +1,6 @@
 import { getAppUrl, getEnv } from "@/lib/env";
 import { kieMarketCreateTask } from "@/lib/kieMarket";
+import { normalizeKieNanoBananaImageInputUrls } from "@/lib/kieNanoBananaImageInputUrls";
 import {
   buildKieGoogleImageInput,
   kieMarketModelForStudioImage,
@@ -47,7 +48,8 @@ export async function createStudioKieImageTasks(input: StudioKieImageTaskInput):
       ? [input.imageUrl]
       : [];
 
-  const imageUrls = normalizedImageUrls.length > 0 ? normalizedImageUrls : undefined;
+  const imageUrlsRaw = normalizedImageUrls.length > 0 ? normalizedImageUrls : undefined;
+  const imageUrls = await normalizeKieNanoBananaImageInputUrls(imageUrlsRaw);
   const model = input.model ?? "nano";
   const personalKey = hasPersonalApiKey(input.personalApiKey) ? input.personalApiKey!.trim() : undefined;
   const num = clampStudioNumImages(input.numImages);

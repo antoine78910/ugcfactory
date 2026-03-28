@@ -58,7 +58,11 @@ export async function POST(req: Request) {
       return map[file.type] ?? "";
     })();
 
-    const ext = extFromName || extFromType || "";
+    const ext =
+      extFromName ||
+      extFromType ||
+      ((file.type || "").startsWith("image/") ? ".jpg" : "") ||
+      ((file.type || "").startsWith("video/") ? ".mp4" : "");
     const filename = `${crypto.randomUUID()}${ext}`;
 
     const supabaseAdmin = createSupabaseServiceClient();
