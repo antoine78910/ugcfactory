@@ -344,7 +344,7 @@ export default function LandingPage() {
 
         {/* 3D video cylinder: nudged up toward the Generate row (was visually too low vs flex-end scene) */}
         <div
-          className="pointer-events-none absolute inset-x-0 bottom-0 z-[2] h-[min(430px,54svh)] -translate-y-px overflow-visible sm:h-[min(500px,58svh)] sm:-translate-y-2 lg:h-[min(600px,64svh)] lg:-translate-y-3"
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-[2] h-[min(460px,56svh)] -translate-y-px overflow-visible sm:h-[min(530px,60svh)] sm:-translate-y-2 lg:h-[min(640px,66svh)] lg:-translate-y-3"
           aria-hidden
         >
           <HeroVideoCarousel3D srcs={HERO_STUDIO_VIDEOS} />

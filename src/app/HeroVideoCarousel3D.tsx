@@ -1,6 +1,7 @@
 'use client';
 
-import type { CSSProperties } from 'react';
+import { useEffect, useRef } from 'react';
+import type { CSSProperties, SyntheticEvent } from 'react';
 import styles from './HeroVideoCarousel3D.module.css';
 
 const DEFAULT_SRCS = [
@@ -16,22 +17,140 @@ const DEFAULT_SRCS = [
   '/studio/0328(10).mp4',
 ];
 
-/** More panels on the ring (smaller angle step) = tighter spacing + ~7+ visible; videos cycle through `srcs`. */
-const PANEL_COUNT = 20;
+/** 10 clips, ~36° apart — about 5 readable in view; no duplicate `<video>` URLs. */
+const MAX_UNIQUE_SRCS = 10;
+
+/** At most this many videos decode/play at once (reduces global stalls). */
+const MAX_PLAYING = 5;
+
+/** Min overlap (px²) with the hero band to count as a play candidate. */
+const MIN_VISIBLE_AREA = 700;
+
+/** Don’t run visibility sync every frame — less layout + fewer play/pause flaps. */
+const SYNC_MS = 110;
+
+/** Consecutive “out of top-N” samples before pausing (× SYNC_MS ≈ delay). */
+const PAUSE_AFTER_TICKS = 3;
 
 type Props = { srcs?: readonly string[] };
 
 export function HeroVideoCarousel3D({ srcs = DEFAULT_SRCS }: Props) {
-  const list = srcs.length ? srcs : DEFAULT_SRCS;
-  const slice = 360 / PANEL_COUNT;
+  const rootRef = useRef<HTMLDivElement>(null);
+  const list = (srcs.length ? srcs : DEFAULT_SRCS).slice(0, MAX_UNIQUE_SRCS);
+  const slice = 360 / list.length;
 
-  const panels = Array.from({ length: PANEL_COUNT }, (_, i) => ({
-    src: list[i % list.length]!,
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+
+    const grace = new Map<HTMLVideoElement, number>();
+    let raf = 0;
+    let lastSync = 0;
+
+    const runSync = () => {
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        for (const v of root.querySelectorAll<HTMLVideoElement>('video')) v.pause();
+        return;
+      }
+      if (document.visibilityState !== 'visible') {
+        for (const v of root.querySelectorAll<HTMLVideoElement>('video')) v.pause();
+        return;
+      }
+
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const padX = vw * 0.04;
+      const bandTop = vh * 0.08;
+      const bandBottom = vh * 0.97;
+
+      const candidates: { video: HTMLVideoElement; area: number }[] = [];
+
+      for (const video of root.querySelectorAll<HTMLVideoElement>('video')) {
+        const panel = video.parentElement;
+        if (!panel) continue;
+
+        const rect = panel.getBoundingClientRect();
+        const iw = Math.min(rect.right, vw - padX) - Math.max(rect.left, padX);
+        const ih = Math.min(rect.bottom, bandBottom) - Math.max(rect.top, bandTop);
+        const area = Math.max(0, iw) * Math.max(0, ih);
+        const cx = (rect.left + rect.right) / 2;
+        if (cx < padX || cx > vw - padX) continue;
+        if (iw < 52 || ih < 88) continue;
+        if (area < MIN_VISIBLE_AREA) continue;
+
+        candidates.push({ video, area });
+      }
+
+      candidates.sort((a, b) => b.area - a.area);
+      const allow = new Set(
+        candidates.slice(0, MAX_PLAYING).map((c) => c.video),
+      );
+
+      for (const video of root.querySelectorAll<HTMLVideoElement>('video')) {
+        if (allow.has(video)) {
+          grace.set(video, 0);
+          if (video.paused) void video.play().catch(() => {});
+        } else {
+          const n = (grace.get(video) ?? 0) + 1;
+          grace.set(video, n);
+          if (n >= PAUSE_AFTER_TICKS && !video.paused) video.pause();
+        }
+      }
+    };
+
+    const loop = (t: number) => {
+      if (t - lastSync >= SYNC_MS) {
+        lastSync = t;
+        runSync();
+      }
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+
+    const onVis = () => {
+      if (document.visibilityState !== 'visible') {
+        for (const v of root.querySelectorAll<HTMLVideoElement>('video')) v.pause();
+      }
+    };
+    document.addEventListener('visibilitychange', onVis);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      document.removeEventListener('visibilitychange', onVis);
+      grace.clear();
+      for (const v of root.querySelectorAll<HTMLVideoElement>('video')) v.pause();
+    };
+  }, []);
+
+  const handleEnded = (e: SyntheticEvent<HTMLVideoElement>) => {
+    const v = e.currentTarget;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    if (document.visibilityState !== 'visible') return;
+    v.currentTime = 0;
+    void v.play().catch(() => {});
+  };
+
+  const handleLoadedMetadata = (e: SyntheticEvent<HTMLVideoElement>) => {
+    const v = e.currentTarget;
+    v.loop = true;
+  };
+
+  /** After our governor pauses near the end, `play()` can resume on a ended state — rewind first. */
+  const handlePlay = (e: SyntheticEvent<HTMLVideoElement>) => {
+    const v = e.currentTarget;
+    const d = v.duration;
+    if (d && Number.isFinite(d) && v.currentTime >= d - 0.08) v.currentTime = 0;
+  };
+
+  if (!list.length) return null;
+
+  const panels = list.map((src, i) => ({
+    src,
     angle: slice * i,
   }));
 
   return (
-    <div className={styles.root} aria-hidden>
+    <div ref={rootRef} className={styles.root} aria-hidden>
       <div className={styles.scene}>
         <div className={styles.ring}>
           {panels.map(({ src, angle }, i) => (
@@ -46,8 +165,11 @@ export function HeroVideoCarousel3D({ srcs = DEFAULT_SRCS }: Props) {
                 muted
                 loop
                 playsInline
-                autoPlay
                 preload="metadata"
+                disableRemotePlayback
+                onEnded={handleEnded}
+                onLoadedMetadata={handleLoadedMetadata}
+                onPlay={handlePlay}
               />
             </div>
           ))}

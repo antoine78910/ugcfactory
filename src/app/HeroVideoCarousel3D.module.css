@@ -14,9 +14,10 @@
 }
 
 .scene {
-  --pw: 120px;
-  --ph: 214px;
-  --r: 460px;
+  --pw: 138px;
+  --ph: 246px;
+  /* Radius vs panel size tuned so ~5 tiles read in view without huge gaps */
+  --r: 420px;
 
   width: 100%;
   height: 100%;
@@ -34,7 +35,7 @@
   width: 0;
   height: 0;
   transform-style: preserve-3d;
-  animation: heroSpin 48s linear infinite;
+  animation: heroSpin 36s linear infinite;
 }
 
 .panel {
@@ -63,9 +64,9 @@
 
 @media (min-width: 640px) {
   .scene {
-    --pw: 116px;
-    --ph: 206px;
-    --r: 580px;
+    --pw: 154px;
+    --ph: 274px;
+    --r: 540px;
     perspective: 640px;
     padding-bottom: 0;
   }
@@ -73,9 +74,9 @@
 
 @media (min-width: 1024px) {
   .scene {
-    --pw: 174px;
-    --ph: 310px;
-    --r: 920px;
+    --pw: 196px;
+    --ph: 348px;
+    --r: 720px;
     perspective: 720px;
     padding-bottom: 0;
   }
@@ -83,9 +84,9 @@
 
 @media (min-width: 1440px) {
   .scene {
-    --pw: 200px;
-    --ph: 356px;
-    --r: 1100px;
+    --pw: 224px;
+    --ph: 398px;
+    --r: 840px;
     perspective: 820px;
     padding-bottom: 0;
   }
