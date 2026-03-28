@@ -78,15 +78,15 @@ function UpgradeModal({
                 <ul className="mt-4 flex-1 space-y-2 text-xs text-white/70">
                   <li className="flex items-center gap-1.5">
                     <Check className="h-3.5 w-3.5 shrink-0 text-emerald-400" strokeWidth={2.5} />
-                    {plan.usage.ads}
+                    {plan.usage.linkToAd} Link to Ad
                   </li>
                   <li className="flex items-center gap-1.5">
                     <Check className="h-3.5 w-3.5 shrink-0 text-emerald-400" strokeWidth={2.5} />
-                    {plan.usage.videos}
+                    {plan.usage.images} images
                   </li>
                   <li className="flex items-center gap-1.5">
                     <Check className="h-3.5 w-3.5 shrink-0 text-emerald-400" strokeWidth={2.5} />
-                    {plan.usage.images}
+                    {plan.usage.videos} videos
                   </li>
                 </ul>
 

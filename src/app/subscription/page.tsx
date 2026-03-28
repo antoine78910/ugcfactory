@@ -28,7 +28,8 @@ type PlanDef = {
   description: string;
   monthly: number;
   credits: number;
-  usage: { ads: string; videos: string; images: string };
+  /** Approx. monthly capacity at typical credit costs (Link to Ad / images / videos). */
+  usage: { linkToAd: string; images: string; videos: string };
   highlight?: boolean;
 };
 
@@ -39,7 +40,7 @@ const PLANS: PlanDef[] = [
     description: "Learn the workflow and launch your first campaigns.",
     monthly: SUBSCRIPTIONS[0].price_usd,
     credits: SUBSCRIPTIONS[0].credits_per_month,
-    usage: { ads: "~6–7 ads", videos: "~30 videos", images: "~350 images" },
+    usage: { linkToAd: "4", images: "125", videos: "24" },
   },
   {
     id: "growth",
@@ -48,7 +49,7 @@ const PLANS: PlanDef[] = [
     description: "The plan most teams pick once content is weekly.",
     monthly: SUBSCRIPTIONS[1].price_usd,
     credits: SUBSCRIPTIONS[1].credits_per_month,
-    usage: { ads: "~15–17 ads", videos: "~70 videos", images: "~900 images" },
+    usage: { linkToAd: "10", images: "300", videos: "60" },
     highlight: true,
   },
   {
@@ -57,7 +58,7 @@ const PLANS: PlanDef[] = [
     description: "Scale creatives without hitting limits every few days.",
     monthly: SUBSCRIPTIONS[2].price_usd,
     credits: SUBSCRIPTIONS[2].credits_per_month,
-    usage: { ads: "~35–40 ads", videos: "~150 videos", images: "~2 000 images" },
+    usage: { linkToAd: "24", images: "700", videos: "140" },
   },
   {
     id: "scale",
@@ -65,7 +66,7 @@ const PLANS: PlanDef[] = [
     description: "Agencies and brands running multiple products at once.",
     monthly: SUBSCRIPTIONS[3].price_usd,
     credits: SUBSCRIPTIONS[3].credits_per_month,
-    usage: { ads: "~80–90 ads", videos: "~350 videos", images: "~4 500 images" },
+    usage: { linkToAd: "55", images: "1600", videos: "320" },
   },
 ];
 
@@ -358,13 +359,13 @@ export default function SubscriptionPage() {
                         </span>
                       </li>
                       <li className="pl-1 text-white/55">
-                        <span className="text-white/70">Ads:</span> {plan.usage.ads}
-                      </li>
-                      <li className="pl-1 text-white/55">
-                        <span className="text-white/70">Video:</span> {plan.usage.videos}
+                        <span className="text-white/70">Link to Ad:</span> {plan.usage.linkToAd}
                       </li>
                       <li className="pl-1 text-white/55">
                         <span className="text-white/70">Images:</span> {plan.usage.images}
+                      </li>
+                      <li className="pl-1 text-white/55">
+                        <span className="text-white/70">Videos:</span> {plan.usage.videos}
                       </li>
                     </ul>
                   </div>
