@@ -5,7 +5,6 @@ import Link from "next/link";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import ShapeGrid from "./ShapeGrid";
 import { HeroVideoCarousel3D } from "./HeroVideoCarousel3D";
 import { ArrowRight, ChevronDown, Sparkles } from "lucide-react";
 
@@ -46,6 +45,7 @@ const PRODUCTS = [
   { src: "/carousel/product-7.png", alt: "Pure Serum" },
 ];
 
+/** Image → video reveal carousel only (`public/carousel/`). */
 const UGC_SLIDES = [
   { src: "/carousel/slide-1.mp4" },
   { src: "/carousel/slide-2.mp4" },
@@ -55,6 +55,20 @@ const UGC_SLIDES = [
   { src: "/carousel/slide-6.mp4" },
   { src: "/carousel/slide-7.mp4" },
 ];
+
+/** Hero 3D ring only (`public/studio/`). */
+const HERO_STUDIO_VIDEOS = [
+  "/studio/0328(1).mp4",
+  "/studio/0328(2).mp4",
+  "/studio/0328(3).mp4",
+  "/studio/0328(4).mp4",
+  "/studio/0328(5).mp4",
+  "/studio/0328(6).mp4",
+  "/studio/0328(7).mp4",
+  "/studio/0328(8).mp4",
+  "/studio/0328(9).mp4",
+  "/studio/0328(10).mp4",
+] as const;
 
 const PAIRED_CAROUSEL_ITEMS = PRODUCTS.map((product, index) => ({
   product,
@@ -293,17 +307,6 @@ export default function LandingPage() {
           style={{ backgroundImage: "url(/hero-bg-texture.png)" }}
           aria-hidden
         />
-        <div className="absolute inset-0 z-[1] opacity-[0.45]">
-          <ShapeGrid
-            speed={0.5}
-            squareSize={40}
-            direction="diagonal"
-            borderColor="#271E37"
-            hoverFillColor="#222222"
-            shape="square"
-            hoverTrailAmount={0}
-          />
-        </div>
         <div className="pointer-events-none absolute inset-0 z-[3] bg-gradient-to-b from-[#050507]/60 via-[#050507]/25 via-40% to-transparent" />
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[3] h-8 bg-gradient-to-b from-transparent to-[#050507]" />
         <div className="pointer-events-none absolute left-1/2 top-0 z-[3] -translate-x-1/2 h-[700px] w-[1000px] rounded-full bg-violet-600/[0.12] blur-[140px]" />
@@ -339,12 +342,12 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* 3D video cylinder: full width, below headline in layout, continuous spin */}
+        {/* 3D video cylinder: nudged up toward the Generate row (was visually too low vs flex-end scene) */}
         <div
-          className="pointer-events-none absolute inset-x-0 bottom-0 z-[2] h-[min(340px,50svh)] overflow-visible sm:h-[min(390px,54svh)] lg:h-[min(460px,58svh)]"
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-[2] h-[min(430px,54svh)] -translate-y-px overflow-visible sm:h-[min(500px,58svh)] sm:-translate-y-2 lg:h-[min(600px,64svh)] lg:-translate-y-3"
           aria-hidden
         >
-          <HeroVideoCarousel3D srcs={UGC_SLIDES.map((s) => s.src)} />
+          <HeroVideoCarousel3D srcs={HERO_STUDIO_VIDEOS} />
         </div>
       </section>
 
@@ -384,8 +387,8 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Carousel: Product → Electric Band → UGC ── */}
-      <section className="overflow-hidden -mt-8 pt-24 pb-10 bg-gradient-to-b from-[#0c0a14]/35 via-[#09080f]/20 to-transparent">
+      {/* ── Carousel: Product → Electric Band → UGC (pulled up toward hero 3D strip) ── */}
+      <section className="overflow-hidden -mt-14 pt-14 pb-10 sm:-mt-20 sm:pt-16 bg-gradient-to-b from-[#0c0a14]/35 via-[#09080f]/20 to-transparent">
         <div className="mx-auto max-w-6xl px-5 mb-14 text-center">
           <h2 className="text-3xl font-bold tracking-tight sm:text-4xl md:text-5xl">
             Turn any product into realistic AI UGC ads
@@ -410,10 +413,10 @@ export default function LandingPage() {
 
           <div
             ref={carouselTrackRef}
-            className="relative z-[12] flex items-center gap-3 py-2 will-change-transform md:gap-8"
+            className="relative z-[12] flex items-center gap-2 py-2 will-change-transform md:gap-5"
             style={{ width: "max-content" }}
           >
-            <div ref={carouselSetRef} className="flex items-center gap-4 md:gap-8">
+            <div ref={carouselSetRef} className="flex items-center gap-3 md:gap-5">
               {PAIRED_CAROUSEL_ITEMS.map((item, i) => (
                 <RevealSlide
                   key={`reveal-a-${i}`}
@@ -425,7 +428,7 @@ export default function LandingPage() {
                 />
               ))}
             </div>
-            <div aria-hidden="true" className="flex items-center gap-4 md:gap-8">
+            <div aria-hidden="true" className="flex items-center gap-3 md:gap-5">
               {PAIRED_CAROUSEL_ITEMS.map((item, i) => (
                 <RevealSlide
                   key={`reveal-b-${i}`}

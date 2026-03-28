@@ -4,26 +4,30 @@ import type { CSSProperties } from 'react';
 import styles from './HeroVideoCarousel3D.module.css';
 
 const DEFAULT_SRCS = [
-  '/carousel/slide-1.mp4',
-  '/carousel/slide-2.mp4',
-  '/carousel/slide-3.mp4',
-  '/carousel/slide-4.mp4',
-  '/carousel/slide-5.mp4',
-  '/carousel/slide-6.mp4',
-  '/carousel/slide-7.mp4',
+  '/studio/0328(1).mp4',
+  '/studio/0328(2).mp4',
+  '/studio/0328(3).mp4',
+  '/studio/0328(4).mp4',
+  '/studio/0328(5).mp4',
+  '/studio/0328(6).mp4',
+  '/studio/0328(7).mp4',
+  '/studio/0328(8).mp4',
+  '/studio/0328(9).mp4',
+  '/studio/0328(10).mp4',
 ];
 
-const PANEL_COUNT = 16;
-const SLICE = 360 / PANEL_COUNT;
+/** More panels on the ring (smaller angle step) = tighter spacing + ~7+ visible; videos cycle through `srcs`. */
+const PANEL_COUNT = 20;
 
 type Props = { srcs?: readonly string[] };
 
 export function HeroVideoCarousel3D({ srcs = DEFAULT_SRCS }: Props) {
   const list = srcs.length ? srcs : DEFAULT_SRCS;
+  const slice = 360 / PANEL_COUNT;
 
   const panels = Array.from({ length: PANEL_COUNT }, (_, i) => ({
     src: list[i % list.length]!,
-    angle: SLICE * i,
+    angle: slice * i,
   }));
 
   return (

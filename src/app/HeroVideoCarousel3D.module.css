@@ -1,5 +1,6 @@
 /**
- * Full-width 3D cylinder: portrait panels, continuous rotation.
+ * 3D ring: “bowl” / recessed center — middle of the arc reads farther (smaller), flanks read closer (larger).
+ * Panels sit on the outer radius but normals flip inward: rotateY(θ) translateZ(+r) rotateY(180deg).
  */
 
 .root {
@@ -13,18 +14,19 @@
 }
 
 .scene {
-  --pw: 76px;
-  --ph: 135px;
-  --r: 360px;
+  --pw: 120px;
+  --ph: 214px;
+  --r: 460px;
 
   width: 100%;
   height: 100%;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: center;
-  padding-bottom: 0.6rem;
-  perspective: 820px;
-  perspective-origin: 50% 18%;
+  padding-bottom: 0;
+  /* Lower value = stronger depth (more hollow center vs big sides). */
+  perspective: 560px;
+  perspective-origin: 50% 22%;
 }
 
 .ring {
@@ -41,11 +43,13 @@
   height: var(--ph);
   left: calc(var(--pw) / -2);
   top: calc(var(--ph) / -2);
-  border-radius: 10px;
+  border-radius: 12px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
-  transform: rotateY(var(--angle)) translateZ(var(--r));
+  /* +Z on the cylinder, then 180° so faces point at the axis — center of strip sinks, sides swell. */
+  transform: rotateY(var(--angle)) translateZ(var(--r)) rotateY(180deg);
+  transform-origin: center center;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
 }
@@ -59,47 +63,46 @@
 
 @media (min-width: 640px) {
   .scene {
-    --pw: 92px;
-    --ph: 164px;
-    --r: 540px;
-    perspective: 940px;
-    padding-bottom: 0.9rem;
+    --pw: 116px;
+    --ph: 206px;
+    --r: 580px;
+    perspective: 640px;
+    padding-bottom: 0;
   }
 }
 
 @media (min-width: 1024px) {
   .scene {
-    --pw: 108px;
-    --ph: 192px;
-    --r: 740px;
-    perspective: 1080px;
-    padding-bottom: 1.1rem;
+    --pw: 174px;
+    --ph: 310px;
+    --r: 920px;
+    perspective: 720px;
+    padding-bottom: 0;
   }
 }
 
 @media (min-width: 1440px) {
   .scene {
-    --pw: 124px;
-    --ph: 220px;
-    --r: 920px;
-    perspective: 1250px;
-    padding-bottom: 1.4rem;
+    --pw: 200px;
+    --ph: 356px;
+    --r: 1100px;
+    perspective: 820px;
+    padding-bottom: 0;
   }
 }
 
 @keyframes heroSpin {
   from {
-    /* Keep the concave look: center reads farther, sides read closer. */
-    transform: translateZ(-300px) rotateX(12deg) rotateY(0deg);
+    transform: translateZ(-280px) rotateX(12deg) rotateY(0deg);
   }
   to {
-    transform: translateZ(-300px) rotateX(12deg) rotateY(-360deg);
+    transform: translateZ(-280px) rotateX(12deg) rotateY(-360deg);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .ring {
     animation: none;
-    transform: translateZ(-300px) rotateX(12deg) rotateY(-18deg);
+    transform: translateZ(-280px) rotateX(12deg) rotateY(-22deg);
   }
 }
