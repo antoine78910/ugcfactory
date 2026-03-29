@@ -21,8 +21,10 @@ import {
   flattenAnglePipeToTopLevel,
   normalizeKlingByReference,
   normalizePipelineByAngle,
+  mergeNanoPromptForApi,
   parseThreeLabeledPrompts,
   readUniverseFromExtracted,
+  splitNanoPromptBodyForEditing,
   selectedAngleScript,
   snapshotAfterKlingVideoSuccessForAngle,
   teaserFromScriptBlock,
@@ -682,6 +684,12 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const [nanoBananaSelectedImageIndex, setNanoBananaSelectedImageIndex] = useState<0 | 1 | 2 | null>(null);
   const [ugcVideoPromptGpt, setUgcVideoPromptGpt] = useState("");
   const [nanoPromptDrafts, setNanoPromptDrafts] = useState<[string, string, string]>(["", "", ""]);
+  /** Technical suffix (negative prompt, etc.) — not shown in the main editor; rejoined when generating. */
+  const [nanoPromptTechnicalTails, setNanoPromptTechnicalTails] = useState<[string, string, string]>([
+    "",
+    "",
+    "",
+  ]);
   const [nanoPromptHasEdits, setNanoPromptHasEdits] = useState(false);
   /** Per reference image (0–2): Kling video URL, task id, history, saved motion prompt. */
   const [klingByRef, setKlingByRef] = useState<KlingReferenceSlotV1[]>(() => createEmptyKlingByReference());
@@ -976,7 +984,13 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   ]);
 
   const quality = useMemo(() => confidenceToQuality(confidence ?? undefined), [confidence]);
-  const parsedNanoPrompts = useMemo(() => parseThreeLabeledPrompts(nanoBananaPromptsRaw), [nanoBananaPromptsRaw]);
+  const fullNanoPromptsTriple = useMemo((): [string, string, string] => {
+    return [
+      mergeNanoPromptForApi(nanoPromptDrafts[0] ?? "", nanoPromptTechnicalTails[0] ?? "").trim(),
+      mergeNanoPromptForApi(nanoPromptDrafts[1] ?? "", nanoPromptTechnicalTails[1] ?? "").trim(),
+      mergeNanoPromptForApi(nanoPromptDrafts[2] ?? "", nanoPromptTechnicalTails[2] ?? "").trim(),
+    ] as [string, string, string];
+  }, [nanoPromptDrafts, nanoPromptTechnicalTails]);
   const scriptOptionBodiesAll = useMemo(() => splitAllScriptOptions(scriptsText), [scriptsText]);
   const hasAvatarPhoto = avatarPhotoUrls.length > 0;
   const hasPersonaPhoto = personaPhotoUrls.length > 0;
@@ -1014,12 +1028,17 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   }, [angleLabels, hasAvatarPhoto, hasPersonaPhoto, sanitizeAngleLabelForAvatar, scriptOptionBodiesAll]);
 
   useEffect(() => {
-    setNanoPromptDrafts([parsedNanoPrompts[0] ?? "", parsedNanoPrompts[1] ?? "", parsedNanoPrompts[2] ?? ""]);
+    const parsed = parseThreeLabeledPrompts(nanoBananaPromptsRaw);
+    const parts = parsed.map((p) => splitNanoPromptBodyForEditing(p));
+    setNanoPromptDrafts([parts[0].editable, parts[1].editable, parts[2].editable]);
+    setNanoPromptTechnicalTails([parts[0].technicalTail, parts[1].technicalTail, parts[2].technicalTail]);
     setNanoPromptHasEdits(false);
   }, [nanoBananaPromptsRaw]);
 
   async function saveEditedNanoPrompts() {
-    const [p1, p2, p3] = nanoPromptDrafts.map((p) => String(p || "").trim()) as [string, string, string];
+    const [p1, p2, p3] = [0, 1, 2].map((i) =>
+      mergeNanoPromptForApi(nanoPromptDrafts[i] ?? "", nanoPromptTechnicalTails[i] ?? "").trim(),
+    ) as [string, string, string];
     if (!p1 || !p2 || !p3) {
       toast.error("All 3 prompts are required.");
       return;
@@ -2280,7 +2299,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   async function onGenerateNanoBananaImage() {
     const url = storeUrl.trim();
     const img = resolveNanoProductImageUrl();
-    const prompt = parsedNanoPrompts[nanoBananaSelectedPromptIndex]?.trim();
+    const prompt = fullNanoPromptsTriple[nanoBananaSelectedPromptIndex]?.trim();
     if (!url || !lastExtractedJson || !prompt) {
       toast.error("Generate the 3 image prompts first, then choose a valid prompt.");
       return;
@@ -2502,13 +2521,20 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
 
     let promptsText = nanoBananaPromptsRaw;
     const signatureMatches = promptsText.trim().length > 0 && nanoBananaPromptsSignatureRef.current === signature;
+
+    let prompts: [string, string, string];
     if (!signatureMatches) {
       const nextPrompts = await onGenerateNanoBananaPrompts(idx);
       if (!nextPrompts) return;
       promptsText = nextPrompts;
+      prompts = parseThreeLabeledPrompts(promptsText).map((p) => {
+        const { editable, technicalTail } = splitNanoPromptBodyForEditing(p);
+        return mergeNanoPromptForApi(editable, technicalTail).trim();
+      }) as [string, string, string];
+    } else {
+      prompts = fullNanoPromptsTriple;
     }
 
-    const prompts = parseThreeLabeledPrompts(promptsText).map((p) => p.trim());
     if (!prompts[0] || !prompts[1] || !prompts[2]) {
       toast.error("Some image prompts are missing.");
       return;
@@ -2562,7 +2588,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     if (!url || !lastExtractedJson) return;
     if (!nanoBananaImageUrls[idx]) return;
     const selectedUrl = nanoBananaImageUrls[idx];
-    const prompt = parsedNanoPrompts[idx]?.trim() || "";
+    const prompt = fullNanoPromptsTriple[idx]?.trim() || "";
 
     const slotsAfterSave = klingByRef.map((s) => ({
       ...s,
@@ -4474,9 +4500,12 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                   {nanoBananaPromptsRaw && !nanoHasThreeImages ? (
                     <div className="space-y-4">
                       <div>
-                        <h3 className="text-lg font-semibold tracking-tight text-white sm:text-xl">Image prompts</h3>
+                        <h3 className="text-lg font-semibold tracking-tight text-white sm:text-xl">
+                          Reference image — creative brief
+                        </h3>
                         <p className="mt-2 text-sm leading-snug text-white/70">
-                          Your 3 prompts are ready. Next, generate the 3 reference images.
+                          Edit persona, environment, and how the product is used. Technical camera lines and negative
+                          prompts stay hidden and are still applied when you generate.
                         </p>
                       </div>
                       <div className="space-y-2">
@@ -4486,7 +4515,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                             className="rounded-xl border border-white/10 bg-black/25 px-3 py-2.5 text-xs leading-relaxed text-white/85"
                           >
                             <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-white/45">
-                              Prompt {i + 1}
+                              Angle {i + 1} — scene &amp; subject
                             </p>
                             <Textarea
                               value={nanoPromptDrafts[i] ?? ""}

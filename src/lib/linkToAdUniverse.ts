@@ -600,6 +600,46 @@ export function parseThreeLabeledPrompts(text: string): [string, string, string]
   return [byNum[1], byNum[2], byNum[3]];
 }
 
+/**
+ * Splits one NanoBanana prompt body into the part users care to edit (persona, scene, product)
+ * vs technical tail (negative prompt, preservation lines). The tail is kept server-side and rejoined on generate.
+ */
+export function splitNanoPromptBodyForEditing(body: string): { editable: string; technicalTail: string } {
+  const t = body.replace(/\r\n/g, "\n");
+  if (!t.trim()) return { editable: "", technicalTail: "" };
+
+  const patterns: RegExp[] = [
+    /^\s*NEGATIVE\s+PROMPT\b/im,
+    /\n\s*NEGATIVE\s+PROMPT\b/i,
+    /\n\s*---+\s*NEGATIVE/i,
+    /\n\s*PRESERVATION\s+INSTRUCTIONS\b/i,
+    /\n\s*Standard\s+negative\s+prompt\b/i,
+  ];
+
+  let cut = t.length;
+  for (const re of patterns) {
+    const m = re.exec(t);
+    if (m && m.index !== undefined && m.index < cut) cut = m.index;
+  }
+
+  if (cut >= t.length) {
+    return { editable: t.trim(), technicalTail: "" };
+  }
+
+  return {
+    editable: t.slice(0, cut).trim(),
+    technicalTail: t.slice(cut).trim(),
+  };
+}
+
+export function mergeNanoPromptForApi(editable: string, technicalTail: string): string {
+  const e = editable.trim();
+  const tail = technicalTail.trim();
+  if (!tail) return e;
+  if (!e) return tail;
+  return `${e}\n\n${tail}`;
+}
+
 /** Clears Nano → Kling pipeline fields (keeps summary, scripts, angles text, product refs). */
 export const UNIVERSE_PIPELINE_CLEAR: Partial<LinkToAdUniverseSnapshotV1> = {
   nanoBananaPromptsRaw: undefined,
