@@ -6,12 +6,10 @@ import {
   studioGenerationRowToHistoryItem,
   type StudioGenerationRow,
 } from "@/lib/studioGenerationsMap";
+import { fetchStudioGenerationRows } from "@/lib/studioGenerationsListQuery";
 import { sweepStudioRefundHints } from "@/lib/studioGenerationsPoll";
 import { markStaleInProgressStudioGenerationsFailedForUser } from "@/lib/studioGenerationsStale";
-import {
-  STUDIO_GENERATIONS_LIST_LIMIT,
-  STUDIO_LIBRARY_KINDS,
-} from "@/lib/studioGenerationKinds";
+import { STUDIO_LIBRARY_KINDS } from "@/lib/studioGenerationKinds";
 import { filterLegacyLinkToAdFromTabRows } from "@/lib/studioGenerationsTabFilter";
 
 const KIND_DEFAULT = "avatar";
@@ -38,31 +36,18 @@ export async function GET(req: Request) {
   try {
     await markStaleInProgressStudioGenerationsFailedForUser(supabase, user.id);
 
-    let query = supabase
-      .from("studio_generations")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(STUDIO_GENERATIONS_LIST_LIMIT);
-
+    let rows: StudioGenerationRow[];
     if (all) {
-      query = query.in("kind", [...STUDIO_LIBRARY_KINDS]);
+      rows = await fetchStudioGenerationRows(supabase, user.id, { mode: "all" });
     } else {
       const parsed = parseKindParam(kindRaw);
       if ("mode" in parsed) {
-        query = query.in("kind", [...STUDIO_LIBRARY_KINDS]);
-      } else if (parsed.kinds.length === 1) {
-        query = query.eq("kind", parsed.kinds[0]!);
+        rows = await fetchStudioGenerationRows(supabase, user.id, { mode: "all" });
       } else {
-        query = query.in("kind", parsed.kinds);
+        rows = await fetchStudioGenerationRows(supabase, user.id, { kinds: parsed.kinds });
       }
     }
 
-    const { data, error } = await query;
-
-    if (error) throw error;
-
-    let rows = (data ?? []) as StudioGenerationRow[];
     if (!all) {
       const parsedForFilter = parseKindParam(kindRaw);
       if (!("mode" in parsedForFilter)) {

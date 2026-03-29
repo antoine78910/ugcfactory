@@ -4,6 +4,7 @@ import {
   studioGenerationRowToHistoryItem,
   type StudioGenerationRow,
 } from "@/lib/studioGenerationsMap";
+import { fetchStudioGenerationRows } from "@/lib/studioGenerationsListQuery";
 import {
   pollStudioGenerationRow,
   STUDIO_GENERATION_IN_PROGRESS_STATUSES,
@@ -14,7 +15,6 @@ import { markStaleInProgressStudioGenerationsFailedForUser } from "@/lib/studioG
 import {
   STUDIO_GENERATION_KIND_LINK_TO_AD_IMAGE,
   STUDIO_GENERATION_KIND_LINK_TO_AD_VIDEO,
-  STUDIO_GENERATIONS_LIST_LIMIT,
   STUDIO_IMAGE_TAB_KINDS,
   STUDIO_LIBRARY_KINDS,
   STUDIO_VIDEO_TAB_KINDS,
@@ -134,26 +134,14 @@ export async function POST(req: Request) {
       serverLog("studio_generations_refund_hints", { count: refundHints.length, kind });
     }
 
-    let listQuery = supabase
-      .from("studio_generations")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(STUDIO_GENERATIONS_LIST_LIMIT);
-
+    let listRows: StudioGenerationRow[];
     if (resolvedKinds === "all") {
-      listQuery = listQuery.in("kind", [...LIBRARY_KINDS]);
+      listRows = await fetchStudioGenerationRows(supabase, user.id, { mode: "all" });
     } else if (resolvedKinds.length === 1) {
-      listQuery = listQuery.eq("kind", resolvedKinds[0]!);
+      listRows = await fetchStudioGenerationRows(supabase, user.id, { kinds: [resolvedKinds[0]!] });
     } else {
-      listQuery = listQuery.in("kind", resolvedKinds);
+      listRows = await fetchStudioGenerationRows(supabase, user.id, { kinds: resolvedKinds });
     }
-
-    const { data: all, error: listErr } = await listQuery;
-
-    if (listErr) throw listErr;
-
-    let listRows = (all ?? []) as StudioGenerationRow[];
     if (resolvedKinds !== "all") {
       listRows = filterLegacyLinkToAdFromTabRows(listRows, resolvedKinds);
     }

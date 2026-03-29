@@ -12,8 +12,20 @@ export const STUDIO_GENERATION_KIND_LINK_TO_AD_IMAGE = "link_to_ad_image" as con
 /** Link to Ad final videos (PiAPI/Kling) — Projects library only, not Create → Video */
 export const STUDIO_GENERATION_KIND_LINK_TO_AD_VIDEO = "link_to_ad_video" as const;
 
-/** Max rows returned per list/poll (per kind filter). Keeps older Studio items visible alongside Link to Ad. */
-export const STUDIO_GENERATIONS_LIST_LIMIT = 250;
+/**
+ * Max rows for Create tab list queries (`kind=avatar`, `studio_image,studio_upscale`, video kinds, etc.).
+ * Single global ORDER+LIMIT was too small for heavy users.
+ */
+export const STUDIO_GENERATIONS_LIST_LIMIT = 2000;
+
+/**
+ * When listing `all=1` (Projects library), fetch this many rows **per kind**, then merge by date.
+ * Avoids one hot kind (e.g. Link to Ad) crowding out avatars / studio images in a single LIMIT.
+ */
+export const STUDIO_GENERATIONS_ALL_PER_KIND_LIMIT = 500;
+
+/** Cap after merging per-kind results for `all=1`. */
+export const STUDIO_GENERATIONS_ALL_MERGED_MAX = 3000;
 
 /** Kinds returned by GET `/api/studio/generations?all=1` (Projects library + background poll). */
 export const STUDIO_LIBRARY_KINDS = [
