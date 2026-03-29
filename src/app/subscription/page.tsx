@@ -14,7 +14,6 @@ import {
   subscriptionPlanSortIndex,
   type SubscriptionPlanId,
 } from "@/lib/stripe/subscriptionPrices";
-import type { AccountPlanId } from "@/app/_components/CreditsPlanContext";
 
 type Billing = "monthly" | "yearly";
 const BILLING_PORTAL_URL =
@@ -70,13 +69,6 @@ const PLANS: PlanDef[] = [
   },
 ];
 
-function visibleSubscriptionPlans(accountPlanId: AccountPlanId): PlanDef[] {
-  if (accountPlanId === "free") return PLANS;
-  const minIdx = subscriptionPlanSortIndex(accountPlanId);
-  if (minIdx < 0) return PLANS;
-  return PLANS.filter((p) => subscriptionPlanSortIndex(p.id as SubscriptionPlanId) >= minIdx);
-}
-
 function CellIcon({ ok, accent }: { ok: boolean; accent?: "violet" | "amber" | "emerald" }) {
   if (!ok) return <X className="mx-auto h-4 w-4 text-white/15" strokeWidth={2} />;
   const cls =
@@ -107,7 +99,34 @@ function tierColBg(ti: number): string {
 export default function SubscriptionPage() {
   const [billing, setBilling] = useState<Billing>("monthly");
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
+  /** Stripe subscription billing from DB; null = free, unknown, or not loaded yet. */
+  const [serverSubBilling, setServerSubBilling] = useState<"monthly" | "yearly" | null | "pending">(
+    "pending",
+  );
   const { planId, planDisplayName } = useCreditsPlan();
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/me/subscription", { credentials: "include" });
+        if (!res.ok) {
+          if (!cancelled) setServerSubBilling(null);
+          return;
+        }
+        const data = (await res.json()) as { billing?: unknown };
+        const raw = data.billing;
+        const b =
+          raw === "yearly" ? "yearly" : raw === "monthly" ? "monthly" : null;
+        if (!cancelled) setServerSubBilling(b);
+      } catch {
+        if (!cancelled) setServerSubBilling(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -171,22 +190,14 @@ export default function SubscriptionPage() {
 
   const isSubscribed = planId !== "free";
 
-  const visiblePlans = useMemo(() => visibleSubscriptionPlans(planId), [planId]);
   const planColumnIndices = useMemo(
-    () => visiblePlans.map((p) => subscriptionPlanSortIndex(p.id as SubscriptionPlanId)),
-    [visiblePlans],
+    () => PLANS.map((p) => subscriptionPlanSortIndex(p.id as SubscriptionPlanId)),
+    [],
   );
 
-  const planGridClass =
-    visiblePlans.length <= 1
-      ? "mx-auto max-w-md grid-cols-1"
-      : visiblePlans.length === 2
-        ? "grid-cols-1 sm:grid-cols-2"
-        : visiblePlans.length === 3
-          ? "grid-cols-1 sm:grid-cols-2 xl:grid-cols-3"
-          : "grid-cols-1 sm:grid-cols-2 xl:grid-cols-4";
+  const planGridClass = "grid-cols-1 sm:grid-cols-2 xl:grid-cols-4";
 
-  const matrixGridTemplate = `minmax(200px,1.2fr) repeat(${visiblePlans.length}, minmax(88px,1fr))`;
+  const matrixGridTemplate = `minmax(200px,1.2fr) repeat(${PLANS.length}, minmax(88px,1fr))`;
 
   return (
     <StudioShell>
@@ -261,20 +272,38 @@ export default function SubscriptionPage() {
                 <p className="max-w-lg text-sm text-white/50">
                   Current plan:{" "}
                   <span className="font-semibold text-white/85">{planDisplayName}</span>
-                  {visiblePlans.length > 1
-                    ? ". Below are your tier and higher options only."
-                    : null}
+                  . All plans are shown — upgrade, switch yearly/monthly, or manage downgrades in billing.
                 </p>
-              ) : null}
-              {isSubscribed && visiblePlans.length === 1 ? (
-                <p className="max-w-md text-xs text-white/40">You’re on our highest subscription tier.</p>
               ) : null}
             </div>
 
             <div className={cn("mx-auto grid max-w-6xl gap-5 pt-3", planGridClass)}>
-              {visiblePlans.map((plan) => {
+              {PLANS.map((plan) => {
                 const { mainLabel, sub } = priceFor(plan);
-                const isCurrentPlanCard = isSubscribed && plan.id === planId;
+                const planIdx = subscriptionPlanSortIndex(plan.id as SubscriptionPlanId);
+                const currentIdx = isSubscribed
+                  ? subscriptionPlanSortIndex(planId as SubscriptionPlanId)
+                  : -1;
+                const isSameTier = isSubscribed && plan.id === planId;
+                const isLowerTier =
+                  isSubscribed && planIdx >= 0 && currentIdx >= 0 && planIdx < currentIdx;
+
+                const serverBillResolved =
+                  serverSubBilling === "monthly" || serverSubBilling === "yearly"
+                    ? serverSubBilling
+                    : null;
+                const exactPlanAndBilling =
+                  isSameTier &&
+                  ((serverBillResolved === "monthly" && billing === "monthly") ||
+                    (serverBillResolved === "yearly" && billing === "yearly") ||
+                    (serverBillResolved === null &&
+                      serverSubBilling !== "pending" &&
+                      billing === "monthly"));
+
+                const isCurrentPlanCard = isSameTier;
+                const showYearlySavingsBadge =
+                  billing === "yearly" &&
+                  !(isSameTier && serverBillResolved === "yearly");
 
                 return (
                   <div
@@ -299,7 +328,7 @@ export default function SubscriptionPage() {
                           {plan.badge}
                         </span>
                       ) : null}
-                      {billing === "yearly" && !isCurrentPlanCard ? (
+                      {showYearlySavingsBadge ? (
                         <span className="rounded-full border border-emerald-300/45 bg-emerald-400/20 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-100">
                           Save 30%
                         </span>
@@ -328,11 +357,16 @@ export default function SubscriptionPage() {
 
                     <Button
                       type="button"
-                      disabled={Boolean(checkoutLoading) || isCurrentPlanCard}
+                      disabled={
+                        Boolean(checkoutLoading) ||
+                        exactPlanAndBilling ||
+                        isLowerTier ||
+                        (isSameTier && serverSubBilling === "pending")
+                      }
                       onClick={() => void startSubscriptionCheckout(plan.id)}
                       className={cn(
                         "mt-6 h-12 w-full rounded-xl text-sm font-bold transition-all",
-                        isCurrentPlanCard
+                        exactPlanAndBilling || isLowerTier
                           ? "cursor-not-allowed border border-white/10 bg-white/[0.06] text-white/40 shadow-none hover:bg-white/[0.06]"
                           : plan.highlight
                             ? "border border-violet-200/35 bg-violet-400 text-black shadow-[0_6px_0_0_rgba(76,29,149,0.9)] hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9)]"
@@ -341,8 +375,22 @@ export default function SubscriptionPage() {
                     >
                       {checkoutLoading === plan.id ? (
                         "Redirecting…"
-                      ) : isCurrentPlanCard ? (
+                      ) : isSameTier && serverSubBilling === "pending" ? (
+                        "Loading…"
+                      ) : exactPlanAndBilling ? (
                         "Current plan"
+                      ) : isLowerTier ? (
+                        "Below current plan"
+                      ) : isSameTier && billing === "yearly" && serverSubBilling !== "yearly" ? (
+                        <span className="inline-flex items-center justify-center gap-2">
+                          Switch to yearly
+                          <ArrowRight className="h-4 w-4" aria-hidden />
+                        </span>
+                      ) : isSameTier && billing === "monthly" && serverSubBilling === "yearly" ? (
+                        <span className="inline-flex items-center justify-center gap-2">
+                          Switch to monthly
+                          <ArrowRight className="h-4 w-4" aria-hidden />
+                        </span>
                       ) : (
                         <span className="inline-flex items-center justify-center gap-2">
                           {isSubscribed ? "Upgrade" : "Subscribe"}
@@ -442,7 +490,7 @@ export default function SubscriptionPage() {
                     style={{ gridTemplateColumns: matrixGridTemplate }}
                   >
                     <div className="p-4 text-xs font-semibold uppercase tracking-wider text-white/35">Feature</div>
-                    {visiblePlans.map((p, i) => {
+                    {PLANS.map((p, i) => {
                       const colIdx = planColumnIndices[i] ?? 0;
                       return (
                         <div

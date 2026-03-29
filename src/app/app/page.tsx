@@ -2070,8 +2070,8 @@ export default function AppBrandWizard() {
                                       Brand content &amp; angles
                                     </p>
                                     <p className="mt-1 max-w-2xl text-[11px] leading-relaxed text-white/40">
-                                      For each ad below: refine the scan brief, then edit the three marketing angles as
-                                      factors (hook, problem, avatar, …) — no raw script view. Saves sync with Link to Ad.
+                                      For each ad: tweak the brief (core story + optional full scan), then edit angles as
+                                      factors. Add a 4th angle or clear one you dislike — changes sync with Link to Ad.
                                     </p>
                                   </div>
                                   {proj.runs.map((run) => {
@@ -2114,6 +2114,8 @@ export default function AppBrandWizard() {
                                             extracted={run.extracted}
                                             scriptsText={snap.scriptsText}
                                             angleLabels={snap.angleLabels}
+                                            brandBrief={snap.summaryText}
+                                            productImageUrls={snap.productOnlyImageUrls ?? null}
                                             onSaved={() => void refreshMeAndRuns()}
                                           />
                                         ) : (

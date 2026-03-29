@@ -19,7 +19,9 @@ export type LinkToAdUniverseSnapshotV1 = {
   userPhotoUrls?: string[] | null;
   summaryText: string;
   scriptsText: string;
-  angleLabels: [string, string, string];
+  /** One label per script angle (3 or 4 SCRIPT OPTION blocks). */
+  angleLabels: string[];
+  /** 0–3 when four angles are stored; video/image pipeline still uses slots 0–2 only (angle 3 mirrors slot 2 until extended). */
   selectedAngleIndex: number | null;
   /** GPT output: 3 NanoBanana reference prompts (PROMPT 1/2/3) */
   nanoBananaPromptsRaw?: string;
@@ -261,7 +263,7 @@ export function findPendingKlingInUniverse(snap: LinkToAdUniverseSnapshotV1): {
   const legacyRef = findPendingKlingSlotIndex(snap);
   if (legacyRef === null || (legacyRef !== 0 && legacyRef !== 1 && legacyRef !== 2)) return null;
   const sel = snap.selectedAngleIndex;
-  const ai = sel === 0 || sel === 1 || sel === 2 ? sel : 0;
+  const ai = sel === 0 || sel === 1 || sel === 2 ? sel : sel === 3 ? 2 : 0;
   const slotsNorm = normalizeKlingByReference(snap);
   const tid = slotsNorm[legacyRef]?.taskId?.trim();
   if (!tid) return null;
@@ -304,8 +306,9 @@ export function snapshotAfterKlingVideoSuccessForAngle(
     ...snap,
     linkToAdPipelineByAngle: triple,
   };
-  if (sel === 0 || sel === 1 || sel === 2) {
-    const active = triple[sel];
+  const pSel = sel === 0 || sel === 1 || sel === 2 || sel === 3 ? Math.min(sel, 2) : null;
+  if (pSel !== null) {
+    const active = triple[pSel];
     const kn = normalizeKlingByReference({
       klingByReferenceIndex: active.klingByReferenceIndex,
       klingVideoUrl: snap.klingVideoUrl,
@@ -470,47 +473,64 @@ function solutionQuotedLine(block: string): string | null {
   return s || null;
 }
 
-/** Split GPT output into the 3 SCRIPT OPTION bodies (best-effort). */
-export function splitScriptOptions(full: string): [string, string, string] {
-  const text = full.replace(/\r\n/g, "\n");
-  const markers = [
-    text.search(/SCRIPT\s+OPTION\s*1\b/i),
-    text.search(/SCRIPT\s+OPTION\s*2\b/i),
-    text.search(/SCRIPT\s+OPTION\s*3\b/i),
-  ];
-  if (markers[0] === -1) {
+/**
+ * Split stored scripts into N SCRIPT OPTION blocks (any count ≥1).
+ * Falls back to three equal chunks when no markers are found.
+ */
+export function splitAllScriptOptions(full: string): string[] {
+  const text = full.replace(/\r\n/g, "\n").trim();
+  if (!text) return [];
+  const re = /SCRIPT\s+OPTION\s*\d+\b/gi;
+  const starts: number[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) starts.push(m.index);
+  if (starts.length === 0) {
     const third = Math.max(1, Math.floor(text.length / 3));
     return [text.slice(0, third), text.slice(third, third * 2), text.slice(third * 2)];
   }
-  const ends = [...markers.slice(1), text.length];
   const out: string[] = [];
-  for (let i = 0; i < 3; i++) {
-    const start = markers[i];
-    const end = i < 2 ? Math.max(start, markers[i + 1]) : text.length;
-    out.push(start >= 0 ? text.slice(start, end).trim() : "");
+  for (let i = 0; i < starts.length; i++) {
+    const start = starts[i];
+    const end = i + 1 < starts.length ? starts[i + 1] : text.length;
+    out.push(text.slice(start, end).trim());
   }
-  return [out[0] || text, out[1] || "", out[2] || ""];
+  return out;
 }
 
-/** Strip a leading `SCRIPT OPTION n` line so we can re-wrap with {@link joinScriptOptions}. */
-function stripScriptOptionHeader(n: 1 | 2 | 3, block: string): string {
+/** First three SCRIPT OPTION bodies (legacy helpers). */
+export function splitScriptOptions(full: string): [string, string, string] {
+  const all = splitAllScriptOptions(full);
+  return [all[0] ?? "", all[1] ?? "", all[2] ?? ""];
+}
+
+/** Strip a leading `SCRIPT OPTION n` line so we can re-wrap with {@link joinScriptOptionsFromBodies}. */
+function stripScriptOptionHeaderN(n: number, block: string): string {
   const t = block.trim();
-  const re = new RegExp(`^SCRIPT\\s+OPTION\\s*${n}\\b\\s*\\n+`, "i");
+  const re = new RegExp(`^SCRIPT\\s+OPTION\\s*${n}\\b\\s*\\n*`, "i");
   return t.replace(re, "").trim();
+}
+
+/** Rebuild scripts text from any number of edited blocks (3 or 4 supported in UI). */
+export function joinScriptOptionsFromBodies(bodies: string[]): string {
+  if (bodies.length === 0) return "";
+  return bodies
+    .map((block, i) => {
+      const n = i + 1;
+      const stripped = stripScriptOptionHeaderN(n, block);
+      return `SCRIPT OPTION ${n}\n\n${stripped}`;
+    })
+    .join("\n\n");
 }
 
 /** Rebuild full scripts text from three edited blocks (matches common GPT layout). */
 export function joinScriptOptions(parts: [string, string, string]): string {
-  const b0 = stripScriptOptionHeader(1, parts[0]);
-  const b1 = stripScriptOptionHeader(2, parts[1]);
-  const b2 = stripScriptOptionHeader(3, parts[2]);
-  return `SCRIPT OPTION 1\n\n${b0}\n\nSCRIPT OPTION 2\n\n${b1}\n\nSCRIPT OPTION 3\n\n${b2}`;
+  return joinScriptOptionsFromBodies([parts[0], parts[1], parts[2]]);
 }
 
 export function selectedAngleScript(scriptsText: string, selectedAngleIndex: number | null): string {
-  if (selectedAngleIndex == null || selectedAngleIndex < 0 || selectedAngleIndex > 2) return "";
-  const [a, b, c] = splitScriptOptions(scriptsText);
-  return [a, b, c][selectedAngleIndex] ?? "";
+  if (selectedAngleIndex == null || selectedAngleIndex < 0) return "";
+  const all = splitAllScriptOptions(scriptsText);
+  return all[selectedAngleIndex] ?? "";
 }
 
 /**
@@ -552,13 +572,58 @@ export function teaserFromScriptBlock(block: string, index: 0 | 1 | 2): string {
   return FALLBACK_ANGLE_LABELS[index];
 }
 
-export function deriveAngleLabelsFromScripts(scriptsText: string): [string, string, string] {
-  const [a, b, c] = splitScriptOptions(scriptsText);
-  return [
-    teaserFromScriptBlock(a, 0),
-    teaserFromScriptBlock(b, 1),
-    teaserFromScriptBlock(c, 2),
-  ];
+export function deriveAngleLabelsFromScripts(scriptsText: string): string[] {
+  const parts = splitAllScriptOptions(scriptsText);
+  return parts.map((block, i) => teaserFromScriptBlock(block, (i % 3) as 0 | 1 | 2));
+}
+
+function parseAngleLabelsFromSnapshot(o: Record<string, unknown>): string[] {
+  const scriptsText = typeof o.scriptsText === "string" ? o.scriptsText : "";
+  const parts = splitAllScriptOptions(scriptsText);
+  const n = Math.min(4, Math.max(3, parts.length));
+  const derived = deriveAngleLabelsFromScripts(scriptsText);
+  const raw = o.angleLabels;
+  if (!Array.isArray(raw) || raw.length < 3) {
+    const out = [...derived];
+    while (out.length < n) out.push("");
+    return out.slice(0, n);
+  }
+  const fromRaw = raw.slice(0, n).map((x, i) => {
+    const s = String(x).trim();
+    return s || derived[i] || "";
+  });
+  while (fromRaw.length < n) fromRaw.push(derived[fromRaw.length] || "");
+  return fromRaw.slice(0, n);
+}
+
+/**
+ * Product brief: show an editable “hero” paragraph in projects; keep the rest for GPT but hidden by default.
+ */
+export function splitProductBriefForEditing(text: string): { hero: string; tail: string; useBrandPrefix: boolean } {
+  const raw = text.replace(/\r\n/g, "\n").trim();
+  if (!raw) return { hero: "", tail: "", useBrandPrefix: false };
+  const prefixMatch = raw.match(/^\s*(brand\s+brief\s*:)\s*/i);
+  const useBrandPrefix = Boolean(prefixMatch);
+  const body = prefixMatch ? raw.slice(prefixMatch[0].length).trim() : raw;
+  if (!body) return { hero: "", tail: "", useBrandPrefix };
+  const maxHero = 520;
+  if (body.length <= maxHero) return { hero: body, tail: "", useBrandPrefix };
+  const slice = body.slice(0, maxHero);
+  const lastSent = Math.max(slice.lastIndexOf(". "), slice.lastIndexOf("? "), slice.lastIndexOf("! "));
+  const cut = lastSent > 140 ? lastSent + 1 : maxHero;
+  return {
+    hero: body.slice(0, cut).trim(),
+    tail: body.slice(cut).trim(),
+    useBrandPrefix,
+  };
+}
+
+export function mergeProductBriefForEditing(hero: string, tail: string, useBrandPrefix: boolean): string {
+  const h = hero.replace(/\r\n/g, " ").replace(/\s+/g, " ").trim();
+  const t = tail.replace(/\r\n/g, " ").replace(/\s+/g, " ").trim();
+  const body = t ? `${h} ${t}`.replace(/\s+/g, " ").trim() : h;
+  if (!body) return "";
+  return useBrandPrefix ? `Brand brief: ${body}` : body;
 }
 
 /**
@@ -690,11 +755,11 @@ export function readUniverseFromExtracted(extracted: unknown): LinkToAdUniverseS
         : null,
     summaryText: typeof o.summaryText === "string" ? o.summaryText : "",
     scriptsText: typeof o.scriptsText === "string" ? o.scriptsText : "",
-    angleLabels:
-      Array.isArray(o.angleLabels) && o.angleLabels.length >= 3
-        ? [String(o.angleLabels[0]), String(o.angleLabels[1]), String(o.angleLabels[2])]
-        : ["", "", ""],
-    selectedAngleIndex: typeof o.selectedAngleIndex === "number" && o.selectedAngleIndex >= 0 && o.selectedAngleIndex <= 2 ? o.selectedAngleIndex : null,
+    angleLabels: parseAngleLabelsFromSnapshot(o),
+    selectedAngleIndex:
+      typeof o.selectedAngleIndex === "number" && o.selectedAngleIndex >= 0 && o.selectedAngleIndex <= 3
+        ? o.selectedAngleIndex
+        : null,
     nanoBananaPromptsRaw: typeof o.nanoBananaPromptsRaw === "string" ? o.nanoBananaPromptsRaw : undefined,
     nanoBananaSelectedPromptIndex:
       typeof o.nanoBananaSelectedPromptIndex === "number" && o.nanoBananaSelectedPromptIndex >= 0 && o.nanoBananaSelectedPromptIndex <= 2
@@ -727,8 +792,9 @@ export function readUniverseFromExtracted(extracted: unknown): LinkToAdUniverseS
   const triple = normalizePipelineByAngle(base);
   let out: LinkToAdUniverseSnapshotV1 = { ...base, linkToAdPipelineByAngle: triple };
   const angSel = out.selectedAngleIndex;
-  if (angSel === 0 || angSel === 1 || angSel === 2) {
-    const active = triple[angSel];
+  const pipeIdx = angSel === 0 || angSel === 1 || angSel === 2 || angSel === 3 ? Math.min(angSel, 2) : null;
+  if (pipeIdx !== null) {
+    const active = triple[pipeIdx];
     const kn = normalizeKlingByReference({
       klingByReferenceIndex: active.klingByReferenceIndex,
       klingVideoUrl: base.klingVideoUrl,

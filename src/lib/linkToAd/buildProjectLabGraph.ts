@@ -1,6 +1,7 @@
 import {
   normalizePipelineByAngle,
   readUniverseFromExtracted,
+  splitAllScriptOptions,
   type LinkToAdAnglePipelineV1,
 } from "@/lib/linkToAdUniverse";
 
@@ -46,7 +47,7 @@ function shorten(s: string, max: number) {
   return `${t.slice(0, max - 1)}…`;
 }
 
-function angleShortLabel(labels: [string, string, string], i: 0 | 1 | 2) {
+function angleShortLabel(labels: string[], i: number) {
   const raw = labels[i]?.trim() || `Angle ${i + 1}`;
   return shorten(raw, 72);
 }
@@ -151,7 +152,7 @@ export function buildProjectLabGraph(params: {
         sublabel: snap.summaryText?.trim()
           ? shorten(snap.summaryText, 90)
           : snap.scriptsText?.trim()
-            ? "3 UGC angles ready"
+            ? `${splitAllScriptOptions(snap.scriptsText).length} UGC angles`
             : undefined,
         runId: run.id,
       });
@@ -175,7 +176,7 @@ export function buildProjectLabGraph(params: {
         w: 200,
         h: 52,
         label: `Script ${a + 1}`,
-        sublabel: angleShortLabel(labels, a as 0 | 1 | 2),
+        sublabel: angleShortLabel(labels, a),
         runId: run.id,
         angleIndex: a,
       });

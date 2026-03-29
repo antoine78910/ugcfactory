@@ -3,7 +3,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { toast } from "sonner";
-import { Check, ChevronDown, ChevronUp, ImagePlus, Loader2, Maximize2, PenLine, Plus, RefreshCw, Sparkles, Trash2, User, Video, X } from "lucide-react";
+import {
+  ArrowLeft,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  ImagePlus,
+  Loader2,
+  Maximize2,
+  PenLine,
+  Plus,
+  RefreshCw,
+  Sparkles,
+  Trash2,
+  User,
+  Video,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -24,6 +40,7 @@ import {
   mergeNanoPromptForApi,
   parseThreeLabeledPrompts,
   readUniverseFromExtracted,
+  splitAllScriptOptions,
   splitNanoPromptBodyForEditing,
   selectedAngleScript,
   snapshotAfterKlingVideoSuccessForAngle,
@@ -75,23 +92,6 @@ import {
 
 /** Same-origin API calls with session (mirrors server `createInternalFetchFromRequest`). */
 const browserPipelineFetch = ((path: string, init?: RequestInit) => fetch(path, init)) as InternalFetch;
-
-function splitAllScriptOptions(full: string): string[] {
-  const text = full.replace(/\r\n/g, "\n").trim();
-  if (!text) return [];
-  const re = /SCRIPT\s+OPTION\s*\d+\b/gi;
-  const starts: number[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text))) starts.push(m.index);
-  if (starts.length === 0) return [text];
-  const out: string[] = [];
-  for (let i = 0; i < starts.length; i++) {
-    const start = starts[i];
-    const end = i + 1 < starts.length ? starts[i + 1] : text.length;
-    out.push(text.slice(start, end).trim());
-  }
-  return out;
-}
 
 function selectedScriptOptionByIndex(full: string, index: number | null): string {
   if (index === null || index < 0) return "";
@@ -643,7 +643,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
 
   const [universeRunId, setUniverseRunId] = useState<string | null>(null);
   const [lastExtractedJson, setLastExtractedJson] = useState<Record<string, unknown> | null>(null);
-  const [angleLabels, setAngleLabels] = useState<[string, string, string]>(["", "", ""]);
+  const [angleLabels, setAngleLabels] = useState<string[]>(["", "", ""]);
   const [selectedAngleIndex, setSelectedAngleIndex] = useState<number | null>(null);
   const [customAngleInput, setCustomAngleInput] = useState("");
   const [isCustomAngleLoading, setIsCustomAngleLoading] = useState(false);
@@ -712,6 +712,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const [angleSummaryDrafts, setAngleSummaryDrafts] = useState<Record<number, string>>({});
 
   const nanoBananaPromptsSignatureRef = useRef<string | null>(null);
+  /** Incremented when user abandons the flow so late pipeline responses do not re-hydrate the UI. */
+  const linkToAdFlowEpochRef = useRef(0);
 
   const nanoPromptsAbortRef = useRef<AbortController | null>(null);
   const nanoImageAbortRef = useRef<AbortController | null>(null);
@@ -719,7 +721,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const videoPromptAbortRef = useRef<AbortController | null>(null);
   const klingAbortRef = useRef<AbortController | null>(null);
 
-  const cancelCurrentGeneration = useCallback(() => {
+  const cancelCurrentGeneration = useCallback((opts?: { silent?: boolean }) => {
     nanoPromptsAbortRef.current?.abort();
     nanoImageAbortRef.current?.abort();
     nanoThreeAbortRef.current?.abort();
@@ -736,8 +738,142 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     setNanoPollingSlotIndex(null);
     setKlingPollTaskId(null);
     setKlingPollImageIndex(null);
-    toast.message("Generation cancelled", { description: "Stopped polling and aborted pending requests." });
+    if (!opts?.silent) {
+      toast.message("Generation cancelled", { description: "Stopped polling and aborted pending requests." });
+    }
   }, []);
+
+  const hasStartedLinkToAdFlow = useMemo(
+    () =>
+      Boolean(
+        storeUrl.trim() ||
+          summaryText.trim() ||
+          scriptsText.trim() ||
+          universeRunId ||
+          lastExtractedJson ||
+          neutralUploadUrl ||
+          productOnlyImageUrls.length > 0 ||
+          userPhotoUrls.length > 0 ||
+          avatarPhotoUrls.length > 0 ||
+          avatarUrls.length > 0 ||
+          personaPhotoUrls.length > 0 ||
+          pendingProductUploads.length > 0 ||
+          pendingPersonaUploads.length > 0 ||
+          stage !== "idle" ||
+          isWorking ||
+          isUploadingAdditionalPhotos,
+      ),
+    [
+      storeUrl,
+      summaryText,
+      scriptsText,
+      universeRunId,
+      lastExtractedJson,
+      neutralUploadUrl,
+      productOnlyImageUrls.length,
+      userPhotoUrls.length,
+      avatarPhotoUrls.length,
+      avatarUrls.length,
+      personaPhotoUrls.length,
+      pendingProductUploads.length,
+      pendingPersonaUploads.length,
+      stage,
+      isWorking,
+      isUploadingAdditionalPhotos,
+    ],
+  );
+
+  const confirmAndResetLinkToAdToStart = useCallback(() => {
+    const msg = [
+      "Annuler cette annonce Link to Ad ?",
+      "",
+      "Le brouillon dans cet écran sera perdu (URL, brief, scripts, uploads, médias en cours).",
+      "Les crédits déjà débités ne seront PAS remboursés.",
+      "",
+      "Les projets déjà enregistrés dans ton compte ne sont pas supprimés.",
+    ].join("\n");
+    if (typeof window !== "undefined" && !window.confirm(msg)) return;
+
+    linkToAdFlowEpochRef.current += 1;
+    cancelCurrentGeneration({ silent: true });
+    setIsWorking(false);
+    setIsUploadingAdditionalPhotos(false);
+    setStage("idle");
+    setServerPipelineStepIndex(null);
+    setStoreUrl("");
+    setSummaryText("");
+    setScriptsText("");
+    setPendingCustomAnglePreview(null);
+    setCustomAngleInput("");
+    setPendingCustomAngleEditing(false);
+    setAngleLabels(["", "", ""]);
+    setSelectedAngleIndex(null);
+    setNeutralUploadUrl(null);
+    setUniverseRunId(null);
+    setLastExtractedJson(null);
+    setExtractedTitle(null);
+    setCleanCandidate(null);
+    setFallbackImageUrl(null);
+    setConfidence(null);
+    setProductOnlyImageUrls([]);
+    setUserPhotoUrls([]);
+    setAvatarPhotoUrls([]);
+    setAvatarUrls([]);
+    setPersonaPhotoUrls([]);
+    setPendingProductUploads([]);
+    setPendingPersonaUploads([]);
+    setImgError(false);
+    setBrandFaviconFailed(false);
+    setAvatarPickerOpen(false);
+    setNanoBananaPromptsRaw("");
+    setNanoBananaSelectedPromptIndex(0);
+    setNanoBananaTaskId(null);
+    setNanoBananaImageUrl(null);
+    setNanoBananaImageUrls([]);
+    setNanoBananaSelectedImageIndex(null);
+    setUgcVideoPromptGpt("");
+    setKlingByRef(createEmptyKlingByReference());
+    setNanoPollTaskId(null);
+    setNanoPollingSlotIndex(null);
+    setKlingPollTaskId(null);
+    setKlingPollImageIndex(null);
+    setUserStartedVideoFromImage(false);
+    setVideoStageMode(false);
+    setPipelineByAngle([emptyAnglePipeline(), emptyAnglePipeline(), emptyAnglePipeline()]);
+    setEditableScript("");
+    setScriptFactors({ ...EMPTY_SCRIPT_FACTORS });
+    setScriptHasEdits(false);
+    setScriptEditVisible(false);
+    setExpandedAngleScripts({});
+    setExpandedAngleBriefs({});
+    setAngleSummaryDrafts({});
+    setAngleScriptDrafts({});
+    setNanoImageLightboxUrl(null);
+    setProductImageLightboxUrl(null);
+    setNanoPromptDrafts(["", "", ""]);
+    setNanoPromptTechnicalTails(["", "", ""]);
+    setNanoPromptHasEdits(false);
+    setEditableVideoPrompt("");
+    setVideoPromptSections({
+      direction: "",
+      scene: "",
+      motion: "",
+      style: "",
+    });
+    setVideoPromptInlineEdit(false);
+    setVideoPromptHasEdits(false);
+    setVideoPromptEditVisible(false);
+    setGenerationMode("automatic");
+    setCustomUgcTopic("");
+    setCustomUgcOffer("");
+    setCustomUgcCta("");
+    setLtaFrozenCredits(null);
+    latestSnapRef.current = null;
+    prevAngleRef.current = null;
+    nanoBananaPromptsSignatureRef.current = null;
+    onRunsChanged?.();
+    toast.message("Link to Ad réinitialisé", { description: "Tu peux repartir sur une nouvelle annonce." });
+  }, [cancelCurrentGeneration, onRunsChanged]);
 
   const selImg = nanoBananaSelectedImageIndex;
   const activeKlingSlot = useMemo(() => {
@@ -1008,7 +1144,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const angleOptionCards = useMemo(() => {
     const count = Math.max(3, scriptOptionBodiesAll.length);
     return Array.from({ length: count }, (_, i) => {
-      const explicit = i < 3 ? angleLabels[i]?.trim() : "";
+      const explicit = angleLabels[i]?.trim() ?? "";
       const body = scriptOptionBodiesAll[i] ?? "";
       const parts = body
         ? angleBriefPartsFromScriptOption(body, (i === 0 ? 0 : i === 1 ? 1 : 2) as 0 | 1 | 2)
@@ -1150,7 +1286,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       const merged = composeScriptsFromOptions(nextOptions);
       setScriptsText(merged);
       if (selectedAngleIndex === index) {
-        const headline = angleLabels[index as 0 | 1 | 2] || "";
+        const headline = angleLabels[index] || "";
         const { editable } = angleBlockForEditing(draft);
         setEditableScript(editable);
         setScriptFactors(splitScriptFactorsForUi(editable, headline));
@@ -1310,7 +1446,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       setCustomUgcCta((snap.customUgcCta ?? "").trim());
       setPendingCustomAnglePreview(null);
       setAngleLabels(
-        snap.angleLabels[0] && snap.angleLabels[1] && snap.angleLabels[2]
+        snap.angleLabels.length >= 3 && snap.angleLabels[0] && snap.angleLabels[1] && snap.angleLabels[2]
           ? snap.angleLabels
           : snap.scriptsText
             ? deriveAngleLabelsFromScripts(snap.scriptsText)
@@ -1324,8 +1460,9 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         cloneAnglePipeline(triple[2]),
       ]);
       const sAng = snap.selectedAngleIndex;
-      if (sAng === 0 || sAng === 1 || sAng === 2) {
-        applyPipelineFromSnapshot(cloneAnglePipeline(triple[sAng]));
+      const pipeSlot = sAng === 0 || sAng === 1 || sAng === 2 || sAng === 3 ? Math.min(sAng, 2) : null;
+      if (pipeSlot !== null) {
+        applyPipelineFromSnapshot(cloneAnglePipeline(triple[pipeSlot]));
       } else {
         applyPipelineFromSnapshot(emptyAnglePipeline());
       }
@@ -1645,13 +1782,19 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       return;
     }
     const currentOptions = splitAllScriptOptions(scriptsText);
+    if (currentOptions.length >= 4) {
+      toast.error("You can have at most 4 angles. Remove one in Projects or delete an angle first.");
+      return;
+    }
     const nextNumber = currentOptions.length + 1;
     const merged = scriptsText.trim()
       ? `${scriptsText.trim()}\n\nSCRIPT OPTION ${nextNumber}\n\n${cleanedBody}`
       : `SCRIPT OPTION 1\n\n${cleanedBody}`;
-    const nextLabels: [string, string, string] = [...angleLabels] as [string, string, string];
+    const nextLabels: string[] = [...angleLabels];
+    while (nextLabels.length < nextNumber) nextLabels.push("");
     const firstEmpty = nextLabels.findIndex((l) => !l.trim());
-    if (firstEmpty >= 0 && firstEmpty < 3) nextLabels[firstEmpty as 0 | 1 | 2] = headline;
+    if (firstEmpty >= 0 && firstEmpty < nextNumber) nextLabels[firstEmpty] = headline;
+    else nextLabels[nextNumber - 1] = headline;
 
     setScriptsText(merged);
     setAngleLabels(nextLabels);
@@ -1739,7 +1882,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
 
   async function onSelectAngle(
     index: number,
-    opts?: { scriptsText?: string; angleLabels?: [string, string, string] },
+    opts?: { scriptsText?: string; angleLabels?: string[] },
   ) {
     const url = storeUrl.trim();
     if (!url || !lastExtractedJson) return;
@@ -2062,6 +2205,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       toast.error("Missing URL");
       return;
     }
+    const epochAtStart = linkToAdFlowEpochRef.current;
 
     /** Re-run step 1: do not reuse neutral upload (UI should clear like the brief). */
     const userUploadedImageUrl = opts?.bypassSavedProject ? null : neutralUploadUrl;
@@ -2081,6 +2225,10 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           const snap = readUniverseFromExtracted(findJson.data.extracted);
           if (snap) {
             hydrateFromRun(findJson.data);
+            if (linkToAdFlowEpochRef.current !== epochAtStart) {
+              setIsWorking(false);
+              return;
+            }
             setStage("ready");
             setIsWorking(false);
             return;
@@ -2171,6 +2319,10 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           };
           if (getRes.ok && getJson.data) {
             hydrateFromRun(getJson.data, { silent: true });
+            if (linkToAdFlowEpochRef.current !== epochAtStart) {
+              setIsWorking(false);
+              return;
+            }
             toast.message("Pipeline stopped early", {
               description: pipeResult.error || "Partial data was saved. Check your project.",
             });
@@ -2191,6 +2343,9 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         throw new Error(getJson.error || "Could not reload project after pipeline");
       }
       hydrateFromRun(getJson.data, { silent: true });
+      if (linkToAdFlowEpochRef.current !== epochAtStart) {
+        return;
+      }
       setStage("ready");
       toast.success("Project saved");
       if (pipeResult.scriptsStepOk) {
@@ -2200,6 +2355,10 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       }
       onRunsChanged?.();
     } catch (err) {
+      if (linkToAdFlowEpochRef.current !== epochAtStart) {
+        setLtaFrozenCredits(null);
+        return;
+      }
       if (chargedFullBundle) {
         grantCredits(ltaGenerateCredits);
         creditsBalanceRef.current += ltaGenerateCredits;
@@ -3307,7 +3466,21 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     <Card className="border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.10)]">
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <CardTitle className="text-base">Link to Ad</CardTitle>
+          <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
+            {hasStartedLinkToAdFlow ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                onClick={() => confirmAndResetLinkToAdToStart()}
+                className="h-8 shrink-0 gap-1.5 rounded-xl border border-white/15 bg-white/[0.04] px-2.5 text-xs font-semibold text-white/75 hover:border-red-400/35 hover:bg-red-500/10 hover:text-red-100"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
+                Annuler l&apos;annonce
+              </Button>
+            ) : null}
+            <CardTitle className="text-base">Link to Ad</CardTitle>
+          </div>
           <div className="flex items-center gap-3">
             {stage === "error" ? (
               <div className="flex items-center gap-2 text-xs text-red-300/90">

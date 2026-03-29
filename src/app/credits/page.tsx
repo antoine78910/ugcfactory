@@ -208,18 +208,20 @@ export default function CreditsPage() {
               <p className="max-w-md text-sm text-white/45">Larger packs include a better price per credit.</p>
             </div>
 
-            <div className="flex flex-wrap justify-center gap-5 px-3 pt-6 pb-1 sm:px-8 sm:pt-7 md:px-12">
-              {creditPacks.map((p) => {
+            <div className="mx-auto grid w-full max-w-5xl grid-cols-1 gap-5 px-3 pt-6 pb-1 sm:px-6 sm:pt-7 md:grid-cols-6 md:gap-5 lg:px-8">
+              {creditPacks.map((p, packIndex) => {
                 const featured = p.key === "most-popular";
                 const value = p.badge === "Best value";
                 const savePercentMatch = /^Save\s+(\d+)%$/i.exec(p.promoLine);
                 const savePercent = savePercentMatch?.[1] ?? null;
+                const topRow = packIndex < 3;
 
                 return (
                   <div
                     key={p.key}
                     className={cn(
-                      "relative flex w-full min-w-[min(100%,280px)] max-w-[320px] flex-col rounded-2xl border p-6 transition-all duration-300",
+                      "relative flex min-w-0 w-full flex-col rounded-2xl border p-6 transition-all duration-300",
+                      topRow ? "md:col-span-2" : "md:col-span-3",
                       featured || value
                         ? "border-violet-400/35 bg-gradient-to-b from-violet-600/[0.14] via-[#0a0a10] to-[#06070d] shadow-[0_0_48px_rgba(139,92,246,0.12),0_8px_0_0_rgba(76,29,149,0.35)]"
                         : "border-white/10 bg-white/[0.03] shadow-[0_0_24px_rgba(0,0,0,0.35)] hover:border-violet-500/25 hover:bg-white/[0.05]",
@@ -227,13 +229,13 @@ export default function CreditsPage() {
                   >
                     {savePercent ? (
                       <div
-                        className="pointer-events-none absolute left-0 top-0 z-[4] flex -translate-x-1/2 -translate-y-1/2 items-baseline gap-1 rounded-full border border-emerald-400/25 bg-emerald-950/50 px-3 py-1.5 shadow-[0_6px_28px_rgba(16,185,129,0.2),inset_0_1px_0_rgba(255,255,255,0.1)] backdrop-blur-xl transition-[transform,box-shadow] duration-300 ease-out"
+                        className="pointer-events-none z-[4] mb-2 inline-flex items-baseline gap-1 self-start rounded-full border border-emerald-400/25 bg-emerald-950/50 px-2.5 py-1 shadow-[0_4px_20px_rgba(16,185,129,0.18),inset_0_1px_0_rgba(255,255,255,0.1)] backdrop-blur-xl"
                         aria-label={p.promoLine}
                       >
                         <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-emerald-200/75">
                           Save
                         </span>
-                        <span className="text-base font-bold tabular-nums leading-none text-emerald-50">
+                        <span className="text-sm font-bold tabular-nums leading-none text-emerald-50 sm:text-base">
                           {savePercent}%
                         </span>
                       </div>
@@ -251,12 +253,7 @@ export default function CreditsPage() {
                       </span>
                     ) : null}
 
-                    <div
-                      className={cn(
-                        "mt-1 flex items-baseline justify-between gap-2",
-                        savePercent && "pl-[2.75rem] pt-0.5 sm:pl-[3.25rem]",
-                      )}
-                    >
+                    <div className="mt-1 flex items-baseline justify-between gap-2">
                       <h2 className="text-lg font-bold text-white">{p.name}</h2>
                       <span className="text-2xl font-extrabold tabular-nums text-violet-100 sm:text-3xl">{p.price}</span>
                     </div>
