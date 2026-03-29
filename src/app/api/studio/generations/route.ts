@@ -8,7 +8,11 @@ import {
 } from "@/lib/studioGenerationsMap";
 import { sweepStudioRefundHints } from "@/lib/studioGenerationsPoll";
 import { markStaleInProgressStudioGenerationsFailedForUser } from "@/lib/studioGenerationsStale";
-import { STUDIO_LIBRARY_KINDS } from "@/lib/studioGenerationKinds";
+import {
+  STUDIO_GENERATIONS_LIST_LIMIT,
+  STUDIO_LIBRARY_KINDS,
+} from "@/lib/studioGenerationKinds";
+import { filterLegacyLinkToAdFromTabRows } from "@/lib/studioGenerationsTabFilter";
 
 const KIND_DEFAULT = "avatar";
 
@@ -39,7 +43,7 @@ export async function GET(req: Request) {
       .select("*")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
-      .limit(80);
+      .limit(STUDIO_GENERATIONS_LIST_LIMIT);
 
     if (all) {
       query = query.in("kind", [...STUDIO_LIBRARY_KINDS]);
@@ -58,7 +62,13 @@ export async function GET(req: Request) {
 
     if (error) throw error;
 
-    const rows = (data ?? []) as StudioGenerationRow[];
+    let rows = (data ?? []) as StudioGenerationRow[];
+    if (!all) {
+      const parsedForFilter = parseKindParam(kindRaw);
+      if (!("mode" in parsedForFilter)) {
+        rows = filterLegacyLinkToAdFromTabRows(rows, parsedForFilter.kinds);
+      }
+    }
     let refundHints: { jobId: string; credits: number }[] = [];
     if (all) {
       for (const k of STUDIO_LIBRARY_KINDS) {

@@ -65,7 +65,10 @@ import { loadAvatarUrls } from "@/lib/avatarLibrary";
 import { AvatarPickerDialog } from "@/app/_components/AvatarPickerDialog";
 import { clipboardImageFiles } from "@/lib/clipboardImage";
 import VideoCard from "@/app/_components/VideoCard";
-import { STUDIO_GENERATION_KIND_LINK_TO_AD_IMAGE } from "@/lib/studioGenerationKinds";
+import {
+  STUDIO_GENERATION_KIND_LINK_TO_AD_IMAGE,
+  STUDIO_GENERATION_KIND_LINK_TO_AD_VIDEO,
+} from "@/lib/studioGenerationKinds";
 
 /** Same-origin API calls with session (mirrors server `createInternalFetchFromRequest`). */
 const browserPipelineFetch = ((path: string, init?: RequestInit) => fetch(path, init)) as InternalFetch;
@@ -2827,7 +2830,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            kind: "studio_video",
+            kind: STUDIO_GENERATION_KIND_LINK_TO_AD_VIDEO,
             label: angLabel,
             taskId: json.taskId,
             provider: "piapi",

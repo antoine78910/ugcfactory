@@ -1744,7 +1744,7 @@ export default function AppBrandWizard() {
                           const badge =
                             kind === "avatar"
                               ? "Avatar"
-                              : kind === "link_to_ad_image"
+                              : kind === "link_to_ad_image" || kind === "link_to_ad_video"
                                 ? "Link to Ad"
                                 : kind === "studio_image"
                                   ? "Image"
@@ -1760,7 +1760,7 @@ export default function AppBrandWizard() {
                           const targetSection: AppSection =
                             kind === "avatar"
                               ? "avatar"
-                              : kind === "link_to_ad_image"
+                              : kind === "link_to_ad_image" || kind === "link_to_ad_video"
                                 ? "link_to_ad"
                               : kind === "studio_image"
                                 ? "image"

@@ -42,8 +42,11 @@ import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
 import { readStudioHistoryLocal, writeStudioHistoryLocal } from "@/lib/studioHistoryLocalStorage";
 import { uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
 import { cn } from "@/lib/utils";
+import { STUDIO_VIDEO_TAB_KINDS } from "@/lib/studioGenerationKinds";
 
 const LS_STUDIO_VIDEO_HISTORY = "ugc_studio_video_history_v1";
+
+const STUDIO_VIDEO_LIBRARY_KIND_PARAM = STUDIO_VIDEO_TAB_KINDS.join(",");
 
 type VideoTab = "create" | "edit";
 
@@ -552,7 +555,10 @@ export default function StudioVideoPanel() {
 
   useEffect(() => {
     void (async () => {
-      const res = await fetch("/api/studio/generations?kind=studio_video", { cache: "no-store" });
+      const res = await fetch(
+        `/api/studio/generations?kind=${encodeURIComponent(STUDIO_VIDEO_LIBRARY_KIND_PARAM)}`,
+        { cache: "no-store" },
+      );
       if (res.status === 401) {
         setServerHistory(false);
         setHistoryItems(readStudioHistoryLocal(LS_STUDIO_VIDEO_HISTORY));
@@ -585,7 +591,7 @@ export default function StudioVideoPanel() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            kind: "studio_video",
+            kind: STUDIO_VIDEO_LIBRARY_KIND_PARAM,
             personalApiKey: getPersonalApiKey() ?? undefined,
             piapiApiKey: getPersonalPiapiApiKey() ?? undefined,
           }),

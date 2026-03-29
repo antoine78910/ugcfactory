@@ -11,7 +11,19 @@ import {
 } from "@/lib/studioGenerationsPoll";
 import { serverLog } from "@/lib/serverLog";
 import { markStaleInProgressStudioGenerationsFailedForUser } from "@/lib/studioGenerationsStale";
-import { STUDIO_LIBRARY_KINDS } from "@/lib/studioGenerationKinds";
+import {
+  STUDIO_GENERATION_KIND_LINK_TO_AD_IMAGE,
+  STUDIO_GENERATION_KIND_LINK_TO_AD_VIDEO,
+  STUDIO_GENERATIONS_LIST_LIMIT,
+  STUDIO_IMAGE_TAB_KINDS,
+  STUDIO_LIBRARY_KINDS,
+  STUDIO_VIDEO_TAB_KINDS,
+} from "@/lib/studioGenerationKinds";
+import {
+  filterLegacyLinkToAdFromTabRows,
+  isStudioImageTabKindQuery,
+  isStudioVideoTabKindQuery,
+} from "@/lib/studioGenerationsTabFilter";
 
 export const runtime = "nodejs";
 
@@ -74,6 +86,16 @@ export async function POST(req: Request) {
 
     if (resolvedKinds === "all") {
       procQuery = procQuery.in("kind", [...LIBRARY_KINDS]);
+    } else if (isStudioVideoTabKindQuery(resolvedKinds)) {
+      const processingKinds = [
+        ...new Set([...STUDIO_VIDEO_TAB_KINDS, STUDIO_GENERATION_KIND_LINK_TO_AD_VIDEO]),
+      ];
+      procQuery = procQuery.in("kind", processingKinds);
+    } else if (isStudioImageTabKindQuery(resolvedKinds)) {
+      const processingKinds = [
+        ...new Set([...STUDIO_IMAGE_TAB_KINDS, STUDIO_GENERATION_KIND_LINK_TO_AD_IMAGE]),
+      ];
+      procQuery = procQuery.in("kind", processingKinds);
     } else if (resolvedKinds.length === 1) {
       procQuery = procQuery.eq("kind", resolvedKinds[0]!);
     } else {
@@ -117,7 +139,7 @@ export async function POST(req: Request) {
       .select("*")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
-      .limit(80);
+      .limit(STUDIO_GENERATIONS_LIST_LIMIT);
 
     if (resolvedKinds === "all") {
       listQuery = listQuery.in("kind", [...LIBRARY_KINDS]);
@@ -131,7 +153,11 @@ export async function POST(req: Request) {
 
     if (listErr) throw listErr;
 
-    const items = ((all ?? []) as StudioGenerationRow[]).map(studioGenerationRowToHistoryItem);
+    let listRows = (all ?? []) as StudioGenerationRow[];
+    if (resolvedKinds !== "all") {
+      listRows = filterLegacyLinkToAdFromTabRows(listRows, resolvedKinds);
+    }
+    const items = listRows.map(studioGenerationRowToHistoryItem);
     return NextResponse.json({ data: items, refundHints });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error.";
