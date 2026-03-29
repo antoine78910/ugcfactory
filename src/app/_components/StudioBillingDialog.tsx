@@ -10,11 +10,11 @@ import {
   listAllowedStudioImageModels,
   listAllowedStudioVideoEditPickers,
   listAllowedStudioVideoModels,
-  minPlanForStudioImage,
+  minPlanForStudioImagePicker,
   minPlanForStudioVideo,
   minPlanForStudioVideoEditPicker,
   planDisplayName,
-  studioImageDisplayLabel,
+  studioImagePickerDisplayLabel,
   studioVideoDisplayLabel,
   studioVideoEditPickerDisplayLabel,
   upgradePlanMessage,
@@ -51,13 +51,13 @@ export function StudioBillingDialog({ open, onOpenChange, planId, studioMode, va
         ? studioVideoDisplayLabel(variant.blockedModelId)
         : studioMode === "video_edit"
           ? studioVideoEditPickerDisplayLabel(variant.blockedModelId)
-          : studioImageDisplayLabel(variant.blockedModelId as "nano" | "pro");
+          : studioImagePickerDisplayLabel(variant.blockedModelId);
     const requiredPlan =
       studioMode === "video"
         ? minPlanForStudioVideo(variant.blockedModelId)
         : studioMode === "video_edit"
           ? minPlanForStudioVideoEditPicker(variant.blockedModelId)
-          : minPlanForStudioImage(variant.blockedModelId as "nano" | "pro");
+          : minPlanForStudioImagePicker(variant.blockedModelId);
     const headline = upgradePlanMessage(requiredPlan, blockedLabel);
     title = "Model not included";
     description = headline || "This model requires a higher plan.";

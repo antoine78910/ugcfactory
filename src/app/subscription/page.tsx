@@ -288,22 +288,25 @@ export default function SubscriptionPage() {
                           : "border-white/10 bg-white/[0.03] hover:border-violet-500/20 hover:bg-white/[0.045]",
                     )}
                   >
-                    {isCurrentPlanCard ? (
-                      <span className="absolute -top-3 left-1/2 max-w-[92%] -translate-x-1/2 rounded-full border border-emerald-400/50 bg-emerald-500/20 px-3 py-1 text-center text-[10px] font-bold uppercase tracking-wider text-emerald-100">
-                        Current plan
-                      </span>
-                    ) : plan.badge ? (
-                      <span className="absolute -top-3 left-1/2 max-w-[92%] -translate-x-1/2 rounded-full border border-violet-400/45 bg-violet-500/25 px-3 py-1 text-center text-[10px] font-bold uppercase tracking-wider text-violet-100">
-                        {plan.badge}
-                      </span>
-                    ) : null}
-                    {billing === "yearly" && !isCurrentPlanCard ? (
-                      <span className="pointer-events-none absolute -right-9 top-4 rotate-45 rounded-sm border border-emerald-300/45 bg-emerald-400/25 px-10 py-1 text-[10px] font-extrabold uppercase tracking-[0.12em] text-emerald-50 shadow-[0_0_18px_rgba(16,185,129,0.35)] transition-all duration-300">
-                        Save 30%
-                      </span>
-                    ) : null}
+                    <div className="mb-3 flex flex-wrap items-center gap-1.5">
+                      {isCurrentPlanCard ? (
+                        <span className="rounded-full border border-emerald-400/50 bg-emerald-500/20 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-100">
+                          Current plan
+                        </span>
+                      ) : null}
+                      {!isCurrentPlanCard && plan.badge ? (
+                        <span className="rounded-full border border-violet-400/45 bg-violet-500/25 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-violet-100">
+                          {plan.badge}
+                        </span>
+                      ) : null}
+                      {billing === "yearly" && !isCurrentPlanCard ? (
+                        <span className="rounded-full border border-emerald-300/45 bg-emerald-400/20 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-100">
+                          Save 30%
+                        </span>
+                      ) : null}
+                    </div>
 
-                    <div className={cn("mt-2", plan.badge || isCurrentPlanCard ? "mt-3" : "")}>
+                    <div>
                       <h2 className="text-xl font-bold text-white">{plan.name}</h2>
                       <p className="mt-2 min-h-[2.75rem] text-sm leading-relaxed text-white/48">{plan.description}</p>
                     </div>

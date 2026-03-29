@@ -23,7 +23,7 @@ import {
 } from "@/app/_components/StudioModelPicker";
 import { StudioEmptyExamples, StudioOutputPane } from "@/app/_components/StudioEmptyExamples";
 import { StudioGenerationsHistory } from "@/app/_components/StudioGenerationsHistory";
-import type { StudioHistoryItem } from "@/app/_components/StudioGenerationsHistory";
+import type { StudioHistoryItem, StudioImageLightboxEditModelOption } from "@/app/_components/StudioGenerationsHistory";
 import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
 import { studioImageCreditsPerOutput, topazImageUpscaleCredits } from "@/lib/pricing";
 import { NANO_BANANA_2_ASPECT_RATIOS } from "@/lib/nanobanana";
@@ -31,7 +31,16 @@ import { dedupeStudioImageHistoryByMediaUrl } from "@/lib/studioHistoryDedupe";
 import { readStudioHistoryLocal, writeStudioHistoryLocal } from "@/lib/studioHistoryLocalStorage";
 import { userMessageFromCaughtError } from "@/lib/generationUserMessage";
 import { cn } from "@/lib/utils";
-import { canUseStudioImageModel, studioImageUpgradeMessage } from "@/lib/subscriptionModelAccess";
+import {
+  canUseStudioImagePickerModel,
+  studioImagePickerUpgradeMessage,
+} from "@/lib/subscriptionModelAccess";
+import {
+  isStudioImageKiePickerModelId,
+  isStudioSeedreamImagePickerId,
+  studioSeedreamPickerRequiresReferenceImages,
+  type StudioImageKiePickerModelId,
+} from "@/lib/studioImageModels";
 import { loadAvatarUrls } from "@/lib/avatarLibrary";
 import { AvatarPickerDialog } from "@/app/_components/AvatarPickerDialog";
 import { clipboardImageFiles } from "@/lib/clipboardImage";
@@ -51,8 +60,6 @@ const ASPECT_RATIOS_PRO = [
 ] as const;
 
 const PRO_RESOLUTIONS = ["1K", "2K", "4K"] as const;
-
-type NanoModel = "nano" | "pro";
 
 const IMAGE_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
   {
@@ -138,14 +145,17 @@ const IMAGE_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
 ];
 
 const COMING_SOON_IMAGE_MODEL_IDS = new Set<string>([
-  "seedream_45_text_to_image",
-  "seedream_45_image_to_image",
-  "seedream_50_lite_text_to_image",
-  "seedream_50_lite_image_to_image",
   "nanobanana_standard",
   "google_nano_banana_edit",
   "recraft_remove_background",
 ]);
+
+const STUDIO_LIGHTBOX_EDIT_MODEL_OPTIONS: StudioImageLightboxEditModelOption[] = [
+  { value: "pro", label: "NanoBanana Pro" },
+  { value: "nano", label: "NanoBanana 2" },
+  { value: "seedream_45_image_to_image", label: "Seedream 4.5 (image-to-image)" },
+  { value: "seedream_50_lite_image_to_image", label: "Seedream 5.0 Lite (image-to-image)" },
+];
 
 async function uploadReferenceFile(file: File): Promise<string> {
   const fd = new FormData();
@@ -246,7 +256,7 @@ export default function StudioImagePanel() {
   creditsRef.current = creditsBalance;
 
   const [prompt, setPrompt] = useState("");
-  const [model, setModel] = useState<NanoModel>("pro");
+  const [model, setModel] = useState<StudioImageKiePickerModelId>("pro");
   const [aspect, setAspect] = useState<string>("3:4");
   const [resolution, setResolution] = useState<(typeof PRO_RESOLUTIONS)[number]>("2K");
   const [numImages, setNumImages] = useState(1);
@@ -261,7 +271,7 @@ export default function StudioImagePanel() {
   const [serverHistory, setServerHistory] = useState<boolean | null>(null);
   type ImageBilling =
     | { open: false }
-    | { open: true; reason: "plan"; blockedId: NanoModel }
+    | { open: true; reason: "plan"; blockedId: string }
     | { open: true; reason: "credits"; required: number };
   const [billing, setBilling] = useState<ImageBilling>({ open: false });
 
@@ -486,19 +496,23 @@ export default function StudioImagePanel() {
   }, [historyItems]);
 
   const aspectOptions = useMemo(() => {
+    if (model === "nano") return NANO_BANANA_2_ASPECT_RATIOS;
     if (model === "pro") return ["auto", ...ASPECT_RATIOS_PRO] as const;
+    if (isStudioSeedreamImagePickerId(model)) return ASPECT_RATIOS_PRO;
     return NANO_BANANA_2_ASPECT_RATIOS;
   }, [model]);
 
   useEffect(() => {
     const allowed = new Set(aspectOptions as readonly string[]);
     if (!allowed.has(aspect)) {
-      setAspect(model === "pro" ? "3:4" : "auto");
+      if (model === "pro") setAspect("3:4");
+      else if (isStudioSeedreamImagePickerId(model)) setAspect("3:4");
+      else setAspect("auto");
     }
   }, [model, aspectOptions, aspect]);
 
   useEffect(() => {
-    if (canUseStudioImageModel(planId, model)) return;
+    if (canUseStudioImagePickerModel(planId, model)) return;
     setModel("nano");
   }, [planId, model]);
 
@@ -522,7 +536,7 @@ export default function StudioImagePanel() {
 
   type RunGenOpts = {
     prompt: string;
-    model: NanoModel;
+    model: StudioImageKiePickerModelId;
     aspect: string;
     resolution: (typeof PRO_RESOLUTIONS)[number];
     numImages: number;
@@ -541,6 +555,14 @@ export default function StudioImagePanel() {
       toast.error("Describe the scene you imagine.");
       return;
     }
+    if (
+      isStudioSeedreamImagePickerId(opts.model) &&
+      studioSeedreamPickerRequiresReferenceImages(opts.model) &&
+      !opts.refUrls.length
+    ) {
+      toast.error("Add at least one reference image for this Seedream image-to-image model.");
+      return;
+    }
     if (opts.syncSidebar) {
       setPrompt(opts.prompt);
       setModel(opts.model);
@@ -549,7 +571,7 @@ export default function StudioImagePanel() {
       setNumImages(opts.numImages);
       setRefUrls(opts.refUrls);
     }
-    const gate = studioImageUpgradeMessage(planId, opts.model);
+    const gate = studioImagePickerUpgradeMessage(planId, opts.model);
     if (!isPersonalApiActive() && gate) {
       setBilling({ open: true, reason: "plan", blockedId: opts.model });
       return;
@@ -883,7 +905,7 @@ export default function StudioImagePanel() {
                 hideMeta
                 isItemLocked={(id) =>
                   COMING_SOON_IMAGE_MODEL_IDS.has(id) ||
-                  (!isPersonalApiActive() && !canUseStudioImageModel(planId, id as NanoModel))
+                  (!isPersonalApiActive() && !canUseStudioImagePickerModel(planId, id))
                 }
                 onLockedPick={(id) => {
                   if (COMING_SOON_IMAGE_MODEL_IDS.has(id)) {
@@ -892,9 +914,9 @@ export default function StudioImagePanel() {
                     });
                     return;
                   }
-                  setBilling({ open: true, reason: "plan", blockedId: id as NanoModel });
+                  setBilling({ open: true, reason: "plan", blockedId: id });
                 }}
-                onChange={(v) => setModel(v as NanoModel)}
+                onChange={(v) => setModel(v as StudioImageKiePickerModelId)}
                 featuredTitle="Image models"
               />
           </div>
@@ -918,7 +940,16 @@ export default function StudioImagePanel() {
           <div>
             <Label className="text-xs text-white/45">Quality (resolution)</Label>
             <p className="mt-0.5 text-[10px] leading-snug text-white/35">
-              1K = faster / lower cost · 4K = more detail · {perImageCredits} credits per image at this quality
+              {isStudioSeedreamImagePickerId(model) ? (
+                <>
+                  Seedream: 1K/2K → basic quality (~2K output), 4K → high (~4K output). {perImageCredits} credits per
+                  image.
+                </>
+              ) : (
+                <>
+                  1K = faster / lower cost · 4K = more detail · {perImageCredits} credits per image at this quality
+                </>
+              )}
             </p>
             <Select value={resolution} onValueChange={(v) => setResolution(v as (typeof PRO_RESOLUTIONS)[number])}>
               <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
@@ -991,10 +1022,15 @@ export default function StudioImagePanel() {
                 proAspectOptions: proAspectOptionsFull,
                 resolutionOptions: PRO_RESOLUTIONS,
                 seedModel: model,
+                editModelOptions: STUDIO_LIGHTBOX_EDIT_MODEL_OPTIONS,
                 seedAspect: aspect,
                 seedResolution: resolution,
                 creditsFor: (m, r) => studioImageCreditsPerOutput({ studioModel: m, resolution: r }),
                 onSubmitEdit: ({ sourceUrl, prompt: editP, model: m, aspectRatio, resolution: res }) => {
+                  if (!isStudioImageKiePickerModelId(m)) {
+                    toast.error("Invalid model selected.");
+                    return;
+                  }
                   runImageGeneration({
                     prompt: editP,
                     model: m,

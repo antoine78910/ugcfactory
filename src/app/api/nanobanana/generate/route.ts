@@ -5,10 +5,11 @@ import { createStudioKieImageTasks } from "@/lib/studioKieImageTask";
 import type { NanoBananaImageSize, NanoBananaProAspectRatio, NanoBananaProResolution } from "@/lib/nanobanana";
 import { hasPersonalApiKey } from "@/lib/personalApiBypass";
 import {
-  canUseStudioImageModel,
+  canUseStudioImagePickerModel,
   parseAccountPlan,
-  studioImageUpgradeMessage,
+  studioImagePickerUpgradeMessage,
 } from "@/lib/subscriptionModelAccess";
+import { isStudioImageKiePickerModelId } from "@/lib/studioImageModels";
 import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
 import { serverLog } from "@/lib/serverLog";
 import { getEnv } from "@/lib/env";
@@ -19,7 +20,7 @@ type Body = {
   accountPlan?: string;
   prompt: string;
   language?: "fr" | "en";
-  model?: "nano" | "pro";
+  model?: string;
   imageUrl?: string;
   imageUrls?: string[];
   imageSize?: NanoBananaImageSize;
@@ -45,7 +46,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Missing `prompt`." }, { status: 400 });
   }
 
-  const model = body.model ?? "nano";
+  const rawModel = body.model ?? "nano";
+  const model = typeof rawModel === "string" ? rawModel.trim() : "nano";
+  if (!isStudioImageKiePickerModelId(model)) {
+    return NextResponse.json({ error: "Invalid image model." }, { status: 400 });
+  }
   const personalKey = hasPersonalApiKey(body.personalApiKey) ? body.personalApiKey.trim() : undefined;
   if (!personalKey && !getEnv("KIE_API_KEY")?.trim()) {
     serverLog("nanobanana_generate_config", { error: "missing_kie_key" });
@@ -57,12 +62,12 @@ export async function POST(req: Request) {
   if (!personalKey) {
     const dbPlan = await getUserPlan(supabase, user.id);
     const accountPlan = dbPlan !== "free" ? dbPlan : parseAccountPlan(body.accountPlan);
-    if (!canUseStudioImageModel(accountPlan, model)) {
+    if (!canUseStudioImagePickerModel(accountPlan, model)) {
       return NextResponse.json(
         {
           error:
-            studioImageUpgradeMessage(accountPlan, model) ??
-            "Subscription upgrade required for Nano Banana Pro.",
+            studioImagePickerUpgradeMessage(accountPlan, model) ??
+            "Subscription upgrade required for this image model.",
           code: "PLAN_UPGRADE_REQUIRED",
         },
         { status: 403 },

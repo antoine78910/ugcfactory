@@ -73,7 +73,8 @@ export default function SidebarAccountMenu({
           role="menu"
           className={
             collapsed
-              ? "absolute bottom-full left-0 z-[100] mb-2 w-[min(calc(100vw-1rem),14rem)] overflow-hidden rounded-xl border border-white/10 bg-[#0a0a0f] py-1 shadow-[0_-12px_48px_rgba(0,0,0,0.65)]"
+              ? /* Open to the right of the narrow rail (`left-full`); avoids overflow clip + keeps the panel on-screen. */
+                "absolute bottom-full left-full z-[100] mb-2 ml-1 w-[min(calc(100vw-1rem),14rem)] overflow-hidden rounded-xl border border-white/10 bg-[#0a0a0f] py-1 shadow-[0_-12px_48px_rgba(0,0,0,0.65)]"
               : "absolute bottom-full left-0 right-0 z-[100] mb-2 overflow-hidden rounded-xl border border-white/10 bg-[#0a0a0f] py-1 shadow-[0_-12px_48px_rgba(0,0,0,0.65)]"
           }
         >

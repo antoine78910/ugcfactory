@@ -4,6 +4,7 @@
  */
 
 import { isSubscriptionPlanId, type SubscriptionPlanId } from "@/lib/stripe/subscriptionPrices";
+import { STUDIO_SEEDREAM_IMAGE_PICKER_IDS, isStudioSeedreamImagePickerId } from "@/lib/studioImageModels";
 import { STUDIO_VIDEO_EDIT_PICKER_IDS } from "@/lib/studioVideoEditModels";
 
 /** Includes free (credit packs / demo). */
@@ -65,6 +66,14 @@ export function canUseStudioImageModel(planId: AccountPlanId, model: "nano" | "p
   return planRank(planId) >= IMAGE_MIN_RANK[model];
 }
 
+/** Studio Image picker row id (`nano` / `pro` / Seedream_*). Seedream = same minimum tier as NanoBanana Pro (Growth+). */
+export function canUseStudioImagePickerModel(planId: AccountPlanId, pickerId: string): boolean {
+  const id = pickerId.trim();
+  if (id === "nano" || id === "pro") return canUseStudioImageModel(planId, id);
+  if (isStudioSeedreamImagePickerId(id)) return planRank(planId) >= IMAGE_MIN_RANK.pro;
+  return false;
+}
+
 export function canUseStudioVideoModel(planId: AccountPlanId, marketModelId: string): boolean {
   const id = marketModelId.trim();
   const min = VIDEO_MIN_RANK[id];
@@ -97,6 +106,13 @@ function planIdAtMinRank(rank: number): AccountPlanId {
 
 export function minPlanForStudioImage(model: "nano" | "pro"): AccountPlanId {
   return planIdAtMinRank(IMAGE_MIN_RANK[model]);
+}
+
+export function minPlanForStudioImagePicker(pickerId: string): AccountPlanId {
+  const id = pickerId.trim();
+  if (id === "nano" || id === "pro") return minPlanForStudioImage(id);
+  if (isStudioSeedreamImagePickerId(id)) return planIdAtMinRank(IMAGE_MIN_RANK.pro);
+  return "scale";
 }
 
 export function minPlanForStudioVideo(marketModelId: string): AccountPlanId {
@@ -177,6 +193,18 @@ export function studioImageDisplayLabel(model: "nano" | "pro"): string {
   return model === "pro" ? "NanoBanana Pro" : "NanoBanana 2";
 }
 
+const STUDIO_IMAGE_PICKER_LABELS: Record<string, string> = {
+  seedream_45_text_to_image: "Seedream 4.5 (text-to-image)",
+  seedream_45_image_to_image: "Seedream 4.5 (image-to-image)",
+  seedream_50_lite_text_to_image: "Seedream 5.0 Lite (text-to-image)",
+  seedream_50_lite_image_to_image: "Seedream 5.0 Lite (image-to-image)",
+};
+
+export function studioImagePickerDisplayLabel(pickerId: string): string {
+  if (pickerId === "nano" || pickerId === "pro") return studioImageDisplayLabel(pickerId);
+  return STUDIO_IMAGE_PICKER_LABELS[pickerId] ?? pickerId;
+}
+
 /** Human-readable names for video models the user can use on this plan. */
 export function listAllowedStudioVideoModels(planId: AccountPlanId): string[] {
   return STUDIO_VIDEO_IDS_ORDERED.filter((id) => canUseStudioVideoModel(planId, id)).map(
@@ -196,6 +224,11 @@ export function listAllowedStudioImageModels(planId: AccountPlanId): string[] {
   const out: string[] = [];
   if (canUseStudioImageModel(planId, "nano")) out.push(studioImageDisplayLabel("nano"));
   if (canUseStudioImageModel(planId, "pro")) out.push(studioImageDisplayLabel("pro"));
+  for (const id of STUDIO_SEEDREAM_IMAGE_PICKER_IDS) {
+    if (canUseStudioImagePickerModel(planId, id)) {
+      out.push(studioImagePickerDisplayLabel(id));
+    }
+  }
   return out;
 }
 
@@ -206,6 +239,12 @@ export function studioImageUpgradeMessage(
   if (canUseStudioImageModel(planId, model)) return null;
   const need = minPlanForStudioImage(model);
   return upgradePlanMessage(need, studioImageDisplayLabel(model));
+}
+
+export function studioImagePickerUpgradeMessage(planId: AccountPlanId, pickerId: string): string | null {
+  if (canUseStudioImagePickerModel(planId, pickerId)) return null;
+  const need = minPlanForStudioImagePicker(pickerId);
+  return upgradePlanMessage(need, studioImagePickerDisplayLabel(pickerId));
 }
 
 export function studioVideoUpgradeMessage(planId: AccountPlanId, marketModelId: string): string | null {
@@ -263,6 +302,16 @@ export const SUBSCRIPTION_MODEL_MATRIX_ROWS: SubscriptionModelMatrixRow[] = [
       { text: "Google", className: "bg-amber-500/20 text-amber-200 border-amber-400/30" },
       { text: "2 credits", className: "bg-violet-500/20 text-violet-200 border-violet-400/30" },
     ],
+    tiers: tierBools(IMAGE_MIN_RANK.pro),
+  },
+  {
+    label: "Seedream 4.5: images (text + edit)",
+    badges: [{ text: "ByteDance", className: "bg-sky-500/20 text-sky-200 border-sky-400/30" }],
+    tiers: tierBools(IMAGE_MIN_RANK.pro),
+  },
+  {
+    label: "Seedream 5.0 Lite: images (text + image-to-image)",
+    badges: [{ text: "ByteDance", className: "bg-sky-500/20 text-sky-200 border-sky-400/30" }],
     tiers: tierBools(IMAGE_MIN_RANK.pro),
   },
   {

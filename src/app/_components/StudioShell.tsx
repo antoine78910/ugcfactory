@@ -160,7 +160,8 @@ function StudioShellInner({
       >
         <aside
           className={cn(
-            "sticky top-0 flex h-screen flex-col overflow-hidden border-r border-white/10 bg-[#06070d] py-4",
+            /* z-20 + overflow-visible so account dropdown (collapsed) can extend over the main column */
+            "sticky top-0 z-20 flex h-screen flex-col overflow-visible border-r border-white/10 bg-[#06070d] py-4",
             /* No text I-beam: feels natural to scroll the nav with the wheel over labels */
             "select-none [&_*]:cursor-default [&_a]:cursor-pointer [&_button]:cursor-pointer",
             navCollapsed ? "px-1.5" : "px-3",
@@ -242,7 +243,7 @@ function StudioShellInner({
             <SidebarCreditsBar collapsed={navCollapsed} />
           </div>
 
-          <div className="studio-sidebar-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+          <div className="studio-sidebar-scroll min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
             <div
               className={cn(
                 "rounded-xl border border-white/10 bg-[#0b0912]/85",
@@ -400,7 +401,7 @@ function StudioShellInner({
           </div>
         </aside>
 
-        {children}
+        <div className="relative z-0 min-h-0 min-w-0">{children}</div>
       </main>
 
       <StudioGenerationsBackgroundPoll />

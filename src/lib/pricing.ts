@@ -3,6 +3,8 @@
  * Import from API routes and UI for consistent billing + margin analytics.
  */
 
+import { isStudioSeedreamImagePickerId } from "@/lib/studioImageModels";
+
 // ---------------------------------------------------------------------------
 // Global base
 // ---------------------------------------------------------------------------
@@ -555,13 +557,18 @@ export function creditsForImageModel(key: ImageModelKey): number {
 export type StudioImageOutputResolution = "1K" | "2K" | "4K";
 
 /**
- * Credits per generated image in Studio (Kie Google Nano Banana 2 / Pro).
+ * Credits per generated image in Studio (Kie Google Nano Banana 2 / Pro, Seedream).
+ * Seedream KIE billing uses a flat credit per image from `IMAGE_MODEL`; resolution maps to provider quality only.
  */
 export function studioImageCreditsPerOutput(opts: {
-  studioModel: "pro" | "nano";
+  studioModel: string;
   resolution: StudioImageOutputResolution;
 }): number {
-  if (opts.studioModel === "pro") {
+  if (isStudioSeedreamImagePickerId(opts.studioModel)) {
+    return IMAGE_MODEL[opts.studioModel].credits;
+  }
+  const m = opts.studioModel as "nano" | "pro";
+  if (m === "pro") {
     if (opts.resolution === "4K") return IMAGE_MODEL.google_nano_banana_pro_4k.credits;
     return IMAGE_MODEL.google_nano_banana_pro_1k_2k.credits;
   }

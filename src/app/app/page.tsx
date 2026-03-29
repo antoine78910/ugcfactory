@@ -323,6 +323,11 @@ export default function AppBrandWizard() {
   const [motionSceneBackground, setMotionSceneBackground] = useState<"video" | "image">("video");
   const [motionBusy, setMotionBusy] = useState(false);
   const motionVideoInputRef = useRef<HTMLInputElement>(null);
+  const motionVideoPreviewRef = useRef<HTMLVideoElement | null>(null);
+  const motionVideoBlobUrlRef = useRef<string | null>(null);
+  const motionPosterCapturedForUrlRef = useRef<string | null>(null);
+  const motionPosterCapturePendingRef = useRef(false);
+  const motionPlayCaptureAttemptsRef = useRef(0);
   const motionCharacterInputRef = useRef<HTMLInputElement>(null);
   const { planId, current: creditsBalance, spendCredits, grantCredits } = useCreditsPlan();
   const creditsRef = useRef(creditsBalance);
@@ -407,102 +412,101 @@ export default function AppBrandWizard() {
     };
   }, [motionVideoPosterUrl]);
 
-  /** First-frame JPEG poster so the tile is not black before the <video> paints a frame (codec / seek quirks). */
-  useEffect(() => {
-    if (!motionVideoRefBlobUrl) {
-      setMotionVideoPosterUrl(null);
+  motionVideoBlobUrlRef.current = motionVideoRefBlobUrl;
+
+  const tryCaptureMotionPosterFromEl = useCallback((v: HTMLVideoElement) => {
+    const blobUrl = motionVideoBlobUrlRef.current;
+    if (
+      !blobUrl ||
+      motionPosterCapturedForUrlRef.current === blobUrl ||
+      motionPosterCapturePendingRef.current
+    ) {
       return;
     }
-
-    setMotionVideoPosterUrl(null);
-
-    let cancelled = false;
-    let playAttempts = 0;
-    const video = document.createElement("video");
-    video.muted = true;
-    video.playsInline = true;
-    video.setAttribute("playsinline", "");
-    video.preload = "auto";
-    video.src = motionVideoRefBlobUrl;
-
-    const captureFrame = () => {
-      if (cancelled) return;
-      const w = video.videoWidth;
-      const h = video.videoHeight;
-      if (w > 0 && h > 0) {
-        const canvas = document.createElement("canvas");
-        const maxSide = 720;
-        const scale = Math.min(1, maxSide / Math.max(w, h));
-        canvas.width = Math.round(w * scale);
-        canvas.height = Math.round(h * scale);
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return;
-        try {
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        } catch {
-          return;
-        }
-        canvas.toBlob(
-          (blob) => {
-            if (cancelled || !blob) return;
-            setMotionVideoPosterUrl(URL.createObjectURL(blob));
-          },
-          "image/jpeg",
-          0.82,
-        );
-        return;
-      }
-      if (playAttempts >= 3) return;
-      playAttempts += 1;
-      void video
-        .play()
-        .then(() => {
-          if (cancelled) return;
-          video.pause();
-          requestAnimationFrame(() => captureFrame());
-        })
-        .catch(() => {
-          /* ignore */
-        });
-    };
-
-    const onSeeked = () => {
-      if (cancelled) return;
-      captureFrame();
-    };
-
-    const onLoadedData = () => {
-      if (cancelled) return;
-      try {
-        const d = video.duration;
-        const t =
-          Number.isFinite(d) && d > 0
-            ? Math.min(0.25, Math.max(0.001, d * 0.02))
-            : 0.05;
-        video.currentTime = t;
-      } catch {
-        captureFrame();
-      }
-    };
-
-    video.addEventListener("seeked", onSeeked);
-    video.addEventListener("loadeddata", onLoadedData);
-    video.addEventListener("error", () => {
-      /* keep poster null */
-    });
-
-    if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-      onLoadedData();
+    const w = v.videoWidth;
+    const h = v.videoHeight;
+    if (!w || !h) return;
+    const canvas = document.createElement("canvas");
+    const maxSide = 720;
+    const scale = Math.min(1, maxSide / Math.max(w, h));
+    canvas.width = Math.round(w * scale);
+    canvas.height = Math.round(h * scale);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    try {
+      ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
+    } catch {
+      return;
     }
+    motionPosterCapturePendingRef.current = true;
+    canvas.toBlob(
+      (blob) => {
+        motionPosterCapturePendingRef.current = false;
+        if (!blob || motionVideoBlobUrlRef.current !== blobUrl) return;
+        motionPosterCapturedForUrlRef.current = blobUrl;
+        setMotionVideoPosterUrl((prev) => {
+          if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
+          return URL.createObjectURL(blob);
+        });
+      },
+      "image/jpeg",
+      0.85,
+    );
+  }, []);
 
-    return () => {
-      cancelled = true;
-      video.removeEventListener("seeked", onSeeked);
-      video.removeEventListener("loadeddata", onLoadedData);
-      video.removeAttribute("src");
-      video.load();
+  const tryPlayThenCapturePoster = useCallback(() => {
+    const v = motionVideoPreviewRef.current;
+    const blobUrl = motionVideoBlobUrlRef.current;
+    if (!v || !blobUrl || motionPosterCapturedForUrlRef.current === blobUrl) return;
+    if (motionPlayCaptureAttemptsRef.current >= 5) return;
+    motionPlayCaptureAttemptsRef.current += 1;
+    const afterFrame = () => {
+      tryCaptureMotionPosterFromEl(v);
+      try {
+        v.pause();
+      } catch {
+        /* ignore */
+      }
     };
+    void v
+      .play()
+      .then(() => {
+        if (typeof v.requestVideoFrameCallback === "function") {
+          v.requestVideoFrameCallback(() => {
+            requestAnimationFrame(afterFrame);
+          });
+        } else {
+          requestAnimationFrame(afterFrame);
+        }
+      })
+      .catch(() => {
+        /* autoplay blocked or codec issue */
+      });
+  }, [tryCaptureMotionPosterFromEl]);
+
+  useEffect(() => {
+    motionPosterCapturedForUrlRef.current = null;
+    motionPosterCapturePendingRef.current = false;
+    motionPlayCaptureAttemptsRef.current = 0;
+    setMotionVideoPosterUrl(null);
   }, [motionVideoRefBlobUrl]);
+
+  /** Some codecs only expose frames after a short play(); retry if poster still missing. */
+  useEffect(() => {
+    if (!motionVideoRefBlobUrl) return;
+    const id1 = window.setTimeout(() => {
+      if (motionPosterCapturedForUrlRef.current === motionVideoBlobUrlRef.current) return;
+      tryPlayThenCapturePoster();
+    }, 350);
+    const id2 = window.setTimeout(() => {
+      if (motionPosterCapturedForUrlRef.current === motionVideoBlobUrlRef.current) return;
+      tryPlayThenCapturePoster();
+    }, 1400);
+    return () => {
+      window.clearTimeout(id1);
+      window.clearTimeout(id2);
+    };
+  }, [motionVideoRefBlobUrl, tryPlayThenCapturePoster]);
 
   useEffect(() => {
     return () => {
@@ -2211,25 +2215,67 @@ export default function AppBrandWizard() {
                                   {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
                                   <video
                                     key={motionVideoRefBlobUrl}
+                                    ref={motionVideoPreviewRef}
                                     src={motionVideoRefBlobUrl}
                                     poster={motionVideoPosterUrl ?? undefined}
-                                    className="absolute inset-0 z-[1] h-full w-full object-cover"
+                                    className="absolute inset-0 z-[1] h-full w-full object-cover bg-black"
                                     muted
                                     playsInline
                                     preload="auto"
-                                    onLoadedData={(ev) => {
+                                    onLoadedMetadata={(ev) => {
                                       const v = ev.currentTarget;
                                       try {
-                                        if (v.readyState < 2) return;
                                         const d = v.duration;
                                         const t =
                                           Number.isFinite(d) && d > 0
-                                            ? Math.min(0.12, Math.max(0.02, d * 0.02))
-                                            : 0.05;
+                                            ? Math.min(0.35, Math.max(0.04, d * 0.03))
+                                            : 0.08;
                                         v.currentTime = t;
                                       } catch {
-                                        /* ignore seek errors */
+                                        tryPlayThenCapturePoster();
                                       }
+                                    }}
+                                    onLoadedData={(ev) => {
+                                      const v = ev.currentTarget;
+                                      tryCaptureMotionPosterFromEl(v);
+                                      try {
+                                        if (v.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+                                          const d = v.duration;
+                                          const t =
+                                            Number.isFinite(d) && d > 0
+                                              ? Math.min(0.35, Math.max(0.04, d * 0.03))
+                                              : 0.08;
+                                          if (Math.abs(v.currentTime - t) > 0.02) v.currentTime = t;
+                                        }
+                                      } catch {
+                                        /* ignore */
+                                      }
+                                    }}
+                                    onSeeked={(ev) => {
+                                      const v = ev.currentTarget;
+                                      const url = motionVideoBlobUrlRef.current;
+                                      tryCaptureMotionPosterFromEl(v);
+                                      if (
+                                        url &&
+                                        motionPosterCapturedForUrlRef.current !== url &&
+                                        v.videoWidth === 0
+                                      ) {
+                                        tryPlayThenCapturePoster();
+                                      }
+                                    }}
+                                    onCanPlay={(ev) => {
+                                      tryCaptureMotionPosterFromEl(ev.currentTarget);
+                                    }}
+                                    onTimeUpdate={(ev) => {
+                                      const v = ev.currentTarget;
+                                      const url = motionVideoBlobUrlRef.current;
+                                      if (!url || motionPosterCapturedForUrlRef.current === url) return;
+                                      if (v.currentTime > 0.01 && v.videoWidth > 0) {
+                                        tryCaptureMotionPosterFromEl(v);
+                                      }
+                                    }}
+                                    onError={() => {
+                                      tryPlayThenCapturePoster();
                                     }}
                                   />
                                   <UploadBusyOverlay active={motionVideoPreviewLoading} className="rounded-xl" />

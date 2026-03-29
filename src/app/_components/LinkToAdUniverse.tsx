@@ -3373,22 +3373,27 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                   onClick={() => setVideoModel(id)}
                   disabled={isWorking}
                   className={cn(
-                    "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition whitespace-nowrap",
+                    "rounded-md px-3 py-1.5 text-xs font-semibold transition whitespace-nowrap",
+                    id === "seedance"
+                      ? "flex flex-col items-start gap-0.5"
+                      : "inline-flex items-center",
                     videoModel === id
                       ? "bg-violet-500/15 text-white border border-violet-400/60"
                       : "bg-black/20 text-white/65 hover:border-white/20 border border-white/10",
                   )}
                 >
-                  {LINK_TO_AD_VIDEO_MODELS[id].label}
                   {id === "seedance" ? (
                     <span
-                      className="inline-flex items-center gap-1 rounded-full border border-teal-400/35 bg-teal-500/[0.12] px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-teal-200/90"
-                      title="Recommended for sharpest motion and lipsync"
+                      className="pointer-events-none inline-flex items-center gap-0.5 self-start rounded border border-teal-400/35 bg-teal-500/[0.14] px-1 py-px text-[8px] font-semibold uppercase leading-none tracking-wide text-teal-200/95"
+                      title="Best results — recommended for motion and lipsync"
                     >
-                      <span className="h-1 w-1 shrink-0 rounded-full bg-teal-400" aria-hidden />
+                      <span className="h-0.5 w-0.5 shrink-0 rounded-full bg-teal-400" aria-hidden />
                       Best results
                     </span>
                   ) : null}
+                  <span className={id === "seedance" ? "leading-tight" : undefined}>
+                    {LINK_TO_AD_VIDEO_MODELS[id].label}
+                  </span>
                 </button>
               ))}
             </div>

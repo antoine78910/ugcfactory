@@ -66,19 +66,23 @@ export function isProbablyVideoUrl(url: string | undefined): boolean {
   );
 }
 
-/** Image tab: edit open image with same KIE fields as Studio (nano-banana-2 / nano-banana-pro + image_input). */
+export type StudioImageLightboxEditModelOption = { value: string; label: string };
+
+/** Image tab: edit open image with same KIE fields as Studio (NanoBanana + Seedream image-to-image). */
 export type StudioImageLightboxEditConfig = {
   nanoAspectOptions: readonly string[];
   proAspectOptions: readonly string[];
   resolutionOptions: readonly ("1K" | "2K" | "4K")[];
-  seedModel: "nano" | "pro";
+  seedModel: string;
+  /** Models shown in the lightbox edit dropdown (e.g. nano, pro, Seedream I2I). */
+  editModelOptions: StudioImageLightboxEditModelOption[];
   seedAspect: string;
   seedResolution: "1K" | "2K" | "4K";
-  creditsFor: (model: "nano" | "pro", resolution: "1K" | "2K" | "4K") => number;
+  creditsFor: (model: string, resolution: "1K" | "2K" | "4K") => number;
   onSubmitEdit: (payload: {
     sourceUrl: string;
     prompt: string;
-    model: "nano" | "pro";
+    model: string;
     aspectRatio: string;
     resolution: "1K" | "2K" | "4K";
   }) => void;
@@ -131,7 +135,7 @@ export function StudioGenerationsHistory({
   } | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editPrompt, setEditPrompt] = useState("");
-  const [editModel, setEditModel] = useState<"nano" | "pro">("pro");
+  const [editModel, setEditModel] = useState<string>("pro");
   const [editAspect, setEditAspect] = useState("3:4");
   const [editResolution, setEditResolution] = useState<"1K" | "2K" | "4K">("2K");
   const [upscaleFactor, setUpscaleFactor] = useState<"1" | "2" | "4" | "8">("2");
@@ -139,7 +143,9 @@ export function StudioGenerationsHistory({
   useEffect(() => {
     if (!lightboxItem?.url || !imageLightboxEdit) return;
     setEditPrompt("");
-    setEditModel(imageLightboxEdit.seedModel);
+    const seed = imageLightboxEdit.seedModel;
+    const allowed = new Set(imageLightboxEdit.editModelOptions.map((o) => o.value));
+    setEditModel(allowed.has(seed) ? seed : "pro");
     setEditAspect(imageLightboxEdit.seedAspect);
     setEditResolution(imageLightboxEdit.seedResolution);
   }, [lightboxItem?.url, imageLightboxEdit]);
@@ -151,7 +157,7 @@ export function StudioGenerationsHistory({
   }, [lightboxItem?.url, imageLightboxUpscale]);
 
   const editAspectOptions = useMemo(
-    () => (editModel === "pro" ? imageLightboxEdit?.proAspectOptions ?? [] : imageLightboxEdit?.nanoAspectOptions ?? []),
+    () => (editModel === "nano" ? imageLightboxEdit?.nanoAspectOptions ?? [] : imageLightboxEdit?.proAspectOptions ?? []),
     [editModel, imageLightboxEdit],
   );
 
@@ -159,7 +165,7 @@ export function StudioGenerationsHistory({
     if (!lightboxItem?.url || !imageLightboxEdit) return;
     const allowed = new Set(editAspectOptions as readonly string[]);
     if (allowed.size > 0 && !allowed.has(editAspect)) {
-      setEditAspect(editModel === "pro" ? "3:4" : "auto");
+      setEditAspect(editModel === "nano" ? "auto" : "3:4");
     }
   }, [editModel, editAspect, editAspectOptions, lightboxItem?.url, imageLightboxEdit]);
 
@@ -681,12 +687,10 @@ export function StudioGenerationsHistory({
                   <div className="rounded-xl border border-white/10 bg-[#14141c]/80 p-3.5">
                     <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-white/90">
                       <Sparkles className="h-4 w-4 text-violet-300" aria-hidden />
-                      Edit with Nano Banana (image → image, KIE)
+                      Edit image (image → image)
                     </div>
                     <p className="mb-3 text-[11px] leading-snug text-white/45">
-                      Uses the same API as Studio: <span className="text-white/60">prompt</span>,{" "}
-                      <span className="text-white/60">aspect_ratio</span>, <span className="text-white/60">resolution</span>, and{" "}
-                      <span className="text-white/60">image_input</span> = this image.
+                      Same options as Studio: prompt, aspect ratio, resolution; the open image is used as the reference.
                     </p>
                     <div className="space-y-3">
                       <div>
@@ -702,13 +706,16 @@ export function StudioGenerationsHistory({
                       <div className="grid gap-3 sm:grid-cols-1">
                         <div>
                           <Label className="text-[10px] uppercase tracking-wide text-white/40">Model</Label>
-                          <Select value={editModel} onValueChange={(v) => setEditModel(v as "nano" | "pro")}>
+                          <Select value={editModel} onValueChange={setEditModel}>
                             <SelectTrigger className="mt-1.5 h-10 border-white/15 bg-black/40 text-white">
                               <SelectValue />
                             </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="nano">Nano Banana 2</SelectItem>
-                              <SelectItem value="pro">Nano Banana Pro</SelectItem>
+                            <SelectContent className="max-h-[min(320px,50vh)]">
+                              {imageLightboxEdit.editModelOptions.map((o) => (
+                                <SelectItem key={o.value} value={o.value}>
+                                  {o.label}
+                                </SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
                         </div>

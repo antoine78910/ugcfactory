@@ -4,27 +4,23 @@ import { NextResponse } from "next/server";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { hasPersonalApiKey } from "@/lib/personalApiBypass";
 import {
-  canUseStudioImageModel,
+  canUseStudioImagePickerModel,
   parseAccountPlan,
-  studioImageUpgradeMessage,
+  studioImagePickerUpgradeMessage,
 } from "@/lib/subscriptionModelAccess";
 import { createStudioKieImageTasks } from "@/lib/studioKieImageTask";
 import type { StudioGenerationRow } from "@/lib/studioGenerationsMap";
 import type { NanoBananaProAspectRatio } from "@/lib/nanobanana";
 import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
-import { IMAGE_MODEL } from "@/lib/pricing";
+import { studioImageCreditsPerOutput } from "@/lib/pricing";
+import { isStudioImageKiePickerModelId } from "@/lib/studioImageModels";
 import { getUserPlan } from "@/lib/supabase/getUserPlan";
 
 /** Calculate credits server-side; never trust the client-provided value. */
-function computeImageCredits(model: "nano" | "pro", resolution: string, numImages: number): number {
-  let perImage: number;
-  if (model === "pro") {
-    perImage = resolution === "4K" ? IMAGE_MODEL.google_nano_banana_pro_4k.credits : IMAGE_MODEL.google_nano_banana_pro_1k_2k.credits;
-  } else {
-    if (resolution === "4K") perImage = IMAGE_MODEL.google_nano_banana_2_4k.credits;
-    else if (resolution === "2K") perImage = IMAGE_MODEL.google_nano_banana_2_2k.credits;
-    else perImage = IMAGE_MODEL.google_nano_banana_2_1k.credits;
-  }
+function computeImageCredits(model: string, resolution: string, numImages: number): number {
+  const res =
+    resolution === "4K" || resolution === "2K" || resolution === "1K" ? resolution : "1K";
+  const perImage = studioImageCreditsPerOutput({ studioModel: model, resolution: res });
   return perImage * Math.max(1, numImages);
 }
 
@@ -33,7 +29,7 @@ type Body = {
   label?: string;
   accountPlan?: string;
   prompt: string;
-  model?: "nano" | "pro";
+  model?: string;
   aspectRatio?: string;
   resolution?: string;
   numImages?: number;
@@ -60,17 +56,21 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Missing prompt." }, { status: 400 });
   }
 
-  const model = body.model ?? "nano";
+  const rawModel = body.model ?? "nano";
+  const model = typeof rawModel === "string" ? rawModel.trim() : "nano";
+  if (!isStudioImageKiePickerModelId(model)) {
+    return NextResponse.json({ error: "Invalid image model." }, { status: 400 });
+  }
   const personalKey = hasPersonalApiKey(body.personalApiKey) ? body.personalApiKey!.trim() : undefined;
   if (!personalKey) {
     const dbPlan = await getUserPlan(supabase, user.id);
     const accountPlan = dbPlan !== "free" ? dbPlan : parseAccountPlan(body.accountPlan);
-    if (!canUseStudioImageModel(accountPlan, model)) {
+    if (!canUseStudioImagePickerModel(accountPlan, model)) {
       return NextResponse.json(
         {
           error:
-            studioImageUpgradeMessage(accountPlan, model) ??
-            "Subscription upgrade required for Nano Banana Pro.",
+            studioImagePickerUpgradeMessage(accountPlan, model) ??
+            "Subscription upgrade required for this image model.",
           code: "PLAN_UPGRADE_REQUIRED",
         },
         { status: 403 },
