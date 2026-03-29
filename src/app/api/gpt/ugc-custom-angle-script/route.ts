@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { openaiResponsesText, openaiResponsesTextWithImages } from "@/lib/openaiResponses";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { claudeMessagesText, claudeMessagesTextWithImages } from "@/lib/claudeResponses";
+import { durationRulesForUgcApi, UGC_SCRIPT_INSTRUCTIONS } from "@/lib/ugcAiScriptBrief";
 
 type Body = {
   brandBrief: string;
@@ -19,12 +20,6 @@ function collectHttpsUrls(urls: unknown): string[] {
     .filter((u): u is string => typeof u === "string" && /^https?:\/\//i.test(u.trim()))
     .map((u) => u.trim())
     .slice(0, 3);
-}
-
-function durationRules(seconds: 8 | 15 | 30) {
-  if (seconds === 8) return "8 seconds total video -> MAXIMUM 16 spoken words.";
-  if (seconds === 30) return "30 seconds total video -> MAXIMUM 60 spoken words.";
-  return "15 seconds total video -> MAXIMUM 30 spoken words.";
 }
 
 export async function POST(req: Request) {
@@ -46,20 +41,14 @@ export async function POST(req: Request) {
       : 15;
 
   const developer = [
-    "You are an expert UGC scriptwriter for AI video (lipsync, shot segmentation, image-to-video).",
-    "The user provides a brand brief AND a specific marketing angle they want to explore.",
-    "Write ONE script option following this exact structure:",
+    "Follow EVERY rule in the instructions below.",
+    "The user provides a brand brief AND one specific marketing angle — output only ONE script.",
+    "OVERRIDE: Generate SCRIPT OPTION 1 and its VIDEO_METADATA only. Do NOT output SCRIPT OPTION 2 or SCRIPT OPTION 3.",
+    "After VIDEO_METADATA, add one line: ANGLE_HEADLINE: (12–24 words summarizing this creative angle).",
+    `${durationRulesForUgcApi(videoDurationSeconds)} Count only spoken words in HOOK, PROBLEM, SOLUTION, CTA (except when the 5-second tier omits PROBLEM).`,
+    "Output plain text only. Write in English.",
     "",
-    "SCRIPT OPTION 1",
-    "(VOICE PROFILE, scene context, then HOOK/PROBLEM/SOLUTION/CTA each as (gesture) \"line\")",
-    "",
-    "VIDEO_METADATA",
-    "(persona, location, camera_style, props, actions, tone, energy_level)",
-    "",
-    "ANGLE_HEADLINE: (one sentence, 12-24 words summarizing the creative angle)",
-    "",
-    `${durationRules(videoDurationSeconds)} Count only spoken words in HOOK, PROBLEM, SOLUTION, CTA.`,
-    "Output plain text only. Write in English. Keep it natural and conversational.",
+    UGC_SCRIPT_INSTRUCTIONS,
   ].join("\n");
 
   const imageNote =
