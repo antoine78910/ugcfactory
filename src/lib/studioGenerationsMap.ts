@@ -16,7 +16,7 @@ function resultUrlLooksLikeVideo(url: string): boolean {
 }
 
 /** Normalize `result_urls` from PostgREST (array, JSON string, or single URL string). */
-function normalizeResultUrls(raw: unknown): string[] {
+export function normalizeResultUrls(raw: unknown): string[] {
   if (raw == null) return [];
   if (Array.isArray(raw)) {
     return raw.filter((x): x is string => typeof x === "string" && x.trim().length > 0);

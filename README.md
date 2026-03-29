@@ -57,6 +57,16 @@ En local, les images sont enregistrées dans `public/uploads/`. Sur Vercel le di
 
 Une fois configuré, les packshots sont uploadés dans le bucket et tout reste sauvegardé par projet.
 
+### 2c-bis) Studio — médias générés (images / vidéos KIE, etc.)
+
+Les URLs renvoyées par certains fournisseurs (ex. CDN éphémère type `theapi.app`) expirent vite. L’app **recopie** les fichiers vers un bucket **`studio-media`** (public) dès qu’un job est prêt, puis enregistre l’URL Supabase dans `studio_generations.result_urls`.
+
+1. Storage → **New bucket** → `studio-media` → **Public** → Create.
+2. Optionnel : exécute `supabase/studio-media-bucket.sql` pour les policies de lecture.
+3. Même exigence que pour les uploads : **`SUPABASE_SERVICE_ROLE_KEY`** côté serveur.
+
+Le cron `POST /api/studio/generations/cron` (secret `STUDIO_GENERATIONS_CRON_SECRET`) **backfill** encore les anciennes lignes avec des URLs éphémères (tant que le fichier est encore téléchargeable) et **purge** les objets de plus de **6 mois** (puis vide `result_urls`).
+
 ### 2d) Sessions et isolation des données
 
 - Chaque utilisateur a **sa propre session** (Supabase Auth, cookie/JWT). Les données ne se mélangent pas.

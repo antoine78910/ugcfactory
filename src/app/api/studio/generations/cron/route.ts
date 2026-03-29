@@ -6,6 +6,7 @@ import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import type { StudioGenerationRow } from "@/lib/studioGenerationsMap";
 import { pollStudioGenerationRow, STUDIO_GENERATION_IN_PROGRESS_STATUSES } from "@/lib/studioGenerationsPoll";
 import { markStaleInProgressStudioGenerationsFailedAll } from "@/lib/studioGenerationsStale";
+import { applyStudioMediaRetention, backfillEphemeralStudioResults } from "@/lib/studioGenerationsMediaLifecycle";
 import { serverLog } from "@/lib/serverLog";
 
 /**
@@ -67,13 +68,36 @@ export async function POST(req: Request) {
       serverLog("studio_generations_stale_expired", { count: stale.count });
     }
 
-    if (n > 0 || pollErrors > 0 || stale.count > 0) {
-      serverLog("studio_generations_cron_tick", { polled: n, pollErrors, staleExpired: stale.count });
+    let backfillUpdated = 0;
+    let retentionPurged = 0;
+    try {
+      const bf = await backfillEphemeralStudioResults(admin, 15);
+      backfillUpdated = bf.updated;
+    } catch (e) {
+      serverLog("studio_media_backfill_error", { message: e instanceof Error ? e.message : String(e) });
+    }
+    try {
+      const rt = await applyStudioMediaRetention(admin, 40);
+      retentionPurged = rt.purged;
+    } catch (e) {
+      serverLog("studio_media_retention_error", { message: e instanceof Error ? e.message : String(e) });
+    }
+
+    if (n > 0 || pollErrors > 0 || stale.count > 0 || backfillUpdated > 0 || retentionPurged > 0) {
+      serverLog("studio_generations_cron_tick", {
+        polled: n,
+        pollErrors,
+        staleExpired: stale.count,
+        backfillUpdated,
+        retentionPurged,
+      });
     }
     return NextResponse.json({
       polled: n,
       pollErrors,
       staleExpired: stale.count,
+      backfillUpdated,
+      retentionPurged,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error.";

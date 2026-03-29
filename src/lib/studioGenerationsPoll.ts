@@ -5,6 +5,11 @@ import type { StudioGenerationRow } from "@/lib/studioGenerationsMap";
 import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
 import { isPiapiTaskId, piapiGetSeedanceTask, piapiTaskStatusToLegacy } from "@/lib/piapiSeedance";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
+import {
+  isEphemeralOrUnstableMediaUrl,
+  isStudioMediaPublicUrl,
+  persistStudioMediaUrls,
+} from "@/lib/studioGenerationsMedia";
 
 /** DB rows we still poll until Kie/PiAPI reports terminal state. */
 export const STUDIO_GENERATION_IN_PROGRESS_STATUSES = [
@@ -16,99 +21,6 @@ export const STUDIO_GENERATION_IN_PROGRESS_STATUSES = [
 
 function isStudioGenerationInProgressStatus(s: string): boolean {
   return (STUDIO_GENERATION_IN_PROGRESS_STATUSES as readonly string[]).includes(s);
-}
-
-const STUDIO_MEDIA_BUCKET = "studio-media";
-
-function guessExtensionFromUrl(url: string): string {
-  const u = url.trim();
-  if (!u) return "";
-  const lower = u.toLowerCase();
-  if (lower.includes(".mp4")) return ".mp4";
-  if (lower.includes(".mov")) return ".mov";
-  if (lower.includes(".webm")) return ".webm";
-  if (lower.includes(".png")) return ".png";
-  if (lower.includes(".webp")) return ".webp";
-  if (lower.includes(".jpg") || lower.includes(".jpeg")) return ".jpg";
-  return "";
-}
-
-function guessExtensionFromContentType(contentType: string | null): string {
-  const ct = (contentType ?? "").toLowerCase();
-  if (!ct) return "";
-  const map: Record<string, string> = {
-    "video/mp4": ".mp4",
-    "video/quicktime": ".mov",
-    "video/webm": ".webm",
-    "image/png": ".png",
-    "image/webp": ".webp",
-    "image/jpeg": ".jpg",
-  };
-  return map[ct] ?? "";
-}
-
-async function persistStudioMediaUrls(opts: {
-  userId: string;
-  rowId: string;
-  urls: string[];
-}): Promise<string[] | null> {
-  const admin = createSupabaseServiceClient();
-  if (!admin) {
-    console.warn("[persistStudioMedia] No admin client (SUPABASE_SERVICE_ROLE_KEY missing?) — skipping persistence");
-    return null;
-  }
-
-  const out: string[] = [];
-  for (let i = 0; i < opts.urls.length; i++) {
-    const src = (opts.urls[i] ?? "").trim();
-    if (!src || !/^https?:\/\//i.test(src)) continue;
-
-    try {
-      console.log(`[persistStudioMedia] Downloading ${src.slice(0, 120)}…`);
-      const res = await fetch(src, { cache: "no-store" });
-      if (!res.ok) {
-        console.warn(`[persistStudioMedia] Download failed: HTTP ${res.status} for ${src.slice(0, 120)}`);
-        continue;
-      }
-      const bytes = await res.arrayBuffer();
-      const buffer = Buffer.from(bytes);
-      if (buffer.length === 0) {
-        console.warn("[persistStudioMedia] Downloaded 0 bytes — skipping");
-        continue;
-      }
-
-      const ct = res.headers.get("content-type") ?? "";
-      const ext = guessExtensionFromContentType(ct) || guessExtensionFromUrl(src) || "";
-      const filename = `${crypto.randomUUID()}${ext}`;
-      const storagePath = `${opts.userId}/${opts.rowId}/${i + 1}-${filename}`;
-
-      console.log(`[persistStudioMedia] Uploading ${(buffer.length / 1024).toFixed(0)} KB → ${STUDIO_MEDIA_BUCKET}/${storagePath}`);
-
-      const { data, error } = await admin.storage.from(STUDIO_MEDIA_BUCKET).upload(storagePath, buffer, {
-        contentType: ct || undefined,
-        upsert: false,
-      });
-      if (error) {
-        console.error(`[persistStudioMedia] Upload error:`, error.message ?? error);
-        continue;
-      }
-      if (!data?.path) {
-        console.warn("[persistStudioMedia] Upload returned no path");
-        continue;
-      }
-
-      const {
-        data: { publicUrl },
-      } = admin.storage.from(STUDIO_MEDIA_BUCKET).getPublicUrl(data.path);
-      console.log(`[persistStudioMedia] ✓ Persisted → ${publicUrl?.slice(0, 120)}`);
-      if (publicUrl) out.push(publicUrl);
-    } catch (err) {
-      console.error(`[persistStudioMedia] Exception for ${src.slice(0, 80)}:`, err instanceof Error ? err.message : err);
-    }
-  }
-
-  console.log(`[persistStudioMedia] row=${opts.rowId} persisted=${out.length}/${opts.urls.length}`);
-  return out.length ? out : null;
 }
 
 /**
@@ -146,16 +58,50 @@ export async function pollStudioGenerationRow(
   if (out.kind === "processing") return;
 
   if (out.kind === "success") {
-    const persisted = await persistStudioMediaUrls({
-      userId: row.user_id,
-      rowId: row.id,
-      urls: out.urls ?? [],
-    });
+    const rawUrls = out.urls ?? [];
+    const admin = createSupabaseServiceClient();
+
+    const allAlreadyOurs =
+      rawUrls.length > 0 && rawUrls.every((u) => isStudioMediaPublicUrl(String(u).trim()));
+    let resultUrlsToSave: string[] = rawUrls;
+
+    if (rawUrls.length > 0 && !allAlreadyOurs) {
+      const trimmed = rawUrls.map((u) => String(u).trim());
+      const hasEphemeral = trimmed.some((u) => isEphemeralOrUnstableMediaUrl(u));
+
+      if (!admin) {
+        if (hasEphemeral) {
+          console.warn(
+            `[pollStudioGeneration] row=${row.id} ephemeral URLs but no SUPABASE_SERVICE_ROLE_KEY — not marking ready`,
+          );
+          return;
+        }
+        resultUrlsToSave = trimmed;
+      } else {
+        const { urls: persisted, complete } = await persistStudioMediaUrls({
+          admin,
+          userId: row.user_id,
+          rowId: row.id,
+          urls: trimmed,
+        });
+        if (complete) {
+          resultUrlsToSave = persisted;
+        } else if (hasEphemeral) {
+          console.warn(
+            `[pollStudioGeneration] row=${row.id} archival incomplete for ephemeral CDN — will retry on next poll`,
+          );
+          return;
+        } else {
+          resultUrlsToSave = trimmed;
+        }
+      }
+    }
+
     const { error } = await supabase
       .from("studio_generations")
       .update({
         status: "ready",
-        result_urls: persisted ?? out.urls,
+        result_urls: resultUrlsToSave.length ? resultUrlsToSave : null,
         error_message: null,
       })
       .eq("id", row.id);
