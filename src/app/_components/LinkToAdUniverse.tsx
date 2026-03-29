@@ -65,6 +65,7 @@ import { loadAvatarUrls } from "@/lib/avatarLibrary";
 import { AvatarPickerDialog } from "@/app/_components/AvatarPickerDialog";
 import { clipboardImageFiles } from "@/lib/clipboardImage";
 import VideoCard from "@/app/_components/VideoCard";
+import { STUDIO_GENERATION_KIND_LINK_TO_AD_IMAGE } from "@/lib/studioGenerationKinds";
 
 /** Same-origin API calls with session (mirrors server `createInternalFetchFromRequest`). */
 const browserPipelineFetch = ((path: string, init?: RequestInit) => fetch(path, init)) as InternalFetch;
@@ -563,7 +564,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          kind: "studio_image",
+          kind: STUDIO_GENERATION_KIND_LINK_TO_AD_IMAGE,
           label,
           taskId,
           provider: "kie-market",
@@ -3365,37 +3366,47 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         <div className="flex flex-wrap items-center gap-4">
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Video model</p>
-            <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] p-1">
-              {(Object.keys(LINK_TO_AD_VIDEO_MODELS) as LinkToAdVideoModelId[]).map((id) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setVideoModel(id)}
-                  disabled={isWorking}
-                  className={cn(
-                    "rounded-md px-3 py-1.5 text-xs font-semibold transition whitespace-nowrap",
-                    id === "seedance"
-                      ? "flex flex-col items-start gap-0.5"
-                      : "inline-flex items-center",
-                    videoModel === id
-                      ? "bg-violet-500/15 text-white border border-violet-400/60"
-                      : "bg-black/20 text-white/65 hover:border-white/20 border border-white/10",
-                  )}
-                >
-                  {id === "seedance" ? (
-                    <span
-                      className="pointer-events-none inline-flex items-center gap-0.5 self-start rounded border border-teal-400/35 bg-teal-500/[0.14] px-1 py-px text-[8px] font-semibold uppercase leading-none tracking-wide text-teal-200/95"
-                      title="Best results — recommended for motion and lipsync"
-                    >
-                      <span className="h-0.5 w-0.5 shrink-0 rounded-full bg-teal-400" aria-hidden />
-                      Best results
+            <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] px-1 pb-1 pt-2.5">
+              {(Object.keys(LINK_TO_AD_VIDEO_MODELS) as LinkToAdVideoModelId[]).map((id) => {
+                const pillClass = cn(
+                  "rounded-md px-3 py-1.5 text-xs font-semibold transition whitespace-nowrap inline-flex items-center",
+                  videoModel === id
+                    ? "bg-violet-500/15 text-white border border-violet-400/60"
+                    : "bg-black/20 text-white/65 hover:border-white/20 border border-white/10",
+                );
+                const label = LINK_TO_AD_VIDEO_MODELS[id].label;
+                if (id === "seedance") {
+                  return (
+                    <span key={id} className="relative inline-flex">
+                      <span
+                        className="pointer-events-none absolute -top-2 right-0 z-[1] translate-x-0.5 rounded-md border border-teal-400/50 bg-gradient-to-b from-teal-500/30 to-teal-950/90 px-1.5 py-px text-[8px] font-semibold uppercase leading-tight tracking-wide text-teal-100 shadow-[0_2px_10px_rgba(0,0,0,0.35)]"
+                        title="Best results — recommended for motion and lipsync"
+                      >
+                        Best results
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setVideoModel(id)}
+                        disabled={isWorking}
+                        className={pillClass}
+                      >
+                        {label}
+                      </button>
                     </span>
-                  ) : null}
-                  <span className={id === "seedance" ? "leading-tight" : undefined}>
-                    {LINK_TO_AD_VIDEO_MODELS[id].label}
-                  </span>
-                </button>
-              ))}
+                  );
+                }
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setVideoModel(id)}
+                    disabled={isWorking}
+                    className={pillClass}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
             </div>
           </div>
           <div className="space-y-1">
@@ -4952,7 +4963,10 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                           <>
                             <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-5">
                               <div className="mx-auto w-[11.5rem] max-w-full shrink-0 sm:mx-0 sm:w-[12.5rem]">
-                                <VideoCard src={klingVideoUrl} />
+                                <VideoCard
+                                  src={klingVideoUrl}
+                                  poster={nanoBananaImageUrl ?? undefined}
+                                />
                               </div>
                               <div className="flex w-full flex-col justify-center gap-2 sm:w-auto sm:min-w-[11rem] sm:flex-1">
                                 <Button
@@ -5017,13 +5031,37 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                                       onClick={() =>
                                         promoteHistoryToMain(nanoBananaSelectedImageIndex, u)
                                       }
+                                      onMouseEnter={(e) => {
+                                        const el = e.currentTarget.querySelector("video");
+                                        if (el instanceof HTMLVideoElement) {
+                                          try {
+                                            el.currentTime = 0;
+                                          } catch {
+                                            /* ignore */
+                                          }
+                                          void el.play().catch(() => {});
+                                        }
+                                      }}
+                                      onMouseLeave={(e) => {
+                                        const el = e.currentTarget.querySelector("video");
+                                        if (el instanceof HTMLVideoElement) {
+                                          el.pause();
+                                          try {
+                                            el.currentTime = 0;
+                                          } catch {
+                                            /* ignore */
+                                          }
+                                        }
+                                      }}
                                     >
                                       {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
                                       <video
                                         src={u}
+                                        poster={nanoBananaImageUrl ?? undefined}
                                         muted
                                         playsInline
-                                        preload="metadata"
+                                        loop
+                                        preload="auto"
                                         className="pointer-events-none h-full w-full object-cover"
                                       />
                                       <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 to-transparent py-3 pt-6 text-center text-[9px] font-medium text-white/95 opacity-0 transition group-hover:opacity-100">

@@ -8,18 +8,9 @@ import {
 } from "@/lib/studioGenerationsMap";
 import { sweepStudioRefundHints } from "@/lib/studioGenerationsPoll";
 import { markStaleInProgressStudioGenerationsFailedForUser } from "@/lib/studioGenerationsStale";
+import { STUDIO_LIBRARY_KINDS } from "@/lib/studioGenerationKinds";
 
 const KIND_DEFAULT = "avatar";
-
-/** Kinds listed together on My Projects (studio library). */
-const STUDIO_LIBRARY_KINDS = [
-  "avatar",
-  "studio_image",
-  "studio_video",
-  "studio_upscale",
-  "motion_control",
-  "studio_watermark",
-] as const;
 
 const ALLOWED_KINDS = new Set<string>(STUDIO_LIBRARY_KINDS);
 

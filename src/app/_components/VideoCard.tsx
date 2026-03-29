@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Download, Maximize2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type VideoCardProps = {
   src: string;
+  /** Shown until playback; use reference image in Link to Ad to avoid black idle frame. */
   poster?: string;
   className?: string;
   aspectClassName?: string;
@@ -31,18 +32,62 @@ export default function VideoCard({
     if (enableLightbox !== false) setLightbox(true);
   };
 
+  /** Without a poster, seek slightly past 0 so the first decoded frame shows (avoids all-black idle). */
+  useEffect(() => {
+    if (poster?.trim()) return;
+    const v = videoRef.current;
+    if (!v || !src.trim()) return;
+
+    const onLoadedData = () => {
+      try {
+        v.pause();
+        v.currentTime = 0.001;
+      } catch {
+        /* ignore */
+      }
+    };
+
+    v.addEventListener("loadeddata", onLoadedData);
+    return () => v.removeEventListener("loadeddata", onLoadedData);
+  }, [src, poster]);
+
   const handleMouseEnter = useCallback(() => {
     const v = videoRef.current;
     if (!v) return;
-    v.currentTime = 0;
-    v.play().catch(() => {});
+
+    const playFromStart = () => {
+      try {
+        v.currentTime = 0;
+      } catch {
+        /* ignore */
+      }
+      void v.play().catch(() => {});
+    };
+
+    if (v.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
+      playFromStart();
+      return;
+    }
+
+    const onCanPlay = () => {
+      v.removeEventListener("canplay", onCanPlay);
+      playFromStart();
+    };
+    v.addEventListener("canplay", onCanPlay, { once: true });
+    void v.play().catch(() => {
+      /* will retry in onCanPlay when buffer is ready */
+    });
   }, []);
 
   const handleMouseLeave = useCallback(() => {
     const v = videoRef.current;
     if (!v) return;
     v.pause();
-    v.currentTime = 0;
+    try {
+      v.currentTime = 0;
+    } catch {
+      /* ignore */
+    }
   }, []);
 
   return (
@@ -59,16 +104,16 @@ export default function VideoCard({
           poster={poster}
           muted
           playsInline
-          preload="metadata"
+          preload="auto"
           loop
-          className="h-full w-full cursor-pointer object-cover"
+          className="relative z-0 h-full w-full cursor-pointer object-cover"
           onClick={openFullscreen}
         />
 
         <button
           type="button"
           onClick={openFullscreen}
-          className="absolute inset-0 z-10 cursor-pointer"
+          className="absolute inset-0 z-10 cursor-pointer bg-transparent"
           aria-label="Open video fullscreen"
         />
 
@@ -111,10 +156,12 @@ export default function VideoCard({
             {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
             <video
               src={src}
+              poster={poster}
               controls
               autoPlay
               playsInline
-              className="max-h-[90vh] max-w-[90vw] rounded-lg"
+              preload="auto"
+              className="max-h-[90vh] max-w-[90vw] rounded-lg bg-black"
             />
           </div>
         </div>

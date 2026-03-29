@@ -11,6 +11,7 @@ import {
 } from "@/lib/studioGenerationsPoll";
 import { serverLog } from "@/lib/serverLog";
 import { markStaleInProgressStudioGenerationsFailedForUser } from "@/lib/studioGenerationsStale";
+import { STUDIO_LIBRARY_KINDS } from "@/lib/studioGenerationKinds";
 
 export const runtime = "nodejs";
 
@@ -26,14 +27,7 @@ type Body = {
   piapiApiKey?: string;
 };
 
-const LIBRARY_KINDS = [
-  "avatar",
-  "studio_image",
-  "studio_video",
-  "studio_upscale",
-  "motion_control",
-  "studio_watermark",
-] as const;
+const LIBRARY_KINDS = STUDIO_LIBRARY_KINDS;
 
 /** Avoid Vercel timeouts when many jobs are in flight (each row may download+re-upload media). */
 const MAX_ROWS_TO_POLL_PER_REQUEST = 8;

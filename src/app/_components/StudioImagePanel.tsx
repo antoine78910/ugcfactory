@@ -41,6 +41,7 @@ import {
   studioSeedreamPickerRequiresReferenceImages,
   type StudioImageKiePickerModelId,
 } from "@/lib/studioImageModels";
+import { STUDIO_IMAGE_TAB_KINDS } from "@/lib/studioGenerationKinds";
 import { loadAvatarUrls } from "@/lib/avatarLibrary";
 import { AvatarPickerDialog } from "@/app/_components/AvatarPickerDialog";
 import { clipboardImageFiles } from "@/lib/clipboardImage";
@@ -204,8 +205,8 @@ async function pollNanoTask(taskId: string, personalApiKey?: string): Promise<st
 
 const LS_STUDIO_IMAGE_HISTORY = "ugc_studio_image_history_v1";
 
-/** Supabase list + poll: main image jobs plus Topaz image upscales registered as `studio_upscale`. */
-const STUDIO_IMAGE_LIBRARY_KIND_PARAM = "studio_image,studio_upscale";
+/** Supabase list + poll: Studio Image tab only (excludes Link to Ad `link_to_ad_image`). */
+const STUDIO_IMAGE_LIBRARY_KIND_PARAM = STUDIO_IMAGE_TAB_KINDS.join(",");
 
 async function pollKieMarketFirstUrl(taskId: string, personalApiKey?: string): Promise<string> {
   const max = 120;

@@ -60,6 +60,7 @@ export type StudioGenerationRow = {
 function rowKindToMediaKind(kind: string, resultUrls: string[], label: string): StudioHistoryItem["kind"] {
   if (kind === "motion_control") return "motion";
   if (kind === "studio_video" || kind === "studio_watermark") return "video";
+  if (kind === "link_to_ad_image") return "image";
   if (kind === "studio_upscale") {
     const u = resultUrls[0] ?? "";
     if (u) return resultUrlLooksLikeVideo(u) ? "video" : "image";

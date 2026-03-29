@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { GitBranch, Loader2, Play, Plus, Sparkles, Trash2, X } from "lucide-react";
+import { Loader2, Play, Plus, Sparkles, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,7 +11,6 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import LinkToAdUniverse from "@/app/_components/LinkToAdUniverse";
-import { ProjectLabCanvas } from "@/app/_components/ProjectLabCanvas";
 import { ProjectRunBrandBriefEditor } from "@/app/_components/ProjectRunBrandBriefEditor";
 import { ProjectRunScriptsEditor } from "@/app/_components/ProjectRunScriptsEditor";
 import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
@@ -250,12 +249,6 @@ export default function AppBrandWizard() {
   } | null>(null);
   const [selectedProjectNormalizedUrl, setSelectedProjectNormalizedUrl] = useState<string | null>(null);
   const [deleteProjectLoading, setDeleteProjectLoading] = useState(false);
-  /** Full-screen “lab” graph: architecture of Link to Ad generations for a store URL. */
-  const [projectLab, setProjectLab] = useState<{
-    title: string;
-    storeUrl: string;
-    runs: (typeof savedRuns)[number][];
-  } | null>(null);
   const [runId, setRunId] = useState<string | null>(null);
   const [isLoadingRuns, setIsLoadingRuns] = useState(false);
   /** While set, ignore URL→section sync so stale ?section= in the bar cannot overwrite a sidebar click before router.replace runs. */
@@ -1751,20 +1744,24 @@ export default function AppBrandWizard() {
                           const badge =
                             kind === "avatar"
                               ? "Avatar"
-                              : kind === "studio_image"
-                                ? "Image"
-                                : kind === "studio_video"
-                                  ? "Video"
-                                  : kind === "motion_control"
-                                    ? "Motion"
-                                    : kind === "studio_upscale"
-                                      ? "Upscale"
-                                      : kind === "studio_watermark"
-                                        ? "Video"
-                                        : "Studio";
+                              : kind === "link_to_ad_image"
+                                ? "Link to Ad"
+                                : kind === "studio_image"
+                                  ? "Image"
+                                  : kind === "studio_video"
+                                    ? "Video"
+                                    : kind === "motion_control"
+                                      ? "Motion"
+                                      : kind === "studio_upscale"
+                                        ? "Upscale"
+                                        : kind === "studio_watermark"
+                                          ? "Video"
+                                          : "Studio";
                           const targetSection: AppSection =
                             kind === "avatar"
                               ? "avatar"
+                              : kind === "link_to_ad_image"
+                                ? "link_to_ad"
                               : kind === "studio_image"
                                 ? "image"
                                 : kind === "motion_control"
@@ -1963,22 +1960,6 @@ export default function AppBrandWizard() {
                                   </div>
                                 </div>
                                 <div className="flex shrink-0 items-center gap-1">
-                                  <Button
-                                    type="button"
-                                    size="icon"
-                                    variant="secondary"
-                                    className="h-9 w-9 border border-cyan-400/35 bg-cyan-500/15 text-cyan-100 hover:bg-cyan-500/30"
-                                    title="Lab view: generation map (zoom, branches)"
-                                    onClick={() =>
-                                      setProjectLab({
-                                        title: proj.title ?? proj.storeUrl,
-                                        storeUrl: proj.storeUrl,
-                                        runs: proj.runs,
-                                      })
-                                    }
-                                  >
-                                    <GitBranch className="h-4 w-4" strokeWidth={2.25} />
-                                  </Button>
                                   {isUniverse ? (
                                     <Button
                                       type="button"
@@ -3304,25 +3285,6 @@ export default function AppBrandWizard() {
             </CardContent>
           </Card>
         </div>
-      ) : null}
-
-      {projectLab ? (
-        <ProjectLabCanvas
-          open
-          onClose={() => setProjectLab(null)}
-          projectTitle={projectLab.title}
-          storeUrl={projectLab.storeUrl}
-          runs={projectLab.runs}
-          onOpenRunInEditor={(runId) => {
-            setProjectLab(null);
-            setRunId(runId);
-            if (typeof localStorage !== "undefined") {
-              localStorage.setItem(UGC_CURRENT_RUN_KEY, runId);
-            }
-            setAppSectionNav("link_to_ad");
-            setLinkToAdResumeRunId(runId);
-          }}
-        />
       ) : null}
 
       {lightboxUrl ? (
