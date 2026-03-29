@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Download, Maximize2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { proxiedMediaSrc } from "@/lib/mediaProxyUrl";
 
 type VideoCardProps = {
   src: string;
@@ -26,6 +27,8 @@ export default function VideoCard({
 }: VideoCardProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [lightbox, setLightbox] = useState(false);
+  const playSrc = proxiedMediaSrc(src);
+  const playPoster = poster?.trim() ? proxiedMediaSrc(poster) : undefined;
 
   const openFullscreen = () => {
     if (typeof onOpenFullscreen === "function") return onOpenFullscreen();
@@ -34,9 +37,9 @@ export default function VideoCard({
 
   /** Without a poster, seek slightly past 0 so the first decoded frame shows (avoids all-black idle). */
   useEffect(() => {
-    if (poster?.trim()) return;
+    if (playPoster) return;
     const v = videoRef.current;
-    if (!v || !src.trim()) return;
+    if (!v || !playSrc.trim()) return;
 
     const onLoadedData = () => {
       try {
@@ -49,7 +52,7 @@ export default function VideoCard({
 
     v.addEventListener("loadeddata", onLoadedData);
     return () => v.removeEventListener("loadeddata", onLoadedData);
-  }, [src, poster]);
+  }, [playSrc, playPoster]);
 
   const handleMouseEnter = useCallback(() => {
     const v = videoRef.current;
@@ -100,8 +103,8 @@ export default function VideoCard({
         {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
         <video
           ref={videoRef}
-          src={src}
-          poster={poster}
+          src={playSrc}
+          poster={playPoster}
           muted
           playsInline
           preload="auto"
@@ -155,8 +158,8 @@ export default function VideoCard({
           <div className="relative max-h-[90vh] max-w-[90vw]" onClick={(e) => e.stopPropagation()}>
             {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
             <video
-              src={src}
-              poster={poster}
+              src={playSrc}
+              poster={playPoster}
               controls
               autoPlay
               playsInline

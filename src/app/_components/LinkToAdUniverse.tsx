@@ -61,6 +61,7 @@ import {
 } from "@/lib/linkToAd/generationCredits";
 import type { InternalFetch } from "@/lib/linkToAd/internalFetch";
 import { runInitialPipeline } from "@/lib/linkToAd/runInitialPipeline";
+import { proxiedMediaSrc } from "@/lib/mediaProxyUrl";
 import { loadAvatarUrls } from "@/lib/avatarLibrary";
 import { AvatarPickerDialog } from "@/app/_components/AvatarPickerDialog";
 import { clipboardImageFiles } from "@/lib/clipboardImage";
@@ -4319,10 +4320,12 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                               {url ? (
                                 /* eslint-disable-next-line @next/next/no-img-element */
                                 <img
-                                  src={url}
+                                  src={proxiedMediaSrc(url)}
                                   alt={`Reference ${i + 1}`}
                                   className="h-full w-full object-cover object-center"
-                                  loading="lazy"
+                                  loading={sel ? "eager" : "lazy"}
+                                  decoding="async"
+                                  fetchPriority={sel ? "high" : "low"}
                                 />
                               ) : pollingHere ? (
                                 <span className="flex h-full w-full items-center justify-center bg-black/40">
@@ -4556,10 +4559,12 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                             >
                               {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img
-                                src={nanoBananaImageUrls[i]}
+                                src={proxiedMediaSrc(nanoBananaImageUrls[i])}
                                 alt={`Reference ${i + 1}`}
                                 className="h-full w-full object-cover object-center"
-                                loading="lazy"
+                                loading={sel ? "eager" : "lazy"}
+                                decoding="async"
+                                fetchPriority={sel ? "high" : "low"}
                               />
                               <span
                                 role="button"
@@ -5059,8 +5064,10 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                                     >
                                       {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
                                       <video
-                                        src={u}
-                                        poster={nanoBananaImageUrl ?? undefined}
+                                        src={proxiedMediaSrc(u)}
+                                        poster={
+                                          nanoBananaImageUrl ? proxiedMediaSrc(nanoBananaImageUrl) : undefined
+                                        }
                                         muted
                                         playsInline
                                         loop
@@ -5319,10 +5326,12 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         </Button>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={nanoImageLightboxUrl}
+          src={proxiedMediaSrc(nanoImageLightboxUrl)}
           alt="Full reference image preview"
           className="max-h-[92vh] max-w-[min(100%,1200px)] rounded-xl border border-violet-500/20 object-contain shadow-[0_0_60px_rgba(139,92,246,0.15)]"
           onClick={(e) => e.stopPropagation()}
+          loading="eager"
+          decoding="async"
         />
       </div>
     ) : null}
@@ -5350,11 +5359,12 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         </Button>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={productImageLightboxUrl}
+          src={proxiedMediaSrc(productImageLightboxUrl)}
           alt="Full product image preview"
           className="max-h-[92vh] max-w-[min(100%,1200px)] rounded-xl border border-violet-500/20 object-contain shadow-[0_0_60px_rgba(139,92,246,0.15)]"
           onClick={(e) => e.stopPropagation()}
-          referrerPolicy="no-referrer"
+          loading="eager"
+          decoding="async"
         />
       </div>
     ) : null}
