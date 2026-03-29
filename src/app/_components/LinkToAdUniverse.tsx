@@ -1747,7 +1747,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           brandBrief: summaryText,
           customAngle: angle,
           productImageUrls: resolvedProductUrlsForGpt(),
-          videoDurationSeconds: 15,
+          videoDurationSeconds: videoDuration,
           provider: scriptProvider,
         }),
       });
@@ -2061,7 +2061,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       const res = await fetch("/api/link-to-ad/continue-scripts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ runId: universeRunId }),
+        body: JSON.stringify({ runId: universeRunId, videoDurationSeconds: videoDuration }),
       });
       const json = (await res.json()) as { runId?: string; error?: string; scriptsStepOk?: boolean };
       if (!res.ok || !json.runId) {
@@ -2123,7 +2123,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           previousScriptsText: scriptsText.trim(),
           productImageUrls: resolvedProductUrlsForGpt(),
           avatarImageUrls: personaRefs.length > 0 ? personaRefs : undefined,
-          videoDurationSeconds: 15,
+          videoDurationSeconds: videoDuration,
           generationMode,
           customUgcIntent: composeCustomUgcIntent(customUgcTopic, customUgcOffer, customUgcCta),
           provider: scriptProvider,
@@ -2304,6 +2304,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           generationMode,
           customUgcIntent: composeCustomUgcIntent(customUgcTopic, customUgcOffer, customUgcCta),
           aiProvider: scriptProvider,
+          videoDurationSeconds: videoDuration,
         },
         (step) => setServerPipelineStepIndex(step),
       );

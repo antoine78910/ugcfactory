@@ -110,6 +110,8 @@ export async function persistStudioMediaUrls(opts: {
 
     const downloaded = await fetchMediaBytes(src);
     if (!downloaded) {
+      // Keep original URL as fallback — cron backfill will retry archival later.
+      out.push(src);
       continue;
     }
 
@@ -124,6 +126,8 @@ export async function persistStudioMediaUrls(opts: {
     });
     if (error || !data?.path) {
       console.error(`[persistStudioMedia] upload error:`, error?.message ?? error);
+      // Keep original URL as fallback rather than silently dropping it.
+      out.push(src);
       continue;
     }
 
@@ -131,9 +135,11 @@ export async function persistStudioMediaUrls(opts: {
       data: { publicUrl },
     } = opts.admin.storage.from(STUDIO_MEDIA_BUCKET).getPublicUrl(data.path);
     if (publicUrl) out.push(publicUrl);
+    else out.push(src); // getPublicUrl shouldn't fail, but keep fallback just in case
   }
 
-  const complete = out.length === inputs.length && inputs.length > 0;
+  // complete = every URL is now on our Supabase Storage (no more third-party CDN URLs)
+  const complete = inputs.length > 0 && out.every(isStudioMediaPublicUrl);
   return { urls: out, complete };
 }
 

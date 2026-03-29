@@ -15,7 +15,7 @@ import { ProjectRunBrandBriefEditor } from "@/app/_components/ProjectRunBrandBri
 import { ProjectRunScriptsEditor } from "@/app/_components/ProjectRunScriptsEditor";
 import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
 import { StudioEmptyExamples, StudioOutputPane } from "@/app/_components/StudioEmptyExamples";
-import { isProbablyVideoUrl, StudioGenerationsHistory } from "@/app/_components/StudioGenerationsHistory";
+import { StudioGenerationsHistory } from "@/app/_components/StudioGenerationsHistory";
 import type { StudioHistoryItem } from "@/app/_components/StudioGenerationsHistory";
 import { calculateMotionControlCredits } from "@/lib/linkToAd/generationCredits";
 import StudioAvatarPanel from "@/app/_components/StudioAvatarPanel";
@@ -30,7 +30,6 @@ import {
 import {
   useCreditsPlan,
   getPersonalApiKey,
-  getPersonalPiapiApiKey,
   isPersonalApiActive,
   isPlatformCreditBypassActive,
 } from "@/app/_components/CreditsPlanContext";
@@ -176,6 +175,82 @@ function runGenerationPreview(run: {
   if (img) return { kind: "image", url: img };
   if (run.video_url) return { kind: "video" };
   return null;
+}
+
+function addNonEmptyUrl(set: Set<string>, url: string | null | undefined) {
+  const t = typeof url === "string" ? url.trim() : "";
+  if (t) set.add(t);
+}
+
+/** All still-image URLs we persist on a run (wizard + Link to Ad universe). */
+function collectProjectRunImageUrls(run: {
+  extracted?: unknown;
+  selected_image_url: string | null;
+  generated_image_urls?: string[] | null;
+}): string[] {
+  const set = new Set<string>();
+  addNonEmptyUrl(set, run.selected_image_url);
+  if (Array.isArray(run.generated_image_urls)) {
+    for (const u of run.generated_image_urls) addNonEmptyUrl(set, u);
+  }
+  const snap = readUniverseFromExtracted(run.extracted);
+  if (snap) {
+    addNonEmptyUrl(set, snap.cleanCandidate?.url ?? null);
+    addNonEmptyUrl(set, snap.fallbackImageUrl);
+    addNonEmptyUrl(set, snap.neutralUploadUrl);
+    if (Array.isArray(snap.productOnlyImageUrls)) {
+      for (const u of snap.productOnlyImageUrls) addNonEmptyUrl(set, u);
+    }
+    if (Array.isArray(snap.userPhotoUrls)) {
+      for (const u of snap.userPhotoUrls) addNonEmptyUrl(set, u);
+    }
+    addNonEmptyUrl(set, snap.nanoBananaImageUrl ?? null);
+    if (Array.isArray(snap.nanoBananaImageUrls)) {
+      for (const u of snap.nanoBananaImageUrls) addNonEmptyUrl(set, u);
+    }
+    if (Array.isArray(snap.linkToAdPipelineByAngle)) {
+      for (const pipe of snap.linkToAdPipelineByAngle) {
+        if (!pipe) continue;
+        addNonEmptyUrl(set, pipe.nanoBananaImageUrl ?? null);
+        if (Array.isArray(pipe.nanoBananaImageUrls)) {
+          for (const u of pipe.nanoBananaImageUrls) addNonEmptyUrl(set, u);
+        }
+      }
+    }
+  }
+  return [...set];
+}
+
+function addVideosFromKlingSlots(set: Set<string>, slots: unknown) {
+  if (!Array.isArray(slots)) return;
+  for (const slot of slots) {
+    if (!slot || typeof slot !== "object") continue;
+    const o = slot as Record<string, unknown>;
+    const vu = o.videoUrl;
+    addNonEmptyUrl(set, typeof vu === "string" ? vu : null);
+    const hist = o.history;
+    if (Array.isArray(hist)) {
+      for (const u of hist) addNonEmptyUrl(set, typeof u === "string" ? u : null);
+    }
+  }
+}
+
+/** Kling / classic wizard video URLs stored on a run. */
+function collectProjectRunVideoUrls(run: { video_url: string | null; extracted?: unknown }): string[] {
+  const set = new Set<string>();
+  addNonEmptyUrl(set, run.video_url);
+  const snap = readUniverseFromExtracted(run.extracted);
+  if (snap) {
+    addNonEmptyUrl(set, snap.klingVideoUrl ?? null);
+    addVideosFromKlingSlots(set, snap.klingByReferenceIndex);
+    if (Array.isArray(snap.linkToAdPipelineByAngle)) {
+      for (const pipe of snap.linkToAdPipelineByAngle) {
+        if (!pipe) continue;
+        addVideosFromKlingSlots(set, pipe.klingByReferenceIndex);
+      }
+    }
+  }
+  return [...set];
 }
 
 const TEMPLATES = [
@@ -328,8 +403,6 @@ export default function AppBrandWizard() {
   const grantCreditsRef = useRef(grantCredits);
   grantCreditsRef.current = grantCredits;
 
-  const [studioLibraryItems, setStudioLibraryItems] = useState<StudioHistoryItem[]>([]);
-  const [studioLibraryLoading, setStudioLibraryLoading] = useState(false);
 
   /** Billable seconds: real clip length, or placeholder so 720p ↔ 1080p updates credits before upload. */
   const MOTION_CREDITS_PLACEHOLDER_SEC = 12;
@@ -683,82 +756,6 @@ export default function AppBrandWizard() {
       setIsLoadingRuns(false);
     }
   }
-
-  const refreshStudioLibrary = useCallback(async () => {
-    setStudioLibraryLoading(true);
-    try {
-      const res = await fetch("/api/studio/generations?all=1", { cache: "no-store" });
-      if (res.status === 401 || !res.ok) {
-        setStudioLibraryItems([]);
-        return;
-      }
-      const json = (await res.json()) as {
-        data?: StudioHistoryItem[];
-        refundHints?: { jobId: string; credits: number }[];
-      };
-      setStudioLibraryItems(json.data ?? []);
-      const hints = json.refundHints ?? [];
-      let anyRefund = false;
-      for (const h of hints) {
-        if (h.credits > 0) {
-          grantCreditsRef.current(h.credits);
-          creditsRef.current += h.credits;
-          anyRefund = true;
-        }
-      }
-      if (anyRefund) {
-        toast.message("Credits refunded", { description: "A studio generation failed after charge." });
-      }
-    } finally {
-      setStudioLibraryLoading(false);
-    }
-  }, []);
-
-  const pollStudioLibraryWhileOnProjects = useCallback(async () => {
-    try {
-      const res = await fetch("/api/studio/generations/poll", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          kind: "all",
-          personalApiKey: getPersonalApiKey() ?? undefined,
-          piapiApiKey: getPersonalPiapiApiKey() ?? undefined,
-        }),
-      });
-      if (!res.ok) return;
-      const json = (await res.json()) as {
-        data?: StudioHistoryItem[];
-        refundHints?: { jobId: string; credits: number }[];
-      };
-      if (Array.isArray(json.data)) setStudioLibraryItems(json.data);
-      const hints = json.refundHints ?? [];
-      let anyRefund = false;
-      for (const h of hints) {
-        if (h.credits > 0) {
-          grantCreditsRef.current(h.credits);
-          creditsRef.current += h.credits;
-          anyRefund = true;
-        }
-      }
-      if (anyRefund) {
-        toast.message("Credits refunded", { description: "A studio generation failed after charge." });
-      }
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
-  useEffect(() => {
-    if (appSection !== "projects") return;
-    void refreshStudioLibrary();
-  }, [appSection, refreshStudioLibrary]);
-
-  useEffect(() => {
-    if (appSection !== "projects") return;
-    void pollStudioLibraryWhileOnProjects();
-    const id = window.setInterval(() => void pollStudioLibraryWhileOnProjects(), 5000);
-    return () => window.clearInterval(id);
-  }, [appSection, pollStudioLibraryWhileOnProjects]);
 
   async function startNewLinkToAdFromProject(
     proj: (typeof projects)[number],
@@ -1695,11 +1692,10 @@ export default function AppBrandWizard() {
                         className="border border-white/10 bg-white/5 text-white hover:bg-white/10"
                         onClick={() => {
                           void refreshMeAndRuns();
-                          void refreshStudioLibrary();
                         }}
-                        disabled={isLoadingRuns || studioLibraryLoading}
+                        disabled={isLoadingRuns}
                       >
-                        {isLoadingRuns || studioLibraryLoading ? (
+                        {isLoadingRuns ? (
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         ) : null}
                         Refresh
@@ -1719,147 +1715,10 @@ export default function AppBrandWizard() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  <div className="rounded-xl border border-violet-500/20 bg-violet-500/[0.06] p-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-white">Studio library</p>
-                        <p className="mt-1 text-xs leading-relaxed text-white/45">
-                          All studio generations (Avatar, Image, Video, Motion, Upscale) are saved here while you&apos;re
-                          signed in. Open a card to jump to the right studio tab. Use the trash control to remove an
-                          entry. Items still processing show a spinner until the server finishes.
-                        </p>
-                      </div>
-                      {studioLibraryLoading ? (
-                        <Loader2 className="h-5 w-5 shrink-0 animate-spin text-violet-300" aria-label="Loading" />
-                      ) : null}
-                    </div>
-                    {studioLibraryItems.length === 0 && !studioLibraryLoading ? (
-                      <p className="mt-3 text-xs text-white/40">
-                        No saved studio generations yet (or not signed in). Generate from Create to build your library.
-                      </p>
-                    ) : (
-                      <div className="mt-3 flex gap-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
-                        {studioLibraryItems.map((item) => {
-                          const kind = item.studioGenerationKind ?? "";
-                          const badge =
-                            kind === "avatar"
-                              ? "Avatar"
-                              : kind === "link_to_ad_image" || kind === "link_to_ad_video"
-                                ? "Link to Ad"
-                                : kind === "studio_image"
-                                  ? "Image"
-                                  : kind === "studio_video"
-                                    ? "Video"
-                                    : kind === "motion_control"
-                                      ? "Motion"
-                                      : kind === "studio_upscale"
-                                        ? "Upscale"
-                                        : kind === "studio_watermark"
-                                          ? "Video"
-                                          : "Studio";
-                          const targetSection: AppSection =
-                            kind === "avatar"
-                              ? "avatar"
-                              : kind === "link_to_ad_image" || kind === "link_to_ad_video"
-                                ? "link_to_ad"
-                              : kind === "studio_image"
-                                ? "image"
-                                : kind === "motion_control"
-                                  ? "motion_control"
-                                  : kind === "studio_upscale"
-                                    ? "upscale"
-                                    : "video";
-                          return (
-                            <div key={item.id} className="relative w-[5.75rem] shrink-0">
-                            <button
-                              type="button"
-                              onClick={() => setAppSectionNav(targetSection)}
-                              className="flex w-full flex-col gap-1 rounded-lg border border-white/10 bg-black/30 p-0.5 text-left transition hover:border-violet-400/40 hover:bg-black/50"
-                            >
-                              <div className="relative aspect-[3/4] w-full overflow-hidden rounded-md bg-[#100d17]">
-                                {item.status === "ready" &&
-                                item.mediaUrl &&
-                                item.kind === "image" &&
-                                !isProbablyVideoUrl(item.mediaUrl) ? (
-                                  // eslint-disable-next-line @next/next/no-img-element
-                                  <img
-                                    src={item.mediaUrl}
-                                    alt=""
-                                    className="h-full w-full object-cover"
-                                    referrerPolicy="no-referrer"
-                                  />
-                                ) : item.status === "ready" && item.mediaUrl && (item.kind !== "image" || isProbablyVideoUrl(item.mediaUrl)) ? (
-                                  <video
-                                    src={item.mediaUrl}
-                                    className="h-full w-full object-cover"
-                                    muted
-                                    playsInline
-                                    preload="metadata"
-                                  />
-                                ) : item.status === "generating" ? (
-                                  <div className="flex h-full w-full flex-col items-center justify-center gap-1 px-1">
-                                    <Loader2 className="h-6 w-6 animate-spin text-violet-300" aria-hidden />
-                                    <span className="text-center text-[8px] font-medium leading-tight text-white/50">
-                                      Generating…
-                                    </span>
-                                  </div>
-                                ) : item.status === "failed" ? (
-                                  <div className="flex h-full items-center justify-center px-1 text-center text-[9px] leading-tight text-red-300/90">
-                                    Failed
-                                  </div>
-                                ) : (
-                                  <div className="flex h-full items-center justify-center text-[10px] text-white/35">
-                                    …
-                                  </div>
-                                )}
-                                <span className="absolute left-0.5 top-0.5 rounded bg-black/75 px-1 py-px text-[7px] font-semibold uppercase tracking-wide text-white/80">
-                                  {badge}
-                                </span>
-                              </div>
-                              <span className="line-clamp-2 px-0.5 text-center text-[9px] leading-tight text-white/50">
-                                {item.label}
-                              </span>
-                            </button>
-                            <button
-                              type="button"
-                              className="absolute -right-1 -top-1 z-10 inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/20 bg-black/90 text-white/75 shadow-md hover:bg-red-950/95 hover:text-white"
-                              aria-label="Remove generation"
-                              title="Remove from library"
-                              onClick={async (e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                if (!window.confirm("Remove this generation from your library?")) return;
-                                const res = await fetch(
-                                  `/api/studio/generations/${encodeURIComponent(item.id)}`,
-                                  { method: "DELETE" },
-                                );
-                                if (res.status === 401) {
-                                  toast.error("Sign in to remove saved generations.");
-                                  return;
-                                }
-                                if (!res.ok && res.status !== 404) {
-                                  const j = (await res.json().catch(() => ({}))) as { error?: string };
-                                  toast.error(
-                                    typeof j.error === "string" && j.error.trim() ? j.error : "Could not delete.",
-                                  );
-                                  return;
-                                }
-                                setStudioLibraryItems((prev) => prev.filter((i) => i.id !== item.id));
-                              }}
-                            >
-                              <Trash2 className="h-3 w-3" aria-hidden />
-                            </button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-
                   {projects.length === 0 ? (
                     <div className="rounded-md border border-white/10 bg-white/5 p-4 text-sm text-white/65">
-                      No product projects yet. Use Link to Ad with a store URL to create one — studio generations above
-                      are kept separately.
+                      No product projects yet. Use Link to Ad with a store URL to create one. Images and videos for each
+                      brand are shown when you open a project below.
                     </div>
                   ) : (
                     <div className="flex flex-col gap-6">
@@ -1914,6 +1773,11 @@ export default function AppBrandWizard() {
                             ) ||
                             (storeUrl.trim() && normalizeUrl(storeUrl) === proj.normalizedUrl);
                           const runIdsInProject = proj.runs.map((r) => r.id);
+                          const projectRunMedia = proj.runs.map((run) => ({
+                            run,
+                            images: collectProjectRunImageUrls(run),
+                            videos: collectProjectRunVideoUrls(run),
+                          }));
                           return (
                             <div
                               key={proj.normalizedUrl}
@@ -2057,6 +1921,94 @@ export default function AppBrandWizard() {
                                     </button>
                                   );
                                 })}
+                              </div>
+                              <div className="space-y-5 border-t border-white/10 px-4 pb-4 pt-4">
+                                <div>
+                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Images</p>
+                                  <p className="mt-0.5 text-[11px] text-white/35">
+                                    Grouped by ad — packshots, NanoBanana frames, and wizard renders saved on each run.
+                                  </p>
+                                  {projectRunMedia.every((x) => x.images.length === 0) ? (
+                                    <p className="mt-2 text-xs text-white/40">No images on this brand yet.</p>
+                                  ) : (
+                                    <div className="mt-3 space-y-4">
+                                      {projectRunMedia.map(({ run, images }) =>
+                                        images.length === 0 ? null : (
+                                          <div key={`proj-imgs-${run.id}`}>
+                                            <p className="mb-1.5 text-[10px] text-white/40">
+                                              Ad ·{" "}
+                                              {new Date(run.created_at).toLocaleString(undefined, {
+                                                dateStyle: "medium",
+                                                timeStyle: "short",
+                                              })}
+                                            </p>
+                                            <div className="flex flex-wrap gap-2">
+                                              {images.map((src) => (
+                                                <a
+                                                  key={src}
+                                                  href={src}
+                                                  target="_blank"
+                                                  rel="noreferrer"
+                                                  className="relative block h-24 w-20 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-[#100d17] ring-offset-2 ring-offset-[#0b0912] transition hover:ring-2 hover:ring-violet-400/50"
+                                                >
+                                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                  <img
+                                                    src={src}
+                                                    alt=""
+                                                    className="h-full w-full object-cover"
+                                                    referrerPolicy="no-referrer"
+                                                  />
+                                                </a>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        ),
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                                <div>
+                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Videos</p>
+                                  <p className="mt-0.5 text-[11px] text-white/35">
+                                    Grouped by ad — Kling outputs and classic wizard videos stored on each run.
+                                  </p>
+                                  {projectRunMedia.every((x) => x.videos.length === 0) ? (
+                                    <p className="mt-2 text-xs text-white/40">No generated videos on this brand yet.</p>
+                                  ) : (
+                                    <div className="mt-3 space-y-4">
+                                      {projectRunMedia.map(({ run, videos }) =>
+                                        videos.length === 0 ? null : (
+                                          <div key={`proj-vids-${run.id}`}>
+                                            <p className="mb-1.5 text-[10px] text-white/40">
+                                              Ad ·{" "}
+                                              {new Date(run.created_at).toLocaleString(undefined, {
+                                                dateStyle: "medium",
+                                                timeStyle: "short",
+                                              })}
+                                            </p>
+                                            <div className="flex flex-wrap gap-2">
+                                              {videos.map((src) => (
+                                                <div
+                                                  key={src}
+                                                  className="relative h-40 w-[7.5rem] shrink-0 overflow-hidden rounded-lg border border-white/10 bg-black"
+                                                >
+                                                  {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                                                  <video
+                                                    src={src}
+                                                    className="h-full w-full object-cover"
+                                                    controls
+                                                    playsInline
+                                                    preload="metadata"
+                                                  />
+                                                </div>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        ),
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
                               </div>
                               {isUniverse &&
                               proj.runs.some((r) => {

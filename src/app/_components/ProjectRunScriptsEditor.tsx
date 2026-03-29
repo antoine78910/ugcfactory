@@ -22,6 +22,9 @@ import {
   EMPTY_SCRIPT_FACTORS,
   splitScriptFactorsForUi,
 } from "@/lib/linkToAdScriptFactors";
+import { isPlatformCreditBypassActive, useCreditsPlan } from "@/app/_components/CreditsPlanContext";
+
+const DISCOVER_ANGLE_CREDITS = 2;
 
 export type ProjectRunScriptsEditorProps = {
   runId: string;
@@ -65,6 +68,7 @@ export function ProjectRunScriptsEditor({
   productImageUrls,
   onSaved,
 }: ProjectRunScriptsEditorProps) {
+  const { current: creditsBalance, spendCredits, grantCredits } = useCreditsPlan();
   const initialBodies = useMemo(() => splitAllScriptOptions(scriptsText), [scriptsText]);
   const [factorsByAngle, setFactorsByAngle] = useState<ScriptFactorBlocks[]>(() => factorsFromBodies(initialBodies));
   const [activeAngle, setActiveAngle] = useState(0);
@@ -186,6 +190,18 @@ export function ProjectRunScriptsEditor({
       return;
     }
 
+    let chargedDiscover = false;
+    if (addMode === "discover" && !isPlatformCreditBypassActive()) {
+      if (creditsBalance < DISCOVER_ANGLE_CREDITS) {
+        toast.error("Not enough credits", {
+          description: `“Let the AI find one” costs ${DISCOVER_ANGLE_CREDITS} credits.`,
+        });
+        return;
+      }
+      spendCredits(DISCOVER_ANGLE_CREDITS);
+      chargedDiscover = true;
+    }
+
     setAdding(true);
     try {
       const res = await fetch("/api/gpt/ugc-custom-angle-script", {
@@ -220,6 +236,7 @@ export function ProjectRunScriptsEditor({
       setAddPrompt("");
       onSaved();
     } catch (e) {
+      if (chargedDiscover) grantCredits(DISCOVER_ANGLE_CREDITS);
       toast.error(e instanceof Error ? e.message : "Failed to add angle");
     } finally {
       setAdding(false);
@@ -345,6 +362,11 @@ export function ProjectRunScriptsEditor({
           ) : (
             <p className="text-[11px] leading-relaxed text-white/50">
               We’ll ask the model for one new angle that fits the product brief only — no extra input needed.
+              <span className="mt-1 block font-medium text-amber-200/85">
+                {isPlatformCreditBypassActive()
+                  ? "No platform credits while Personal API mode is on."
+                  : `Uses ${DISCOVER_ANGLE_CREDITS} credits.`}
+              </span>
             </p>
           )}
           <div className="flex flex-wrap gap-2">

@@ -1,27 +1,50 @@
 /**
- * System instructions for `/api/gpt/ugc-scripts-from-brief` (3 angles).
- * API video lengths: 8 | 15 | 30 seconds — mapped to word-count tiers below.
+ * Target lengths for UGC scripts. Matches Link to Ad duration buttons (5 / 10 / 15 s).
+ * Legacy callers sometimes sent 8 → treated as the 10-second word tier.
  */
+export type UgcScriptVideoDurationSec = 5 | 10 | 15 | 30;
 
-export function durationRulesForUgcApi(seconds: 8 | 15 | 30): string {
-  if (seconds === 8) {
+/** Normalize client/API input to a script word-count tier. Default 10 matches Link to Ad UI default. */
+export function normalizeUgcScriptVideoDurationSec(raw: unknown): UgcScriptVideoDurationSec {
+  const n = typeof raw === "number" && Number.isFinite(raw) ? raw : Number(raw);
+  if (n === 5 || n === 10 || n === 15 || n === 30) return n;
+  if (n === 8) return 10;
+  return 10;
+}
+
+/**
+ * Short, repeated rules for the model system prompt (Claude / GPT).
+ * Must stay aligned with LENGTH RULES in `UGC_SCRIPT_INSTRUCTIONS`.
+ */
+export function durationRulesForUgcApi(seconds: UgcScriptVideoDurationSec): string {
+  if (seconds === 5) {
     return [
-      "REQUESTED VIDEO LENGTH: ~8 seconds — use the 10-second tier from LENGTH RULES.",
-      "Spoken words (HOOK + PROBLEM + SOLUTION + CTA): MAXIMUM 30 words total.",
-      "Set video_duration in VIDEO_METADATA to 10s (or 8s).",
+      "USER SELECTED 5-SECOND VIDEOS — this is mandatory for every script you output.",
+      "Spoken word budget: MAXIMUM 15 words total (HOOK + SOLUTION + CTA only). Count only words the actor will speak aloud.",
+      "OMIT the PROBLEM section entirely (too short — see LENGTH RULES 5-second tier).",
+      "Set video_duration in VIDEO_METADATA to exactly 5s. word_count must be ≤ 15 spoken words.",
+    ].join(" ");
+  }
+  if (seconds === 10) {
+    return [
+      "USER SELECTED 10-SECOND VIDEOS — this is mandatory for every script you output.",
+      "Spoken word budget: MAXIMUM 30 words total across HOOK, PROBLEM, SOLUTION, CTA. Count only spoken words.",
+      "Follow the 10-second row in LENGTH RULES (percentages + examples).",
+      "Set video_duration in VIDEO_METADATA to exactly 10s. word_count must be ≤ 30 spoken words.",
     ].join(" ");
   }
   if (seconds === 30) {
     return [
-      "REQUESTED VIDEO LENGTH: 30 seconds (no 30s row in LENGTH RULES — scale proportionally).",
+      "USER SELECTED 30-SECOND VIDEOS — LENGTH RULES has no 30s row; scale the 15s tier proportionally.",
       "Spoken words: MAXIMUM 90 total (~3 words/sec). Keep HOOK 15%, PROBLEM 25%, SOLUTION 45%, CTA 15% of total; SOLUTION must stay the longest section.",
       "Set video_duration in VIDEO_METADATA to 30s.",
     ].join(" ");
   }
   return [
-    "REQUESTED VIDEO LENGTH: 15 seconds — use the 15-second tier from LENGTH RULES.",
-    "Spoken words: MAXIMUM 46 total.",
-    "Set video_duration in VIDEO_METADATA to 15s.",
+    "USER SELECTED 15-SECOND VIDEOS — this is mandatory for every script you output.",
+    "Spoken word budget: MAXIMUM 46 words total across HOOK, PROBLEM, SOLUTION, CTA. Count only spoken words.",
+    "Follow the 15-second row in LENGTH RULES (percentages + examples).",
+    "Set video_duration in VIDEO_METADATA to exactly 15s. word_count must be ≤ 46 spoken words.",
   ].join(" ");
 }
 
@@ -427,7 +450,7 @@ movement_context: [STATIC / WALKING / POST-WORKOUT /
                    GETTING READY / JUST WOKE UP / SITTING DOWN]
 scene_details: [brief description of key visual elements
                 visible in the scene for image generation]
-video_duration: [5s / 10s / 15s]
+video_duration: [5s / 10s / 15s / 30s]
 word_count: [total spoken words in this script]
 
 Output plain text only.

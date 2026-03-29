@@ -1,7 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { serverLog } from "@/lib/serverLog";
 import {
-  isEphemeralOrUnstableMediaUrl,
   isStudioMediaPublicUrl,
   persistStudioMediaUrls,
   deleteStudioMediaForRow,
@@ -11,7 +10,10 @@ import { normalizeResultUrls } from "@/lib/studioGenerationsMap";
 import type { StudioGenerationRow } from "@/lib/studioGenerationsMap";
 
 /**
- * Fix rows already saved with ephemeral CDN URLs (e.g. img.theapi.app) while links still work.
+ * Migrate ALL result_urls not yet on our Supabase Storage bucket to `studio-media`.
+ * Covers ephemeral CDN URLs (theapi.app etc.) AND any stable provider CDN that may expire later.
+ * Saves partial progress: if only some URLs could be archived, the DB is updated with the mix
+ * (studio-media URLs + original fallbacks). Remaining fallbacks are retried on the next cron tick.
  */
 export async function backfillEphemeralStudioResults(
   admin: SupabaseClient,
@@ -32,17 +34,21 @@ export async function backfillEphemeralStudioResults(
   for (const row of (rows ?? []) as Pick<StudioGenerationRow, "id" | "user_id" | "result_urls">[]) {
     const urls = normalizeResultUrls(row.result_urls as unknown);
     if (urls.length === 0) continue;
-    if (!urls.some(isEphemeralOrUnstableMediaUrl)) continue;
+    // Skip rows where ALL URLs are already on our storage — nothing to migrate.
     if (urls.every(isStudioMediaPublicUrl)) continue;
 
     scanned++;
-    const { urls: persistedUrls, complete } = await persistStudioMediaUrls({
+    const { urls: persistedUrls } = await persistStudioMediaUrls({
       admin,
       userId: row.user_id,
       rowId: row.id,
       urls,
     });
-    if (!complete) continue;
+
+    // Save if at least one URL was successfully archived to studio-media.
+    // persistStudioMediaUrls keeps fallback originals, so persistedUrls.length === urls.length.
+    const anyNewlyArchived = persistedUrls.some(isStudioMediaPublicUrl);
+    if (!anyNewlyArchived) continue;
 
     const { error: upErr } = await admin
       .from("studio_generations")

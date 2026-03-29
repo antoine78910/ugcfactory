@@ -6,7 +6,6 @@ import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/ge
 import { isPiapiTaskId, piapiGetSeedanceTask, piapiTaskStatusToLegacy } from "@/lib/piapiSeedance";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import {
-  isEphemeralOrUnstableMediaUrl,
   isStudioMediaPublicUrl,
   persistStudioMediaUrls,
 } from "@/lib/studioGenerationsMedia";
@@ -67,33 +66,23 @@ export async function pollStudioGenerationRow(
 
     if (rawUrls.length > 0 && !allAlreadyOurs) {
       const trimmed = rawUrls.map((u) => String(u).trim());
-      const hasEphemeral = trimmed.some((u) => isEphemeralOrUnstableMediaUrl(u));
 
       if (!admin) {
-        if (hasEphemeral) {
-          console.warn(
-            `[pollStudioGeneration] row=${row.id} ephemeral URLs but no SUPABASE_SERVICE_ROLE_KEY — not marking ready`,
-          );
-          return;
-        }
+        // No service-role key: save original URLs as-is. Cron backfill will archive later.
         resultUrlsToSave = trimmed;
       } else {
-        const { urls: persisted, complete } = await persistStudioMediaUrls({
+        // Always attempt to archive ALL provider URLs to Supabase Storage.
+        // persistStudioMediaUrls now keeps the original URL as fallback on failure,
+        // so `persisted` always has the same count as `trimmed` — never drops URLs.
+        const { urls: persisted } = await persistStudioMediaUrls({
           admin,
           userId: row.user_id,
           rowId: row.id,
           urls: trimmed,
         });
-        if (complete) {
-          resultUrlsToSave = persisted;
-        } else if (hasEphemeral) {
-          console.warn(
-            `[pollStudioGeneration] row=${row.id} archival incomplete for ephemeral CDN — will retry on next poll`,
-          );
-          return;
-        } else {
-          resultUrlsToSave = trimmed;
-        }
+        // Save whatever we got (mix of studio-media URLs + fallback originals).
+        // The cron backfill will gradually migrate any remaining fallback URLs.
+        resultUrlsToSave = persisted.length ? persisted : trimmed;
       }
     }
 

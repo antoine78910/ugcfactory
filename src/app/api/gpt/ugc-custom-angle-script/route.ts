@@ -4,13 +4,17 @@ import { NextResponse } from "next/server";
 import { openaiResponsesText, openaiResponsesTextWithImages } from "@/lib/openaiResponses";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { claudeMessagesText, claudeMessagesTextWithImages } from "@/lib/claudeResponses";
-import { durationRulesForUgcApi, UGC_SCRIPT_INSTRUCTIONS } from "@/lib/ugcAiScriptBrief";
+import {
+  durationRulesForUgcApi,
+  normalizeUgcScriptVideoDurationSec,
+  UGC_SCRIPT_INSTRUCTIONS,
+} from "@/lib/ugcAiScriptBrief";
 
 type Body = {
   brandBrief: string;
   customAngle: string;
   productImageUrls?: string[] | null;
-  videoDurationSeconds?: 8 | 15 | 30;
+  videoDurationSeconds?: number;
   provider?: "gpt" | "claude";
 };
 
@@ -35,17 +39,14 @@ export async function POST(req: Request) {
   }
 
   const imageUrls = collectHttpsUrls(body?.productImageUrls);
-  const videoDurationSeconds: 8 | 15 | 30 =
-    body?.videoDurationSeconds === 8 || body?.videoDurationSeconds === 30
-      ? body.videoDurationSeconds
-      : 15;
+  const videoDurationSeconds = normalizeUgcScriptVideoDurationSec(body?.videoDurationSeconds);
 
   const developer = [
     "Follow EVERY rule in the instructions below.",
     "The user provides a brand brief AND one specific marketing angle — output only ONE script.",
     "OVERRIDE: Generate SCRIPT OPTION 1 and its VIDEO_METADATA only. Do NOT output SCRIPT OPTION 2 or SCRIPT OPTION 3.",
     "After VIDEO_METADATA, add one line: ANGLE_HEADLINE: (12–24 words summarizing this creative angle).",
-    `${durationRulesForUgcApi(videoDurationSeconds)} Count only spoken words in HOOK, PROBLEM, SOLUTION, CTA (except when the 5-second tier omits PROBLEM).`,
+    `${durationRulesForUgcApi(videoDurationSeconds)} For word limits: count only HOOK, PROBLEM, SOLUTION, CTA lines (when PROBLEM exists).`,
     "Output plain text only. Write in English.",
     "",
     UGC_SCRIPT_INSTRUCTIONS,
@@ -64,7 +65,8 @@ export async function POST(req: Request) {
     "Brand brief:",
     brandBrief,
     "",
-    `Video length: ${videoDurationSeconds} seconds`,
+    `Target video length (user selected in the app): ${String(videoDurationSeconds)} seconds.`,
+    `Respect the spoken-word cap for this exact length — shorter = fewer words.`,
     "",
     imageNote,
   ].join("\n");

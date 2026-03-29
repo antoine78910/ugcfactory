@@ -7,6 +7,8 @@ import {
 } from "@/lib/linkToAdUniverse";
 import { productUrlsForGpt } from "@/lib/productReferenceImages";
 import type { InternalFetch } from "@/lib/linkToAd/internalFetch";
+import { LINK_TO_AD_DEFAULT_VIDEO_DURATION_SEC } from "@/lib/linkToAd/generationCredits";
+import { normalizeUgcScriptVideoDurationSec } from "@/lib/ugcAiScriptBrief";
 
 type ProductCandidate = { url: string; reason?: string } | string;
 
@@ -55,6 +57,8 @@ export async function runInitialPipeline(
     generationMode?: "automatic" | "custom_ugc";
     customUgcIntent?: string;
     aiProvider?: "gpt" | "claude";
+    /** 5 / 10 / 15 / 30 — spoken-word budget for UGC scripts (Link to Ad duration control). */
+    videoDurationSeconds?: number;
   },
   onProgress?: (step: InitialPipelineStepIndex) => void,
 ): Promise<InitialPipelineResult> {
@@ -63,6 +67,9 @@ export async function runInitialPipeline(
   const generationMode = opts.generationMode === "custom_ugc" ? "custom_ugc" : "automatic";
   const customUgcIntent = (opts.customUgcIntent ?? "").trim();
   const aiProvider = opts.aiProvider === "claude" ? "claude" : "gpt";
+  const scriptTargetDurationSec = normalizeUgcScriptVideoDurationSec(
+    opts.videoDurationSeconds ?? LINK_TO_AD_DEFAULT_VIDEO_DURATION_SEC,
+  );
 
   let activeRunId: string | null = null;
 
@@ -202,7 +209,7 @@ export async function runInitialPipeline(
           brandBrief: summaryStr,
           productImageUrl: gptImages[0] ?? null,
           productImageUrls: gptImages,
-          videoDurationSeconds: 15,
+          videoDurationSeconds: scriptTargetDurationSec,
           generationMode,
           customUgcIntent,
           provider: aiProvider,
@@ -267,7 +274,11 @@ export type ContinueScriptsResult =
   | { ok: false; error: string; runId?: string };
 
 /** Resume script generation from a saved run (after_summary) on the server. */
-export async function runContinueScriptsPipeline(f: InternalFetch, runId: string): Promise<ContinueScriptsResult> {
+export async function runContinueScriptsPipeline(
+  f: InternalFetch,
+  runId: string,
+  opts?: { videoDurationSeconds?: number },
+): Promise<ContinueScriptsResult> {
   const getRes = await f(`/api/runs/get?runId=${encodeURIComponent(runId)}`, { method: "GET" });
   const getJson = (await getRes.json()) as {
     data?: {
@@ -309,6 +320,10 @@ export async function runContinueScriptsPipeline(f: InternalFetch, runId: string
     fallbackUrl: snap.fallbackImageUrl,
   });
 
+  const scriptTargetDurationSec = normalizeUgcScriptVideoDurationSec(
+    opts?.videoDurationSeconds ?? LINK_TO_AD_DEFAULT_VIDEO_DURATION_SEC,
+  );
+
   try {
     const scriptsRes = await f("/api/gpt/ugc-scripts-from-brief", {
       method: "POST",
@@ -318,7 +333,7 @@ export async function runContinueScriptsPipeline(f: InternalFetch, runId: string
         brandBrief: snap.summaryText,
         productImageUrl: gptImages[0] ?? null,
         productImageUrls: gptImages,
-        videoDurationSeconds: 15,
+        videoDurationSeconds: scriptTargetDurationSec,
         generationMode,
         customUgcIntent,
         provider: aiProvider,

@@ -5,7 +5,11 @@ import { openaiResponsesText, openaiResponsesTextWithImages } from "@/lib/openai
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { makeCacheKey } from "@/lib/gptCache";
 import { claudeMessagesText, claudeMessagesTextWithImages } from "@/lib/claudeResponses";
-import { durationRulesForUgcApi, UGC_SCRIPT_INSTRUCTIONS } from "@/lib/ugcAiScriptBrief";
+import {
+  durationRulesForUgcApi,
+  normalizeUgcScriptVideoDurationSec,
+  UGC_SCRIPT_INSTRUCTIONS,
+} from "@/lib/ugcAiScriptBrief";
 
 type Body = {
   storeUrl?: string;
@@ -19,8 +23,8 @@ type Body = {
   productImageUrls?: string[] | null;
   /** Optional persona/avatar reference images — when present, scripts skip text persona description. */
   avatarImageUrls?: string[] | null;
-  /** 8 | 15 | 30 — drives max word count per script */
-  videoDurationSeconds?: 8 | 15 | 30;
+  /** 5 | 10 | 15 | 30 (legacy: 8 → 10s tier). Drives max spoken-word count per script. */
+  videoDurationSeconds?: number;
   generationMode?: "automatic" | "custom_ugc";
   customUgcIntent?: string | null;
   provider?: "gpt" | "claude";
@@ -67,10 +71,7 @@ export async function POST(req: Request) {
         .slice(0, 3)
     : [];
 
-  const videoDurationSeconds: 8 | 15 | 30 =
-    body?.videoDurationSeconds === 8 || body?.videoDurationSeconds === 30
-      ? body.videoDurationSeconds
-      : 15;
+  const videoDurationSeconds = normalizeUgcScriptVideoDurationSec(body?.videoDurationSeconds);
   const generationMode = body?.generationMode === "custom_ugc" ? "custom_ugc" : "automatic";
   const customUgcIntent = body?.customUgcIntent?.trim() || "";
   const previousScriptsText = body?.previousScriptsText?.trim() || "";
@@ -79,7 +80,7 @@ export async function POST(req: Request) {
   const developer = [
     "Follow EVERY rule and the exact output structure in the instructions below.",
     "All spoken script lines must be in English.",
-    `${durationRulesForUgcApi(videoDurationSeconds)} Count only spoken words in HOOK, PROBLEM, SOLUTION, CTA (except when the 5-second tier explicitly omits PROBLEM).`,
+    `${durationRulesForUgcApi(videoDurationSeconds)} For word limits: count only HOOK, PROBLEM, SOLUTION, CTA lines (when PROBLEM exists).`,
     "Output plain text only, using the section headings exactly as specified (SCRIPT OPTION 1, VIDEO_METADATA, etc.).",
     generationMode === "custom_ugc"
       ? `Generation mode: CUSTOM UGC INTENT. Respect this user intent while still following all structural rules: ${customUgcIntent || "No talk, product-focused visual UGC."}`
@@ -112,7 +113,8 @@ export async function POST(req: Request) {
     previousScriptsText ? previousScriptsText : "",
     "",
     "Language: english",
-    `Video length: ${String(videoDurationSeconds)} seconds`,
+    `Target video length (user selected in the app): ${String(videoDurationSeconds)} seconds.`,
+    `You MUST respect the spoken-word cap for this exact length — shorter videos mean fewer words (see system rules). Do not write for a different duration.`,
     "",
     "The scripts must follow the UGC AI script structure.",
     "Test 3 different marketing angles.",
@@ -127,7 +129,7 @@ export async function POST(req: Request) {
 
   try {
     const cacheKey = makeCacheKey({
-      v: 5,
+      v: 6,
       kind: "ugc_scripts_from_brief",
       provider,
       brandBrief,

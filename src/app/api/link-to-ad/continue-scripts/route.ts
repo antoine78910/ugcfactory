@@ -6,7 +6,7 @@ import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { createInternalFetchFromRequest } from "@/lib/linkToAd/internalFetch";
 import { runContinueScriptsPipeline } from "@/lib/linkToAd/runInitialPipeline";
 
-type Body = { runId?: string };
+type Body = { runId?: string; videoDurationSeconds?: number };
 
 export async function POST(req: Request) {
   const { response } = await requireSupabaseUser();
@@ -19,7 +19,9 @@ export async function POST(req: Request) {
   }
 
   const f = createInternalFetchFromRequest(req);
-  const result = await runContinueScriptsPipeline(f, runId);
+  const result = await runContinueScriptsPipeline(f, runId, {
+    videoDurationSeconds: body?.videoDurationSeconds,
+  });
 
   if (!result.ok) {
     return NextResponse.json(

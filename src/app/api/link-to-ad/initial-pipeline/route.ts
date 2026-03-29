@@ -13,6 +13,7 @@ type Body = {
   generationMode?: "automatic" | "custom_ugc";
   customUgcIntent?: string;
   aiProvider?: "gpt" | "claude";
+  videoDurationSeconds?: number;
 };
 
 export async function POST(req: Request) {
@@ -37,7 +38,14 @@ export async function POST(req: Request) {
   const aiProvider: "gpt" | "claude" = body?.aiProvider === "gpt" ? "gpt" : "claude";
 
   const f = createInternalFetchFromRequest(req);
-  const result = await runInitialPipeline(f, { storeUrl, neutralUploadUrl, generationMode, customUgcIntent, aiProvider });
+  const result = await runInitialPipeline(f, {
+    storeUrl,
+    neutralUploadUrl,
+    generationMode,
+    customUgcIntent,
+    aiProvider,
+    videoDurationSeconds: body?.videoDurationSeconds,
+  });
 
   if (!result.ok) {
     return NextResponse.json(
