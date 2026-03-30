@@ -665,15 +665,55 @@ export function parseThreeLabeledPrompts(text: string): [string, string, string]
   return [byNum[1], byNum[2], byNum[3]];
 }
 
+export type NanoEditableSections = {
+  person: string;
+  scene: string;
+  product: string;
+};
+
+/** True when prompts use EDIT — / TECHNICAL: blocks from the image prompt API. */
+export function parseNanoEditableSections(editable: string): NanoEditableSections & { isStructured: boolean } {
+  const raw = editable.replace(/\r\n/g, "\n");
+  if (!raw.trim()) {
+    return { person: "", scene: "", product: "", isStructured: false };
+  }
+  if (!/EDIT\s*[—:-]\s*Person/im.test(raw)) {
+    return { person: raw.trim(), scene: "", product: "", isStructured: false };
+  }
+  const personM = raw.match(/EDIT\s*[—:-]\s*Person\s*[:\n]\s*([\s\S]*?)(?=\n\s*EDIT\s*[—:-]\s*Scene\b|$)/i);
+  const sceneM = raw.match(/EDIT\s*[—:-]\s*Scene\s*[:\n]\s*([\s\S]*?)(?=\n\s*EDIT\s*[—:-]\s*Product\b|$)/i);
+  const productM = raw.match(
+    /EDIT\s*[—:-]\s*Product\s*(?:&|and)?\s*action\s*[:\n]\s*([\s\S]*?)(?=\n\s*TECHNICAL\s*[—:\s]|\n\s*NEGATIVE\s+PROMPT\b|$)/i,
+  );
+  return {
+    person: personM?.[1]?.trim() ?? "",
+    scene: sceneM?.[1]?.trim() ?? "",
+    product: productM?.[1]?.trim() ?? "",
+    isStructured: true,
+  };
+}
+
+export function composeNanoEditableSections(parts: NanoEditableSections): string {
+  const p = parts.person.replace(/\r\n/g, "\n").trim();
+  const s = parts.scene.replace(/\r\n/g, "\n").trim();
+  const pr = parts.product.replace(/\r\n/g, "\n").trim();
+  const lines: string[] = [];
+  if (p) lines.push(`EDIT — Person:\n${p}`);
+  if (s) lines.push(`EDIT — Scene:\n${s}`);
+  if (pr) lines.push(`EDIT — Product & action:\n${pr}`);
+  return lines.join("\n\n");
+}
+
 /**
- * Splits one NanoBanana prompt body into the part users care to edit (persona, scene, product)
- * vs technical tail (negative prompt, preservation lines). The tail is kept server-side and rejoined on generate.
+ * Splits one NanoBanana prompt body into EDIT sections (user-facing) vs technical tail
+ * (lighting, camera, preservation, negative prompt). Rejoin with mergeNanoPromptForApi.
  */
 export function splitNanoPromptBodyForEditing(body: string): { editable: string; technicalTail: string } {
   const t = body.replace(/\r\n/g, "\n");
   if (!t.trim()) return { editable: "", technicalTail: "" };
 
   const patterns: RegExp[] = [
+    /(?:^|\n)\s*TECHNICAL\s*[—:\s]/im,
     /^\s*NEGATIVE\s+PROMPT\b/im,
     /\n\s*NEGATIVE\s+PROMPT\b/i,
     /\n\s*---+\s*NEGATIVE/i,

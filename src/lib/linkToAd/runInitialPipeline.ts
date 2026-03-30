@@ -89,7 +89,16 @@ export async function runInitialPipeline(
     });
     if (!extractRes.ok) {
       const raw = await extractRes.text().catch(() => "");
-      return { ok: false, error: `Extract failed: HTTP ${extractRes.status} ${raw.slice(0, 250)}` };
+      let detail = raw.slice(0, 400);
+      try {
+        const j = JSON.parse(raw) as { error?: string };
+        if (typeof j.error === "string" && j.error.trim()) {
+          detail = j.error.trim();
+        }
+      } catch {
+        /* keep raw snippet */
+      }
+      return { ok: false, error: `Extract failed: ${detail}` };
     }
     const extracted = (await extractRes.json()) as unknown;
     const extractedObj = extracted as { title?: unknown; images?: unknown };

@@ -23,7 +23,8 @@ function applyRefundHints(
   }
 }
 
-const POLL_INTERVAL_MS = 8000;
+/** While jobs finish on KIE, refresh DB-backed items sooner so history UI does not lag. */
+const POLL_INTERVAL_MS = 4500;
 
 /**
  * Polls in-flight studio jobs (all library kinds) while the user navigates inside /app.

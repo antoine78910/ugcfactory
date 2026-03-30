@@ -463,32 +463,42 @@ Add contextual negatives based on product and avatar:
    different eye color, different ethnicity
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-PROMPT FORMAT
+PROMPT FORMAT (STRICT — for in-app editing)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Generate THREE prompts labeled:
+Generate THREE blocks labeled exactly:
 
 PROMPT 1
 PROMPT 2
 PROMPT 3
 
-Each prompt must:
-- be between 150 and 220 words
-- be written as one continuous paragraph
-- follow this exact order:
-  1. Subject: face + skin + hair + unique trait
-  2. Clothing + accessories
-  3. Action + product interaction (matching script role)
-  4. Expression + emotion (matching script hook)
-  5. Environment + scene details (minimum 3 imperfect elements)
-  6. Lighting (matched to script moment)
-  7. Camera technical specs
-  8. Preservation instructions
-- end with a NEGATIVE PROMPT block on a separate line
+Inside EACH block, use EXACTLY these headings (use an em dash in EDIT lines as shown):
 
-Output only the three prompts and their negative prompts.
+EDIT — Person:
+→ 2–5 short sentences only: face, skin texture, hair, one unique trait, clothing + accessories.
+→ If avatar_source = REFERENCE IMAGE: match the reference; otherwise follow TEXT GENERATED rules.
+→ Do NOT include lighting, camera, lens, resolution, quality, “smartphone”, “9:16”, ISO, HDR, or preservation here.
+
+EDIT — Scene:
+→ 1–3 sentences: location, time of day, mood, minimum three imperfect environment details.
+
+EDIT — Product & action:
+→ 1–4 sentences: how the product is held or used (match product_state + script), expression matching the script hook.
+
+TECHNICAL:
+→ ONE compact paragraph (can be dense): lighting for this moment, camera / lens / smartphone capture details, framing, and ALL preservation instructions (label legibility, do-not-change-face, etc.).
+→ Everything about image quality, realism, “not studio”, aspect ratio, sharpness, etc. goes HERE — never in the three EDIT sections.
+
+NEGATIVE PROMPT:
+→ Same rule as before: list of negative terms (can be multiple lines).
+
+Rules:
+- The EDIT sections together should stay readable for a marketer (no camera specs, no “48MP”, no “vertical 9:16” there).
+- Do not repeat the NEGATIVE list inside TECHNICAL.
+- Do not add any other headings inside a prompt block.
+
+Output only PROMPT 1, PROMPT 2, PROMPT 3 with this structure.
 Do not explain your reasoning.
-Do not add labels inside the prompts.
 `.trim();
 
 export async function POST(req: Request) {
@@ -522,7 +532,8 @@ export async function POST(req: Request) {
 
   const developer = [
     "Follow the instructions in the user message exactly.",
-    "Output only PROMPT 1, PROMPT 2, and PROMPT 3. Each block must contain the main paragraph (150–220 words) in the specified order, then on separate lines the NEGATIVE PROMPT block. No preamble, no reasoning.",
+    "Output only PROMPT 1, PROMPT 2, and PROMPT 3.",
+    "Each PROMPT block MUST use this exact structure: three EDIT sections (Person / Scene / Product & action), one TECHNICAL section, then NEGATIVE PROMPT. Labels must match exactly (EDIT — Person:, EDIT — Scene:, EDIT — Product & action:, TECHNICAL:, NEGATIVE PROMPT:). No preamble, no reasoning.",
   ].join("\n");
 
   const userText = [

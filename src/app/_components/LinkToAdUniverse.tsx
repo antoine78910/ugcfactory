@@ -38,6 +38,8 @@ import {
   normalizeKlingByReference,
   normalizePipelineByAngle,
   mergeNanoPromptForApi,
+  composeNanoEditableSections,
+  parseNanoEditableSections,
   parseThreeLabeledPrompts,
   readUniverseFromExtracted,
   splitAllScriptOptions,
@@ -204,56 +206,95 @@ function StatusLineShimmer({ text, className }: { text: string; className?: stri
   );
 }
 
-function NanoThreeImageArchitectureLoader() {
+/** While KIE jobs run, show each frame as soon as its URL exists; skeleton only for missing slots. */
+function NanoThreeImageGenerationGrid({
+  urls,
+  busy,
+  captions,
+}: {
+  urls: [string, string, string];
+  busy: boolean;
+  captions: [string, string, string];
+}) {
   const reduceMotion = useReducedMotion();
+  const filled = urls.filter((u) => u.trim()).length;
   return (
     <div className="flex flex-col gap-3">
       <div className="grid grid-cols-3 gap-2">
-        {([0, 1, 2] as const).map((i) => (
-          <motion.div
-            key={i}
-            className="relative aspect-[3/4] overflow-hidden rounded-xl border border-white/10 bg-black/20"
-            aria-hidden
-            initial={reduceMotion ? undefined : { opacity: 0.6, y: 8 }}
-            animate={reduceMotion ? undefined : { opacity: [0.65, 1, 0.65], y: [4, 0, 4] }}
-            transition={{
-              duration: 2.1,
-              delay: i * 0.12,
-              repeat: Infinity,
-              ease: "easeInOut",
-            }}
-          >
-            <ShapeGrid
-              direction="diagonal"
-              speed={0.65}
-              squareSize={14}
-              borderColor="#3b1c6d"
-              hoverFillColor="#2a1252"
-              shape="hexagon"
-              hoverTrailAmount={0}
-              className="absolute inset-0 h-full w-full opacity-75"
-            />
-            <motion.div
-              className="absolute -left-[40%] top-0 h-full w-[45%] bg-gradient-to-r from-transparent via-violet-300/16 to-transparent"
-              animate={reduceMotion ? undefined : { x: ["0%", "300%"] }}
-              transition={{
-                duration: 1.8,
-                delay: i * 0.18,
-                repeat: Infinity,
-                ease: "linear",
-              }}
-            />
-            <div className="absolute inset-0 bg-gradient-to-b from-violet-500/10 via-transparent to-violet-900/20" />
-            <div className="absolute left-2 top-2 rounded-md border border-white/10 bg-black/40 px-1.5 py-0.5 text-[10px] font-semibold text-white/70">
-              {i + 1}
+        {([0, 1, 2] as const).map((i) => {
+          const url = urls[i]?.trim();
+          const cap = (captions[i] ?? "").trim() || `Frame ${i + 1}`;
+          return (
+            <div key={i} className="flex min-w-0 flex-col gap-1.5">
+              <div className="relative aspect-[3/4] overflow-hidden rounded-xl border border-white/10 bg-black/20">
+                {url ? (
+                  <>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={proxiedMediaSrc(url)}
+                      alt=""
+                      className="h-full w-full object-cover object-center"
+                      loading="eager"
+                      decoding="async"
+                      fetchPriority="high"
+                    />
+                    <div className="absolute left-2 top-2 rounded-md border border-white/10 bg-black/40 px-1.5 py-0.5 text-[10px] font-semibold text-white/70">
+                      {i + 1}
+                    </div>
+                  </>
+                ) : busy ? (
+                  <motion.div
+                    className="relative h-full w-full"
+                    aria-hidden
+                    initial={reduceMotion ? undefined : { opacity: 0.6, y: 8 }}
+                    animate={reduceMotion ? undefined : { opacity: [0.65, 1, 0.65], y: [4, 0, 4] }}
+                    transition={{
+                      duration: 2.1,
+                      delay: i * 0.12,
+                      repeat: Infinity,
+                      ease: "easeInOut",
+                    }}
+                  >
+                    <ShapeGrid
+                      direction="diagonal"
+                      speed={0.65}
+                      squareSize={14}
+                      borderColor="#3b1c6d"
+                      hoverFillColor="#2a1252"
+                      shape="hexagon"
+                      hoverTrailAmount={0}
+                      className="absolute inset-0 h-full w-full opacity-75"
+                    />
+                    <motion.div
+                      className="absolute -left-[40%] top-0 h-full w-[45%] bg-gradient-to-r from-transparent via-violet-300/16 to-transparent"
+                      animate={reduceMotion ? undefined : { x: ["0%", "300%"] }}
+                      transition={{
+                        duration: 1.8,
+                        delay: i * 0.18,
+                        repeat: Infinity,
+                        ease: "linear",
+                      }}
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-b from-violet-500/10 via-transparent to-violet-900/20" />
+                    <div className="absolute left-2 top-2 rounded-md border border-white/10 bg-black/40 px-1.5 py-0.5 text-[10px] font-semibold text-white/70">
+                      {i + 1}
+                    </div>
+                  </motion.div>
+                ) : (
+                  <div className="flex h-full items-center justify-center text-[11px] text-white/25">—</div>
+                )}
+              </div>
+              <p className="line-clamp-2 break-words text-center text-[10px] leading-tight text-white/40">{cap}</p>
             </div>
-          </motion.div>
-        ))}
+          );
+        })}
       </div>
-      <div className="flex items-center gap-2 text-xs font-normal text-white/45">
-        <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-300/80" aria-hidden />
-        <span>Generating photo concepts…</span>
-      </div>
+      {busy ? (
+        <div className="flex items-center gap-2 text-xs font-normal text-white/45">
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-300/80" aria-hidden />
+          <span>{filled >= 3 ? "Saving project…" : `Generating images… (${filled}/3 ready)`}</span>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1172,6 +1213,13 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   }, [nanoBananaPromptsRaw]);
 
   async function saveEditedNanoPrompts() {
+    for (let i = 0; i < 3; i++) {
+      const sec = parseNanoEditableSections(nanoPromptDrafts[i] ?? "");
+      if (sec.isStructured && (!sec.person.trim() || !sec.scene.trim() || !sec.product.trim())) {
+        toast.error(`Complete the three fields for reference image ${i + 1} (Person, Scene, Product).`);
+        return;
+      }
+    }
     const [p1, p2, p3] = [0, 1, 2].map((i) =>
       mergeNanoPromptForApi(nanoPromptDrafts[i] ?? "", nanoPromptTechnicalTails[i] ?? "").trim(),
     ) as [string, string, string];
@@ -2525,7 +2573,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   async function pollNanoBananaTaskForUrls(taskId: string, signal?: AbortSignal): Promise<string[]> {
     // Poll NanoBanana task until successFlag indicates completion.
     // We keep it simple for pro image generation: take the first URL from the response.
-    const sleepMs = 4000;
+    const sleepMs = 1800;
     // ~12 minutes max wait (enough for most generations).
     const maxAttempts = Math.ceil((12 * 60 * 1000) / sleepMs);
     const pKey = getPersonalApiKey();
@@ -2580,7 +2628,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     opts?: { labelPrefix?: string },
     signal?: AbortSignal,
   ): Promise<{ urlsByPrompt: string[]; lastTaskId: string | null; taskIds: string[] }> {
-    const urlsByPrompt: string[] = [];
+    const urlsByPrompt: string[] = ["", "", ""];
     let lastTaskId: string | null = null;
     const taskIds: string[] = [];
     for (let i = 0; i < 3; i++) {
@@ -2610,7 +2658,9 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         opts?.labelPrefix ? `${opts.labelPrefix} · ${i + 1}/3` : `Link to Ad · Nano ${i + 1}/3`,
       );
       const urls = await pollNanoBananaTaskForUrls(json.taskId, signal);
-      urlsByPrompt[i] = urls[0];
+      urlsByPrompt[i] = urls[0] ?? "";
+      setNanoBananaImageUrls([...urlsByPrompt]);
+      setNanoBananaTaskId(lastTaskId);
     }
     return { urlsByPrompt, lastTaskId, taskIds };
   }
@@ -2907,7 +2957,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     }
 
     tick();
-    interval = setInterval(tick, 4000);
+    interval = setInterval(tick, 2000);
     return () => {
       cancelled = true;
       if (interval) clearInterval(interval);
@@ -3248,7 +3298,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     }
 
     tick();
-    interval = setInterval(tick, 4000);
+    interval = setInterval(tick, 2500);
     return () => {
       cancelled = true;
       if (interval) clearInterval(interval);
@@ -3267,6 +3317,31 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       (typeof a[2] === "string" ? a[2] : "").trim(),
     ];
   }, [nanoBananaImageUrls]);
+
+  const nanoImageCaptionSlots = useMemo((): [string, string, string] => {
+    const captionFromDraft = (raw: string) => {
+      const sec = parseNanoEditableSections(raw);
+      const pickFirstLine = (s: string) => {
+        const t = s.trim();
+        if (!t) return "";
+        return (t.split(/\n/)[0]?.trim() ?? "").slice(0, 72);
+      };
+      if (sec.isStructured) {
+        return (
+          pickFirstLine(sec.person) || pickFirstLine(sec.scene) || pickFirstLine(sec.product)
+        );
+      }
+      const t = (raw ?? "").trim();
+      if (!t) return "";
+      return (t.split(/\n/)[0]?.trim() ?? "").slice(0, 72);
+    };
+    return [
+      captionFromDraft(nanoPromptDrafts[0] ?? ""),
+      captionFromDraft(nanoPromptDrafts[1] ?? ""),
+      captionFromDraft(nanoPromptDrafts[2] ?? ""),
+    ];
+  }, [nanoPromptDrafts]);
+
   const nanoHasAnyReferenceImage = nanoImageSlots.some(Boolean);
   const nanoHasThreeImages = nanoImageSlots.every(Boolean);
   const nanoShowReferenceStrip =
@@ -4520,12 +4595,12 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                               {url ? (
                                 /* eslint-disable-next-line @next/next/no-img-element */
                                 <img
-                                  src={proxiedMediaSrc(url)}
+                                  src={url}
                                   alt={`Reference ${i + 1}`}
                                   className="h-full w-full object-cover object-center"
-                                  loading={sel ? "eager" : "lazy"}
+                                  loading="eager"
                                   decoding="async"
-                                  fetchPriority={sel ? "high" : "low"}
+                                  fetchPriority="high"
                                 />
                               ) : pollingHere ? (
                                 <span className="flex h-full w-full items-center justify-center bg-black/40">
@@ -4678,32 +4753,98 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                           Reference image — creative brief
                         </h3>
                         <p className="mt-2 text-sm leading-snug text-white/70">
-                          Edit persona, environment, and how the product is used. Technical camera lines and negative
-                          prompts stay hidden and are still applied when you generate.
+                          Only the main choices you may want to tweak: who is on camera, the setting, and how the product
+                          shows up. Lighting, camera, quality, and negatives stay out of sight and still apply when you
+                          generate.
                         </p>
                       </div>
                       <div className="space-y-2">
-                        {([0, 1, 2] as const).map((i) => (
-                          <div
-                            key={i}
-                            className="rounded-xl border border-white/10 bg-black/25 px-3 py-2.5 text-xs leading-relaxed text-white/85"
-                          >
-                            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-white/45">
-                              Angle {i + 1} — scene &amp; subject
-                            </p>
-                            <Textarea
-                              value={nanoPromptDrafts[i] ?? ""}
-                              onChange={(e) => {
-                                const next: [string, string, string] = [...nanoPromptDrafts] as [string, string, string];
-                                next[i] = e.target.value;
-                                setNanoPromptDrafts(next);
-                                setNanoPromptHasEdits(true);
-                              }}
-                              className="min-h-[96px] border-white/10 bg-black/25 text-xs leading-relaxed text-white/85"
-                              spellCheck
-                            />
-                          </div>
-                        ))}
+                        {([0, 1, 2] as const).map((i) => {
+                          const draft = nanoPromptDrafts[i] ?? "";
+                          const parsed = parseNanoEditableSections(draft);
+                          const patchStructured = (field: "person" | "scene" | "product", value: string) => {
+                            const nextEditable = composeNanoEditableSections({
+                              person: field === "person" ? value : parsed.person,
+                              scene: field === "scene" ? value : parsed.scene,
+                              product: field === "product" ? value : parsed.product,
+                            });
+                            const next: [string, string, string] = [...nanoPromptDrafts] as [
+                              string,
+                              string,
+                              string,
+                            ];
+                            next[i] = nextEditable;
+                            setNanoPromptDrafts(next);
+                            setNanoPromptHasEdits(true);
+                          };
+                          return (
+                            <div
+                              key={i}
+                              className="rounded-xl border border-white/10 bg-black/25 px-3 py-2.5 text-xs leading-relaxed text-white/85"
+                            >
+                              <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-white/45">
+                                Reference frame {i + 1}
+                              </p>
+                              {parsed.isStructured ? (
+                                <div className="space-y-2">
+                                  <div>
+                                    <Label className="mb-1 block text-[10px] font-medium text-white/45">
+                                      Person / avatar
+                                    </Label>
+                                    <Textarea
+                                      value={parsed.person}
+                                      onChange={(e) => patchStructured("person", e.target.value)}
+                                      className="min-h-[64px] border-white/10 bg-black/25 text-xs leading-relaxed text-white/85"
+                                      spellCheck
+                                    />
+                                  </div>
+                                  <div>
+                                    <Label className="mb-1 block text-[10px] font-medium text-white/45">Scene</Label>
+                                    <Textarea
+                                      value={parsed.scene}
+                                      onChange={(e) => patchStructured("scene", e.target.value)}
+                                      className="min-h-[64px] border-white/10 bg-black/25 text-xs leading-relaxed text-white/85"
+                                      spellCheck
+                                    />
+                                  </div>
+                                  <div>
+                                    <Label className="mb-1 block text-[10px] font-medium text-white/45">
+                                      Product &amp; action
+                                    </Label>
+                                    <Textarea
+                                      value={parsed.product}
+                                      onChange={(e) => patchStructured("product", e.target.value)}
+                                      className="min-h-[64px] border-white/10 bg-black/25 text-xs leading-relaxed text-white/85"
+                                      spellCheck
+                                    />
+                                  </div>
+                                </div>
+                              ) : (
+                                <>
+                                  <p className="mb-2 text-[10px] leading-snug text-amber-200/85">
+                                    Older prompt format: use &quot;Generate 3 prompts&quot; again for the short fields, or
+                                    edit the full text below.
+                                  </p>
+                                  <Textarea
+                                    value={draft}
+                                    onChange={(e) => {
+                                      const next: [string, string, string] = [...nanoPromptDrafts] as [
+                                        string,
+                                        string,
+                                        string,
+                                      ];
+                                      next[i] = e.target.value;
+                                      setNanoPromptDrafts(next);
+                                      setNanoPromptHasEdits(true);
+                                    }}
+                                    className="min-h-[96px] border-white/10 bg-black/25 text-xs leading-relaxed text-white/85"
+                                    spellCheck
+                                  />
+                                </>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                       <div className="flex flex-col gap-2">
                         <div className="flex flex-wrap items-center gap-2">
@@ -4735,7 +4876,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                     </div>
                   ) : null}
 
-                  {nanoBananaPromptsRaw && nanoHasThreeImages ? (
+                  {nanoBananaPromptsRaw && nanoHasAnyReferenceImage ? (
                     <div className="space-y-4">
                       <div>
                         <h3 className="text-lg font-semibold tracking-tight text-white sm:text-xl">
@@ -4748,38 +4889,54 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                       <div className="grid w-full max-w-md grid-cols-3 gap-2 sm:max-w-lg sm:gap-3">
                         {([0, 1, 2] as const).map((i) => {
                           const sel = nanoBananaSelectedImageIndex === i;
+                          const imgUrl = nanoBananaImageUrls[i] ?? "";
                           return (
                             <button
                               key={i}
                               type="button"
-                              onClick={() => void onSelectNanoBananaImage(i)}
+                              onClick={() => { if (imgUrl) void onSelectNanoBananaImage(i); }}
+                              disabled={!imgUrl}
                               className={cn(
                                 "group/card relative aspect-square w-full min-w-0 overflow-hidden rounded-xl border-2 bg-[#050507] transition-all",
-                                sel
+                                imgUrl && sel
                                   ? "border-violet-400 shadow-[0_0_12px_rgba(139,92,246,0.35)]"
-                                  : "border-white/10 opacity-90 hover:border-violet-400/40 hover:opacity-100",
+                                  : imgUrl
+                                  ? "border-white/10 opacity-90 hover:border-violet-400/40 hover:opacity-100"
+                                  : "cursor-default border-white/5 opacity-50",
                               )}
                             >
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={proxiedMediaSrc(nanoBananaImageUrls[i])}
-                                alt={`Reference ${i + 1}`}
-                                className="h-full w-full object-cover object-center"
-                                loading={sel ? "eager" : "lazy"}
-                                decoding="async"
-                                fetchPriority={sel ? "high" : "low"}
-                              />
-                              <span
-                                role="button"
-                                tabIndex={0}
-                                aria-label="Open full size"
-                                className="absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-lg bg-black/60 text-white opacity-0 shadow transition-opacity group-hover/card:opacity-100"
-                                onClick={(e) => { e.stopPropagation(); setNanoImageLightboxUrl(nanoBananaImageUrls[i] ?? null); }}
-                                onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); setNanoImageLightboxUrl(nanoBananaImageUrls[i] ?? null); } }}
-                              >
-                                <Maximize2 className="h-4 w-4" aria-hidden />
-                              </span>
-                              {sel ? (
+                              {imgUrl ? (
+                                /* eslint-disable-next-line @next/next/no-img-element */
+                                <img
+                                  src={imgUrl}
+                                  alt={`Reference ${i + 1}`}
+                                  className="h-full w-full object-cover object-center"
+                                  loading="eager"
+                                  decoding="async"
+                                  fetchPriority="high"
+                                />
+                              ) : isNanoAllImagesSubmitting ? (
+                                <span className="flex h-full w-full items-center justify-center bg-black/40">
+                                  <Loader2 className="h-6 w-6 shrink-0 animate-spin text-violet-300" aria-hidden />
+                                </span>
+                              ) : (
+                                <span className="flex h-full w-full items-center justify-center text-xs font-medium uppercase tracking-wide text-white/25">
+                                  —
+                                </span>
+                              )}
+                              {imgUrl ? (
+                                <span
+                                  role="button"
+                                  tabIndex={0}
+                                  aria-label="Open full size"
+                                  className="absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-lg bg-black/60 text-white opacity-0 shadow transition-opacity group-hover/card:opacity-100"
+                                  onClick={(e) => { e.stopPropagation(); setNanoImageLightboxUrl(imgUrl); }}
+                                  onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); setNanoImageLightboxUrl(imgUrl); } }}
+                                >
+                                  <Maximize2 className="h-4 w-4" aria-hidden />
+                                </span>
+                              ) : null}
+                              {imgUrl && sel ? (
                                 <span className="absolute bottom-1 right-1 flex h-5 w-5 items-center justify-center rounded-full bg-violet-400 text-black shadow sm:h-6 sm:w-6">
                                   <Check className="h-3 w-3 sm:h-3.5 sm:w-3.5" strokeWidth={3} aria-hidden />
                                 </span>
@@ -5052,7 +5209,11 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                           </>
                         ) : null}
                         {nanoPollTaskId || isNanoAllImagesSubmitting ? (
-                          <NanoThreeImageArchitectureLoader />
+                          <NanoThreeImageGenerationGrid
+                            urls={nanoImageSlots}
+                            busy={Boolean(nanoPollTaskId || isNanoAllImagesSubmitting)}
+                            captions={nanoImageCaptionSlots}
+                          />
                         ) : null}
                       </div>
                     </div>

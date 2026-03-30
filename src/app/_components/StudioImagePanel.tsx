@@ -179,7 +179,7 @@ async function pollNanoTask(taskId: string, personalApiKey?: string): Promise<st
     if (!res.ok || !json.data) throw new Error(json.error || "Poll failed");
     const s = json.data.successFlag ?? 0;
     if (s === 0) {
-      await new Promise((r) => setTimeout(r, 2500));
+      await new Promise((r) => setTimeout(r, 1800));
       continue;
     }
     if (s === 1) {
@@ -222,7 +222,7 @@ async function pollKieMarketFirstUrl(taskId: string, personalApiKey?: string): P
     if (!res.ok || !json.data) throw new Error(json.error || "Poll failed");
     const st = json.data.status ?? "IN_PROGRESS";
     if (st === "IN_PROGRESS") {
-      await new Promise((r) => setTimeout(r, 3000));
+      await new Promise((r) => setTimeout(r, 2000));
       continue;
     }
     if (st === "SUCCESS") {

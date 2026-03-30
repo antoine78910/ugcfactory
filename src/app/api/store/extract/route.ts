@@ -3,6 +3,7 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import * as cheerio from "cheerio";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
+import { fetchStorePageHtmlForExtract } from "@/lib/storeExtractFetch";
 
 /** Reject requests targeting private/internal IP ranges (SSRF protection). */
 function isPrivateHost(hostname: string): boolean {
@@ -138,38 +139,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid URL." }, { status: 400 });
   }
 
-  let html: string;
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15_000);
-    let res: Response;
-    try {
-      res = await fetch(url, {
-        method: "GET",
-        redirect: "follow",
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123 Safari/537.36",
-          Accept: "text/html,application/xhtml+xml",
-        },
-        cache: "no-store",
-        signal: controller.signal,
-      });
-    } finally {
-      clearTimeout(timeout);
-    }
-    if (!res.ok) {
-      const t = await res.text().catch(() => "");
-      return NextResponse.json(
-        { error: `Fetch failed: HTTP ${res.status}`, details: t.slice(0, 500) },
-        { status: 502 },
-      );
-    }
-    html = await res.text();
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error.";
-    return NextResponse.json({ error: `Fetch failed: ${message}` }, { status: 502 });
+  const fetched = await fetchStorePageHtmlForExtract(url);
+  if (!fetched.ok) {
+    return fetched.response;
   }
+  const html = fetched.html;
 
   const $ = cheerio.load(html);
   $("script, style, noscript").remove();
