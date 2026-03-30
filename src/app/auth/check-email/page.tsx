@@ -51,18 +51,9 @@ export default async function CheckEmailPage({
             </div>
           </div>
 
-          <div className="mt-8 grid gap-3 sm:grid-cols-2">
-            <Link
-              href="/signin"
-              className="inline-flex h-11 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] px-4 text-sm font-semibold text-white transition hover:border-white/20 hover:bg-white/[0.06]"
-            >
-              I confirmed — sign in
-            </Link>
-            <Link
-              href="/signup"
-              className="inline-flex h-11 items-center justify-center rounded-2xl border border-violet-200/40 bg-violet-400 px-4 text-sm font-semibold text-black shadow-[0_6px_0_0_rgba(76,29,149,0.9)] transition hover:-translate-y-[1px] hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9)] active:translate-y-[6px] active:shadow-[0_0_0_0_rgba(76,29,149,0.9)]"
-            >
-              Use a different email
+          <div className="mt-8 flex justify-center">
+            <Link href="/signin" className="text-sm font-semibold text-violet-300/90 hover:text-violet-200">
+              Back to sign in
             </Link>
           </div>
 
