@@ -234,8 +234,10 @@ export function CreditsPlanProvider({
     setState(readState());
   }, [userId]);
 
-  // Sync plan from the database on mount so a freshly-created account (or a browser
-  // that has stale localStorage from a previous account) always shows the correct plan.
+  // Sync plan from the database on mount.
+  // Rule: only upgrade local state when the server confirms an active paid plan.
+  // We never downgrade to free from here — the webhook may not have fired yet
+  // right after a checkout, and namespaced keys already prevent cross-account leakage.
   useEffect(() => {
     if (!userId) return;
     fetch("/api/me/subscription")
@@ -243,21 +245,14 @@ export function CreditsPlanProvider({
       .then((data: { planId: string } | null) => {
         if (!data) return;
         const serverPlan = parseAccountPlan(data.planId);
+        if (serverPlan === "free") return; // never downgrade from here
         const localPlan = parseAccountPlan(lsGet(LS_PLAN));
         if (serverPlan !== localPlan) {
-          // DB is authoritative for the plan; correct the local state.
-          if (serverPlan === "free") {
-            lsSet(LS_PLAN, "free");
-            lsSet(LS_CREDITS, "0");
-            lsRemove(LS_CAP);
-          } else {
-            const alloc = subscriptionCredits(serverPlan);
-            lsSet(LS_PLAN, serverPlan);
-            // Only reset credits if the local value looks wrong (higher than allocation for a new sub).
-            const localCredits = Number(lsGet(LS_CREDITS));
-            if (!Number.isFinite(localCredits) || localCredits > alloc * 2) {
-              lsSet(LS_CREDITS, String(alloc));
-            }
+          const alloc = subscriptionCredits(serverPlan);
+          lsSet(LS_PLAN, serverPlan);
+          const localCredits = Number(lsGet(LS_CREDITS));
+          if (!Number.isFinite(localCredits) || localCredits > alloc * 2) {
+            lsSet(LS_CREDITS, String(alloc));
           }
           setState(readState());
         }

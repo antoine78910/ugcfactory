@@ -2112,22 +2112,6 @@ export default function AppBrandWizard() {
                               setMotionVideoDetectedDuration(null);
                               const blobUrl = URL.createObjectURL(f);
                               setMotionVideoRefBlobUrl(blobUrl);
-                              const vid = document.createElement("video");
-                              vid.preload = "metadata";
-                              vid.muted = true;
-                              vid.onloadedmetadata = () => {
-                                const raw = Number(vid.duration);
-                                const dur =
-                                  Number.isFinite(raw) && raw > 0
-                                    ? Math.min(120, Math.max(1, Math.round(raw)))
-                                    : null;
-                                setMotionVideoDetectedDuration(dur);
-                                setMotionVideoPreviewLoading(false);
-                              };
-                              vid.onerror = () => {
-                                setMotionVideoPreviewLoading(false);
-                              };
-                              vid.src = blobUrl;
                               toast.success("Video reference selected", { description: f.name });
                               e.currentTarget.value = "";
                             }}
@@ -2152,68 +2136,44 @@ export default function AppBrandWizard() {
                                     key={motionVideoRefBlobUrl}
                                     ref={motionVideoPreviewRef}
                                     src={motionVideoRefBlobUrl}
-                                    poster={motionVideoPosterUrl ?? undefined}
-                                    className="absolute inset-0 z-[1] h-full w-full object-cover bg-black"
+                                    className="absolute inset-0 z-[1] h-full w-full object-cover"
                                     muted
                                     playsInline
+                                    autoPlay
+                                    loop
                                     preload="auto"
                                     onLoadedMetadata={(ev) => {
                                       const v = ev.currentTarget;
-                                      try {
-                                        const d = v.duration;
-                                        const t =
-                                          Number.isFinite(d) && d > 0
-                                            ? Math.min(0.35, Math.max(0.04, d * 0.03))
-                                            : 0.08;
-                                        v.currentTime = t;
-                                      } catch {
-                                        tryPlayThenCapturePoster();
-                                      }
-                                    }}
-                                    onLoadedData={(ev) => {
-                                      const v = ev.currentTarget;
-                                      tryCaptureMotionPosterFromEl(v);
-                                      try {
-                                        if (v.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-                                          const d = v.duration;
-                                          const t =
-                                            Number.isFinite(d) && d > 0
-                                              ? Math.min(0.35, Math.max(0.04, d * 0.03))
-                                              : 0.08;
-                                          if (Math.abs(v.currentTime - t) > 0.02) v.currentTime = t;
-                                        }
-                                      } catch {
-                                        /* ignore */
-                                      }
-                                    }}
-                                    onSeeked={(ev) => {
-                                      const v = ev.currentTarget;
-                                      const url = motionVideoBlobUrlRef.current;
-                                      tryCaptureMotionPosterFromEl(v);
-                                      if (
-                                        url &&
-                                        motionPosterCapturedForUrlRef.current !== url &&
-                                        v.videoWidth === 0
-                                      ) {
-                                        tryPlayThenCapturePoster();
-                                      }
+                                      const raw = Number(v.duration);
+                                      const dur =
+                                        Number.isFinite(raw) && raw > 0
+                                          ? Math.min(120, Math.max(1, Math.round(raw)))
+                                          : null;
+                                      setMotionVideoDetectedDuration(dur);
+                                      void v.play().catch(() => {});
                                     }}
                                     onCanPlay={(ev) => {
+                                      setMotionVideoPreviewLoading(false);
+                                      void ev.currentTarget.play().catch(() => {});
                                       tryCaptureMotionPosterFromEl(ev.currentTarget);
                                     }}
                                     onTimeUpdate={(ev) => {
                                       const v = ev.currentTarget;
                                       const url = motionVideoBlobUrlRef.current;
                                       if (!url || motionPosterCapturedForUrlRef.current === url) return;
-                                      if (v.currentTime > 0.01 && v.videoWidth > 0) {
+                                      if (v.currentTime > 0.02 && v.videoWidth > 0) {
                                         tryCaptureMotionPosterFromEl(v);
                                       }
                                     }}
                                     onError={() => {
-                                      tryPlayThenCapturePoster();
+                                      setMotionVideoPreviewLoading(false);
                                     }}
                                   />
-                                  <UploadBusyOverlay active={motionVideoPreviewLoading} className="rounded-xl" />
+                                  <UploadBusyOverlay
+                                    active={motionVideoPreviewLoading}
+                                    label="Chargement…"
+                                    className="rounded-xl"
+                                  />
                                   {motionVideoDetectedDuration ? (
                                     <span className="absolute bottom-2 z-[1] rounded-md bg-black/70 px-2 py-1 text-[10px] font-medium text-white">
                                       {motionVideoDetectedDuration}s

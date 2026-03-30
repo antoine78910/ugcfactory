@@ -39,8 +39,8 @@ const IMAGE_MIN_RANK: Record<"nano" | "pro", number> = {
 const VIDEO_MIN_RANK: Record<string, number> = {
   "bytedance/seedance-1.5-pro": 0,
   "kling-2.6/video": 1, // Starter+
-  /** Same as 1.5: available on every plan (credits still apply). */
-  "bytedance/seedance-2.0-pro": 0,
+  /** Restricted on Starter in Studio Video; available from Growth+. */
+  "bytedance/seedance-2.0-pro": 2,
   "veo3_fast": 2,
   "kling-3.0/video": 2,
   veo3: 2,
@@ -197,7 +197,7 @@ export function studioVideoEditPickerDisplayLabel(pickerId: string): string {
 }
 
 export function studioImageDisplayLabel(model: "nano" | "pro"): string {
-  return model === "pro" ? "NanoBanana Pro" : "NanoBanana 2";
+  return model === "pro" ? "NanoBanana Pro" : "NanoBanana";
 }
 
 const STUDIO_IMAGE_PICKER_LABELS: Record<string, string> = {
@@ -299,52 +299,38 @@ function tierBools(minRank: number): [boolean, boolean, boolean, boolean] {
 /** Rows shown under “Model access” on /subscription; synced with gates above. */
 export const SUBSCRIPTION_MODEL_MATRIX_ROWS: SubscriptionModelMatrixRow[] = [
   {
-    label: "NanoBanana 2: images",
-    badges: [{ text: "Google", className: "bg-amber-500/20 text-amber-200 border-amber-400/30" }],
+    label: "NanoBanana: images",
     tiers: tierBools(IMAGE_MIN_RANK.nano),
   },
   {
     label: "NanoBanana Pro: images",
-    badges: [
-      { text: "Google", className: "bg-amber-500/20 text-amber-200 border-amber-400/30" },
-      { text: "2 credits", className: "bg-violet-500/20 text-violet-200 border-violet-400/30" },
-    ],
     tiers: tierBools(IMAGE_MIN_RANK.pro),
   },
   {
     label: "Seedream 4.5: images (text + edit)",
-    badges: [{ text: "ByteDance", className: "bg-sky-500/20 text-sky-200 border-sky-400/30" }],
     tiers: tierBools(IMAGE_MIN_RANK.pro),
   },
   {
     label: "Seedream 5.0 Lite: images (text + image-to-image)",
-    badges: [{ text: "ByteDance", className: "bg-sky-500/20 text-sky-200 border-sky-400/30" }],
     tiers: tierBools(IMAGE_MIN_RANK.pro),
   },
   {
     label: "Seedance 1.5 Pro: video",
-    badges: [{ text: "ByteDance", className: "bg-sky-500/20 text-sky-200 border-sky-400/30" }],
     tiers: tierBools(VIDEO_MIN_RANK["bytedance/seedance-1.5-pro"]),
   },
   { label: "Kling 2.6: video", tiers: tierBools(VIDEO_MIN_RANK["kling-2.6/video"]) },
   { label: "Seedance 2.0 Pro: video", tiers: tierBools(VIDEO_MIN_RANK["bytedance/seedance-2.0-pro"]) },
   {
     label: "Veo 3.1 Fast: video",
-    badges: [{ text: "Google", className: "bg-amber-500/20 text-amber-200 border-amber-400/30" }],
     tiers: tierBools(VIDEO_MIN_RANK.veo3_fast),
   },
   {
     label: "Kling 3.0: video",
-    badges: [
-      { text: "1080p", className: "bg-violet-500/20 text-violet-200 border-violet-400/30" },
-      { text: "Audio", className: "bg-teal-500/20 text-teal-200 border-teal-400/30" },
-    ],
     tiers: tierBools(VIDEO_MIN_RANK["kling-3.0/video"]),
   },
   { label: "Veo 3.1: video", tiers: tierBools(VIDEO_MIN_RANK.veo3) },
   {
     label: "Sora 2: video",
-    badges: [{ text: "OpenAI", className: "bg-sky-500/20 text-sky-200 border-sky-400/30" }],
     tiers: tierBools(VIDEO_MIN_RANK["openai/sora-2"]),
   },
   {

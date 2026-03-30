@@ -2,19 +2,13 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Eye, EyeOff, Key, Sparkles } from "lucide-react";
+import { ArrowRight, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import StudioShell from "@/app/_components/StudioShell";
 import { consumeCheckoutQueryParams, useCreditsPlan } from "@/app/_components/CreditsPlanContext";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { CREDIT_PACKS } from "@/lib/pricing";
-
-const PERSONAL_API_KEY_LS = "ugc_personal_api_key";
-const PERSONAL_API_ENABLED_LS = "ugc_personal_api_enabled";
-const PIAPI_PERSONAL_API_KEY_LS = "ugc_piapi_personal_api_key";
-const PIAPI_PERSONAL_API_ENABLED_LS = "ugc_piapi_personal_api_enabled";
 
 type CreditPack = {
   key: string;
@@ -74,51 +68,6 @@ const creditPacks: CreditPack[] = PACK_UI.map((meta, i) => {
 export default function CreditsPage() {
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const { planDisplayName } = useCreditsPlan();
-  const [personalApiEnabled, setPersonalApiEnabled] = useState(false);
-  const [personalApiKey, setPersonalApiKey] = useState("");
-  const [piapiEnabled, setPiapiEnabled] = useState(false);
-  const [piapiKey, setPiapiKey] = useState("");
-  const [showKey, setShowKey] = useState(false);
-  const [showPiapiKey, setShowPiapiKey] = useState(false);
-
-  useEffect(() => {
-    setPersonalApiEnabled(localStorage.getItem(PERSONAL_API_ENABLED_LS) === "1");
-    setPersonalApiKey(localStorage.getItem(PERSONAL_API_KEY_LS) ?? "");
-    setPiapiEnabled(localStorage.getItem(PIAPI_PERSONAL_API_ENABLED_LS) === "1");
-    setPiapiKey(localStorage.getItem(PIAPI_PERSONAL_API_KEY_LS) ?? "");
-  }, []);
-
-  function togglePersonalApi() {
-    const next = !personalApiEnabled;
-    setPersonalApiEnabled(next);
-    localStorage.setItem(PERSONAL_API_ENABLED_LS, next ? "1" : "0");
-    if (!next) {
-      setPersonalApiKey("");
-      localStorage.removeItem(PERSONAL_API_KEY_LS);
-    }
-  }
-
-  function savePersonalApiKey(v: string) {
-    setPersonalApiKey(v);
-    if (v.trim()) localStorage.setItem(PERSONAL_API_KEY_LS, v.trim());
-    else localStorage.removeItem(PERSONAL_API_KEY_LS);
-  }
-
-  function togglePiapi() {
-    const next = !piapiEnabled;
-    setPiapiEnabled(next);
-    localStorage.setItem(PIAPI_PERSONAL_API_ENABLED_LS, next ? "1" : "0");
-    if (!next) {
-      setPiapiKey("");
-      localStorage.removeItem(PIAPI_PERSONAL_API_KEY_LS);
-    }
-  }
-
-  function savePiapiKey(v: string) {
-    setPiapiKey(v);
-    if (v.trim()) localStorage.setItem(PIAPI_PERSONAL_API_KEY_LS, v.trim());
-    else localStorage.removeItem(PIAPI_PERSONAL_API_KEY_LS);
-  }
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -303,138 +252,6 @@ export default function CreditsPage() {
                   </div>
                 );
               })}
-            </div>
-          </section>
-
-          <section className="mx-auto max-w-3xl rounded-2xl border border-amber-500/20 bg-gradient-to-br from-amber-500/[0.06] to-transparent p-6 md:p-8">
-            <div className="flex flex-col gap-5">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500/15 text-amber-400">
-                    <Key className="h-4.5 w-4.5" aria-hidden />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-white">KIE API backdoor</h3>
-                    <p className="mt-1 text-xs leading-relaxed text-white/45">
-                      Use your own KIE API key for generations. No platform credits are consumed, and model tier gates
-                      are bypassed while this mode is enabled.
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={personalApiEnabled}
-                  onClick={togglePersonalApi}
-                  className={cn(
-                    "relative mt-0.5 inline-flex h-6 w-11 shrink-0 items-center rounded-full border-2 border-transparent transition-colors",
-                    personalApiEnabled ? "bg-amber-500" : "bg-white/15",
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform",
-                      personalApiEnabled ? "translate-x-[22px]" : "translate-x-[2px]",
-                    )}
-                  />
-                </button>
-              </div>
-
-              {personalApiEnabled ? (
-                <div className="flex flex-col gap-2">
-                  <label className="text-[11px] font-semibold uppercase tracking-wide text-white/40">
-                    KIE API Key
-                  </label>
-                  <div className="relative">
-                    <Input
-                      type={showKey ? "text" : "password"}
-                      placeholder="Paste your KIE key..."
-                      value={personalApiKey}
-                      onChange={(e) => savePersonalApiKey(e.target.value)}
-                      className="h-10 border-amber-500/20 bg-black/40 pr-10 font-mono text-sm text-white placeholder:text-white/25 focus-visible:ring-amber-500/40"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowKey(!showKey)}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/40 transition hover:text-white/70"
-                    >
-                      {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
-                  </div>
-                  {personalApiKey.trim() ? (
-                    <p className="text-[11px] text-emerald-400/80">
-                      Key saved locally. Generations now use your KIE key and skip platform credit charging.
-                    </p>
-                  ) : (
-                    <p className="text-[11px] text-amber-400/60">Enter your API key to bypass platform credits.</p>
-                  )}
-                </div>
-              ) : null}
-            </div>
-          </section>
-
-          <section className="mx-auto max-w-3xl rounded-2xl border border-violet-500/20 bg-gradient-to-br from-violet-500/[0.06] to-transparent p-6 md:p-8">
-            <div className="flex flex-col gap-5">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-500/15 text-violet-300">
-                    <Key className="h-4.5 w-4.5" aria-hidden />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-white">PiAPI key (Seedance)</h3>
-                    <p className="mt-1 text-xs leading-relaxed text-white/45">
-                      Use your own PiAPI key for Seedance video generation (Link to Ad / Studio). No platform credits are
-                      consumed for Seedance while this mode is enabled.
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={piapiEnabled}
-                  onClick={togglePiapi}
-                  className={cn(
-                    "relative mt-0.5 inline-flex h-6 w-11 shrink-0 items-center rounded-full border-2 border-transparent transition-colors",
-                    piapiEnabled ? "bg-violet-500" : "bg-white/15",
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform",
-                      piapiEnabled ? "translate-x-[22px]" : "translate-x-[2px]",
-                    )}
-                  />
-                </button>
-              </div>
-
-              {piapiEnabled ? (
-                <div className="flex flex-col gap-2">
-                  <label className="text-[11px] font-semibold uppercase tracking-wide text-white/40">PiAPI Key</label>
-                  <div className="relative">
-                    <Input
-                      type={showPiapiKey ? "text" : "password"}
-                      placeholder="Paste your PiAPI key..."
-                      value={piapiKey}
-                      onChange={(e) => savePiapiKey(e.target.value)}
-                      className="h-10 border-violet-500/20 bg-black/40 pr-10 font-mono text-sm text-white placeholder:text-white/25 focus-visible:ring-violet-500/40"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPiapiKey(!showPiapiKey)}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/40 transition hover:text-white/70"
-                    >
-                      {showPiapiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
-                  </div>
-                  {piapiKey.trim() ? (
-                    <p className="text-[11px] text-emerald-400/80">
-                      Key saved locally. Seedance generations now use your PiAPI key.
-                    </p>
-                  ) : (
-                    <p className="text-[11px] text-violet-200/60">Enter your PiAPI key to use Seedance without credits.</p>
-                  )}
-                </div>
-              ) : null}
             </div>
           </section>
 

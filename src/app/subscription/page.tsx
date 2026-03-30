@@ -9,7 +9,11 @@ import { consumeCheckoutQueryParams, useCreditsPlan } from "@/app/_components/Cr
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { SUBSCRIPTIONS } from "@/lib/pricing";
-import { SUBSCRIPTION_MODEL_MATRIX_ROWS } from "@/lib/subscriptionModelAccess";
+import {
+  listAllowedStudioImageModels,
+  listAllowedStudioVideoModels,
+  type AccountPlanId,
+} from "@/lib/subscriptionModelAccess";
 import {
   subscriptionPlanSortIndex,
   type SubscriptionPlanId,
@@ -68,33 +72,6 @@ const PLANS: PlanDef[] = [
     usage: { linkToAd: "55", images: "1600", videos: "320" },
   },
 ];
-
-function CellIcon({ ok, accent }: { ok: boolean; accent?: "violet" | "amber" | "emerald" }) {
-  if (!ok) return <X className="mx-auto h-4 w-4 text-white/15" strokeWidth={2} />;
-  const cls =
-    accent === "violet"
-      ? "text-violet-300"
-      : accent === "amber"
-        ? "text-amber-200"
-        : accent === "emerald"
-          ? "text-emerald-300"
-          : "text-white";
-  return <Check className={cn("mx-auto h-4 w-4", cls)} strokeWidth={2.5} />;
-}
-
-function tierAccent(ti: number): "violet" | "amber" | "emerald" | undefined {
-  if (ti === 1) return "emerald";
-  if (ti === 2) return "amber";
-  if (ti === 3) return "violet";
-  return undefined;
-}
-
-function tierColBg(ti: number): string {
-  if (ti === 1) return "bg-emerald-500/[0.04]";
-  if (ti === 2) return "bg-amber-500/[0.04]";
-  if (ti === 3) return "bg-violet-500/[0.05]";
-  return "";
-}
 
 export default function SubscriptionPage() {
   const [billing, setBilling] = useState<Billing>("monthly");
@@ -190,14 +167,7 @@ export default function SubscriptionPage() {
 
   const isSubscribed = planId !== "free";
 
-  const planColumnIndices = useMemo(
-    () => PLANS.map((p) => subscriptionPlanSortIndex(p.id as SubscriptionPlanId)),
-    [],
-  );
-
   const planGridClass = "grid-cols-1 sm:grid-cols-2 xl:grid-cols-4";
-
-  const matrixGridTemplate = `minmax(200px,1.2fr) repeat(${PLANS.length}, minmax(88px,1fr))`;
 
   return (
     <StudioShell>
@@ -304,6 +274,8 @@ export default function SubscriptionPage() {
                 const showYearlySavingsBadge =
                   billing === "yearly" &&
                   !(isSameTier && serverBillResolved === "yearly");
+                const allowedImages = listAllowedStudioImageModels(plan.id as AccountPlanId);
+                const allowedVideos = listAllowedStudioVideoModels(plan.id as AccountPlanId);
 
                 return (
                   <div
@@ -399,7 +371,7 @@ export default function SubscriptionPage() {
                       )}
                     </Button>
 
-                    <ul className="mt-6 space-y-3 border-t border-white/10 pt-6 text-left text-sm text-white/78">
+                    <ul className="mt-6 space-y-2 border-t border-white/10 pt-6 text-left text-xs text-white/72">
                       <li className="flex items-start gap-2.5">
                         <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-violet-500/20 text-violet-200">
                           <Coins className="h-3 w-3" aria-hidden />
@@ -409,14 +381,23 @@ export default function SubscriptionPage() {
                           <span className="text-white/45"> / month</span>
                         </span>
                       </li>
-                      <li className="pl-1 text-white/55">
+                      <li className="pl-1 text-white/50">
                         <span className="text-white/70">Link to Ad:</span> {plan.usage.linkToAd}
                       </li>
-                      <li className="pl-1 text-white/55">
+                      <li className="pl-1 text-white/50">
                         <span className="text-white/70">Images:</span> {plan.usage.images}
                       </li>
-                      <li className="pl-1 text-white/55">
+                      <li className="pl-1 text-white/50">
                         <span className="text-white/70">Videos:</span> {plan.usage.videos}
+                      </li>
+                      <li className="pt-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-white/45">
+                        Included models
+                      </li>
+                      <li className="pl-1 text-white/55">
+                        <span className="text-white/70">Image:</span> {allowedImages.join(", ")}
+                      </li>
+                      <li className="pl-1 text-white/55">
+                        <span className="text-white/70">Video:</span> {allowedVideos.join(", ")}
                       </li>
                     </ul>
                   </div>
@@ -456,117 +437,20 @@ export default function SubscriptionPage() {
                 </div>
               </div>
 
-              <div className="mt-8 flex flex-wrap gap-3 border-t border-white/10 pt-6">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  className="rounded-xl border border-white/15 bg-white/5 text-white hover:bg-white/10"
-                  onClick={() => window.open(BILLING_PORTAL_URL, "_blank", "noopener,noreferrer")}
-                >
-                  Manage billing
-                </Button>
-              </div>
-            </div>
-          </section>
-
-          <section className="mx-auto max-w-6xl">
-            <div className="mb-6 text-center">
-              <h2 className="text-lg font-bold text-white md:text-xl">Model access</h2>
-              <p className="mx-auto mt-2 max-w-2xl text-sm text-white/45">
-                Studio Image &amp; Video use the same rules as in the app. Starter has model restrictions; Growth and
-                above unlock full model access.
-              </p>
-              <p className="mt-2 text-xs text-white/32">
-                <span className="font-medium text-white/45">Free</span> (with packs) matches{" "}
-                <span className="text-white/50">Starter</span> for studio models.
-              </p>
-            </div>
-
-            <div className="overflow-hidden rounded-2xl border border-violet-500/15 bg-[#07080f] shadow-[0_0_60px_rgba(139,92,246,0.06)]">
-              <div className="overflow-x-auto">
-                <div className="min-w-[720px]">
-                  <div
-                    className="grid border-b border-white/10 bg-white/[0.03]"
-                    style={{ gridTemplateColumns: matrixGridTemplate }}
-                  >
-                    <div className="p-4 text-xs font-semibold uppercase tracking-wider text-white/35">Feature</div>
-                    {PLANS.map((p, i) => {
-                      const colIdx = planColumnIndices[i] ?? 0;
-                      return (
-                        <div
-                          key={p.id}
-                          className={cn(
-                            "border-l border-white/5 p-4 text-center text-xs font-bold text-white/90",
-                            colIdx === 1 && "bg-violet-500/[0.06]",
-                            colIdx === 2 && "bg-amber-500/[0.04]",
-                            colIdx === 3 && "bg-violet-600/[0.07]",
-                          )}
-                        >
-                          {p.name}
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  <div
-                    className="grid border-b border-violet-500/15 bg-violet-500/[0.06]"
-                    style={{ gridTemplateColumns: matrixGridTemplate }}
-                  >
-                    <div className="p-3 pl-4 text-xs font-bold uppercase tracking-[0.12em] text-violet-200/95">
-                      Studio: models
-                    </div>
-                    {planColumnIndices.map((colIdx) => (
-                      <div
-                        key={`studio-head-${colIdx}`}
-                        className={cn(
-                          "border-l border-white/5",
-                          colIdx === 1 && "bg-violet-500/[0.04]",
-                          colIdx === 2 && "bg-amber-500/[0.05]",
-                          colIdx === 3 && "bg-violet-600/[0.08]",
-                        )}
-                      />
-                    ))}
-                  </div>
-
-                  {SUBSCRIPTION_MODEL_MATRIX_ROWS.map((row) => (
-                    <div
-                      key={row.label}
-                      className="grid border-b border-white/5 last:border-b-0"
-                      style={{ gridTemplateColumns: matrixGridTemplate }}
-                    >
-                      <div className="flex flex-wrap items-center gap-2 p-3 pl-4 text-sm text-white/78">
-                        <span>{row.label}</span>
-                        {row.badges?.map((b) => (
-                          <span
-                            key={b.text}
-                            className={cn("rounded border px-1.5 py-0.5 text-[9px] font-bold tracking-wide", b.className)}
-                          >
-                            {b.text}
-                          </span>
-                        ))}
-                      </div>
-                      {planColumnIndices.map((colIdx) => {
-                        const ok = row.tiers[colIdx] ?? false;
-                        return (
-                          <div
-                            key={`${row.label}-${colIdx}`}
-                            className={cn(
-                              "flex items-center justify-center border-l border-white/5 py-2.5",
-                              tierColBg(colIdx),
-                            )}
-                          >
-                            <CellIcon ok={ok} accent={tierAccent(colIdx)} />
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ))}
-                </div>
-              </div>
             </div>
           </section>
 
           <p className="pb-6 text-center text-[11px] text-white/28">Checkout is powered by Stripe.</p>
+          <div className="pb-2 text-center">
+            <Button
+              type="button"
+              variant="secondary"
+              className="rounded-xl border border-white/15 bg-white/5 text-white hover:bg-white/10"
+              onClick={() => window.open(BILLING_PORTAL_URL, "_blank", "noopener,noreferrer")}
+            >
+              Manage billing
+            </Button>
+          </div>
         </div>
       </div>
     </StudioShell>
