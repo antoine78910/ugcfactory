@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -29,9 +30,21 @@ const LS_PERSONAL_API_ENABLED = "ugc_personal_api_enabled";
 const LS_PIAPI_PERSONAL_KEY = "ugc_piapi_personal_api_key";
 const LS_PIAPI_PERSONAL_ENABLED = "ugc_piapi_personal_api_enabled";
 
+/**
+ * Active user ID — set by CreditsPlanProvider before any localStorage read.
+ * Namespacing keys by user ID prevents one account's data leaking into another
+ * when multiple accounts share the same browser.
+ */
+let _activeUserId: string | null = null;
+
+/** Returns a user-scoped localStorage key, falling back to the bare key when no user is known. */
+function lsKey(base: string): string {
+  return _activeUserId ? `${base}_${_activeUserId}` : base;
+}
+
 function lsGet(key: string): string | null {
   try {
-    return localStorage.getItem(key);
+    return localStorage.getItem(lsKey(key));
   } catch {
     return null;
   }
@@ -39,7 +52,7 @@ function lsGet(key: string): string | null {
 
 function lsSet(key: string, value: string) {
   try {
-    localStorage.setItem(key, value);
+    localStorage.setItem(lsKey(key), value);
   } catch {
     /* ignore storage errors */
   }
@@ -47,7 +60,7 @@ function lsSet(key: string, value: string) {
 
 function lsRemove(key: string) {
   try {
-    localStorage.removeItem(key);
+    localStorage.removeItem(lsKey(key));
   } catch {
     /* ignore storage errors */
   }
@@ -200,8 +213,58 @@ const SUBSCRIPTION_TIERS = [
 
 const CreditsPlanContext = createContext<CreditsPlanContextValue | null>(null);
 
-export function CreditsPlanProvider({ children }: { children: ReactNode }) {
+export function CreditsPlanProvider({
+  children,
+  userId,
+}: {
+  children: ReactNode;
+  userId?: string | null;
+}) {
+  // Set module-level userId BEFORE useState so readState() uses the correct namespace.
+  _activeUserId = userId ?? null;
+
   const [state, setState] = useState<CreditsState>(readState);
+  const prevUserIdRef = useRef(userId);
+
+  // When the logged-in user changes, reset credits state to that user's localStorage.
+  useEffect(() => {
+    if (prevUserIdRef.current === userId) return;
+    prevUserIdRef.current = userId;
+    _activeUserId = userId ?? null;
+    setState(readState());
+  }, [userId]);
+
+  // Sync plan from the database on mount so a freshly-created account (or a browser
+  // that has stale localStorage from a previous account) always shows the correct plan.
+  useEffect(() => {
+    if (!userId) return;
+    fetch("/api/me/subscription")
+      .then((r) => r.ok ? r.json() : null)
+      .then((data: { planId: string } | null) => {
+        if (!data) return;
+        const serverPlan = parseAccountPlan(data.planId);
+        const localPlan = parseAccountPlan(lsGet(LS_PLAN));
+        if (serverPlan !== localPlan) {
+          // DB is authoritative for the plan; correct the local state.
+          if (serverPlan === "free") {
+            lsSet(LS_PLAN, "free");
+            lsSet(LS_CREDITS, "0");
+            lsRemove(LS_CAP);
+          } else {
+            const alloc = subscriptionCredits(serverPlan);
+            lsSet(LS_PLAN, serverPlan);
+            // Only reset credits if the local value looks wrong (higher than allocation for a new sub).
+            const localCredits = Number(lsGet(LS_CREDITS));
+            if (!Number.isFinite(localCredits) || localCredits > alloc * 2) {
+              lsSet(LS_CREDITS, String(alloc));
+            }
+          }
+          setState(readState());
+        }
+      })
+      .catch(() => { /* network error — keep local state */ });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
 
   const syncFromStorage = useCallback(() => {
     setState(readState());
@@ -210,7 +273,12 @@ export function CreditsPlanProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     syncFromStorage();
     const onStorage = (e: StorageEvent) => {
-      if (e.key === LS_CREDITS || e.key === LS_PLAN || e.key === LS_CAP) syncFromStorage();
+      if (
+        e.key === lsKey(LS_CREDITS) ||
+        e.key === lsKey(LS_PLAN) ||
+        e.key === lsKey(LS_CAP)
+      )
+        syncFromStorage();
     };
     const onLocal = () => syncFromStorage();
     window.addEventListener("storage", onStorage);
