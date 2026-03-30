@@ -819,12 +819,12 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
 
   const confirmAndResetLinkToAdToStart = useCallback(() => {
     const msg = [
-      "Annuler cette annonce Link to Ad ?",
+      "Cancel this Link to Ad?",
       "",
-      "Le brouillon dans cet écran sera perdu (URL, brief, scripts, uploads, médias en cours).",
-      "Les crédits déjà débités ne seront PAS remboursés.",
+      "The draft on this screen will be lost (URL, brief, scripts, uploads, in-progress media).",
+      "Credits already spent will NOT be refunded.",
       "",
-      "Les projets déjà enregistrés dans ton compte ne sont pas supprimés.",
+      "Projects already saved to your account are not deleted.",
     ].join("\n");
     if (typeof window !== "undefined" && !window.confirm(msg)) return;
 
@@ -900,7 +900,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     prevAngleRef.current = null;
     nanoBananaPromptsSignatureRef.current = null;
     onRunsChanged?.();
-    toast.message("Link to Ad réinitialisé", { description: "Tu peux repartir sur une nouvelle annonce." });
+    toast.message("Link to Ad reset", { description: "You can start a new ad from scratch." });
   }, [cancelCurrentGeneration, onRunsChanged]);
 
   const selImg = nanoBananaSelectedImageIndex;
@@ -3542,7 +3542,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                 className="h-8 shrink-0 gap-1.5 rounded-xl border border-white/15 bg-white/[0.04] px-2.5 text-xs font-semibold text-white/75 hover:border-red-400/35 hover:bg-red-500/10 hover:text-red-100"
               >
                 <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
-                Annuler l&apos;annonce
+                Cancel the ad
               </Button>
             ) : null}
             <CardTitle className="text-base">Link to Ad</CardTitle>

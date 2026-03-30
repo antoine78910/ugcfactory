@@ -115,7 +115,7 @@ export function mergeUserLabIntoGraph(graph: LabGraph, artifacts: LabArtifacts):
           w: 204,
           h: 44,
           label: ca.name,
-          sublabel: ca.notes ? shorten(ca.notes, 72) : "Angle personnalisé (plan)",
+          sublabel: ca.notes ? shorten(ca.notes, 72) : "Custom angle (planned)",
         });
         addE(nid, aid);
         cursorY += 50;
@@ -137,7 +137,7 @@ export function mergeUserLabIntoGraph(graph: LabGraph, artifacts: LabArtifacts):
       w: 204,
       h: 44,
       label: ca.name,
-      sublabel: ca.notes ? shorten(ca.notes, 72) : "Angle personnalisé (plan)",
+      sublabel: ca.notes ? shorten(ca.notes, 72) : "Custom angle (planned)",
     });
     addE("root", aid);
     cursorY += 50;

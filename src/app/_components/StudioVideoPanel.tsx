@@ -1631,16 +1631,33 @@ export default function StudioVideoPanel() {
                   ) : null}
                 </>
               )}
-              <div>
-                <Label className="text-xs text-white/45">Prompt</Label>
-                <Textarea
-                  value={editPrompt}
-                  onChange={(e) => setEditPrompt(e.target.value)}
-                  placeholder="Describe the change you want, like 'Make it snow'. Add elements using @"
-                  className="mt-2 min-h-[120px] w-full resize-none rounded-xl border-white/10 bg-[#0a0a0d] px-3 py-3 text-sm text-white placeholder:text-white/35 focus-visible:ring-0"
-                  rows={4}
-                />
-                {!motionEdit ? (
+              {motionEdit ? (
+                <div className="rounded-xl border border-white/10 bg-[#101014] p-3 space-y-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Advanced settings</p>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-white/45">Prompt</Label>
+                    <Textarea
+                      value={editPrompt}
+                      onChange={(e) => setEditPrompt(e.target.value)}
+                      placeholder="Describe background and scene details - e.g., 'A corgi runs in' or 'Snowy park setting'. Motion is controlled by your reference video."
+                      className="min-h-[100px] w-full resize-none rounded-xl border-white/10 bg-[#0a0a0d] px-3 py-3 text-sm text-white placeholder:text-white/35 focus-visible:ring-0"
+                      rows={4}
+                    />
+                  </div>
+                  <p className="text-[10px] leading-snug text-white/35">
+                    Describe background and scene details. Motion is controlled by your reference video.
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <Label className="text-xs text-white/45">Prompt</Label>
+                  <Textarea
+                    value={editPrompt}
+                    onChange={(e) => setEditPrompt(e.target.value)}
+                    placeholder="Describe the change you want, like 'Make it snow'. Add elements using @"
+                    className="mt-2 min-h-[120px] w-full resize-none rounded-xl border-white/10 bg-[#0a0a0d] px-3 py-3 text-sm text-white placeholder:text-white/35 focus-visible:ring-0"
+                    rows={4}
+                  />
                   <div className="mt-2">
                     <Button
                       type="button"
@@ -1653,8 +1670,8 @@ export default function StudioVideoPanel() {
                       Elements
                     </Button>
                   </div>
-                ) : null}
-              </div>
+                </div>
+              )}
             </div>
 
             <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Parameters</p>

@@ -79,7 +79,7 @@ export async function POST(req: Request) {
           {
             error:
               error.message === "Bucket not found"
-                ? "Crée un bucket public « ugc-uploads » dans Supabase (Storage)."
+                ? "Create a public « ugc-uploads » bucket in Supabase (Storage)."
                 : error.message,
           },
           { status: 502 },
@@ -113,7 +113,7 @@ export async function POST(req: Request) {
     const msg = err instanceof Error ? err.message : "Upload failed";
     const isFsError = /EACCES|EPERM|READONLY|ENOENT|EROFS/i.test(msg);
     const error = isFsError
-      ? "Upload impossible sur cet hébergement (disque non writable). Ajoute SUPABASE_SERVICE_ROLE_KEY et un bucket « ugc-uploads » (Supabase Storage) ou lance en local."
+      ? "Upload failed on this host (disk not writable). Add SUPABASE_SERVICE_ROLE_KEY and an « ugc-uploads » bucket (Supabase Storage), or run locally."
       : msg;
     return NextResponse.json({ error }, { status: 502 });
   }

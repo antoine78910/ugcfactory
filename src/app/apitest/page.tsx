@@ -82,18 +82,18 @@ export default function ApiTestPage() {
                 API test
               </span>
             </div>
-            <h1 className="text-3xl font-bold tracking-tight text-white md:text-4xl">Clés personnelles (sandbox)</h1>
+            <h1 className="text-3xl font-bold tracking-tight text-white md:text-4xl">Personal API keys (sandbox)</h1>
             <p className="max-w-xl text-sm leading-relaxed text-white/50">
-              Cette page est réservée aux comptes listés dans{" "}
+              This page is only for accounts listed in{" "}
               <code className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-xs text-white/70">
                 API_TEST_ALLOWED_EMAILS
               </code>
-              . Les clés restent dans votre navigateur (localStorage), comme sur{" "}
+              . Keys stay in your browser (localStorage), same as on{" "}
               <Link href="/credits" className="text-cyan-300/90 underline-offset-4 hover:underline">
                 /credits
               </Link>
-              . Avec KIE ou PiAPI activé et renseigné, le studio ne bloque plus sur le solde de crédits plateforme pour
-              les flux concernés.
+              . With KIE or PiAPI enabled and filled in, the studio no longer blocks on platform credit balance for those
+              flows.
             </p>
           </header>
 
@@ -107,8 +107,7 @@ export default function ApiTestPage() {
                   <div>
                     <h2 className="text-sm font-bold text-white">KIE</h2>
                     <p className="mt-1 text-xs leading-relaxed text-white/45">
-                      Clé API KIE : générations facturées sur votre compte KIE ; pas de débit de crédits plateforme
-                      quand le mode est actif.
+                      KIE API key: usage is billed to your KIE account; no platform credit charge when this mode is on.
                     </p>
                   </div>
                 </div>
@@ -137,7 +136,7 @@ export default function ApiTestPage() {
                   <div className="relative">
                     <Input
                       type={showKey ? "text" : "password"}
-                      placeholder="Coller la clé KIE…"
+                      placeholder="Paste KIE key…"
                       value={personalApiKey}
                       onChange={(e) => savePersonalApiKey(e.target.value)}
                       className="h-10 border-amber-500/20 bg-black/40 pr-10 font-mono text-sm text-white placeholder:text-white/25 focus-visible:ring-amber-500/40"
@@ -151,9 +150,9 @@ export default function ApiTestPage() {
                     </button>
                   </div>
                   {personalApiKey.trim() ? (
-                    <p className="text-[11px] text-emerald-400/80">Enregistrée localement.</p>
+                    <p className="text-[11px] text-emerald-400/80">Saved locally.</p>
                   ) : (
-                    <p className="text-[11px] text-amber-400/60">Saisissez une clé pour activer le contournement crédits.</p>
+                    <p className="text-[11px] text-amber-400/60">Enter a key to enable platform credit bypass.</p>
                   )}
                 </div>
               ) : null}
@@ -170,8 +169,8 @@ export default function ApiTestPage() {
                   <div>
                     <h2 className="text-sm font-bold text-white">PiAPI (Seedance)</h2>
                     <p className="mt-1 text-xs leading-relaxed text-white/45">
-                      Clé PiAPI pour les modèles Seedance : même principe, pas de débit crédits plateforme sur ces flux
-                      quand le mode est actif.
+                      PiAPI key for Seedance models: same idea—no platform credit charge on those flows when this mode is
+                      on.
                     </p>
                   </div>
                 </div>
@@ -200,7 +199,7 @@ export default function ApiTestPage() {
                   <div className="relative">
                     <Input
                       type={showPiapiKey ? "text" : "password"}
-                      placeholder="Coller la clé PiAPI…"
+                      placeholder="Paste PiAPI key…"
                       value={piapiKey}
                       onChange={(e) => savePiapiKey(e.target.value)}
                       className="h-10 border-violet-500/20 bg-black/40 pr-10 font-mono text-sm text-white placeholder:text-white/25 focus-visible:ring-violet-500/40"
@@ -214,9 +213,9 @@ export default function ApiTestPage() {
                     </button>
                   </div>
                   {piapiKey.trim() ? (
-                    <p className="text-[11px] text-emerald-400/80">Enregistrée localement.</p>
+                    <p className="text-[11px] text-emerald-400/80">Saved locally.</p>
                   ) : (
-                    <p className="text-[11px] text-violet-300/60">Saisissez une clé pour activer le contournement crédits.</p>
+                    <p className="text-[11px] text-violet-300/60">Enter a key to enable platform credit bypass.</p>
                   )}
                 </div>
               ) : null}
