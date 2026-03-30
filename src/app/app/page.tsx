@@ -379,6 +379,8 @@ export default function AppBrandWizard() {
   const [motionVideoRefBlobUrl, setMotionVideoRefBlobUrl] = useState<string | null>(null);
   const [motionVideoPosterUrl, setMotionVideoPosterUrl] = useState<string | null>(null);
   const [motionVideoPreviewLoading, setMotionVideoPreviewLoading] = useState(false);
+  /** True only after the video element fires onPlaying — guarantees real frames are visible. */
+  const [motionVideoPlaying, setMotionVideoPlaying] = useState(false);
   const [motionVideoDetectedDuration, setMotionVideoDetectedDuration] = useState<number | null>(null);
   const [motionCharacterImageUrl, setMotionCharacterImageUrl] = useState<string | null>(null);
   const [motionQuality, setMotionQuality] = useState<string>("720p");
@@ -2109,6 +2111,7 @@ export default function AppBrandWizard() {
                               const f = e.target.files?.[0] ?? null;
                               if (!f) return;
                               setMotionVideoPreviewLoading(true);
+                              setMotionVideoPlaying(false);
                               setMotionVideoDetectedDuration(null);
                               const blobUrl = URL.createObjectURL(f);
                               setMotionVideoRefBlobUrl(blobUrl);
@@ -2127,7 +2130,7 @@ export default function AppBrandWizard() {
                                 }
                               }}
                               onClick={() => motionVideoInputRef.current?.click()}
-                              className="relative flex aspect-[4/3] w-full cursor-pointer flex-col items-center justify-center gap-1.5 overflow-hidden rounded-xl border border-dashed border-white/20 bg-[#0c0c10] text-white/50 transition hover:border-violet-400/40 hover:bg-white/[0.03]"
+                              className="relative flex aspect-[3/4] w-full cursor-pointer flex-col items-center justify-center gap-1.5 overflow-hidden rounded-xl border border-dashed border-white/20 bg-[#0c0c10] text-white/50 transition hover:border-violet-400/40 hover:bg-white/[0.03]"
                             >
                               {motionVideoRefBlobUrl ? (
                                 <>
@@ -2136,7 +2139,7 @@ export default function AppBrandWizard() {
                                     key={motionVideoRefBlobUrl}
                                     ref={motionVideoPreviewRef}
                                     src={motionVideoRefBlobUrl}
-                                    className="absolute inset-0 z-[1] h-full w-full object-cover"
+                                    className={`absolute inset-0 z-[1] h-full w-full object-cover transition-opacity duration-300 ${motionVideoPlaying ? "opacity-100" : "opacity-0"}`}
                                     muted
                                     playsInline
                                     autoPlay
@@ -2153,8 +2156,11 @@ export default function AppBrandWizard() {
                                       void v.play().catch(() => {});
                                     }}
                                     onCanPlay={(ev) => {
-                                      setMotionVideoPreviewLoading(false);
                                       void ev.currentTarget.play().catch(() => {});
+                                    }}
+                                    onPlaying={(ev) => {
+                                      setMotionVideoPlaying(true);
+                                      setMotionVideoPreviewLoading(false);
                                       tryCaptureMotionPosterFromEl(ev.currentTarget);
                                     }}
                                     onTimeUpdate={(ev) => {
@@ -2170,12 +2176,12 @@ export default function AppBrandWizard() {
                                     }}
                                   />
                                   <UploadBusyOverlay
-                                    active={motionVideoPreviewLoading}
+                                    active={!motionVideoPlaying}
                                     label="Chargement…"
                                     className="rounded-xl"
                                   />
-                                  {motionVideoDetectedDuration ? (
-                                    <span className="absolute bottom-2 z-[1] rounded-md bg-black/70 px-2 py-1 text-[10px] font-medium text-white">
+                                  {motionVideoDetectedDuration && motionVideoPlaying ? (
+                                    <span className="absolute bottom-2 z-[2] rounded-md bg-black/70 px-2 py-1 text-[10px] font-medium text-white">
                                       {motionVideoDetectedDuration}s
                                     </span>
                                   ) : null}
@@ -2227,7 +2233,7 @@ export default function AppBrandWizard() {
                                 }
                               }}
                               onClick={() => motionCharacterInputRef.current?.click()}
-                              className="relative flex aspect-[4/3] w-full cursor-pointer flex-col items-center justify-center gap-1.5 overflow-hidden rounded-xl border border-dashed border-white/20 bg-[#0c0c10] text-white/50 transition hover:border-violet-400/40 hover:bg-white/[0.03]"
+                              className="relative flex aspect-[3/4] w-full cursor-pointer flex-col items-center justify-center gap-1.5 overflow-hidden rounded-xl border border-dashed border-white/20 bg-[#0c0c10] text-white/50 transition hover:border-violet-400/40 hover:bg-white/[0.03]"
                             >
                               {motionCharacterImageUrl ? (
                                 // eslint-disable-next-line @next/next/no-img-element

@@ -234,18 +234,26 @@ export function CreditsPlanProvider({
     setState(readState());
   }, [userId]);
 
-  // Sync plan from the database on mount.
-  // Rule: only upgrade local state when the server confirms an active paid plan.
-  // We never downgrade to free from here — the webhook may not have fired yet
-  // right after a checkout, and namespaced keys already prevent cross-account leakage.
+  // Sync plan from the database on every mount.
+  // Uses the userId returned by the API (more reliable than the server layout prop,
+  // which can be null if the Supabase token wasn't refreshed before the layout ran).
+  // Rule: only upgrade local state when the server confirms an active paid plan —
+  // never downgrade, since the webhook may not have fired yet right after checkout.
   useEffect(() => {
-    if (!userId) return;
     fetch("/api/me/subscription")
       .then((r) => r.ok ? r.json() : null)
-      .then((data: { planId: string } | null) => {
+      .then((data: { planId: string; userId?: string } | null) => {
         if (!data) return;
+
+        // Use the API-confirmed userId to ensure correct localStorage namespace.
+        const confirmedUid = data.userId ?? null;
+        if (confirmedUid && confirmedUid !== _activeUserId) {
+          _activeUserId = confirmedUid;
+        }
+
         const serverPlan = parseAccountPlan(data.planId);
         if (serverPlan === "free") return; // never downgrade from here
+
         const localPlan = parseAccountPlan(lsGet(LS_PLAN));
         if (serverPlan !== localPlan) {
           const alloc = subscriptionCredits(serverPlan);
@@ -259,7 +267,7 @@ export function CreditsPlanProvider({
       })
       .catch(() => { /* network error — keep local state */ });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId]);
+  }, []);
 
   const syncFromStorage = useCallback(() => {
     setState(readState());

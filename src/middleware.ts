@@ -1,10 +1,11 @@
+import { createServerClient } from "@supabase/ssr";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 const APP_HOST = "app.youry.io";
 const MAIN_HOSTS = new Set(["youry.io", "www.youry.io"]);
 
-export function middleware(req: NextRequest) {
+export async function middleware(req: NextRequest) {
   const url = req.nextUrl.clone();
   const host = (req.headers.get("host") ?? "").split(":")[0].toLowerCase();
   const { pathname } = url;
@@ -18,8 +19,6 @@ export function middleware(req: NextRequest) {
 
   // On app.youry.io, serve the app from "/" (rewrite -> /app).
   if (host === APP_HOST) {
-    // OAuth / magic links often land on the site root (?code= / ?error= / ?token_hash=).
-    // Never rewrite those to /app — the session is created in /auth/callback only.
     if (pathname === "/" && hasAuthParams) {
       url.pathname = "/auth/callback";
       return NextResponse.redirect(url, 307);
@@ -28,7 +27,6 @@ export function middleware(req: NextRequest) {
       url.pathname = "/app";
       return NextResponse.rewrite(url);
     }
-    return NextResponse.next();
   }
 
   // On main marketing domain, redirect /app* to app.youry.io.
@@ -46,6 +44,35 @@ export function middleware(req: NextRequest) {
     target.protocol = "https";
     target.host = APP_HOST;
     return NextResponse.redirect(target, 308);
+  }
+
+  // Refresh the Supabase session on every request so Server Components always
+  // receive a valid access token (tokens expire after ~1 hour without this).
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (supabaseUrl && supabaseAnonKey) {
+    let response = NextResponse.next({ request: req });
+    try {
+      const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+        cookies: {
+          getAll() {
+            return req.cookies.getAll();
+          },
+          setAll(cookiesToSet) {
+            cookiesToSet.forEach(({ name, value }) => req.cookies.set(name, value));
+            response = NextResponse.next({ request: req });
+            cookiesToSet.forEach(({ name, value, options }) =>
+              response.cookies.set(name, value, options),
+            );
+          },
+        },
+      });
+      // getUser() refreshes the token if expired and writes the new cookie via setAll.
+      await supabase.auth.getUser();
+    } catch {
+      /* non-fatal — continue without refresh */
+    }
+    return response;
   }
 
   return NextResponse.next();

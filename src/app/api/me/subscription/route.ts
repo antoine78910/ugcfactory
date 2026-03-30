@@ -5,6 +5,7 @@ import { parseAccountPlan, type AccountPlanId } from "@/lib/subscriptionModelAcc
 export type MeSubscriptionResponse = {
   planId: AccountPlanId;
   billing: "monthly" | "yearly" | null;
+  userId: string;
 };
 
 /**
@@ -23,11 +24,11 @@ export async function GET() {
       .maybeSingle();
 
     if (error || !data) {
-      return NextResponse.json({ planId: "free", billing: null } satisfies MeSubscriptionResponse);
+      return NextResponse.json({ planId: "free", billing: null, userId: auth.user.id } satisfies MeSubscriptionResponse);
     }
 
     if (data.status !== "active" && data.status !== "trialing") {
-      return NextResponse.json({ planId: "free", billing: null } satisfies MeSubscriptionResponse);
+      return NextResponse.json({ planId: "free", billing: null, userId: auth.user.id } satisfies MeSubscriptionResponse);
     }
 
     const planId = parseAccountPlan(data.plan_id);
@@ -38,8 +39,9 @@ export async function GET() {
     return NextResponse.json({
       planId,
       billing: planId === "free" ? null : billing,
+      userId: auth.user.id,
     } satisfies MeSubscriptionResponse);
   } catch {
-    return NextResponse.json({ planId: "free", billing: null } satisfies MeSubscriptionResponse);
+    return NextResponse.json({ planId: "free", billing: null, userId: auth.user.id } satisfies MeSubscriptionResponse);
   }
 }
