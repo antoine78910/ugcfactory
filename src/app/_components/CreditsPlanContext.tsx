@@ -6,7 +6,6 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -21,30 +20,31 @@ import {
   isSubscriptionPlanId,
 } from "@/lib/stripe/subscriptionPrices";
 
+// ---------------------------------------------------------------------------
+// localStorage keys — bare (no namespace).
+// Cross-account isolation is handled via LS_OWNER (see below).
+// ---------------------------------------------------------------------------
 const LS_CREDITS = "ugc_demo_credits";
 const LS_PLAN = "ugc_demo_plan";
-/** Bucket for % bar when plan is Free (one-off packs). */
+/** Bucket ceiling for the % bar when plan is Free (one-off packs). */
 const LS_CAP = "ugc_demo_credits_cap";
+/** userId that owns the current credits/plan data. */
+const LS_OWNER = "ugc_demo_owner";
+/**
+ * Unix ms timestamp of the last successful checkout.
+ * Used for a 5-minute grace period so we don't overwrite the plan with "free"
+ * when the Stripe webhook hasn't fired yet.
+ */
+const LS_CHECKOUT_TS = "ugc_demo_checkout_ts";
+
 const LS_PERSONAL_API_KEY = "ugc_personal_api_key";
 const LS_PERSONAL_API_ENABLED = "ugc_personal_api_enabled";
 const LS_PIAPI_PERSONAL_KEY = "ugc_piapi_personal_api_key";
 const LS_PIAPI_PERSONAL_ENABLED = "ugc_piapi_personal_api_enabled";
 
-/**
- * Active user ID — set by CreditsPlanProvider before any localStorage read.
- * Namespacing keys by user ID prevents one account's data leaking into another
- * when multiple accounts share the same browser.
- */
-let _activeUserId: string | null = null;
-
-/** Returns a user-scoped localStorage key, falling back to the bare key when no user is known. */
-function lsKey(base: string): string {
-  return _activeUserId ? `${base}_${_activeUserId}` : base;
-}
-
 function lsGet(key: string): string | null {
   try {
-    return localStorage.getItem(lsKey(key));
+    return localStorage.getItem(key);
   } catch {
     return null;
   }
@@ -52,7 +52,7 @@ function lsGet(key: string): string | null {
 
 function lsSet(key: string, value: string) {
   try {
-    localStorage.setItem(lsKey(key), value);
+    localStorage.setItem(key, value);
   } catch {
     /* ignore storage errors */
   }
@@ -60,10 +60,19 @@ function lsSet(key: string, value: string) {
 
 function lsRemove(key: string) {
   try {
-    localStorage.removeItem(lsKey(key));
+    localStorage.removeItem(key);
   } catch {
     /* ignore storage errors */
   }
+}
+
+/** Wipe plan/credits data (but not API keys). */
+function clearPlanData() {
+  lsRemove(LS_PLAN);
+  lsRemove(LS_CREDITS);
+  lsRemove(LS_CAP);
+  lsRemove(LS_OWNER);
+  lsRemove(LS_CHECKOUT_TS);
 }
 
 /** Returns the user's Kie API key when Personal API mode is active, or undefined. */
@@ -93,8 +102,7 @@ export function isPersonalPiapiActive(): boolean {
 
 /**
  * When either personal KIE or PiAPI key is enabled, skip platform credit charges and
- * balance checks in the studio (you bill the provider directly). Configure keys on
- * `/credits` or `/apitest` (allowlisted accounts).
+ * balance checks in the studio (you bill the provider directly).
  */
 export function isPlatformCreditBypassActive(): boolean {
   return isPersonalApiActive() || isPersonalPiapiActive();
@@ -122,13 +130,26 @@ export function creditsForPackKey(packKey: CreditPackKey): number {
 type CreditsState = {
   planId: AccountPlanId;
   current: number;
-  /** Upper bound for progress (monthly sub allocation or free pack bucket). */
+  /** Upper bound for progress bar (monthly allocation or free pack bucket). */
   total: number;
 };
 
-function readState(): CreditsState {
+/**
+ * Read credits/plan state from localStorage.
+ * If `currentUserId` is provided and the stored owner differs, returns free/0
+ * so stale data from a previous account is never shown to a new user.
+ */
+function readState(currentUserId?: string | null): CreditsState {
   if (typeof window === "undefined") {
     return { planId: "free", current: 0, total: 0 };
+  }
+
+  // Cross-account guard: ignore data that belongs to a different user.
+  if (currentUserId) {
+    const owner = lsGet(LS_OWNER);
+    if (owner && owner !== currentUserId) {
+      return { planId: "free", current: 0, total: 0 };
+    }
   }
 
   const planId = parseAccountPlan(lsGet(LS_PLAN));
@@ -143,14 +164,14 @@ function readState(): CreditsState {
 
   const capRaw = Number(lsGet(LS_CAP));
   const cap = Number.isFinite(capRaw) && capRaw >= 0 ? capRaw : 0;
-  /** Purchased bucket for Free; does not shrink when spending. */
   const total = cap > 0 ? cap : current;
   return { planId: "free", current, total };
 }
 
-function persist(state: CreditsState) {
+function persist(state: CreditsState, ownerId?: string | null) {
   lsSet(LS_PLAN, state.planId);
   lsSet(LS_CREDITS, String(state.current));
+  if (ownerId) lsSet(LS_OWNER, ownerId);
   if (state.planId === "free") {
     lsSet(LS_CAP, String(state.total));
   } else {
@@ -220,40 +241,61 @@ export function CreditsPlanProvider({
   children: ReactNode;
   userId?: string | null;
 }) {
-  // Set module-level userId BEFORE useState so readState() uses the correct namespace.
-  _activeUserId = userId ?? null;
+  const [state, setState] = useState<CreditsState>(() => readState(userId));
 
-  const [state, setState] = useState<CreditsState>(readState);
-  const prevUserIdRef = useRef(userId);
-
-  // When the logged-in user changes, reset credits state to that user's localStorage.
+  // Re-read when userId becomes available (SSR hydration) or changes (login/logout).
   useEffect(() => {
-    if (prevUserIdRef.current === userId) return;
-    prevUserIdRef.current = userId;
-    _activeUserId = userId ?? null;
-    setState(readState());
+    setState(readState(userId));
   }, [userId]);
 
-  // Sync plan from the database on every mount.
-  // Uses the userId returned by the API (more reliable than the server layout prop,
-  // which can be null if the Supabase token wasn't refreshed before the layout ran).
-  // Rule: only upgrade local state when the server confirms an active paid plan —
-  // never downgrade, since the webhook may not have fired yet right after checkout.
+  // ---------------------------------------------------------------------------
+  // DB sync — runs once on mount.
+  //
+  // Always fetches the authoritative plan from the server.
+  // The API also returns the confirmed userId, which is used to:
+  //   1. Detect a different account → clear stale data
+  //   2. Stamp LS_OWNER so future reads know who owns this data
+  //
+  // Grace period: if a checkout happened < 5 min ago and the server still says
+  // "free" (webhook not yet processed), we keep the plan from consumeCheckoutQueryParams.
+  // ---------------------------------------------------------------------------
   useEffect(() => {
     fetch("/api/me/subscription")
-      .then((r) => r.ok ? r.json() : null)
+      .then((r) => (r.ok ? r.json() : null))
       .then((data: { planId: string; userId?: string } | null) => {
         if (!data) return;
 
-        // Use the API-confirmed userId to ensure correct localStorage namespace.
         const confirmedUid = data.userId ?? null;
-        if (confirmedUid && confirmedUid !== _activeUserId) {
-          _activeUserId = confirmedUid;
+        const serverPlan = parseAccountPlan(data.planId);
+
+        // Detect a different account — clear stale data before applying.
+        if (confirmedUid) {
+          const storedOwner = lsGet(LS_OWNER);
+          if (storedOwner && storedOwner !== confirmedUid) {
+            clearPlanData();
+          }
+          lsSet(LS_OWNER, confirmedUid);
         }
 
-        const serverPlan = parseAccountPlan(data.planId);
-        if (serverPlan === "free") return; // never downgrade from here
+        if (serverPlan === "free") {
+          // Check grace period: if checkout happened < 5 min ago, the webhook may
+          // not have fired yet — keep the plan written by consumeCheckoutQueryParams.
+          const ts = Number(lsGet(LS_CHECKOUT_TS));
+          const inGrace = Number.isFinite(ts) && Date.now() - ts < 5 * 60 * 1000;
+          if (inGrace) return;
 
+          // Server is authoritative: downgrade to free.
+          const localPlan = parseAccountPlan(lsGet(LS_PLAN));
+          if (localPlan !== "free") {
+            lsSet(LS_PLAN, "free");
+            lsSet(LS_CREDITS, "0");
+            lsRemove(LS_CAP);
+            setState(readState(confirmedUid));
+          }
+          return;
+        }
+
+        // Server confirms a paid plan — apply it.
         const localPlan = parseAccountPlan(lsGet(LS_PLAN));
         if (serverPlan !== localPlan) {
           const alloc = subscriptionCredits(serverPlan);
@@ -262,26 +304,23 @@ export function CreditsPlanProvider({
           if (!Number.isFinite(localCredits) || localCredits > alloc * 2) {
             lsSet(LS_CREDITS, String(alloc));
           }
-          setState(readState());
+          setState(readState(confirmedUid));
         }
       })
-      .catch(() => { /* network error — keep local state */ });
+      .catch(() => {
+        /* network error — keep local state */
+      });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const syncFromStorage = useCallback(() => {
-    setState(readState());
-  }, []);
+    setState(readState(userId));
+  }, [userId]);
 
   useEffect(() => {
     syncFromStorage();
     const onStorage = (e: StorageEvent) => {
-      if (
-        e.key === lsKey(LS_CREDITS) ||
-        e.key === lsKey(LS_PLAN) ||
-        e.key === lsKey(LS_CAP)
-      )
-        syncFromStorage();
+      if (e.key === LS_CREDITS || e.key === LS_PLAN || e.key === LS_CAP) syncFromStorage();
     };
     const onLocal = () => syncFromStorage();
     window.addEventListener("storage", onStorage);
@@ -292,10 +331,13 @@ export function CreditsPlanProvider({
     };
   }, [syncFromStorage]);
 
-  const commit = useCallback((next: CreditsState) => {
-    persist(next);
-    setState(next);
-  }, []);
+  const commit = useCallback(
+    (next: CreditsState) => {
+      persist(next, userId);
+      setState(next);
+    },
+    [userId],
+  );
 
   const setSubscriptionPlan = useCallback(
     (planId: SubscriptionPlanId) => {
@@ -309,7 +351,7 @@ export function CreditsPlanProvider({
     (packKey: CreditPackKey) => {
       const add = creditsForPackKey(packKey);
       if (add <= 0) return;
-      const prev = readState();
+      const prev = readState(userId);
       const nextCurrent = prev.current + add;
       if (prev.planId === "free") {
         const nextTotal = prev.total + add;
@@ -323,14 +365,14 @@ export function CreditsPlanProvider({
         });
       }
     },
-    [commit],
+    [commit, userId],
   );
 
   const spendCredits = useCallback(
     (n: number) => {
       const k = Math.max(0, Math.floor(n));
       if (k === 0) return;
-      const prev = readState();
+      const prev = readState(userId);
       const nextCurrent = Math.max(0, prev.current - k);
       const nextTotal =
         prev.planId === "free"
@@ -338,14 +380,14 @@ export function CreditsPlanProvider({
           : Math.max(subscriptionCredits(prev.planId), nextCurrent);
       commit({ ...prev, current: nextCurrent, total: nextTotal });
     },
-    [commit],
+    [commit, userId],
   );
 
   const grantCredits = useCallback(
     (n: number) => {
       const k = Math.max(0, Math.floor(n));
       if (k === 0) return;
-      const prev = readState();
+      const prev = readState(userId);
       const nextCurrent = prev.current + k;
       const nextTotal =
         prev.planId === "free"
@@ -353,7 +395,7 @@ export function CreditsPlanProvider({
           : Math.max(subscriptionCredits(prev.planId), nextCurrent);
       commit({ planId: prev.planId, current: nextCurrent, total: nextTotal });
     },
-    [commit],
+    [commit, userId],
   );
 
   const planDisplayName = useMemo(() => {
@@ -422,9 +464,8 @@ export function consumeCheckoutQueryParams(pathname: string): boolean {
     if (planId === "free") {
       const capRaw = Number(lsGet(LS_CAP));
       const cap = Number.isFinite(capRaw) && capRaw >= 0 ? capRaw : 0;
-      const nextCap = cap + add;
       lsSet(LS_CREDITS, String(nextCurrent));
-      lsSet(LS_CAP, String(nextCap));
+      lsSet(LS_CAP, String(cap + add));
     } else {
       lsSet(LS_CREDITS, String(nextCurrent));
     }
@@ -441,6 +482,8 @@ export function consumeCheckoutQueryParams(pathname: string): boolean {
   }
 
   if (applied) {
+    // Stamp checkout timestamp for the DB sync grace period.
+    lsSet(LS_CHECKOUT_TS, String(Date.now()));
     window.dispatchEvent(new Event("ugc-credits-storage"));
     const clean = pathname.split("?")[0] ?? pathname;
     window.history.replaceState({}, "", clean);

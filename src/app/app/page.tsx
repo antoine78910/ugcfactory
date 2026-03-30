@@ -557,6 +557,25 @@ export default function AppBrandWizard() {
     motionPosterCapturePendingRef.current = false;
     motionPlayCaptureAttemptsRef.current = 0;
     setMotionVideoPosterUrl(null);
+    setMotionVideoPlaying(false);
+  }, [motionVideoRefBlobUrl]);
+
+  /** Safety net: if onPlaying never fires (autoplay blocked, slow codec), stop the spinner after 3 s. */
+  useEffect(() => {
+    if (!motionVideoRefBlobUrl) return;
+    const id = window.setTimeout(() => {
+      setMotionVideoPlaying((prev) => {
+        if (prev) return prev; // already playing — no-op
+        // Force-show whatever frame is available and stop spinner.
+        const v = motionVideoPreviewRef.current;
+        if (v) {
+          try { v.currentTime = Math.min(0.1, v.duration || 0.1); } catch { /* ignore */ }
+        }
+        return true;
+      });
+      setMotionVideoPreviewLoading(false);
+    }, 3000);
+    return () => window.clearTimeout(id);
   }, [motionVideoRefBlobUrl]);
 
   /** Some codecs only expose frames after a short play(); retry if poster still missing. */
@@ -2143,7 +2162,6 @@ export default function AppBrandWizard() {
                                     muted
                                     playsInline
                                     autoPlay
-                                    loop
                                     preload="auto"
                                     onLoadedMetadata={(ev) => {
                                       const v = ev.currentTarget;
@@ -2159,6 +2177,8 @@ export default function AppBrandWizard() {
                                       void ev.currentTarget.play().catch(() => {});
                                     }}
                                     onPlaying={(ev) => {
+                                      // Pause immediately — we only needed one frame to decode.
+                                      ev.currentTarget.pause();
                                       setMotionVideoPlaying(true);
                                       setMotionVideoPreviewLoading(false);
                                       tryCaptureMotionPosterFromEl(ev.currentTarget);
@@ -2268,7 +2288,7 @@ export default function AppBrandWizard() {
                         </div>
 
                         <div className="space-y-2">
-                        <div>
+                        <div className="flex items-center">
                             <StudioSingleModelCard
                               hideMeta
                               label="Kling 3.0 Motion Control"
