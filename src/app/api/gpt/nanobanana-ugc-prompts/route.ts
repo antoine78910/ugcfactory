@@ -326,7 +326,7 @@ CAMERA TECHNICAL RULE (CRITICAL)
 Always specify these technical parameters in every prompt:
 
 LENS & SENSOR:
-→ 35mm equivalent, front-facing iPhone camera
+→ 35mm equivalent, casual smartphone selfie perspective (no device or brand names)
 → f/2.2 aperture, ISO 400
 → Natural phone lens distortion
 → Minor unfiltered sensor grain

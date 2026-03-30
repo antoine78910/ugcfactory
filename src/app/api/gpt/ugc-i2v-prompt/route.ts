@@ -195,80 +195,15 @@ Speech delivery must match the voice profile exactly.
 Pacing must reflect the natural imperfections written in the script.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-STABILITY ANCHORS (always include)
+STABILITY & REALISM (for TECHNICAL block only — never device brands)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-- Scene remains consistent with the reference image
-- No new objects appear
-- Subject remains identical to the reference image
-- Lighting and environment remain unchanged
-- Product appearance remains identical to the reference image
+These ideas belong ONLY in the TECHNICAL section, phrased generically:
+- Stay faithful to the reference image — no new objects, same subject, same product look, same lighting
+- Natural handheld UGC feel — subtle drift, not locked-off, not shaky
+- Clear voice-forward capture; subtle real room tone; no music unless the location naturally has background music (e.g. gym speakers, café)
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-REALISM ANCHORS (always include)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-- Realistic skin texture
-- Natural lighting
-- Authentic smartphone camera realism
-- Slight handheld camera movement
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-VIDEO QUALITY RULE (CRITICAL)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Always specify these video quality parameters in every prompt.
-The goal is the highest possible video quality — sharp, clean,
-cinematic-level resolution with authentic smartphone realism.
-
-CAMERA DEVICE:
-→ Shot on iPhone 17 Pro Max, main rear 48MP Fusion camera
-→ Apple ProRes RAW video format
-→ 4K resolution at 120fps for maximum motion clarity
-→ Dolby Vision HDR with Apple Log 2 wide color gamut
-→ A19 Pro chip image processing pipeline
-→ Sensor-shift optical image stabilization
-
-SENSOR & SHARPNESS:
-→ Maximum sensor sharpness — every detail resolved
-→ Zero digital noise, zero grain, zero compression artifacts
-→ Micro-detail preserved on skin pores, hair strands,
-  fabric texture, and product label text
-→ Crystal clear edge definition on all elements in frame
-→ No digital softening, no AI beauty processing, no smoothing
-→ Updated Photonic Engine — natural detail preserved,
-  noise reduced, color accuracy maximized
-
-DEPTH & FOCUS:
-→ Tack sharp focus on subject's face and product
-→ Natural smartphone depth of field on background —
-  soft but fully identifiable, never artificially blurred
-→ Focus lock maintained throughout — no focus drift,
-  no breathing, no rack focus unless written in script
-
-COLOR & EXPOSURE:
-→ Dolby Vision wide color gamut — vivid but true-to-life
-→ Apple Log 2 — maximum dynamic range, rich midtones
-→ Skin tones warm, accurate, and three-dimensional
-→ Perfect exposure balance — no blown highlights,
-  no crushed shadows, no clipping
-→ Natural color temperature matching scene lighting
-→ No color grading, no filter, no LUT applied
-→ Blacks deep, whites clean, midtones rich and detailed
-
-STABILIZATION & MOTION:
-→ Smooth natural handheld movement —
-  organic micro-drift, never locked off, never shaky
-→ Natural optical image stabilization —
-  fluid motion without robotic artificial smoothing
-→ Motion is smooth at 120fps — zero motion blur on speech,
-  zero stutter on gestures
-
-AUDIO QUALITY:
-→ Recorded with iPhone 17 Pro Max spatial audio microphones
-→ Voice captured with studio-level clarity
-→ Zero background hiss, zero wind distortion on voice
-→ Natural room tone preserved underneath clean voice capture
+Never name phone models, camera products, codecs, resolution, fps, HDR/Log formats, or chip names in ANY part of the output.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 AUDIO RULES (CRITICAL)
@@ -331,33 +266,25 @@ RULE:
    it is simply present in the environment
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-OUTPUT FORMAT
+OUTPUT FORMAT (CRITICAL — exact labels)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Generate ONE compact video prompt between 120 and 180 words.
-Write as a continuous cinematic description.
-No section titles. No bullet points.
+Output plain text only, with EXACTLY these four labeled blocks in this order.
+Keep EDIT blocks concise (what the creator might want to tweak). No bullet points inside EDIT blocks.
 
-Structure in this order:
-1. Camera movement based on movement_context (1 sentence)
-2. Subject movement and micro-behaviors (1–2 sentences)
-3. Product interaction and gestures (1–2 sentences)
-4. Natural micro movements — blinks, breathing, head shifts (1 sentence)
-5. Full dialogue block with all speech imperfections preserved exactly
-6. Ambient sound description matched to scene location (1 sentence)
-7. Stability and realism anchors (1–2 sentences)
-8. Video quality line — always the last line of the prompt:
-   "Shot on iPhone 17 Pro Max, Apple ProRes RAW, 4K 120fps,
-   Dolby Vision HDR, Apple Log 2, A19 Pro Photonic Engine,
-   spatial audio, tack sharp focus, zero grain, zero filter,
-   maximum sensor detail, natural skin texture fully preserved,
-   product label fully legible, clean accurate color rendering,
-   organic handheld micro-movement, no artificial stabilization."
+EDIT — Motion:
+2–4 short sentences only: camera/head movement (from movement_context), body posture, hands and product beats per product_state and hand_assignment, and micro-behaviors translated from the script. Do NOT redescribe the room, décor, lighting, or overall visual style — those are already in the reference image.
 
-Do not describe the scene, environment, or visual style.
-These already exist in the reference image.
-Only describe what moves, what is said, how it is said,
-and what is naturally heard in the environment.
+EDIT — Dialogue:
+The spoken lines exactly as in the script, including fillers and punctuation quirks (... — etc.). Optionally one short phrase on delivery (pace, warmth) if needed. Do NOT add lines not in the script.
+
+EDIT — Ambience:
+One sentence: quiet environmental sound appropriate to VIDEO_METADATA scene_details (gym, bedroom, street, etc.). Keep it subtle; voice stays dominant.
+
+TECHNICAL:
+4–7 short lines, plain language, no brand or product names from the brief, no camera/phone model names, no codec/resolution/fps/HDR/Log claims. State: stay locked to reference (no new objects); respect two-hand limit and script-only gestures; voice + real room/product noise only unless location implies quiet background music; no added sound design; natural handheld UGC look; faithful lip sync to dialogue; ambient stays under voice.
+
+Forbidden anywhere in the output: naming specific phone/camera hardware, recording formats, or sensor marketing language.
 `.trim();
 
 export async function POST(req: Request) {
@@ -372,9 +299,9 @@ export async function POST(req: Request) {
   }
 
   const developer = [
-    "You output a single compact image-to-video prompt as plain text.",
-    "No section headings in the output. One continuous cinematic description: ~120–180 words for motion, dialogue, and ambient sound, then end with the exact mandatory video quality line from OUTPUT FORMAT step 8 in the user instructions.",
-    "Follow every rule in the instructions in the user message.",
+    "You output one image-to-video prompt as plain text with four labeled sections: EDIT — Motion, EDIT — Dialogue, EDIT — Ambience, then TECHNICAL — exactly as in OUTPUT FORMAT in the user instructions.",
+    "Never output device names (phones, cameras), codecs, resolution, fps, HDR/Log, or chip names. Technical fidelity belongs only in TECHNICAL, in generic wording.",
+    "Follow every rule in the user message instructions.",
   ].join("\n");
 
   const user = [

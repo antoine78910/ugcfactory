@@ -39,8 +39,12 @@ import {
   normalizePipelineByAngle,
   mergeNanoPromptForApi,
   composeNanoEditableSections,
+  composeVideoPromptEditableSections,
   parseNanoEditableSections,
   parseThreeLabeledPrompts,
+  parseVideoPromptEditableSections,
+  splitUgcVideoPromptForEditing,
+  type VideoPromptEditableSections,
   readUniverseFromExtracted,
   splitAllScriptOptions,
   splitNanoPromptBodyForEditing,
@@ -401,50 +405,6 @@ function firstHexColor(input: string): string | null {
   return raw.toUpperCase();
 }
 
-type VideoPromptSections = {
-  direction: string;
-  scene: string;
-  motion: string;
-  style: string;
-};
-
-function splitVideoPromptSectionsForUi(prompt: string): VideoPromptSections {
-  const clean = prompt.replace(/\r\n/g, "\n").replace(/\s+/g, " ").trim();
-  if (!clean) return { direction: "", scene: "", motion: "", style: "" };
-  const sentences = (clean.match(/[^.!?]+[.!?]?/g) ?? []).map((s) => s.trim()).filter(Boolean);
-  if (sentences.length >= 4) {
-    return {
-      direction: sentences[0] ?? "",
-      scene: sentences[1] ?? "",
-      motion: sentences[2] ?? "",
-      style: sentences.slice(3).join(" ").trim(),
-    };
-  }
-  if (sentences.length === 3) {
-    return { direction: sentences[0], scene: sentences[1], motion: sentences[2], style: "" };
-  }
-  if (sentences.length === 2) {
-    return { direction: sentences[0], scene: sentences[1], motion: "", style: "" };
-  }
-  const parts = clean.split(",").map((s) => s.trim()).filter(Boolean);
-  return {
-    direction: parts[0] ?? clean,
-    scene: parts[1] ?? "",
-    motion: parts[2] ?? "",
-    style: parts.slice(3).join(", ").trim(),
-  };
-}
-
-function composeVideoPromptFromSections(sections: VideoPromptSections): string {
-  const blocks = [
-    sections.direction.trim() ? `Creative direction: ${sections.direction.trim()}` : "",
-    sections.scene.trim() ? `Scene setup: ${sections.scene.trim()}` : "",
-    sections.motion.trim() ? `Motion cues: ${sections.motion.trim()}` : "",
-    sections.style.trim() ? `Style & constraints: ${sections.style.trim()}` : "",
-  ].filter(Boolean);
-  return blocks.join("\n");
-}
-
 function LinkToAdPendingProductThumbnails({ items }: { items: { id: string; blob: string }[] }) {
   if (!items.length) return null;
   return (
@@ -702,13 +662,15 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const [scriptEditVisible, setScriptEditVisible] = useState(false);
   const [scriptFactors, setScriptFactors] = useState<ScriptFactorBlocks>({ ...EMPTY_SCRIPT_FACTORS });
   const [scriptHasEdits, setScriptHasEdits] = useState(false);
-  const [editableVideoPrompt, setEditableVideoPrompt] = useState("");
-  const [videoPromptSections, setVideoPromptSections] = useState<VideoPromptSections>({
-    direction: "",
-    scene: "",
+  const [videoPromptSections, setVideoPromptSections] = useState<VideoPromptEditableSections>({
     motion: "",
-    style: "",
+    dialogue: "",
+    ambience: "",
   });
+  /** Text after EDIT blocks (fidelity / audio rules) — not shown in UI, sent to the video model. */
+  const [videoPromptTechnicalTail, setVideoPromptTechnicalTail] = useState("");
+  /** Older one-blob prompts without EDIT — sections.motion holds the full creative text. */
+  const [videoPromptIsLegacyBlob, setVideoPromptIsLegacyBlob] = useState(false);
   const [videoPromptInlineEdit, setVideoPromptInlineEdit] = useState(false);
   const [videoPromptHasEdits, setVideoPromptHasEdits] = useState(false);
   const [videoPromptEditVisible, setVideoPromptEditVisible] = useState(false);
@@ -761,6 +723,37 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const nanoThreeAbortRef = useRef<AbortController | null>(null);
   const videoPromptAbortRef = useRef<AbortController | null>(null);
   const klingAbortRef = useRef<AbortController | null>(null);
+
+  const hydrateVideoPromptFromStored = useCallback((full: string) => {
+    const raw = full.replace(/\r\n/g, "\n").trim();
+    if (!raw) {
+      setVideoPromptTechnicalTail("");
+      setVideoPromptIsLegacyBlob(false);
+      setVideoPromptSections({ motion: "", dialogue: "", ambience: "" });
+      return;
+    }
+    const { editable, technicalTail } = splitUgcVideoPromptForEditing(full);
+    setVideoPromptTechnicalTail(technicalTail);
+    const parsed = parseVideoPromptEditableSections(editable);
+    if (parsed.isStructured) {
+      setVideoPromptIsLegacyBlob(false);
+      setVideoPromptSections({
+        motion: parsed.motion,
+        dialogue: parsed.dialogue,
+        ambience: parsed.ambience,
+      });
+    } else {
+      setVideoPromptIsLegacyBlob(true);
+      setVideoPromptSections({ motion: editable, dialogue: "", ambience: "" });
+    }
+  }, []);
+
+  const mergedVideoPromptDraft = useMemo(() => {
+    const editable = videoPromptIsLegacyBlob
+      ? videoPromptSections.motion.trim()
+      : composeVideoPromptEditableSections(videoPromptSections).trim();
+    return mergeNanoPromptForApi(editable, videoPromptTechnicalTail).trim();
+  }, [videoPromptSections, videoPromptTechnicalTail, videoPromptIsLegacyBlob]);
 
   const cancelCurrentGeneration = useCallback((opts?: { silent?: boolean }) => {
     nanoPromptsAbortRef.current?.abort();
@@ -873,6 +866,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     setNanoBananaImageUrls([]);
     setNanoBananaSelectedImageIndex(null);
     setUgcVideoPromptGpt("");
+    hydrateVideoPromptFromStored("");
     setKlingByRef(createEmptyKlingByReference());
     setNanoPollTaskId(null);
     setNanoPollingSlotIndex(null);
@@ -894,13 +888,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     setNanoPromptDrafts(["", "", ""]);
     setNanoPromptTechnicalTails(["", "", ""]);
     setNanoPromptHasEdits(false);
-    setEditableVideoPrompt("");
-    setVideoPromptSections({
-      direction: "",
-      scene: "",
-      motion: "",
-      style: "",
-    });
     setVideoPromptInlineEdit(false);
     setVideoPromptHasEdits(false);
     setVideoPromptEditVisible(false);
@@ -1001,7 +988,9 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         ? p.nanoBananaSelectedImageIndex
         : null,
     );
-    setUgcVideoPromptGpt(p.ugcVideoPromptGpt ?? "");
+    const vPrompt = p.ugcVideoPromptGpt ?? "";
+    setUgcVideoPromptGpt(vPrompt);
+    hydrateVideoPromptFromStored(vPrompt);
     const k = p.klingByReferenceIndex;
     setKlingByRef(
       k && k.length === 3
@@ -1016,7 +1005,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     setVideoStageMode(Boolean(p.videoStageMode));
     setUserStartedVideoFromImage(
       Boolean(
-        (p.ugcVideoPromptGpt && p.ugcVideoPromptGpt.trim()) ||
+        (vPrompt && vPrompt.trim()) ||
           (p.nanoBananaImageUrl && String(p.nanoBananaImageUrl).trim()) ||
           (k &&
             k.some(
@@ -1236,6 +1225,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     setNanoBananaImageUrls([]);
     setNanoBananaSelectedImageIndex(null);
     setUgcVideoPromptGpt("");
+    hydrateVideoPromptFromStored("");
     setKlingByRef(createEmptyKlingByReference());
     setNanoPollTaskId(null);
     setNanoPollingSlotIndex(null);
@@ -2193,6 +2183,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       setNanoBananaImageUrls([]);
       setNanoBananaSelectedImageIndex(null);
       setUgcVideoPromptGpt("");
+      hydrateVideoPromptFromStored("");
       setKlingByRef(createEmptyKlingByReference());
       setNanoPollTaskId(null);
       setNanoPollingSlotIndex(null);
@@ -2331,6 +2322,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     setNanoBananaImageUrls([]);
     setNanoBananaSelectedImageIndex(null);
     setUgcVideoPromptGpt("");
+    hydrateVideoPromptFromStored("");
     setKlingByRef(createEmptyKlingByReference());
     setNanoPollTaskId(null);
     setNanoPollingSlotIndex(null);
@@ -2677,6 +2669,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     setNanoBananaTaskId(lastTaskId);
     setNanoBananaImageUrl(null);
     setUgcVideoPromptGpt("");
+    hydrateVideoPromptFromStored("");
     setKlingByRef(createEmptyKlingByReference());
     setKlingPollTaskId(null);
     setKlingPollImageIndex(null);
@@ -2761,6 +2754,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
 
     setKlingByRef(createEmptyKlingByReference());
     setUgcVideoPromptGpt("");
+    hydrateVideoPromptFromStored("");
     setUserStartedVideoFromImage(false);
     setVideoStageMode(false);
 
@@ -2816,6 +2810,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
 
     setKlingByRef(slotsAfterSave);
     setUgcVideoPromptGpt(promptForNew);
+    hydrateVideoPromptFromStored(promptForNew);
     setUserStartedVideoFromImage(
       Boolean(
         promptForNew.trim() ||
@@ -2987,9 +2982,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       if (!res.ok || !json.data) throw new Error(json.error || "Video prompt failed");
       const text = String(json.data);
       setUgcVideoPromptGpt(text);
-      const nextSections = splitVideoPromptSectionsForUi(text);
-      setVideoPromptSections(nextSections);
-      setEditableVideoPrompt(composeVideoPromptFromSections(nextSections));
+      hydrateVideoPromptFromStored(text);
       setVideoPromptInlineEdit(false);
       setVideoPromptHasEdits(false);
       setVideoPromptEditVisible(true);
@@ -3453,9 +3446,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     setUserStartedVideoFromImage(true);
     const t = await onGenerateUgcVideoPrompt();
     if (t?.trim()) {
-      const nextSections = splitVideoPromptSectionsForUi(t.trim());
-      setVideoPromptSections(nextSections);
-      setEditableVideoPrompt(composeVideoPromptFromSections(nextSections));
       setVideoPromptInlineEdit(false);
       setVideoPromptHasEdits(false);
       setVideoPromptEditVisible(true);
@@ -3463,12 +3453,12 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   }
 
   async function handleConfirmVideoGeneration() {
-    const prompt = composeVideoPromptFromSections(videoPromptSections).trim();
-    setEditableVideoPrompt(prompt);
+    const prompt = mergedVideoPromptDraft;
     if (!prompt) {
       toast.error("Video prompt is empty.");
       return;
     }
+    setUgcVideoPromptGpt(prompt);
     setVideoPromptEditVisible(false);
     await onGenerateKlingVideo(prompt);
   }
@@ -5247,71 +5237,71 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                   <div className="flex min-w-0 flex-1 flex-col gap-6">
                     {showVideoWorkPanel ? (
                     <>
-                      {videoPromptEditVisible && editableVideoPrompt.trim() && !klingVideoUrl ? (
-                        <div className="rounded-xl border border-violet-500/25 bg-violet-500/[0.06] p-4 space-y-3">
-                          <div className="flex items-center justify-between">
-                            <p className="text-sm font-semibold text-white/90">Review prompt sections</p>
-                            <span className="text-[10px] text-white/40">Edit blocks before generating</span>
+                      {videoPromptEditVisible && mergedVideoPromptDraft && !klingVideoUrl ? (
+                        <div className="rounded-xl border border-violet-500/25 bg-violet-500/[0.06] p-3 space-y-2">
+                          <div>
+                            <p className="text-xs font-semibold text-white/90">Video brief</p>
+                            <p className="mt-0.5 text-[10px] leading-snug text-white/45">
+                              Adjust motion, what is said, and background sound. Technical fidelity stays hidden and is
+                              still sent to the video model.
+                            </p>
                           </div>
-                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                          {videoPromptIsLegacyBlob ? (
                             <div className="space-y-1">
-                              <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Direction</p>
-                              <Textarea
-                                value={videoPromptSections.direction}
-                                onChange={(e) => {
-                                  const next = { ...videoPromptSections, direction: e.target.value };
-                                  setVideoPromptSections(next);
-                                  setEditableVideoPrompt(composeVideoPromptFromSections(next));
-                                }}
-                                className="min-h-[88px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/80"
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Scene</p>
-                              <Textarea
-                                value={videoPromptSections.scene}
-                                onChange={(e) => {
-                                  const next = { ...videoPromptSections, scene: e.target.value };
-                                  setVideoPromptSections(next);
-                                  setEditableVideoPrompt(composeVideoPromptFromSections(next));
-                                }}
-                                className="min-h-[88px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/80"
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Motion</p>
+                              <p className="text-[9px] font-semibold uppercase tracking-wide text-amber-200/75">
+                                Older prompt — regenerate the video prompt for the short fields
+                              </p>
                               <Textarea
                                 value={videoPromptSections.motion}
-                                onChange={(e) => {
-                                  const next = { ...videoPromptSections, motion: e.target.value };
-                                  setVideoPromptSections(next);
-                                  setEditableVideoPrompt(composeVideoPromptFromSections(next));
-                                }}
-                                className="min-h-[88px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/80"
+                                onChange={(e) =>
+                                  setVideoPromptSections((prev) => ({ ...prev, motion: e.target.value }))
+                                }
+                                className="min-h-[64px] border-white/10 bg-black/30 text-[11px] leading-snug text-white/80"
+                                spellCheck
                               />
                             </div>
-                            <div className="space-y-1">
-                              <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Style</p>
-                              <Textarea
-                                value={videoPromptSections.style}
-                                onChange={(e) => {
-                                  const next = { ...videoPromptSections, style: e.target.value };
-                                  setVideoPromptSections(next);
-                                  setEditableVideoPrompt(composeVideoPromptFromSections(next));
-                                }}
-                                className="min-h-[88px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/80"
-                              />
+                          ) : (
+                            <div className="space-y-2">
+                              <div className="space-y-0.5">
+                                <Label className="text-[9px] font-medium text-white/40">Motion</Label>
+                                <Textarea
+                                  value={videoPromptSections.motion}
+                                  onChange={(e) =>
+                                    setVideoPromptSections((prev) => ({ ...prev, motion: e.target.value }))
+                                  }
+                                  className="min-h-[52px] border-white/10 bg-black/30 text-[11px] leading-snug text-white/80"
+                                  spellCheck
+                                />
+                              </div>
+                              <div className="space-y-0.5">
+                                <Label className="text-[9px] font-medium text-white/40">Dialogue</Label>
+                                <Textarea
+                                  value={videoPromptSections.dialogue}
+                                  onChange={(e) =>
+                                    setVideoPromptSections((prev) => ({ ...prev, dialogue: e.target.value }))
+                                  }
+                                  className="min-h-[52px] border-white/10 bg-black/30 text-[11px] leading-snug text-white/80"
+                                  spellCheck
+                                />
+                              </div>
+                              <div className="space-y-0.5">
+                                <Label className="text-[9px] font-medium text-white/40">Ambience</Label>
+                                <Textarea
+                                  value={videoPromptSections.ambience}
+                                  onChange={(e) =>
+                                    setVideoPromptSections((prev) => ({ ...prev, ambience: e.target.value }))
+                                  }
+                                  className="min-h-[44px] border-white/10 bg-black/30 text-[11px] leading-snug text-white/80"
+                                  spellCheck
+                                />
+                              </div>
                             </div>
-                          </div>
+                          )}
                           <Button
                             type="button"
-                            disabled={
-                              isKlingSubmitting ||
-                              Boolean(klingPollTaskId) ||
-                              !composeVideoPromptFromSections(videoPromptSections).trim()
-                            }
+                            disabled={isKlingSubmitting || Boolean(klingPollTaskId) || !mergedVideoPromptDraft}
                             onClick={() => void handleConfirmVideoGeneration()}
-                            className={`h-11 w-full max-w-sm ${primaryBtnClass}`}
+                            className={`h-9 w-full max-w-sm text-sm ${primaryBtnClass}`}
                           >
                             {isKlingSubmitting || klingPollTaskId ? (
                               <span className="inline-flex items-center gap-2 text-sm font-semibold">
@@ -5477,16 +5467,17 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                         ) : null}
                       </div>
 
-                      {!(videoPromptEditVisible && editableVideoPrompt.trim() && !klingVideoUrl) ? (
-                        <div className="space-y-4 border-t border-white/10 pt-5">
+                      {!(videoPromptEditVisible && mergedVideoPromptDraft && !klingVideoUrl) ? (
+                        <div className="space-y-3 border-t border-white/10 pt-4">
                           <div>
                             <p className="text-sm font-semibold text-white/90">Video</p>
-                            <p className="mt-1 text-xs text-white/45">
-                              Motion prompt and final render. You can retry each step if something fails.
+                            <p className="mt-1 text-[11px] leading-snug text-white/45">
+                              Final render below. The motion prompt shows only what matters to tweak; the rest is applied
+                              for you.
                             </p>
                           </div>
                           <div>
-                            <p className="text-xs font-semibold uppercase tracking-wide text-white/50">Prompt</p>
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-white/50">Prompt</p>
                             {nanoBananaImageUrl &&
                             userStartedVideoFromImage &&
                             !ugcVideoPromptGpt.trim() &&
@@ -5509,61 +5500,27 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                               </div>
                             ) : null}
                             {ugcVideoPromptGpt ? (
-                              <div className="mt-3 space-y-3">
-                                <div className="flex items-center justify-between">
-                                  <span className="text-[10px] text-white/40">
-                                    {videoPromptHasEdits ? "Edited prompt blocks (not rendered yet)" : "Prompt blocks"}
+                              <div className="mt-2 space-y-2">
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-[9px] text-white/40">
+                                    {videoPromptHasEdits ? "Edited (not rendered yet)" : "Motion · dialogue · sound"}
                                   </span>
                                   <button
                                     type="button"
-                                    className="text-[11px] font-medium text-violet-300/85 transition hover:text-violet-200"
+                                    className="text-[10px] font-medium text-violet-300/85 transition hover:text-violet-200"
                                     onClick={() => {
                                       if (!videoPromptInlineEdit) {
-                                        setVideoPromptSections(splitVideoPromptSectionsForUi(ugcVideoPromptGpt));
+                                        hydrateVideoPromptFromStored(ugcVideoPromptGpt);
                                       }
                                       setVideoPromptInlineEdit((v) => !v);
                                     }}
                                   >
-                                    {videoPromptInlineEdit ? "Done editing" : "Edit blocks"}
+                                    {videoPromptInlineEdit ? "Done" : "Edit"}
                                   </button>
                                 </div>
-                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                                  <div className="rounded-lg border border-white/10 bg-black/30 p-2.5">
-                                    <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Direction</p>
-                                    {videoPromptInlineEdit ? (
-                                      <Textarea
-                                        value={videoPromptSections.direction}
-                                        onChange={(e) => {
-                                          setVideoPromptSections((prev) => ({ ...prev, direction: e.target.value }));
-                                          setVideoPromptHasEdits(true);
-                                        }}
-                                        className="mt-1 min-h-[78px] border-white/10 bg-black/35 text-xs leading-relaxed text-white/80"
-                                      />
-                                    ) : (
-                                      <p className="mt-1 text-xs leading-relaxed text-white/75 line-clamp-4">
-                                        {(videoPromptHasEdits ? videoPromptSections.direction : splitVideoPromptSectionsForUi(ugcVideoPromptGpt).direction) || "—"}
-                                      </p>
-                                    )}
-                                  </div>
-                                  <div className="rounded-lg border border-white/10 bg-black/30 p-2.5">
-                                    <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Scene</p>
-                                    {videoPromptInlineEdit ? (
-                                      <Textarea
-                                        value={videoPromptSections.scene}
-                                        onChange={(e) => {
-                                          setVideoPromptSections((prev) => ({ ...prev, scene: e.target.value }));
-                                          setVideoPromptHasEdits(true);
-                                        }}
-                                        className="mt-1 min-h-[78px] border-white/10 bg-black/35 text-xs leading-relaxed text-white/80"
-                                      />
-                                    ) : (
-                                      <p className="mt-1 text-xs leading-relaxed text-white/75 line-clamp-4">
-                                        {(videoPromptHasEdits ? videoPromptSections.scene : splitVideoPromptSectionsForUi(ugcVideoPromptGpt).scene) || "—"}
-                                      </p>
-                                    )}
-                                  </div>
-                                  <div className="rounded-lg border border-white/10 bg-black/30 p-2.5">
-                                    <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Motion</p>
+                                {videoPromptIsLegacyBlob ? (
+                                  <div className="rounded-lg border border-white/10 bg-black/30 p-2">
+                                    <p className="text-[9px] font-semibold uppercase tracking-wide text-white/45">Brief</p>
                                     {videoPromptInlineEdit ? (
                                       <Textarea
                                         value={videoPromptSections.motion}
@@ -5571,46 +5528,61 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                                           setVideoPromptSections((prev) => ({ ...prev, motion: e.target.value }));
                                           setVideoPromptHasEdits(true);
                                         }}
-                                        className="mt-1 min-h-[78px] border-white/10 bg-black/35 text-xs leading-relaxed text-white/80"
+                                        className="mt-1 min-h-[56px] border-white/10 bg-black/35 text-[11px] leading-snug text-white/80"
                                       />
                                     ) : (
-                                      <p className="mt-1 text-xs leading-relaxed text-white/75 line-clamp-4">
-                                        {(videoPromptHasEdits ? videoPromptSections.motion : splitVideoPromptSectionsForUi(ugcVideoPromptGpt).motion) || "—"}
+                                      <p className="mt-1 text-[11px] leading-snug text-white/75 line-clamp-3">
+                                        {videoPromptSections.motion.trim() || "—"}
                                       </p>
                                     )}
                                   </div>
-                                  <div className="rounded-lg border border-white/10 bg-black/30 p-2.5">
-                                    <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Style</p>
-                                    {videoPromptInlineEdit ? (
-                                      <Textarea
-                                        value={videoPromptSections.style}
-                                        onChange={(e) => {
-                                          setVideoPromptSections((prev) => ({ ...prev, style: e.target.value }));
-                                          setVideoPromptHasEdits(true);
-                                        }}
-                                        className="mt-1 min-h-[78px] border-white/10 bg-black/35 text-xs leading-relaxed text-white/80"
-                                      />
-                                    ) : (
-                                      <p className="mt-1 text-xs leading-relaxed text-white/75 line-clamp-4">
-                                        {(videoPromptHasEdits ? videoPromptSections.style : splitVideoPromptSectionsForUi(ugcVideoPromptGpt).style) || "—"}
-                                      </p>
-                                    )}
+                                ) : (
+                                  <div className="space-y-1.5">
+                                    {(
+                                      [
+                                        ["Motion", "motion"],
+                                        ["Dialogue", "dialogue"],
+                                        ["Ambience", "ambience"],
+                                      ] as const
+                                    ).map(([label, key]) => (
+                                      <div
+                                        key={key}
+                                        className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5"
+                                      >
+                                        <p className="text-[9px] font-semibold uppercase tracking-wide text-white/45">
+                                          {label}
+                                        </p>
+                                        {videoPromptInlineEdit ? (
+                                          <Textarea
+                                            value={videoPromptSections[key]}
+                                            onChange={(e) => {
+                                              setVideoPromptSections((prev) => ({ ...prev, [key]: e.target.value }));
+                                              setVideoPromptHasEdits(true);
+                                            }}
+                                            className="mt-0.5 min-h-[44px] border-white/10 bg-black/35 text-[11px] leading-snug text-white/80"
+                                          />
+                                        ) : (
+                                          <p className="mt-0.5 text-[11px] leading-snug text-white/75 line-clamp-3">
+                                            {videoPromptSections[key].trim() || "—"}
+                                          </p>
+                                        )}
+                                      </div>
+                                    ))}
                                   </div>
-                                </div>
+                                )}
                                 {videoPromptHasEdits ? (
                                   <Button
                                     type="button"
-                                    className={`h-auto min-h-11 py-2.5 ${primaryBtnClass}`}
+                                    className={`h-9 py-2 text-sm ${primaryBtnClass}`}
                                     disabled={
                                       isKlingSubmitting ||
                                       Boolean(klingPollTaskId) ||
                                       !nanoBananaImageUrl ||
-                                      !composeVideoPromptFromSections(videoPromptSections).trim()
+                                      !mergedVideoPromptDraft
                                     }
                                     onClick={() => {
-                                      const nextPrompt = composeVideoPromptFromSections(videoPromptSections).trim();
+                                      const nextPrompt = mergedVideoPromptDraft;
                                       if (!nextPrompt) return;
-                                      setEditableVideoPrompt(nextPrompt);
                                       setUgcVideoPromptGpt(nextPrompt);
                                       setVideoPromptHasEdits(false);
                                       setVideoPromptInlineEdit(false);

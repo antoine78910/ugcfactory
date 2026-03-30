@@ -745,6 +745,71 @@ export function mergeNanoPromptForApi(editable: string, technicalTail: string): 
   return `${e}\n\n${tail}`;
 }
 
+/** User-facing slice of the UGC image-to-video prompt (shown in Link to Ad UI). */
+export type VideoPromptEditableSections = {
+  motion: string;
+  dialogue: string;
+  ambience: string;
+};
+
+/** True when the video prompt uses EDIT — Motion / Dialogue / Ambience blocks. */
+export function parseVideoPromptEditableSections(editable: string): VideoPromptEditableSections & { isStructured: boolean } {
+  const raw = editable.replace(/\r\n/g, "\n");
+  if (!raw.trim()) {
+    return { motion: "", dialogue: "", ambience: "", isStructured: false };
+  }
+  if (!/EDIT\s*[—:-]\s*Motion\b/im.test(raw)) {
+    return { motion: raw.trim(), dialogue: "", ambience: "", isStructured: false };
+  }
+  const motionM = raw.match(/EDIT\s*[—:-]\s*Motion\s*[:\n]\s*([\s\S]*?)(?=\n\s*EDIT\s*[—:-]\s*Dialogue\b|$)/i);
+  const dialogueM = raw.match(/EDIT\s*[—:-]\s*Dialogue\s*[:\n]\s*([\s\S]*?)(?=\n\s*EDIT\s*[—:-]\s*Ambience\b|$)/i);
+  const ambienceM = raw.match(/EDIT\s*[—:-]\s*Ambience\s*[:\n]\s*([\s\S]*?)$/i);
+  return {
+    motion: motionM?.[1]?.trim() ?? "",
+    dialogue: dialogueM?.[1]?.trim() ?? "",
+    ambience: ambienceM?.[1]?.trim() ?? "",
+    isStructured: true,
+  };
+}
+
+export function composeVideoPromptEditableSections(parts: VideoPromptEditableSections): string {
+  const m = parts.motion.replace(/\r\n/g, "\n").trim();
+  const d = parts.dialogue.replace(/\r\n/g, "\n").trim();
+  const a = parts.ambience.replace(/\r\n/g, "\n").trim();
+  const lines: string[] = [];
+  if (m) lines.push(`EDIT — Motion:\n${m}`);
+  if (d) lines.push(`EDIT — Dialogue:\n${d}`);
+  if (a) lines.push(`EDIT — Ambience:\n${a}`);
+  return lines.join("\n\n");
+}
+
+/**
+ * Splits stored video prompt into UI-visible creative text vs hidden technical/fidelity tail.
+ * Legacy outputs without TECHNICAL may still end with device-spec spam; tuck that after a heuristic cut.
+ */
+export function splitUgcVideoPromptForEditing(body: string): { editable: string; technicalTail: string } {
+  const t = body.replace(/\r\n/g, "\n");
+  if (!t.trim()) return { editable: "", technicalTail: "" };
+
+  const tech = /(?:^|\n)\s*TECHNICAL\s*[—:\s]/im.exec(t);
+  if (tech && tech.index !== undefined) {
+    return {
+      editable: t.slice(0, tech.index).trim(),
+      technicalTail: t.slice(tech.index).trim(),
+    };
+  }
+
+  const deviceLine = /\n(?=\s*(?:Shot on|Recorded with)\s+(?:an\s+)?iPhone\b)/i.exec(t);
+  if (deviceLine && deviceLine.index !== undefined) {
+    return {
+      editable: t.slice(0, deviceLine.index).trim(),
+      technicalTail: t.slice(deviceLine.index).replace(/^\n+/, "").trim(),
+    };
+  }
+
+  return { editable: t.trim(), technicalTail: "" };
+}
+
 /** Clears Nano → Kling pipeline fields (keeps summary, scripts, angles text, product refs). */
 export const UNIVERSE_PIPELINE_CLEAR: Partial<LinkToAdUniverseSnapshotV1> = {
   nanoBananaPromptsRaw: undefined,
