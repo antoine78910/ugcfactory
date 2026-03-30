@@ -145,11 +145,8 @@ const IMAGE_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
   },
 ];
 
-const COMING_SOON_IMAGE_MODEL_IDS = new Set<string>([
-  "nanobanana_standard",
-  "google_nano_banana_edit",
-  "recraft_remove_background",
-]);
+// These pickers are now enabled for Growth+ (and above).
+const COMING_SOON_IMAGE_MODEL_IDS = new Set<string>();
 
 const STUDIO_LIGHTBOX_EDIT_MODEL_OPTIONS: StudioImageLightboxEditModelOption[] = [
   { value: "pro", label: "NanoBanana Pro" },

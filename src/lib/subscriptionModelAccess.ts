@@ -71,6 +71,10 @@ export function canUseStudioImagePickerModel(planId: AccountPlanId, pickerId: st
   const id = pickerId.trim();
   if (id === "nano" || id === "pro") return canUseStudioImageModel(planId, id);
   if (isStudioSeedreamImagePickerId(id)) return planRank(planId) >= IMAGE_MIN_RANK.pro;
+  // Legacy / extra pickers: treat as Growth+ to match the “Starter is restricted” policy.
+  if (id === "nanobanana_standard" || id === "google_nano_banana_edit" || id === "recraft_remove_background") {
+    return planRank(planId) >= IMAGE_MIN_RANK.pro;
+  }
   return false;
 }
 
@@ -112,6 +116,9 @@ export function minPlanForStudioImagePicker(pickerId: string): AccountPlanId {
   const id = pickerId.trim();
   if (id === "nano" || id === "pro") return minPlanForStudioImage(id);
   if (isStudioSeedreamImagePickerId(id)) return planIdAtMinRank(IMAGE_MIN_RANK.pro);
+  if (id === "nanobanana_standard" || id === "google_nano_banana_edit" || id === "recraft_remove_background") {
+    return planIdAtMinRank(IMAGE_MIN_RANK.pro);
+  }
   return "scale";
 }
 
