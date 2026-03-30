@@ -79,15 +79,15 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
   async function onSignUp() {
     setIsLoading(true);
     try {
+      const cleanEmail = email.trim();
       const { error } = await client.auth.signUp({
         email: email.trim(),
         password,
+        options: { emailRedirectTo: getAuthCallbackUrl() },
       });
       if (error) throw error;
-      toast.success("Account created", {
-        description: "If email confirmation is enabled, check your inbox.",
-      });
-      router.push("/");
+      toast.success("Account created", { description: "Check your inbox to confirm your email." });
+      router.push(`/auth/check-email?email=${encodeURIComponent(cleanEmail)}`);
       router.refresh();
     } catch (err) {
       toast.error("Sign up error", {
