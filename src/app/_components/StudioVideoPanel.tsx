@@ -157,6 +157,7 @@ const VIDEO_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
     id: "bytedance/seedance-2.0-pro",
     label: "Seedance 2.0 Pro",
     icon: "seedance",
+    newBadge: true,
     resolution: "1080p",
     durationRange: "5–15s",
   },

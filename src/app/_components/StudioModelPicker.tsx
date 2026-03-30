@@ -31,6 +31,8 @@ export type StudioModelPickerItem = {
   /** Shown under the title in the sheet / bar when `hideMeta` (or always in the list). */
   subtitle?: string;
   exclusive?: boolean;
+  /** Shows a small “New” badge next to the model label. */
+  newBadge?: boolean;
   hasAudio?: boolean;
   resolution: string;
   durationRange: string;
@@ -185,6 +187,11 @@ function ModelPickerPanelBody({
                       {item.exclusive ? (
                         <span className="shrink-0 rounded-md border border-violet-400/35 bg-violet-500/15 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-violet-200">
                           Exclusive
+                        </span>
+                      ) : null}
+                      {item.newBadge ? (
+                        <span className="shrink-0 rounded-md border border-emerald-400/35 bg-emerald-500/15 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-emerald-200">
+                          New
                         </span>
                       ) : null}
                       {!hideMeta && item.hasAudio ? (
