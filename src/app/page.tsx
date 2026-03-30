@@ -47,13 +47,13 @@ const PRODUCTS = [
 
 /** Image → video reveal carousel only (`public/carousel/`). */
 const UGC_SLIDES = [
-  { src: "/carousel/slide-1.mp4" },
-  { src: "/carousel/slide-2.mp4" },
-  { src: "/carousel/slide-3.mp4" },
-  { src: "/carousel/slide-4.mp4" },
-  { src: "/carousel/slide-5.mp4" },
-  { src: "/carousel/slide-6.mp4" },
-  { src: "/carousel/slide-7.mp4" },
+  { src: "/carousel/slide1.mp4" },
+  { src: "/carousel/slide2.mp4" },
+  { src: "/carousel/slide3.mp4" },
+  { src: "/carousel/slide4.mp4" },
+  { src: "/carousel/slide5.mp4" },
+  { src: "/carousel/slide6.mp4" },
+  { src: "/carousel/slide7.mp4" },
 ];
 
 /** Hero 3D ring only (`public/studio/`). */
