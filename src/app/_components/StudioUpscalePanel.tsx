@@ -100,7 +100,7 @@ export default function StudioUpscalePanel() {
   const credits = useMemo(() => {
     if (upscalePickerId === "upscale/image") return topazImageUpscaleCredits(factor);
     if (durationSec == null) return 0;
-    return topazVideoUpscaleCredits(durationSec);
+    return topazVideoUpscaleCredits(durationSec, factor);
   }, [upscalePickerId, durationSec, factor]);
 
   const probeDuration = useCallback((url: string) => {
@@ -337,6 +337,7 @@ export default function StudioUpscalePanel() {
               items={UPSCALE_MODEL_PICKER_ITEMS}
               triggerVariant="bar"
               hideMeta
+              panelMode="dropdown"
               featuredTitle="Upscale models"
               onChange={(v) => setUpscalePickerId(v as UpscalePickerId)}
             />

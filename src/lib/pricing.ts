@@ -239,8 +239,10 @@ export const TOPAZ_IMAGE_UPSCALER = {
       cogs_usd: 0,
     },
     "4K": {
-      credits_per_image: 20,
-      our_price_usd: 0.1,
+      // Spec: 4× should cost 1.75× the 2× price (credits).
+      // 2K is 10 credits => 10 * 1.75 = 17.5 => ceil => 18 credits.
+      credits_per_image: 18,
+      our_price_usd: 0.0875,
       fal_list_usd: null as number | null,
       discount_vs_fal_pct: null as number | null,
       cogs_usd: 0,
@@ -255,9 +257,11 @@ export const TOPAZ_IMAGE_UPSCALER = {
   },
 } as const;
 
-export function topazVideoUpscaleCredits(durationSeconds: number): number {
+export function topazVideoUpscaleCredits(durationSeconds: number, upscaleFactor: string = "2"): number {
   const d = Math.max(0, Number(durationSeconds) || 0);
-  return Math.max(1, Math.ceil(d * TOPAZ_VIDEO_UPSCALER.credits_per_second));
+  const f = upscaleFactor.trim();
+  const mult = f === "4" ? 1.75 : 1; // 1× and 2× have the same price.
+  return Math.max(1, Math.ceil(d * TOPAZ_VIDEO_UPSCALER.credits_per_second * mult));
 }
 
 /** Topaz image upscale (Kie): factor 1 / 2 → 2K tier, 4 → 4K, 8 → 8K credits. */
