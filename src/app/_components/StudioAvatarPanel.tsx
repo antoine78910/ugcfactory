@@ -208,11 +208,13 @@ export default function StudioAvatarPanel() {
     void (async () => {
       const res = await fetch("/api/studio/generations?kind=avatar", { cache: "no-store" });
       if (res.status === 401) {
+        // Not authenticated — never show localStorage data that may belong to another account
         setServerHistory(false);
-        setHistoryItems(readLocalAvatarHistory());
+        setHistoryItems([]);
         return;
       }
       if (!res.ok) {
+        // Server error — fall back to local only as a last resort (guest/offline mode)
         setServerHistory(false);
         setHistoryItems(readLocalAvatarHistory());
         return;

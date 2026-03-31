@@ -38,19 +38,25 @@ export function readLatestAvatarUrlFromLocal(): string | null {
   }
 }
 
+/**
+ * Load the latest avatar URL.
+ * Server is authoritative — only falls back to localStorage on network failure (never on empty server response).
+ */
 export async function loadLatestAvatarUrl(): Promise<string | null> {
   try {
     const res = await fetch("/api/studio/generations?kind=avatar", { cache: "no-store" });
     if (res.ok) {
       const json = (await res.json()) as { data?: AvatarLikeItem[] };
       const data = Array.isArray(json.data) ? json.data : [];
-      const fromServer = pickLatestAvatarUrl(data);
-      if (fromServer) return fromServer;
+      // Server responded — return its result even if empty (do NOT fall back to localStorage)
+      return pickLatestAvatarUrl(data);
     }
   } catch {
-    // Fall back to local avatar history.
+    // Network error only — fall back to local
+    return readLatestAvatarUrlFromLocal();
   }
-  return readLatestAvatarUrlFromLocal();
+  // Non-ok status (e.g. 401) — return null, never show another account's data
+  return null;
 }
 
 function pickAvatarUrlsNewestFirst(items: AvatarLikeItem[]): string[] {
@@ -86,18 +92,23 @@ export function readAvatarUrlsFromLocal(): string[] {
   }
 }
 
+/**
+ * Load all avatar URLs.
+ * Server is authoritative — only falls back to localStorage on network failure (never on empty server response).
+ */
 export async function loadAvatarUrls(): Promise<string[]> {
   try {
     const res = await fetch("/api/studio/generations?kind=avatar", { cache: "no-store" });
     if (res.ok) {
       const json = (await res.json()) as { data?: AvatarLikeItem[] };
       const data = Array.isArray(json.data) ? json.data : [];
-      const urls = pickAvatarUrlsNewestFirst(data);
-      if (urls.length > 0) return urls;
+      // Server responded — return its result even if empty (do NOT fall back to localStorage)
+      return pickAvatarUrlsNewestFirst(data);
     }
   } catch {
-    // Fall back to local avatar history.
+    // Network error only — fall back to local
+    return readAvatarUrlsFromLocal();
   }
-  return readAvatarUrlsFromLocal();
+  // Non-ok status (e.g. 401) — return empty, never show another account's data
+  return [];
 }
-

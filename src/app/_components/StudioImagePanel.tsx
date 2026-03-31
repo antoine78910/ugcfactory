@@ -284,7 +284,7 @@ export default function StudioImagePanel() {
       );
       if (res.status === 401) {
         setServerHistory(false);
-        setHistoryItems(readStudioHistoryLocal(LS_STUDIO_IMAGE_HISTORY));
+        setHistoryItems([]);
         return;
       }
       if (!res.ok) {

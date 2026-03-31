@@ -562,7 +562,7 @@ export default function StudioVideoPanel() {
       );
       if (res.status === 401) {
         setServerHistory(false);
-        setHistoryItems(readStudioHistoryLocal(LS_STUDIO_VIDEO_HISTORY));
+        setHistoryItems([]);
         return;
       }
       if (!res.ok) {

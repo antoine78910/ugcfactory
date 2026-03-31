@@ -51,6 +51,7 @@ import { motionControlUpgradeMessage } from "@/lib/subscriptionModelAccess";
 import { clipboardImageFiles } from "@/lib/clipboardImage";
 import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
 import { uploadBlobUrlToCdn, uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
+import { proxiedMediaSrc } from "@/lib/mediaProxyUrl";
 import { cn } from "@/lib/utils";
 
 type WizardStep = "url" | "analysis" | "quiz" | "image" | "video";
@@ -388,6 +389,8 @@ export default function AppBrandWizard() {
 
   const [motionVideoRefBlobUrl, setMotionVideoRefBlobUrl] = useState<string | null>(null);
   const [motionVideoFile, setMotionVideoFile] = useState<File | null>(null);
+  const [motionVideoUploadedUrl, setMotionVideoUploadedUrl] = useState<string | null>(null);
+  const [motionVideoUploadPending, setMotionVideoUploadPending] = useState(false);
   const [motionVideoPosterUrl, setMotionVideoPosterUrl] = useState<string | null>(null);
   const [motionVideoPreviewLoading, setMotionVideoPreviewLoading] = useState(false);
   /** True only after the video element fires onPlaying — guarantees real frames are visible. */
@@ -407,6 +410,7 @@ export default function AppBrandWizard() {
   const [motionBusy, setMotionBusy] = useState(false);
   const motionVideoInputRef = useRef<HTMLInputElement>(null);
   const motionVideoPreviewRef = useRef<HTMLVideoElement | null>(null);
+  const motionVideoUploadTokenRef = useRef<string | null>(null);
   const motionVideoBlobUrlRef = useRef<string | null>(null);
   const motionPosterCapturedForUrlRef = useRef<string | null>(null);
   const motionPosterCapturePendingRef = useRef(false);
@@ -431,6 +435,10 @@ export default function AppBrandWizard() {
   const MOTION_CREDITS_PLACEHOLDER_SEC = 12;
   /** Conservative guardrail for motion-control upload UX. */
   const MOTION_VIDEO_MAX_BYTES = 100 * 1024 * 1024; // 100 MB
+  const motionVideoPreviewSrc = useMemo(
+    () => proxiedMediaSrc(motionVideoUploadedUrl || motionVideoRefBlobUrl),
+    [motionVideoUploadedUrl, motionVideoRefBlobUrl],
+  );
   const motionBillableSeconds = useMemo(() => {
     const d = motionVideoDetectedDuration;
     if (d != null && Number.isFinite(d) && d > 0) return d;
@@ -504,7 +512,7 @@ export default function AppBrandWizard() {
     };
   }, [motionVideoPosterUrl]);
 
-  motionVideoBlobUrlRef.current = motionVideoRefBlobUrl;
+  motionVideoBlobUrlRef.current = motionVideoPreviewSrc;
 
   const tryCaptureMotionPosterFromEl = useCallback((v: HTMLVideoElement) => {
     const blobUrl = motionVideoBlobUrlRef.current;
@@ -582,11 +590,11 @@ export default function AppBrandWizard() {
     motionPlayCaptureAttemptsRef.current = 0;
     setMotionVideoPosterUrl(null);
     setMotionVideoPlaying(false);
-  }, [motionVideoRefBlobUrl]);
+  }, [motionVideoPreviewSrc]);
 
   /** Safety net: if onPlaying never fires (autoplay blocked, slow codec), stop the spinner after 3 s. */
   useEffect(() => {
-    if (!motionVideoRefBlobUrl) return;
+    if (!motionVideoPreviewSrc) return;
     const id = window.setTimeout(() => {
       setMotionVideoPlaying((prev) => {
         if (prev) return prev; // already playing — no-op
@@ -600,11 +608,11 @@ export default function AppBrandWizard() {
       setMotionVideoPreviewLoading(false);
     }, 3000);
     return () => window.clearTimeout(id);
-  }, [motionVideoRefBlobUrl]);
+  }, [motionVideoPreviewSrc]);
 
   /** Some codecs only expose frames after a short play(); retry if poster still missing. */
   useEffect(() => {
-    if (!motionVideoRefBlobUrl) return;
+    if (!motionVideoPreviewSrc) return;
     const id1 = window.setTimeout(() => {
       if (motionPosterCapturedForUrlRef.current === motionVideoBlobUrlRef.current) return;
       tryPlayThenCapturePoster();
@@ -617,7 +625,7 @@ export default function AppBrandWizard() {
       window.clearTimeout(id1);
       window.clearTimeout(id2);
     };
-  }, [motionVideoRefBlobUrl, tryPlayThenCapturePoster]);
+  }, [motionVideoPreviewSrc, tryPlayThenCapturePoster]);
 
   useEffect(() => {
     return () => {
@@ -626,7 +634,10 @@ export default function AppBrandWizard() {
   }, [motionCharacterImageUrl]);
 
   const clearMotionVideoReference = useCallback(() => {
+    motionVideoUploadTokenRef.current = null;
     setMotionVideoFile(null);
+    setMotionVideoUploadedUrl(null);
+    setMotionVideoUploadPending(false);
     setMotionVideoRefBlobUrl(null);
     setMotionVideoPosterUrl(null);
     setMotionVideoDetectedDuration(null);
@@ -966,6 +977,12 @@ export default function AppBrandWizard() {
       }
 
       setStep(r.video_url ? "video" : r.selected_image_url ? "image" : r.analysis ? "quiz" : "url");
+
+      // If this run contains a Link to Ad Universe snapshot, auto-hydrate the component.
+      if (runHasLinkToAdUniverse(r.extracted)) {
+        setLinkToAdResumeRunId(r.id);
+      }
+
       toast.success("Run loaded");
     } catch (err) {
       localStorage.removeItem(UGC_CURRENT_RUN_KEY);
@@ -2163,12 +2180,31 @@ export default function AppBrandWizard() {
                                 e.currentTarget.value = "";
                                 return;
                               }
+                              const uploadToken = crypto.randomUUID();
+                              motionVideoUploadTokenRef.current = uploadToken;
                               setMotionVideoFile(f);
+                              setMotionVideoUploadedUrl(null);
+                              setMotionVideoUploadPending(true);
                               setMotionVideoPreviewLoading(true);
                               setMotionVideoPlaying(false);
                               setMotionVideoDetectedDuration(null);
                               const blobUrl = URL.createObjectURL(f);
                               setMotionVideoRefBlobUrl(blobUrl);
+                              void uploadFileToCdn(f)
+                                .then((url) => {
+                                  if (motionVideoUploadTokenRef.current !== uploadToken) return;
+                                  setMotionVideoUploadedUrl(url);
+                                })
+                                .catch((err) => {
+                                  if (motionVideoUploadTokenRef.current !== uploadToken) return;
+                                  const description =
+                                    err instanceof Error ? err.message : "Please re-select the video.";
+                                  toast.error("Could not prepare the video preview.", { description });
+                                })
+                                .finally(() => {
+                                  if (motionVideoUploadTokenRef.current !== uploadToken) return;
+                                  setMotionVideoUploadPending(false);
+                                });
                               toast.success("Video reference selected", { description: f.name });
                               e.currentTarget.value = "";
                             }}
@@ -2186,13 +2222,13 @@ export default function AppBrandWizard() {
                               onClick={() => motionVideoInputRef.current?.click()}
                               className="relative flex aspect-[3/4] w-full cursor-pointer flex-col items-center justify-center gap-1.5 overflow-hidden rounded-xl border border-dashed border-white/20 bg-[#0c0c10] text-white/50 transition hover:border-violet-400/40 hover:bg-white/[0.03]"
                             >
-                              {motionVideoRefBlobUrl ? (
+                              {motionVideoPreviewSrc ? (
                                 <>
                                   {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
                                   <video
-                                    key={motionVideoRefBlobUrl}
+                                    key={motionVideoPreviewSrc}
                                     ref={motionVideoPreviewRef}
-                                    src={motionVideoRefBlobUrl}
+                                    src={motionVideoPreviewSrc}
                                     className="absolute inset-0 z-[1] h-full w-full object-cover"
                                     muted
                                     playsInline
@@ -2252,8 +2288,8 @@ export default function AppBrandWizard() {
                                     }}
                                   />
                                   <UploadBusyOverlay
-                                    active={motionVideoPreviewLoading && !motionVideoPlaying}
-                                    label="Chargement…"
+                                    active={motionVideoUploadPending || (motionVideoPreviewLoading && !motionVideoPlaying)}
+                                    label={motionVideoUploadPending ? "Préparation de la preview…" : "Chargement…"}
                                     className="rounded-xl"
                                   />
                                   {motionVideoDetectedDuration && motionVideoPlaying ? (
@@ -2270,7 +2306,7 @@ export default function AppBrandWizard() {
                                 </>
                               )}
                             </div>
-                            {motionVideoRefBlobUrl ? (
+                            {motionVideoPreviewSrc ? (
                               <button
                                 type="button"
                                 aria-label="Remove motion reference video"
@@ -2528,13 +2564,15 @@ export default function AppBrandWizard() {
                                 }
                                 throw new Error("Could not prepare character image");
                               });
-                              const videoHttps = motionVideoFile
-                                ? await uploadFileToCdn(motionVideoFile)
-                                : await uploadBlobUrlToCdn(
-                                    motionVideoRefBlobUrl,
-                                    "motion-ref.mp4",
-                                    "video/mp4",
-                                  );
+                              const videoHttps = motionVideoUploadedUrl
+                                ? motionVideoUploadedUrl
+                                : motionVideoFile
+                                  ? await uploadFileToCdn(motionVideoFile)
+                                  : await uploadBlobUrlToCdn(
+                                      motionVideoRefBlobUrl,
+                                      "motion-ref.mp4",
+                                      "video/mp4",
+                                    );
                               const res = await fetch("/api/kling/motion-control", {
                                 method: "POST",
                                 headers: { "Content-Type": "application/json" },

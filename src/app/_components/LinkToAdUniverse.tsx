@@ -1074,6 +1074,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const klingResumeAttemptedRef = useRef(false);
   /** Same for single-image Nano poll after hydrate clears `nanoPollTaskId`. */
   const nanoResumeAttemptedRef = useRef(false);
+  /** Guard for auto-resuming scripts generation when user returns to a run that has summary but no scripts. */
+  const scriptsResumeAttemptedRef = useRef(false);
 
   useEffect(() => {
     const idx = nanoBananaSelectedImageIndex;
@@ -3133,6 +3135,10 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     nanoResumeAttemptedRef.current = false;
   }, [nanoResumeSignature]);
 
+  useEffect(() => {
+    scriptsResumeAttemptedRef.current = false;
+  }, [universeRunId]);
+
   /** Resume Nano single-image poll after hydrate (hydrate clears `nanoPollTaskId`). */
   useEffect(() => {
     if (nanoPollTaskId) return;
@@ -3190,6 +3196,19 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       }
     }
   }, [klingByRef, klingPollTaskId]);
+
+  /** Auto-resume scripts generation when user returns to a run that has summary but no scripts yet. */
+  useEffect(() => {
+    if (scriptsResumeAttemptedRef.current) return;
+    if (!summaryText.trim()) return;
+    if (scriptsText.trim()) return;
+    if (!lastExtractedJson) return;
+    if (!universeRunId) return;
+    if (stage !== "ready") return;
+    if (isWorking) return;
+    scriptsResumeAttemptedRef.current = true;
+    void onContinueScripts();
+  }, [summaryText, scriptsText, lastExtractedJson, universeRunId, stage, isWorking]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!klingPollTaskId || klingPollImageIndex === null) return;
