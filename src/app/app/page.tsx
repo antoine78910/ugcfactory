@@ -81,6 +81,7 @@ type Extracted = {
 };
 
 type AnalyzeResult = any;
+type RefundHint = { jobId: string; credits: number };
 
 type Quiz = {
   aboutProduct: string;
@@ -437,6 +438,7 @@ export default function AppBrandWizard() {
   const [motionPrompt, setMotionPrompt] = useState<string>("");
   const [adCloneTranslateVideo, setAdCloneTranslateVideo] = useState(false);
   const [motionHistoryItems, setMotionHistoryItems] = useState<StudioHistoryItem[]>([]);
+  const [motionServerHistory, setMotionServerHistory] = useState<boolean | null>(null);
   type MotionBilling =
     | { open: false }
     | { open: true; reason: "plan" }
@@ -466,6 +468,15 @@ export default function AppBrandWizard() {
   const grantCreditsRef = useRef(grantCredits);
   grantCreditsRef.current = grantCredits;
 
+  const applyRefundHints = useCallback((hints: RefundHint[]) => {
+    for (const h of hints) {
+      if (h.credits > 0) {
+        grantCreditsRef.current(h.credits);
+        creditsRef.current += h.credits;
+      }
+    }
+  }, []);
+
 
   /** Billable seconds: real clip length, or placeholder so 720p ↔ 1080p updates credits before upload. */
   const MOTION_CREDITS_PLACEHOLDER_SEC = 12;
@@ -494,27 +505,58 @@ export default function AppBrandWizard() {
     [motionQuality, motionBillableSeconds],
   );
 
-  const pollMotionKlingTask = useCallback(async (taskId: string) => {
-    for (let i = 0; i < 120; i++) {
-      const p = getPersonalApiKey();
-      const kp = p ? `&personalApiKey=${encodeURIComponent(p)}` : "";
-      const res = await fetch(`/api/kling/status?taskId=${encodeURIComponent(taskId)}${kp}`, { cache: "no-store" });
-      const json = (await res.json()) as {
-        data?: { status?: string; response?: string[]; error_message?: string | null };
-        error?: string;
-      };
-      if (!res.ok) throw new Error(json.error || "Kling status failed");
-      const st = json.data?.status;
-      if (st === "SUCCESS") {
-        const u = json.data?.response?.[0];
-        if (!u) throw new Error("No video URL");
-        return u;
+  useEffect(() => {
+    void (async () => {
+      const res = await fetch("/api/studio/generations?kind=motion_control", { cache: "no-store" });
+      if (res.status === 401) {
+        setMotionServerHistory(false);
+        setMotionHistoryItems([]);
+        return;
       }
-      if (st === "FAILED") throw new Error(json.data?.error_message || "Motion control failed");
-      await new Promise((r) => setTimeout(r, 4000));
-    }
-    throw new Error("Motion control timeout");
-  }, []);
+      if (!res.ok) {
+        setMotionServerHistory(false);
+        setMotionHistoryItems([]);
+        return;
+      }
+      const json = (await res.json()) as { data?: StudioHistoryItem[]; refundHints?: RefundHint[] };
+      setMotionServerHistory(true);
+      setMotionHistoryItems(json.data ?? []);
+      const hints = json.refundHints ?? [];
+      if (hints.length) {
+        applyRefundHints(hints);
+        toast.message("Credits refunded", { description: "A studio generation failed after charge." });
+      }
+    })();
+  }, [applyRefundHints]);
+
+  useEffect(() => {
+    if (motionServerHistory !== true) return;
+
+    const tick = () => {
+      void (async () => {
+        const res = await fetch("/api/studio/generations/poll", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            kind: "motion_control",
+            personalApiKey: getPersonalApiKey() ?? undefined,
+          }),
+        });
+        if (!res.ok) return;
+        const json = (await res.json()) as { data?: StudioHistoryItem[]; refundHints?: RefundHint[] };
+        if (Array.isArray(json.data)) setMotionHistoryItems(json.data);
+        const hints = json.refundHints ?? [];
+        if (hints.length) {
+          applyRefundHints(hints);
+          toast.message("Credits refunded", { description: "A studio generation failed after charge." });
+        }
+      })();
+    };
+
+    tick();
+    const id = window.setInterval(tick, 4000);
+    return () => window.clearInterval(id);
+  }, [applyRefundHints, motionServerHistory]);
 
   const applyMotionCharacterFile = useCallback((file: File) => {
     const url = URL.createObjectURL(file);
@@ -2495,10 +2537,9 @@ export default function AppBrandWizard() {
                         ) : null}
 
                         <div>
-                          <Label className="text-xs text-white/45">Scene control mode</Label>
+                          <Label className="text-xs text-white/45">Mode de controle de la scene</Label>
                           <p className="mt-0.5 text-[10px] leading-snug text-white/35">
-                            Choose where the background should come from: the motion reference video or the character
-                            image.
+                            Choisis la source de fond: la video de reference de mouvement ou l'image du personnage.
                           </p>
                           <Select
                             value={motionSceneBackground}
@@ -2519,9 +2560,9 @@ export default function AppBrandWizard() {
                         </div>
 
                         <div>
-                          <Label className="text-xs text-white/45">Quality</Label>
+                          <Label className="text-xs text-white/45">Qualite</Label>
                           <p className="mt-0.5 text-[10px] leading-snug text-white/35">
-                            720p and 1080p use different credit costs (shown on Generate).
+                            720p et 1080p utilisent des couts credits differents (affiches sur Generate).
                           </p>
                           <Select value={motionQuality} onValueChange={setMotionQuality}>
                             <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
@@ -2539,16 +2580,16 @@ export default function AppBrandWizard() {
                         </div>
 
                         <details className="rounded-xl border border-white/10 bg-black/20 p-2.5">
-                          <summary className="cursor-pointer text-xs font-semibold text-white/70">Advanced</summary>
+                          <summary className="cursor-pointer text-xs font-semibold text-white/70">Avance</summary>
                           <div className="mt-2 space-y-2">
-                            <Label className="text-xs text-white/45">Optional prompt</Label>
+                            <Label className="text-xs text-white/45">Prompt optionnel</Label>
                             <p className="text-[10px] leading-snug text-white/35">
-                              Optional text guidance sent to Kling Motion Control (`prompt`, max 2500 chars).
+                              Texte optionnel envoye a Kling Motion Control (`prompt`, max 2500 caracteres).
                             </p>
                             <Textarea
                               value={motionPrompt}
                               onChange={(e) => setMotionPrompt(e.target.value)}
-                              placeholder="Example: The character is dancing with subtle upper-body movement."
+                              placeholder="Exemple: Le personnage danse avec un mouvement subtil du haut du corps."
                               className="min-h-[84px] w-full resize-none rounded-xl border-white/15 bg-[#0a0a0d] text-xs text-white placeholder:text-white/35"
                               rows={4}
                             />
@@ -2561,6 +2602,7 @@ export default function AppBrandWizard() {
                         type="button"
                         disabled={
                           motionBusy ||
+                          motionServerHistory !== true ||
                           !motionCharacterImageUrl ||
                           !motionVideoRefBlobUrl ||
                           (!isPersonalApiActive() && Boolean(motionControlUpgradeMessage(planId)))
@@ -2570,23 +2612,33 @@ export default function AppBrandWizard() {
                           const mcGate = motionControlUpgradeMessage(planId);
                           const motionPersonal = isPersonalApiActive();
                           const motionCreditBypass = isPlatformCreditBypassActive();
+                          if (motionServerHistory === null) {
+                            toast.message("Chargement de ta bibliotheque…", {
+                              description: "Attends un instant puis reessaie.",
+                            });
+                            return;
+                          }
+                          if (motionServerHistory !== true) {
+                            toast.error("Sync backend indisponible. Recharge la page puis reessaie.");
+                            return;
+                          }
                           if (!motionPersonal && mcGate) {
                             setMotionBilling({ open: true, reason: "plan" });
                             return;
                           }
                           if (!motionCharacterImageUrl) {
-                            toast.error("Please choose a character image first.");
+                            toast.error("Choisis d'abord une image de personnage.");
                             return;
                           }
                           if (!motionVideoRefBlobUrl) {
-                            toast.error("Please choose a video reference first.");
+                            toast.error("Choisis d'abord une video de reference.");
                             return;
                           }
                           if (
                             motionVideoDetectedDuration != null &&
                             (motionVideoDetectedDuration < 3 || motionVideoDetectedDuration > 30)
                           ) {
-                            toast.error("Motion reference video must be between 3 and 30 seconds.");
+                            toast.error("La video de reference doit durer entre 3 et 30 secondes.");
                             return;
                           }
                           if (!motionCreditBypass && creditsRef.current < motionCredits) {
@@ -2672,27 +2724,9 @@ export default function AppBrandWizard() {
                                   ),
                                 );
                               }
-                              toast.message("Rendering…", { description: "Polling Kling Motion Control" });
-                              const url = await pollMotionKlingTask(json.taskId);
-                              const doneAt = Date.now();
-                              const persistId = rowId ?? jobId;
-                              setMotionHistoryItems((prev) => {
-                                const rest = prev.filter((i) => i.id !== jobId && i.id !== rowId);
-                                return [
-                                  {
-                                    id: persistId,
-                                    kind: "motion",
-                                    status: "ready",
-                                    label: "Motion control",
-                                    mediaUrl: url,
-                                    posterUrl: poster,
-                                    createdAt: doneAt,
-                                    studioGenerationKind: "motion_control",
-                                  },
-                                  ...rest,
-                                ];
+                              toast.message("Motion control lance", {
+                                description: "Traitement cote backend. Tu peux changer de page sans risque.",
                               });
-                              toast.success("Motion control video ready");
                             } catch (err) {
                               const msg = err instanceof Error ? err.message : "Error";
                               refundPlatformCredits(platformChargeMotion, grantCredits, creditsRef);

@@ -313,7 +313,7 @@ export default function StudioImagePanel() {
         return;
       }
       if (serverHistory !== true) {
-        toast.error("Backend sync unavailable. Please reload and try again.");
+        toast.error("Sync backend indisponible. Recharge la page puis reessaie.");
         return;
       }
 
@@ -486,7 +486,7 @@ export default function StudioImagePanel() {
 
   function runImageGeneration(opts: RunGenOpts) {
     if (serverHistory !== true) {
-      toast.error("Backend sync unavailable. Please reload and try again.");
+      toast.error("Sync backend indisponible. Recharge la page puis reessaie.");
       return;
     }
     const p = opts.prompt.trim();

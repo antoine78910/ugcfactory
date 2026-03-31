@@ -1066,7 +1066,7 @@ export default function StudioVideoPanel() {
         return;
       }
       if (editMotionDurationSec < 3 || editMotionDurationSec > 30) {
-        toast.error("Motion reference must be between 3 and 30 seconds.");
+        toast.error("La video de reference doit durer entre 3 et 30 secondes.");
         return;
       }
     } else {
@@ -1634,7 +1634,7 @@ export default function StudioVideoPanel() {
               )}
               {motionEdit ? (
                 <div className="rounded-xl border border-white/10 bg-[#101014] p-3 space-y-2">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Advanced settings</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Parametres avances</p>
                   <div className="space-y-1.5">
                     <Label className="text-xs text-white/45">Prompt</Label>
                     <Textarea

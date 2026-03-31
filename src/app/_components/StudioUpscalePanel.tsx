@@ -200,10 +200,10 @@ export default function StudioUpscalePanel() {
       try {
         const url = await uploadFile(f);
         setVideoUrl(url);
-        toast.success("Video uploaded");
+        toast.success("Video importee");
         setVideoPreviewBlob(null);
       } catch (e) {
-        toast.error("Upload failed. Please try again.");
+        toast.error("Echec de l'import. Reessaie.");
       } finally {
         setBusy(false);
       }
@@ -226,10 +226,10 @@ export default function StudioUpscalePanel() {
       try {
         const url = await uploadFile(f);
         setImageUrl(url);
-        toast.success("Image uploaded");
+        toast.success("Image importee");
         setImagePreviewBlob(null);
       } catch (e) {
-        toast.error("Upload failed. Please try again.");
+        toast.error("Echec de l'import. Reessaie.");
       } finally {
         setBusy(false);
       }
@@ -239,11 +239,11 @@ export default function StudioUpscalePanel() {
 
   const generate = () => {
     if (serverHistory === null) {
-      toast.message("Loading your library…", { description: "Wait a moment, then try again." });
+      toast.message("Chargement de ta bibliotheque…", { description: "Attends un instant puis reessaie." });
       return;
     }
     if (serverHistory !== true) {
-      toast.error("Backend sync unavailable. Please reload and try again.");
+      toast.error("Sync backend indisponible. Recharge la page puis reessaie.");
       return;
     }
     if (upscalePickerId === "upscale/video" && durationSec == null) {
@@ -311,8 +311,8 @@ export default function StudioUpscalePanel() {
           );
         }
 
-        toast.message("Upscale started", {
-          description: "Running on backend. You can change page safely.",
+        toast.message("Upscale lance", {
+          description: "Traitement cote backend. Tu peux changer de page sans risque.",
         });
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Error";
@@ -439,11 +439,11 @@ export default function StudioUpscalePanel() {
                 <p className="text-[10px] leading-snug text-white/40">
                   {upscalePickerId === "upscale/image"
                     ? imageUrl.trim() && !imagePreviewBlob
-                      ? "Use the preview to confirm the upload."
-                      : "Preview before upload finishes."
+                      ? "Utilise l'aperçu pour confirmer l'import."
+                      : "Aperçu en attente de fin d'import."
                     : videoUrl.trim() && !videoPreviewBlob
-                      ? "Use the player controls to play, pause, and scrub your uploaded clip."
-                      : "Preview before upload finishes. After upload, use the controls to check the hosted file."}
+                      ? "Utilise le lecteur pour lire, mettre en pause et naviguer dans la video importee."
+                      : "Aperçu en attente de fin d'import. Ensuite, utilise les controles pour verifier le fichier heberge."}
                 </p>
               </div>
             ) : null}
