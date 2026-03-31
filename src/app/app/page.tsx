@@ -475,7 +475,7 @@ export default function AppBrandWizard() {
   }, []);
 
   useEffect(() => {
-    if (appSection !== "motion_control") return;
+    if (appSection !== "motion_control" && appSection !== "ad_clone") return;
     const onPaste = (event: ClipboardEvent) => {
       const files = clipboardImageFiles(event);
       if (!files.length) return;
@@ -2177,10 +2177,11 @@ export default function AppBrandWizard() {
                                     key={motionVideoRefBlobUrl}
                                     ref={motionVideoPreviewRef}
                                     src={motionVideoRefBlobUrl}
-                                    className={`absolute inset-0 z-[1] h-full w-full object-cover transition-opacity duration-300 ${motionVideoPlaying ? "opacity-100" : "opacity-0"}`}
+                                    className="absolute inset-0 z-[1] h-full w-full object-cover"
                                     muted
                                     playsInline
                                     autoPlay
+                                    loop
                                     preload="auto"
                                     onLoadedMetadata={(ev) => {
                                       const v = ev.currentTarget;
@@ -2192,12 +2193,14 @@ export default function AppBrandWizard() {
                                       setMotionVideoDetectedDuration(dur);
                                       void v.play().catch(() => {});
                                     }}
+                                    onLoadedData={() => {
+                                      setMotionVideoPlaying(true);
+                                      setMotionVideoPreviewLoading(false);
+                                    }}
                                     onCanPlay={(ev) => {
                                       void ev.currentTarget.play().catch(() => {});
                                     }}
                                     onPlaying={(ev) => {
-                                      // Pause immediately — we only needed one frame to decode.
-                                      ev.currentTarget.pause();
                                       setMotionVideoPlaying(true);
                                       setMotionVideoPreviewLoading(false);
                                       tryCaptureMotionPosterFromEl(ev.currentTarget);
@@ -2215,7 +2218,7 @@ export default function AppBrandWizard() {
                                     }}
                                   />
                                   <UploadBusyOverlay
-                                    active={!motionVideoPlaying}
+                                    active={motionVideoPreviewLoading && !motionVideoPlaying}
                                     label="Chargement…"
                                     className="rounded-xl"
                                   />
@@ -2481,7 +2484,14 @@ export default function AppBrandWizard() {
                                 motionCharacterImageUrl,
                                 "motion-character.jpg",
                                 "image/jpeg",
-                              );
+                              ).catch(() => {
+                                // Template avatars are already hosted in /public.
+                                if (/^https?:\/\//i.test(motionCharacterImageUrl)) return motionCharacterImageUrl;
+                                if (motionCharacterImageUrl.startsWith("/")) {
+                                  return `${window.location.origin}${motionCharacterImageUrl}`;
+                                }
+                                throw new Error("Could not prepare character image");
+                              });
                               const videoHttps = await uploadBlobUrlToCdn(
                                 motionVideoRefBlobUrl,
                                 "motion-ref.mp4",
