@@ -51,6 +51,7 @@ import { motionControlUpgradeMessage } from "@/lib/subscriptionModelAccess";
 import { clipboardImageFiles } from "@/lib/clipboardImage";
 import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
 import { uploadBlobUrlToCdn } from "@/lib/uploadBlobUrlToCdn";
+import { cn } from "@/lib/utils";
 
 type WizardStep = "url" | "analysis" | "quiz" | "image" | "video";
 type AppSection =
