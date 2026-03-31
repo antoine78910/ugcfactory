@@ -11,6 +11,16 @@ export const runtime = "nodejs";
  */
 
 import { NextResponse } from "next/server";
+
+/** GET /api/stripe/webhook — health check (no auth required). */
+export async function GET() {
+  const hasSecret = Boolean(process.env.STRIPE_SECRET_KEY?.trim());
+  const hasWebhookSecret = Boolean(process.env.STRIPE_WEBHOOK_SECRET?.trim());
+  const hasSupabase = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL?.trim()) && Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY?.trim());
+  const ready = hasSecret && hasWebhookSecret && hasSupabase;
+  return NextResponse.json({ ready, hasSecret, hasWebhookSecret, hasSupabase }, { status: ready ? 200 : 503 });
+}
+
 import Stripe from "stripe";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import { isSubscriptionPlanId } from "@/lib/stripe/subscriptionPrices";
