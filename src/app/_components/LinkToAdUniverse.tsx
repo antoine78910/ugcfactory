@@ -4771,6 +4771,11 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                         {([0, 1, 2] as const).map((i) => {
                           const draft = nanoPromptDrafts[i] ?? "";
                           const parsed = parseNanoEditableSections(draft);
+                          const previewText = (value: string) => {
+                            const t = value.replace(/\s+/g, " ").trim();
+                            if (!t) return "—";
+                            return t.length > 88 ? `${t.slice(0, 88).trim()}…` : t;
+                          };
                           const patchStructured = (field: "person" | "scene" | "product", value: string) => {
                             const nextEditable = composeNanoEditableSections({
                               person: field === "person" ? value : parsed.person,
@@ -4787,71 +4792,108 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                             setNanoPromptHasEdits(true);
                           };
                           return (
-                            <div
+                            <details
                               key={i}
                               className="rounded-xl border border-white/10 bg-black/25 px-3 py-2.5 text-xs leading-relaxed text-white/85"
                             >
-                              <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-white/45">
-                                Reference frame {i + 1}
-                              </p>
-                              {parsed.isStructured ? (
-                                <div className="space-y-2">
-                                  <div>
-                                    <Label className="mb-1 block text-[10px] font-medium text-white/45">
-                                      Person / avatar
-                                    </Label>
-                                    <Textarea
-                                      value={parsed.person}
-                                      onChange={(e) => patchStructured("person", e.target.value)}
-                                      className="min-h-[64px] border-white/10 bg-black/25 text-xs leading-relaxed text-white/85"
-                                      spellCheck
-                                    />
-                                  </div>
-                                  <div>
-                                    <Label className="mb-1 block text-[10px] font-medium text-white/45">Scene</Label>
-                                    <Textarea
-                                      value={parsed.scene}
-                                      onChange={(e) => patchStructured("scene", e.target.value)}
-                                      className="min-h-[64px] border-white/10 bg-black/25 text-xs leading-relaxed text-white/85"
-                                      spellCheck
-                                    />
-                                  </div>
-                                  <div>
-                                    <Label className="mb-1 block text-[10px] font-medium text-white/45">
-                                      Product &amp; action
-                                    </Label>
-                                    <Textarea
-                                      value={parsed.product}
-                                      onChange={(e) => patchStructured("product", e.target.value)}
-                                      className="min-h-[64px] border-white/10 bg-black/25 text-xs leading-relaxed text-white/85"
-                                      spellCheck
-                                    />
-                                  </div>
-                                </div>
-                              ) : (
-                                <>
-                                  <p className="mb-2 text-[10px] leading-snug text-amber-200/85">
-                                    Older prompt format: use &quot;Generate 3 prompts&quot; again for the short fields, or
-                                    edit the full text below.
+                              <summary className="cursor-pointer list-none">
+                                <div className="flex items-start justify-between gap-3">
+                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
+                                    Reference frame {i + 1}
                                   </p>
-                                  <Textarea
-                                    value={draft}
-                                    onChange={(e) => {
-                                      const next: [string, string, string] = [...nanoPromptDrafts] as [
-                                        string,
-                                        string,
-                                        string,
-                                      ];
-                                      next[i] = e.target.value;
-                                      setNanoPromptDrafts(next);
-                                      setNanoPromptHasEdits(true);
-                                    }}
-                                    className="min-h-[96px] border-white/10 bg-black/25 text-xs leading-relaxed text-white/85"
-                                    spellCheck
-                                  />
-                                </>
-                              )}
-                            </div>
+                                  <span className="text-[10px] text-white/35">Edit</span>
+                                </div>
+                                {parsed.isStructured ? (
+                                  <div className="mt-2 grid gap-1.5">
+                                    <div className="rounded-lg border border-white/8 bg-white/[0.03] px-2 py-1.5">
+                                      <p className="text-[10px] font-medium uppercase tracking-wide text-white/40">
+                                        Avatar
+                                      </p>
+                                      <p className="mt-0.5 text-[11px] leading-snug text-white/75">
+                                        {previewText(parsed.person)}
+                                      </p>
+                                    </div>
+                                    <div className="rounded-lg border border-white/8 bg-white/[0.03] px-2 py-1.5">
+                                      <p className="text-[10px] font-medium uppercase tracking-wide text-white/40">
+                                        Scene
+                                      </p>
+                                      <p className="mt-0.5 text-[11px] leading-snug text-white/75">
+                                        {previewText(parsed.scene)}
+                                      </p>
+                                    </div>
+                                    <div className="rounded-lg border border-white/8 bg-white/[0.03] px-2 py-1.5">
+                                      <p className="text-[10px] font-medium uppercase tracking-wide text-white/40">
+                                        Product
+                                      </p>
+                                      <p className="mt-0.5 text-[11px] leading-snug text-white/75">
+                                        {previewText(parsed.product)}
+                                      </p>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <p className="mt-2 text-[11px] leading-snug text-white/65">{previewText(draft)}</p>
+                                )}
+                              </summary>
+                              <div className="mt-3 border-t border-white/10 pt-3">
+                                {parsed.isStructured ? (
+                                  <div className="space-y-2">
+                                    <div>
+                                      <Label className="mb-1 block text-[10px] font-medium text-white/45">
+                                        Person / avatar
+                                      </Label>
+                                      <Textarea
+                                        value={parsed.person}
+                                        onChange={(e) => patchStructured("person", e.target.value)}
+                                        className="min-h-[64px] border-white/10 bg-black/25 text-xs leading-relaxed text-white/85"
+                                        spellCheck
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label className="mb-1 block text-[10px] font-medium text-white/45">Scene</Label>
+                                      <Textarea
+                                        value={parsed.scene}
+                                        onChange={(e) => patchStructured("scene", e.target.value)}
+                                        className="min-h-[64px] border-white/10 bg-black/25 text-xs leading-relaxed text-white/85"
+                                        spellCheck
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label className="mb-1 block text-[10px] font-medium text-white/45">
+                                        Product &amp; action
+                                      </Label>
+                                      <Textarea
+                                        value={parsed.product}
+                                        onChange={(e) => patchStructured("product", e.target.value)}
+                                        className="min-h-[64px] border-white/10 bg-black/25 text-xs leading-relaxed text-white/85"
+                                        spellCheck
+                                      />
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <p className="mb-2 text-[10px] leading-snug text-amber-200/85">
+                                      Older prompt format: use &quot;Generate 3 prompts&quot; again for the short fields, or
+                                      edit the full text below.
+                                    </p>
+                                    <Textarea
+                                      value={draft}
+                                      onChange={(e) => {
+                                        const next: [string, string, string] = [...nanoPromptDrafts] as [
+                                          string,
+                                          string,
+                                          string,
+                                        ];
+                                        next[i] = e.target.value;
+                                        setNanoPromptDrafts(next);
+                                        setNanoPromptHasEdits(true);
+                                      }}
+                                      className="min-h-[96px] border-white/10 bg-black/25 text-xs leading-relaxed text-white/85"
+                                      spellCheck
+                                    />
+                                  </>
+                                )}
+                              </div>
+                            </details>
                           );
                         })}
                       </div>
