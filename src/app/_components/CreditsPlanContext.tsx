@@ -183,6 +183,8 @@ type CreditsPlanContextValue = CreditsState & {
   planDisplayName: string;
   /** 0–100, credits remaining vs total bucket */
   percentRemaining: number;
+  /** True when the server confirmed this account has unlimited access (no credit deduction). */
+  isUnlimited: boolean;
   setSubscriptionPlan: (planId: SubscriptionPlanId) => void;
   addPackCredits: (packKey: CreditPackKey) => void;
   spendCredits: (n: number) => void;
@@ -242,6 +244,7 @@ export function CreditsPlanProvider({
   userId?: string | null;
 }) {
   const [state, setState] = useState<CreditsState>(() => readState(userId));
+  const [isUnlimited, setIsUnlimited] = useState(false);
 
   // Re-read when userId becomes available (SSR hydration) or changes (login/logout).
   useEffect(() => {
@@ -262,8 +265,17 @@ export function CreditsPlanProvider({
   useEffect(() => {
     fetch("/api/me/subscription")
       .then((r) => (r.ok ? r.json() : null))
-      .then((data: { planId: string; userId?: string } | null) => {
+      .then((data: { planId: string; userId?: string; unlimited?: boolean } | null) => {
         if (!data) return;
+
+        // Unlimited accounts: flag them and apply the top plan — never deduct credits.
+        if (data.unlimited === true) {
+          setIsUnlimited(true);
+          const confirmedUid = data.userId ?? null;
+          if (confirmedUid) lsSet(LS_OWNER, confirmedUid);
+          setState({ planId: "scale", current: 999_999, total: 999_999 });
+          return;
+        }
 
         const confirmedUid = data.userId ?? null;
         const serverPlan = parseAccountPlan(data.planId);
@@ -370,6 +382,8 @@ export function CreditsPlanProvider({
 
   const spendCredits = useCallback(
     (n: number) => {
+      // Unlimited accounts are never charged.
+      if (isUnlimited) return;
       const k = Math.max(0, Math.floor(n));
       if (k === 0) return;
       const prev = readState(userId);
@@ -380,7 +394,7 @@ export function CreditsPlanProvider({
           : Math.max(subscriptionCredits(prev.planId), nextCurrent);
       commit({ ...prev, current: nextCurrent, total: nextTotal });
     },
-    [commit, userId],
+    [commit, isUnlimited, userId],
   );
 
   const grantCredits = useCallback(
@@ -413,6 +427,7 @@ export function CreditsPlanProvider({
       ...state,
       planDisplayName,
       percentRemaining,
+      isUnlimited,
       setSubscriptionPlan,
       addPackCredits,
       spendCredits,
@@ -423,6 +438,7 @@ export function CreditsPlanProvider({
       state,
       planDisplayName,
       percentRemaining,
+      isUnlimited,
       setSubscriptionPlan,
       addPackCredits,
       spendCredits,

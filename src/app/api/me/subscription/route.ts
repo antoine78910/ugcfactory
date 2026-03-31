@@ -6,11 +6,14 @@ import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import { parseAccountPlan, type AccountPlanId } from "@/lib/subscriptionModelAccess";
 import { getPlanFromPriceId } from "@/lib/stripe/subscriptionPrices";
+import { isAllowedUser } from "@/lib/allowedUsers";
 
 export type MeSubscriptionResponse = {
   planId: AccountPlanId;
   billing: "monthly" | "yearly" | null;
   userId: string;
+  /** When true the client must not deduct or check credits — account has unlimited access. */
+  unlimited?: boolean;
 };
 
 /**
@@ -21,6 +24,16 @@ export type MeSubscriptionResponse = {
 export async function GET() {
   const auth = await requireSupabaseUser();
   if (auth.response) return auth.response;
+
+  // Allowlisted accounts get unlimited access — skip Stripe entirely.
+  if (isAllowedUser(auth.user.email)) {
+    return NextResponse.json({
+      planId: "scale" as AccountPlanId,
+      billing: null,
+      userId: auth.user.id,
+      unlimited: true,
+    } satisfies MeSubscriptionResponse);
+  }
 
   const free: MeSubscriptionResponse = { planId: "free", billing: null, userId: auth.user.id };
 
