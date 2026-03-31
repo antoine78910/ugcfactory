@@ -785,9 +785,15 @@ export function normalizeMotionControlQuality(quality: string | undefined): "720
   return "720p";
 }
 
+/** Motion control (and Ad Clone without translate) fixed per-second billing. */
+export const MOTION_CONTROL_CREDITS_PER_SECOND = {
+  "720p": 3,
+  "1080p": 4,
+} as const;
+
 /**
- * Motion control (Kling 3.0 MC): 1080p = anchor rate/s, 720p = 14/27 of anchor.
- * (No separate audio toggle in UI — priced like 1080p vs 720p motion tiers.)
+ * Motion control (Kling 3.0 MC): fixed credits/s by quality tier.
+ * (No separate audio toggle in UI — priced by 720p/1080p only.)
  */
 export function calculateMotionControlCreditsFromDuration(
   durationSeconds: number,
@@ -795,6 +801,6 @@ export function calculateMotionControlCreditsFromDuration(
 ): number {
   const d = Math.max(0, Number(durationSeconds) || 0);
   const tier = normalizeMotionControlQuality(quality);
-  const mult = tier === "1080p" ? 1 : 14 / 27;
-  return Math.max(1, Math.ceil(d * KLING_3_VIDEO_CREDITS_PER_SECOND * mult));
+  const perSecond = MOTION_CONTROL_CREDITS_PER_SECOND[tier];
+  return Math.max(1, Math.ceil(d * perSecond));
 }

@@ -2209,14 +2209,30 @@ export default function AppBrandWizard() {
                                           ? Math.min(120, Math.max(1, Math.round(raw)))
                                           : null;
                                       setMotionVideoDetectedDuration(dur);
+                                      // Force decoding a real frame for reliable preview thumbnails.
+                                      if (Number.isFinite(raw) && raw > 0.12) {
+                                        try {
+                                          v.currentTime = 0.1;
+                                        } catch {
+                                          /* ignore seek failure */
+                                        }
+                                      }
                                       void v.play().catch(() => {});
                                     }}
                                     onLoadedData={() => {
                                       setMotionVideoPlaying(true);
                                       setMotionVideoPreviewLoading(false);
+                                      const v = motionVideoPreviewRef.current;
+                                      if (v) tryCaptureMotionPosterFromEl(v);
                                     }}
                                     onCanPlay={(ev) => {
+                                      setMotionVideoPreviewLoading(false);
                                       void ev.currentTarget.play().catch(() => {});
+                                    }}
+                                    onSeeked={(ev) => {
+                                      setMotionVideoPlaying(true);
+                                      setMotionVideoPreviewLoading(false);
+                                      tryCaptureMotionPosterFromEl(ev.currentTarget);
                                     }}
                                     onPlaying={(ev) => {
                                       setMotionVideoPlaying(true);
@@ -2233,10 +2249,6 @@ export default function AppBrandWizard() {
                                     }}
                                     onError={() => {
                                       setMotionVideoPreviewLoading(false);
-                                      toast.error("Could not preview this video.", {
-                                        description:
-                                          "Try another file format (MP4/H.264 recommended) or re-select the clip.",
-                                      });
                                     }}
                                   />
                                   <UploadBusyOverlay
