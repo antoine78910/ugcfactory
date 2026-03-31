@@ -83,7 +83,7 @@ function buildInputForPicker(
 }
 
 export async function POST(req: Request) {
-  const { supabase, user, response } = await requireSupabaseUser();
+  const { user, response } = await requireSupabaseUser();
   if (response) return response;
 
   let body: Body;

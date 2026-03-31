@@ -47,3 +47,20 @@ export function getSubscriptionStripePriceId(
     ? getYearlySubscriptionPriceId(planId)
     : getMonthlySubscriptionPriceId(planId);
 }
+
+/**
+ * Reverse lookup: given a Stripe price ID, return the matching plan + billing.
+ * Returns null if the price doesn't match any configured plan.
+ */
+export function getPlanFromPriceId(
+  priceId: string,
+): { planId: SubscriptionPlanId; billing: "monthly" | "yearly" } | null {
+  if (!priceId) return null;
+  for (const planId of SUBSCRIPTION_PLAN_IDS) {
+    const monthly = getMonthlySubscriptionPriceId(planId);
+    if (monthly && monthly === priceId) return { planId, billing: "monthly" };
+    const yearly = getYearlySubscriptionPriceId(planId);
+    if (yearly && yearly === priceId) return { planId, billing: "yearly" };
+  }
+  return null;
+}

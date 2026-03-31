@@ -27,7 +27,7 @@ type Body = {
 };
 
 export async function POST(req: Request) {
-  const { supabase, user, response } = await requireSupabaseUser();
+  const { user, response } = await requireSupabaseUser();
   if (response) return response;
 
   const body = (await req.json().catch(() => null)) as Body | null;

@@ -5,6 +5,7 @@ import { getEnv } from "@/lib/env";
  * Env allowlist is still supported and merged below.
  */
 const ALWAYS_ALLOWED_API_TEST_EMAILS = new Set<string>([
+  "anto.delbos@gmail.com",
   "paulyaniskacou@gmail.com",
 ]);
 
