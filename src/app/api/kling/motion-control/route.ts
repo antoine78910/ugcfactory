@@ -13,6 +13,7 @@ import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { getUserPlan } from "@/lib/supabase/getUserPlan";
 
 type BackgroundSource = "input_video" | "input_image";
+type CharacterOrientation = "video" | "image";
 
 type Body = {
   accountPlan?: string;
@@ -24,6 +25,8 @@ type Body = {
   quality?: string;
   /** Background from motion clip vs character still (Kie `background_source`). */
   backgroundSource?: BackgroundSource;
+  /** Character orientation source (Kie `character_orientation`). */
+  characterOrientation?: CharacterOrientation;
   prompt?: string;
   personalApiKey?: string;
 };
@@ -70,6 +73,8 @@ export async function POST(req: Request) {
 
   const backgroundSource: BackgroundSource =
     body.backgroundSource === "input_image" ? "input_image" : "input_video";
+  const characterOrientation: CharacterOrientation =
+    body.characterOrientation === "video" ? "video" : "image";
 
   const mode = motionModeFromQuality(body.quality);
   const prompt = (body.prompt ?? "").trim();
@@ -79,6 +84,7 @@ export async function POST(req: Request) {
       input_urls: [imageUrl],
       video_urls: [videoUrl],
       mode,
+      character_orientation: characterOrientation,
       background_source: backgroundSource,
     };
     if (prompt) input.prompt = prompt.slice(0, 2500);

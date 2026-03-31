@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   useCreditsPlan,
   getPersonalApiKey,
+  getPersonalPiapiApiKey,
   isPlatformCreditBypassActive,
 } from "@/app/_components/CreditsPlanContext";
 import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
@@ -30,32 +31,19 @@ async function uploadFile(file: File): Promise<string> {
   return json.url;
 }
 
-async function pollUpscaleTask(taskId: string, personalApiKey?: string): Promise<string> {
-  const max = 120;
-  const keyParam = personalApiKey ? `&personalApiKey=${encodeURIComponent(personalApiKey)}` : "";
-  for (let i = 0; i < max; i++) {
-    const res = await fetch(`/api/kling/status?taskId=${encodeURIComponent(taskId)}${keyParam}`, {
-      cache: "no-store",
-    });
-    const json = (await res.json()) as {
-      data?: { status?: string; response?: string[]; error_message?: string | null };
-      error?: string;
-    };
-    if (!res.ok || !json.data) throw new Error(json.error || "Poll failed");
-    const st = json.data.status ?? "IN_PROGRESS";
-    if (st === "IN_PROGRESS") {
-      await new Promise((r) => setTimeout(r, 3000));
-      continue;
+type RefundHint = { jobId: string; credits: number };
+
+function applyRefundHints(
+  hints: RefundHint[],
+  grantCredits: (n: number) => void,
+  creditsRef: { current: number },
+) {
+  for (const h of hints) {
+    if (h.credits > 0) {
+      grantCredits(h.credits);
+      creditsRef.current += h.credits;
     }
-    if (st === "SUCCESS") {
-      const urls = json.data.response ?? [];
-      const u = urls[0];
-      if (!u || typeof u !== "string") throw new Error("Upscale finished but no output URL.");
-      return u;
-    }
-    throw new Error(json.data.error_message || "Upscale failed.");
   }
-  throw new Error("Upscale timed out.");
 }
 
 type UpscalePickerId = "upscale/video" | "upscale/image";
@@ -94,8 +82,12 @@ export default function StudioUpscalePanel() {
   const [videoPreviewBlob, setVideoPreviewBlob] = useState<string | null>(null);
   const [imagePreviewBlob, setImagePreviewBlob] = useState<string | null>(null);
   const [historyItems, setHistoryItems] = useState<StudioHistoryItem[]>([]);
+  /** null = loading auth/history status; true = backend history/poll active. */
+  const [serverHistory, setServerHistory] = useState<boolean | null>(null);
   type Bill = { open: false } | { open: true; required: number };
   const [billing, setBilling] = useState<Bill>({ open: false });
+  const grantCreditsRef = useRef(grantCredits);
+  grantCreditsRef.current = grantCredits;
 
   const credits = useMemo(() => {
     if (upscalePickerId === "upscale/image") return topazImageUpscaleCredits(factor);
@@ -138,6 +130,60 @@ export default function StudioUpscalePanel() {
     setDurationSec(null);
     probeDuration(previewSrc);
   }, [upscalePickerId, previewSrc, probeDuration]);
+
+  useEffect(() => {
+    void (async () => {
+      const res = await fetch("/api/studio/generations?kind=studio_upscale", { cache: "no-store" });
+      if (res.status === 401) {
+        setServerHistory(false);
+        setHistoryItems([]);
+        return;
+      }
+      if (!res.ok) {
+        setServerHistory(false);
+        setHistoryItems([]);
+        return;
+      }
+      const json = (await res.json()) as { data?: StudioHistoryItem[]; refundHints?: RefundHint[] };
+      setServerHistory(true);
+      setHistoryItems(json.data ?? []);
+      const hints = json.refundHints ?? [];
+      if (hints.length) {
+        applyRefundHints(hints, grantCreditsRef.current, creditsRef);
+        toast.message("Credits refunded", { description: "A studio generation failed after charge." });
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (serverHistory !== true) return;
+
+    const tick = () => {
+      void (async () => {
+        const res = await fetch("/api/studio/generations/poll", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            kind: "studio_upscale",
+            personalApiKey: getPersonalApiKey() ?? undefined,
+            piapiApiKey: getPersonalPiapiApiKey() ?? undefined,
+          }),
+        });
+        if (!res.ok) return;
+        const json = (await res.json()) as { data?: StudioHistoryItem[]; refundHints?: RefundHint[] };
+        if (Array.isArray(json.data)) setHistoryItems(json.data);
+        const hints = json.refundHints ?? [];
+        if (hints.length) {
+          applyRefundHints(hints, grantCreditsRef.current, creditsRef);
+          toast.message("Credits refunded", { description: "A studio generation failed after charge." });
+        }
+      })();
+    };
+
+    tick();
+    const id = window.setInterval(tick, 4000);
+    return () => window.clearInterval(id);
+  }, [serverHistory]);
 
   const onPickVideo = () => {
     const input = document.createElement("input");
@@ -192,6 +238,14 @@ export default function StudioUpscalePanel() {
   };
 
   const generate = () => {
+    if (serverHistory === null) {
+      toast.message("Loading your library…", { description: "Wait a moment, then try again." });
+      return;
+    }
+    if (serverHistory !== true) {
+      toast.error("Backend sync unavailable. Please reload and try again.");
+      return;
+    }
     if (upscalePickerId === "upscale/video" && durationSec == null) {
       toast.message("Loading video duration…", { description: "Please wait a moment, then try again." });
       return;
@@ -257,26 +311,9 @@ export default function StudioUpscalePanel() {
           );
         }
 
-        const outUrl = await pollUpscaleTask(json.taskId, upPKey);
-        const doneAt = Date.now();
-        const persistId = rowId ?? jobId;
-        setHistoryItems((prev) => {
-          const rest = prev.filter((i) => i.id !== jobId && i.id !== rowId);
-          return [
-            {
-              id: persistId,
-              kind: isImage ? "image" : "video",
-              status: "ready",
-              label,
-              mediaUrl: outUrl,
-              createdAt: doneAt,
-              studioGenerationKind: "studio_upscale",
-            },
-            ...rest,
-          ];
+        toast.message("Upscale started", {
+          description: "Running on backend. You can change page safely.",
         });
-
-        toast.success(isImage ? "Upscaled image ready" : "Upscaled video ready");
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Error";
         refundPlatformCredits(platformCharge, grantCredits, creditsRef);
@@ -429,18 +466,22 @@ export default function StudioUpscalePanel() {
 
           <Button
             type="button"
-            disabled={busy || (upscalePickerId === "upscale/video" && durationSec == null)}
+            disabled={
+              busy || serverHistory !== true || (upscalePickerId === "upscale/video" && durationSec == null)
+            }
             onClick={generate}
-            className="h-14 w-full rounded-2xl border border-violet-300/40 bg-violet-500 text-lg font-semibold text-white shadow-[0_6px_0_0_rgba(76,29,149,0.85)] transition-all hover:-translate-y-px hover:bg-violet-400 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.85)] active:translate-y-1 active:shadow-none disabled:opacity-50"
+            className="h-14 w-full overflow-hidden rounded-2xl border border-violet-300/40 bg-violet-500 text-base font-semibold text-white shadow-[0_6px_0_0_rgba(76,29,149,0.85)] transition-all hover:-translate-y-px hover:bg-violet-400 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.85)] active:translate-y-1 active:shadow-none disabled:opacity-50 sm:text-lg"
           >
-            <span className="inline-flex items-center gap-2">
+            <span className="inline-flex w-full min-w-0 flex-wrap items-center justify-center gap-1.5 px-2 sm:flex-nowrap sm:gap-2">
               <Wand2 className="h-5 w-5" />
-              {upscalePickerId === "upscale/image" ? "Upscale image" : "Upscale video"}
+              <span className="min-w-0 truncate">
+                {upscalePickerId === "upscale/image" ? "Upscale image" : "Upscale video"}
+              </span>
               <Sparkles className="h-5 w-5" />
               {upscalePickerId === "upscale/image" || durationSec !== null ? (
                 <>
                   <span className="rounded-md bg-white/15 px-2 py-0.5 text-base tabular-nums">{credits}</span>
-                  <span className="text-sm font-normal text-white/80">credits</span>
+                  <span className="text-xs font-normal text-white/80 sm:text-sm">credits</span>
                 </>
               ) : null}
             </span>

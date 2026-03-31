@@ -312,8 +312,8 @@ export default function StudioImagePanel() {
         toast.error("Invalid upscale factor.");
         return;
       }
-      if (serverHistory === null) {
-        toast.message("Still loading your library…", { description: "Wait a moment, then try again." });
+      if (serverHistory !== true) {
+        toast.error("Backend sync unavailable. Please reload and try again.");
         return;
       }
 
@@ -335,71 +335,6 @@ export default function StudioImagePanel() {
       void (async () => {
         const pKey = getPersonalApiKey() ?? undefined;
 
-        if (serverHistory === true) {
-          try {
-            const res = await fetch("/api/kie/upscale/image", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ imageUrl: url, upscaleFactor: f, personalApiKey: pKey }),
-            });
-            const json = (await res.json()) as { taskId?: string; error?: string };
-            if (!res.ok || !json.taskId) throw new Error(json.error || "Upscale request failed");
-
-            const regRes = await fetch("/api/studio/generations/register", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                kind: "studio_upscale",
-                label,
-                taskId: json.taskId,
-                creditsCharged: platformCharge,
-                personalApiKey: pKey,
-              }),
-            });
-            const regJson = (await regRes.json()) as {
-              data?: { rows?: { id: string }[] };
-              error?: string;
-            };
-            if (!regRes.ok || !regJson.data?.rows?.length) {
-              throw new Error(regJson.error || "Failed to register job");
-            }
-            const rowId = String(regJson.data.rows[0]!.id);
-            const startedAt = Date.now();
-            setHistoryItems((prev) => {
-              const row: StudioHistoryItem = {
-                id: rowId,
-                kind: "image",
-                status: "generating",
-                label,
-                createdAt: startedAt,
-                studioGenerationKind: "studio_upscale",
-              };
-              return [row, ...prev.filter((i) => i.id !== rowId)];
-            });
-            toast.message("Image upscale running", {
-              description: "You can leave this page — it will appear in history when ready.",
-            });
-          } catch (e) {
-            const msg = userMessageFromCaughtError(e, "Something went wrong while starting upscale.");
-            refundPlatformCredits(platformCharge, grantCredits, creditsRef);
-            toast.error(msg);
-          }
-          return;
-        }
-
-        const jobId = crypto.randomUUID();
-        const startedAt = Date.now();
-        setHistoryItems((prev) => [
-          {
-            id: jobId,
-            kind: "image",
-            status: "generating",
-            label,
-            createdAt: startedAt,
-          },
-          ...prev,
-        ]);
-
         try {
           const res = await fetch("/api/kie/upscale/image", {
             method: "POST",
@@ -408,39 +343,45 @@ export default function StudioImagePanel() {
           });
           const json = (await res.json()) as { taskId?: string; error?: string };
           if (!res.ok || !json.taskId) throw new Error(json.error || "Upscale request failed");
-          const outUrl = await pollKieMarketFirstUrl(json.taskId, pKey);
-          const doneAt = Date.now();
-          setHistoryItems((prev) => {
-            const rest = prev.filter((i) => i.id !== jobId);
-            return [
-              {
-                id: `${jobId}-done-${doneAt}`,
-                kind: "image",
-                status: "ready",
-                label,
-                mediaUrl: outUrl,
-                createdAt: doneAt,
-              },
-              ...rest,
-            ];
+
+          const regRes = await fetch("/api/studio/generations/register", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              kind: "studio_upscale",
+              label,
+              taskId: json.taskId,
+              creditsCharged: platformCharge,
+              personalApiKey: pKey,
+            }),
           });
-          toast.success("Upscaled image ready");
+          const regJson = (await regRes.json()) as {
+            data?: { rows?: { id: string }[] };
+            error?: string;
+          };
+          if (!regRes.ok || !regJson.data?.rows?.length) {
+            throw new Error(regJson.error || "Failed to register job");
+          }
+          const rowId = String(regJson.data.rows[0]!.id);
+          const startedAt = Date.now();
+          setHistoryItems((prev) => {
+            const row: StudioHistoryItem = {
+              id: rowId,
+              kind: "image",
+              status: "generating",
+              label,
+              createdAt: startedAt,
+              studioGenerationKind: "studio_upscale",
+            };
+            return [row, ...prev.filter((i) => i.id !== rowId)];
+          });
+          toast.message("Image upscale running", {
+            description: "You can leave this page — it will appear in history when ready.",
+          });
         } catch (e) {
           const msg = userMessageFromCaughtError(e, "Something went wrong while upscaling.");
           refundPlatformCredits(platformCharge, grantCredits, creditsRef);
           toast.error(msg);
-          setHistoryItems((prev) =>
-            prev.map((i) =>
-              i.id === jobId && i.status === "generating"
-                ? {
-                    ...i,
-                    status: "failed",
-                    errorMessage: msg,
-                    creditsRefunded: platformCharge > 0,
-                  }
-                : i,
-            ),
-          );
         }
       })();
     },
@@ -544,8 +485,8 @@ export default function StudioImagePanel() {
   };
 
   function runImageGeneration(opts: RunGenOpts) {
-    if (serverHistory === null) {
-      toast.message("Still loading your library…", { description: "Wait a moment, then try Generate again." });
+    if (serverHistory !== true) {
+      toast.error("Backend sync unavailable. Please reload and try again.");
       return;
     }
     const p = opts.prompt.trim();
@@ -593,130 +534,54 @@ export default function StudioImagePanel() {
     }
 
     void (async () => {
-      if (serverHistory === true) {
-        try {
-          const res = await fetch("/api/studio/generations/start", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              kind: "studio_image",
-              label: summary,
-              accountPlan: planId,
-              creditsCharged: platformCharge,
-              prompt: p,
-              model: opts.model,
-              aspectRatio: opts.aspect,
-              resolution: opts.resolution,
-              numImages: n,
-              imageUrls: opts.refUrls.length ? opts.refUrls : undefined,
-              personalApiKey: getPersonalApiKey(),
-            }),
-          });
-          const json = (await res.json()) as {
-            data?: { id?: string; rows?: { id: string }[]; error?: string };
-            error?: string;
-          };
-          if (!res.ok) throw new Error(json.error || "Start failed");
-          const rowIds = json.data?.rows?.map((r) => r.id) ?? (json.data?.id ? [json.data.id] : []);
-          if (!rowIds.length) throw new Error("No job id");
-          const startedAt = Date.now();
-          setHistoryItems((prev) => {
-            const gens: StudioHistoryItem[] = rowIds.map((id) => ({
-              id,
-              kind: "image",
-              status: "generating",
-              label: summary,
-              createdAt: startedAt,
-              studioGenerationKind: "studio_image",
-            }));
-            const drop = new Set(rowIds);
-            return [...gens, ...prev.filter((i) => !drop.has(i.id))];
-          });
-          toast.message("Generation running", {
-            description: "You can open My Projects — jobs stay in sync. Safe to leave this page.",
-          });
-        } catch (e) {
-          const msg = userMessageFromCaughtError(
-            e,
-            "Something went wrong while starting generation. Please try again.",
-          );
-          refundPlatformCredits(platformCharge, grantCredits, creditsRef);
-          toast.error(msg);
-        }
-        return;
-      }
-
-      const jobId = crypto.randomUUID();
-      const startedAt = Date.now();
-      setHistoryItems((prev) => [
-        {
-          id: jobId,
-          kind: "image",
-          status: "generating",
-          label: summary,
-          createdAt: startedAt,
-        },
-        ...prev,
-      ]);
-
       try {
-        const res = await fetch("/api/nanobanana/generate", {
+        const res = await fetch("/api/studio/generations/start", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            kind: "studio_image",
+            label: summary,
             accountPlan: planId,
+            creditsCharged: platformCharge,
             prompt: p,
             model: opts.model,
             imageUrls: opts.refUrls.length ? opts.refUrls : undefined,
             aspectRatio: opts.aspect,
             resolution: opts.resolution,
             numImages: n,
-            personalApiKey: getPersonalApiKey(),
+            personalApiKey: getPersonalApiKey() ?? undefined,
           }),
         });
-        const json = (await res.json()) as { taskId?: string; taskIds?: string[]; error?: string };
-        if (!res.ok) throw new Error(json.error || "Generate failed");
-        const ids =
-          Array.isArray(json.taskIds) && json.taskIds.length > 0
-            ? json.taskIds
-            : json.taskId
-              ? [json.taskId]
-              : [];
-        if (!ids.length) throw new Error("No task id returned");
-        toast.message("Generation started", { description: `Polling ${ids.length} task(s)…` });
-        const pKey = getPersonalApiKey();
-        const batches = await Promise.all(ids.map((tid) => pollNanoTask(tid, pKey)));
-        const urls = batches.flat();
-        const doneAt = Date.now();
+        const json = (await res.json()) as {
+          data?: { id?: string; rows?: { id: string }[]; error?: string };
+          error?: string;
+        };
+        if (!res.ok) throw new Error(json.error || "Start failed");
+        const rowIds = json.data?.rows?.map((r) => r.id) ?? (json.data?.id ? [json.data.id] : []);
+        if (!rowIds.length) throw new Error("No job id");
+        const startedAt = Date.now();
         setHistoryItems((prev) => {
-          const rest = prev.filter((i) => i.id !== jobId);
-          const adds: StudioHistoryItem[] = urls.map((u, idx) => ({
-            id: `${jobId}-done-${idx}-${doneAt}`,
+          const gens: StudioHistoryItem[] = rowIds.map((id) => ({
+            id,
             kind: "image",
-            status: "ready",
+            status: "generating",
             label: summary,
-            mediaUrl: u,
-            createdAt: doneAt,
+            createdAt: startedAt,
+            studioGenerationKind: "studio_image",
           }));
-          return [...adds, ...rest];
+          const drop = new Set(rowIds);
+          return [...gens, ...prev.filter((i) => !drop.has(i.id))];
         });
-        toast.success(ids.length > 1 ? `${urls.length} images ready` : "Image ready");
+        toast.message("Generation running", {
+          description: "You can open My Projects — jobs stay in sync. Safe to leave this page.",
+        });
       } catch (e) {
-        const msg = userMessageFromCaughtError(e, "Something went wrong while generating. Please try again.");
+        const msg = userMessageFromCaughtError(
+          e,
+          "Something went wrong while starting generation. Please try again.",
+        );
         refundPlatformCredits(platformCharge, grantCredits, creditsRef);
         toast.error(msg);
-        setHistoryItems((prev) =>
-          prev.map((i) =>
-            i.id === jobId && i.status === "generating"
-              ? {
-                  ...i,
-                  status: "failed",
-                  errorMessage: msg,
-                  creditsRefunded: platformCharge > 0,
-                }
-              : i,
-          ),
-        );
       }
     })();
   }

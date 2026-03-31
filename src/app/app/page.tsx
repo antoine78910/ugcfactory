@@ -44,7 +44,10 @@ import {
 import {
   branchUniverseForNewAd,
   cloneExtractedBase,
+  parseNanoEditableSections,
+  parseThreeLabeledPrompts,
   readUniverseFromExtracted,
+  splitNanoPromptBodyForEditing,
   universeHasPendingKlingTask,
 } from "@/lib/linkToAdUniverse";
 import { motionControlUpgradeMessage } from "@/lib/subscriptionModelAccess";
@@ -379,6 +382,38 @@ export default function AppBrandWizard() {
   const [imageGen, setImageGen] = useState<ImageGenState>({ kind: "idle" });
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
 
+  const imagePromptDisplayBlocks = useMemo(() => {
+    const raw = imagePrompt.trim();
+    if (!raw) return [] as Array<{
+      title: string;
+      isStructured: boolean;
+      avatar: string;
+      scene: string;
+      product: string;
+      fallback: string;
+      technicalTail: string;
+    }>;
+
+    const hasLabeledPrompts = /(?:^|\n)\s*PROMPT\s*[123]\s*$/im.test(raw);
+    const blocks = hasLabeledPrompts
+      ? parseThreeLabeledPrompts(raw).map((t) => t.trim()).filter(Boolean)
+      : [raw];
+
+    return blocks.map((block, idx) => {
+      const { editable, technicalTail } = splitNanoPromptBodyForEditing(block);
+      const parsed = parseNanoEditableSections(editable);
+      return {
+        title: `Prompt ${idx + 1}`,
+        isStructured: parsed.isStructured,
+        avatar: parsed.person,
+        scene: parsed.scene,
+        product: parsed.product,
+        fallback: editable.trim(),
+        technicalTail: technicalTail.trim(),
+      };
+    });
+  }, [imagePrompt]);
+
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateId>("template1");
   const [videoPrompt, setVideoPrompt] = useState<string>("");
   const [isBuildingVideoPrompt, setIsBuildingVideoPrompt] = useState(false);
@@ -399,6 +434,7 @@ export default function AppBrandWizard() {
   const [motionCharacterImageUrl, setMotionCharacterImageUrl] = useState<string | null>(null);
   const [motionCharacterFile, setMotionCharacterFile] = useState<File | null>(null);
   const [motionQuality, setMotionQuality] = useState<string>("720p");
+  const [motionPrompt, setMotionPrompt] = useState<string>("");
   const [adCloneTranslateVideo, setAdCloneTranslateVideo] = useState(false);
   const [motionHistoryItems, setMotionHistoryItems] = useState<StudioHistoryItem[]>([]);
   type MotionBilling =
@@ -2253,6 +2289,8 @@ export default function AppBrandWizard() {
                                           /* ignore seek failure */
                                         }
                                       }
+                                      // Metadata is enough to enable user playback controls.
+                                      setMotionVideoPreviewLoading(false);
                                       void v.play().catch(() => {});
                                     }}
                                     onLoadedData={() => {
@@ -2288,10 +2326,15 @@ export default function AppBrandWizard() {
                                     }}
                                   />
                                   <UploadBusyOverlay
-                                    active={motionVideoUploadPending || (motionVideoPreviewLoading && !motionVideoPlaying)}
-                                    label={motionVideoUploadPending ? "Préparation de la preview…" : "Chargement…"}
+                                    active={motionVideoPreviewLoading && !motionVideoPlaying}
+                                    label="Chargement…"
                                     className="rounded-xl"
                                   />
+                                  {motionVideoUploadPending ? (
+                                    <span className="absolute left-2 top-2 z-[2] rounded-md bg-black/70 px-2 py-1 text-[10px] font-medium text-white/85">
+                                      Upload en cours…
+                                    </span>
+                                  ) : null}
                                   {motionVideoDetectedDuration && motionVideoPlaying ? (
                                     <span className="absolute bottom-2 z-[2] rounded-md bg-black/70 px-2 py-1 text-[10px] font-medium text-white">
                                       {motionVideoDetectedDuration}s
@@ -2494,6 +2537,23 @@ export default function AppBrandWizard() {
                             </SelectContent>
                           </Select>
                         </div>
+
+                        <details className="rounded-xl border border-white/10 bg-black/20 p-2.5">
+                          <summary className="cursor-pointer text-xs font-semibold text-white/70">Advanced</summary>
+                          <div className="mt-2 space-y-2">
+                            <Label className="text-xs text-white/45">Optional prompt</Label>
+                            <p className="text-[10px] leading-snug text-white/35">
+                              Optional text guidance sent to Kling Motion Control (`prompt`, max 2500 chars).
+                            </p>
+                            <Textarea
+                              value={motionPrompt}
+                              onChange={(e) => setMotionPrompt(e.target.value)}
+                              placeholder="Example: The character is dancing with subtle upper-body movement."
+                              className="min-h-[84px] w-full resize-none rounded-xl border-white/15 bg-[#0a0a0d] text-xs text-white placeholder:text-white/35"
+                              rows={4}
+                            />
+                          </div>
+                        </details>
                         </div>
                       </div>
 
@@ -2520,6 +2580,13 @@ export default function AppBrandWizard() {
                           }
                           if (!motionVideoRefBlobUrl) {
                             toast.error("Please choose a video reference first.");
+                            return;
+                          }
+                          if (
+                            motionVideoDetectedDuration != null &&
+                            (motionVideoDetectedDuration < 3 || motionVideoDetectedDuration > 30)
+                          ) {
+                            toast.error("Motion reference video must be between 3 and 30 seconds.");
                             return;
                           }
                           if (!motionCreditBypass && creditsRef.current < motionCredits) {
@@ -2580,7 +2647,9 @@ export default function AppBrandWizard() {
                                   accountPlan: planId,
                                   imageUrl: imageHttps,
                                   videoUrl: videoHttps,
+                                  prompt: motionPrompt.trim() || undefined,
                                   quality: motionQuality,
+                                  characterOrientation: "image",
                                   backgroundSource: bgSource,
                                   personalApiKey: getPersonalApiKey(),
                                 }),
@@ -3143,14 +3212,58 @@ export default function AppBrandWizard() {
 
                   <div className="rounded-md border bg-background/30 p-3 text-sm">
                     <div className="font-medium mb-2">Image prompt</div>
-                    <div className="whitespace-pre-wrap text-muted-foreground">
-                      {imagePrompt || "No prompt yet (use “Create perfect image prompt”)."}
-                    </div>
-                    {negativePrompt ? (
-                      <div className="mt-3">
-                        <div className="font-medium mb-1">Negative</div>
-                        <div className="whitespace-pre-wrap text-muted-foreground">{negativePrompt}</div>
+                    {!imagePrompt.trim() ? (
+                      <div className="whitespace-pre-wrap text-muted-foreground">
+                        No prompt yet (use “Create perfect image prompt”).
                       </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {imagePromptDisplayBlocks.map((block, idx) => (
+                          <div key={`${block.title}-${idx}`} className="rounded-md border border-white/10 bg-black/15 p-2.5">
+                            {imagePromptDisplayBlocks.length > 1 ? (
+                              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-white/55">
+                                {block.title}
+                              </div>
+                            ) : null}
+
+                            {block.isStructured ? (
+                              <div className="space-y-2">
+                                <div>
+                                  <div className="text-[11px] font-semibold text-white/70">Avatar / person</div>
+                                  <div className="whitespace-pre-wrap text-muted-foreground">{block.avatar || "—"}</div>
+                                </div>
+                                <div>
+                                  <div className="text-[11px] font-semibold text-white/70">Scene</div>
+                                  <div className="whitespace-pre-wrap text-muted-foreground">{block.scene || "—"}</div>
+                                </div>
+                                <div>
+                                  <div className="text-[11px] font-semibold text-white/70">Product & action</div>
+                                  <div className="whitespace-pre-wrap text-muted-foreground">{block.product || "—"}</div>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="whitespace-pre-wrap text-muted-foreground">{block.fallback}</div>
+                            )}
+
+                            {block.technicalTail ? (
+                              <details className="mt-2">
+                                <summary className="cursor-pointer text-[11px] font-medium text-white/60">
+                                  Technical / negative (hidden by default)
+                                </summary>
+                                <div className="mt-1 whitespace-pre-wrap text-muted-foreground">
+                                  {block.technicalTail}
+                                </div>
+                              </details>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {negativePrompt ? (
+                      <details className="mt-3">
+                        <summary className="cursor-pointer font-medium">Negative</summary>
+                        <div className="mt-1 whitespace-pre-wrap text-muted-foreground">{negativePrompt}</div>
+                      </details>
                     ) : null}
                   </div>
 

@@ -265,6 +265,10 @@ export default function StudioAvatarPanel() {
   }, [serverHistory, historyItems]);
 
   const generate = useCallback(() => {
+    if (serverHistory !== true) {
+      toast.error("Backend sync unavailable. Please reload and try again.");
+      return;
+    }
     const creditBypass = isPlatformCreditBypassActive();
     if (!creditBypass && creditsRef.current < credits) {
       setBilling({ open: true, reason: "credits", required: credits });
@@ -281,109 +285,47 @@ export default function StudioAvatarPanel() {
     setBusy(true);
 
     void (async () => {
-      if (serverHistory === true) {
-        try {
-          const res = await fetch("/api/studio/generations/start", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              kind: "avatar",
-              label,
-              accountPlan: planId,
-              creditsCharged: platformCharge,
-              prompt,
-              model: "nano",
-              aspectRatio: "3:4",
-              resolution: "1K",
-              numImages: 1,
-              personalApiKey: getPersonalApiKey(),
-            }),
-          });
-          const json = (await res.json()) as { data?: { id: string }; error?: string };
-          if (!res.ok) throw new Error(json.error || "Start failed");
-          const id = json.data?.id;
-          if (!id) throw new Error("No job id");
-          const startedAt = Date.now();
-          setHistoryItems((prev) => [
-            { id, kind: "image", status: "generating", label, createdAt: startedAt },
-            ...prev.filter((i) => i.id !== id),
-          ]);
-          toast.message("Avatar generation running", {
-            description: "You can leave this page — it will finish on the server.",
-          });
-        } catch (e) {
-          const msg = "Something went wrong while starting generation. Please try again.";
-          refundPlatformCredits(platformCharge, grantCredits, creditsRef);
-          toast.error(msg);
-        } finally {
-          setBusy(false);
-        }
-        return;
-      }
-
-      const jobId = crypto.randomUUID();
-      const startedAt = Date.now();
-      setHistoryItems((prev) => [
-        { id: jobId, kind: "image", status: "generating", label, createdAt: startedAt },
-        ...prev,
-      ]);
-
       try {
-        const pKey = getPersonalApiKey();
-        const res = await fetch("/api/nanobanana/generate", {
+        const res = await fetch("/api/studio/generations/start", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            kind: "avatar",
+            label,
             accountPlan: planId,
             prompt,
             model: "nano",
             aspectRatio: "3:4",
             resolution: "1K",
             numImages: 1,
-            personalApiKey: pKey,
+            creditsCharged: platformCharge,
+            personalApiKey: getPersonalApiKey(),
           }),
         });
-        const json = (await res.json()) as { taskId?: string; taskIds?: string[]; error?: string };
-        if (!res.ok) throw new Error(json.error || "Generate failed");
-        const tid = json.taskId ?? json.taskIds?.[0];
-        if (!tid) throw new Error("No task id returned");
-        toast.message("Avatar generation started");
-        const urls = await pollNanoTask(tid, pKey);
-        const doneAt = Date.now();
+        const json = (await res.json()) as { data?: { id: string }; error?: string };
+        if (!res.ok) throw new Error(json.error || "Start failed");
+        const id = json.data?.id;
+        if (!id) throw new Error("No job id");
+        const startedAt = Date.now();
         setHistoryItems((prev) => {
-          const rest = prev.filter((i) => i.id !== jobId);
           return [
             {
-              id: `${jobId}-done-${doneAt}`,
+              id,
               kind: "image",
-              status: "ready",
+              status: "generating",
               label,
-              mediaUrl: urls[0],
-              createdAt: doneAt,
+              createdAt: startedAt,
             },
-            ...rest,
+            ...prev.filter((i) => i.id !== id),
           ];
         });
-        toast.success("Avatar ready");
+        toast.message("Avatar generation running", {
+          description: "You can leave this page — it will finish on the server.",
+        });
       } catch (e) {
         const msg = "Something went wrong while generating. Please try again.";
         refundPlatformCredits(platformCharge, grantCredits, creditsRef);
         toast.error(msg);
-        setHistoryItems((prev) => {
-          const rest = prev.filter((i) => i.id !== jobId);
-          return [
-            {
-              id: `${jobId}-err`,
-              kind: "image",
-              status: "failed",
-              label: msg,
-              errorMessage: msg,
-              createdAt: Date.now(),
-              creditsRefunded: platformCharge > 0,
-            },
-            ...rest,
-          ];
-        });
       } finally {
         setBusy(false);
       }
@@ -432,7 +374,7 @@ export default function StudioAvatarPanel() {
           <div className="flex items-center gap-3">
             <Button
               type="button"
-              disabled={busy || serverHistory === null}
+              disabled={busy || serverHistory !== true}
               onClick={generate}
               className="h-10 gap-2 rounded-xl border border-violet-400/30 bg-violet-500 px-5 text-sm font-bold text-white shadow-[0_4px_0_0_rgba(76,29,149,0.7)] hover:bg-violet-400"
             >

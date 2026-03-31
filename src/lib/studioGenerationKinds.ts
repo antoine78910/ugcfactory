@@ -39,8 +39,8 @@ export const STUDIO_LIBRARY_KINDS = [
   "studio_watermark",
 ] as const;
 
-/** Kinds shown in Create → Image history (excludes Link to Ad). */
-export const STUDIO_IMAGE_TAB_KINDS = [STUDIO_GENERATION_KIND_STUDIO_IMAGE, "studio_upscale"] as const;
+/** Kinds shown in Create → Image history (excludes Link to Ad and Upscale). */
+export const STUDIO_IMAGE_TAB_KINDS = [STUDIO_GENERATION_KIND_STUDIO_IMAGE] as const;
 
 /** Kinds shown in Create → Video history (excludes Link to Ad). */
 export const STUDIO_VIDEO_TAB_KINDS = ["studio_video", "studio_watermark"] as const;
