@@ -53,7 +53,15 @@ import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
 import { uploadBlobUrlToCdn } from "@/lib/uploadBlobUrlToCdn";
 
 type WizardStep = "url" | "analysis" | "quiz" | "image" | "video";
-type AppSection = "link_to_ad" | "avatar" | "motion_control" | "image" | "video" | "upscale" | "projects";
+type AppSection =
+  | "link_to_ad"
+  | "avatar"
+  | "ad_clone"
+  | "motion_control"
+  | "image"
+  | "video"
+  | "upscale"
+  | "projects";
 
 type Extracted = {
   url: string;
@@ -100,6 +108,7 @@ const UGC_CURRENT_RUN_KEY = "ugc_current_run_id";
 const APP_VALID_SECTIONS: AppSection[] = [
   "link_to_ad",
   "avatar",
+  "ad_clone",
   "motion_control",
   "image",
   "video",
@@ -384,6 +393,7 @@ export default function AppBrandWizard() {
   const [motionVideoDetectedDuration, setMotionVideoDetectedDuration] = useState<number | null>(null);
   const [motionCharacterImageUrl, setMotionCharacterImageUrl] = useState<string | null>(null);
   const [motionQuality, setMotionQuality] = useState<string>("720p");
+  const [adCloneTranslateVideo, setAdCloneTranslateVideo] = useState(false);
   const [motionHistoryItems, setMotionHistoryItems] = useState<StudioHistoryItem[]>([]);
   type MotionBilling =
     | { open: false }
@@ -399,6 +409,14 @@ export default function AppBrandWizard() {
   const motionPosterCapturePendingRef = useRef(false);
   const motionPlayCaptureAttemptsRef = useRef(0);
   const motionCharacterInputRef = useRef<HTMLInputElement>(null);
+  const AD_CLONE_TEMPLATE_AVATARS = useMemo(
+    () => [
+      "/ad-clone-avatars/template-1.png",
+      "/ad-clone-avatars/template-2.png",
+      "/ad-clone-avatars/template-3.png",
+    ],
+    [],
+  );
   const { planId, current: creditsBalance, spendCredits, grantCredits } = useCreditsPlan();
   const creditsRef = useRef(creditsBalance);
   creditsRef.current = creditsBalance;
@@ -2111,13 +2129,13 @@ export default function AppBrandWizard() {
               </Card>
             ) : null}
 
-            {appSection === "motion_control" ? (
+            {appSection === "motion_control" || appSection === "ad_clone" ? (
               <div className="space-y-2">
                 <div className="flex flex-col gap-3 overflow-x-hidden lg:flex-row lg:items-start lg:gap-4 lg:h-[calc(100dvh-4rem)] lg:min-h-0">
                     <div className="flex min-w-0 w-full flex-col lg:basis-1/4 lg:max-w-[24rem] lg:flex-none lg:shrink-0 lg:min-h-0 lg:overflow-hidden">
                       <div className="studio-params-scroll flex min-w-0 flex-col gap-2 lg:h-full lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pb-10">
                       <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
-                        Motion control
+                        {appSection === "ad_clone" ? "Ad clone" : "Motion control"}
                       </p>
                       <div className="rounded-2xl border border-white/10 bg-[#101014] p-3 space-y-3">
                         <div className="grid grid-cols-2 gap-2">
@@ -2287,11 +2305,66 @@ export default function AppBrandWizard() {
                           </div>
                         </div>
 
+                        {appSection === "ad_clone" ? (
+                          <div className="space-y-2 rounded-xl border border-white/10 bg-black/20 p-2.5">
+                            <div className="flex items-center justify-between gap-3">
+                              <Label className="text-xs text-white/70">Translate video</Label>
+                              <button
+                                type="button"
+                                role="switch"
+                                aria-checked={adCloneTranslateVideo}
+                                onClick={() => setAdCloneTranslateVideo((v) => !v)}
+                                className={cn(
+                                  "relative inline-flex h-6 w-11 items-center rounded-full border-2 border-transparent transition-colors",
+                                  adCloneTranslateVideo ? "bg-violet-500" : "bg-white/15",
+                                )}
+                              >
+                                <span
+                                  className={cn(
+                                    "pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform",
+                                    adCloneTranslateVideo ? "translate-x-[22px]" : "translate-x-[2px]",
+                                  )}
+                                />
+                              </button>
+                            </div>
+                            <p className="text-[10px] leading-snug text-white/35">
+                              Enable this to prepare a translated version (voice/lipsync flow).
+                            </p>
+                          </div>
+                        ) : null}
+
+                        {appSection === "ad_clone" ? (
+                          <div className="space-y-2">
+                            <Label className="text-xs text-white/45">Avatar templates</Label>
+                            <div className="grid grid-cols-3 gap-2">
+                              {AD_CLONE_TEMPLATE_AVATARS.map((u, idx) => (
+                                <button
+                                  key={u}
+                                  type="button"
+                                  onClick={() => {
+                                    setMotionCharacterImageUrl(u);
+                                    toast.success(`Template avatar ${idx + 1} selected`);
+                                  }}
+                                  className="relative overflow-hidden rounded-lg border border-white/15 bg-black/30 transition hover:border-violet-400/40"
+                                  title={`Template avatar ${idx + 1}`}
+                                >
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img
+                                    src={u}
+                                    alt={`Template avatar ${idx + 1}`}
+                                    className="aspect-[3/4] w-full object-cover"
+                                  />
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
+
                         <div className="space-y-2">
                         <div className="flex items-center">
                             <StudioSingleModelCard
                               hideMeta
-                              label="Kling 3.0 Motion Control"
+                              label={appSection === "ad_clone" ? "Ad Clone (Kling Motion Control)" : "Kling 3.0 Motion Control"}
                               icon="kling"
                               resolution="1080p"
                               durationRange="3s–30s"
