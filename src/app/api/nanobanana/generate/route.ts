@@ -60,7 +60,7 @@ export async function POST(req: Request) {
     );
   }
   if (!personalKey) {
-    const dbPlan = await getUserPlan(supabase, user.id);
+    const dbPlan = await getUserPlan(user.id);
     const accountPlan = dbPlan !== "free" ? dbPlan : parseAccountPlan(body.accountPlan);
     if (!canUseStudioImagePickerModel(accountPlan, model)) {
       return NextResponse.json(

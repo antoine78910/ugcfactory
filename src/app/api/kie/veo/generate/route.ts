@@ -51,7 +51,7 @@ export async function POST(req: Request) {
   const personalKey =
     body && hasPersonalApiKey(body.personalApiKey) ? body.personalApiKey.trim() : undefined;
   if (!personalKey) {
-    const dbPlan = await getUserPlan(supabase, user.id);
+    const dbPlan = await getUserPlan(user.id);
     const accountPlan = dbPlan !== "free" ? dbPlan : parseAccountPlan(body?.accountPlan);
     if (!canUseVeoApiModel(accountPlan, veoModel)) {
       return NextResponse.json(

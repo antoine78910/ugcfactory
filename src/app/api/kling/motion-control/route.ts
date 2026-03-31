@@ -55,7 +55,7 @@ export async function POST(req: Request) {
 
   const personalKey = hasPersonalApiKey(body.personalApiKey) ? body.personalApiKey.trim() : undefined;
   if (!personalKey) {
-    const dbPlan = await getUserPlan(supabase, user.id);
+    const dbPlan = await getUserPlan(user.id);
     const accountPlan = dbPlan !== "free" ? dbPlan : parseAccountPlan(body.accountPlan);
     if (!canUseMotionControl(accountPlan)) {
       return NextResponse.json(

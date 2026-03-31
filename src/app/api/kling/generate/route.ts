@@ -91,7 +91,7 @@ export async function POST(req: Request) {
   const piapiKey = hasPersonalApiKey(body.piapiApiKey) ? body.piapiApiKey.trim() : undefined;
   if (!personalKey && !piapiKey) {
     // Fetch plan from DB (server-side); fall back to client claim only if table not yet available
-    const dbPlan = await getUserPlan(supabase, user.id);
+    const dbPlan = await getUserPlan(user.id);
     const accountPlan = dbPlan !== "free" ? dbPlan : parseAccountPlan(body.accountPlan);
     if (!canUseStudioVideoModel(accountPlan, model)) {
       return NextResponse.json(
