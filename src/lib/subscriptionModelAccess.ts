@@ -1,6 +1,6 @@
 /**
  * Which Studio image/video models each subscription tier may use.
- * Policy: Starter is restricted; Growth+ gets full model access.
+ * Policy: Starter includes paid-model access unless a model is explicitly gated higher.
  */
 
 import { isSubscriptionPlanId, type SubscriptionPlanId } from "@/lib/stripe/subscriptionPrices";
@@ -39,8 +39,7 @@ const IMAGE_MIN_RANK: Record<"nano" | "pro", number> = {
 const VIDEO_MIN_RANK: Record<string, number> = {
   "bytedance/seedance-1.5-pro": 0,
   "kling-2.6/video": 1, // Starter+
-  /** Restricted on Starter in Studio Video; available from Growth+. */
-  "bytedance/seedance-2.0-pro": 2,
+  "bytedance/seedance-2.0-pro": 1,
   "veo3_fast": 2,
   "kling-3.0/video": 2,
   veo3: 2,
