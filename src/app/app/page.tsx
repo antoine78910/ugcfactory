@@ -50,7 +50,7 @@ import {
 import { motionControlUpgradeMessage } from "@/lib/subscriptionModelAccess";
 import { clipboardImageFiles } from "@/lib/clipboardImage";
 import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
-import { uploadBlobUrlToCdn } from "@/lib/uploadBlobUrlToCdn";
+import { uploadBlobUrlToCdn, uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
 import { cn } from "@/lib/utils";
 
 type WizardStep = "url" | "analysis" | "quiz" | "image" | "video";
@@ -387,12 +387,14 @@ export default function AppBrandWizard() {
   const packshotFileInputRef = useRef<HTMLInputElement>(null);
 
   const [motionVideoRefBlobUrl, setMotionVideoRefBlobUrl] = useState<string | null>(null);
+  const [motionVideoFile, setMotionVideoFile] = useState<File | null>(null);
   const [motionVideoPosterUrl, setMotionVideoPosterUrl] = useState<string | null>(null);
   const [motionVideoPreviewLoading, setMotionVideoPreviewLoading] = useState(false);
   /** True only after the video element fires onPlaying — guarantees real frames are visible. */
   const [motionVideoPlaying, setMotionVideoPlaying] = useState(false);
   const [motionVideoDetectedDuration, setMotionVideoDetectedDuration] = useState<number | null>(null);
   const [motionCharacterImageUrl, setMotionCharacterImageUrl] = useState<string | null>(null);
+  const [motionCharacterFile, setMotionCharacterFile] = useState<File | null>(null);
   const [motionQuality, setMotionQuality] = useState<string>("720p");
   const [adCloneTranslateVideo, setAdCloneTranslateVideo] = useState(false);
   const [motionHistoryItems, setMotionHistoryItems] = useState<StudioHistoryItem[]>([]);
@@ -427,6 +429,8 @@ export default function AppBrandWizard() {
 
   /** Billable seconds: real clip length, or placeholder so 720p ↔ 1080p updates credits before upload. */
   const MOTION_CREDITS_PLACEHOLDER_SEC = 12;
+  /** Conservative guardrail for motion-control upload UX. */
+  const MOTION_VIDEO_MAX_BYTES = 100 * 1024 * 1024; // 100 MB
   const motionBillableSeconds = useMemo(() => {
     const d = motionVideoDetectedDuration;
     if (d != null && Number.isFinite(d) && d > 0) return d;
@@ -470,6 +474,7 @@ export default function AppBrandWizard() {
 
   const applyMotionCharacterFile = useCallback((file: File) => {
     const url = URL.createObjectURL(file);
+    setMotionCharacterFile(file);
     setMotionCharacterImageUrl(url);
     toast.success("Character image selected", { description: file.name });
   }, []);
@@ -621,6 +626,7 @@ export default function AppBrandWizard() {
   }, [motionCharacterImageUrl]);
 
   const clearMotionVideoReference = useCallback(() => {
+    setMotionVideoFile(null);
     setMotionVideoRefBlobUrl(null);
     setMotionVideoPosterUrl(null);
     setMotionVideoDetectedDuration(null);
@@ -628,6 +634,7 @@ export default function AppBrandWizard() {
   }, []);
 
   const clearMotionCharacterImage = useCallback(() => {
+    setMotionCharacterFile(null);
     setMotionCharacterImageUrl(null);
   }, []);
 
@@ -2148,6 +2155,15 @@ export default function AppBrandWizard() {
                             onChange={(e) => {
                               const f = e.target.files?.[0] ?? null;
                               if (!f) return;
+                              if (f.size > MOTION_VIDEO_MAX_BYTES) {
+                                toast.error("Video file is too large.", {
+                                  description:
+                                    "Please upload a lighter clip (<= 100 MB) and keep motion-control videos short (3-30s).",
+                                });
+                                e.currentTarget.value = "";
+                                return;
+                              }
+                              setMotionVideoFile(f);
                               setMotionVideoPreviewLoading(true);
                               setMotionVideoPlaying(false);
                               setMotionVideoDetectedDuration(null);
@@ -2180,8 +2196,10 @@ export default function AppBrandWizard() {
                                     className="absolute inset-0 z-[1] h-full w-full object-cover"
                                     muted
                                     playsInline
+                                    controls
                                     autoPlay
                                     loop
+                                    poster={motionVideoPosterUrl ?? undefined}
                                     preload="auto"
                                     onLoadedMetadata={(ev) => {
                                       const v = ev.currentTarget;
@@ -2215,6 +2233,10 @@ export default function AppBrandWizard() {
                                     }}
                                     onError={() => {
                                       setMotionVideoPreviewLoading(false);
+                                      toast.error("Could not preview this video.", {
+                                        description:
+                                          "Try another file format (MP4/H.264 recommended) or re-select the clip.",
+                                      });
                                     }}
                                   />
                                   <UploadBusyOverlay
@@ -2346,6 +2368,7 @@ export default function AppBrandWizard() {
                                   key={u}
                                   type="button"
                                   onClick={() => {
+                                    setMotionCharacterFile(null);
                                     setMotionCharacterImageUrl(u);
                                     toast.success(`Template avatar ${idx + 1} selected`);
                                   }}
@@ -2484,7 +2507,8 @@ export default function AppBrandWizard() {
                                 motionCharacterImageUrl,
                                 "motion-character.jpg",
                                 "image/jpeg",
-                              ).catch(() => {
+                              ).catch(async () => {
+                                if (motionCharacterFile) return uploadFileToCdn(motionCharacterFile);
                                 // Template avatars are already hosted in /public.
                                 if (/^https?:\/\//i.test(motionCharacterImageUrl)) return motionCharacterImageUrl;
                                 if (motionCharacterImageUrl.startsWith("/")) {
@@ -2492,11 +2516,13 @@ export default function AppBrandWizard() {
                                 }
                                 throw new Error("Could not prepare character image");
                               });
-                              const videoHttps = await uploadBlobUrlToCdn(
-                                motionVideoRefBlobUrl,
-                                "motion-ref.mp4",
-                                "video/mp4",
-                              );
+                              const videoHttps = motionVideoFile
+                                ? await uploadFileToCdn(motionVideoFile)
+                                : await uploadBlobUrlToCdn(
+                                    motionVideoRefBlobUrl,
+                                    "motion-ref.mp4",
+                                    "video/mp4",
+                                  );
                               const res = await fetch("/api/kling/motion-control", {
                                 method: "POST",
                                 headers: { "Content-Type": "application/json" },
