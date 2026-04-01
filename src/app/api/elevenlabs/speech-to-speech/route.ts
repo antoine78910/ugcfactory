@@ -1,5 +1,5 @@
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 import { NextResponse } from "next/server";
 import { convertSpeechToSpeechWithElevenLabs } from "@/lib/elevenlabs";
@@ -7,26 +7,7 @@ import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/ge
 import { STUDIO_MEDIA_BUCKET } from "@/lib/studioGenerationsMedia";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
-
-function extFromOutputFormat(outputFormat: string): string {
-  const f = outputFormat.trim().toLowerCase();
-  if (f.startsWith("mp3_")) return ".mp3";
-  if (f.startsWith("opus_")) return ".opus";
-  if (f.startsWith("pcm_")) return ".wav";
-  if (f.startsWith("ulaw_")) return ".ulaw";
-  if (f.startsWith("alaw_")) return ".alaw";
-  return ".mp3";
-}
-
-function contentTypeFromOutputFormat(outputFormat: string): string {
-  const f = outputFormat.trim().toLowerCase();
-  if (f.startsWith("mp3_")) return "audio/mpeg";
-  if (f.startsWith("opus_")) return "audio/ogg";
-  if (f.startsWith("pcm_")) return "audio/wav";
-  if (f.startsWith("ulaw_")) return "audio/basic";
-  if (f.startsWith("alaw_")) return "audio/basic";
-  return "audio/mpeg";
-}
+import { mergeVideoWithAudioServer } from "@/lib/mergeVideoAudio";
 
 function messageFromUnknown(err: unknown, fallback = "Unknown error."): string {
   if (err instanceof Error) return err.message || fallback;
@@ -36,6 +17,12 @@ function messageFromUnknown(err: unknown, fallback = "Unknown error."): string {
   }
   const s = String(err ?? "").trim();
   return s || fallback;
+}
+
+function isVideoFile(contentType: string, url: string): boolean {
+  if (contentType.startsWith("video/")) return true;
+  const ext = url.split(/[?#]/)[0].split(".").pop()?.toLowerCase() ?? "";
+  return ["mp4", "mov", "avi", "webm", "mkv", "m4v"].includes(ext);
 }
 
 type RequestBody = {
@@ -96,25 +83,35 @@ export async function POST(req: Request) {
     );
   }
 
-  // Download the audio/video from the provided URL (Supabase Storage)
-  let audioFile: File;
+  // Download the file from Supabase Storage
+  let inputBuffer: Buffer;
+  let inputContentType: string;
   try {
     const dlRes = await fetch(audioUrl);
     if (!dlRes.ok) throw new Error(`HTTP ${dlRes.status}`);
-    const blob = await dlRes.blob();
-    const ext = audioUrl.split(/[?#]/)[0].split(".").pop() ?? "mp4";
-    audioFile = new File([blob], `input.${ext}`, { type: blob.type || "application/octet-stream" });
+    inputContentType = dlRes.headers.get("content-type") ?? "application/octet-stream";
+    inputBuffer = Buffer.from(await dlRes.arrayBuffer());
   } catch (dlErr) {
-    const msg = messageFromUnknown(dlErr, "Could not download audio file.");
+    const msg = messageFromUnknown(dlErr, "Could not download input file.");
     return NextResponse.json({ error: `Failed to download input file: ${msg}` }, { status: 400 });
   }
+
+  const inputIsVideo = isVideoFile(inputContentType, audioUrl);
+
+  // Build a File object to send to ElevenLabs
+  const ext = audioUrl.split(/[?#]/)[0].split(".").pop() ?? "mp4";
+  const ab = inputBuffer.buffer.slice(
+    inputBuffer.byteOffset,
+    inputBuffer.byteOffset + inputBuffer.byteLength,
+  ) as ArrayBuffer;
+  const audioFile = new File([ab], `input.${ext}`, { type: inputContentType });
 
   const label = voiceName ? `Voice change (${voiceName})` : "Voice change";
   const { data: inserted, error: insertError } = await supabase
     .from("studio_generations")
     .insert({
       user_id: user.id,
-      kind: "studio_audio",
+      kind: inputIsVideo ? "studio_video" : "studio_audio",
       status: "processing",
       label,
       external_task_id: `elevenlabs-sync:${crypto.randomUUID()}`,
@@ -133,6 +130,7 @@ export async function POST(req: Request) {
   const rowId = String(inserted.id);
 
   try {
+    // 1. Convert speech with ElevenLabs
     const converted = await convertSpeechToSpeechWithElevenLabs({
       voiceId,
       audioFile,
@@ -149,23 +147,41 @@ export async function POST(req: Request) {
     const admin = createSupabaseServiceClient();
     if (!admin) throw new Error("Supabase service role key missing on server.");
 
-    const ext = extFromOutputFormat(outputFormat);
-    const storagePath = `${user.id}/${rowId}/voice-change-${crypto.randomUUID()}${ext}`;
-    const ct = converted.contentType || contentTypeFromOutputFormat(outputFormat);
+    let finalBuffer: Buffer;
+    let finalContentType: string;
+    let finalExt: string;
+    let resultKind: "video" | "audio";
+
+    if (inputIsVideo) {
+      // 2. Merge: mute original video + overlay new audio
+      finalBuffer = await mergeVideoWithAudioServer(inputBuffer, converted.buffer);
+      finalContentType = "video/mp4";
+      finalExt = ".mp4";
+      resultKind = "video";
+    } else {
+      finalBuffer = converted.buffer;
+      finalContentType = converted.contentType || "audio/mpeg";
+      finalExt = ".mp3";
+      resultKind = "audio";
+    }
+
+    // 3. Upload to Supabase Storage
+    const storagePath = `${user.id}/${rowId}/voice-change-${crypto.randomUUID()}${finalExt}`;
     const { data: uploaded, error: uploadError } = await admin.storage
       .from(STUDIO_MEDIA_BUCKET)
-      .upload(storagePath, converted.buffer, {
-        contentType: ct,
+      .upload(storagePath, finalBuffer, {
+        contentType: finalContentType,
         upsert: false,
       });
     if (uploadError || !uploaded?.path) {
-      throw new Error(uploadError?.message ?? "Could not upload ElevenLabs output.");
+      throw new Error(uploadError?.message ?? "Could not upload result.");
     }
 
     const {
       data: { publicUrl },
     } = admin.storage.from(STUDIO_MEDIA_BUCKET).getPublicUrl(uploaded.path);
 
+    // 4. Update DB row
     const { error: updateError } = await supabase
       .from("studio_generations")
       .update({
@@ -179,9 +195,9 @@ export async function POST(req: Request) {
     return NextResponse.json({
       rowId,
       mediaUrl: publicUrl,
+      kind: resultKind,
       provider: "elevenlabs",
       label,
-      outputFormat,
     });
   } catch (err) {
     logGenerationFailure("elevenlabs/speech-to-speech", err, { rowId, voiceId });

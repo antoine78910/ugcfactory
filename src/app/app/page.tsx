@@ -3601,7 +3601,9 @@ export default function AppBrandWizard() {
                                   throw new Error(`Upload failed (HTTP ${uploadRes.status}).`);
                                 }
 
-                                toast.message("Sending to ElevenLabs...");
+                                toast.message("Converting voice & merging...", {
+                                  description: "This may take up to a minute.",
+                                });
 
                                 // 3. Send just the URL + params (lightweight JSON, no file in body)
                                 const res = await fetch("/api/elevenlabs/speech-to-speech", {
@@ -3622,7 +3624,7 @@ export default function AppBrandWizard() {
                                   }),
                                 });
 
-                                let json: { rowId?: string; mediaUrl?: string; error?: string };
+                                let json: { rowId?: string; mediaUrl?: string; kind?: string; error?: string };
                                 try {
                                   json = await res.json();
                                 } catch {
@@ -3634,6 +3636,7 @@ export default function AppBrandWizard() {
                                   throw new Error(json.error || "Voice change failed.");
                                 }
 
+                                const resultIsVideo = json.kind === "video";
                                 setMotionHistoryItems((prev) =>
                                   prev.map((i) =>
                                     i.id === jobId
@@ -3641,15 +3644,18 @@ export default function AppBrandWizard() {
                                           ...i,
                                           id: json.rowId!,
                                           mediaUrl: json.mediaUrl,
-                                          kind: "audio",
+                                          kind: resultIsVideo ? "video" : "audio",
                                           status: "ready",
-                                          studioGenerationKind: "studio_audio",
+                                          label: `Voice changed — ${selectedElevenVoice?.name ?? "custom"}`,
+                                          studioGenerationKind: resultIsVideo ? "studio_video" : "studio_audio",
                                         }
                                       : i,
                                   ),
                                 );
-                                toast.success("Voice change complete", {
-                                  description: "Audio is available in your history.",
+                                toast.success(resultIsVideo ? "Video ready!" : "Voice change complete", {
+                                  description: resultIsVideo
+                                    ? "The video with the new voice is in your history."
+                                    : "Audio is available in your history.",
                                 });
                                 return;
                               }
