@@ -19,6 +19,7 @@ import {
   type SubscriptionPlanId,
   isSubscriptionPlanId,
 } from "@/lib/stripe/subscriptionPrices";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 // ---------------------------------------------------------------------------
 // localStorage keys — bare (no namespace).
@@ -243,13 +244,40 @@ export function CreditsPlanProvider({
   children: ReactNode;
   userId?: string | null;
 }) {
-  const [state, setState] = useState<CreditsState>(() => readState(userId));
+  const [resolvedUserId, setResolvedUserId] = useState<string | null>(userId ?? null);
+  const [state, setState] = useState<CreditsState>(() => readState(userId ?? null));
   const [isUnlimited, setIsUnlimited] = useState(false);
 
   // Re-read when userId becomes available (SSR hydration) or changes (login/logout).
   useEffect(() => {
-    setState(readState(userId));
+    setResolvedUserId(userId ?? null);
+    setState(readState(userId ?? null));
   }, [userId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let unsubscribe: (() => void) | undefined;
+
+    try {
+      const supabase = createSupabaseBrowserClient();
+      void supabase.auth.getUser().then(({ data }) => {
+        if (!cancelled) setResolvedUserId(data.user?.id ?? null);
+      });
+      const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+        if (!cancelled) setResolvedUserId(session?.user?.id ?? null);
+      });
+      unsubscribe = () => data.subscription.unsubscribe();
+    } catch {
+      // Public pages without Supabase config can stay anonymous.
+    }
+
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
+  }, []);
+
+  const activeUserId = resolvedUserId ?? null;
 
   // ---------------------------------------------------------------------------
   // DB sync — runs once on mount.
@@ -263,6 +291,8 @@ export function CreditsPlanProvider({
   // "free" (webhook not yet processed), we keep the plan from consumeCheckoutQueryParams.
   // ---------------------------------------------------------------------------
   useEffect(() => {
+    // Skip when not authenticated — avoids a guaranteed 401 on public pages.
+    if (!activeUserId) return;
     fetch("/api/me/subscription")
       .then((r) => (r.ok ? r.json() : null))
       .then((data: { planId: string; userId?: string; unlimited?: boolean } | null) => {
@@ -323,11 +353,11 @@ export function CreditsPlanProvider({
         /* network error — keep local state */
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [activeUserId]);
 
   const syncFromStorage = useCallback(() => {
-    setState(readState(userId));
-  }, [userId]);
+    setState(readState(activeUserId));
+  }, [activeUserId]);
 
   useEffect(() => {
     syncFromStorage();
@@ -345,10 +375,10 @@ export function CreditsPlanProvider({
 
   const commit = useCallback(
     (next: CreditsState) => {
-      persist(next, userId);
+      persist(next, activeUserId);
       setState(next);
     },
-    [userId],
+    [activeUserId],
   );
 
   const setSubscriptionPlan = useCallback(
@@ -363,7 +393,7 @@ export function CreditsPlanProvider({
     (packKey: CreditPackKey) => {
       const add = creditsForPackKey(packKey);
       if (add <= 0) return;
-      const prev = readState(userId);
+      const prev = readState(activeUserId);
       const nextCurrent = prev.current + add;
       if (prev.planId === "free") {
         const nextTotal = prev.total + add;
@@ -377,7 +407,7 @@ export function CreditsPlanProvider({
         });
       }
     },
-    [commit, userId],
+    [activeUserId, commit],
   );
 
   const spendCredits = useCallback(
@@ -386,7 +416,7 @@ export function CreditsPlanProvider({
       if (isUnlimited) return;
       const k = Math.max(0, Math.floor(n));
       if (k === 0) return;
-      const prev = readState(userId);
+      const prev = readState(activeUserId);
       const nextCurrent = Math.max(0, prev.current - k);
       const nextTotal =
         prev.planId === "free"
@@ -394,14 +424,14 @@ export function CreditsPlanProvider({
           : Math.max(subscriptionCredits(prev.planId), nextCurrent);
       commit({ ...prev, current: nextCurrent, total: nextTotal });
     },
-    [commit, isUnlimited, userId],
+    [activeUserId, commit, isUnlimited],
   );
 
   const grantCredits = useCallback(
     (n: number) => {
       const k = Math.max(0, Math.floor(n));
       if (k === 0) return;
-      const prev = readState(userId);
+      const prev = readState(activeUserId);
       const nextCurrent = prev.current + k;
       const nextTotal =
         prev.planId === "free"
@@ -409,7 +439,7 @@ export function CreditsPlanProvider({
           : Math.max(subscriptionCredits(prev.planId), nextCurrent);
       commit({ planId: prev.planId, current: nextCurrent, total: nextTotal });
     },
-    [commit, userId],
+    [activeUserId, commit],
   );
 
   const planDisplayName = useMemo(() => {

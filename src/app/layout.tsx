@@ -5,7 +5,6 @@ import "./globals.css";
 import { CreditsPlanProvider } from "@/app/_components/CreditsPlanContext";
 import { Toaster } from "@/components/ui/sonner";
 import HeyoInit from "@/app/_components/HeyoInit";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -40,20 +39,11 @@ const DATAFAST_DOMAIN = process.env.NEXT_PUBLIC_DATAFAST_DOMAIN ?? "youry.io";
 const LINKJOLT_MERCHANT_ID =
   process.env.NEXT_PUBLIC_LINKJOLT_MERCHANT_ID ?? "NKdBH0Xt51wfjtEIZB5Zg";
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  let userId: string | null = null;
-  try {
-    const supabase = await createSupabaseServerClient();
-    const { data } = await supabase.auth.getUser();
-    userId = data.user?.id ?? null;
-  } catch {
-    // Not authenticated or Supabase unavailable — credits context will use anonymous keys.
-  }
-
   return (
     <html lang="en">
       <body
@@ -64,16 +54,16 @@ export default async function RootLayout({
         <Script
           id="datafast"
           src="https://datafa.st/js/script.js"
-          strategy="afterInteractive"
+          strategy="lazyOnload"
           data-website-id={DATAFAST_WEBSITE_ID}
           data-domain={DATAFAST_DOMAIN}
         />
         <Script
           id="linkjolt"
           src={`https://www.linkjolt.io/api/tracking.js?id=${LINKJOLT_MERCHANT_ID}`}
-          strategy="afterInteractive"
+          strategy="lazyOnload"
         />
-        <CreditsPlanProvider userId={userId}>
+        <CreditsPlanProvider>
           <HeyoInit />
           {children}
         </CreditsPlanProvider>

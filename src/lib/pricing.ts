@@ -3,7 +3,11 @@
  * Import from API routes and UI for consistent billing + margin analytics.
  */
 
-import { isStudioSeedreamImagePickerId } from "@/lib/studioImageModels";
+import {
+  isStudioGoogleNanoBananaPickerId,
+  isStudioSeedreamImagePickerId,
+  isStudioUnifiedSeedreamPickerId,
+} from "@/lib/studioImageModels";
 
 // ---------------------------------------------------------------------------
 // Global base
@@ -211,6 +215,35 @@ export const IMAGE_MODEL = {
     ),
     fal_list_price_usd: SEEDREAM_50_LITE_FAL_LIST_USD,
   },
+  seedream_45: {
+    model: "seedream_45",
+    cost_usd: SEEDREAM_45_BASE.cost_usd,
+    cost_with_buffer: SEEDREAM_45_BASE.cost_with_buffer,
+    target_margin: SEEDREAM_45_BASE.target_margin,
+    price_usd: SEEDREAM_45_COST_USD / (1 - PRICING_BASE.target_margins.image),
+    credits: Math.max(
+      1,
+      Math.ceil((SEEDREAM_45_COST_USD / (1 - PRICING_BASE.target_margins.image)) / STARTER_CREDIT_VALUE_USD),
+    ),
+    fal_list_price_usd: SEEDREAM_45_FAL_LIST_USD,
+  },
+  seedream_50_lite: {
+    model: "seedream_50_lite",
+    cost_usd: SEEDREAM_50_LITE_BASE.cost_usd,
+    cost_with_buffer: SEEDREAM_50_LITE_BASE.cost_with_buffer,
+    target_margin: SEEDREAM_50_LITE_BASE.target_margin,
+    price_usd: SEEDREAM_50_LITE_COST_USD / (1 - PRICING_BASE.target_margins.image),
+    credits: Math.max(
+      1,
+      Math.ceil((SEEDREAM_50_LITE_COST_USD / (1 - PRICING_BASE.target_margins.image)) / STARTER_CREDIT_VALUE_USD),
+    ),
+    fal_list_price_usd: SEEDREAM_50_LITE_FAL_LIST_USD,
+  },
+  google_nano_banana: googleImageTier({
+    model: "google_nano_banana",
+    cost_usd: 0.02,
+    fal_list_price_usd: 0.039,
+  }),
 } as const;
 
 /** Kie Market model id — Topaz Video Upscale (1× / 2× / 4×). */
@@ -568,8 +601,14 @@ export function studioImageCreditsPerOutput(opts: {
   studioModel: string;
   resolution: StudioImageOutputResolution;
 }): number {
-  if (isStudioSeedreamImagePickerId(opts.studioModel)) {
+  if (isStudioSeedreamImagePickerId(opts.studioModel) || isStudioUnifiedSeedreamPickerId(opts.studioModel)) {
     return IMAGE_MODEL[opts.studioModel].credits;
+  }
+  if (isStudioGoogleNanoBananaPickerId(opts.studioModel)) {
+    return IMAGE_MODEL.google_nano_banana.credits;
+  }
+  if (opts.studioModel === "recraft_remove_background") {
+    return IMAGE_MODEL.recraft_remove_background.credits;
   }
   const m = opts.studioModel as "nano" | "pro";
   if (m === "pro") {

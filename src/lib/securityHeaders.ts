@@ -3,13 +3,13 @@
  * Third-party cookies (Heyo, Datafast, Linkjolt) cannot be removed from our code — only vendors can migrate to first-party / CHIPS.
  */
 
-const CSP_PARTS = [
+const CSP_PARTS_BASE = [
   "default-src 'self'",
   "base-uri 'self'",
   "form-action 'self'",
   "frame-ancestors 'self'",
-  // Next.js + Tailwind need inline; eval sometimes in dev / legacy chunks
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://datafa.st https://www.linkjolt.io https://linkjolt.io https://heyo.so https://*.heyo.so https://cdn.heyo.so https://js.stripe.com https://*.stripe.com https://browser.sentry-cdn.com",
+  // Next.js needs unsafe-inline for its runtime scripts; third-party widgets (heyo, stripe) also require it.
+  "script-src 'self' 'unsafe-inline' https://datafa.st https://www.linkjolt.io https://linkjolt.io https://heyo.so https://*.heyo.so https://cdn.heyo.so https://js.stripe.com https://*.stripe.com https://browser.sentry-cdn.com",
   "style-src 'self' 'unsafe-inline' https://heyo.so https://*.heyo.so https://cdn.heyo.so",
   "img-src 'self' data: blob: https:",
   "font-src 'self' data: https://fonts.gstatic.com",
@@ -20,9 +20,12 @@ const CSP_PARTS = [
 ];
 
 export function contentSecurityPolicy(): string {
-  const p = [...CSP_PARTS];
+  const p = [...CSP_PARTS_BASE];
   if (process.env.VERCEL_ENV === "production") {
     p.push("upgrade-insecure-requests");
+  } else {
+    // Dev builds use eval for hot-module replacement and fast refresh.
+    p[p.findIndex((d) => d.startsWith("script-src"))] += " 'unsafe-eval'";
   }
   return p.join("; ");
 }

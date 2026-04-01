@@ -46,6 +46,11 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(target, 308);
   }
 
+  // Keep the marketing landing page cache-friendly and eligible for bfcache.
+  if (MAIN_HOSTS.has(host) && pathname === "/") {
+    return NextResponse.next();
+  }
+
   // Refresh the Supabase session on every request so Server Components always
   // receive a valid access token (tokens expire after ~1 hour without this).
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;

@@ -22,22 +22,14 @@ import { topazImageUpscaleCredits, topazVideoUpscaleCredits } from "@/lib/pricin
 import { registerStudioGenerationClient } from "@/lib/registerStudioGenerationClient";
 import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
 import { userMessageFromCaughtError } from "@/lib/generationUserMessage";
+import { uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
 import {
-  assertStudioImageUpload,
-  assertStudioVideoUpload,
   STUDIO_IMAGE_FILE_ACCEPT,
   STUDIO_VIDEO_FILE_ACCEPT,
 } from "@/lib/studioUploadValidation";
 
 async function uploadFile(file: File, kind: "image" | "video"): Promise<string> {
-  if (kind === "video") assertStudioVideoUpload(file);
-  else assertStudioImageUpload(file);
-  const fd = new FormData();
-  fd.set("file", file);
-  const res = await fetch("/api/uploads", { method: "POST", body: fd });
-  const json = (await res.json()) as { url?: string; error?: string };
-  if (!res.ok || !json.url) throw new Error(json.error || "Upload failed");
-  return json.url;
+  return uploadFileToCdn(file, { kind });
 }
 
 type RefundHint = { jobId: string; credits: number };

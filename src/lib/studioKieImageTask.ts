@@ -14,6 +14,7 @@ import type { NanoBananaImageSize, NanoBananaProAspectRatio, NanoBananaProResolu
 import { hasPersonalApiKey } from "@/lib/personalApiBypass";
 import {
   isStudioSeedreamImagePickerId,
+  resolveStudioImageModelForReferences,
   studioSeedreamPickerRequiresReferenceImages,
   type StudioImageKiePickerModelId,
 } from "@/lib/studioImageModels";
@@ -58,7 +59,8 @@ export async function createStudioKieImageTasks(input: StudioKieImageTaskInput):
       : [];
 
   const imageUrlsRaw = normalizedImageUrls.length > 0 ? normalizedImageUrls : undefined;
-  const model = input.model ?? "nano";
+  const requestedModel = input.model ?? "nano";
+  const model = resolveStudioImageModelForReferences(requestedModel, Boolean(imageUrlsRaw?.length));
   const personalKey = hasPersonalApiKey(input.personalApiKey) ? input.personalApiKey!.trim() : undefined;
   const num = clampStudioNumImages(input.numImages);
   const resolution = (input.resolution ?? "1K") as "1K" | "2K" | "4K";
@@ -98,9 +100,14 @@ export async function createStudioKieImageTasks(input: StudioKieImageTaskInput):
     return { taskIds, model, kieModel };
   }
 
+  if (model === "recraft_remove_background") {
+    throw new Error("Recraft Remove Background is not wired to the Studio image backend yet.");
+  }
+
   const imageUrls = await normalizeKieNanoBananaImageInputUrls(imageUrlsRaw);
   const resolutionNano = resolution as KieGoogleImageResolution;
-  const kieModel = kieMarketModelForStudioImage(model);
+  const googleModel = model === "pro" ? "pro" : "nano";
+  const kieModel = kieMarketModelForStudioImage(googleModel);
   const aspectFor = input.aspectRatio ?? input.imageSize ?? "auto";
 
   const runOne = () =>

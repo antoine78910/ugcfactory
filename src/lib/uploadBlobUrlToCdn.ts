@@ -38,8 +38,21 @@ async function uploadViaNextApi(file: File): Promise<string> {
           : "Upload failed",
     );
   }
-  const json = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
-  if (!res.ok || !json.url) throw new Error(json.error || "Upload failed");
+  const raw = await res.text().catch(() => "");
+  let json: { url?: string; error?: string } = {};
+  if (raw) {
+    try {
+      json = JSON.parse(raw) as { url?: string; error?: string };
+    } catch {
+      const snippet = raw.replace(/\s+/g, " ").trim().slice(0, 180);
+      throw new Error(
+        res.ok
+          ? "Upload failed: invalid server response."
+          : snippet || `Upload failed (${res.status}).`,
+      );
+    }
+  }
+  if (!res.ok || !json.url) throw new Error(json.error || `Upload failed (${res.status})`);
   return json.url;
 }
 

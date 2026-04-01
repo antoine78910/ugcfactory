@@ -4,7 +4,11 @@
  */
 
 import { isSubscriptionPlanId, type SubscriptionPlanId } from "@/lib/stripe/subscriptionPrices";
-import { STUDIO_SEEDREAM_IMAGE_PICKER_IDS, isStudioSeedreamImagePickerId } from "@/lib/studioImageModels";
+import {
+  STUDIO_UNIFIED_IMAGE_PICKER_IDS,
+  isStudioGoogleNanoBananaPickerId,
+  isStudioSeedreamImagePickerId,
+} from "@/lib/studioImageModels";
 import { STUDIO_VIDEO_EDIT_PICKER_IDS } from "@/lib/studioVideoEditModels";
 
 /** Includes free (credit packs / demo). */
@@ -70,8 +74,7 @@ export function canUseStudioImagePickerModel(planId: AccountPlanId, pickerId: st
   const id = pickerId.trim();
   if (id === "nano" || id === "pro") return canUseStudioImageModel(planId, id);
   if (isStudioSeedreamImagePickerId(id)) return planRank(planId) >= IMAGE_MIN_RANK.pro;
-  // Legacy / extra pickers: treat as Growth+ to match the “Starter is restricted” policy.
-  if (id === "nanobanana_standard" || id === "google_nano_banana_edit" || id === "recraft_remove_background") {
+  if (isStudioGoogleNanoBananaPickerId(id) || id === "recraft_remove_background") {
     return planRank(planId) >= IMAGE_MIN_RANK.pro;
   }
   return false;
@@ -115,7 +118,7 @@ export function minPlanForStudioImagePicker(pickerId: string): AccountPlanId {
   const id = pickerId.trim();
   if (id === "nano" || id === "pro") return minPlanForStudioImage(id);
   if (isStudioSeedreamImagePickerId(id)) return planIdAtMinRank(IMAGE_MIN_RANK.pro);
-  if (id === "nanobanana_standard" || id === "google_nano_banana_edit" || id === "recraft_remove_background") {
+  if (isStudioGoogleNanoBananaPickerId(id) || id === "recraft_remove_background") {
     return planIdAtMinRank(IMAGE_MIN_RANK.pro);
   }
   return "scale";
@@ -200,12 +203,16 @@ export function studioImageDisplayLabel(model: "nano" | "pro"): string {
 }
 
 const STUDIO_IMAGE_PICKER_LABELS: Record<string, string> = {
-  seedream_45_text_to_image: "Seedream 4.5 · text to image",
-  seedream_45_image_to_image: "Seedream 4.5 · image to image",
-  seedream_50_lite_text_to_image: "Seedream 5.0 Lite · text to image",
-  seedream_50_lite_image_to_image: "Seedream 5.0 Lite · image to image",
-  nanobanana_standard: "Google Nano Banana · text to image",
-  google_nano_banana_edit: "Google Nano Banana · image to image",
+  seedream_45: "Seedream 4.5",
+  seedream_45_text_to_image: "Seedream 4.5",
+  seedream_45_image_to_image: "Seedream 4.5",
+  seedream_50_lite: "Seedream 5.0 Lite",
+  seedream_50_lite_text_to_image: "Seedream 5.0 Lite",
+  seedream_50_lite_image_to_image: "Seedream 5.0 Lite",
+  google_nano_banana: "Google Nano Banana",
+  nanobanana_standard: "Google Nano Banana",
+  google_nano_banana_edit: "Google Nano Banana",
+  recraft_remove_background: "Recraft Remove Background",
 };
 
 export function studioImagePickerDisplayLabel(pickerId: string): string {
@@ -232,9 +239,10 @@ export function listAllowedStudioImageModels(planId: AccountPlanId): string[] {
   const out: string[] = [];
   if (canUseStudioImageModel(planId, "nano")) out.push(studioImageDisplayLabel("nano"));
   if (canUseStudioImageModel(planId, "pro")) out.push(studioImageDisplayLabel("pro"));
-  for (const id of STUDIO_SEEDREAM_IMAGE_PICKER_IDS) {
+  for (const id of STUDIO_UNIFIED_IMAGE_PICKER_IDS) {
     if (canUseStudioImagePickerModel(planId, id)) {
-      out.push(studioImagePickerDisplayLabel(id));
+      const label = studioImagePickerDisplayLabel(id);
+      if (!out.includes(label)) out.push(label);
     }
   }
   return out;

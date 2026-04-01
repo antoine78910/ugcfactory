@@ -44,6 +44,13 @@ export function HeroVideoCarousel3D({ srcs = DEFAULT_SRCS }: Props) {
   useEffect(() => {
     const root = rootRef.current;
     if (!root) return;
+    const videos = Array.from(root.querySelectorAll<HTMLVideoElement>("video"));
+    const videoPanels = videos
+      .map((video) => {
+        const panel = video.parentElement;
+        return panel ? { video, panel } : null;
+      })
+      .filter((entry): entry is { video: HTMLVideoElement; panel: HTMLElement } => Boolean(entry));
 
     const grace = new Map<HTMLVideoElement, number>();
     let raf = 0;
@@ -51,7 +58,7 @@ export function HeroVideoCarousel3D({ srcs = DEFAULT_SRCS }: Props) {
     let running = false;
 
     const pauseAll = () => {
-      for (const v of root.querySelectorAll<HTMLVideoElement>('video')) v.pause();
+      for (const { video } of videoPanels) video.pause();
     };
 
     const runSync = () => {
@@ -72,10 +79,7 @@ export function HeroVideoCarousel3D({ srcs = DEFAULT_SRCS }: Props) {
 
       const candidates: { video: HTMLVideoElement; area: number }[] = [];
 
-      for (const video of root.querySelectorAll<HTMLVideoElement>('video')) {
-        const panel = video.parentElement;
-        if (!panel) continue;
-
+      for (const { video, panel } of videoPanels) {
         const rect = panel.getBoundingClientRect();
         const iw = Math.min(rect.right, vw - padX) - Math.max(rect.left, padX);
         const ih = Math.min(rect.bottom, bandBottom) - Math.max(rect.top, bandTop);
@@ -93,7 +97,7 @@ export function HeroVideoCarousel3D({ srcs = DEFAULT_SRCS }: Props) {
         candidates.slice(0, MAX_PLAYING).map((c) => c.video),
       );
 
-      for (const video of root.querySelectorAll<HTMLVideoElement>('video')) {
+      for (const { video } of videoPanels) {
         if (allow.has(video)) {
           grace.set(video, 0);
           if (video.paused) void video.play().catch(() => {});

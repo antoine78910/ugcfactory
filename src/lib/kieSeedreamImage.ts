@@ -2,8 +2,10 @@ import type { StudioSeedreamImagePickerId } from "@/lib/studioImageModels";
 import { studioSeedreamPickerRequiresReferenceImages } from "@/lib/studioImageModels";
 
 const KIE_BY_PICKER: Record<StudioSeedreamImagePickerId, string> = {
+  seedream_45: "seedream/4.5-text-to-image",
   seedream_45_text_to_image: "seedream/4.5-text-to-image",
   seedream_45_image_to_image: "seedream/4.5-edit",
+  seedream_50_lite: "seedream/5-lite-text-to-image",
   seedream_50_lite_text_to_image: "seedream/5-lite-text-to-image",
   seedream_50_lite_image_to_image: "seedream/5-lite-image-to-image",
 };

@@ -38,7 +38,6 @@ import {
 import {
   isStudioImageKiePickerModelId,
   isStudioSeedreamImagePickerId,
-  studioSeedreamPickerRequiresReferenceImages,
   type StudioImageKiePickerModelId,
 } from "@/lib/studioImageModels";
 import { STUDIO_IMAGE_TAB_KINDS } from "@/lib/studioGenerationKinds";
@@ -46,7 +45,8 @@ import { loadAvatarUrls } from "@/lib/avatarLibrary";
 import { AvatarPickerDialog } from "@/app/_components/AvatarPickerDialog";
 import { clipboardImageFiles } from "@/lib/clipboardImage";
 import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
-import { assertStudioImageUpload, STUDIO_IMAGE_FILE_ACCEPT } from "@/lib/studioUploadValidation";
+import { uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
+import { STUDIO_IMAGE_FILE_ACCEPT } from "@/lib/studioUploadValidation";
 
 const ASPECT_RATIOS_PRO = [
   "1:1",
@@ -82,58 +82,31 @@ const IMAGE_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
     searchText: "nanobanana 2 standard google",
   },
   {
-    id: "seedream_45_text_to_image",
+    id: "seedream_45",
     label: "Seedream 4.5",
     icon: "google",
-    subtitle: "Text to image · Image to image",
+    subtitle: "Auto text-to-image / image-to-image",
     resolution: "1 crédit / image",
-    durationRange: "T2I",
-    searchText: "seedream 4.5 text to image",
+    durationRange: "Auto",
+    searchText: "seedream 4.5 text to image image to image",
   },
   {
-    id: "seedream_45_image_to_image",
-    label: "Seedream 4.5",
-    icon: "google",
-    subtitle: "Text to image · Image to image",
-    resolution: "1 crédit / image",
-    durationRange: "I2I",
-    searchText: "seedream 4.5 image to image",
-  },
-  {
-    id: "seedream_50_lite_text_to_image",
+    id: "seedream_50_lite",
     label: "Seedream 5.0 Lite",
     icon: "google",
-    subtitle: "Text to image · Image to image",
+    subtitle: "Auto text-to-image / image-to-image",
     resolution: "1 crédit / image",
-    durationRange: "T2I",
-    searchText: "seedream 5.0 lite text to image",
+    durationRange: "Auto",
+    searchText: "seedream 5.0 lite text to image image to image",
   },
   {
-    id: "seedream_50_lite_image_to_image",
-    label: "Seedream 5.0 Lite",
-    icon: "google",
-    subtitle: "Text to image · Image to image",
-    resolution: "1 crédit / image",
-    durationRange: "I2I",
-    searchText: "seedream 5.0 lite image to image",
-  },
-  {
-    id: "nanobanana_standard",
+    id: "google_nano_banana",
     label: "Google Nano Banana",
     icon: "google",
-    subtitle: "Text to image · Image to image",
+    subtitle: "Auto text-to-image / image-to-image",
     resolution: "1 crédit / image",
-    durationRange: "T2I",
-    searchText: "google nano banana text to image",
-  },
-  {
-    id: "google_nano_banana_edit",
-    label: "Google Nano Banana",
-    icon: "google",
-    subtitle: "Text to image · Image to image",
-    resolution: "1 crédit / image",
-    durationRange: "I2I",
-    searchText: "google nano banana edit image to image",
+    durationRange: "Auto",
+    searchText: "google nano banana text to image image to image",
   },
   {
     id: "recraft_remove_background",
@@ -152,18 +125,13 @@ const COMING_SOON_IMAGE_MODEL_IDS = new Set<string>();
 const STUDIO_LIGHTBOX_EDIT_MODEL_OPTIONS: StudioImageLightboxEditModelOption[] = [
   { value: "pro", label: "NanoBanana Pro" },
   { value: "nano", label: "NanoBanana 2" },
-  { value: "seedream_45_image_to_image", label: "Seedream 4.5 · image to image" },
-  { value: "seedream_50_lite_image_to_image", label: "Seedream 5.0 Lite · image to image" },
+  { value: "seedream_45", label: "Seedream 4.5" },
+  { value: "seedream_50_lite", label: "Seedream 5.0 Lite" },
+  { value: "google_nano_banana", label: "Google Nano Banana" },
 ];
 
 async function uploadReferenceFile(file: File): Promise<string> {
-  assertStudioImageUpload(file);
-  const fd = new FormData();
-  fd.set("file", file);
-  const res = await fetch("/api/uploads", { method: "POST", body: fd });
-  const json = (await res.json()) as { url?: string; error?: string };
-  if (!res.ok || !json.url) throw new Error(json.error || "Upload failed");
-  return json.url;
+  return uploadFileToCdn(file, { kind: "image" });
 }
 
 async function pollNanoTask(taskId: string, personalApiKey?: string): Promise<string[]> {
@@ -494,14 +462,6 @@ export default function StudioImagePanel() {
     const p = opts.prompt.trim();
     if (!p) {
       toast.error("Describe the scene you imagine.");
-      return;
-    }
-    if (
-      isStudioSeedreamImagePickerId(opts.model) &&
-      studioSeedreamPickerRequiresReferenceImages(opts.model) &&
-      !opts.refUrls.length
-    ) {
-      toast.error("Add at least one reference image for this Seedream image-to-image model.");
       return;
     }
     if (opts.syncSidebar) {

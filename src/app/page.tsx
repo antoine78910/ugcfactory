@@ -1,12 +1,11 @@
-"use client";
-
-import { useEffect, useRef, useState, type MutableRefObject } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { HeroVideoCarousel3D } from "./HeroVideoCarousel3D";
-import { ArrowRight, ChevronDown, Sparkles } from "lucide-react";
+import { LandingRevealCarousel } from "./LandingRevealCarousel";
+import { LandingFaq } from "./LandingFaq";
+import { ArrowRight, Sparkles } from "lucide-react";
 
 const STEPS = [
   {
@@ -35,27 +34,6 @@ const STEPS = [
   },
 ];
 
-const PRODUCTS = [
-  { src: "/carousel/product-1.png", alt: "Roast & Ritual Coffee" },
-  { src: "/carousel/product-2.png", alt: "Lumina Radiance Elixir" },
-  { src: "/carousel/product-3.png", alt: "Aqua Luxe Bottle" },
-  { src: "/carousel/product-4.png", alt: "Aurelion Luminous Serum" },
-  { src: "/carousel/product-5.png", alt: "Designer Perfume" },
-  { src: "/carousel/product-6.png", alt: "Volcanic Heat Chips" },
-  { src: "/carousel/product-7.png", alt: "Pure Serum" },
-];
-
-/** Image → video reveal carousel only (`public/carousel/`). */
-const UGC_SLIDES = [
-  { src: "/carousel/slide1.mp4" },
-  { src: "/carousel/slide2.mp4" },
-  { src: "/carousel/slide3.mp4" },
-  { src: "/carousel/slide4.mp4" },
-  { src: "/carousel/slide5.mp4" },
-  { src: "/carousel/slide6.mp4" },
-  { src: "/carousel/slide7.mp4" },
-];
-
 /** Hero 3D ring only (`public/studio/`). */
 const HERO_STUDIO_VIDEOS = [
   "/studio/0328(1).mp4",
@@ -69,213 +47,7 @@ const HERO_STUDIO_VIDEOS = [
   "/studio/0328(9).mp4",
   "/studio/0328(10).mp4",
 ] as const;
-
-const PAIRED_CAROUSEL_ITEMS = PRODUCTS.map((product, index) => ({
-  product,
-  slide: UGC_SLIDES[index],
-}));
-
-const REVEAL_SLIDE_TOTAL = PAIRED_CAROUSEL_ITEMS.length * 2;
-
-type RevealRegistryEntry = {
-  card: HTMLDivElement;
-  overlay: HTMLDivElement;
-};
-
-const FAQ_ITEMS = [
-  {
-    q: "What kind of products work best?",
-    a: "Youry works with any e-commerce product: skincare, supplements, fashion, electronics, home goods, and more. If it has a product page, we can turn it into a video ad.",
-  },
-  {
-    q: "Do I need to provide my own video footage?",
-    a: "No! Youry generates everything from your product images and page content. Our AI creates the script, selects an avatar, and produces a complete video ad automatically.",
-  },
-  {
-    q: "How long does it take to generate a video?",
-    a: "Most videos are ready in under 5 minutes. Simply paste your URL, choose your style, and click generate.",
-  },
-  {
-    q: "Can I customize the generated ads?",
-    a: "Absolutely. You can adjust the script, change the avatar, modify the style template, and regenerate as many times as you want.",
-  },
-  {
-    q: "What platforms are the videos optimized for?",
-    a: "All videos are generated in 9:16 vertical format, optimized for TikTok, Instagram Reels, YouTube Shorts, and Facebook Stories.",
-  },
-];
-
-function RevealSlide({
-  imageSrc,
-  videoSrc,
-  imageAlt,
-  slideIndex,
-  registryRef,
-}: {
-  imageSrc: string;
-  /** `null` until the reveal section is near the viewport — avoids ~30MB+ of carousel MP4 on first paint. */
-  videoSrc: string | null;
-  imageAlt: string;
-  slideIndex: number;
-  registryRef: MutableRefObject<(RevealRegistryEntry | null)[]>;
-}) {
-  const cardRef = useRef<HTMLDivElement>(null);
-  const overlayRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const card = cardRef.current;
-    const overlay = overlayRef.current;
-    const reg = registryRef.current;
-    if (!card || !overlay || slideIndex < 0 || slideIndex >= reg.length) return;
-    reg[slideIndex] = { card, overlay };
-    return () => {
-      reg[slideIndex] = null;
-    };
-  }, [slideIndex, registryRef]);
-
-  return (
-    <div
-      ref={cardRef}
-      className="relative z-10 isolate shrink-0 overflow-hidden rounded-3xl bg-[#0a0a0c] w-[70vw] max-w-[25rem] sm:w-[90vw]"
-      style={{ aspectRatio: "0.64" }}
-    >
-      <Image
-        src={imageSrc}
-        alt={imageAlt}
-        fill
-        className="object-cover"
-        sizes="(max-width:768px) 90vw, 400px"
-        priority={slideIndex === 0}
-      />
-      <div
-        ref={overlayRef}
-        className="absolute inset-0 z-[1] will-change-[clip-path]"
-        style={{
-          clipPath: "inset(0 0 0 100%)",
-          backfaceVisibility: "hidden",
-          WebkitBackfaceVisibility: "hidden",
-        }}
-      >
-        {videoSrc ? (
-          <video
-            src={videoSrc}
-            autoPlay
-            loop
-            muted
-            playsInline
-            preload="none"
-            className="h-full w-full object-cover"
-          />
-        ) : (
-          <div className="h-full w-full bg-black/40" aria-hidden />
-        )}
-      </div>
-    </div>
-  );
-}
-
 export default function LandingPage() {
-  const [openFaq, setOpenFaq] = useState<number | null>(null);
-  const [revealVideosReady, setRevealVideosReady] = useState(false);
-  const carouselTrackRef = useRef<HTMLDivElement>(null);
-  const carouselSetRef = useRef<HTMLDivElement>(null);
-  const revealSectionRef = useRef<HTMLElement | null>(null);
-  const revealRegistryRef = useRef<(RevealRegistryEntry | null)[]>(
-    Array.from({ length: REVEAL_SLIDE_TOTAL }, () => null),
-  );
-
-  useEffect(() => {
-    const el = revealSectionRef.current;
-    if (!el) return;
-    const io = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) setRevealVideosReady(true);
-      },
-      { root: null, rootMargin: "480px 0px", threshold: 0 },
-    );
-    io.observe(el);
-    return () => io.disconnect();
-  }, []);
-
-  // Single RAF for all reveal slides; avoids desync / invalid clip-path when width≈0 (fixes video bleeding or missing video).
-  useEffect(() => {
-    let rafId = 0;
-    function tick() {
-      const cx = window.innerWidth * 0.5;
-      const reg = revealRegistryRef.current;
-
-      // Phase 1: batch all geometry reads to avoid interleaved read→write→read forced reflows.
-      const updates: { overlay: HTMLDivElement; clipPath: string }[] = [];
-      for (let i = 0; i < reg.length; i++) {
-        const entry = reg[i];
-        if (!entry) continue;
-        const { card, overlay } = entry;
-        const rect = card.getBoundingClientRect();
-        const w = rect.width;
-        let clipPath: string;
-        if (!Number.isFinite(w) || w < 0.5) {
-          clipPath = "inset(0 0 0 100%)";
-        } else {
-          let splitPct = ((cx - rect.left) / w) * 100;
-          if (!Number.isFinite(splitPct)) splitPct = 100;
-          splitPct = Math.max(0, Math.min(100, splitPct));
-          clipPath = `inset(0 0 0 ${splitPct.toFixed(3)}%)`;
-        }
-        updates.push({ overlay, clipPath });
-      }
-
-      // Phase 2: batch all style writes after all reads are done.
-      for (const { overlay, clipPath } of updates) {
-        overlay.style.clipPath = clipPath;
-      }
-
-      rafId = requestAnimationFrame(tick);
-    }
-    rafId = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(rafId);
-  }, []);
-
-  useEffect(() => {
-    const trackEl = carouselTrackRef.current;
-    const setEl = carouselSetRef.current;
-    if (!trackEl || !setEl) return;
-
-    let rafId = 0;
-    let lastTs = performance.now();
-    let setWidth = 0;
-    let offset = 0;
-    const speedPxPerSec = 70;
-
-    function measure() {
-      setWidth = setEl!.getBoundingClientRect().width;
-      if (setWidth <= 0) return;
-      // Rightward movement with a seamless wrap point.
-      trackEl!.style.transform = `translate3d(${(-setWidth + offset).toFixed(2)}px, 0, 0)`;
-    }
-
-    function tick(ts: number) {
-      const dt = (ts - lastTs) / 1000;
-      lastTs = ts;
-      if (setWidth > 0) {
-        offset = (offset + speedPxPerSec * dt) % setWidth;
-        trackEl!.style.transform = `translate3d(${(-setWidth + offset).toFixed(2)}px, 0, 0)`;
-      }
-      rafId = requestAnimationFrame(tick);
-    }
-
-    measure();
-    const resizeObserver = new ResizeObserver(measure);
-    resizeObserver.observe(setEl!);
-    window.addEventListener("resize", measure);
-    rafId = requestAnimationFrame(tick);
-
-    return () => {
-      cancelAnimationFrame(rafId);
-      resizeObserver.disconnect();
-      window.removeEventListener("resize", measure);
-    };
-  }, []);
-
   return (
     <div className="min-h-screen bg-[#050507] text-white selection:bg-violet-500/30">
       {/* ── Sticky header: Nano Banana bar + nav (no hero texture here) ── */}
@@ -430,64 +202,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── Carousel: Product → Electric Band → UGC (pulled up toward hero 3D strip) ── */}
-      <section
-        ref={revealSectionRef}
-        className="overflow-hidden -mt-14 pt-14 pb-10 sm:-mt-20 sm:pt-16 bg-gradient-to-b from-[#0c0a14]/35 via-[#09080f]/20 to-transparent"
-      >
-        <div className="mx-auto max-w-6xl px-5 mb-14 text-center">
-          <h2 className="text-3xl font-bold tracking-tight sm:text-4xl md:text-5xl">
-            Turn any product into realistic AI UGC ads
-          </h2>
-          <p className="mx-auto mt-4 max-w-3xl text-base leading-relaxed text-white/52 sm:text-lg">
-            Transform simple product shots into authentic, scroll-stopping videos that actually convert.
-          </p>
-        </div>
-
-        {/* Scrolling reveal carousel: image → video wipe per card */}
-        <div className="relative overflow-hidden">
-          <div className="pointer-events-none absolute inset-y-0 left-0 z-20 w-16 bg-gradient-to-r from-[#050507] to-transparent sm:w-28" />
-          <div className="pointer-events-none absolute inset-y-0 right-0 z-20 w-16 bg-gradient-to-l from-[#050507] to-transparent sm:w-28" />
-          <div
-            className="pointer-events-none absolute inset-y-0 left-1/2 z-[16] w-[4px] -translate-x-1/2 bg-gradient-to-b from-transparent via-violet-300/95 to-transparent shadow-[0_0_24px_rgba(139,92,246,0.7)]"
-            aria-hidden
-          />
-          <div
-            className="pointer-events-none absolute inset-y-0 left-1/2 z-[15] w-[14px] -translate-x-1/2 bg-gradient-to-b from-transparent via-violet-400/35 to-transparent blur-[2px]"
-            aria-hidden
-          />
-
-          <div
-            ref={carouselTrackRef}
-            className="relative z-[12] flex items-center gap-2 py-2 will-change-transform md:gap-5"
-            style={{ width: "max-content" }}
-          >
-            <div ref={carouselSetRef} className="flex items-center gap-3 md:gap-5">
-              {PAIRED_CAROUSEL_ITEMS.map((item, i) => (
-                <RevealSlide
-                  key={`reveal-a-${i}`}
-                  slideIndex={i}
-                  registryRef={revealRegistryRef}
-                  imageSrc={item.product.src}
-                  videoSrc={revealVideosReady ? item.slide.src : null}
-                  imageAlt={item.product.alt}
-                />
-              ))}
-            </div>
-            <div aria-hidden="true" className="flex items-center gap-3 md:gap-5">
-              {PAIRED_CAROUSEL_ITEMS.map((item, i) => (
-                <RevealSlide
-                  key={`reveal-b-${i}`}
-                  slideIndex={i + PAIRED_CAROUSEL_ITEMS.length}
-                  registryRef={revealRegistryRef}
-                  imageSrc={item.product.src}
-                  videoSrc={revealVideosReady ? item.slide.src : null}
-                  imageAlt={item.product.alt}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
+      <LandingRevealCarousel />
 
       {/* ── CTA text + button ── */}
       <section className="mx-auto max-w-4xl px-5 pt-10 pb-18 text-center">
@@ -533,51 +248,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── FAQ ── */}
-      <section className="mx-auto max-w-3xl px-5 py-24">
-        <div className="mb-12 text-center">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-violet-400">
-            FAQ
-          </p>
-          <h2 className="mt-3 text-3xl font-bold tracking-tight">
-            Frequently Asked Questions
-          </h2>
-        </div>
-
-        <div className="space-y-3">
-          {FAQ_ITEMS.map((item, i) => (
-            <div
-              key={i}
-              className="overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.015] transition-colors hover:border-white/[0.1]"
-            >
-              <button
-                type="button"
-                onClick={() => setOpenFaq(openFaq === i ? null : i)}
-                className="flex w-full items-center justify-between px-5 py-4 text-left text-sm font-medium cursor-pointer"
-              >
-                <span>{item.q}</span>
-                <ChevronDown
-                  className={`ml-4 h-4 w-4 shrink-0 text-white/40 transition-transform duration-200 ${
-                    openFaq === i ? "rotate-180" : ""
-                  }`}
-                />
-              </button>
-              <div
-                className={`grid transition-all duration-200 ${
-                  openFaq === i
-                    ? "grid-rows-[1fr] opacity-100"
-                    : "grid-rows-[0fr] opacity-0"
-                }`}
-              >
-                <div className="overflow-hidden">
-                  <p className="px-5 pb-4 text-sm leading-relaxed text-white/45">
-                    {item.a}
-                  </p>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
+      <LandingFaq />
 
       {/* ── Footer ── */}
       <footer className="border-t border-white/[0.06] py-8">
