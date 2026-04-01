@@ -150,7 +150,6 @@ export async function POST(req: Request) {
       .from("studio_generations")
       .update({
         status: "ready",
-        completed_at: new Date().toISOString(),
         result_urls: [publicUrl],
         error_message: null,
       })
@@ -171,7 +170,6 @@ export async function POST(req: Request) {
       .from("studio_generations")
       .update({
         status: "failed",
-        completed_at: new Date().toISOString(),
         result_urls: null,
         error_message: userFacingProviderErrorOrDefault(message, "Voice change failed"),
       })
