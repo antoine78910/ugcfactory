@@ -1,31 +1,57 @@
 "use client";
 
 /*
- * ffmpeg.wasm loaded from esm.sh CDN at runtime.
+ * ffmpeg.wasm — loaded from /public/ffmpeg/ (same-origin UMD build).
  *
- * The npm packages @ffmpeg/ffmpeg and @ffmpeg/util contain dynamic expressions
- * that break Next.js webpack ("Cannot find module as expression is too dynamic").
- * Loading from esm.sh with webpackIgnore bypasses webpack while keeping native
- * ES module resolution in the browser.
+ * The npm @ffmpeg/ffmpeg package breaks Next.js webpack due to dynamic
+ * expressions. Hosting the UMD build in public/ ensures:
+ * - Same-origin (no CORS / CSP issues)
+ * - The Web Worker (814.ffmpeg.js) resolves from the same directory
+ * - No webpack bundling involved
+ *
+ * toBlobURL and fetchFile are reimplemented inline (trivial functions)
+ * so we don't need @ffmpeg/util either.
  */
+
+const CORE_CDN = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let instance: any = null;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let loadPromise: Promise<any> | null = null;
 
-const CORE_CDN = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd";
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function loadFFmpegModule(): Promise<any> {
-  // @ts-expect-error — URL import; webpack must not touch this (webpackIgnore)
-  return import(/* webpackIgnore: true */ "https://esm.sh/@ffmpeg/ffmpeg@0.12.15");
+async function toBlobURL(url: string, mimeType: string): Promise<string> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Failed to fetch ${url}: HTTP ${res.status}`);
+  const buf = await res.arrayBuffer();
+  return URL.createObjectURL(new Blob([buf], { type: mimeType }));
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function loadUtilModule(): Promise<any> {
-  // @ts-expect-error — URL import; webpack must not touch this (webpackIgnore)
-  return import(/* webpackIgnore: true */ "https://esm.sh/@ffmpeg/util@0.12.2");
+async function fetchFileAsUint8Array(src: string | File | Blob): Promise<Uint8Array> {
+  if (src instanceof Blob) {
+    return new Uint8Array(await src.arrayBuffer());
+  }
+  if (typeof src === "string") {
+    const res = await fetch(src);
+    if (!res.ok) throw new Error(`Failed to fetch file: HTTP ${res.status}`);
+    return new Uint8Array(await res.arrayBuffer());
+  }
+  return new Uint8Array();
+}
+
+function loadScript(url: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (document.querySelector(`script[src="${url}"]`)) {
+      resolve();
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = url;
+    script.type = "text/javascript";
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error(`Failed to load script: ${url}`));
+    document.head.appendChild(script);
+  });
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -34,14 +60,16 @@ async function getFFmpeg(): Promise<any> {
   if (loadPromise) return loadPromise;
 
   loadPromise = (async () => {
-    const [ffmpegMod, utilMod] = await Promise.all([
-      loadFFmpegModule(),
-      loadUtilModule(),
-    ]);
-    const { FFmpeg } = ffmpegMod;
-    const { toBlobURL } = utilMod;
+    await loadScript("/ffmpeg/ffmpeg.js");
 
-    const ff = new FFmpeg();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const global = window as unknown as Record<string, any>;
+    const FFmpegWASM = global.FFmpegWASM;
+    if (!FFmpegWASM?.FFmpeg) {
+      throw new Error("FFmpegWASM not found after loading script.");
+    }
+
+    const ff = new FFmpegWASM.FFmpeg();
     await ff.load({
       coreURL: await toBlobURL(`${CORE_CDN}/ffmpeg-core.js`, "text/javascript"),
       wasmURL: await toBlobURL(`${CORE_CDN}/ffmpeg-core.wasm`, "application/wasm"),
@@ -51,12 +79,6 @@ async function getFFmpeg(): Promise<any> {
   })();
 
   return loadPromise;
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function doFetchFile(src: string): Promise<any> {
-  const mod = await loadUtilModule();
-  return mod.fetchFile(src);
 }
 
 /**
@@ -76,10 +98,7 @@ export async function extractAudioFromVideo(
   ff.on("log", logHandler);
 
   try {
-    const videoData =
-      videoSrc instanceof Blob
-        ? new Uint8Array(await videoSrc.arrayBuffer())
-        : await doFetchFile(videoSrc);
+    const videoData = await fetchFileAsUint8Array(videoSrc);
     await ff.writeFile("extract_in.mp4", videoData);
 
     const exitCode = await ff.exec([
@@ -131,8 +150,8 @@ export async function mergeVideoWithAudio(
 
   try {
     const [videoData, audioData] = await Promise.all([
-      doFetchFile(videoSrc),
-      doFetchFile(audioSrc),
+      fetchFileAsUint8Array(videoSrc),
+      fetchFileAsUint8Array(audioSrc),
     ]);
 
     await ff.writeFile("in.mp4", videoData);
