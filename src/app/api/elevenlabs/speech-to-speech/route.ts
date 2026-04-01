@@ -161,11 +161,19 @@ export async function POST(req: Request) {
     let resultKind: "video" | "audio";
 
     if (inputIsVideo) {
-      // 2. Merge: mute original video + overlay new audio
-      finalBuffer = await mergeVideoWithAudioServer(inputBuffer, converted.buffer);
-      finalContentType = "video/mp4";
-      finalExt = ".mp4";
-      resultKind = "video";
+      // 2. Try to merge: mute original video + overlay new audio
+      try {
+        finalBuffer = await mergeVideoWithAudioServer(inputBuffer, converted.buffer);
+        finalContentType = "video/mp4";
+        finalExt = ".mp4";
+        resultKind = "video";
+      } catch (mergeErr) {
+        console.error("[voice-change] Merge failed, falling back to audio-only:", mergeErr);
+        finalBuffer = converted.buffer;
+        finalContentType = converted.contentType || "audio/mpeg";
+        finalExt = ".mp3";
+        resultKind = "audio";
+      }
     } else {
       finalBuffer = converted.buffer;
       finalContentType = converted.contentType || "audio/mpeg";
@@ -213,20 +221,17 @@ export async function POST(req: Request) {
   } catch (err) {
     logGenerationFailure("elevenlabs/speech-to-speech", err, { rowId, voiceId });
     const rawMessage = messageFromUnknown(err);
-    console.error("[voice-change] Raw error:", rawMessage);
-    const userMessage = rawMessage.includes("ENOENT") || rawMessage.includes("spawn")
-      ? `Server ffmpeg error: ${rawMessage}`
-      : userFacingProviderErrorOrDefault(rawMessage, "Voice change failed");
+    console.error("[voice-change] FAILED — raw error:", rawMessage);
     await supabase
       .from("studio_generations")
       .update({
         status: "failed",
         result_urls: null,
-        error_message: userMessage,
+        error_message: rawMessage.slice(0, 300),
       })
       .eq("id", rowId);
     return NextResponse.json(
-      { error: userMessage },
+      { error: rawMessage.slice(0, 300) },
       { status: 502 },
     );
   }
