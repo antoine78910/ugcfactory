@@ -1438,6 +1438,7 @@ export default function StudioVideoPanel({
             mode: isKling30 || isKling26 ? snap.klingMode : undefined,
             multiShots: isKling30 ? snap.multiShot : undefined,
             personalApiKey: pKey,
+            piapiApiKey: getPersonalPiapiApiKey() ?? undefined,
           }),
         });
         const json = (await res.json()) as { taskId?: string; provider?: string; error?: string };
