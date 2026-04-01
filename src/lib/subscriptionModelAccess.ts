@@ -200,10 +200,12 @@ export function studioImageDisplayLabel(model: "nano" | "pro"): string {
 }
 
 const STUDIO_IMAGE_PICKER_LABELS: Record<string, string> = {
-  seedream_45_text_to_image: "Seedream 4.5 (text-to-image)",
-  seedream_45_image_to_image: "Seedream 4.5 (image-to-image)",
-  seedream_50_lite_text_to_image: "Seedream 5.0 Lite (text-to-image)",
-  seedream_50_lite_image_to_image: "Seedream 5.0 Lite (image-to-image)",
+  seedream_45_text_to_image: "Seedream 4.5 · text to image",
+  seedream_45_image_to_image: "Seedream 4.5 · image to image",
+  seedream_50_lite_text_to_image: "Seedream 5.0 Lite · text to image",
+  seedream_50_lite_image_to_image: "Seedream 5.0 Lite · image to image",
+  nanobanana_standard: "Google Nano Banana · text to image",
+  google_nano_banana_edit: "Google Nano Banana · image to image",
 };
 
 export function studioImagePickerDisplayLabel(pickerId: string): string {
