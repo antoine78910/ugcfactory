@@ -70,6 +70,48 @@ type ElevenLabsSharedVoice = {
   public_owner_id?: string;
 };
 
+export async function listElevenLabsSharedVoicesPage(opts?: {
+  page?: number;
+  pageSize?: number;
+  featured?: boolean;
+}): Promise<{ voices: ElevenLabsVoice[]; hasMore: boolean }> {
+  const page = Math.max(0, Math.floor(Number(opts?.page ?? 0)));
+  const pageSize = Math.min(100, Math.max(1, Math.floor(Number(opts?.pageSize ?? 100))));
+  const featured = Boolean(opts?.featured ?? false);
+
+  const query = new URLSearchParams({
+    page_size: String(pageSize),
+    page: String(page),
+    featured: featured ? "true" : "false",
+  });
+  const res = await fetch(`${ELEVENLABS_API_BASE}/shared-voices?${query.toString()}`, {
+    method: "GET",
+    headers: {
+      "xi-api-key": getElevenLabsApiKey(),
+    },
+    cache: "no-store",
+  });
+  if (!res.ok) await readElevenLabsError(res, "Could not load shared ElevenLabs voices.");
+  const json = (await res.json()) as {
+    voices?: ElevenLabsSharedVoice[];
+    has_more?: boolean;
+  };
+  const shared = Array.isArray(json.voices) ? json.voices : [];
+  return {
+    voices: shared.map((voice) => ({
+      voice_id: voice.voice_id,
+      name: voice.name,
+      category: voice.category ?? "",
+      preview_url: voice.preview_url ?? "",
+      labels: voice.labels ?? {},
+      language: voice.language ?? "",
+      public_owner_id: voice.public_owner_id ?? "",
+      is_shared: true,
+    })),
+    hasMore: Boolean(json.has_more),
+  };
+}
+
 export async function listElevenLabsSharedVoices(maxPages = 2): Promise<ElevenLabsVoice[]> {
   const out: ElevenLabsVoice[] = [];
   for (let page = 0; page < Math.max(1, maxPages); page += 1) {

@@ -1,19 +1,25 @@
 export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
-import { listElevenLabsSharedVoices, listElevenLabsVoices } from "@/lib/elevenlabs";
+import { listElevenLabsSharedVoicesPage, listElevenLabsVoices } from "@/lib/elevenlabs";
 import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 
-export async function GET() {
+export async function GET(req: Request) {
   const { response } = await requireSupabaseUser();
   if (response) return response;
 
   try {
-    const [accountVoices, sharedVoices] = await Promise.all([
-      listElevenLabsVoices(),
-      listElevenLabsSharedVoices(2),
+    const { searchParams } = new URL(req.url);
+    const sharedPage = Math.max(0, Math.floor(Number(searchParams.get("sharedPage") ?? 0)));
+    const sharedPageSize = Math.min(100, Math.max(1, Math.floor(Number(searchParams.get("sharedPageSize") ?? 100))));
+    const includeAccount = (searchParams.get("includeAccount") ?? "true").toLowerCase() !== "false";
+
+    const [accountVoices, sharedPageOut] = await Promise.all([
+      includeAccount ? listElevenLabsVoices() : Promise.resolve([]),
+      listElevenLabsSharedVoicesPage({ page: sharedPage, pageSize: sharedPageSize, featured: false }),
     ]);
+    const sharedVoices = sharedPageOut.voices;
     const byId = new Map<string, (typeof accountVoices)[number]>();
     for (const voice of [...sharedVoices, ...accountVoices]) {
       if (!voice.voice_id) continue;
@@ -21,6 +27,7 @@ export async function GET() {
     }
     const voices = [...byId.values()];
     return NextResponse.json({
+      sharedHasMore: sharedPageOut.hasMore,
       voices: voices
         .map((voice) => ({
           voiceId: voice.voice_id,
