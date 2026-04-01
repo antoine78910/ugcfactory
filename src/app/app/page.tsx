@@ -17,7 +17,7 @@ import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
 import { StudioEmptyExamples, StudioOutputPane } from "@/app/_components/StudioEmptyExamples";
 import { StudioGenerationsHistory } from "@/app/_components/StudioGenerationsHistory";
 import type { StudioHistoryItem } from "@/app/_components/StudioGenerationsHistory";
-import { calculateAdCloneCredits, calculateMotionControlCredits } from "@/lib/linkToAd/generationCredits";
+import { calculateMotionControlCredits } from "@/lib/linkToAd/generationCredits";
 import StudioAvatarPanel from "@/app/_components/StudioAvatarPanel";
 import StudioImagePanel from "@/app/_components/StudioImagePanel";
 import StudioUpscalePanel from "@/app/_components/StudioUpscalePanel";
@@ -63,10 +63,14 @@ import {
 import { uploadBlobUrlToCdn, uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
 import { proxiedMediaSrc } from "@/lib/mediaProxyUrl";
 import { cn } from "@/lib/utils";
+import { WAVESPEED_PROVIDER } from "@/lib/wavespeedChain";
 import {
-  makeWaveSpeedMotionTranslateChainTaskId,
-  WAVESPEED_CHAIN_PROVIDER,
-} from "@/lib/wavespeedChain";
+  calculateWaveSpeedVideoTranslateCredits,
+} from "@/lib/pricing";
+import {
+  DEFAULT_WAVESPEED_HEYGEN_TRANSLATE_LANGUAGE,
+  WAVESPEED_HEYGEN_TRANSLATE_LANGUAGES,
+} from "@/lib/wavespeedTranslateLanguages";
 
 type WizardStep = "url" | "analysis" | "quiz" | "image" | "video";
 type AppSection =
@@ -132,24 +136,6 @@ const APP_VALID_SECTIONS: AppSection[] = [
   "upscale",
   "projects",
 ];
-
-const AD_CLONE_TRANSLATE_LANGUAGE_OPTIONS = [
-  "French",
-  "English",
-  "Spanish",
-  "German",
-  "Italian",
-  "Portuguese",
-  "Dutch",
-  "Japanese",
-  "Chinese",
-  "Korean",
-  "Hindi",
-  "Arabic",
-  "Turkish",
-  "Polish",
-  "Russian",
-] as const;
 
 function sectionFromSearchParams(sp: URLSearchParams): AppSection {
   const s = sp.get("section");
@@ -465,8 +451,9 @@ export default function AppBrandWizard() {
   const [motionCharacterFile, setMotionCharacterFile] = useState<File | null>(null);
   const [motionQuality, setMotionQuality] = useState<string>("720p");
   const [motionPrompt, setMotionPrompt] = useState<string>("");
-  const [adCloneTranslateVideo, setAdCloneTranslateVideo] = useState(false);
-  const [adCloneOutputLanguage, setAdCloneOutputLanguage] = useState<string>("French");
+  const [adCloneOutputLanguage, setAdCloneOutputLanguage] = useState<string>(
+    DEFAULT_WAVESPEED_HEYGEN_TRANSLATE_LANGUAGE,
+  );
   const [motionHistoryItems, setMotionHistoryItems] = useState<StudioHistoryItem[]>([]);
   const [motionServerHistory, setMotionServerHistory] = useState<boolean | null>(null);
   type MotionBilling =
@@ -484,14 +471,6 @@ export default function AppBrandWizard() {
   const motionPosterCapturePendingRef = useRef(false);
   const motionPlayCaptureAttemptsRef = useRef(0);
   const motionCharacterInputRef = useRef<HTMLInputElement>(null);
-  const AD_CLONE_TEMPLATE_AVATARS = useMemo(
-    () => [
-      "/ad-clone-avatars/template-1.png",
-      "/ad-clone-avatars/template-2.png",
-      "/ad-clone-avatars/template-3.png",
-    ],
-    [],
-  );
   const { planId, current: creditsBalance, spendCredits, grantCredits } = useCreditsPlan();
   const creditsRef = useRef(creditsBalance);
   creditsRef.current = creditsBalance;
@@ -525,16 +504,12 @@ export default function AppBrandWizard() {
     motionVideoDetectedDuration == null ||
     !Number.isFinite(motionVideoDetectedDuration) ||
     motionVideoDetectedDuration <= 0;
-  const adCloneTranslateEnabled = appSection === "ad_clone" && adCloneTranslateVideo;
+  const adCloneTranslateEnabled = appSection === "ad_clone";
 
   const motionCredits = useMemo(
     () =>
       adCloneTranslateEnabled
-        ? calculateAdCloneCredits({
-            quality: motionQuality,
-            durationSeconds: motionBillableSeconds,
-            translateVideo: true,
-          })
+        ? calculateWaveSpeedVideoTranslateCredits(motionBillableSeconds)
         : calculateMotionControlCredits({
             quality: motionQuality,
             durationSeconds: motionBillableSeconds,
@@ -2284,10 +2259,10 @@ export default function AppBrandWizard() {
                     <div className="flex min-w-0 w-full flex-col lg:basis-1/4 lg:max-w-[24rem] lg:flex-none lg:shrink-0 lg:min-h-0 lg:overflow-hidden">
                       <div className="studio-params-scroll flex min-w-0 flex-col gap-2 lg:h-full lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pb-10">
                       <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
-                        {appSection === "ad_clone" ? "Ad clone" : "Motion control"}
+                        {appSection === "ad_clone" ? "Translate" : "Motion control"}
                       </p>
                       <div className="rounded-2xl border border-white/10 bg-[#101014] p-3 space-y-3">
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className={cn("grid gap-2", appSection === "ad_clone" ? "grid-cols-1" : "grid-cols-2")}>
                           <input
                             ref={motionVideoInputRef}
                             type="file"
@@ -2296,10 +2271,14 @@ export default function AppBrandWizard() {
                             onChange={(e) => {
                               const f = e.target.files?.[0] ?? null;
                               if (!f) return;
-                              if (f.size > MOTION_VIDEO_MAX_BYTES) {
+                              const maxBytes =
+                                appSection === "ad_clone" ? 300 * 1024 * 1024 : MOTION_VIDEO_MAX_BYTES;
+                              if (f.size > maxBytes) {
                                 toast.error("Video file is too large.", {
                                   description:
-                                    "Please upload a lighter clip (<= 100 MB) and keep motion-control videos short (3-30s).",
+                                    appSection === "ad_clone"
+                                      ? "Upload a lighter clip (<= 300 MB). For larger files, use a public URL workflow."
+                                      : "Please upload a lighter clip (<= 100 MB) and keep motion-control videos short (3-30s).",
                                 });
                                 e.currentTarget.value = "";
                                 return;
@@ -2444,8 +2423,12 @@ export default function AppBrandWizard() {
                               ) : (
                                 <>
                                   <Play className="h-8 w-8 opacity-50" />
-                                  <span className="text-xs font-medium text-white/45">Add motion to copy</span>
-                                  <span className="text-[10px] text-white/30">Video duration: 3–30 seconds</span>
+                                  <span className="text-xs font-medium text-white/45">
+                                    {appSection === "ad_clone" ? "Add video to translate" : "Add motion to copy"}
+                                  </span>
+                                  <span className="text-[10px] text-white/30">
+                                    {appSection === "ad_clone" ? "MP4, MOV or WebM" : "Video duration: 3–30 seconds"}
+                                  </span>
                                 </>
                               )}
                             </div>
@@ -2465,220 +2448,178 @@ export default function AppBrandWizard() {
                             ) : null}
                           </div>
 
-                          <input
-                            ref={motionCharacterInputRef}
-                            type="file"
-                            accept={STUDIO_IMAGE_FILE_ACCEPT}
-                            className="sr-only"
-                            onChange={(e) => {
-                              const f = e.target.files?.[0] ?? null;
-                              if (!f) return;
-                              applyMotionCharacterFile(f);
-                              e.currentTarget.value = "";
-                            }}
-                          />
-                          <div className="relative">
-                            <div
-                              role="button"
-                              tabIndex={0}
-                              onKeyDown={(ev) => {
-                                if (ev.key === "Enter" || ev.key === " ") {
-                                  ev.preventDefault();
-                                  motionCharacterInputRef.current?.click();
-                                }
-                              }}
-                              onClick={() => motionCharacterInputRef.current?.click()}
-                              className="relative flex aspect-[3/4] w-full cursor-pointer flex-col items-center justify-center gap-1.5 overflow-hidden rounded-xl border border-dashed border-white/20 bg-[#0c0c10] text-white/50 transition hover:border-violet-400/40 hover:bg-white/[0.03]"
-                            >
-                              {motionCharacterImageUrl ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img
-                                  src={motionCharacterImageUrl}
-                                  alt="Character"
-                                  className="absolute inset-0 h-full w-full object-cover"
-                                />
-                              ) : (
-                                <>
-                                  <Plus className="h-8 w-8 opacity-50" />
-                                  <span className="text-xs font-medium text-white/45">Add your character</span>
-                                  <span className="text-[10px] text-white/30">Image with visible face and body</span>
-                                </>
-                              )}
-                            </div>
-                            {motionCharacterImageUrl ? (
-                              <button
-                                type="button"
-                                aria-label="Remove character image"
-                                className="absolute right-1.5 top-1.5 z-[5] flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-black/70 text-white/90 shadow-md backdrop-blur-sm transition hover:bg-red-500/90 hover:text-white"
-                                onClick={(ev) => {
-                                  ev.preventDefault();
-                                  ev.stopPropagation();
-                                  clearMotionCharacterImage();
+                          {appSection !== "ad_clone" ? (
+                            <>
+                              <input
+                                ref={motionCharacterInputRef}
+                                type="file"
+                                accept={STUDIO_IMAGE_FILE_ACCEPT}
+                                className="sr-only"
+                                onChange={(e) => {
+                                  const f = e.target.files?.[0] ?? null;
+                                  if (!f) return;
+                                  applyMotionCharacterFile(f);
+                                  e.currentTarget.value = "";
                                 }}
-                              >
-                                <X className="h-4 w-4" aria-hidden />
-                              </button>
-                            ) : null}
-                          </div>
-                        </div>
-
-                        {appSection === "ad_clone" ? (
-                          <div className="space-y-2 rounded-xl border border-white/10 bg-black/20 p-2.5">
-                            <div className="flex items-center justify-between gap-3">
-                              <Label className="text-xs text-white/70">Traduire la video finale</Label>
-                              <button
-                                type="button"
-                                role="switch"
-                                aria-checked={adCloneTranslateVideo}
-                                onClick={() => setAdCloneTranslateVideo((v) => !v)}
-                                className={cn(
-                                  "relative inline-flex h-6 w-11 items-center rounded-full border-2 border-transparent transition-colors",
-                                  adCloneTranslateVideo ? "bg-violet-500" : "bg-white/15",
-                                )}
-                              >
-                                <span
-                                  className={cn(
-                                    "pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform",
-                                    adCloneTranslateVideo ? "translate-x-[22px]" : "translate-x-[2px]",
-                                  )}
-                                />
-                              </button>
-                            </div>
-                            <p className="text-[10px] leading-snug text-white/35">
-                              Lance automatiquement une version traduite avec voix + lipsync apres le rendu Ad
-                              clone.
-                            </p>
-                            {adCloneTranslateVideo ? (
-                              <div className="space-y-2 pt-1">
-                                <Label className="text-xs text-white/45">Langue cible</Label>
-                                <Select value={adCloneOutputLanguage} onValueChange={setAdCloneOutputLanguage}>
-                                  <SelectTrigger className="h-11 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
-                                    <SelectValue placeholder="Choisis une langue" />
-                                  </SelectTrigger>
-                                  <SelectContent position="popper" className={studioSelectContentClass}>
-                                    {AD_CLONE_TRANSLATE_LANGUAGE_OPTIONS.map((language) => (
-                                      <SelectItem
-                                        key={language}
-                                        value={language}
-                                        className={studioSelectItemClass}
-                                      >
-                                        {language}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                                <p className="text-[10px] leading-snug text-white/35">
-                                  Traduction WaveSpeed / HeyGen facturee en plus selon la duree de la video.
-                                </p>
-                              </div>
-                            ) : null}
-                          </div>
-                        ) : null}
-
-                        {appSection === "ad_clone" ? (
-                          <div className="space-y-2">
-                            <Label className="text-xs text-white/45">Avatar templates</Label>
-                            <div className="grid grid-cols-3 gap-2">
-                              {AD_CLONE_TEMPLATE_AVATARS.map((u, idx) => (
-                                <button
-                                  key={u}
-                                  type="button"
-                                  onClick={() => {
-                                    setMotionCharacterFile(null);
-                                    setMotionCharacterImageUrl(u);
-                                    toast.success(`Template avatar ${idx + 1} selected`);
+                              />
+                              <div className="relative">
+                                <div
+                                  role="button"
+                                  tabIndex={0}
+                                  onKeyDown={(ev) => {
+                                    if (ev.key === "Enter" || ev.key === " ") {
+                                      ev.preventDefault();
+                                      motionCharacterInputRef.current?.click();
+                                    }
                                   }}
-                                  className="relative overflow-hidden rounded-lg border border-white/15 bg-black/30 transition hover:border-violet-400/40"
-                                  title={`Template avatar ${idx + 1}`}
+                                  onClick={() => motionCharacterInputRef.current?.click()}
+                                  className="relative flex aspect-[3/4] w-full cursor-pointer flex-col items-center justify-center gap-1.5 overflow-hidden rounded-xl border border-dashed border-white/20 bg-[#0c0c10] text-white/50 transition hover:border-violet-400/40 hover:bg-white/[0.03]"
                                 >
-                                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                                  <img
-                                    src={u}
-                                    alt={`Template avatar ${idx + 1}`}
-                                    className="aspect-[3/4] w-full object-cover"
-                                  />
-                                </button>
-                              ))}
+                                  {motionCharacterImageUrl ? (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img
+                                      src={motionCharacterImageUrl}
+                                      alt="Character"
+                                      className="absolute inset-0 h-full w-full object-cover"
+                                    />
+                                  ) : (
+                                    <>
+                                      <Plus className="h-8 w-8 opacity-50" />
+                                      <span className="text-xs font-medium text-white/45">Add your character</span>
+                                      <span className="text-[10px] text-white/30">Image with visible face and body</span>
+                                    </>
+                                  )}
+                                </div>
+                                {motionCharacterImageUrl ? (
+                                  <button
+                                    type="button"
+                                    aria-label="Remove character image"
+                                    className="absolute right-1.5 top-1.5 z-[5] flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-black/70 text-white/90 shadow-md backdrop-blur-sm transition hover:bg-red-500/90 hover:text-white"
+                                    onClick={(ev) => {
+                                      ev.preventDefault();
+                                      ev.stopPropagation();
+                                      clearMotionCharacterImage();
+                                    }}
+                                  >
+                                    <X className="h-4 w-4" aria-hidden />
+                                  </button>
+                                ) : null}
+                              </div>
+                            </>
+                          ) : null}
+                        </div>
+
+                        {appSection === "ad_clone" ? (
+                          <div className="space-y-3">
+                            <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                              <div className="flex items-center gap-2">
+                                <div className="h-8 w-8 rounded-lg border border-white/10 bg-white/5" />
+                                <div>
+                                  <p className="text-sm font-semibold text-white">HeyGen Video Translate</p>
+                                  <p className="text-[11px] text-white/40">WaveSpeed · voix + lipsync · 175+ langues</p>
+                                </div>
+                              </div>
                             </div>
-                          </div>
-                        ) : null}
-
-                        <div className="space-y-2">
-                        <div className="flex items-center">
-                            <StudioSingleModelCard
-                              hideMeta
-                              label={appSection === "ad_clone" ? "Ad Clone (Kling Motion Control)" : "Kling 3.0 Motion Control"}
-                              icon="kling"
-                              resolution="1080p"
-                              durationRange="3s–30s"
-                            />
-                        </div>
-                        {!isPersonalApiActive() && motionControlUpgradeMessage(planId) ? (
-                          <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-2.5 py-1.5 text-[11px] leading-snug text-amber-100/90">
-                            {motionControlUpgradeMessage(planId)}
-                          </p>
-                        ) : null}
-
-                        <div>
-                          <Label className="text-xs text-white/45">Mode de controle de la scene</Label>
-                          <p className="mt-0.5 text-[10px] leading-snug text-white/35">
-                            Choisis la source de fond: la video de reference de mouvement ou l'image du personnage.
-                          </p>
-                          <Select
-                            value={motionSceneBackground}
-                            onValueChange={(v) => setMotionSceneBackground(v as "video" | "image")}
-                          >
-                            <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent position="popper" className={studioSelectContentClass}>
-                              <SelectItem value="video" className={studioSelectItemClass}>
-                                Video
-                              </SelectItem>
-                              <SelectItem value="image" className={studioSelectItemClass}>
-                                Image
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        <div>
-                          <Label className="text-xs text-white/45">Qualite</Label>
-                          <p className="mt-0.5 text-[10px] leading-snug text-white/35">
-                            720p et 1080p utilisent des couts credits differents (affiches sur Generate).
-                          </p>
-                          <Select value={motionQuality} onValueChange={setMotionQuality}>
-                            <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
-                              <SelectValue placeholder="Quality" />
-                            </SelectTrigger>
-                            <SelectContent position="popper" className={studioSelectContentClass}>
-                              <SelectItem value="720p" className={studioSelectItemClass}>
-                                720p
-                              </SelectItem>
-                              <SelectItem value="1080p" className={studioSelectItemClass}>
-                                1080p
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        <details className="rounded-xl border border-white/10 bg-black/20 p-2.5">
-                          <summary className="cursor-pointer text-xs font-semibold text-white/70">Avance</summary>
-                          <div className="mt-2 space-y-2">
-                            <Label className="text-xs text-white/45">Prompt optionnel</Label>
-                            <p className="text-[10px] leading-snug text-white/35">
-                              Texte optionnel envoye a Kling Motion Control (`prompt`, max 2500 caracteres).
+                            <div className="rounded-xl border border-white/10 bg-black/20 p-2.5">
+                              <Label className="text-xs text-white/45">Langue cible</Label>
+                              <p className="mt-0.5 text-[10px] leading-snug text-white/35">
+                                Parametre `output_language` HeyGen. Choisis parmi toutes les langues supportees.
+                              </p>
+                              <Select value={adCloneOutputLanguage} onValueChange={setAdCloneOutputLanguage}>
+                                <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
+                                  <SelectValue placeholder="Choisis une langue" />
+                                </SelectTrigger>
+                                <SelectContent position="popper" className={studioSelectContentClass}>
+                                  {WAVESPEED_HEYGEN_TRANSLATE_LANGUAGES.map((language) => (
+                                    <SelectItem key={language} value={language} className={studioSelectItemClass}>
+                                      {language}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <p className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-[11px] leading-snug text-white/60">
+                              D&apos;apres la doc, ce modele utilise seulement `video` et `output_language`.
                             </p>
-                            <Textarea
-                              value={motionPrompt}
-                              onChange={(e) => setMotionPrompt(e.target.value)}
-                              placeholder="Exemple: Le personnage danse avec un mouvement subtil du haut du corps."
-                              className="min-h-[84px] w-full resize-none rounded-xl border-white/15 bg-[#0a0a0d] text-xs text-white placeholder:text-white/35"
-                              rows={4}
-                            />
                           </div>
-                        </details>
-                        </div>
+                        ) : (
+                          <div className="space-y-2">
+                            <div className="flex items-center">
+                              <StudioSingleModelCard
+                                hideMeta
+                                label="Kling 3.0 Motion Control"
+                                icon="kling"
+                                resolution="1080p"
+                                durationRange="3s–30s"
+                              />
+                            </div>
+                            {!isPersonalApiActive() && motionControlUpgradeMessage(planId) ? (
+                              <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-2.5 py-1.5 text-[11px] leading-snug text-amber-100/90">
+                                {motionControlUpgradeMessage(planId)}
+                              </p>
+                            ) : null}
+
+                            <div>
+                              <Label className="text-xs text-white/45">Mode de controle de la scene</Label>
+                              <p className="mt-0.5 text-[10px] leading-snug text-white/35">
+                                Choisis la source de fond: la video de reference de mouvement ou l&apos;image du personnage.
+                              </p>
+                              <Select
+                                value={motionSceneBackground}
+                                onValueChange={(v) => setMotionSceneBackground(v as "video" | "image")}
+                              >
+                                <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent position="popper" className={studioSelectContentClass}>
+                                  <SelectItem value="video" className={studioSelectItemClass}>
+                                    Video
+                                  </SelectItem>
+                                  <SelectItem value="image" className={studioSelectItemClass}>
+                                    Image
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+
+                            <div>
+                              <Label className="text-xs text-white/45">Qualite</Label>
+                              <p className="mt-0.5 text-[10px] leading-snug text-white/35">
+                                720p et 1080p utilisent des couts credits differents (affiches sur Generate).
+                              </p>
+                              <Select value={motionQuality} onValueChange={setMotionQuality}>
+                                <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
+                                  <SelectValue placeholder="Quality" />
+                                </SelectTrigger>
+                                <SelectContent position="popper" className={studioSelectContentClass}>
+                                  <SelectItem value="720p" className={studioSelectItemClass}>
+                                    720p
+                                  </SelectItem>
+                                  <SelectItem value="1080p" className={studioSelectItemClass}>
+                                    1080p
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+
+                            <details className="rounded-xl border border-white/10 bg-black/20 p-2.5">
+                              <summary className="cursor-pointer text-xs font-semibold text-white/70">Avance</summary>
+                              <div className="mt-2 space-y-2">
+                                <Label className="text-xs text-white/45">Prompt optionnel</Label>
+                                <p className="text-[10px] leading-snug text-white/35">
+                                  Texte optionnel envoye a Kling Motion Control (`prompt`, max 2500 caracteres).
+                                </p>
+                                <Textarea
+                                  value={motionPrompt}
+                                  onChange={(e) => setMotionPrompt(e.target.value)}
+                                  placeholder="Exemple: Le personnage danse avec un mouvement subtil du haut du corps."
+                                  className="min-h-[84px] w-full resize-none rounded-xl border-white/15 bg-[#0a0a0d] text-xs text-white placeholder:text-white/35"
+                                  rows={4}
+                                />
+                              </div>
+                            </details>
+                          </div>
+                        )}
                       </div>
 
                       <Button
@@ -2686,9 +2627,11 @@ export default function AppBrandWizard() {
                         disabled={
                           motionBusy ||
                           motionServerHistory !== true ||
-                          !motionCharacterImageUrl ||
                           !motionVideoRefBlobUrl ||
-                          (!isPersonalApiActive() && Boolean(motionControlUpgradeMessage(planId)))
+                          (appSection !== "ad_clone" &&
+                            !isPersonalApiActive() &&
+                            Boolean(motionControlUpgradeMessage(planId))) ||
+                          (appSection === "ad_clone" && !adCloneOutputLanguage.trim())
                         }
                         className="h-14 w-full rounded-2xl border border-violet-300/40 bg-violet-500 text-lg font-semibold text-white shadow-[0_6px_0_0_rgba(76,29,149,0.85)] transition-all hover:-translate-y-px hover:bg-violet-400 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.85)] active:translate-y-1 active:shadow-none disabled:opacity-50"
                         onClick={() => {
@@ -2705,11 +2648,11 @@ export default function AppBrandWizard() {
                             toast.error("Sync backend indisponible. Recharge la page puis reessaie.");
                             return;
                           }
-                          if (!motionPersonal && mcGate) {
+                          if (appSection !== "ad_clone" && !motionPersonal && mcGate) {
                             setMotionBilling({ open: true, reason: "plan" });
                             return;
                           }
-                          if (!motionCharacterImageUrl) {
+                          if (appSection !== "ad_clone" && !motionCharacterImageUrl) {
                             toast.error("Choisis d'abord une image de personnage.");
                             return;
                           }
@@ -2718,6 +2661,7 @@ export default function AppBrandWizard() {
                             return;
                           }
                           if (
+                            appSection !== "ad_clone" &&
                             motionVideoDetectedDuration != null &&
                             (motionVideoDetectedDuration < 3 || motionVideoDetectedDuration > 30)
                           ) {
@@ -2729,15 +2673,11 @@ export default function AppBrandWizard() {
                             return;
                           }
                           const jobId = crypto.randomUUID();
-                          const poster = motionCharacterImageUrl ?? undefined;
+                          const poster =
+                            appSection === "ad_clone" ? motionVideoPosterUrl ?? undefined : motionCharacterImageUrl ?? undefined;
                           const startedAt = Date.now();
-                          const isAdClone = appSection === "ad_clone";
-                          const wantsTranslatedAdClone = isAdClone && adCloneTranslateVideo;
-                          const historyLabel = isAdClone
-                            ? wantsTranslatedAdClone
-                              ? `Ad clone (${adCloneOutputLanguage})`
-                              : "Ad clone"
-                            : "Motion control";
+                          const isTranslate = appSection === "ad_clone";
+                          const historyLabel = isTranslate ? `Translate (${adCloneOutputLanguage})` : "Motion control";
                           const bgSource =
                             motionSceneBackground === "video" ? "input_video" : "input_image";
                           setMotionHistoryItems((prev) => [
@@ -2759,22 +2699,9 @@ export default function AppBrandWizard() {
                           setMotionBusy(true);
                           void (async () => {
                             try {
-                              toast.message("Uploading references…");
-                              const imageHttps = await uploadBlobUrlToCdn(
-                                motionCharacterImageUrl,
-                                "motion-character.jpg",
-                                "image/jpeg",
-                                { kind: "image" },
-                              ).catch(async () => {
-                                if (motionCharacterFile)
-                                  return uploadFileToCdn(motionCharacterFile, { kind: "image" });
-                                // Template avatars are already hosted in /public.
-                                if (/^https?:\/\//i.test(motionCharacterImageUrl)) return motionCharacterImageUrl;
-                                if (motionCharacterImageUrl.startsWith("/")) {
-                                  return `${window.location.origin}${motionCharacterImageUrl}`;
-                                }
-                                throw new Error("Could not prepare character image");
-                              });
+                              toast.message(
+                                appSection === "ad_clone" ? "Uploading video…" : "Uploading references…",
+                              );
                               const videoHttps = motionVideoUploadedUrl
                                 ? motionVideoUploadedUrl
                                 : motionVideoFile
@@ -2785,33 +2712,56 @@ export default function AppBrandWizard() {
                                       "video/mp4",
                                       { kind: "video" },
                                     );
-                              const res = await fetch("/api/kling/motion-control", {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({
-                                  accountPlan: planId,
-                                  imageUrl: imageHttps,
-                                  videoUrl: videoHttps,
-                                  prompt: motionPrompt.trim() || undefined,
-                                  quality: motionQuality,
-                                  characterOrientation: "image",
-                                  backgroundSource: bgSource,
-                                  personalApiKey: getPersonalApiKey(),
-                                }),
-                              });
+                              const res =
+                                appSection === "ad_clone"
+                                  ? await fetch("/api/wavespeed/video-translate", {
+                                      method: "POST",
+                                      headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify({
+                                        videoUrl: videoHttps,
+                                        outputLanguage: adCloneOutputLanguage,
+                                      }),
+                                    })
+                                  : await fetch("/api/kling/motion-control", {
+                                      method: "POST",
+                                      headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify({
+                                        accountPlan: planId,
+                                        imageUrl: motionCharacterImageUrl
+                                          ? await uploadBlobUrlToCdn(
+                                              motionCharacterImageUrl,
+                                              "motion-character.jpg",
+                                              "image/jpeg",
+                                              { kind: "image" },
+                                            ).catch(async () => {
+                                              if (motionCharacterFile)
+                                                return uploadFileToCdn(motionCharacterFile, { kind: "image" });
+                                              if (/^https?:\/\//i.test(motionCharacterImageUrl)) return motionCharacterImageUrl;
+                                              if (motionCharacterImageUrl.startsWith("/")) {
+                                                return `${window.location.origin}${motionCharacterImageUrl}`;
+                                              }
+                                              throw new Error("Could not prepare character image");
+                                            })
+                                          : "",
+                                        videoUrl: videoHttps,
+                                        prompt: motionPrompt.trim() || undefined,
+                                        quality: motionQuality,
+                                        characterOrientation: "image",
+                                        backgroundSource: bgSource,
+                                        personalApiKey: getPersonalApiKey(),
+                                      }),
+                                    });
                               const json = (await res.json()) as { taskId?: string; error?: string };
-                              if (!res.ok || !json.taskId) throw new Error(json.error || "Motion control failed");
-                              const provider = wantsTranslatedAdClone ? WAVESPEED_CHAIN_PROVIDER : "kie-market";
-                              const registeredTaskId = wantsTranslatedAdClone
-                                ? makeWaveSpeedMotionTranslateChainTaskId(
-                                    json.taskId,
-                                    adCloneOutputLanguage,
-                                  )
-                                : json.taskId;
+                              if (!res.ok || !json.taskId) {
+                                throw new Error(
+                                  json.error || (appSection === "ad_clone" ? "Translation failed" : "Motion control failed"),
+                                );
+                              }
+                              const provider = appSection === "ad_clone" ? WAVESPEED_PROVIDER : "kie-market";
                               const rowId = await registerStudioGenerationClient({
                                 kind: "motion_control",
                                 label: historyLabel,
-                                taskId: registeredTaskId,
+                                taskId: json.taskId,
                                 provider,
                                 creditsCharged: platformChargeMotion,
                                 personalApiKey: getPersonalApiKey() ?? undefined,
@@ -2825,10 +2775,11 @@ export default function AppBrandWizard() {
                                   ),
                                 );
                               }
-                              toast.message(isAdClone ? "Ad clone lance" : "Motion control lance", {
-                                description: wantsTranslatedAdClone
-                                  ? "Le rendu part d'abord sur Kling, puis la traduction WaveSpeed se lance cote backend."
-                                  : "Traitement cote backend. Tu peux changer de page sans risque.",
+                              toast.message(appSection === "ad_clone" ? "Translation started" : "Motion control lance", {
+                                description:
+                                  appSection === "ad_clone"
+                                    ? "Traitement HeyGen cote backend. Tu peux changer de page sans risque."
+                                    : "Traitement cote backend. Tu peux changer de page sans risque.",
                               });
                             } catch (err) {
                               const msg = err instanceof Error ? err.message : "Error";
@@ -2853,7 +2804,7 @@ export default function AppBrandWizard() {
                         }}
                       >
                         <span className="inline-flex items-center gap-2">
-                          Generate
+                          {appSection === "ad_clone" ? "Translate" : "Generate"}
                           <Sparkles className="h-5 w-5" />
                           <span className="rounded-md bg-white/15 px-2 py-0.5 text-base tabular-nums">
                             {motionCredits}
@@ -2878,7 +2829,7 @@ export default function AppBrandWizard() {
                           <StudioGenerationsHistory
                             items={motionHistoryItems}
                             empty={<StudioEmptyExamples variant="motion" />}
-                            mediaLabel="Motion"
+                            mediaLabel={appSection === "ad_clone" ? "Translate" : "Motion"}
                             onItemDeleted={(id) =>
                               setMotionHistoryItems((prev) => prev.filter((i) => i.id !== id))
                             }

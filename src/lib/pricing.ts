@@ -839,7 +839,7 @@ export function normalizeMotionControlQuality(quality: string | undefined): "720
   return "720p";
 }
 
-/** Motion control (and Ad Clone without translate) fixed per-second billing. */
+/** Motion control fixed per-second billing. */
 export const MOTION_CONTROL_CREDITS_PER_SECOND = {
   "720p": 3,
   "1080p": 4,

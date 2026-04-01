@@ -53,7 +53,7 @@ type CreateNavEntry =
 const CREATE_NAV: CreateNavEntry[] = [
   { kind: "route", id: "link_to_ad", label: "Link to Ad", icon: Link2 },
   { kind: "route", id: "avatar", label: "Avatar", icon: UserRound },
-  { kind: "route", id: "ad_clone", label: "Ad Clone", icon: Copy },
+  { kind: "route", id: "ad_clone", label: "Translate", icon: Copy },
   { kind: "route", id: "motion_control", label: "Motion Control", icon: Joystick },
   { kind: "route", id: "image", label: "Image", icon: ImageIcon },
   { kind: "route", id: "video", label: "Video", icon: Video },
