@@ -3319,8 +3319,12 @@ export default function AppBrandWizard() {
                                             onPointerDown={(ev) => {
                                               ev.preventDefault();
                                               ev.stopPropagation();
+                                              // Radix Select closes/unmounts items on pointer interactions.
+                                              // Toggle on pointerdown so the UI updates immediately.
+                                              toggleFavoriteElevenVoice(voice.voiceId);
                                             }}
-                                            onClick={(ev) => {
+                                            onKeyDown={(ev) => {
+                                              if (ev.key !== "Enter" && ev.key !== " ") return;
                                               ev.preventDefault();
                                               ev.stopPropagation();
                                               toggleFavoriteElevenVoice(voice.voiceId);
