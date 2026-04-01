@@ -127,6 +127,146 @@ type ElevenVoiceOption = {
 const LS_FAVORITE_ELEVEN_VOICE_IDS_KEY = "ugc_favorite_eleven_voice_ids_v1";
 const LS_FAVORITE_TRANSLATE_LANGUAGES_KEY = "ugc_favorite_translate_languages_v1";
 
+function formatClockTime(totalSeconds: number): string {
+  if (!Number.isFinite(totalSeconds) || totalSeconds < 0) return "0:00";
+  const s = Math.floor(totalSeconds);
+  const m = Math.floor(s / 60);
+  const rs = s % 60;
+  return `${m}:${String(rs).padStart(2, "0")}`;
+}
+
+function SampleAudioPlayer({ src }: { src: string }) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+
+  const stopRaf = () => {
+    if (rafRef.current != null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+  };
+
+  const tick = () => {
+    const a = audioRef.current;
+    if (a) {
+      setCurrentTime(a.currentTime || 0);
+      if (!a.paused) {
+        rafRef.current = requestAnimationFrame(tick);
+      } else {
+        stopRaf();
+      }
+    }
+  };
+
+  useEffect(() => {
+    // Force a hard reload when src changes; fixes “old sample keeps playing”.
+    const a = audioRef.current;
+    if (!a) return;
+    stopRaf();
+    setPlaying(false);
+    setDuration(0);
+    setCurrentTime(0);
+    a.pause();
+    a.currentTime = 0;
+    a.load();
+  }, [src]);
+
+  useEffect(() => {
+    return () => stopRaf();
+  }, []);
+
+  const onTogglePlay = async () => {
+    const a = audioRef.current;
+    if (!a) return;
+    try {
+      if (a.paused) {
+        await a.play();
+        setPlaying(true);
+        rafRef.current = requestAnimationFrame(tick);
+      } else {
+        a.pause();
+        setPlaying(false);
+        stopRaf();
+      }
+    } catch {
+      // ignore autoplay/play errors
+    }
+  };
+
+  const pct = duration > 0 ? Math.min(1, Math.max(0, currentTime / duration)) : 0;
+
+  return (
+    <div className="w-full max-w-[26rem]">
+      {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+      <audio
+        ref={audioRef}
+        key={src}
+        preload="none"
+        onLoadedMetadata={(e) => {
+          const d = (e.currentTarget.duration || 0) as number;
+          setDuration(Number.isFinite(d) ? d : 0);
+        }}
+        onEnded={() => {
+          setPlaying(false);
+          stopRaf();
+          setCurrentTime(0);
+        }}
+      >
+        <source src={src} />
+      </audio>
+
+      <div className="flex items-center gap-3 rounded-full border border-white/10 bg-[#0a0a0d] px-3 py-2 shadow-sm">
+        <button
+          type="button"
+          onClick={onTogglePlay}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-white/80 transition hover:bg-white/[0.07]"
+          aria-label={playing ? "Pause sample" : "Play sample"}
+          title={playing ? "Pause" : "Play"}
+        >
+          {playing ? (
+            <span className="block h-3 w-3 rounded-[2px] bg-white/80" />
+          ) : (
+            <span
+              className="ml-0.5 block h-0 w-0 border-y-[7px] border-y-transparent border-l-[10px] border-l-white/80"
+              aria-hidden
+            />
+          )}
+        </button>
+
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
+            <div className="absolute inset-y-0 left-0 rounded-full bg-violet-400" style={{ width: `${pct * 100}%` }} />
+            <input
+              type="range"
+              min={0}
+              max={Math.max(0.001, duration)}
+              step={0.01}
+              value={Math.min(duration, currentTime)}
+              onChange={(e) => {
+                const a = audioRef.current;
+                if (!a) return;
+                const v = Number(e.currentTarget.value);
+                if (Number.isFinite(v)) {
+                  a.currentTime = v;
+                  setCurrentTime(v);
+                }
+              }}
+              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+              aria-label="Seek"
+            />
+          </div>
+          <div className="shrink-0 tabular-nums text-[10px] font-semibold text-white/55">
+            {formatClockTime(currentTime)} / {formatClockTime(duration)}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 type ImageGenState =
   | { kind: "idle" }
   | { kind: "submitting" }
@@ -3219,9 +3359,7 @@ export default function AppBrandWizard() {
                                 {selectedElevenVoice?.previewUrl ? (
                                   <div className="rounded-lg border border-white/10 bg-black/30 p-2">
                                     <p className="mb-1 text-[9px] uppercase tracking-wide text-white/35">Sample — {selectedElevenVoice.name}</p>
-                                    <audio controls preload="none" className="w-full">
-                                      <source src={selectedElevenVoice.previewUrl} />
-                                    </audio>
+                                    <SampleAudioPlayer src={selectedElevenVoice.previewUrl} />
                                   </div>
                                 ) : null}
 
