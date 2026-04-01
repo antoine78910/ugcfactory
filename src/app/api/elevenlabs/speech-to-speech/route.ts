@@ -94,12 +94,15 @@ export async function POST(req: Request) {
   let inputBuffer: Buffer;
   let inputContentType: string;
   try {
+    console.log(`[voice-change] Downloading from bucket="${UGC_UPLOADS_BUCKET}" path="${storagePath}"`);
     const { data, error } = await admin.storage.from(UGC_UPLOADS_BUCKET).download(storagePath);
     if (error || !data) {
+      console.error("[voice-change] Download error:", error?.message);
       throw new Error(error?.message ?? "File not found in storage.");
     }
     inputBuffer = Buffer.from(await data.arrayBuffer());
     inputContentType = data.type || "application/octet-stream";
+    console.log(`[voice-change] Downloaded ${inputBuffer.length} bytes, type=${inputContentType}`);
   } catch (dlErr) {
     const msg = messageFromUnknown(dlErr, "Could not download input file.");
     return NextResponse.json({ error: `Failed to download input file: ${msg}` }, { status: 400 });
@@ -209,17 +212,21 @@ export async function POST(req: Request) {
     });
   } catch (err) {
     logGenerationFailure("elevenlabs/speech-to-speech", err, { rowId, voiceId });
-    const message = messageFromUnknown(err);
+    const rawMessage = messageFromUnknown(err);
+    console.error("[voice-change] Raw error:", rawMessage);
+    const userMessage = rawMessage.includes("ENOENT") || rawMessage.includes("spawn")
+      ? `Server ffmpeg error: ${rawMessage}`
+      : userFacingProviderErrorOrDefault(rawMessage, "Voice change failed");
     await supabase
       .from("studio_generations")
       .update({
         status: "failed",
         result_urls: null,
-        error_message: userFacingProviderErrorOrDefault(message, "Voice change failed"),
+        error_message: userMessage,
       })
       .eq("id", rowId);
     return NextResponse.json(
-      { error: userFacingProviderErrorOrDefault(message, "Voice change failed") },
+      { error: userMessage },
       { status: 502 },
     );
   }
