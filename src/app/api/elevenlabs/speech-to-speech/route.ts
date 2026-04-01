@@ -38,55 +38,75 @@ function messageFromUnknown(err: unknown, fallback = "Unknown error."): string {
   return s || fallback;
 }
 
+type RequestBody = {
+  audioUrl: string;
+  voiceId: string;
+  voiceName?: string;
+  outputFormat?: string;
+  modelId?: string;
+  voiceSettingsJson?: string;
+  fileFormat?: string;
+  seed?: string;
+  removeBackgroundNoise?: boolean;
+  enableLogging?: boolean;
+  optimizeStreamingLatency?: string;
+};
+
 export async function POST(req: Request) {
   const { supabase, user, response } = await requireSupabaseUser();
   if (response) return response;
 
-  const form = await req.formData().catch(() => null);
-  if (!form) {
-    return NextResponse.json({ error: "Invalid multipart form data." }, { status: 400 });
+  let body: RequestBody;
+  try {
+    body = (await req.json()) as RequestBody;
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
-  const audio = form.get("audio");
-  const voiceId = String(form.get("voiceId") ?? "").trim();
-  const voiceName = String(form.get("voiceName") ?? "").trim();
-  const outputFormat = String(form.get("outputFormat") ?? "mp3_44100_128").trim() || "mp3_44100_128";
-  const modelId = String(form.get("modelId") ?? "").trim();
-  const voiceSettingsJson = String(form.get("voiceSettingsJson") ?? "").trim();
-  const fileFormatRaw = String(form.get("fileFormat") ?? "").trim();
+  const audioUrl = (body.audioUrl ?? "").trim();
+  const voiceId = (body.voiceId ?? "").trim();
+  const voiceName = (body.voiceName ?? "").trim();
+  const outputFormat = (body.outputFormat ?? "mp3_44100_128").trim() || "mp3_44100_128";
+  const modelId = (body.modelId ?? "").trim();
+  const voiceSettingsJson = (body.voiceSettingsJson ?? "").trim();
+  const fileFormatRaw = (body.fileFormat ?? "").trim();
   const fileFormat =
-    fileFormatRaw === "pcm_s16le_16" || fileFormatRaw === "other"
-      ? fileFormatRaw
-      : undefined;
-  const seedRaw = String(form.get("seed") ?? "").trim();
+    fileFormatRaw === "pcm_s16le_16" || fileFormatRaw === "other" ? fileFormatRaw : undefined;
+  const seedRaw = (body.seed ?? "").toString().trim();
   const seed = seedRaw ? Number(seedRaw) : undefined;
-  const removeBackgroundNoise = String(form.get("removeBackgroundNoise") ?? "").trim() === "true";
-  const enableLoggingRaw = String(form.get("enableLogging") ?? "").trim();
-  const optimizeLatencyRaw = String(form.get("optimizeStreamingLatency") ?? "").trim();
+  const removeBackgroundNoise = body.removeBackgroundNoise === true;
   const enableLogging =
-    enableLoggingRaw === "true" ? true : enableLoggingRaw === "false" ? false : undefined;
+    body.enableLogging === true ? true : body.enableLogging === false ? false : undefined;
+  const optimizeLatencyRaw = (body.optimizeStreamingLatency ?? "").toString().trim();
   const optimizeStreamingLatency =
-    optimizeLatencyRaw === "0" ||
-    optimizeLatencyRaw === "1" ||
-    optimizeLatencyRaw === "2" ||
-    optimizeLatencyRaw === "3" ||
-    optimizeLatencyRaw === "4"
+    ["0", "1", "2", "3", "4"].includes(optimizeLatencyRaw)
       ? (Number(optimizeLatencyRaw) as 0 | 1 | 2 | 3 | 4)
       : undefined;
 
-  if (!(audio instanceof File) || audio.size === 0) {
-    return NextResponse.json({ error: "Missing audio file." }, { status: 400 });
+  if (!audioUrl) {
+    return NextResponse.json({ error: "Missing audioUrl." }, { status: 400 });
   }
   if (!voiceId) {
     return NextResponse.json({ error: "Missing ElevenLabs voice id." }, { status: 400 });
   }
-  if (typeof seed === "number") {
-    if (!Number.isInteger(seed) || seed < 0 || seed > 4294967295) {
-      return NextResponse.json(
-        { error: "Invalid seed. Must be an integer between 0 and 4294967295." },
-        { status: 400 },
-      );
-    }
+  if (typeof seed === "number" && (!Number.isInteger(seed) || seed < 0 || seed > 4294967295)) {
+    return NextResponse.json(
+      { error: "Invalid seed. Must be an integer between 0 and 4294967295." },
+      { status: 400 },
+    );
+  }
+
+  // Download the audio/video from the provided URL (Supabase Storage)
+  let audioFile: File;
+  try {
+    const dlRes = await fetch(audioUrl);
+    if (!dlRes.ok) throw new Error(`HTTP ${dlRes.status}`);
+    const blob = await dlRes.blob();
+    const ext = audioUrl.split(/[?#]/)[0].split(".").pop() ?? "mp4";
+    audioFile = new File([blob], `input.${ext}`, { type: blob.type || "application/octet-stream" });
+  } catch (dlErr) {
+    const msg = messageFromUnknown(dlErr, "Could not download audio file.");
+    return NextResponse.json({ error: `Failed to download input file: ${msg}` }, { status: 400 });
   }
 
   const label = voiceName ? `Voice change (${voiceName})` : "Voice change";
@@ -115,7 +135,7 @@ export async function POST(req: Request) {
   try {
     const converted = await convertSpeechToSpeechWithElevenLabs({
       voiceId,
-      audioFile: audio,
+      audioFile,
       modelId: modelId || undefined,
       voiceSettingsJson: voiceSettingsJson || undefined,
       seed: typeof seed === "number" && Number.isFinite(seed) ? seed : undefined,
@@ -131,11 +151,11 @@ export async function POST(req: Request) {
 
     const ext = extFromOutputFormat(outputFormat);
     const storagePath = `${user.id}/${rowId}/voice-change-${crypto.randomUUID()}${ext}`;
-    const contentType = converted.contentType || contentTypeFromOutputFormat(outputFormat);
+    const ct = converted.contentType || contentTypeFromOutputFormat(outputFormat);
     const { data: uploaded, error: uploadError } = await admin.storage
       .from(STUDIO_MEDIA_BUCKET)
       .upload(storagePath, converted.buffer, {
-        contentType,
+        contentType: ct,
         upsert: false,
       });
     if (uploadError || !uploaded?.path) {

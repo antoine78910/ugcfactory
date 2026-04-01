@@ -3565,38 +3565,71 @@ export default function AppBrandWizard() {
                                 toast.message("Preparing file...");
                                 const audioFile = await prepareVoiceChangeAudioFile();
 
+                                if (audioFile.size > 50 * 1024 * 1024) {
+                                  throw new Error(
+                                    `File is too large (${(audioFile.size / 1024 / 1024).toFixed(1)} MB). Maximum is 50 MB.`,
+                                  );
+                                }
+
                                 if (voiceChangeVoiceSettingsJson.trim()) {
                                   JSON.parse(voiceChangeVoiceSettingsJson);
                                 }
 
+                                toast.message("Uploading file...");
+
+                                // 1. Get a signed upload URL from Supabase
+                                const signedRes = await fetch("/api/uploads/signed-url", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({
+                                    filename: audioFile.name || "input.mp4",
+                                    contentType: audioFile.type || "video/mp4",
+                                  }),
+                                });
+                                const signedJson = await signedRes.json();
+                                if (!signedRes.ok || !signedJson.signedUrl) {
+                                  throw new Error(signedJson.error || "Could not get upload URL.");
+                                }
+
+                                // 2. Upload directly to Supabase Storage (no body size limit)
+                                const uploadRes = await fetch(signedJson.signedUrl, {
+                                  method: "PUT",
+                                  headers: { "Content-Type": audioFile.type || "video/mp4" },
+                                  body: audioFile,
+                                });
+                                if (!uploadRes.ok) {
+                                  throw new Error(`Upload failed (HTTP ${uploadRes.status}).`);
+                                }
+
                                 toast.message("Sending to ElevenLabs...");
 
-                                const formData = new FormData();
-                                formData.set("audio", audioFile);
-                                formData.set("voiceId", elevenVoiceId);
-                                formData.set("voiceName", selectedElevenVoice?.name || "");
-                                formData.set("modelId", voiceChangeModelId.trim());
-                                formData.set("outputFormat", voiceChangeOutputFormat);
-                                formData.set("enableLogging", String(voiceChangeEnableLogging));
-                                formData.set("removeBackgroundNoise", String(voiceChangeRemoveBackgroundNoise));
-                                formData.set("fileFormat", voiceChangeFileFormat);
-                                if (voiceChangeOptimizeLatency.trim()) {
-                                  formData.set("optimizeStreamingLatency", voiceChangeOptimizeLatency.trim());
-                                }
-                                if (voiceChangeSeed.trim()) formData.set("seed", voiceChangeSeed.trim());
-                                if (voiceChangeVoiceSettingsJson.trim()) {
-                                  formData.set("voiceSettingsJson", voiceChangeVoiceSettingsJson.trim());
-                                }
-
+                                // 3. Send just the URL + params (lightweight JSON, no file in body)
                                 const res = await fetch("/api/elevenlabs/speech-to-speech", {
                                   method: "POST",
-                                  body: formData,
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({
+                                    audioUrl: signedJson.publicUrl,
+                                    voiceId: elevenVoiceId,
+                                    voiceName: selectedElevenVoice?.name || "",
+                                    modelId: voiceChangeModelId.trim(),
+                                    outputFormat: voiceChangeOutputFormat,
+                                    enableLogging: voiceChangeEnableLogging,
+                                    removeBackgroundNoise: voiceChangeRemoveBackgroundNoise,
+                                    fileFormat: voiceChangeFileFormat,
+                                    optimizeStreamingLatency: voiceChangeOptimizeLatency.trim() || undefined,
+                                    seed: voiceChangeSeed.trim() || undefined,
+                                    voiceSettingsJson: voiceChangeVoiceSettingsJson.trim() || undefined,
+                                  }),
                                 });
-                                const json = (await res.json()) as {
-                                  rowId?: string;
-                                  mediaUrl?: string;
-                                  error?: string;
-                                };
+
+                                let json: { rowId?: string; mediaUrl?: string; error?: string };
+                                try {
+                                  json = await res.json();
+                                } catch {
+                                  const text = await res.text().catch(() => "");
+                                  throw new Error(`Server error (${res.status}): ${text.slice(0, 200) || "unexpected response"}`);
+                                }
+
                                 if (!res.ok || !json.rowId) {
                                   throw new Error(json.error || "Voice change failed.");
                                 }
