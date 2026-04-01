@@ -1,4 +1,5 @@
 export const runtime = "nodejs";
+export const maxDuration = 300;
 
 import { NextResponse } from "next/server";
 import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
