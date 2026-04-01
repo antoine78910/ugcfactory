@@ -1,12 +1,12 @@
 "use client";
 
 /*
- * ffmpeg.wasm loaded from CDN at runtime.
+ * ffmpeg.wasm loaded from esm.sh CDN at runtime.
  *
- * We cannot use npm imports (`import("@ffmpeg/ffmpeg")`) because the package
- * contains dynamic expressions that break Next.js webpack ("Cannot find module
- * as expression is too dynamic"). Loading from esm.sh at runtime bypasses
- * webpack completely while still giving us the same API.
+ * The npm packages @ffmpeg/ffmpeg and @ffmpeg/util contain dynamic expressions
+ * that break Next.js webpack ("Cannot find module as expression is too dynamic").
+ * Loading from esm.sh with webpackIgnore bypasses webpack while keeping native
+ * ES module resolution in the browser.
  */
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -14,13 +14,18 @@ let instance: any = null;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let loadPromise: Promise<any> | null = null;
 
-const FFMPEG_CDN = "https://esm.sh/@ffmpeg/ffmpeg@0.12.15";
-const UTIL_CDN = "https://esm.sh/@ffmpeg/util@0.12.2";
 const CORE_CDN = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function cdnImport(url: string): Promise<any> {
-  return new Function("u", "return import(u)")(url);
+async function loadFFmpegModule(): Promise<any> {
+  // @ts-expect-error — URL import; webpack must not touch this (webpackIgnore)
+  return import(/* webpackIgnore: true */ "https://esm.sh/@ffmpeg/ffmpeg@0.12.15");
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function loadUtilModule(): Promise<any> {
+  // @ts-expect-error — URL import; webpack must not touch this (webpackIgnore)
+  return import(/* webpackIgnore: true */ "https://esm.sh/@ffmpeg/util@0.12.2");
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -30,8 +35,8 @@ async function getFFmpeg(): Promise<any> {
 
   loadPromise = (async () => {
     const [ffmpegMod, utilMod] = await Promise.all([
-      cdnImport(FFMPEG_CDN),
-      cdnImport(UTIL_CDN),
+      loadFFmpegModule(),
+      loadUtilModule(),
     ]);
     const { FFmpeg } = ffmpegMod;
     const { toBlobURL } = utilMod;
@@ -50,7 +55,7 @@ async function getFFmpeg(): Promise<any> {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function doFetchFile(src: string): Promise<any> {
-  const mod = await cdnImport(UTIL_CDN);
+  const mod = await loadUtilModule();
   return mod.fetchFile(src);
 }
 
