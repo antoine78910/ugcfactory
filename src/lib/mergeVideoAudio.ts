@@ -1,51 +1,64 @@
 /**
- * Server-side video + audio merge using ffmpeg.
+ * Server-side video + audio merge.
  *
- * Takes a video buffer (original) and an audio buffer (ElevenLabs output),
- * mutes the original video audio and overlays the new audio track.
- * Returns the merged MP4 as a Buffer.
+ * Downloads a static ffmpeg binary to /tmp on first use (works on any serverless
+ * platform including Vercel). Subsequent warm invocations reuse the cached binary.
  */
 
-import ffmpegPath from "ffmpeg-static";
-import ffmpeg from "fluent-ffmpeg";
-import { tmpdir } from "os";
+import { existsSync } from "fs";
+import { writeFile, readFile, unlink, chmod } from "fs/promises";
 import { join } from "path";
-import { access, chmod, writeFile, readFile, unlink } from "fs/promises";
+import { tmpdir } from "os";
 import { randomUUID } from "crypto";
+import { execFile } from "child_process";
+import { pipeline } from "stream/promises";
+import { createWriteStream } from "fs";
 
-if (ffmpegPath) {
-  ffmpeg.setFfmpegPath(ffmpegPath);
+const FFMPEG_BIN = join(tmpdir(), "ffmpeg");
+
+const FFMPEG_DOWNLOAD_URL =
+  "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.0/linux-x64";
+
+async function ensureFfmpeg(): Promise<string> {
+  if (existsSync(FFMPEG_BIN)) return FFMPEG_BIN;
+
+  console.log("[merge] Downloading ffmpeg binary...");
+  const res = await fetch(FFMPEG_DOWNLOAD_URL);
+  if (!res.ok || !res.body) {
+    throw new Error(`Failed to download ffmpeg: HTTP ${res.status}`);
+  }
+
+  const dest = createWriteStream(FFMPEG_BIN);
+  // @ts-expect-error Node fetch body is a ReadableStream, pipeline can handle it
+  await pipeline(res.body, dest);
+  await chmod(FFMPEG_BIN, 0o755);
+  console.log("[merge] ffmpeg binary ready at", FFMPEG_BIN);
+  return FFMPEG_BIN;
 }
 
-async function ensureFfmpegBinaryAvailable() {
-  if (!ffmpegPath) {
-    throw new Error("ffmpeg-static did not resolve a binary path.");
-  }
-  try {
-    await access(ffmpegPath);
-  } catch {
-    throw new Error(`ffmpeg binary not found at: ${ffmpegPath}`);
-  }
-  // On Linux, ensure it's executable (bundlers can lose mode bits).
-  if (process.platform !== "win32") {
-    try {
-      await chmod(ffmpegPath, 0o755);
-    } catch {
-      // best-effort
-    }
-  }
+function runFfmpeg(bin: string, args: string[]): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    execFile(bin, args, { maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
+      if (err) {
+        reject(new Error(`ffmpeg failed: ${err.message}\n${stderr}`));
+      } else {
+        resolve({ stdout, stderr });
+      }
+    });
+  });
 }
 
 export async function mergeVideoWithAudioServer(
   videoBuffer: Buffer,
   audioBuffer: Buffer,
 ): Promise<Buffer> {
-  await ensureFfmpegBinaryAvailable();
+  const bin = await ensureFfmpeg();
+
   const id = randomUUID();
   const dir = tmpdir();
-  const videoPath = join(dir, `merge-video-${id}.mp4`);
-  const audioPath = join(dir, `merge-audio-${id}.mp3`);
-  const outputPath = join(dir, `merge-output-${id}.mp4`);
+  const videoPath = join(dir, `merge-v-${id}.mp4`);
+  const audioPath = join(dir, `merge-a-${id}.mp3`);
+  const outputPath = join(dir, `merge-o-${id}.mp4`);
 
   await Promise.all([
     writeFile(videoPath, videoBuffer),
@@ -53,26 +66,22 @@ export async function mergeVideoWithAudioServer(
   ]);
 
   try {
-    await new Promise<void>((resolve, reject) => {
-      ffmpeg()
-        .input(videoPath)
-        .input(audioPath)
-        .outputOptions([
-          "-c:v", "copy",
-          "-c:a", "aac",
-          "-map", "0:v:0",
-          "-map", "1:a:0",
-          "-shortest",
-          "-movflags", "+faststart",
-          "-y",
-        ])
-        .output(outputPath)
-        .on("error", (err: Error) => reject(err))
-        .on("end", () => resolve())
-        .run();
-    });
+    await runFfmpeg(bin, [
+      "-i", videoPath,
+      "-i", audioPath,
+      "-c:v", "copy",
+      "-c:a", "aac",
+      "-map", "0:v:0",
+      "-map", "1:a:0",
+      "-shortest",
+      "-movflags", "+faststart",
+      "-y",
+      outputPath,
+    ]);
 
-    return await readFile(outputPath);
+    const out = await readFile(outputPath);
+    if (out.length === 0) throw new Error("ffmpeg produced an empty output.");
+    return out;
   } finally {
     await Promise.all([
       unlink(videoPath).catch(() => {}),
