@@ -72,8 +72,6 @@ import {
   WAVESPEED_HEYGEN_TRANSLATE_LANGUAGES,
 } from "@/lib/wavespeedTranslateLanguages";
 import { STUDIO_GENERATION_KIND_STUDIO_TRANSLATE_VIDEO } from "@/lib/studioGenerationKinds";
-// ffmpeg.wasm merge temporarily disabled — will be re-enabled later
-// import { mergeVideoWithAudio, extractAudioFromVideo } from "@/lib/mergeVideoAudio";
 
 type WizardStep = "url" | "analysis" | "quiz" | "image" | "video";
 type AppSection =
@@ -672,9 +670,6 @@ export default function AppBrandWizard() {
   /** Language filter for the ElevenLabs voice picker (e.g. "en", "fr", "es"). Empty = all. */
   const [voiceChangeLangFilter, setVoiceChangeLangFilter] = useState<string>("");
   const [voiceChangeVoiceTab, setVoiceChangeVoiceTab] = useState<"all" | "favorites">("all");
-  /** True while ffmpeg.wasm is merging the generated audio with the original video. */
-  const [isMergingVideo, setIsMergingVideo] = useState(false);
-  const [mergeVideoProgress, setMergeVideoProgress] = useState(0);
   const [motionHistoryItems, setMotionHistoryItems] = useState<StudioHistoryItem[]>([]);
   const [motionServerHistory, setMotionServerHistory] = useState<boolean | null>(null);
   type MotionBilling =
@@ -917,19 +912,6 @@ export default function AppBrandWizard() {
     [],
   );
 
-  /**
-   * The original video URL to merge with after a voice change.
-   * Derived from the current source mode / selection — no extra state needed.
-   */
-  const effectiveVoiceChangeSourceVideoUrl = useMemo((): string | null => {
-    if (voiceChangeUploadKind === "video" && voiceChangeUploadPreviewUrl) {
-      return voiceChangeUploadPreviewUrl;
-    }
-    if (voiceChangeHistoryUrl) {
-      return proxiedMediaSrc(voiceChangeHistoryUrl);
-    }
-    return null;
-  }, [voiceChangeUploadKind, voiceChangeUploadPreviewUrl, voiceChangeHistoryUrl]);
 
   useEffect(() => {
     void (async () => {
@@ -3364,20 +3346,6 @@ export default function AppBrandWizard() {
                                   </div>
                                 ) : null}
 
-                                {/* Merge progress */}
-                                {isMergingVideo ? (
-                                  <div className="rounded-lg border border-violet-500/25 bg-violet-950/30 px-3 py-2">
-                                    <p className="text-[11px] text-violet-200/80">
-                                      Merging... {mergeVideoProgress > 0 ? `${Math.round(mergeVideoProgress * 100)}%` : "loading ffmpeg"}
-                                    </p>
-                                    <div className="mt-1.5 h-1 w-full rounded-full bg-white/10">
-                                      <div
-                                        className="h-1 rounded-full bg-violet-400 transition-all"
-                                        style={{ width: `${Math.round(mergeVideoProgress * 100)}%` }}
-                                      />
-                                    </div>
-                                  </div>
-                                ) : null}
                               </div>
 
                               {/* Advanced settings hidden for now */}
