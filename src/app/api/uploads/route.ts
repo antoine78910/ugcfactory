@@ -7,6 +7,7 @@ import { mkdir, writeFile } from "fs/promises";
 import { getAppUrl } from "@/lib/env";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
+import { assertGenericMultipartUpload } from "@/lib/studioUploadValidation";
 
 const STORAGE_BUCKET = "ugc-uploads";
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
@@ -31,6 +32,13 @@ export async function POST(req: Request) {
         { error: `File too large (${Math.round(file.size / 1024 / 1024)}MB). Maximum is 100MB.` },
         { status: 413 },
       );
+    }
+
+    try {
+      assertGenericMultipartUpload(file);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Format de fichier non pris en charge.";
+      return NextResponse.json({ error: msg }, { status: 400 });
     }
 
     const bytes = await file.arrayBuffer();

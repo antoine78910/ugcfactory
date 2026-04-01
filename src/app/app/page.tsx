@@ -53,6 +53,13 @@ import {
 import { motionControlUpgradeMessage } from "@/lib/subscriptionModelAccess";
 import { clipboardImageFiles } from "@/lib/clipboardImage";
 import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
+import { userMessageFromCaughtError } from "@/lib/generationUserMessage";
+import {
+  assertStudioImageUpload,
+  assertStudioVideoUpload,
+  STUDIO_IMAGE_FILE_ACCEPT,
+  STUDIO_VIDEO_FILE_ACCEPT,
+} from "@/lib/studioUploadValidation";
 import { uploadBlobUrlToCdn, uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
 import { proxiedMediaSrc } from "@/lib/mediaProxyUrl";
 import { cn } from "@/lib/utils";
@@ -559,6 +566,14 @@ export default function AppBrandWizard() {
   }, [applyRefundHints, motionServerHistory]);
 
   const applyMotionCharacterFile = useCallback((file: File) => {
+    try {
+      assertStudioImageUpload(file);
+    } catch (e) {
+      toast.error("Image incompatible", {
+        description: userMessageFromCaughtError(e, "Ce fichier n’est pas utilisable."),
+      });
+      return;
+    }
     const url = URL.createObjectURL(file);
     setMotionCharacterFile(file);
     setMotionCharacterImageUrl(url);
@@ -1436,6 +1451,7 @@ export default function AppBrandWizard() {
       const urls: string[] = [];
       for (const row of pendingRows) {
         try {
+          assertStudioImageUpload(row.file);
           const fd = new FormData();
           fd.set("file", row.file);
           const res = await fetch("/api/uploads", { method: "POST", body: fd });
@@ -1453,8 +1469,8 @@ export default function AppBrandWizard() {
           }
           urls.push(json.url);
         } catch (err) {
-          toast.error("Upload error", {
-            description: err instanceof Error ? err.message : "Unknown error",
+          toast.error("Erreur d’upload", {
+            description: userMessageFromCaughtError(err, "Réessaie avec JPEG, PNG ou WebP."),
           });
         } finally {
           URL.revokeObjectURL(row.blob);
@@ -2245,7 +2261,7 @@ export default function AppBrandWizard() {
                           <input
                             ref={motionVideoInputRef}
                             type="file"
-                            accept="video/*"
+                            accept={STUDIO_VIDEO_FILE_ACCEPT}
                             className="sr-only"
                             onChange={(e) => {
                               const f = e.target.files?.[0] ?? null;
@@ -2254,6 +2270,15 @@ export default function AppBrandWizard() {
                                 toast.error("Video file is too large.", {
                                   description:
                                     "Please upload a lighter clip (<= 100 MB) and keep motion-control videos short (3-30s).",
+                                });
+                                e.currentTarget.value = "";
+                                return;
+                              }
+                              try {
+                                assertStudioVideoUpload(f);
+                              } catch (err) {
+                                toast.error("Vidéo incompatible", {
+                                  description: userMessageFromCaughtError(err, "Fichier non pris en charge."),
                                 });
                                 e.currentTarget.value = "";
                                 return;
@@ -2268,16 +2293,19 @@ export default function AppBrandWizard() {
                               setMotionVideoDetectedDuration(null);
                               const blobUrl = URL.createObjectURL(f);
                               setMotionVideoRefBlobUrl(blobUrl);
-                              void uploadFileToCdn(f)
+                              void uploadFileToCdn(f, { kind: "video" })
                                 .then((url) => {
                                   if (motionVideoUploadTokenRef.current !== uploadToken) return;
                                   setMotionVideoUploadedUrl(url);
                                 })
                                 .catch((err) => {
                                   if (motionVideoUploadTokenRef.current !== uploadToken) return;
-                                  const description =
-                                    err instanceof Error ? err.message : "Please re-select the video.";
-                                  toast.error("Could not prepare the video preview.", { description });
+                                  toast.error("Impossible d’envoyer la vidéo.", {
+                                    description: userMessageFromCaughtError(
+                                      err,
+                                      "Réessaie ou choisis MP4 / MOV / WebM.",
+                                    ),
+                                  });
                                 })
                                 .finally(() => {
                                   if (motionVideoUploadTokenRef.current !== uploadToken) return;
@@ -2410,7 +2438,7 @@ export default function AppBrandWizard() {
                           <input
                             ref={motionCharacterInputRef}
                             type="file"
-                            accept="image/*"
+                            accept={STUDIO_IMAGE_FILE_ACCEPT}
                             className="sr-only"
                             onChange={(e) => {
                               const f = e.target.files?.[0] ?? null;
@@ -2674,8 +2702,10 @@ export default function AppBrandWizard() {
                                 motionCharacterImageUrl,
                                 "motion-character.jpg",
                                 "image/jpeg",
+                                { kind: "image" },
                               ).catch(async () => {
-                                if (motionCharacterFile) return uploadFileToCdn(motionCharacterFile);
+                                if (motionCharacterFile)
+                                  return uploadFileToCdn(motionCharacterFile, { kind: "image" });
                                 // Template avatars are already hosted in /public.
                                 if (/^https?:\/\//i.test(motionCharacterImageUrl)) return motionCharacterImageUrl;
                                 if (motionCharacterImageUrl.startsWith("/")) {
@@ -2686,11 +2716,12 @@ export default function AppBrandWizard() {
                               const videoHttps = motionVideoUploadedUrl
                                 ? motionVideoUploadedUrl
                                 : motionVideoFile
-                                  ? await uploadFileToCdn(motionVideoFile)
+                                  ? await uploadFileToCdn(motionVideoFile, { kind: "video" })
                                   : await uploadBlobUrlToCdn(
                                       motionVideoRefBlobUrl,
                                       "motion-ref.mp4",
                                       "video/mp4",
+                                      { kind: "video" },
                                     );
                               const res = await fetch("/api/kling/motion-control", {
                                 method: "POST",
@@ -3141,7 +3172,7 @@ export default function AppBrandWizard() {
                       <input
                         ref={packshotFileInputRef}
                         type="file"
-                        accept="image/jpeg,image/png,image/webp,image/*"
+                        accept={STUDIO_IMAGE_FILE_ACCEPT}
                         multiple
                         className="sr-only"
                         disabled={isUploadingPackshots}

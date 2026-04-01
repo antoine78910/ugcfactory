@@ -10,6 +10,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { StudioEmptyExamples, StudioOutputPane } from "@/app/_components/StudioEmptyExamples";
 import { StudioGenerationsHistory } from "@/app/_components/StudioGenerationsHistory";
 import { userMessageFromCaughtError } from "@/lib/generationUserMessage";
+import {
+  STUDIO_IMAGE_FILE_ACCEPT,
+  STUDIO_VIDEO_FILE_ACCEPT,
+} from "@/lib/studioUploadValidation";
 import type { StudioHistoryItem } from "@/app/_components/StudioGenerationsHistory";
 import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
 import {
@@ -40,7 +44,7 @@ import { AvatarPickerDialog } from "@/app/_components/AvatarPickerDialog";
 import { clipboardImageFiles } from "@/lib/clipboardImage";
 import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
 import { readStudioHistoryLocal, writeStudioHistoryLocal } from "@/lib/studioHistoryLocalStorage";
-import { uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
+import { uploadFileToCdn, type UploadFileKind } from "@/lib/uploadBlobUrlToCdn";
 import { cn } from "@/lib/utils";
 import { STUDIO_VIDEO_TAB_KINDS } from "@/lib/studioGenerationKinds";
 
@@ -220,8 +224,8 @@ function modelHasMultiShot(id: VideoModelId): boolean {
   return id === "kling-3.0/video";
 }
 
-async function uploadFile(file: File): Promise<string> {
-  return uploadFileToCdn(file);
+async function uploadStudioMediaFile(file: File, kind: UploadFileKind): Promise<string> {
+  return uploadFileToCdn(file, { kind });
 }
 
 function isMotionEditPicker(id: string): boolean {
@@ -747,7 +751,7 @@ export default function StudioVideoPanel() {
   const pickFrame = useCallback((which: "start" | "end") => {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = "image/*";
+    input.accept = STUDIO_IMAGE_FILE_ACCEPT;
     input.onchange = async () => {
       const f = input.files?.[0];
       if (!f) return;
@@ -766,12 +770,14 @@ export default function StudioVideoPanel() {
       }
       setFrameUploadBusy(true);
       try {
-        const u = await uploadFile(f);
+        const u = await uploadStudioMediaFile(f, "image");
         if (which === "start") setStartUrl(u);
         else setEndUrl(u);
         toast.success("Frame uploaded");
       } catch (e) {
-        toast.error("Upload failed. Please try again.");
+        toast.error("Échec de l’upload", {
+          description: userMessageFromCaughtError(e, "Utilise JPEG, PNG, WebP ou GIF."),
+        });
       } finally {
         URL.revokeObjectURL(blobUrl);
         if (which === "start") setStartFramePreviewBlob(null);
@@ -822,7 +828,7 @@ export default function StudioVideoPanel() {
   const pickEditSourceVideo = useCallback(() => {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = "video/mp4,video/quicktime,video/webm";
+    input.accept = STUDIO_VIDEO_FILE_ACCEPT;
     input.onchange = async () => {
       const f = input.files?.[0];
       if (!f) return;
@@ -832,12 +838,14 @@ export default function StudioVideoPanel() {
       setEditVideoDurationSec(null);
       setEditUploadBusy(true);
       try {
-        const u = await uploadFile(f);
+        const u = await uploadStudioMediaFile(f, "video");
         setEditVideoUrl(u);
         setEditVideoBlobUrl(null);
         toast.success("Video uploaded");
       } catch (e) {
-        toast.error("Upload failed. Please try again.");
+        toast.error("Échec de l’upload", {
+          description: userMessageFromCaughtError(e, "Utilise MP4, MOV ou WebM."),
+        });
         setEditVideoBlobUrl(null);
       } finally {
         setEditUploadBusy(false);
@@ -856,7 +864,7 @@ export default function StudioVideoPanel() {
   const pickMotionCharacter = useCallback(() => {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = "image/*";
+    input.accept = STUDIO_IMAGE_FILE_ACCEPT;
     input.onchange = async () => {
       const f = input.files?.[0];
       if (!f) return;
@@ -867,11 +875,13 @@ export default function StudioVideoPanel() {
       });
       setEditUploadBusy(true);
       try {
-        const u = await uploadFile(f);
+        const u = await uploadStudioMediaFile(f, "image");
         setEditMotionImageUrl(u);
         toast.success("Image uploaded");
       } catch (e) {
-        toast.error("Upload failed. Please try again.");
+        toast.error("Échec de l’upload", {
+          description: userMessageFromCaughtError(e, "Utilise JPEG, PNG, WebP ou GIF."),
+        });
       } finally {
         URL.revokeObjectURL(blobUrl);
         setMotionCharPreviewBlob(null);
@@ -884,7 +894,7 @@ export default function StudioVideoPanel() {
   const pickMotionReferenceVideo = useCallback(() => {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = "video/mp4,video/quicktime,video/webm";
+    input.accept = STUDIO_VIDEO_FILE_ACCEPT;
     input.onchange = async () => {
       const f = input.files?.[0];
       if (!f) return;
@@ -894,12 +904,14 @@ export default function StudioVideoPanel() {
       setEditMotionDurationSec(null);
       setEditUploadBusy(true);
       try {
-        const u = await uploadFile(f);
+        const u = await uploadStudioMediaFile(f, "video");
         setEditMotionVideoUrl(u);
         setEditMotionVideoBlobUrl(null);
         toast.success("Motion video uploaded");
       } catch (e) {
-        toast.error("Upload failed. Please try again.");
+        toast.error("Échec de l’upload", {
+          description: userMessageFromCaughtError(e, "Utilise MP4, MOV ou WebM."),
+        });
         setEditMotionVideoBlobUrl(null);
       } finally {
         setEditUploadBusy(false);
@@ -919,7 +931,7 @@ export default function StudioVideoPanel() {
     if (editElementUrls.length >= 4) return;
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = "image/*";
+    input.accept = STUDIO_IMAGE_FILE_ACCEPT;
     input.onchange = async () => {
       const f = input.files?.[0];
       if (!f) return;
@@ -930,11 +942,13 @@ export default function StudioVideoPanel() {
       });
       setEditUploadBusy(true);
       try {
-        const u = await uploadFile(f);
+        const u = await uploadStudioMediaFile(f, "image");
         setEditElementUrls((prev) => (prev.length >= 4 ? prev : [...prev, u]));
         toast.success("Image added");
       } catch (e) {
-        toast.error("Upload failed. Please try again.");
+        toast.error("Échec de l’upload", {
+          description: userMessageFromCaughtError(e, "Utilise JPEG, PNG, WebP ou GIF."),
+        });
       } finally {
         URL.revokeObjectURL(blobUrl);
         setElementUploadPreviewBlob(null);
@@ -963,7 +977,7 @@ export default function StudioVideoPanel() {
         }
         setFrameUploadBusy(true);
         try {
-          const u = await uploadFile(file);
+          const u = await uploadStudioMediaFile(file, "image");
           if (!startUrl) {
             setStartUrl(u);
             toast.success("Start frame pasted");
@@ -975,7 +989,9 @@ export default function StudioVideoPanel() {
             toast.success("Start frame replaced from paste");
           }
         } catch (e) {
-          toast.error("Upload failed. Please try again.");
+          toast.error("Échec du collage", {
+            description: userMessageFromCaughtError(e, "Utilise JPEG, PNG, WebP ou GIF."),
+          });
         } finally {
           URL.revokeObjectURL(blobUrl);
           if (which === "start") setStartFramePreviewBlob(null);
@@ -994,11 +1010,13 @@ export default function StudioVideoPanel() {
         });
         setEditUploadBusy(true);
         try {
-          const u = await uploadFile(file);
+          const u = await uploadStudioMediaFile(file, "image");
           setEditMotionImageUrl(u);
           toast.success("Character image pasted");
         } catch (e) {
-          toast.error("Upload failed. Please try again.");
+          toast.error("Échec du collage", {
+            description: userMessageFromCaughtError(e, "Utilise JPEG, PNG, WebP ou GIF."),
+          });
         } finally {
           URL.revokeObjectURL(blobUrl);
           setMotionCharPreviewBlob(null);
@@ -1014,11 +1032,13 @@ export default function StudioVideoPanel() {
       });
       setEditUploadBusy(true);
       try {
-        const u = await uploadFile(file);
+        const u = await uploadStudioMediaFile(file, "image");
         setEditElementUrls((prev) => (prev.length >= 4 ? prev : [...prev, u]));
         toast.success("Element image pasted");
       } catch (e) {
-        toast.error("Upload failed. Please try again.");
+        toast.error("Échec du collage", {
+          description: userMessageFromCaughtError(e, "Utilise JPEG, PNG, WebP ou GIF."),
+        });
       } finally {
         URL.revokeObjectURL(blobUrl);
         setElementUploadPreviewBlob(null);

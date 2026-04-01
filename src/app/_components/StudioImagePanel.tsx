@@ -46,6 +46,7 @@ import { loadAvatarUrls } from "@/lib/avatarLibrary";
 import { AvatarPickerDialog } from "@/app/_components/AvatarPickerDialog";
 import { clipboardImageFiles } from "@/lib/clipboardImage";
 import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
+import { assertStudioImageUpload, STUDIO_IMAGE_FILE_ACCEPT } from "@/lib/studioUploadValidation";
 
 const ASPECT_RATIOS_PRO = [
   "1:1",
@@ -156,6 +157,7 @@ const STUDIO_LIGHTBOX_EDIT_MODEL_OPTIONS: StudioImageLightboxEditModelOption[] =
 ];
 
 async function uploadReferenceFile(file: File): Promise<string> {
+  assertStudioImageUpload(file);
   const fd = new FormData();
   fd.set("file", file);
   const res = await fetch("/api/uploads", { method: "POST", body: fd });
@@ -589,7 +591,7 @@ export default function StudioImagePanel() {
   const onAddRefs = useCallback(() => {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = "image/*";
+    input.accept = STUDIO_IMAGE_FILE_ACCEPT;
     input.multiple = true;
     input.onchange = async () => {
       const files = Array.from(input.files ?? []);
@@ -603,8 +605,10 @@ export default function StudioImagePanel() {
         for (const row of pending) {
           try {
             urls.push(await uploadReferenceFile(row.file));
-          } catch {
-            toast.error("Upload failed. Please try again.");
+          } catch (e) {
+            toast.error("Échec de l’upload", {
+              description: userMessageFromCaughtError(e, "Utilise JPEG, PNG, WebP ou GIF."),
+            });
           } finally {
             URL.revokeObjectURL(row.blob);
             setRefUploadPreviews((p) => p.filter((x) => x.id !== row.id));
@@ -632,8 +636,10 @@ export default function StudioImagePanel() {
       for (const row of pending) {
         try {
           urls.push(await uploadReferenceFile(row.file));
-        } catch {
-          toast.error("Upload failed. Please try again.");
+        } catch (e) {
+          toast.error("Échec du collage", {
+            description: userMessageFromCaughtError(e, "Utilise JPEG, PNG, WebP ou GIF."),
+          });
         } finally {
           URL.revokeObjectURL(row.blob);
           setRefUploadPreviews((p) => p.filter((x) => x.id !== row.id));

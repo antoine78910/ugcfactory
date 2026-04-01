@@ -21,8 +21,17 @@ import { StudioModelPicker, type StudioModelPickerItem } from "@/app/_components
 import { topazImageUpscaleCredits, topazVideoUpscaleCredits } from "@/lib/pricing";
 import { registerStudioGenerationClient } from "@/lib/registerStudioGenerationClient";
 import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
+import { userMessageFromCaughtError } from "@/lib/generationUserMessage";
+import {
+  assertStudioImageUpload,
+  assertStudioVideoUpload,
+  STUDIO_IMAGE_FILE_ACCEPT,
+  STUDIO_VIDEO_FILE_ACCEPT,
+} from "@/lib/studioUploadValidation";
 
-async function uploadFile(file: File): Promise<string> {
+async function uploadFile(file: File, kind: "image" | "video"): Promise<string> {
+  if (kind === "video") assertStudioVideoUpload(file);
+  else assertStudioImageUpload(file);
   const fd = new FormData();
   fd.set("file", file);
   const res = await fetch("/api/uploads", { method: "POST", body: fd });
@@ -188,7 +197,7 @@ export default function StudioUpscalePanel() {
   const onPickVideo = () => {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = "video/mp4,video/quicktime,video/webm";
+    input.accept = STUDIO_VIDEO_FILE_ACCEPT;
     input.onchange = async () => {
       const f = input.files?.[0];
       if (!f) return;
@@ -198,12 +207,14 @@ export default function StudioUpscalePanel() {
       setImageUrl("");
       setBusy(true);
       try {
-        const url = await uploadFile(f);
+        const url = await uploadFile(f, "video");
         setVideoUrl(url);
         toast.success("Video importee");
         setVideoPreviewBlob(null);
       } catch (e) {
-        toast.error("Echec de l'import. Reessaie.");
+        toast.error("Échec de l’import", {
+          description: userMessageFromCaughtError(e, "Utilise MP4, MOV ou WebM."),
+        });
       } finally {
         setBusy(false);
       }
@@ -214,7 +225,7 @@ export default function StudioUpscalePanel() {
   const onPickImage = () => {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = "image/png,image/jpeg,image/webp,image/gif";
+    input.accept = STUDIO_IMAGE_FILE_ACCEPT;
     input.onchange = async () => {
       const f = input.files?.[0];
       if (!f) return;
@@ -224,12 +235,14 @@ export default function StudioUpscalePanel() {
       setVideoUrl("");
       setBusy(true);
       try {
-        const url = await uploadFile(f);
+        const url = await uploadFile(f, "image");
         setImageUrl(url);
         toast.success("Image importee");
         setImagePreviewBlob(null);
       } catch (e) {
-        toast.error("Echec de l'import. Reessaie.");
+        toast.error("Échec de l’import", {
+          description: userMessageFromCaughtError(e, "Utilise JPEG, PNG, WebP ou GIF."),
+        });
       } finally {
         setBusy(false);
       }

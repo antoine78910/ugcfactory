@@ -76,6 +76,7 @@ import {
 } from "@/lib/linkToAdScriptFactors";
 import ShapeGrid from "@/app/ShapeGrid";
 import { LINK_TO_AD_LOADING_MESSAGES } from "@/lib/linkToAd/loadingMessageLoops";
+import { assertStudioImageUpload, STUDIO_IMAGE_FILE_ACCEPT } from "@/lib/studioUploadValidation";
 import {
   creditsLinkToAdFullPipeline,
   creditsLinkToAdVideoFromImage,
@@ -1614,6 +1615,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       let lastError: string | null = null;
       for (const row of pendingRows) {
         try {
+          assertStudioImageUpload(row.file);
           const fd = new FormData();
           fd.set("file", row.file);
           const res = await fetch("/api/uploads", { method: "POST", body: fd });
@@ -1670,6 +1672,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     try {
       for (const row of pendingRows) {
         try {
+          assertStudioImageUpload(row.file);
           const fd = new FormData();
           fd.set("file", row.file);
           const res = await fetch("/api/uploads", { method: "POST", body: fd });
@@ -1723,6 +1726,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     try {
       for (const row of pendingRows) {
         try {
+          assertStudioImageUpload(row.file);
           const fd = new FormData();
           fd.set("file", row.file);
           const res = await fetch("/api/uploads", { method: "POST", body: fd });
@@ -4015,7 +4019,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                     <input
                       ref={photoInputRef}
                       type="file"
-                      accept="image/jpeg,image/png,image/webp,image/*"
+                      accept={STUDIO_IMAGE_FILE_ACCEPT}
                       multiple
                       className="sr-only"
                       onChange={(e) => {
@@ -4037,7 +4041,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                     <input
                       ref={personaPhotoInputRef}
                       type="file"
-                      accept="image/jpeg,image/png,image/webp,image/*"
+                      accept={STUDIO_IMAGE_FILE_ACCEPT}
                       multiple
                       className="sr-only"
                       onChange={(e) => {
@@ -4202,7 +4206,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                     <input
                       ref={photoInputRef}
                       type="file"
-                      accept="image/jpeg,image/png,image/webp,image/*"
+                      accept={STUDIO_IMAGE_FILE_ACCEPT}
                       multiple
                       className="sr-only"
                       onChange={(e) => {
@@ -4224,7 +4228,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                     <input
                       ref={personaPhotoInputRef}
                       type="file"
-                      accept="image/jpeg,image/png,image/webp,image/*"
+                      accept={STUDIO_IMAGE_FILE_ACCEPT}
                       multiple
                       className="sr-only"
                       onChange={(e) => {
@@ -4543,7 +4547,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                   <input
                     ref={photoInputRef}
                     type="file"
-                    accept="image/jpeg,image/png,image/webp,image/*"
+                    accept={STUDIO_IMAGE_FILE_ACCEPT}
                     multiple
                     className="sr-only"
                     onChange={(e) => {
@@ -4565,7 +4569,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                   <input
                     ref={personaPhotoInputRef}
                     type="file"
-                    accept="image/jpeg,image/png,image/webp,image/*"
+                    accept={STUDIO_IMAGE_FILE_ACCEPT}
                     multiple
                     className="sr-only"
                     onChange={(e) => {

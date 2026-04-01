@@ -1,4 +1,8 @@
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import {
+  assertStudioUploadForKind,
+  inferStudioUploadKind,
+} from "@/lib/studioUploadValidation";
 
 /** Stay under typical Vercel serverless request body limits (~4.5 MB); larger files go direct to Supabase. */
 const VERCEL_SAFE_BODY_BYTES = 3.5 * 1024 * 1024;
@@ -72,7 +76,15 @@ async function uploadViaSupabaseDirect(file: File): Promise<string> {
  * Upload a browser `File` to public CDN URL.
  * Large files and videos use Supabase Storage from the browser (bypasses Vercel body limits).
  */
-export async function uploadFileToCdn(file: File): Promise<string> {
+export type UploadFileKind = "image" | "video";
+
+export async function uploadFileToCdn(
+  file: File,
+  opts?: { kind?: UploadFileKind },
+): Promise<string> {
+  const kind = opts?.kind ?? inferStudioUploadKind(file);
+  assertStudioUploadForKind(file, kind);
+
   const mime = file.type || "";
   const useDirect = file.size > VERCEL_SAFE_BODY_BYTES || mime.startsWith("video/");
 
@@ -95,6 +107,7 @@ export async function uploadBlobUrlToCdn(
   blobUrl: string,
   filename: string,
   fallbackMime: string,
+  opts?: { kind?: UploadFileKind },
 ): Promise<string> {
   let blob: Blob;
   try {
@@ -106,5 +119,5 @@ export async function uploadBlobUrlToCdn(
   }
   const type = blob.type || fallbackMime;
   const file = new File([blob], filename, { type });
-  return uploadFileToCdn(file);
+  return uploadFileToCdn(file, opts);
 }
