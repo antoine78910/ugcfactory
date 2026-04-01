@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Download, FolderOpen, Info, LayoutGrid, List, Loader2, Sparkles, Trash2, Wand2, X } from "lucide-react";
+import { Download, FolderOpen, Info, LayoutGrid, List, Loader2, Sparkles, Trash2, Volume2, Wand2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -11,7 +11,7 @@ import { toast } from "sonner";
 import VideoCard from "@/app/_components/VideoCard";
 import { isStudioGenerationRowId } from "@/lib/studioGenerationRowId";
 
-export type StudioHistoryMediaKind = "image" | "video" | "motion";
+export type StudioHistoryMediaKind = "image" | "video" | "motion" | "audio";
 
 export type StudioHistoryItem = {
   id: string;
@@ -63,6 +63,20 @@ export function isProbablyVideoUrl(url: string | undefined): boolean {
     u.includes("video/mp4") ||
     u.includes("video/quicktime") ||
     u.includes("video/webm")
+  );
+}
+
+export function isProbablyAudioUrl(url: string | undefined): boolean {
+  const u = (url || "").trim().toLowerCase();
+  if (!u) return false;
+  return (
+    u.includes(".mp3") ||
+    u.includes(".wav") ||
+    u.includes(".m4a") ||
+    u.includes(".ogg") ||
+    u.includes(".opus") ||
+    u.includes(".aac") ||
+    u.includes("audio/")
   );
 }
 
@@ -130,7 +144,7 @@ export function StudioGenerationsHistory({
     sourceId: string;
     url: string;
     poster?: string;
-    kind: "image" | "video";
+    kind: "image" | "video" | "audio";
     prompt: string;
   } | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -448,7 +462,28 @@ export function StudioGenerationsHistory({
                           </div>
                         </div>
                       ) : null}
-                      {canShowResultMedia && item.mediaUrl && (item.kind !== "image" || isProbablyVideoUrl(item.mediaUrl)) ? (
+                      {canShowResultMedia && item.mediaUrl && item.kind === "audio" ? (
+                        <div className="flex h-full w-full flex-col items-center justify-center gap-4 bg-gradient-to-b from-[#171721] to-[#0c0c12] p-4">
+                          <div className="flex h-16 w-16 items-center justify-center rounded-full border border-white/10 bg-white/[0.06]">
+                            <Volume2 className="h-8 w-8 text-violet-200/80" aria-hidden />
+                          </div>
+                          <audio controls preload="metadata" className="w-full max-w-[14rem]">
+                            <source src={item.mediaUrl} />
+                          </audio>
+                          <a
+                            href={`/api/download?url=${encodeURIComponent(item.mediaUrl)}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/55 px-3 py-1.5 text-[11px] font-medium text-white/80 transition hover:bg-black/75 hover:text-white"
+                          >
+                            <Download className="h-3.5 w-3.5" aria-hidden />
+                            Download audio
+                          </a>
+                        </div>
+                      ) : null}
+                      {canShowResultMedia &&
+                      item.mediaUrl &&
+                      item.kind !== "audio" &&
+                      (item.kind !== "image" || isProbablyVideoUrl(item.mediaUrl)) ? (
                         <VideoCard
                           src={item.mediaUrl}
                           poster={item.posterUrl}
@@ -569,7 +604,16 @@ export function StudioGenerationsHistory({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center rounded-2xl border border-white/[0.12] bg-gradient-to-b from-[#16161f]/90 to-black/60 p-2 shadow-[0_24px_80px_rgba(0,0,0,0.55)] transition-shadow duration-300 ease-out sm:p-4 lg:min-h-[min(88vh,900px)]">
-              {lightboxItem.kind === "video" || isProbablyVideoUrl(lightboxItem.url) ? (
+              {lightboxItem.kind === "audio" || isProbablyAudioUrl(lightboxItem.url) ? (
+                <div className="flex w-full max-w-xl flex-col items-center justify-center gap-5 rounded-2xl border border-white/[0.12] bg-[#111119] p-8">
+                  <div className="flex h-20 w-20 items-center justify-center rounded-full border border-white/10 bg-white/[0.06]">
+                    <Volume2 className="h-10 w-10 text-violet-200/80" aria-hidden />
+                  </div>
+                  <audio controls autoPlay preload="metadata" className="w-full">
+                    <source src={lightboxItem.url} />
+                  </audio>
+                </div>
+              ) : lightboxItem.kind === "video" || isProbablyVideoUrl(lightboxItem.url) ? (
                 // eslint-disable-next-line jsx-a11y/media-has-caption
                 <video
                   src={lightboxItem.url}

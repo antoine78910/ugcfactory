@@ -34,6 +34,7 @@ export const STUDIO_LIBRARY_KINDS = [
   STUDIO_GENERATION_KIND_LINK_TO_AD_IMAGE,
   "studio_video",
   STUDIO_GENERATION_KIND_LINK_TO_AD_VIDEO,
+  "studio_audio",
   "studio_upscale",
   "motion_control",
   "studio_watermark",

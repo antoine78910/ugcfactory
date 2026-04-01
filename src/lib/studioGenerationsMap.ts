@@ -15,6 +15,20 @@ function resultUrlLooksLikeVideo(url: string): boolean {
   );
 }
 
+function resultUrlLooksLikeAudio(url: string): boolean {
+  const t = url.trim().toLowerCase();
+  if (!t) return false;
+  return (
+    t.includes(".mp3") ||
+    t.includes(".wav") ||
+    t.includes(".m4a") ||
+    t.includes(".ogg") ||
+    t.includes(".opus") ||
+    t.includes(".aac") ||
+    t.includes("audio/")
+  );
+}
+
 /** Normalize `result_urls` from PostgREST (array, JSON string, or single URL string). */
 export function normalizeResultUrls(raw: unknown): string[] {
   if (raw == null) return [];
@@ -58,12 +72,17 @@ export type StudioGenerationRow = {
 };
 
 function rowKindToMediaKind(kind: string, resultUrls: string[], label: string): StudioHistoryItem["kind"] {
-  if (kind === "motion_control") return "motion";
+  if (kind === "motion_control") {
+    const u = resultUrls[0] ?? "";
+    if (u && resultUrlLooksLikeAudio(u)) return "audio";
+    return "motion";
+  }
   if (kind === "studio_video" || kind === "studio_watermark" || kind === "link_to_ad_video") return "video";
+  if (kind === "studio_audio") return "audio";
   if (kind === "link_to_ad_image") return "image";
   if (kind === "studio_upscale") {
     const u = resultUrls[0] ?? "";
-    if (u) return resultUrlLooksLikeVideo(u) ? "video" : "image";
+    if (u) return resultUrlLooksLikeAudio(u) ? "audio" : resultUrlLooksLikeVideo(u) ? "video" : "image";
     return label.toLowerCase().includes("image") ? "image" : "video";
   }
   return "image";

@@ -34,7 +34,24 @@ async function readWaveSpeedJson(res: Response, fallbackMessage: string): Promis
     throw new Error(error);
   }
 
-  return json ?? {};
+  // WaveSpeed v3 wraps the payload in a `data` field:
+  // { "code": 200, "message": "success", "data": { "id": "...", ... } }
+  // Unwrap it so callers read fields directly.
+  const inner = json?.data;
+  return (inner !== null && typeof inner === "object" && !Array.isArray(inner)
+    ? (inner as Record<string, unknown>)
+    : json) ?? {};
+}
+
+function parsePrediction(json: Record<string, unknown>): WaveSpeedPrediction {
+  return {
+    id: typeof json.id === "string" ? json.id : undefined,
+    status: typeof json.status === "string" ? json.status : undefined,
+    outputs: Array.isArray(json.outputs)
+      ? json.outputs.filter((x): x is string => typeof x === "string")
+      : [],
+    error: typeof json.error === "string" ? json.error : undefined,
+  };
 }
 
 export async function submitWaveSpeedHeygenVideoTranslate(opts: {
@@ -59,12 +76,7 @@ export async function submitWaveSpeedHeygenVideoTranslate(opts: {
   });
 
   const json = await readWaveSpeedJson(res, "WaveSpeed translation request failed.");
-  return {
-    id: typeof json.id === "string" ? json.id : undefined,
-    status: typeof json.status === "string" ? json.status : undefined,
-    outputs: Array.isArray(json.outputs) ? json.outputs.filter((x): x is string => typeof x === "string") : [],
-    error: typeof json.error === "string" ? json.error : undefined,
-  };
+  return parsePrediction(json);
 }
 
 export async function getWaveSpeedPrediction(taskId: string): Promise<WaveSpeedPrediction> {
@@ -80,10 +92,5 @@ export async function getWaveSpeedPrediction(taskId: string): Promise<WaveSpeedP
   });
 
   const json = await readWaveSpeedJson(res, "WaveSpeed prediction lookup failed.");
-  return {
-    id: typeof json.id === "string" ? json.id : undefined,
-    status: typeof json.status === "string" ? json.status : undefined,
-    outputs: Array.isArray(json.outputs) ? json.outputs.filter((x): x is string => typeof x === "string") : [],
-    error: typeof json.error === "string" ? json.error : undefined,
-  };
+  return parsePrediction(json);
 }
