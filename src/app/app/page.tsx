@@ -3731,12 +3731,15 @@ export default function AppBrandWizard() {
                               toast.message(
                                 appSection === "ad_clone" ? "Uploading video..." : "Uploading references...",
                               );
+                              if (!motionVideoRefBlobUrl && !motionVideoUploadedUrl && !motionVideoFile) {
+                                throw new Error("No reference video selected.");
+                              }
                               const videoHttps = motionVideoUploadedUrl
                                 ? motionVideoUploadedUrl
                                 : motionVideoFile
                                   ? await uploadFileToCdn(motionVideoFile, { kind: "video" })
                                   : await uploadBlobUrlToCdn(
-                                      motionVideoRefBlobUrl,
+                                      motionVideoRefBlobUrl!,
                                       "motion-ref.mp4",
                                       "video/mp4",
                                       { kind: "video" },
