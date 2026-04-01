@@ -3,7 +3,7 @@ import { kieMarketRecordInfo } from "@/lib/kieMarket";
 import { kieImageTaskPollOutcome } from "@/lib/kieTaskPoll";
 import type { StudioGenerationRow } from "@/lib/studioGenerationsMap";
 import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
-import { isPiapiTaskId, piapiGetSeedanceTask, piapiTaskStatusToLegacy } from "@/lib/piapiSeedance";
+import { isPiapiTaskId, piapiGenericTaskStatusToLegacy, piapiGetTask } from "@/lib/piapiSeedance";
 import { serverLog } from "@/lib/serverLog";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import {
@@ -168,9 +168,9 @@ export async function pollStudioGenerationRow(
       }
     }
   } else if (providerLc === "piapi" || isPiapiTaskId(row.external_task_id)) {
-    /** Prefer user PiAPI key when present; otherwise platform key (piapiGetSeedanceTask fallback). */
-    const raw = await piapiGetSeedanceTask(row.external_task_id, piapiApiKey?.trim() || undefined);
-    const mapped = piapiTaskStatusToLegacy(raw);
+    /** Prefer user PiAPI key when present; otherwise platform key (piapiGetTask fallback). */
+    const raw = await piapiGetTask(row.external_task_id, piapiApiKey?.trim() || undefined);
+    const mapped = piapiGenericTaskStatusToLegacy(raw);
     if (mapped.status === "IN_PROGRESS") out = { kind: "processing" };
     else if (mapped.status === "SUCCESS") out = { kind: "success", urls: mapped.response };
     else out = { kind: "fail", message: mapped.error_message ?? "PiAPI task failed" };
