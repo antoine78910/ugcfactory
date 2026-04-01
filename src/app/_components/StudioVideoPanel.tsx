@@ -530,7 +530,11 @@ async function pollVeoVideo(taskId: string, personalApiKey?: string): Promise<st
   throw new Error("Veo timeout");
 }
 
-export default function StudioVideoPanel() {
+export default function StudioVideoPanel({
+  onChangeVoice,
+}: {
+  onChangeVoice?: (item: import("@/app/_components/StudioGenerationsHistory").StudioHistoryItem) => void;
+}) {
   const { planId, current: creditsBalance, spendCredits, grantCredits } = useCreditsPlan();
   const [serverHistory, setServerHistory] = useState<boolean | null>(null);
   const creditsRef = useRef(creditsBalance);
@@ -1527,6 +1531,7 @@ export default function StudioVideoPanel() {
             empty={<StudioEmptyExamples variant="video" />}
             mediaLabel="Video"
             onItemDeleted={(id) => setHistoryItems((prev) => prev.filter((i) => i.id !== id))}
+            onChangeVoice={onChangeVoice}
           />
         }
         empty={null}

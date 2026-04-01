@@ -181,7 +181,11 @@ function applyRefundHints(
   }
 }
 
-export default function StudioAvatarPanel() {
+export default function StudioAvatarPanel({
+  onChangeVoice,
+}: {
+  onChangeVoice?: (item: StudioHistoryItem) => void;
+}) {
   const { planId, current: creditsBalance, spendCredits, grantCredits } = useCreditsPlan();
   const creditsRef = useRef(creditsBalance);
   creditsRef.current = creditsBalance;
@@ -409,6 +413,7 @@ export default function StudioAvatarPanel() {
                 empty={<p className="py-8 text-center text-xs text-white/30">Generated avatars will appear here.</p>}
                 mediaLabel="Avatar"
                 onItemDeleted={(id) => setHistoryItems((prev) => prev.filter((i) => i.id !== id))}
+                onChangeVoice={onChangeVoice}
               />
             }
             empty={null}

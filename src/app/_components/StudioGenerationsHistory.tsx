@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Download, FolderOpen, Info, LayoutGrid, List, Loader2, Maximize2, Sparkles, Trash2, Volume2, Wand2, X } from "lucide-react";
+import { Download, FolderOpen, Info, LayoutGrid, List, Loader2, Maximize2, Mic, Sparkles, Trash2, Volume2, Wand2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -127,6 +127,8 @@ type Props = {
   onDismissFailed?: (id: string) => void;
   /** Remove item from UI; when the row is saved in Supabase, it is deleted on the server first. */
   onItemDeleted?: (id: string) => void;
+  /** Called when the user wants to change the voice of a video item. */
+  onChangeVoice?: (item: StudioHistoryItem) => void;
 };
 
 export function StudioGenerationsHistory({
@@ -138,6 +140,7 @@ export function StudioGenerationsHistory({
   failedAutoDismiss,
   onDismissFailed,
   onItemDeleted,
+  onChangeVoice,
 }: Props) {
   const [view, setView] = useState<"grid" | "list">("grid");
   const [zoom, setZoom] = useState(100);
@@ -510,6 +513,24 @@ export function StudioGenerationsHistory({
                           </a>
                         </div>
                       ) : null}
+                      {onChangeVoice &&
+                      canShowResultMedia &&
+                      item.mediaUrl &&
+                      item.kind !== "audio" &&
+                      (item.kind !== "image" || isProbablyVideoUrl(item.mediaUrl)) ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onChangeVoice(item);
+                          }}
+                          className="absolute right-2 top-2 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-black/65 text-white/80 opacity-0 shadow-sm backdrop-blur-sm transition hover:bg-violet-950/80 hover:text-violet-200 group-hover/media:opacity-100 focus-visible:opacity-100"
+                          aria-label="Change voice"
+                          title="Change voice"
+                        >
+                          <Mic className="h-3.5 w-3.5" aria-hidden />
+                        </button>
+                      ) : null}
                       {canShowResultMedia &&
                       item.mediaUrl &&
                       item.kind !== "audio" &&
@@ -691,6 +712,23 @@ export function StudioGenerationsHistory({
                     >
                       <Maximize2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
                       Plein ecran
+                    </button>
+                  ) : null}
+                  {isLightboxVideo && onChangeVoice ? (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const foundItem = items.find((i) => i.id === lightboxItem.sourceId);
+                        if (foundItem) {
+                          onChangeVoice(foundItem);
+                          setLightboxItem(null);
+                        }
+                      }}
+                      className="inline-flex min-w-[7rem] flex-1 items-center justify-center gap-1.5 rounded-md border border-violet-500/35 bg-violet-950/40 px-3 py-2 text-center text-[11px] font-semibold text-violet-100/90 transition hover:bg-violet-900/50"
+                    >
+                      <Mic className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                      Change Voice
                     </button>
                   ) : null}
                   <a
