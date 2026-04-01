@@ -9,6 +9,7 @@ import {
   IMAGE_MODEL,
   LINK_TO_AD_VIDEO_MODELS,
   type LinkToAdVideoModelId,
+  calculateWaveSpeedVideoTranslateCredits,
   calculateMotionControlCreditsFromDuration,
   calculateVideoCreditsForModel,
   calculateVideoCreditsFromDuration,
@@ -93,4 +94,14 @@ export function calculateMotionControlCredits(opts: {
   durationSeconds: number;
 }): number {
   return calculateMotionControlCreditsFromDuration(opts.durationSeconds, opts.quality);
+}
+
+export function calculateAdCloneCredits(opts: {
+  quality: string;
+  durationSeconds: number;
+  translateVideo: boolean;
+}): number {
+  const motion = calculateMotionControlCreditsFromDuration(opts.durationSeconds, opts.quality);
+  if (!opts.translateVideo) return motion;
+  return motion + calculateWaveSpeedVideoTranslateCredits(opts.durationSeconds);
 }

@@ -9,6 +9,15 @@ import {
   isStudioMediaPublicUrl,
   persistStudioMediaUrls,
 } from "@/lib/studioGenerationsMedia";
+import {
+  getWaveSpeedPrediction,
+  submitWaveSpeedHeygenVideoTranslate,
+} from "@/lib/wavespeed";
+import {
+  parseWaveSpeedMotionTranslateChainTaskId,
+  WAVESPEED_CHAIN_PROVIDER,
+  WAVESPEED_PROVIDER,
+} from "@/lib/wavespeedChain";
 
 /** DB rows we still poll until Kie/PiAPI reports terminal state. */
 export const STUDIO_GENERATION_IN_PROGRESS_STATUSES = [
@@ -38,7 +47,84 @@ export async function pollStudioGenerationRow(
   const kieKey = row.uses_personal_api ? personalApiKey?.trim() || undefined : undefined;
 
   let out: { kind: "processing" | "success" | "fail"; urls?: string[]; message?: string };
-  if ((row.provider ?? "").toLowerCase() === "piapi" || isPiapiTaskId(row.external_task_id)) {
+  const providerLc = (row.provider ?? "").toLowerCase();
+  if (providerLc === WAVESPEED_CHAIN_PROVIDER) {
+    const chain = parseWaveSpeedMotionTranslateChainTaskId(row.external_task_id);
+    if (!chain) {
+      out = { kind: "fail", message: "Invalid queued translation task." };
+    } else {
+      const raw = await kieMarketRecordInfo(chain.motionTaskId, kieKey);
+      const motionOut = kieImageTaskPollOutcome(raw);
+      if (motionOut.kind === "processing") return;
+      if (motionOut.kind === "fail") {
+        out = { kind: "fail", message: motionOut.message ?? "Motion control failed" };
+      } else {
+        const motionVideoUrl = motionOut.urls?.find((u) => typeof u === "string" && u.trim().length > 0)?.trim();
+        if (!motionVideoUrl) {
+          out = { kind: "fail", message: "Motion control completed but returned no video." };
+        } else {
+          try {
+            const translateTask = await submitWaveSpeedHeygenVideoTranslate({
+              videoUrl: motionVideoUrl,
+              outputLanguage: chain.outputLanguage,
+            });
+            const translationTaskId = String(translateTask.id ?? "").trim();
+            const translationStatus = String(translateTask.status ?? "").toLowerCase();
+            if (!translationTaskId && translationStatus !== "completed") {
+              throw new Error("WaveSpeed did not return a task id.");
+            }
+            const { error } = await supabase
+              .from("studio_generations")
+              .update({
+                provider: WAVESPEED_PROVIDER,
+                external_task_id: translationTaskId || row.external_task_id,
+                status:
+                  translationStatus === "failed"
+                    ? "failed"
+                    : translationStatus === "completed"
+                      ? "ready"
+                      : "processing",
+                error_message:
+                  translationStatus === "failed"
+                    ? userFacingProviderErrorOrDefault(translateTask.error, "Translation failed")
+                    : null,
+                result_urls:
+                  translationStatus === "completed" && (translateTask.outputs?.length ?? 0) > 0
+                    ? translateTask.outputs ?? null
+                    : null,
+              })
+              .eq("id", row.id);
+            if (error) throw error;
+            if (translationStatus === "completed") {
+              out = { kind: "success", urls: translateTask.outputs ?? [] };
+            } else if (translationStatus === "failed") {
+              out = { kind: "fail", message: translateTask.error ?? "Translation failed" };
+            } else {
+              return;
+            }
+          } catch (err) {
+            out = {
+              kind: "fail",
+              message: err instanceof Error ? err.message : "WaveSpeed translation failed",
+            };
+          }
+        }
+      }
+    }
+  } else if (providerLc === WAVESPEED_PROVIDER) {
+    try {
+      const pred = await getWaveSpeedPrediction(row.external_task_id);
+      const predStatus = String(pred.status ?? "").toLowerCase();
+      if (predStatus === "completed") out = { kind: "success", urls: pred.outputs ?? [] };
+      else if (predStatus === "failed") out = { kind: "fail", message: pred.error ?? "Translation failed" };
+      else out = { kind: "processing" };
+    } catch (err) {
+      out = {
+        kind: "fail",
+        message: err instanceof Error ? err.message : "WaveSpeed prediction lookup failed",
+      };
+    }
+  } else if (providerLc === "piapi" || isPiapiTaskId(row.external_task_id)) {
     /** Prefer user PiAPI key when present; otherwise platform key (piapiGetSeedanceTask fallback). */
     const raw = await piapiGetSeedanceTask(row.external_task_id, piapiApiKey?.trim() || undefined);
     const mapped = piapiTaskStatusToLegacy(raw);

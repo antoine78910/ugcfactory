@@ -17,7 +17,7 @@ import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
 import { StudioEmptyExamples, StudioOutputPane } from "@/app/_components/StudioEmptyExamples";
 import { StudioGenerationsHistory } from "@/app/_components/StudioGenerationsHistory";
 import type { StudioHistoryItem } from "@/app/_components/StudioGenerationsHistory";
-import { calculateMotionControlCredits } from "@/lib/linkToAd/generationCredits";
+import { calculateAdCloneCredits, calculateMotionControlCredits } from "@/lib/linkToAd/generationCredits";
 import StudioAvatarPanel from "@/app/_components/StudioAvatarPanel";
 import StudioImagePanel from "@/app/_components/StudioImagePanel";
 import StudioUpscalePanel from "@/app/_components/StudioUpscalePanel";
@@ -63,6 +63,10 @@ import {
 import { uploadBlobUrlToCdn, uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
 import { proxiedMediaSrc } from "@/lib/mediaProxyUrl";
 import { cn } from "@/lib/utils";
+import {
+  makeWaveSpeedMotionTranslateChainTaskId,
+  WAVESPEED_CHAIN_PROVIDER,
+} from "@/lib/wavespeedChain";
 
 type WizardStep = "url" | "analysis" | "quiz" | "image" | "video";
 type AppSection =
@@ -128,6 +132,24 @@ const APP_VALID_SECTIONS: AppSection[] = [
   "upscale",
   "projects",
 ];
+
+const AD_CLONE_TRANSLATE_LANGUAGE_OPTIONS = [
+  "French",
+  "English",
+  "Spanish",
+  "German",
+  "Italian",
+  "Portuguese",
+  "Dutch",
+  "Japanese",
+  "Chinese",
+  "Korean",
+  "Hindi",
+  "Arabic",
+  "Turkish",
+  "Polish",
+  "Russian",
+] as const;
 
 function sectionFromSearchParams(sp: URLSearchParams): AppSection {
   const s = sp.get("section");
@@ -444,6 +466,7 @@ export default function AppBrandWizard() {
   const [motionQuality, setMotionQuality] = useState<string>("720p");
   const [motionPrompt, setMotionPrompt] = useState<string>("");
   const [adCloneTranslateVideo, setAdCloneTranslateVideo] = useState(false);
+  const [adCloneOutputLanguage, setAdCloneOutputLanguage] = useState<string>("French");
   const [motionHistoryItems, setMotionHistoryItems] = useState<StudioHistoryItem[]>([]);
   const [motionServerHistory, setMotionServerHistory] = useState<boolean | null>(null);
   type MotionBilling =
@@ -502,14 +525,21 @@ export default function AppBrandWizard() {
     motionVideoDetectedDuration == null ||
     !Number.isFinite(motionVideoDetectedDuration) ||
     motionVideoDetectedDuration <= 0;
+  const adCloneTranslateEnabled = appSection === "ad_clone" && adCloneTranslateVideo;
 
   const motionCredits = useMemo(
     () =>
-      calculateMotionControlCredits({
-        quality: motionQuality,
-        durationSeconds: motionBillableSeconds,
-      }),
-    [motionQuality, motionBillableSeconds],
+      adCloneTranslateEnabled
+        ? calculateAdCloneCredits({
+            quality: motionQuality,
+            durationSeconds: motionBillableSeconds,
+            translateVideo: true,
+          })
+        : calculateMotionControlCredits({
+            quality: motionQuality,
+            durationSeconds: motionBillableSeconds,
+          }),
+    [adCloneTranslateEnabled, motionQuality, motionBillableSeconds],
   );
 
   useEffect(() => {
@@ -2495,7 +2525,7 @@ export default function AppBrandWizard() {
                         {appSection === "ad_clone" ? (
                           <div className="space-y-2 rounded-xl border border-white/10 bg-black/20 p-2.5">
                             <div className="flex items-center justify-between gap-3">
-                              <Label className="text-xs text-white/70">Translate video</Label>
+                              <Label className="text-xs text-white/70">Traduire la video finale</Label>
                               <button
                                 type="button"
                                 role="switch"
@@ -2515,8 +2545,33 @@ export default function AppBrandWizard() {
                               </button>
                             </div>
                             <p className="text-[10px] leading-snug text-white/35">
-                              Enable this to prepare a translated version (voice/lipsync flow).
+                              Lance automatiquement une version traduite avec voix + lipsync apres le rendu Ad
+                              clone.
                             </p>
+                            {adCloneTranslateVideo ? (
+                              <div className="space-y-2 pt-1">
+                                <Label className="text-xs text-white/45">Langue cible</Label>
+                                <Select value={adCloneOutputLanguage} onValueChange={setAdCloneOutputLanguage}>
+                                  <SelectTrigger className="h-11 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
+                                    <SelectValue placeholder="Choisis une langue" />
+                                  </SelectTrigger>
+                                  <SelectContent position="popper" className={studioSelectContentClass}>
+                                    {AD_CLONE_TRANSLATE_LANGUAGE_OPTIONS.map((language) => (
+                                      <SelectItem
+                                        key={language}
+                                        value={language}
+                                        className={studioSelectItemClass}
+                                      >
+                                        {language}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <p className="text-[10px] leading-snug text-white/35">
+                                  Traduction WaveSpeed / HeyGen facturee en plus selon la duree de la video.
+                                </p>
+                              </div>
+                            ) : null}
                           </div>
                         ) : null}
 
@@ -2676,6 +2731,13 @@ export default function AppBrandWizard() {
                           const jobId = crypto.randomUUID();
                           const poster = motionCharacterImageUrl ?? undefined;
                           const startedAt = Date.now();
+                          const isAdClone = appSection === "ad_clone";
+                          const wantsTranslatedAdClone = isAdClone && adCloneTranslateVideo;
+                          const historyLabel = isAdClone
+                            ? wantsTranslatedAdClone
+                              ? `Ad clone (${adCloneOutputLanguage})`
+                              : "Ad clone"
+                            : "Motion control";
                           const bgSource =
                             motionSceneBackground === "video" ? "input_video" : "input_image";
                           setMotionHistoryItems((prev) => [
@@ -2683,7 +2745,7 @@ export default function AppBrandWizard() {
                               id: jobId,
                               kind: "motion",
                               status: "generating",
-                              label: "Motion control",
+                              label: historyLabel,
                               posterUrl: poster,
                               createdAt: startedAt,
                             },
@@ -2739,10 +2801,18 @@ export default function AppBrandWizard() {
                               });
                               const json = (await res.json()) as { taskId?: string; error?: string };
                               if (!res.ok || !json.taskId) throw new Error(json.error || "Motion control failed");
+                              const provider = wantsTranslatedAdClone ? WAVESPEED_CHAIN_PROVIDER : "kie-market";
+                              const registeredTaskId = wantsTranslatedAdClone
+                                ? makeWaveSpeedMotionTranslateChainTaskId(
+                                    json.taskId,
+                                    adCloneOutputLanguage,
+                                  )
+                                : json.taskId;
                               const rowId = await registerStudioGenerationClient({
                                 kind: "motion_control",
-                                label: "Motion control",
-                                taskId: json.taskId,
+                                label: historyLabel,
+                                taskId: registeredTaskId,
+                                provider,
                                 creditsCharged: platformChargeMotion,
                                 personalApiKey: getPersonalApiKey() ?? undefined,
                               });
@@ -2755,8 +2825,10 @@ export default function AppBrandWizard() {
                                   ),
                                 );
                               }
-                              toast.message("Motion control lance", {
-                                description: "Traitement cote backend. Tu peux changer de page sans risque.",
+                              toast.message(isAdClone ? "Ad clone lance" : "Motion control lance", {
+                                description: wantsTranslatedAdClone
+                                  ? "Le rendu part d'abord sur Kling, puis la traduction WaveSpeed se lance cote backend."
+                                  : "Traitement cote backend. Tu peux changer de page sans risque.",
                               });
                             } catch (err) {
                               const msg = err instanceof Error ? err.message : "Error";

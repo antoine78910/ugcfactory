@@ -76,6 +76,21 @@ export function computeImageModelFromCostUsd(costUsd: number): {
   return { cost_usd: costUsd, cost_with_buffer, target_margin, price_usd, credits };
 }
 
+/** Derive billed credits from raw API cost (video margin + cost buffer + credit list price). */
+export function computeVideoModelFromCostUsd(costUsd: number): {
+  cost_usd: number;
+  cost_with_buffer: number;
+  target_margin: number;
+  price_usd: number;
+  credits: number;
+} {
+  const cost_with_buffer = costUsd * PRICING_BASE.cost_buffer;
+  const target_margin = PRICING_BASE.target_margins.video;
+  const price_usd = cost_with_buffer / (1 - target_margin);
+  const credits = Math.max(1, Math.ceil(price_usd / PRICING_BASE.credit_value_usd));
+  return { cost_usd: costUsd, cost_with_buffer, target_margin, price_usd, credits };
+}
+
 /** Fal public list; negotiated COGS ≈ list × (1 − 0.1875) → $0.0325. */
 export const SEEDREAM_45_FAL_LIST_USD = 0.04;
 export const SEEDREAM_45_COST_USD = 0.0325;
@@ -830,6 +845,11 @@ export const MOTION_CONTROL_CREDITS_PER_SECOND = {
   "1080p": 4,
 } as const;
 
+/** WaveSpeed / HeyGen video translate provider price from public docs. */
+export const WAVESPEED_HEYGEN_TRANSLATE_COST_USD_PER_SECOND = 0.0375;
+export const WAVESPEED_HEYGEN_TRANSLATE_CREDITS_PER_SECOND =
+  computeVideoModelFromCostUsd(WAVESPEED_HEYGEN_TRANSLATE_COST_USD_PER_SECOND).credits;
+
 /**
  * Motion control (Kling 3.0 MC): fixed credits/s by quality tier.
  * (No separate audio toggle in UI — priced by 720p/1080p only.)
@@ -842,4 +862,9 @@ export function calculateMotionControlCreditsFromDuration(
   const tier = normalizeMotionControlQuality(quality);
   const perSecond = MOTION_CONTROL_CREDITS_PER_SECOND[tier];
   return Math.max(1, Math.ceil(d * perSecond));
+}
+
+export function calculateWaveSpeedVideoTranslateCredits(durationSeconds: number): number {
+  const d = Math.max(0, Number(durationSeconds) || 0);
+  return Math.max(1, Math.ceil(d * WAVESPEED_HEYGEN_TRANSLATE_CREDITS_PER_SECOND));
 }
