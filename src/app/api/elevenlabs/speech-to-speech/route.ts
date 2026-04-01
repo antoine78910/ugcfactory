@@ -28,6 +28,16 @@ function contentTypeFromOutputFormat(outputFormat: string): string {
   return "audio/mpeg";
 }
 
+function messageFromUnknown(err: unknown, fallback = "Unknown error."): string {
+  if (err instanceof Error) return err.message || fallback;
+  if (err && typeof err === "object" && "message" in err) {
+    const msg = String((err as { message?: unknown }).message ?? "").trim();
+    if (msg) return msg;
+  }
+  const s = String(err ?? "").trim();
+  return s || fallback;
+}
+
 export async function POST(req: Request) {
   const { supabase, user, response } = await requireSupabaseUser();
   if (response) return response;
@@ -96,7 +106,8 @@ export async function POST(req: Request) {
     .single();
 
   if (insertError || !inserted?.id) {
-    return NextResponse.json({ error: insertError?.message ?? "Could not create studio row." }, { status: 502 });
+    const msg = messageFromUnknown(insertError, "Could not create studio row.");
+    return NextResponse.json({ error: userFacingProviderErrorOrDefault(msg, "Could not create studio row.") }, { status: 502 });
   }
 
   const rowId = String(inserted.id);
@@ -155,7 +166,7 @@ export async function POST(req: Request) {
     });
   } catch (err) {
     logGenerationFailure("elevenlabs/speech-to-speech", err, { rowId, voiceId });
-    const message = err instanceof Error ? err.message : "Unknown error.";
+    const message = messageFromUnknown(err);
     await supabase
       .from("studio_generations")
       .update({

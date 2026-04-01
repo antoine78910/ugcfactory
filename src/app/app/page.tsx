@@ -3456,11 +3456,13 @@ export default function AppBrandWizard() {
                                                 : "border-white/10 bg-black/20 text-white/45 hover:bg-white/[0.04]",
                                             )}
                                           >
+                                            {/** Lucide icons default to fill="none"; set fill explicitly for a solid favorite state. */}
                                             <Star
                                               className={cn(
                                                 "h-4 w-4",
-                                                favoriteElevenVoiceIds.includes(voice.voiceId) ? "fill-current" : "",
+                                                favoriteElevenVoiceIds.includes(voice.voiceId) ? "text-violet-200" : "",
                                               )}
+                                              fill={favoriteElevenVoiceIds.includes(voice.voiceId) ? "currentColor" : "none"}
                                             />
                                           </button>
                                         </span>

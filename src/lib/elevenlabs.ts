@@ -38,7 +38,35 @@ async function readElevenLabsError(res: Response, fallback: string): Promise<nev
   } catch {
     json = null;
   }
+  const detailFromArray = Array.isArray(json?.detail)
+    ? json.detail
+        .map((d) => {
+          if (typeof d === "string") return d.trim();
+          if (d && typeof d === "object") {
+            const obj = d as Record<string, unknown>;
+            const msg = typeof obj.msg === "string" ? obj.msg.trim() : "";
+            const loc = Array.isArray(obj.loc) ? obj.loc.map((x) => String(x)).join(".").trim() : "";
+            if (msg && loc) return `${loc}: ${msg}`;
+            if (msg) return msg;
+          }
+          return "";
+        })
+        .filter(Boolean)
+        .join("; ")
+    : "";
+  const detailFromObject =
+    json?.detail && typeof json.detail === "object" && !Array.isArray(json.detail)
+      ? JSON.stringify(json.detail).slice(0, 240)
+      : "";
+  const nestedError =
+    json?.error && typeof json.error === "object"
+      ? (json.error as Record<string, unknown>)
+      : null;
   const detail =
+    detailFromArray ||
+    detailFromObject ||
+    (nestedError && typeof nestedError.message === "string" ? nestedError.message.trim() : "") ||
+    (nestedError && typeof nestedError.raw_message === "string" ? nestedError.raw_message.trim() : "") ||
     (typeof json?.detail === "string" && json.detail.trim()) ||
     (typeof json?.message === "string" && json.message.trim()) ||
     (typeof json?.error === "string" && json.error.trim()) ||
