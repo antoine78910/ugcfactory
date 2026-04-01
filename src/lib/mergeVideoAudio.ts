@@ -1,16 +1,21 @@
 "use client";
 
-import { FFmpeg } from "@ffmpeg/ffmpeg";
-import { toBlobURL, fetchFile } from "@ffmpeg/util";
+// Dynamic imports avoid webpack "Cannot find module as expression is too dynamic"
+// errors with @ffmpeg/ffmpeg and @ffmpeg/util.
 
-let instance: FFmpeg | null = null;
-let loadPromise: Promise<FFmpeg> | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let instance: any = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let loadPromise: Promise<any> | null = null;
 
-async function getFFmpeg(): Promise<FFmpeg> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function getFFmpeg(): Promise<any> {
   if (instance?.loaded) return instance;
   if (loadPromise) return loadPromise;
 
   loadPromise = (async () => {
+    const { FFmpeg } = await import(/* webpackIgnore: true */ "@ffmpeg/ffmpeg");
+    const { toBlobURL } = await import(/* webpackIgnore: true */ "@ffmpeg/util");
     const ff = new FFmpeg();
     const base = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd";
     await ff.load({
@@ -24,9 +29,14 @@ async function getFFmpeg(): Promise<FFmpeg> {
   return loadPromise;
 }
 
+async function doFetchFile(src: string): Promise<Uint8Array> {
+  const { fetchFile } = await import(/* webpackIgnore: true */ "@ffmpeg/util");
+  return fetchFile(src);
+}
+
 /**
  * Extract the audio track from a video file using ffmpeg.wasm.
- * Returns a File containing the extracted audio as MP3.
+ * Returns a File containing the extracted audio as M4A (AAC).
  */
 export async function extractAudioFromVideo(
   videoSrc: string | File | Blob,
@@ -44,10 +54,9 @@ export async function extractAudioFromVideo(
     const videoData =
       videoSrc instanceof Blob
         ? new Uint8Array(await videoSrc.arrayBuffer())
-        : await fetchFile(videoSrc);
+        : await doFetchFile(videoSrc);
     await ff.writeFile("extract_in.mp4", videoData);
 
-    // AAC encoder is always built into ffmpeg.wasm core (no external libs needed).
     const exitCode = await ff.exec([
       "-i", "extract_in.mp4",
       "-vn",
@@ -97,8 +106,8 @@ export async function mergeVideoWithAudio(
 
   try {
     const [videoData, audioData] = await Promise.all([
-      fetchFile(videoSrc),
-      fetchFile(audioSrc),
+      doFetchFile(videoSrc),
+      doFetchFile(audioSrc),
     ]);
 
     await ff.writeFile("in.mp4", videoData);
