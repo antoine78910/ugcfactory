@@ -118,7 +118,12 @@ export function HeroVideoCarousel3D({ srcs = DEFAULT_SRCS }: Props) {
       if (running) return;
       running = true;
       lastSync = 0;
-      raf = requestAnimationFrame(loop);
+      // Defer first frame to idle time so video setup doesn't compete with initial paint.
+      if (typeof requestIdleCallback !== 'undefined') {
+        requestIdleCallback(() => { if (running) raf = requestAnimationFrame(loop); }, { timeout: 1000 });
+      } else {
+        raf = requestAnimationFrame(loop);
+      }
     };
 
     const stop = () => {

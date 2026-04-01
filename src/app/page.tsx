@@ -203,21 +203,32 @@ export default function LandingPage() {
     function tick() {
       const cx = window.innerWidth * 0.5;
       const reg = revealRegistryRef.current;
+
+      // Phase 1: batch all geometry reads to avoid interleaved read→write→read forced reflows.
+      const updates: { overlay: HTMLDivElement; clipPath: string }[] = [];
       for (let i = 0; i < reg.length; i++) {
         const entry = reg[i];
         if (!entry) continue;
         const { card, overlay } = entry;
         const rect = card.getBoundingClientRect();
         const w = rect.width;
+        let clipPath: string;
         if (!Number.isFinite(w) || w < 0.5) {
-          overlay.style.clipPath = "inset(0 0 0 100%)";
-          continue;
+          clipPath = "inset(0 0 0 100%)";
+        } else {
+          let splitPct = ((cx - rect.left) / w) * 100;
+          if (!Number.isFinite(splitPct)) splitPct = 100;
+          splitPct = Math.max(0, Math.min(100, splitPct));
+          clipPath = `inset(0 0 0 ${splitPct.toFixed(3)}%)`;
         }
-        let splitPct = ((cx - rect.left) / w) * 100;
-        if (!Number.isFinite(splitPct)) splitPct = 100;
-        splitPct = Math.max(0, Math.min(100, splitPct));
-        overlay.style.clipPath = `inset(0 0 0 ${splitPct.toFixed(3)}%)`;
+        updates.push({ overlay, clipPath });
       }
+
+      // Phase 2: batch all style writes after all reads are done.
+      for (const { overlay, clipPath } of updates) {
+        overlay.style.clipPath = clipPath;
+      }
+
       rafId = requestAnimationFrame(tick);
     }
     rafId = requestAnimationFrame(tick);
