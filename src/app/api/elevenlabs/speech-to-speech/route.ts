@@ -161,19 +161,13 @@ export async function POST(req: Request) {
     let resultKind: "video" | "audio";
 
     if (inputIsVideo) {
-      // 2. Try to merge: mute original video + overlay new audio
-      try {
-        finalBuffer = await mergeVideoWithAudioServer(inputBuffer, converted.buffer);
-        finalContentType = "video/mp4";
-        finalExt = ".mp4";
-        resultKind = "video";
-      } catch (mergeErr) {
-        console.error("[voice-change] Merge failed, falling back to audio-only:", mergeErr);
-        finalBuffer = converted.buffer;
-        finalContentType = converted.contentType || "audio/mpeg";
-        finalExt = ".mp3";
-        resultKind = "audio";
-      }
+      // 2. Merge: mute original video + overlay new audio
+      console.log("[voice-change] Merging video + converted audio...");
+      finalBuffer = await mergeVideoWithAudioServer(inputBuffer, converted.buffer);
+      finalContentType = "video/mp4";
+      finalExt = ".mp4";
+      resultKind = "video";
+      console.log(`[voice-change] Merge done, output ${finalBuffer.length} bytes`);
     } else {
       finalBuffer = converted.buffer;
       finalContentType = converted.contentType || "audio/mpeg";

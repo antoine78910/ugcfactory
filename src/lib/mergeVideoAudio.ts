@@ -5,34 +5,57 @@
  * platform including Vercel). Subsequent warm invocations reuse the cached binary.
  */
 
-import { existsSync } from "fs";
+import { existsSync, statSync } from "fs";
 import { writeFile, readFile, unlink, chmod } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import { randomUUID } from "crypto";
 import { execFile } from "child_process";
-import { pipeline } from "stream/promises";
-import { createWriteStream } from "fs";
 
 const FFMPEG_BIN = join(tmpdir(), "ffmpeg");
 
 const FFMPEG_DOWNLOAD_URL =
   "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.0/linux-x64";
 
-async function ensureFfmpeg(): Promise<string> {
-  if (existsSync(FFMPEG_BIN)) return FFMPEG_BIN;
+const MIN_BINARY_SIZE = 30 * 1024 * 1024; // expect at least 30 MB
 
-  console.log("[merge] Downloading ffmpeg binary...");
-  const res = await fetch(FFMPEG_DOWNLOAD_URL);
-  if (!res.ok || !res.body) {
-    throw new Error(`Failed to download ffmpeg: HTTP ${res.status}`);
+async function ensureFfmpeg(): Promise<string> {
+  if (existsSync(FFMPEG_BIN)) {
+    const size = statSync(FFMPEG_BIN).size;
+    if (size > MIN_BINARY_SIZE) {
+      return FFMPEG_BIN;
+    }
+    console.warn(`[merge] Existing ffmpeg binary too small (${size} bytes), re-downloading`);
   }
 
-  const dest = createWriteStream(FFMPEG_BIN);
-  // @ts-expect-error Node fetch body is a ReadableStream, pipeline can handle it
-  await pipeline(res.body, dest);
+  console.log("[merge] Downloading ffmpeg binary from", FFMPEG_DOWNLOAD_URL);
+  const res = await fetch(FFMPEG_DOWNLOAD_URL, { redirect: "follow" });
+  if (!res.ok) {
+    throw new Error(`Failed to download ffmpeg: HTTP ${res.status} ${res.statusText}`);
+  }
+
+  const arrayBuf = await res.arrayBuffer();
+  const buf = Buffer.from(arrayBuf);
+  console.log(`[merge] Downloaded ${buf.length} bytes`);
+
+  if (buf.length < MIN_BINARY_SIZE) {
+    throw new Error(
+      `Downloaded ffmpeg binary is too small (${buf.length} bytes). Expected at least ${MIN_BINARY_SIZE}.`,
+    );
+  }
+
+  await writeFile(FFMPEG_BIN, buf);
   await chmod(FFMPEG_BIN, 0o755);
-  console.log("[merge] ffmpeg binary ready at", FFMPEG_BIN);
+
+  // Verify the binary actually works
+  const version = await new Promise<string>((resolve, reject) => {
+    execFile(FFMPEG_BIN, ["-version"], { timeout: 10_000 }, (err, stdout) => {
+      if (err) reject(new Error(`ffmpeg verification failed: ${err.message}`));
+      else resolve(stdout.split("\n")[0] ?? "");
+    });
+  });
+  console.log("[merge] ffmpeg binary ready:", version);
+
   return FFMPEG_BIN;
 }
 
