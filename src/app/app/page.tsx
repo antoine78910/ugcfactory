@@ -3814,7 +3814,12 @@ export default function AppBrandWizard() {
                                     : "Processing on backend. You can safely switch pages.",
                               });
                             } catch (err) {
-                              const msg = err instanceof Error ? err.message : "Error";
+                              const msg =
+                                err instanceof Error
+                                  ? err.message || "Unknown error"
+                                  : typeof err === "string"
+                                    ? err
+                                    : "Unknown error";
                               refundPlatformCredits(platformChargeMotion, grantCredits, creditsRef);
                               toast.error(msg);
                               setMotionHistoryItems((prev) =>

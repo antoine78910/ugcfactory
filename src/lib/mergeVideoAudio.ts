@@ -34,6 +34,12 @@ export async function extractAudioFromVideo(
 ): Promise<File> {
   const ff = await getFFmpeg();
 
+  const logs: string[] = [];
+  const logHandler = ({ message }: { message: string }) => {
+    logs.push(message);
+  };
+  ff.on("log", logHandler);
+
   try {
     const videoData =
       videoSrc instanceof Blob
@@ -41,27 +47,34 @@ export async function extractAudioFromVideo(
         : await fetchFile(videoSrc);
     await ff.writeFile("extract_in.mp4", videoData);
 
-    await ff.exec([
+    // AAC encoder is always built into ffmpeg.wasm core (no external libs needed).
+    const exitCode = await ff.exec([
       "-i", "extract_in.mp4",
       "-vn",
-      "-acodec", "libmp3lame",
-      "-q:a", "2",
+      "-c:a", "aac",
+      "-b:a", "128k",
       "-y",
-      "extract_out.mp3",
+      "extract_out.m4a",
     ]);
 
-    const data = await ff.readFile("extract_out.mp3");
+    if (exitCode !== 0) {
+      const tail = logs.slice(-5).join("\n");
+      throw new Error(`Audio extraction failed (exit ${exitCode}). ${tail}`);
+    }
+
+    const data = await ff.readFile("extract_out.m4a");
     const bytes: Uint8Array =
       data instanceof Uint8Array ? data : new Uint8Array(data as unknown as ArrayBuffer);
     if (bytes.byteLength === 0) {
       throw new Error("No audio track found in this video.");
     }
     const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
-    const blob = new Blob([buffer], { type: "audio/mpeg" });
-    return new File([blob], `${filenameBase}.mp3`, { type: "audio/mpeg" });
+    const blob = new Blob([buffer], { type: "audio/mp4" });
+    return new File([blob], `${filenameBase}.m4a`, { type: "audio/mp4" });
   } finally {
+    ff.off("log", logHandler);
     await ff.deleteFile("extract_in.mp4").catch(() => {});
-    await ff.deleteFile("extract_out.mp3").catch(() => {});
+    await ff.deleteFile("extract_out.m4a").catch(() => {});
   }
 }
 
