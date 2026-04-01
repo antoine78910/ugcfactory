@@ -72,6 +72,7 @@ import {
   WAVESPEED_HEYGEN_TRANSLATE_LANGUAGES,
 } from "@/lib/wavespeedTranslateLanguages";
 import { STUDIO_GENERATION_KIND_STUDIO_TRANSLATE_VIDEO } from "@/lib/studioGenerationKinds";
+import { mergeVideoWithAudio } from "@/lib/mergeVideoAudio";
 
 type WizardStep = "url" | "analysis" | "quiz" | "image" | "video";
 type AppSection =
@@ -504,7 +505,7 @@ export default function AppBrandWizard() {
   const [adCloneOutputLanguage, setAdCloneOutputLanguage] = useState<string>(
     DEFAULT_WAVESPEED_HEYGEN_TRANSLATE_LANGUAGE,
   );
-  const [translateToolMode, setTranslateToolMode] = useState<TranslateToolMode>("video_translate");
+  const [translateToolMode, setTranslateToolMode] = useState<TranslateToolMode>("voice_change");
   const [elevenVoices, setElevenVoices] = useState<ElevenVoiceOption[]>([]);
   const [elevenVoicesLoading, setElevenVoicesLoading] = useState(false);
   const [elevenVoiceId, setElevenVoiceId] = useState<string>("");
@@ -522,6 +523,11 @@ export default function AppBrandWizard() {
   const [voiceChangeSeed, setVoiceChangeSeed] = useState<string>("");
   const [voiceChangeRemoveBackgroundNoise, setVoiceChangeRemoveBackgroundNoise] = useState(false);
   const [voiceChangeVoiceSettingsJson, setVoiceChangeVoiceSettingsJson] = useState<string>("");
+  /** Language filter for the ElevenLabs voice picker (e.g. "en", "fr", "es"). Empty = all. */
+  const [voiceChangeLangFilter, setVoiceChangeLangFilter] = useState<string>("");
+  /** True while ffmpeg.wasm is merging the generated audio with the original video. */
+  const [isMergingVideo, setIsMergingVideo] = useState(false);
+  const [mergeVideoProgress, setMergeVideoProgress] = useState(0);
   const [motionHistoryItems, setMotionHistoryItems] = useState<StudioHistoryItem[]>([]);
   const [motionServerHistory, setMotionServerHistory] = useState<boolean | null>(null);
   type MotionBilling =
@@ -606,6 +612,36 @@ export default function AppBrandWizard() {
       ),
     [motionHistoryItems],
   );
+
+  /** All unique language codes present in the loaded ElevenLabs voice library. */
+  const elevenVoiceLanguages = useMemo(
+    () =>
+      [...new Set(elevenVoices.map((v) => v.labels?.language).filter((l): l is string => Boolean(l)))].sort(),
+    [elevenVoices],
+  );
+
+  /** Voice list filtered by the selected language (or all voices when filter is empty). */
+  const filteredElevenVoices = useMemo(
+    () =>
+      voiceChangeLangFilter
+        ? elevenVoices.filter((v) => v.labels?.language === voiceChangeLangFilter)
+        : elevenVoices,
+    [elevenVoices, voiceChangeLangFilter],
+  );
+
+  /**
+   * The original video URL to merge with after a voice change.
+   * Derived from the current source mode / selection — no extra state needed.
+   */
+  const effectiveVoiceChangeSourceVideoUrl = useMemo((): string | null => {
+    if (voiceChangeSourceMode === "upload" && voiceChangeUploadKind === "video" && voiceChangeUploadPreviewUrl) {
+      return voiceChangeUploadPreviewUrl;
+    }
+    if (voiceChangeSourceMode === "history" && voiceChangeHistoryUrl) {
+      return proxiedMediaSrc(voiceChangeHistoryUrl);
+    }
+    return null;
+  }, [voiceChangeSourceMode, voiceChangeUploadKind, voiceChangeUploadPreviewUrl, voiceChangeHistoryUrl]);
 
   useEffect(() => {
     void (async () => {
@@ -1422,6 +1458,28 @@ export default function AppBrandWizard() {
     pendingSectionNavRef.current = s;
     setAppSection(s);
   }, []);
+
+  /**
+   * Called when the user clicks "Change Voice" on a video in ANY history panel.
+   * Navigates to the voice changer and pre-loads the video.
+   */
+  const handleChangeVoiceFromHistory = useCallback(
+    (item: StudioHistoryItem) => {
+      if (!item.mediaUrl) return;
+      // Ensure the item is available in the translate section history list
+      // (readyTranslateVideos only reads from motionHistoryItems)
+      setMotionHistoryItems((prev) => {
+        if (prev.some((i) => i.mediaUrl === item.mediaUrl)) return prev;
+        return [{ ...item, kind: "video" as const }, ...prev];
+      });
+      setAppSectionNav("ad_clone");
+      setTranslateToolMode("voice_change");
+      setVoiceChangeSourceMode("history");
+      setVoiceChangeHistoryUrl(item.mediaUrl);
+      toast.message("Vidéo chargée", { description: "Sélectionne une voix et génère." });
+    },
+    [setAppSectionNav],
+  );
 
   const searchKey = searchParams.toString();
 
@@ -2577,19 +2635,7 @@ export default function AppBrandWizard() {
                       </p>
                       <div className="rounded-2xl border border-white/10 bg-[#101014] p-3 space-y-3">
                         {appSection === "ad_clone" ? (
-                          <div className="grid grid-cols-2 gap-2">
-                            <button
-                              type="button"
-                              onClick={() => setTranslateToolMode("video_translate")}
-                              className={cn(
-                                "rounded-xl border px-3 py-2 text-xs font-semibold transition",
-                                translateToolMode === "video_translate"
-                                  ? "border-violet-400/40 bg-violet-500/15 text-white"
-                                  : "border-white/10 bg-black/20 text-white/60 hover:bg-white/[0.04]",
-                              )}
-                            >
-                              Video translation
-                            </button>
+                          <div className="grid grid-cols-1 gap-2">
                             <button
                               type="button"
                               onClick={() => setTranslateToolMode("voice_change")}
@@ -3000,27 +3046,77 @@ export default function AppBrandWizard() {
                                 </div>
                               </div>
 
-                              <div className="rounded-xl border border-white/10 bg-black/20 p-2.5">
+                              <div className="rounded-xl border border-white/10 bg-black/20 p-2.5 space-y-2">
                                 <Label className="text-xs text-white/45">Voice</Label>
-                                <p className="mt-0.5 text-[10px] leading-snug text-white/35">
-                                  Loaded from your available ElevenLabs voices.
+                                <p className="text-[10px] leading-snug text-white/35">
+                                  Bibliothèque ElevenLabs — filtre par langue puis écoute le sample.
                                 </p>
-                                <Select value={elevenVoiceId} onValueChange={setElevenVoiceId}>
-                                  <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
-                                    <SelectValue placeholder={elevenVoicesLoading ? "Loading voices..." : "Choose a voice"} />
+
+                                {/* Language filter */}
+                                <Select value={voiceChangeLangFilter || "__all__"} onValueChange={(v) => {
+                                  setVoiceChangeLangFilter(v === "__all__" ? "" : v);
+                                  setElevenVoiceId("");
+                                }}>
+                                  <SelectTrigger className="h-10 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
+                                    <SelectValue placeholder="All languages" />
                                   </SelectTrigger>
                                   <SelectContent position="popper" className={studioSelectContentClass}>
-                                    {elevenVoices.map((voice) => (
-                                      <SelectItem key={voice.voiceId} value={voice.voiceId} className={studioSelectItemClass}>
-                                        {voice.name}
+                                    <SelectItem value="__all__" className={studioSelectItemClass}>
+                                      🌐 All languages
+                                    </SelectItem>
+                                    {elevenVoiceLanguages.map((lang) => (
+                                      <SelectItem key={lang} value={lang} className={studioSelectItemClass}>
+                                        {lang.toUpperCase()}
                                       </SelectItem>
                                     ))}
                                   </SelectContent>
                                 </Select>
+
+                                {/* Voice picker */}
+                                <Select value={elevenVoiceId} onValueChange={setElevenVoiceId}>
+                                  <SelectTrigger className="h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
+                                    <SelectValue placeholder={elevenVoicesLoading ? "Chargement…" : filteredElevenVoices.length === 0 ? "Aucune voix pour cette langue" : "Choisir une voix"} />
+                                  </SelectTrigger>
+                                  <SelectContent position="popper" className={studioSelectContentClass}>
+                                    {filteredElevenVoices.map((voice) => (
+                                      <SelectItem key={voice.voiceId} value={voice.voiceId} className={studioSelectItemClass}>
+                                        <span className="flex items-center gap-2">
+                                          <span>{voice.name}</span>
+                                          {voice.labels?.language ? (
+                                            <span className="text-[10px] text-white/35">{voice.labels.language.toUpperCase()}</span>
+                                          ) : null}
+                                          {voice.labels?.gender ? (
+                                            <span className="text-[10px] text-white/25">{voice.labels.gender}</span>
+                                          ) : null}
+                                        </span>
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+
+                                {/* Sample audio preview */}
                                 {selectedElevenVoice?.previewUrl ? (
-                                  <audio controls preload="none" className="mt-2 w-full">
-                                    <source src={selectedElevenVoice.previewUrl} />
-                                  </audio>
+                                  <div className="rounded-lg border border-white/10 bg-black/30 p-2">
+                                    <p className="mb-1 text-[9px] uppercase tracking-wide text-white/35">Sample — {selectedElevenVoice.name}</p>
+                                    <audio controls preload="none" className="w-full">
+                                      <source src={selectedElevenVoice.previewUrl} />
+                                    </audio>
+                                  </div>
+                                ) : null}
+
+                                {/* Merge progress */}
+                                {isMergingVideo ? (
+                                  <div className="rounded-lg border border-violet-500/25 bg-violet-950/30 px-3 py-2">
+                                    <p className="text-[11px] text-violet-200/80">
+                                      Fusion en cours… {mergeVideoProgress > 0 ? `${Math.round(mergeVideoProgress * 100)}%` : "chargement ffmpeg"}
+                                    </p>
+                                    <div className="mt-1.5 h-1 w-full rounded-full bg-white/10">
+                                      <div
+                                        className="h-1 rounded-full bg-violet-400 transition-all"
+                                        style={{ width: `${Math.round(mergeVideoProgress * 100)}%` }}
+                                      />
+                                    </div>
+                                  </div>
                                 ) : null}
                               </div>
 
@@ -3406,6 +3502,51 @@ export default function AppBrandWizard() {
                                 toast.message("Voice change complete", {
                                   description: "Final audio is available in your Translate history.",
                                 });
+
+                                // If source was a video, auto-merge the new audio with the original video
+                                const srcVideoUrl = effectiveVoiceChangeSourceVideoUrl;
+                                const audioResultUrl = json.mediaUrl;
+                                if (srcVideoUrl && audioResultUrl) {
+                                  setIsMergingVideo(true);
+                                  setMergeVideoProgress(0);
+                                  toast.message("Fusion audio/vidéo en cours…", {
+                                    description: "ffmpeg.wasm — première fois: ~35 MB à télécharger.",
+                                  });
+                                  void (async () => {
+                                    try {
+                                      const mergedUrl = await mergeVideoWithAudio(
+                                        srcVideoUrl,
+                                        audioResultUrl,
+                                        (p) => setMergeVideoProgress(p),
+                                      );
+                                      const mergedId = `merged_${json.rowId ?? jobId}`;
+                                      setMotionHistoryItems((prev) => [
+                                        {
+                                          id: mergedId,
+                                          kind: "video",
+                                          status: "ready",
+                                          label: `Vidéo fusionnée — voix ${selectedElevenVoice?.name ?? "custom"}`,
+                                          mediaUrl: mergedUrl,
+                                          createdAt: Date.now(),
+                                        },
+                                        ...prev,
+                                      ]);
+                                      toast.success("Vidéo prête !", {
+                                        description: "La nouvelle voix a été fusionnée avec la vidéo source.",
+                                      });
+                                    } catch (mergeErr) {
+                                      toast.error("Fusion impossible", {
+                                        description:
+                                          mergeErr instanceof Error
+                                            ? mergeErr.message
+                                            : "L'audio MP3 est disponible dans l'historique.",
+                                      });
+                                    } finally {
+                                      setIsMergingVideo(false);
+                                      setMergeVideoProgress(0);
+                                    }
+                                  })();
+                                }
                                 return;
                               }
 
@@ -3558,6 +3699,7 @@ export default function AppBrandWizard() {
                             onItemDeleted={(id) =>
                               setMotionHistoryItems((prev) => prev.filter((i) => i.id !== id))
                             }
+                            onChangeVoice={handleChangeVoiceFromHistory}
                           />
                         }
                         empty={null}
@@ -3593,7 +3735,7 @@ export default function AppBrandWizard() {
                   <CardTitle className="text-sm">Avatar Creator</CardTitle>
                 </CardHeader>
                 <CardContent className="px-6 pb-3 pt-0">
-                  <StudioAvatarPanel />
+                  <StudioAvatarPanel onChangeVoice={handleChangeVoiceFromHistory} />
                 </CardContent>
               </Card>
             ) : null}
@@ -3610,7 +3752,7 @@ export default function AppBrandWizard() {
             {appSection === "video" ? (
               <Card className="gap-2 border-white/10 bg-[#0b0912]/85 py-3 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
                 <CardContent className="px-6 pb-3 pt-2">
-                  <StudioVideoPanel />
+                  <StudioVideoPanel onChangeVoice={handleChangeVoiceFromHistory} />
                 </CardContent>
               </Card>
             ) : null}
