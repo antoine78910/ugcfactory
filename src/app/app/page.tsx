@@ -71,6 +71,7 @@ import {
   DEFAULT_WAVESPEED_HEYGEN_TRANSLATE_LANGUAGE,
   WAVESPEED_HEYGEN_TRANSLATE_LANGUAGES,
 } from "@/lib/wavespeedTranslateLanguages";
+import { STUDIO_GENERATION_KIND_STUDIO_TRANSLATE_VIDEO } from "@/lib/studioGenerationKinds";
 
 type WizardStep = "url" | "analysis" | "quiz" | "image" | "video";
 type AppSection =
@@ -559,7 +560,10 @@ export default function AppBrandWizard() {
   const MOTION_CREDITS_PLACEHOLDER_SEC = 12;
   /** Conservative guardrail for motion-control upload UX. */
   const MOTION_VIDEO_MAX_BYTES = 100 * 1024 * 1024; // 100 MB
-  const historyKindsKey = appSection === "ad_clone" ? "motion_control,studio_audio" : "motion_control";
+  const historyKindsKey =
+    appSection === "ad_clone"
+      ? `${STUDIO_GENERATION_KIND_STUDIO_TRANSLATE_VIDEO},studio_audio`
+      : "motion_control";
   const motionVideoPreviewSrc = useMemo(
     () => proxiedMediaSrc(motionVideoUploadedUrl || motionVideoRefBlobUrl),
     [motionVideoUploadedUrl, motionVideoRefBlobUrl],
@@ -874,6 +878,17 @@ export default function AppBrandWizard() {
       return null;
     });
   }, []);
+
+  const motionSectionRef = useRef<"ad_clone" | "motion_control" | null>(null);
+  useEffect(() => {
+    const current = appSection === "ad_clone" || appSection === "motion_control" ? appSection : null;
+    const previous = motionSectionRef.current;
+    motionSectionRef.current = current;
+    if (!current || !previous || current === previous) return;
+    // Keep Translate and Motion Control media inputs independent.
+    clearMotionVideoReference();
+    if (current === "motion_control") clearVoiceChangeUpload();
+  }, [appSection, clearMotionVideoReference, clearVoiceChangeUpload]);
 
   const applyVoiceChangeUploadFile = useCallback((file: File) => {
     const type = (file.type || "").toLowerCase();
@@ -3453,8 +3468,12 @@ export default function AppBrandWizard() {
                                 );
                               }
                               const provider = appSection === "ad_clone" ? WAVESPEED_PROVIDER : "kie-market";
+                              const generationKind =
+                                appSection === "ad_clone"
+                                  ? STUDIO_GENERATION_KIND_STUDIO_TRANSLATE_VIDEO
+                                  : "motion_control";
                               const rowId = await registerStudioGenerationClient({
-                                kind: "motion_control",
+                                kind: generationKind,
                                 label: historyLabel,
                                 taskId: json.taskId,
                                 provider,
@@ -3465,7 +3484,7 @@ export default function AppBrandWizard() {
                                 setMotionHistoryItems((prev) =>
                                   prev.map((i) =>
                                     i.id === jobId
-                                      ? { ...i, id: rowId, studioGenerationKind: "motion_control" }
+                                      ? { ...i, id: rowId, studioGenerationKind: generationKind }
                                       : i,
                                   ),
                                 );

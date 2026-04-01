@@ -77,7 +77,14 @@ function rowKindToMediaKind(kind: string, resultUrls: string[], label: string): 
     if (u && resultUrlLooksLikeAudio(u)) return "audio";
     return "motion";
   }
-  if (kind === "studio_video" || kind === "studio_watermark" || kind === "link_to_ad_video") return "video";
+  if (
+    kind === "studio_video" ||
+    kind === "studio_watermark" ||
+    kind === "link_to_ad_video" ||
+    kind === "studio_translate_video"
+  ) {
+    return "video";
+  }
   if (kind === "studio_audio") return "audio";
   if (kind === "link_to_ad_image") return "image";
   if (kind === "studio_upscale") {

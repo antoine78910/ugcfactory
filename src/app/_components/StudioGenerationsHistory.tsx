@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Download, FolderOpen, Info, LayoutGrid, List, Loader2, Sparkles, Trash2, Volume2, Wand2, X } from "lucide-react";
+import { Download, FolderOpen, Info, LayoutGrid, List, Loader2, Maximize2, Sparkles, Trash2, Volume2, Wand2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -153,6 +153,7 @@ export function StudioGenerationsHistory({
   const [editAspect, setEditAspect] = useState("3:4");
   const [editResolution, setEditResolution] = useState<"1K" | "2K" | "4K">("2K");
   const [upscaleFactor, setUpscaleFactor] = useState<"1" | "2" | "4" | "8">("2");
+  const lightboxVideoRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
     if (!lightboxItem?.url || !imageLightboxEdit) return;
@@ -290,6 +291,32 @@ export function StudioGenerationsHistory({
   );
 
   const grouped = useMemo(() => groupByDate(items), [items]);
+  const isLightboxVideo = Boolean(
+    lightboxItem &&
+      (lightboxItem.kind === "video" || isProbablyVideoUrl(lightboxItem.url)) &&
+      !isProbablyAudioUrl(lightboxItem.url),
+  );
+
+  const openLightboxVideoFullscreen = useCallback(() => {
+    const video = lightboxVideoRef.current;
+    if (!video) return;
+    const anyVideo = video as HTMLVideoElement & { webkitEnterFullscreen?: () => void };
+    void (async () => {
+      try {
+        if (document.fullscreenElement !== video && typeof video.requestFullscreen === "function") {
+          await video.requestFullscreen();
+          return;
+        }
+      } catch {
+        /* Safari iOS fallback below */
+      }
+      try {
+        anyVideo.webkitEnterFullscreen?.();
+      } catch {
+        /* no-op */
+      }
+    })();
+  }, []);
 
   const cardWidthClass =
     view === "grid"
@@ -598,7 +625,10 @@ export function StudioGenerationsHistory({
           </button>
           <div
             className={cn(
-              "flex min-h-0 w-full max-w-[min(1400px,calc(100vw-1rem))] flex-col gap-4 duration-300 ease-out lg:max-h-[min(92vh,920px)] lg:flex-row lg:items-stretch lg:gap-5",
+              "flex min-h-0 w-full flex-col gap-4 duration-300 ease-out lg:max-h-[min(92vh,920px)] lg:flex-row lg:items-stretch lg:gap-5",
+              isLightboxVideo
+                ? "max-w-[min(1820px,calc(100vw-0.5rem))]"
+                : "max-w-[min(1400px,calc(100vw-1rem))]",
               "translate-y-0 opacity-100 transition-[opacity,transform] motion-reduce:transition-none",
             )}
             onClick={(e) => e.stopPropagation()}
@@ -616,6 +646,7 @@ export function StudioGenerationsHistory({
               ) : lightboxItem.kind === "video" || isProbablyVideoUrl(lightboxItem.url) ? (
                 // eslint-disable-next-line jsx-a11y/media-has-caption
                 <video
+                  ref={lightboxVideoRef}
                   src={lightboxItem.url}
                   poster={lightboxItem.poster}
                   controls
@@ -646,6 +677,19 @@ export function StudioGenerationsHistory({
                   {lightboxItem.prompt?.trim() ? lightboxItem.prompt.trim() : "—"}
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
+                  {isLightboxVideo ? (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openLightboxVideoFullscreen();
+                      }}
+                      className="inline-flex min-w-[7rem] flex-1 items-center justify-center gap-1.5 rounded-md border border-white/15 bg-white/[0.06] px-3 py-2 text-center text-[11px] font-semibold text-white/80 transition hover:bg-white/[0.1]"
+                    >
+                      <Maximize2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                      Plein ecran
+                    </button>
+                  ) : null}
                   <a
                     href={`/api/download?url=${encodeURIComponent(lightboxItem.url)}`}
                     onClick={(e) => e.stopPropagation()}

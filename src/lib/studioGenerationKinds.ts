@@ -11,6 +11,8 @@ export const STUDIO_GENERATION_KIND_LINK_TO_AD_IMAGE = "link_to_ad_image" as con
 
 /** Link to Ad final videos (PiAPI/Kling) — Projects library only, not Create → Video */
 export const STUDIO_GENERATION_KIND_LINK_TO_AD_VIDEO = "link_to_ad_video" as const;
+/** Translate tab final videos (WaveSpeed) — kept separate from Motion Control history. */
+export const STUDIO_GENERATION_KIND_STUDIO_TRANSLATE_VIDEO = "studio_translate_video" as const;
 
 /**
  * Max rows for Create tab list queries (`kind=avatar`, `studio_image,studio_upscale`, video kinds, etc.).
@@ -37,6 +39,7 @@ export const STUDIO_LIBRARY_KINDS = [
   "studio_audio",
   "studio_upscale",
   "motion_control",
+  STUDIO_GENERATION_KIND_STUDIO_TRANSLATE_VIDEO,
   "studio_watermark",
 ] as const;
 
