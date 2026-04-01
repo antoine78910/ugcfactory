@@ -1194,6 +1194,8 @@ export default function AppBrandWizard() {
     const kind: VoiceChangeUploadKind =
       type.startsWith("video/") || /\.(mp4|mov|webm)$/i.test(name) ? "video" : "audio";
 
+    // Upload should win over history selection.
+    setVoiceChangeHistoryUrl("");
     setVoiceChangeUploadFile(file);
     setVoiceChangeUploadKind(kind);
     setVoiceChangeUploadPreviewUrl((prev) => {
@@ -2989,28 +2991,34 @@ export default function AppBrandWizard() {
                                 ) : null}
                               </div>
                             </div>
-
-                            <div className="space-y-2 rounded-xl border border-white/10 bg-black/20 p-2.5">
-                              <Label className="text-xs text-white/45">Or pick from history</Label>
-                              <Select value={voiceChangeHistoryUrl} onValueChange={setVoiceChangeHistoryUrl}>
-                                <SelectTrigger className="mt-1 h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
-                                  <SelectValue
-                                    placeholder={
-                                      readyTranslateVideos.length
-                                        ? "Choose a translated/generated video"
-                                        : "No ready video in this history"
-                                    }
-                                  />
-                                </SelectTrigger>
-                                <SelectContent position="popper" className={studioSelectContentClass}>
-                                  {readyTranslateVideos.map((item) => (
-                                    <SelectItem key={item.id} value={item.mediaUrl!} className={studioSelectItemClass}>
-                                      {item.label}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
+                            {!voiceChangeUploadPreviewUrl ? (
+                              <div className="rounded-xl border border-white/10 bg-black/20 p-2.5">
+                                <Select
+                                  value={voiceChangeHistoryUrl}
+                                  onValueChange={(v) => {
+                                    clearVoiceChangeUpload();
+                                    setVoiceChangeHistoryUrl(v);
+                                  }}
+                                >
+                                  <SelectTrigger className="h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
+                                    <SelectValue
+                                      placeholder={
+                                        readyTranslateVideos.length
+                                          ? "Pick from your Translate history"
+                                          : "No ready video in your history"
+                                      }
+                                    />
+                                  </SelectTrigger>
+                                  <SelectContent position="popper" className={studioSelectContentClass}>
+                                    {readyTranslateVideos.map((item) => (
+                                      <SelectItem key={item.id} value={item.mediaUrl!} className={studioSelectItemClass}>
+                                        {item.label}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            ) : null}
                           </div>
                         ) : (
                         <div className={cn("grid gap-2", appSection === "ad_clone" ? "grid-cols-1" : "grid-cols-2")}>
@@ -3379,110 +3387,7 @@ export default function AppBrandWizard() {
                                 ) : null}
                               </div>
 
-                              <details className="rounded-xl border border-white/10 bg-black/20 p-2.5">
-                                <summary className="cursor-pointer text-xs font-semibold text-white/70">
-                                  Advanced settings
-                                </summary>
-                                <div className="mt-3 space-y-3">
-                                  <div>
-                                    <Label className="text-xs text-white/45">model_id</Label>
-                                    <Input
-                                      value={voiceChangeModelId}
-                                      onChange={(e) => setVoiceChangeModelId(e.target.value)}
-                                      className="mt-1 h-11 rounded-xl border-white/15 bg-[#0a0a0d] text-white"
-                                    />
-                                  </div>
-                                  <div>
-                                    <Label className="text-xs text-white/45">output_format</Label>
-                                    <Select value={voiceChangeOutputFormat} onValueChange={setVoiceChangeOutputFormat}>
-                                      <SelectTrigger className="mt-1 h-11 rounded-xl border-white/15 bg-[#0a0a0d] text-white">
-                                        <SelectValue />
-                                      </SelectTrigger>
-                                      <SelectContent position="popper" className={studioSelectContentClass}>
-                                        {ELEVENLABS_OUTPUT_FORMAT_OPTIONS.map((format) => (
-                                          <SelectItem key={format} value={format} className={studioSelectItemClass}>
-                                            {format}
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                  </div>
-                                  <div>
-                                    <Label className="text-xs text-white/45">optimize_streaming_latency</Label>
-                                    <Select value={voiceChangeOptimizeLatency || "none"} onValueChange={(v) => setVoiceChangeOptimizeLatency(v === "none" ? "" : v)}>
-                                      <SelectTrigger className="mt-1 h-11 rounded-xl border-white/15 bg-[#0a0a0d] text-white">
-                                        <SelectValue />
-                                      </SelectTrigger>
-                                      <SelectContent position="popper" className={studioSelectContentClass}>
-                                          <SelectItem value="none" className={studioSelectItemClass}>none</SelectItem>
-                                        {["0", "1", "2", "3", "4"].map((value) => (
-                                          <SelectItem key={value} value={value} className={studioSelectItemClass}>
-                                            {value}
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                  </div>
-                                  <div>
-                                    <Label className="text-xs text-white/45">file_format</Label>
-                                    <Select value={voiceChangeFileFormat} onValueChange={(v) => setVoiceChangeFileFormat(v as "other" | "pcm_s16le_16")}>
-                                      <SelectTrigger className="mt-1 h-11 rounded-xl border-white/15 bg-[#0a0a0d] text-white">
-                                        <SelectValue />
-                                      </SelectTrigger>
-                                      <SelectContent position="popper" className={studioSelectContentClass}>
-                                        <SelectItem value="other" className={studioSelectItemClass}>other</SelectItem>
-                                        <SelectItem value="pcm_s16le_16" className={studioSelectItemClass}>
-                                          pcm_s16le_16
-                                        </SelectItem>
-                                      </SelectContent>
-                                    </Select>
-                                  </div>
-                                  <div>
-                                    <Label className="text-xs text-white/45">seed</Label>
-                                    <Input
-                                      value={voiceChangeSeed}
-                                      onChange={(e) => setVoiceChangeSeed(e.target.value)}
-                                      placeholder="Optional deterministic seed"
-                                      className="mt-1 h-11 rounded-xl border-white/15 bg-[#0a0a0d] text-white"
-                                    />
-                                  </div>
-                                  <div>
-                                    <Label className="text-xs text-white/45">voice_settings (JSON)</Label>
-                                    <Textarea
-                                      value={voiceChangeVoiceSettingsJson}
-                                      onChange={(e) => setVoiceChangeVoiceSettingsJson(e.target.value)}
-                                      placeholder='{"stability":0.5,"similarity_boost":0.8}'
-                                      className="mt-1 min-h-[84px] rounded-xl border-white/15 bg-[#0a0a0d] text-xs text-white placeholder:text-white/35"
-                                    />
-                                  </div>
-                                  <div className="grid grid-cols-2 gap-2">
-                                    <button
-                                      type="button"
-                                      onClick={() => setVoiceChangeEnableLogging((v) => !v)}
-                                      className={cn(
-                                        "rounded-xl border px-3 py-2 text-xs font-semibold transition",
-                                        voiceChangeEnableLogging
-                                          ? "border-violet-400/40 bg-violet-500/15 text-white"
-                                          : "border-white/10 bg-black/20 text-white/60",
-                                      )}
-                                    >
-                                      enable_logging: {voiceChangeEnableLogging ? "true" : "false"}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => setVoiceChangeRemoveBackgroundNoise((v) => !v)}
-                                      className={cn(
-                                        "rounded-xl border px-3 py-2 text-xs font-semibold transition",
-                                        voiceChangeRemoveBackgroundNoise
-                                          ? "border-violet-400/40 bg-violet-500/15 text-white"
-                                          : "border-white/10 bg-black/20 text-white/60",
-                                      )}
-                                    >
-                                      remove_background_noise: {voiceChangeRemoveBackgroundNoise ? "true" : "false"}
-                                    </button>
-                                  </div>
-                                </div>
-                              </details>
+                              {/* Advanced settings hidden for now */}
                             </div>
                           ) : (
                             <div className="space-y-3">
@@ -3665,17 +3570,19 @@ export default function AppBrandWizard() {
                             toast.error("Choose a character image first.");
                             return;
                           }
-                          if (!motionVideoRefBlobUrl) {
-                            toast.error("Choose a reference video first.");
-                            return;
-                          }
-                          if (
-                            appSection !== "ad_clone" &&
-                            motionVideoDetectedDuration != null &&
-                            (motionVideoDetectedDuration < 3 || motionVideoDetectedDuration > 30)
-                          ) {
-                            toast.error("Reference video must be between 3 and 30 seconds.");
-                            return;
+                          if (!isVoiceChange) {
+                            if (!motionVideoRefBlobUrl) {
+                              toast.error("Choose a reference video first.");
+                              return;
+                            }
+                            if (
+                              appSection !== "ad_clone" &&
+                              motionVideoDetectedDuration != null &&
+                              (motionVideoDetectedDuration < 3 || motionVideoDetectedDuration > 30)
+                            ) {
+                              toast.error("Reference video must be between 3 and 30 seconds.");
+                              return;
+                            }
                           }
                           if (!motionCreditBypass && creditsRef.current < motionCredits) {
                             setMotionBilling({ open: true, reason: "credits", required: motionCredits });
