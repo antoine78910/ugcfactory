@@ -109,6 +109,8 @@ export async function pollStudioGenerationRow(
                     : translationStatus === "completed"
                       ? "ready"
                       : "processing",
+                completed_at:
+                  translationStatus === "failed" || translationStatus === "completed" ? new Date().toISOString() : null,
                 error_message:
                   translationStatus === "failed"
                     ? userFacingProviderErrorOrDefault(translateTask.error, "Translation failed")
@@ -217,6 +219,7 @@ export async function pollStudioGenerationRow(
       .from("studio_generations")
       .update({
         status: "ready",
+        completed_at: new Date().toISOString(),
         result_urls: resultUrlsToSave.length ? resultUrlsToSave : null,
         error_message: null,
       })
@@ -245,6 +248,7 @@ export async function pollStudioGenerationRow(
     .from("studio_generations")
     .update({
       status: "failed",
+      completed_at: new Date().toISOString(),
       error_message: userFacingProviderErrorOrDefault(rawFail, "Generation failed"),
       result_urls: null,
     })

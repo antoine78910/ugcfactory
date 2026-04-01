@@ -3578,11 +3578,16 @@ export default function AppBrandWizard() {
                                 appSection === "ad_clone"
                                   ? STUDIO_GENERATION_KIND_STUDIO_TRANSLATE_VIDEO
                                   : "motion_control";
+                              const model =
+                                appSection === "ad_clone"
+                                  ? `wavespeed:heygen_translate:${adCloneOutputLanguage}`
+                                  : `kling:motion_control:${motionQuality}:${motionSceneBackground}`;
                               const rowId = await registerStudioGenerationClient({
                                 kind: generationKind,
                                 label: historyLabel,
                                 taskId: json.taskId,
                                 provider,
+                                model,
                                 creditsCharged: platformChargeMotion,
                                 personalApiKey: getPersonalApiKey() ?? undefined,
                               });

@@ -122,6 +122,7 @@ export async function POST(req: Request) {
     label,
     external_task_id,
     provider: "kie-market",
+    model,
     credits_charged: baseCharge + (i === 0 ? remainder : 0),
     uses_personal_api: usesPersonalApi,
   }));

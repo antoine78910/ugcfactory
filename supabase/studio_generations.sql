@@ -6,17 +6,25 @@ create table if not exists public.studio_generations (
   user_id uuid not null references auth.users(id) on delete cascade,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
+  started_at timestamptz not null default now(),
+  completed_at timestamptz,
   kind text not null,
   status text not null check (status in ('processing', 'ready', 'failed')),
   label text not null default '',
   external_task_id text not null,
   provider text not null default 'kie-market',
+  model text not null default '',
   result_urls text[],
   error_message text,
   credits_charged int not null default 0,
   uses_personal_api boolean not null default false,
   credits_refund_hint_sent boolean not null default false
 );
+
+-- Backward-compatible adds (safe to re-run)
+alter table public.studio_generations add column if not exists started_at timestamptz not null default now();
+alter table public.studio_generations add column if not exists completed_at timestamptz;
+alter table public.studio_generations add column if not exists model text not null default '';
 
 create index if not exists studio_generations_user_kind_created_idx
   on public.studio_generations (user_id, kind, created_at desc);
