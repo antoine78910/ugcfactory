@@ -72,7 +72,7 @@ import {
   WAVESPEED_HEYGEN_TRANSLATE_LANGUAGES,
 } from "@/lib/wavespeedTranslateLanguages";
 import { STUDIO_GENERATION_KIND_STUDIO_TRANSLATE_VIDEO } from "@/lib/studioGenerationKinds";
-import { mergeVideoWithAudio } from "@/lib/mergeVideoAudio";
+import { mergeVideoWithAudio, extractAudioFromVideo } from "@/lib/mergeVideoAudio";
 
 type WizardStep = "url" | "analysis" | "quiz" | "image" | "video";
 type AppSection =
@@ -1289,128 +1289,6 @@ export default function AppBrandWizard() {
     });
   }, []);
 
-  const extractAudioFromVideoSource = useCallback(
-    async (src: string, filenameBase: string): Promise<File> => {
-      return await new Promise<File>((resolve, reject) => {
-        const video = document.createElement("video");
-        const audioContext = new AudioContext();
-        const destination = audioContext.createMediaStreamDestination();
-        const gain = audioContext.createGain();
-        gain.gain.value = 0;
-        let mediaSource: MediaElementAudioSourceNode | null = null;
-        let objectUrlToRevoke: string | null = src.startsWith("blob:") ? src : null;
-
-        const cleanup = () => {
-          try {
-            video.pause();
-          } catch {
-            /* ignore */
-          }
-          video.src = "";
-          video.load();
-          try {
-            mediaSource?.disconnect();
-          } catch {
-            /* ignore */
-          }
-          try {
-            gain.disconnect();
-          } catch {
-            /* ignore */
-          }
-          try {
-            destination.disconnect();
-          } catch {
-            /* ignore */
-          }
-          void audioContext.close().catch(() => {});
-          if (objectUrlToRevoke?.startsWith("blob:")) {
-            URL.revokeObjectURL(objectUrlToRevoke);
-            objectUrlToRevoke = null;
-          }
-        };
-
-        const fail = (err: unknown) => {
-          cleanup();
-          reject(err instanceof Error ? err : new Error("Could not extract audio from video."));
-        };
-
-        video.crossOrigin = "anonymous";
-        video.preload = "auto";
-        video.playsInline = true;
-        video.volume = 0;
-        video.muted = true;
-        video.src = src;
-
-        video.onloadedmetadata = async () => {
-          if (!Number.isFinite(video.duration) || video.duration <= 0) {
-            fail(new Error("Video metadata unavailable."));
-            return;
-          }
-          if (video.duration > 300) {
-            fail(new Error("The video is too long for ElevenLabs voice change (max 5 minutes)."));
-            return;
-          }
-
-          const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-            ? "audio/webm;codecs=opus"
-            : MediaRecorder.isTypeSupported("audio/webm")
-              ? "audio/webm"
-              : "";
-
-          if (typeof MediaRecorder === "undefined") {
-            fail(new Error("This browser does not support audio extraction for video files."));
-            return;
-          }
-
-          try {
-            mediaSource = audioContext.createMediaElementSource(video);
-            mediaSource.connect(destination);
-            mediaSource.connect(gain);
-            gain.connect(audioContext.destination);
-          } catch (err) {
-            fail(err);
-            return;
-          }
-
-          const recorder = new MediaRecorder(destination.stream, mimeType ? { mimeType } : undefined);
-          const chunks: BlobPart[] = [];
-          recorder.ondataavailable = (event) => {
-            if (event.data.size > 0) chunks.push(event.data);
-          };
-          recorder.onerror = (event) => {
-            fail(event.error ?? new Error("Audio extraction failed."));
-          };
-          recorder.onstop = () => {
-            const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
-            if (!blob.size) {
-              fail(new Error("No audio track found in this video."));
-              return;
-            }
-            cleanup();
-            resolve(new File([blob], `${filenameBase}.webm`, { type: blob.type || "audio/webm" }));
-          };
-          video.onended = () => {
-            if (recorder.state !== "inactive") recorder.stop();
-          };
-
-          try {
-            await audioContext.resume();
-            recorder.start();
-            await video.play();
-          } catch (err) {
-            fail(err);
-          }
-        };
-
-        video.onerror = () => {
-          fail(new Error("Could not load this video for voice change."));
-        };
-      });
-    },
-    [],
-  );
-
   const prepareVoiceChangeAudioFile = useCallback(async (): Promise<File> => {
     if (voiceChangeUploadFile) {
       if (voiceChangeUploadKind === "audio") {
@@ -1419,8 +1297,8 @@ export default function AppBrandWizard() {
         }
         return voiceChangeUploadFile;
       }
-      return await extractAudioFromVideoSource(
-        voiceChangeUploadPreviewUrl || URL.createObjectURL(voiceChangeUploadFile),
+      return await extractAudioFromVideo(
+        voiceChangeUploadFile,
         `voice-source-${Date.now()}`,
       );
     }
@@ -1429,17 +1307,15 @@ export default function AppBrandWizard() {
     if (!selected?.mediaUrl) {
       throw new Error("Add an audio/video file or choose a generated video.");
     }
-    return await extractAudioFromVideoSource(
+    return await extractAudioFromVideo(
       proxiedMediaSrc(selected.mediaUrl),
       `history-voice-source-${Date.now()}`,
     );
   }, [
-    extractAudioFromVideoSource,
     readyTranslateVideos,
     voiceChangeHistoryUrl,
     voiceChangeUploadFile,
     voiceChangeUploadKind,
-    voiceChangeUploadPreviewUrl,
   ]);
 
   const currentProductName = useMemo(() => {
@@ -3720,7 +3596,9 @@ export default function AppBrandWizard() {
                             try {
                               if (isVoiceChange) {
                                 setVoiceChangePreparing(true);
-                                toast.message("Preparing audio...");
+                                toast.message("Extracting audio (ffmpeg)...", {
+                                  description: "First time may download ~35 MB of ffmpeg.wasm.",
+                                });
                                 const audioFile = await prepareVoiceChangeAudioFile();
                                 if (audioFile.size > 50 * 1024 * 1024) {
                                   throw new Error("Extracted audio is too large for ElevenLabs voice change (max 50 MB).");
@@ -3729,6 +3607,8 @@ export default function AppBrandWizard() {
                                 if (voiceChangeVoiceSettingsJson.trim()) {
                                   JSON.parse(voiceChangeVoiceSettingsJson);
                                 }
+
+                                toast.message("Sending to ElevenLabs...");
 
                                 const formData = new FormData();
                                 formData.set("audio", audioFile);
@@ -3759,67 +3639,82 @@ export default function AppBrandWizard() {
                                 if (!res.ok || !json.rowId) {
                                   throw new Error(json.error || "Voice change failed.");
                                 }
-                                setMotionHistoryItems((prev) =>
-                                  prev.map((i) =>
-                                    i.id === jobId
-                                      ? {
-                                          ...i,
-                                          id: json.rowId!,
-                                          mediaUrl: json.mediaUrl,
-                                          kind: "audio",
-                                          status: "ready",
-                                          studioGenerationKind: "studio_audio",
-                                        }
-                                      : i,
-                                  ),
-                                );
-                                toast.message("Voice change complete", {
-                                  description: "Final audio is available in your Translate history.",
-                                });
 
-                                // If source was a video, auto-merge the new audio with the original video
                                 const srcVideoUrl = effectiveVoiceChangeSourceVideoUrl;
                                 const audioResultUrl = json.mediaUrl;
+
                                 if (srcVideoUrl && audioResultUrl) {
+                                  toast.message("Merging video + new audio...");
                                   setIsMergingVideo(true);
                                   setMergeVideoProgress(0);
-                                  toast.message("Merging audio/video...", {
-                                    description: "ffmpeg.wasm — first time download: ~35 MB.",
+                                  try {
+                                    const proxiedAudio = proxiedMediaSrc(audioResultUrl);
+                                    const mergedUrl = await mergeVideoWithAudio(
+                                      srcVideoUrl,
+                                      proxiedAudio,
+                                      (p) => setMergeVideoProgress(p),
+                                    );
+                                    setMotionHistoryItems((prev) =>
+                                      prev.map((i) =>
+                                        i.id === jobId
+                                          ? {
+                                              ...i,
+                                              id: json.rowId!,
+                                              mediaUrl: mergedUrl,
+                                              kind: "video",
+                                              status: "ready",
+                                              label: `Voice changed — ${selectedElevenVoice?.name ?? "custom"}`,
+                                              studioGenerationKind: "studio_audio",
+                                            }
+                                          : i,
+                                      ),
+                                    );
+                                    toast.success("Video ready!", {
+                                      description: "The new voice has been merged with the source video.",
+                                    });
+                                  } catch (mergeErr) {
+                                    setMotionHistoryItems((prev) =>
+                                      prev.map((i) =>
+                                        i.id === jobId
+                                          ? {
+                                              ...i,
+                                              id: json.rowId!,
+                                              mediaUrl: json.mediaUrl,
+                                              kind: "audio",
+                                              status: "ready",
+                                              studioGenerationKind: "studio_audio",
+                                            }
+                                          : i,
+                                      ),
+                                    );
+                                    toast.error("Video merge failed — audio saved to history.", {
+                                      description:
+                                        mergeErr instanceof Error
+                                          ? mergeErr.message
+                                          : "You can download the audio from your history.",
+                                    });
+                                  } finally {
+                                    setIsMergingVideo(false);
+                                    setMergeVideoProgress(0);
+                                  }
+                                } else {
+                                  setMotionHistoryItems((prev) =>
+                                    prev.map((i) =>
+                                      i.id === jobId
+                                        ? {
+                                            ...i,
+                                            id: json.rowId!,
+                                            mediaUrl: json.mediaUrl,
+                                            kind: "audio",
+                                            status: "ready",
+                                            studioGenerationKind: "studio_audio",
+                                          }
+                                        : i,
+                                    ),
+                                  );
+                                  toast.success("Voice change complete", {
+                                    description: "Audio is available in your history.",
                                   });
-                                  void (async () => {
-                                    try {
-                                      const mergedUrl = await mergeVideoWithAudio(
-                                        srcVideoUrl,
-                                        audioResultUrl,
-                                        (p) => setMergeVideoProgress(p),
-                                      );
-                                      const mergedId = `merged_${json.rowId ?? jobId}`;
-                                      setMotionHistoryItems((prev) => [
-                                        {
-                                          id: mergedId,
-                                          kind: "video",
-                                          status: "ready",
-                                          label: `Merged video — voice ${selectedElevenVoice?.name ?? "custom"}`,
-                                          mediaUrl: mergedUrl,
-                                          createdAt: Date.now(),
-                                        },
-                                        ...prev,
-                                      ]);
-                                      toast.success("Video ready!", {
-                                        description: "The new voice has been merged with the source video.",
-                                      });
-                                    } catch (mergeErr) {
-                                      toast.error("Merge failed", {
-                                        description:
-                                          mergeErr instanceof Error
-                                            ? mergeErr.message
-                                            : "The MP3 audio is available in history.",
-                                      });
-                                    } finally {
-                                      setIsMergingVideo(false);
-                                      setMergeVideoProgress(0);
-                                    }
-                                  })();
                                 }
                                 return;
                               }

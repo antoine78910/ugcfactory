@@ -1,6 +1,4 @@
 "use client";
-// Client-side video+audio merge using ffmpeg.wasm (single-threaded, no SharedArrayBuffer / COOP+COEP headers needed).
-// The first call downloads ~10 MB of JS + ~25 MB wasm from jsDelivr CDN and caches them as blob URLs.
 
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { toBlobURL, fetchFile } from "@ffmpeg/util";
@@ -27,13 +25,50 @@ async function getFFmpeg(): Promise<FFmpeg> {
 }
 
 /**
- * Merges a video source (URL or blob URL) with a new audio track (URL or blob URL).
+ * Extract the audio track from a video file using ffmpeg.wasm.
+ * Returns a File containing the extracted audio as MP3.
+ */
+export async function extractAudioFromVideo(
+  videoSrc: string | File | Blob,
+  filenameBase = "extracted-audio",
+): Promise<File> {
+  const ff = await getFFmpeg();
+
+  try {
+    const videoData =
+      videoSrc instanceof Blob
+        ? new Uint8Array(await videoSrc.arrayBuffer())
+        : await fetchFile(videoSrc);
+    await ff.writeFile("extract_in.mp4", videoData);
+
+    await ff.exec([
+      "-i", "extract_in.mp4",
+      "-vn",
+      "-acodec", "libmp3lame",
+      "-q:a", "2",
+      "-y",
+      "extract_out.mp3",
+    ]);
+
+    const data = await ff.readFile("extract_out.mp3");
+    const bytes: Uint8Array =
+      data instanceof Uint8Array ? data : new Uint8Array(data as unknown as ArrayBuffer);
+    if (bytes.byteLength === 0) {
+      throw new Error("No audio track found in this video.");
+    }
+    const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+    const blob = new Blob([buffer], { type: "audio/mpeg" });
+    return new File([blob], `${filenameBase}.mp3`, { type: "audio/mpeg" });
+  } finally {
+    await ff.deleteFile("extract_in.mp4").catch(() => {});
+    await ff.deleteFile("extract_out.mp3").catch(() => {});
+  }
+}
+
+/**
+ * Merges a video source with a new audio track.
  * The original video audio is replaced; the video stream is copied without re-encoding.
  * Returns a local `blob:` URL pointing to the merged MP4.
- *
- * @param videoSrc  URL or blob URL of the original video.
- * @param audioSrc  URL or blob URL of the new audio (mp3/opus/wav…).
- * @param onProgress  Called with values 0→1 as encoding progresses.
  */
 export async function mergeVideoWithAudio(
   videoSrc: string,
@@ -56,7 +91,6 @@ export async function mergeVideoWithAudio(
     await ff.writeFile("in.mp4", videoData);
     await ff.writeFile("in_audio", audioData);
 
-    // Copy video stream, re-encode audio to AAC, trim to shorter stream.
     await ff.exec([
       "-i", "in.mp4",
       "-i", "in_audio",
@@ -66,12 +100,16 @@ export async function mergeVideoWithAudio(
       "-map", "1:a:0",
       "-shortest",
       "-movflags", "+faststart",
+      "-y",
       "out.mp4",
     ]);
 
     const data = await ff.readFile("out.mp4");
-    // `data` is Uint8Array; copy bytes into a plain ArrayBuffer for Blob compatibility.
-    const bytes: Uint8Array = data instanceof Uint8Array ? data : new Uint8Array((data as unknown as ArrayBuffer));
+    const bytes: Uint8Array =
+      data instanceof Uint8Array ? data : new Uint8Array(data as unknown as ArrayBuffer);
+    if (bytes.byteLength === 0) {
+      throw new Error("ffmpeg produced an empty output file.");
+    }
     const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
     const blob = new Blob([buffer], { type: "video/mp4" });
     return URL.createObjectURL(blob);
