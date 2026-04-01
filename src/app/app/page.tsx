@@ -505,7 +505,7 @@ export default function AppBrandWizard() {
   const [adCloneOutputLanguage, setAdCloneOutputLanguage] = useState<string>(
     DEFAULT_WAVESPEED_HEYGEN_TRANSLATE_LANGUAGE,
   );
-  const [translateToolMode, setTranslateToolMode] = useState<TranslateToolMode>("voice_change");
+  const [translateToolMode, setTranslateToolMode] = useState<TranslateToolMode>("video_translate");
   const [elevenVoices, setElevenVoices] = useState<ElevenVoiceOption[]>([]);
   const [elevenVoicesLoading, setElevenVoicesLoading] = useState(false);
   const [elevenVoiceId, setElevenVoiceId] = useState<string>("");
@@ -2635,7 +2635,19 @@ export default function AppBrandWizard() {
                       </p>
                       <div className="rounded-2xl border border-white/10 bg-[#101014] p-3 space-y-3">
                         {appSection === "ad_clone" ? (
-                          <div className="grid grid-cols-1 gap-2">
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setTranslateToolMode("video_translate")}
+                              className={cn(
+                                "rounded-xl border px-3 py-2 text-xs font-semibold transition",
+                                translateToolMode === "video_translate"
+                                  ? "border-violet-400/40 bg-violet-500/15 text-white"
+                                  : "border-white/10 bg-black/20 text-white/60 hover:bg-white/[0.04]",
+                              )}
+                            >
+                              Video translation
+                            </button>
                             <button
                               type="button"
                               onClick={() => setTranslateToolMode("voice_change")}
