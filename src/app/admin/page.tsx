@@ -32,6 +32,7 @@ type GenerationRow = {
   external_task_id: string;
   provider: string;
   model?: string;
+  app_endpoint?: string;
   result_urls: string[] | null;
   error_message: string | null;
   credits_charged: number;
@@ -391,6 +392,7 @@ export default function AdminPage() {
                   <th className="px-3 py-2.5 font-semibold">Status</th>
                   <th className="px-3 py-2.5 font-semibold">Credits</th>
                   <th className="px-3 py-2.5 font-semibold">Model</th>
+                  <th className="px-3 py-2.5 font-semibold">App API</th>
                   <th className="px-3 py-2.5 font-semibold">Provider</th>
                   <th className="px-3 py-2.5 font-semibold">Label</th>
                   <th className="px-3 py-2.5 font-semibold">Media</th>
@@ -432,6 +434,11 @@ export default function AdminPage() {
                           {row.model?.trim() ? row.model : "—"}
                         </span>
                       </td>
+                      <td className="px-3 py-2.5">
+                        <span className="max-w-[180px] truncate block font-mono text-[11px] text-white/45" title={row.app_endpoint || ""}>
+                          {row.app_endpoint?.trim() ? row.app_endpoint : "—"}
+                        </span>
+                      </td>
                       <td className="px-3 py-2.5 text-white/50">{row.provider}</td>
                       <td className="max-w-[200px] truncate px-3 py-2.5 text-white/60" title={row.label}>
                         {row.label || "—"}
@@ -442,7 +449,7 @@ export default function AdminPage() {
                     </tr>
                     {expandedGenId === row.id && (
                       <tr key={`${row.id}-expand`} className="border-b border-white/5">
-                        <td colSpan={10} className="bg-white/[0.02] px-4 py-3">
+                        <td colSpan={11} className="bg-white/[0.02] px-4 py-3">
                           <div className="grid gap-3 sm:grid-cols-2">
                             <div>
                               <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Full Label / Prompt</p>
@@ -456,6 +463,7 @@ export default function AdminPage() {
                                 <p><span className="text-white/40">User:</span> {genEmailMap[row.user_id] ?? row.user_id}</p>
                                 <p><span className="text-white/40">Created:</span> {new Date(row.created_at).toLocaleString()}</p>
                                 <p><span className="text-white/40">Model:</span> {row.model?.trim() ? row.model : "—"}</p>
+                                <p><span className="text-white/40">App API:</span> <span className="font-mono">{row.app_endpoint?.trim() ? row.app_endpoint : "—"}</span></p>
                                 <p><span className="text-white/40">Duration:</span> {durationForRow(row)}</p>
                                 {row.error_message && (
                                   <p className="text-red-300/80"><span className="text-white/40">Error:</span> {row.error_message}</p>

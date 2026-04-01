@@ -4,6 +4,22 @@ import { NextResponse } from "next/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/admin";
 
+function deriveAppEndpoint(row: Record<string, unknown>): string {
+  const kind = String(row.kind ?? "").trim().toLowerCase();
+  // Prefer kind-based mapping (most reliable).
+  if (kind === "studio_audio") return "/api/elevenlabs/speech-to-speech";
+  if (kind === "studio_translate_video") return "/api/wavespeed/video-translate";
+  if (kind === "motion_control") return "/api/kling/motion-control";
+  if (kind === "studio_video" || kind === "studio_watermark" || kind === "link_to_ad_video") {
+    return "/api/kling/generate";
+  }
+  if (kind === "studio_image" || kind === "link_to_ad_image" || kind === "avatar") {
+    return "/api/studio/generations/start";
+  }
+  if (kind === "studio_upscale") return "/api/kie/upscale";
+  return "—";
+}
+
 export async function GET(req: Request) {
   const { response } = await requireAdmin();
   if (response) return response;
@@ -55,7 +71,10 @@ export async function GET(req: Request) {
   }
 
   return NextResponse.json({
-    rows: rows ?? [],
+    rows: (rows ?? []).map((r: Record<string, unknown>) => ({
+      ...r,
+      app_endpoint: deriveAppEndpoint(r),
+    })),
     emailMap,
     total: count ?? 0,
     page,
