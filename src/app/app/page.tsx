@@ -767,7 +767,7 @@ export default function AppBrandWizard() {
   const MOTION_VIDEO_MAX_BYTES = 100 * 1024 * 1024; // 100 MB
   const historyKindsKey =
     appSection === "ad_clone"
-      ? `${STUDIO_GENERATION_KIND_STUDIO_TRANSLATE_VIDEO},studio_audio`
+      ? `${STUDIO_GENERATION_KIND_STUDIO_TRANSLATE_VIDEO},studio_audio,studio_video`
       : "motion_control";
   const motionVideoPreviewSrc = useMemo(
     () => proxiedMediaSrc(motionVideoUploadedUrl || motionVideoRefBlobUrl),
@@ -904,10 +904,13 @@ export default function AppBrandWizard() {
       const serverIds = new Set(serverItems.map((i) => i.id));
       const now = Date.now();
       const optimisticKeepMs = 5 * 60 * 1000;
-      const pendingLocal = prevItems.filter(
-        (i) => i.status === "generating" && !serverIds.has(i.id) && now - i.createdAt < optimisticKeepMs,
+      const keepLocal = prevItems.filter(
+        (i) =>
+          !serverIds.has(i.id) &&
+          now - i.createdAt < optimisticKeepMs &&
+          (i.status === "generating" || i.status === "ready" || i.status === "failed"),
       );
-      return [...serverItems, ...pendingLocal].sort((a, b) => b.createdAt - a.createdAt);
+      return [...serverItems, ...keepLocal].sort((a, b) => b.createdAt - a.createdAt);
     },
     [],
   );
