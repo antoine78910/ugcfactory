@@ -3324,19 +3324,24 @@ export default function AppBrandWizard() {
                                         </span>
                                       </SelectItem>
                                     ))}
+                                    {voiceChangeVoiceTab === "all" && elevenVoiceLangHasMore ? (
+                                      <div className="mt-1 border-t border-white/10 p-1">
+                                        <button
+                                          type="button"
+                                          disabled={elevenVoicesLoadMorePending}
+                                          onPointerDown={(ev) => {
+                                            ev.preventDefault();
+                                            ev.stopPropagation();
+                                            void loadMoreElevenVoices();
+                                          }}
+                                          className="w-full rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-[11px] font-semibold text-white/70 transition hover:bg-white/[0.04] disabled:opacity-40"
+                                        >
+                                          {elevenVoicesLoadMorePending ? "Loading..." : "Load 10 more voices"}
+                                        </button>
+                                      </div>
+                                    ) : null}
                                   </SelectContent>
                                 </Select>
-
-                                {voiceChangeVoiceTab === "all" && elevenVoiceLangHasMore ? (
-                                  <button
-                                    type="button"
-                                    disabled={elevenVoicesLoadMorePending}
-                                    onClick={() => void loadMoreElevenVoices()}
-                                    className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-[11px] font-semibold text-white/70 transition hover:bg-white/[0.04] disabled:opacity-40"
-                                  >
-                                    {elevenVoicesLoadMorePending ? "Loading..." : "Load 10 more voices"}
-                                  </button>
-                                ) : null}
 
                                 {/* Sample audio preview */}
                                 {selectedElevenVoice?.previewUrl ? (
