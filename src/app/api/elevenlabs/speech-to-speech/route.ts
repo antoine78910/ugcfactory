@@ -9,6 +9,8 @@ import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { mergeVideoWithAudioServer } from "@/lib/mergeVideoAudio";
 
+const UGC_UPLOADS_BUCKET = "ugc-uploads";
+
 function messageFromUnknown(err: unknown, fallback = "Unknown error."): string {
   if (err instanceof Error) return err.message || fallback;
   if (err && typeof err === "object" && "message" in err) {
@@ -19,14 +21,14 @@ function messageFromUnknown(err: unknown, fallback = "Unknown error."): string {
   return s || fallback;
 }
 
-function isVideoFile(contentType: string, url: string): boolean {
+function isVideoFile(contentType: string, pathOrUrl: string): boolean {
   if (contentType.startsWith("video/")) return true;
-  const ext = url.split(/[?#]/)[0].split(".").pop()?.toLowerCase() ?? "";
+  const ext = pathOrUrl.split(/[?#]/)[0].split(".").pop()?.toLowerCase() ?? "";
   return ["mp4", "mov", "avi", "webm", "mkv", "m4v"].includes(ext);
 }
 
 type RequestBody = {
-  audioUrl: string;
+  storagePath: string;
   voiceId: string;
   voiceName?: string;
   outputFormat?: string;
@@ -50,7 +52,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
-  const audioUrl = (body.audioUrl ?? "").trim();
+  const storagePath = (body.storagePath ?? "").trim();
   const voiceId = (body.voiceId ?? "").trim();
   const voiceName = (body.voiceName ?? "").trim();
   const outputFormat = (body.outputFormat ?? "mp3_44100_128").trim() || "mp3_44100_128";
@@ -70,8 +72,8 @@ export async function POST(req: Request) {
       ? (Number(optimizeLatencyRaw) as 0 | 1 | 2 | 3 | 4)
       : undefined;
 
-  if (!audioUrl) {
-    return NextResponse.json({ error: "Missing audioUrl." }, { status: 400 });
+  if (!storagePath) {
+    return NextResponse.json({ error: "Missing storagePath." }, { status: 400 });
   }
   if (!voiceId) {
     return NextResponse.json({ error: "Missing ElevenLabs voice id." }, { status: 400 });
@@ -83,23 +85,29 @@ export async function POST(req: Request) {
     );
   }
 
-  // Download the file from Supabase Storage
+  const admin = createSupabaseServiceClient();
+  if (!admin) {
+    return NextResponse.json({ error: "Supabase service role key missing on server." }, { status: 500 });
+  }
+
+  // Download the file from Supabase Storage using the admin client (works for private buckets)
   let inputBuffer: Buffer;
   let inputContentType: string;
   try {
-    const dlRes = await fetch(audioUrl);
-    if (!dlRes.ok) throw new Error(`HTTP ${dlRes.status}`);
-    inputContentType = dlRes.headers.get("content-type") ?? "application/octet-stream";
-    inputBuffer = Buffer.from(await dlRes.arrayBuffer());
+    const { data, error } = await admin.storage.from(UGC_UPLOADS_BUCKET).download(storagePath);
+    if (error || !data) {
+      throw new Error(error?.message ?? "File not found in storage.");
+    }
+    inputBuffer = Buffer.from(await data.arrayBuffer());
+    inputContentType = data.type || "application/octet-stream";
   } catch (dlErr) {
     const msg = messageFromUnknown(dlErr, "Could not download input file.");
     return NextResponse.json({ error: `Failed to download input file: ${msg}` }, { status: 400 });
   }
 
-  const inputIsVideo = isVideoFile(inputContentType, audioUrl);
+  const inputIsVideo = isVideoFile(inputContentType, storagePath);
 
-  // Build a File object to send to ElevenLabs
-  const ext = audioUrl.split(/[?#]/)[0].split(".").pop() ?? "mp4";
+  const ext = storagePath.split(".").pop() ?? "mp4";
   const ab = inputBuffer.buffer.slice(
     inputBuffer.byteOffset,
     inputBuffer.byteOffset + inputBuffer.byteLength,
@@ -144,9 +152,6 @@ export async function POST(req: Request) {
       enableLogging,
     });
 
-    const admin = createSupabaseServiceClient();
-    if (!admin) throw new Error("Supabase service role key missing on server.");
-
     let finalBuffer: Buffer;
     let finalContentType: string;
     let finalExt: string;
@@ -165,11 +170,11 @@ export async function POST(req: Request) {
       resultKind = "audio";
     }
 
-    // 3. Upload to Supabase Storage
-    const storagePath = `${user.id}/${rowId}/voice-change-${crypto.randomUUID()}${finalExt}`;
+    // 3. Upload result to Supabase Storage
+    const resultPath = `${user.id}/${rowId}/voice-change-${crypto.randomUUID()}${finalExt}`;
     const { data: uploaded, error: uploadError } = await admin.storage
       .from(STUDIO_MEDIA_BUCKET)
-      .upload(storagePath, finalBuffer, {
+      .upload(resultPath, finalBuffer, {
         contentType: finalContentType,
         upsert: false,
       });
@@ -191,6 +196,9 @@ export async function POST(req: Request) {
       })
       .eq("id", rowId);
     if (updateError) throw updateError;
+
+    // 5. Clean up uploaded input file (best-effort)
+    await admin.storage.from(UGC_UPLOADS_BUCKET).remove([storagePath]).catch(() => {});
 
     return NextResponse.json({
       rowId,

@@ -3610,12 +3610,12 @@ export default function AppBrandWizard() {
                                   description: "This may take up to a minute.",
                                 });
 
-                                // 3. Send just the URL + params (lightweight JSON, no file in body)
+                                // 3. Send storage path + params (server downloads via admin client)
                                 const res = await fetch("/api/elevenlabs/speech-to-speech", {
                                   method: "POST",
                                   headers: { "Content-Type": "application/json" },
                                   body: JSON.stringify({
-                                    audioUrl: signedJson.publicUrl,
+                                    storagePath: signedJson.path,
                                     voiceId: elevenVoiceId,
                                     voiceName: selectedElevenVoice?.name || "",
                                     modelId: voiceChangeModelId.trim(),
