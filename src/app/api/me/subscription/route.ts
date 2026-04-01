@@ -14,6 +14,12 @@ export type MeSubscriptionResponse = {
   userId: string;
   /** When true the client must not deduct or check credits — account has unlimited access. */
   unlimited?: boolean;
+  /**
+   * When true the client should auto-activate stored personal API keys (KIE + PiAPI)
+   * so that generations use the founder's own provider accounts.
+   * Only set for emails in the server-side allowlist — never exposed for other users.
+   */
+  autoEnablePersonalApi?: boolean;
 };
 
 /**
@@ -32,6 +38,9 @@ export async function GET() {
       billing: null,
       userId: auth.user.id,
       unlimited: true,
+      // Tells the client to auto-activate localStorage personal API keys (KIE + PiAPI)
+      // so generations use the founder's own provider accounts, not the platform keys.
+      autoEnablePersonalApi: true,
     } satisfies MeSubscriptionResponse);
   }
 

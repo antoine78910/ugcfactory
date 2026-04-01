@@ -85,7 +85,7 @@ export async function POST(req: Request) {
     .insert({
       user_id: user.id,
       kind: "studio_audio",
-      status: "generating",
+      status: "processing",
       label,
       external_task_id: `elevenlabs-sync:${crypto.randomUUID()}`,
       provider: "elevenlabs",

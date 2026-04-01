@@ -903,6 +903,19 @@ export default function AppBrandWizard() {
     return deduped.sort((a, b) => a.localeCompare(b));
   }, []);
 
+  const mergeServerHistoryWithLocalPending = useCallback(
+    (serverItems: StudioHistoryItem[], prevItems: StudioHistoryItem[]): StudioHistoryItem[] => {
+      const serverIds = new Set(serverItems.map((i) => i.id));
+      const now = Date.now();
+      const optimisticKeepMs = 5 * 60 * 1000;
+      const pendingLocal = prevItems.filter(
+        (i) => i.status === "generating" && !serverIds.has(i.id) && now - i.createdAt < optimisticKeepMs,
+      );
+      return [...serverItems, ...pendingLocal].sort((a, b) => b.createdAt - a.createdAt);
+    },
+    [],
+  );
+
   /**
    * The original video URL to merge with after a voice change.
    * Derived from the current source mode / selection — no extra state needed.
@@ -934,7 +947,9 @@ export default function AppBrandWizard() {
       }
       const json = (await res.json()) as { data?: StudioHistoryItem[]; refundHints?: RefundHint[] };
       setMotionServerHistory(true);
-      setMotionHistoryItems(json.data ?? []);
+      setMotionHistoryItems((prev) =>
+        mergeServerHistoryWithLocalPending(json.data ?? [], prev),
+      );
       const hints = json.refundHints ?? [];
       if (hints.length) {
         applyRefundHints(hints);
@@ -958,7 +973,11 @@ export default function AppBrandWizard() {
         });
         if (!res.ok) return;
         const json = (await res.json()) as { data?: StudioHistoryItem[]; refundHints?: RefundHint[] };
-        if (Array.isArray(json.data)) setMotionHistoryItems(json.data);
+        if (Array.isArray(json.data)) {
+          setMotionHistoryItems((prev) =>
+            mergeServerHistoryWithLocalPending(json.data ?? [], prev),
+          );
+        }
         const hints = json.refundHints ?? [];
         if (hints.length) {
           applyRefundHints(hints);
@@ -970,7 +989,7 @@ export default function AppBrandWizard() {
     tick();
     const id = window.setInterval(tick, 4000);
     return () => window.clearInterval(id);
-  }, [applyRefundHints, historyKindsKey, motionServerHistory]);
+  }, [applyRefundHints, historyKindsKey, mergeServerHistoryWithLocalPending, motionServerHistory]);
 
   useEffect(() => {
     return () => {

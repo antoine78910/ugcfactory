@@ -67,6 +67,23 @@ function lsRemove(key: string) {
   }
 }
 
+/**
+ * Called when the server confirms this is a founder account (autoEnablePersonalApi: true).
+ * If the user already has API keys stored in localStorage but hasn't toggled them on,
+ * this silently enables them — so founders never need to visit /apitest manually.
+ * Only sets the "enabled" flag; never creates or overwrites actual key values.
+ */
+function autoEnableFounderApiKeys() {
+  const kieKey = lsGet(LS_PERSONAL_API_KEY)?.trim();
+  if (kieKey && kieKey.length > 0) {
+    lsSet(LS_PERSONAL_API_ENABLED, "1");
+  }
+  const piapiKey = lsGet(LS_PIAPI_PERSONAL_KEY)?.trim();
+  if (piapiKey && piapiKey.length > 0) {
+    lsSet(LS_PIAPI_PERSONAL_ENABLED, "1");
+  }
+}
+
 /** Wipe plan/credits data (but not API keys). */
 function clearPlanData() {
   lsRemove(LS_PLAN);
@@ -295,8 +312,13 @@ export function CreditsPlanProvider({
     if (!activeUserId) return;
     fetch("/api/me/subscription")
       .then((r) => (r.ok ? r.json() : null))
-      .then((data: { planId: string; userId?: string; unlimited?: boolean } | null) => {
+      .then((data: { planId: string; userId?: string; unlimited?: boolean; autoEnablePersonalApi?: boolean } | null) => {
         if (!data) return;
+
+        // Founder account: auto-enable stored personal API keys if they exist.
+        if (data.autoEnablePersonalApi === true) {
+          autoEnableFounderApiKeys();
+        }
 
         // Unlimited accounts: flag them and apply the top plan — never deduct credits.
         if (data.unlimited === true) {
