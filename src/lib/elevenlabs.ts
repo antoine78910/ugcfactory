@@ -6,6 +6,9 @@ export type ElevenLabsVoice = {
   category?: string;
   preview_url?: string | null;
   labels?: Record<string, string>;
+  language?: string;
+  public_owner_id?: string;
+  is_shared?: boolean;
 };
 
 export type ElevenLabsSpeechToSpeechInput = {
@@ -55,6 +58,54 @@ export async function listElevenLabsVoices(): Promise<ElevenLabsVoice[]> {
   if (!res.ok) await readElevenLabsError(res, "Could not load ElevenLabs voices.");
   const json = (await res.json()) as { voices?: ElevenLabsVoice[] };
   return Array.isArray(json.voices) ? json.voices : [];
+}
+
+type ElevenLabsSharedVoice = {
+  voice_id: string;
+  name: string;
+  category?: string;
+  preview_url?: string | null;
+  language?: string;
+  labels?: Record<string, string>;
+  public_owner_id?: string;
+};
+
+export async function listElevenLabsSharedVoices(maxPages = 2): Promise<ElevenLabsVoice[]> {
+  const out: ElevenLabsVoice[] = [];
+  for (let page = 0; page < Math.max(1, maxPages); page += 1) {
+    const query = new URLSearchParams({
+      page_size: "100",
+      page: String(page),
+      featured: "false",
+    });
+    const res = await fetch(`${ELEVENLABS_API_BASE}/shared-voices?${query.toString()}`, {
+      method: "GET",
+      headers: {
+        "xi-api-key": getElevenLabsApiKey(),
+      },
+      cache: "no-store",
+    });
+    if (!res.ok) await readElevenLabsError(res, "Could not load shared ElevenLabs voices.");
+    const json = (await res.json()) as {
+      voices?: ElevenLabsSharedVoice[];
+      has_more?: boolean;
+    };
+    const shared = Array.isArray(json.voices) ? json.voices : [];
+    out.push(
+      ...shared.map((voice) => ({
+        voice_id: voice.voice_id,
+        name: voice.name,
+        category: voice.category ?? "",
+        preview_url: voice.preview_url ?? "",
+        labels: voice.labels ?? {},
+        language: voice.language ?? "",
+        public_owner_id: voice.public_owner_id ?? "",
+        is_shared: true,
+      })),
+    );
+    if (!json.has_more) break;
+  }
+  return out;
 }
 
 export async function convertSpeechToSpeechWithElevenLabs(

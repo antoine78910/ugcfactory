@@ -1,7 +1,7 @@
 export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
-import { listElevenLabsVoices } from "@/lib/elevenlabs";
+import { listElevenLabsSharedVoices, listElevenLabsVoices } from "@/lib/elevenlabs";
 import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 
@@ -10,7 +10,16 @@ export async function GET() {
   if (response) return response;
 
   try {
-    const voices = await listElevenLabsVoices();
+    const [accountVoices, sharedVoices] = await Promise.all([
+      listElevenLabsVoices(),
+      listElevenLabsSharedVoices(2),
+    ]);
+    const byId = new Map<string, (typeof accountVoices)[number]>();
+    for (const voice of [...sharedVoices, ...accountVoices]) {
+      if (!voice.voice_id) continue;
+      byId.set(voice.voice_id, voice);
+    }
+    const voices = [...byId.values()];
     return NextResponse.json({
       voices: voices
         .map((voice) => ({
@@ -19,6 +28,9 @@ export async function GET() {
           category: voice.category ?? "",
           previewUrl: voice.preview_url ?? "",
           labels: voice.labels ?? {},
+          language: voice.language ?? "",
+          publicOwnerId: voice.public_owner_id ?? "",
+          isShared: Boolean(voice.is_shared),
         }))
         .sort((a, b) => a.name.localeCompare(b.name)),
     });

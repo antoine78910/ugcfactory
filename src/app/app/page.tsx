@@ -112,7 +112,6 @@ type Quiz = {
 
 type NanoModel = "nano" | "pro";
 type TranslateToolMode = "video_translate" | "voice_change";
-type VoiceChangeSourceMode = "upload" | "history";
 type VoiceChangeUploadKind = "audio" | "video";
 type ElevenVoiceOption = {
   voiceId: string;
@@ -120,6 +119,9 @@ type ElevenVoiceOption = {
   category: string;
   previewUrl: string;
   labels: Record<string, string>;
+  language?: string;
+  publicOwnerId?: string;
+  isShared?: boolean;
 };
 
 type ImageGenState =
@@ -509,7 +511,6 @@ export default function AppBrandWizard() {
   const [elevenVoices, setElevenVoices] = useState<ElevenVoiceOption[]>([]);
   const [elevenVoicesLoading, setElevenVoicesLoading] = useState(false);
   const [elevenVoiceId, setElevenVoiceId] = useState<string>("");
-  const [voiceChangeSourceMode, setVoiceChangeSourceMode] = useState<VoiceChangeSourceMode>("upload");
   const [voiceChangeUploadKind, setVoiceChangeUploadKind] = useState<VoiceChangeUploadKind>("audio");
   const [voiceChangeUploadFile, setVoiceChangeUploadFile] = useState<File | null>(null);
   const [voiceChangeUploadPreviewUrl, setVoiceChangeUploadPreviewUrl] = useState<string | null>(null);
@@ -616,7 +617,13 @@ export default function AppBrandWizard() {
   /** All unique language codes present in the loaded ElevenLabs voice library. */
   const elevenVoiceLanguages = useMemo(
     () =>
-      [...new Set(elevenVoices.map((v) => v.labels?.language).filter((l): l is string => Boolean(l)))].sort(),
+      [
+        ...new Set(
+          elevenVoices
+            .map((v) => (v.labels?.language || v.language || "").trim().toLowerCase())
+            .filter((l): l is string => Boolean(l)),
+        ),
+      ].sort(),
     [elevenVoices],
   );
 
@@ -624,7 +631,9 @@ export default function AppBrandWizard() {
   const filteredElevenVoices = useMemo(
     () =>
       voiceChangeLangFilter
-        ? elevenVoices.filter((v) => v.labels?.language === voiceChangeLangFilter)
+        ? elevenVoices.filter(
+            (v) => (v.labels?.language || v.language || "").trim().toLowerCase() === voiceChangeLangFilter,
+          )
         : elevenVoices,
     [elevenVoices, voiceChangeLangFilter],
   );
@@ -634,14 +643,14 @@ export default function AppBrandWizard() {
    * Derived from the current source mode / selection — no extra state needed.
    */
   const effectiveVoiceChangeSourceVideoUrl = useMemo((): string | null => {
-    if (voiceChangeSourceMode === "upload" && voiceChangeUploadKind === "video" && voiceChangeUploadPreviewUrl) {
+    if (voiceChangeUploadKind === "video" && voiceChangeUploadPreviewUrl) {
       return voiceChangeUploadPreviewUrl;
     }
-    if (voiceChangeSourceMode === "history" && voiceChangeHistoryUrl) {
+    if (voiceChangeHistoryUrl) {
       return proxiedMediaSrc(voiceChangeHistoryUrl);
     }
     return null;
-  }, [voiceChangeSourceMode, voiceChangeUploadKind, voiceChangeUploadPreviewUrl, voiceChangeHistoryUrl]);
+  }, [voiceChangeUploadKind, voiceChangeUploadPreviewUrl, voiceChangeHistoryUrl]);
 
   useEffect(() => {
     void (async () => {
@@ -720,8 +729,8 @@ export default function AppBrandWizard() {
         setElevenVoices(voices);
         setElevenVoiceId((prev) => prev || voices[0]?.voiceId || "");
       } catch (err) {
-        toast.error("Impossible de charger les voix.", {
-          description: userMessageFromCaughtError(err, "Reessaie dans un instant."),
+        toast.error("Could not load voices.", {
+          description: userMessageFromCaughtError(err, "Please try again in a moment."),
         });
       } finally {
         setElevenVoicesLoading(false);
@@ -1063,35 +1072,31 @@ export default function AppBrandWizard() {
   );
 
   const prepareVoiceChangeAudioFile = useCallback(async (): Promise<File> => {
-    if (voiceChangeSourceMode === "history") {
-      const selected = readyTranslateVideos.find((item) => item.mediaUrl === voiceChangeHistoryUrl);
-      if (!selected?.mediaUrl) {
-        throw new Error("Choisis d'abord une video de l'historique.");
+    if (voiceChangeUploadFile) {
+      if (voiceChangeUploadKind === "audio") {
+        if (voiceChangeUploadFile.size > 50 * 1024 * 1024) {
+          throw new Error("Audio file too large for ElevenLabs voice change (max 50 MB).");
+        }
+        return voiceChangeUploadFile;
       }
       return await extractAudioFromVideoSource(
-        proxiedMediaSrc(selected.mediaUrl),
-        `history-voice-source-${Date.now()}`,
+        voiceChangeUploadPreviewUrl || URL.createObjectURL(voiceChangeUploadFile),
+        `voice-source-${Date.now()}`,
       );
     }
 
-    if (!voiceChangeUploadFile) {
-      throw new Error("Upload an audio or video file first.");
-    }
-    if (voiceChangeUploadKind === "audio") {
-      if (voiceChangeUploadFile.size > 50 * 1024 * 1024) {
-        throw new Error("Audio file too large for ElevenLabs voice change (max 50 MB).");
-      }
-      return voiceChangeUploadFile;
+    const selected = readyTranslateVideos.find((item) => item.mediaUrl === voiceChangeHistoryUrl);
+    if (!selected?.mediaUrl) {
+      throw new Error("Add an audio/video file or choose a generated video.");
     }
     return await extractAudioFromVideoSource(
-      voiceChangeUploadPreviewUrl || URL.createObjectURL(voiceChangeUploadFile),
-      `voice-source-${Date.now()}`,
+      proxiedMediaSrc(selected.mediaUrl),
+      `history-voice-source-${Date.now()}`,
     );
   }, [
     extractAudioFromVideoSource,
     readyTranslateVideos,
     voiceChangeHistoryUrl,
-    voiceChangeSourceMode,
     voiceChangeUploadFile,
     voiceChangeUploadKind,
     voiceChangeUploadPreviewUrl,
@@ -1474,11 +1479,11 @@ export default function AppBrandWizard() {
       });
       setAppSectionNav("ad_clone");
       setTranslateToolMode("voice_change");
-      setVoiceChangeSourceMode("history");
+      clearVoiceChangeUpload();
       setVoiceChangeHistoryUrl(item.mediaUrl);
-      toast.message("Vidéo chargée", { description: "Sélectionne une voix et génère." });
+      toast.message("Video loaded", { description: "Select a voice and generate." });
     },
-    [setAppSectionNav],
+    [clearVoiceChangeUpload, setAppSectionNav],
   );
 
   const searchKey = searchParams.toString();
@@ -1846,8 +1851,8 @@ export default function AppBrandWizard() {
           }
           urls.push(json.url);
         } catch (err) {
-          toast.error("Erreur d’upload", {
-            description: userMessageFromCaughtError(err, "Réessaie avec JPEG, PNG ou WebP."),
+          toast.error("Upload error", {
+            description: userMessageFromCaughtError(err, "Try again with JPEG, PNG, or WebP."),
           });
         } finally {
           URL.revokeObjectURL(row.blob);
@@ -2676,123 +2681,83 @@ export default function AppBrandWizard() {
                                 e.currentTarget.value = "";
                               }}
                             />
-                            <div className="grid grid-cols-2 gap-2">
-                              <button
-                                type="button"
-                                onClick={() => setVoiceChangeSourceMode("upload")}
-                                className={cn(
-                                  "rounded-xl border px-3 py-2 text-xs font-semibold transition",
-                                  voiceChangeSourceMode === "upload"
-                                    ? "border-violet-400/40 bg-violet-500/15 text-white"
-                                    : "border-white/10 bg-black/20 text-white/60 hover:bg-white/[0.04]",
-                                )}
+                            <div className="space-y-2">
+                              <div
+                                role="button"
+                                tabIndex={0}
+                                onKeyDown={(ev) => {
+                                  if (ev.key === "Enter" || ev.key === " ") {
+                                    ev.preventDefault();
+                                    voiceChangeInputRef.current?.click();
+                                  }
+                                }}
+                                onClick={() => voiceChangeInputRef.current?.click()}
+                                className="relative flex aspect-[3/4] w-full cursor-pointer flex-col items-center justify-center gap-1.5 overflow-hidden rounded-xl border border-dashed border-white/20 bg-[#0c0c10] text-white/50 transition hover:border-violet-400/40 hover:bg-white/[0.03]"
                               >
-                                Upload file
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setVoiceChangeSourceMode("history")}
-                                className={cn(
-                                  "rounded-xl border px-3 py-2 text-xs font-semibold transition",
-                                  voiceChangeSourceMode === "history"
-                                    ? "border-violet-400/40 bg-violet-500/15 text-white"
-                                    : "border-white/10 bg-black/20 text-white/60 hover:bg-white/[0.04]",
-                                )}
-                              >
-                                Generated video
-                              </button>
-                            </div>
-
-                            {voiceChangeSourceMode === "upload" ? (
-                              <div className="space-y-2">
-                                <div
-                                  role="button"
-                                  tabIndex={0}
-                                  onKeyDown={(ev) => {
-                                    if (ev.key === "Enter" || ev.key === " ") {
-                                      ev.preventDefault();
-                                      voiceChangeInputRef.current?.click();
-                                    }
-                                  }}
-                                  onClick={() => voiceChangeInputRef.current?.click()}
-                                  className="relative flex aspect-[16/9] w-full cursor-pointer flex-col items-center justify-center gap-2 overflow-hidden rounded-xl border border-dashed border-white/20 bg-[#0c0c10] p-3 text-white/50 transition hover:border-violet-400/40 hover:bg-white/[0.03]"
-                                >
-                                  {voiceChangeUploadPreviewUrl ? (
-                                    voiceChangeUploadKind === "video" ? (
-                                      // eslint-disable-next-line jsx-a11y/media-has-caption
-                                      <video
-                                        src={voiceChangeUploadPreviewUrl}
-                                        controls
-                                        playsInline
-                                        className="absolute inset-0 h-full w-full object-cover"
-                                      />
-                                    ) : (
-                                      <div className="flex w-full max-w-md flex-col items-center gap-3">
-                                        <p className="text-xs font-medium text-white">
-                                          {voiceChangeUploadFile?.name || "Selected audio file"}
-                                        </p>
-                                        <audio controls preload="metadata" className="w-full">
-                                          <source src={voiceChangeUploadPreviewUrl} />
-                                        </audio>
-                                      </div>
-                                    )
-                                  ) : (
-                                    <>
-                                      <Play className="h-8 w-8 opacity-50" />
-                                      <span className="text-xs font-medium text-white/45">
-                                        Add audio or video
-                                      </span>
-                                      <span className="text-[10px] text-white/30">
-                                        Direct audio, or video converted to audio before processing
-                                      </span>
-                                    </>
-                                  )}
-                                </div>
                                 {voiceChangeUploadPreviewUrl ? (
-                                  <div className="flex items-center justify-between gap-2">
-                                    <p className="truncate text-[11px] text-white/45">
-                                      {voiceChangeUploadFile?.name}
-                                    </p>
-                                    <button
-                                      type="button"
-                                      onClick={clearVoiceChangeUpload}
-                                      className="rounded-md border border-white/10 bg-black/20 px-2 py-1 text-[10px] text-white/65 transition hover:bg-white/[0.04]"
-                                    >
-                                      Remove
-                                    </button>
-                                  </div>
+                                  voiceChangeUploadKind === "video" ? (
+                                    // eslint-disable-next-line jsx-a11y/media-has-caption
+                                    <video
+                                      src={voiceChangeUploadPreviewUrl}
+                                      controls
+                                      playsInline
+                                      className="absolute inset-0 h-full w-full object-cover"
+                                    />
+                                  ) : (
+                                    <div className="flex w-full max-w-md flex-col items-center gap-3 p-3">
+                                      <p className="text-xs font-medium text-white">
+                                        {voiceChangeUploadFile?.name || "Selected audio file"}
+                                      </p>
+                                      <audio controls preload="metadata" className="w-full">
+                                        <source src={voiceChangeUploadPreviewUrl} />
+                                      </audio>
+                                    </div>
+                                  )
+                                ) : (
+                                  <>
+                                    <Play className="h-6 w-6 opacity-55" />
+                                    <span className="text-[11px] font-semibold text-white/80">Add source media</span>
+                                    <span className="text-[10px] text-white/40">Audio or video</span>
+                                  </>
+                                )}
+                              </div>
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="truncate text-[11px] text-white/45">
+                                  {voiceChangeUploadFile?.name || "No uploaded source"}
+                                </p>
+                                {voiceChangeUploadPreviewUrl ? (
+                                  <button
+                                    type="button"
+                                    onClick={clearVoiceChangeUpload}
+                                    className="rounded-md border border-white/10 bg-black/20 px-2 py-1 text-[10px] text-white/65 transition hover:bg-white/[0.04]"
+                                  >
+                                    Remove
+                                  </button>
                                 ) : null}
                               </div>
-                            ) : (
-                              <div className="space-y-2 rounded-xl border border-white/10 bg-black/20 p-2.5">
-                                <Label className="text-xs text-white/45">Generated video source</Label>
-                                <Select value={voiceChangeHistoryUrl} onValueChange={setVoiceChangeHistoryUrl}>
-                                  <SelectTrigger className="mt-1 h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
-                                    <SelectValue
-                                      placeholder={
-                                        readyTranslateVideos.length
-                                          ? "Choose a translated or generated video"
-                                          : "No ready video in this history"
-                                      }
-                                    />
-                                  </SelectTrigger>
-                                  <SelectContent position="popper" className={studioSelectContentClass}>
-                                    {readyTranslateVideos.map((item) => (
-                                      <SelectItem
-                                        key={item.id}
-                                        value={item.mediaUrl!}
-                                        className={studioSelectItemClass}
-                                      >
-                                        {item.label}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                                <p className="text-[10px] leading-snug text-white/35">
-                                  Use a previously generated video from this history as the audio source.
-                                </p>
-                              </div>
-                            )}
+                            </div>
+
+                            <div className="space-y-2 rounded-xl border border-white/10 bg-black/20 p-2.5">
+                              <Label className="text-xs text-white/45">Or pick from history</Label>
+                              <Select value={voiceChangeHistoryUrl} onValueChange={setVoiceChangeHistoryUrl}>
+                                <SelectTrigger className="mt-1 h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
+                                  <SelectValue
+                                    placeholder={
+                                      readyTranslateVideos.length
+                                        ? "Choose a translated/generated video"
+                                        : "No ready video in this history"
+                                    }
+                                  />
+                                </SelectTrigger>
+                                <SelectContent position="popper" className={studioSelectContentClass}>
+                                  {readyTranslateVideos.map((item) => (
+                                    <SelectItem key={item.id} value={item.mediaUrl!} className={studioSelectItemClass}>
+                                      {item.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
                           </div>
                         ) : (
                         <div className={cn("grid gap-2", appSection === "ad_clone" ? "grid-cols-1" : "grid-cols-2")}>
@@ -2819,7 +2784,7 @@ export default function AppBrandWizard() {
                               try {
                                 assertStudioVideoUpload(f);
                               } catch (err) {
-                                toast.error("Vidéo incompatible", {
+                                toast.error("Unsupported video", {
                                   description: userMessageFromCaughtError(err, "Unsupported file."),
                                 });
                                 e.currentTarget.value = "";
@@ -2939,12 +2904,12 @@ export default function AppBrandWizard() {
                                   />
                                   <UploadBusyOverlay
                                     active={motionVideoPreviewLoading && !motionVideoPlaying}
-                                    label="Chargement…"
+                                    label="Loading..."
                                     className="rounded-xl"
                                   />
                                   {motionVideoUploadPending ? (
                                     <span className="absolute left-2 top-2 z-[2] rounded-md bg-black/70 px-2 py-1 text-[10px] font-medium text-white/85">
-                                      Upload en cours…
+                                      Uploading...
                                     </span>
                                   ) : null}
                                   {motionVideoDetectedDuration && motionVideoPlaying ? (
@@ -3046,22 +3011,10 @@ export default function AppBrandWizard() {
                         {appSection === "ad_clone" ? (
                           translateToolMode === "voice_change" ? (
                             <div className="space-y-3">
-                              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                                <div className="flex items-center gap-2">
-                                  <div className="h-8 w-8 rounded-lg border border-white/10 bg-white/5" />
-                                  <div>
-                                    <p className="text-sm font-semibold text-white">Voice change</p>
-                                    <p className="text-[11px] text-white/40">
-                                      Replace the voice from a translation or already generated video
-                                    </p>
-                                  </div>
-                                </div>
-                              </div>
-
                               <div className="rounded-xl border border-white/10 bg-black/20 p-2.5 space-y-2">
                                 <Label className="text-xs text-white/45">Voice</Label>
                                 <p className="text-[10px] leading-snug text-white/35">
-                                  Bibliothèque ElevenLabs — filtre par langue puis écoute le sample.
+                                  ElevenLabs voice library — filter by language and listen to the sample.
                                 </p>
 
                                 {/* Language filter */}
@@ -3087,18 +3040,31 @@ export default function AppBrandWizard() {
                                 {/* Voice picker */}
                                 <Select value={elevenVoiceId} onValueChange={setElevenVoiceId}>
                                   <SelectTrigger className="h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
-                                    <SelectValue placeholder={elevenVoicesLoading ? "Chargement…" : filteredElevenVoices.length === 0 ? "Aucune voix pour cette langue" : "Choisir une voix"} />
+                                    <SelectValue
+                                      placeholder={
+                                        elevenVoicesLoading
+                                          ? "Loading voices..."
+                                          : filteredElevenVoices.length === 0
+                                            ? "No voice for this language"
+                                            : "Choose a voice"
+                                      }
+                                    />
                                   </SelectTrigger>
                                   <SelectContent position="popper" className={studioSelectContentClass}>
                                     {filteredElevenVoices.map((voice) => (
                                       <SelectItem key={voice.voiceId} value={voice.voiceId} className={studioSelectItemClass}>
                                         <span className="flex items-center gap-2">
                                           <span>{voice.name}</span>
-                                          {voice.labels?.language ? (
-                                            <span className="text-[10px] text-white/35">{voice.labels.language.toUpperCase()}</span>
+                                          {(voice.labels?.language || voice.language) ? (
+                                            <span className="text-[10px] text-white/35">
+                                              {(voice.labels?.language || voice.language || "").toUpperCase()}
+                                            </span>
                                           ) : null}
                                           {voice.labels?.gender ? (
                                             <span className="text-[10px] text-white/25">{voice.labels.gender}</span>
+                                          ) : null}
+                                          {voice.isShared ? (
+                                            <span className="text-[10px] text-violet-200/70">Shared</span>
                                           ) : null}
                                         </span>
                                       </SelectItem>
@@ -3120,7 +3086,7 @@ export default function AppBrandWizard() {
                                 {isMergingVideo ? (
                                   <div className="rounded-lg border border-violet-500/25 bg-violet-950/30 px-3 py-2">
                                     <p className="text-[11px] text-violet-200/80">
-                                      Fusion en cours… {mergeVideoProgress > 0 ? `${Math.round(mergeVideoProgress * 100)}%` : "chargement ffmpeg"}
+                                      Merging... {mergeVideoProgress > 0 ? `${Math.round(mergeVideoProgress * 100)}%` : "loading ffmpeg"}
                                     </p>
                                     <div className="mt-1.5 h-1 w-full rounded-full bg-white/10">
                                       <div
@@ -3239,14 +3205,6 @@ export default function AppBrandWizard() {
                             </div>
                           ) : (
                             <div className="space-y-3">
-                              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                                <div className="flex items-center gap-2">
-                                  <div className="h-8 w-8 rounded-lg border border-white/10 bg-white/5" />
-                                  <div>
-                                    <p className="text-sm font-semibold text-white">Video translation</p>
-                                  </div>
-                                </div>
-                              </div>
                               <div className="rounded-xl border border-white/10 bg-black/20 p-2.5">
                                 <Label className="text-xs text-white/45">Target language</Label>
                                 <p className="mt-0.5 text-[10px] leading-snug text-white/35">
@@ -3285,9 +3243,9 @@ export default function AppBrandWizard() {
                             ) : null}
 
                             <div>
-                              <Label className="text-xs text-white/45">Mode de controle de la scene</Label>
+                              <Label className="text-xs text-white/45">Scene control mode</Label>
                               <p className="mt-0.5 text-[10px] leading-snug text-white/35">
-                                Choisis la source de fond: la video de reference de mouvement ou l&apos;image du personnage.
+                                Choose the background source: reference motion video or character image.
                               </p>
                               <Select
                                 value={motionSceneBackground}
@@ -3308,9 +3266,9 @@ export default function AppBrandWizard() {
                             </div>
 
                             <div>
-                              <Label className="text-xs text-white/45">Qualite</Label>
+                              <Label className="text-xs text-white/45">Quality</Label>
                               <p className="mt-0.5 text-[10px] leading-snug text-white/35">
-                                720p et 1080p utilisent des couts credits differents (affiches sur Generate).
+                                720p and 1080p use different credit costs (shown on Generate).
                               </p>
                               <Select value={motionQuality} onValueChange={setMotionQuality}>
                                 <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
@@ -3328,16 +3286,16 @@ export default function AppBrandWizard() {
                             </div>
 
                             <details className="rounded-xl border border-white/10 bg-black/20 p-2.5">
-                              <summary className="cursor-pointer text-xs font-semibold text-white/70">Avance</summary>
+                              <summary className="cursor-pointer text-xs font-semibold text-white/70">Advanced</summary>
                               <div className="mt-2 space-y-2">
-                                <Label className="text-xs text-white/45">Prompt optionnel</Label>
+                                <Label className="text-xs text-white/45">Optional prompt</Label>
                                 <p className="text-[10px] leading-snug text-white/35">
-                                  Texte optionnel envoye a Kling Motion Control (`prompt`, max 2500 caracteres).
+                                  Optional text sent to Kling Motion Control (`prompt`, max 2500 characters).
                                 </p>
                                 <Textarea
                                   value={motionPrompt}
                                   onChange={(e) => setMotionPrompt(e.target.value)}
-                                  placeholder="Exemple: Le personnage danse avec un mouvement subtil du haut du corps."
+                                  placeholder="Example: The character dances with subtle upper-body motion."
                                   className="min-h-[84px] w-full resize-none rounded-xl border-white/15 bg-[#0a0a0d] text-xs text-white placeholder:text-white/35"
                                   rows={4}
                                 />
@@ -3356,8 +3314,7 @@ export default function AppBrandWizard() {
                           (appSection === "ad_clone" && translateToolMode === "video_translate" && !motionVideoRefBlobUrl) ||
                           (appSection === "ad_clone" &&
                             translateToolMode === "voice_change" &&
-                            ((voiceChangeSourceMode === "upload" && !voiceChangeUploadFile) ||
-                              (voiceChangeSourceMode === "history" && !voiceChangeHistoryUrl) ||
+                            ((!voiceChangeUploadFile && !voiceChangeHistoryUrl) ||
                               !elevenVoiceId.trim())) ||
                           (appSection !== "ad_clone" && !motionVideoRefBlobUrl) ||
                           (appSection !== "ad_clone" &&
@@ -3381,7 +3338,7 @@ export default function AppBrandWizard() {
                             return;
                           }
                           if (motionServerHistory !== true) {
-                            toast.error("Sync backend indisponible. Recharge la page puis reessaie.");
+                            toast.error("Backend sync unavailable. Refresh the page and try again.");
                             return;
                           }
                           if (isVoiceChange) {
@@ -3389,12 +3346,8 @@ export default function AppBrandWizard() {
                               toast.error("Choose a voice first.");
                               return;
                             }
-                            if (voiceChangeSourceMode === "upload" && !voiceChangeUploadFile) {
-                              toast.error("Add audio or video first.");
-                              return;
-                            }
-                            if (voiceChangeSourceMode === "history" && !voiceChangeHistoryUrl) {
-                              toast.error("Choose a generated video first.");
+                            if (!voiceChangeUploadFile && !voiceChangeHistoryUrl) {
+                              toast.error("Add audio/video or choose a generated video.");
                               return;
                             }
                           }
@@ -3521,8 +3474,8 @@ export default function AppBrandWizard() {
                                 if (srcVideoUrl && audioResultUrl) {
                                   setIsMergingVideo(true);
                                   setMergeVideoProgress(0);
-                                  toast.message("Fusion audio/vidéo en cours…", {
-                                    description: "ffmpeg.wasm — première fois: ~35 MB à télécharger.",
+                                  toast.message("Merging audio/video...", {
+                                    description: "ffmpeg.wasm — first time download: ~35 MB.",
                                   });
                                   void (async () => {
                                     try {
@@ -3537,21 +3490,21 @@ export default function AppBrandWizard() {
                                           id: mergedId,
                                           kind: "video",
                                           status: "ready",
-                                          label: `Vidéo fusionnée — voix ${selectedElevenVoice?.name ?? "custom"}`,
+                                          label: `Merged video — voice ${selectedElevenVoice?.name ?? "custom"}`,
                                           mediaUrl: mergedUrl,
                                           createdAt: Date.now(),
                                         },
                                         ...prev,
                                       ]);
-                                      toast.success("Vidéo prête !", {
-                                        description: "La nouvelle voix a été fusionnée avec la vidéo source.",
+                                      toast.success("Video ready!", {
+                                        description: "The new voice has been merged with the source video.",
                                       });
                                     } catch (mergeErr) {
-                                      toast.error("Fusion impossible", {
+                                      toast.error("Merge failed", {
                                         description:
                                           mergeErr instanceof Error
                                             ? mergeErr.message
-                                            : "L'audio MP3 est disponible dans l'historique.",
+                                            : "The MP3 audio is available in history.",
                                       });
                                     } finally {
                                       setIsMergingVideo(false);
