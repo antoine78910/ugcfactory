@@ -10,7 +10,6 @@ type Body = {
   taskId?: string;
   taskIds?: string[];
   provider?: string;
-  model?: string;
   creditsCharged?: number;
   personalApiKey?: string;
   piapiApiKey?: string;
@@ -30,7 +29,6 @@ export async function POST(req: Request) {
   const kind = String(body.kind ?? "").trim();
   const label = String(body.label ?? "").trim() || "Studio";
   const provider = String(body.provider ?? "kie-market").trim() || "kie-market";
-  const model = String(body.model ?? "").trim();
   const creditsCharged = Math.max(0, Math.floor(Number(body.creditsCharged) || 0));
   const hasKiePersonal = Boolean(String(body.personalApiKey ?? "").trim());
   const hasPiapiPersonal = Boolean(String(body.piapiApiKey ?? "").trim());
@@ -57,7 +55,6 @@ export async function POST(req: Request) {
     label,
     external_task_id: externalTaskId,
     provider,
-    model,
     credits_charged: baseCharge + (i === 0 ? remainder : 0),
     uses_personal_api: usesPersonalApi,
   }));
