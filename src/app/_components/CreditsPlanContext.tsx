@@ -42,6 +42,8 @@ const LS_PERSONAL_API_KEY = "ugc_personal_api_key";
 const LS_PERSONAL_API_ENABLED = "ugc_personal_api_enabled";
 const LS_PIAPI_PERSONAL_KEY = "ugc_piapi_personal_api_key";
 const LS_PIAPI_PERSONAL_ENABLED = "ugc_piapi_personal_api_enabled";
+const LS_ELEVENLABS_PERSONAL_KEY = "ugc_elevenlabs_personal_api_key";
+const LS_ELEVENLABS_PERSONAL_ENABLED = "ugc_elevenlabs_personal_api_enabled";
 
 function lsGet(key: string): string | null {
   try {
@@ -82,6 +84,10 @@ function autoEnableFounderApiKeys() {
   if (piapiKey && piapiKey.length > 0) {
     lsSet(LS_PIAPI_PERSONAL_ENABLED, "1");
   }
+  const elevenKey = lsGet(LS_ELEVENLABS_PERSONAL_KEY)?.trim();
+  if (elevenKey && elevenKey.length > 0) {
+    lsSet(LS_ELEVENLABS_PERSONAL_ENABLED, "1");
+  }
 }
 
 /** Wipe plan/credits data (but not API keys). */
@@ -116,6 +122,18 @@ export function getPersonalPiapiApiKey(): string | undefined {
 
 export function isPersonalPiapiActive(): boolean {
   return getPersonalPiapiApiKey() !== undefined;
+}
+
+/** Returns the user's ElevenLabs API key when ElevenLabs personal mode is active, or undefined. */
+export function getPersonalElevenLabsApiKey(): string | undefined {
+  if (typeof window === "undefined") return undefined;
+  if (lsGet(LS_ELEVENLABS_PERSONAL_ENABLED) !== "1") return undefined;
+  const k = lsGet(LS_ELEVENLABS_PERSONAL_KEY)?.trim();
+  return k && k.length > 0 ? k : undefined;
+}
+
+export function isPersonalElevenLabsActive(): boolean {
+  return getPersonalElevenLabsApiKey() !== undefined;
 }
 
 /**

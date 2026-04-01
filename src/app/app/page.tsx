@@ -32,6 +32,7 @@ import {
   getPersonalApiKey,
   isPersonalApiActive,
   isPlatformCreditBypassActive,
+  getPersonalElevenLabsApiKey,
 } from "@/app/_components/CreditsPlanContext";
 import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
 import { registerStudioGenerationClient } from "@/lib/registerStudioGenerationClient";
@@ -3631,6 +3632,7 @@ export default function AppBrandWizard() {
                                     optimizeStreamingLatency: voiceChangeOptimizeLatency.trim() || undefined,
                                     seed: voiceChangeSeed.trim() || undefined,
                                     voiceSettingsJson: voiceChangeVoiceSettingsJson.trim() || undefined,
+                                    personalElevenLabsApiKey: getPersonalElevenLabsApiKey() || undefined,
                                   }),
                                 });
 

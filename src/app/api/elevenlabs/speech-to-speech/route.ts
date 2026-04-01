@@ -39,6 +39,7 @@ type RequestBody = {
   removeBackgroundNoise?: boolean;
   enableLogging?: boolean;
   optimizeStreamingLatency?: string;
+  personalElevenLabsApiKey?: string;
 };
 
 export async function POST(req: Request) {
@@ -71,6 +72,8 @@ export async function POST(req: Request) {
     ["0", "1", "2", "3", "4"].includes(optimizeLatencyRaw)
       ? (Number(optimizeLatencyRaw) as 0 | 1 | 2 | 3 | 4)
       : undefined;
+
+  const personalElevenLabsApiKey = (body.personalElevenLabsApiKey ?? "").trim() || undefined;
 
   if (!storagePath) {
     return NextResponse.json({ error: "Missing storagePath." }, { status: 400 });
@@ -153,6 +156,7 @@ export async function POST(req: Request) {
       outputFormat,
       optimizeStreamingLatency,
       enableLogging,
+      apiKeyOverride: personalElevenLabsApiKey,
     });
 
     let finalBuffer: Buffer;

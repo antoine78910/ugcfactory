@@ -22,6 +22,8 @@ export type ElevenLabsSpeechToSpeechInput = {
   outputFormat?: string;
   optimizeStreamingLatency?: 0 | 1 | 2 | 3 | 4;
   enableLogging?: boolean;
+  /** When provided, use this key instead of the platform ELEVENLABS_API_KEY. */
+  apiKeyOverride?: string;
 };
 
 function getElevenLabsApiKey(): string {
@@ -217,12 +219,14 @@ export async function convertSpeechToSpeechWithElevenLabs(
   }
   if (input.fileFormat) form.set("file_format", input.fileFormat);
 
+  const apiKey = input.apiKeyOverride?.trim() || getElevenLabsApiKey();
+
   const res = await fetch(
     `${ELEVENLABS_API_BASE}/speech-to-speech/${encodeURIComponent(voiceId)}${query.size ? `?${query}` : ""}`,
     {
       method: "POST",
       headers: {
-        "xi-api-key": getElevenLabsApiKey(),
+        "xi-api-key": apiKey,
       },
       body: form,
       cache: "no-store",

@@ -12,20 +12,27 @@ const PERSONAL_API_KEY_LS = "ugc_personal_api_key";
 const PERSONAL_API_ENABLED_LS = "ugc_personal_api_enabled";
 const PIAPI_PERSONAL_API_KEY_LS = "ugc_piapi_personal_api_key";
 const PIAPI_PERSONAL_API_ENABLED_LS = "ugc_piapi_personal_api_enabled";
+const ELEVENLABS_PERSONAL_API_KEY_LS = "ugc_elevenlabs_personal_api_key";
+const ELEVENLABS_PERSONAL_API_ENABLED_LS = "ugc_elevenlabs_personal_api_enabled";
 
 export default function ApiTestPage() {
   const [personalApiEnabled, setPersonalApiEnabled] = useState(false);
   const [personalApiKey, setPersonalApiKey] = useState("");
   const [piapiEnabled, setPiapiEnabled] = useState(false);
   const [piapiKey, setPiapiKey] = useState("");
+  const [elevenEnabled, setElevenEnabled] = useState(false);
+  const [elevenKey, setElevenKey] = useState("");
   const [showKey, setShowKey] = useState(false);
   const [showPiapiKey, setShowPiapiKey] = useState(false);
+  const [showElevenKey, setShowElevenKey] = useState(false);
 
   useEffect(() => {
     setPersonalApiEnabled(localStorage.getItem(PERSONAL_API_ENABLED_LS) === "1");
     setPersonalApiKey(localStorage.getItem(PERSONAL_API_KEY_LS) ?? "");
     setPiapiEnabled(localStorage.getItem(PIAPI_PERSONAL_API_ENABLED_LS) === "1");
     setPiapiKey(localStorage.getItem(PIAPI_PERSONAL_API_KEY_LS) ?? "");
+    setElevenEnabled(localStorage.getItem(ELEVENLABS_PERSONAL_API_ENABLED_LS) === "1");
+    setElevenKey(localStorage.getItem(ELEVENLABS_PERSONAL_API_KEY_LS) ?? "");
   }, []);
 
   function togglePersonalApi() {
@@ -58,6 +65,22 @@ export default function ApiTestPage() {
     setPiapiKey(v);
     if (v.trim()) localStorage.setItem(PIAPI_PERSONAL_API_KEY_LS, v.trim());
     else localStorage.removeItem(PIAPI_PERSONAL_API_KEY_LS);
+  }
+
+  function toggleEleven() {
+    const next = !elevenEnabled;
+    setElevenEnabled(next);
+    localStorage.setItem(ELEVENLABS_PERSONAL_API_ENABLED_LS, next ? "1" : "0");
+    if (!next) {
+      setElevenKey("");
+      localStorage.removeItem(ELEVENLABS_PERSONAL_API_KEY_LS);
+    }
+  }
+
+  function saveElevenKey(v: string) {
+    setElevenKey(v);
+    if (v.trim()) localStorage.setItem(ELEVENLABS_PERSONAL_API_KEY_LS, v.trim());
+    else localStorage.removeItem(ELEVENLABS_PERSONAL_API_KEY_LS);
   }
 
   return (
@@ -216,6 +239,68 @@ export default function ApiTestPage() {
                     <p className="text-[11px] text-emerald-400/80">Saved locally.</p>
                   ) : (
                     <p className="text-[11px] text-violet-300/60">Enter a key to enable platform credit bypass.</p>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/[0.06] to-transparent p-6 md:p-8">
+            <div className="flex flex-col gap-5">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-300">
+                    <Key className="h-4.5 w-4.5" aria-hidden />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-bold text-white">ElevenLabs (Voice Change)</h2>
+                    <p className="mt-1 text-xs leading-relaxed text-white/45">
+                      ElevenLabs API key for speech-to-speech voice change: usage is billed to your ElevenLabs account.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={elevenEnabled}
+                  onClick={toggleEleven}
+                  className={cn(
+                    "relative mt-0.5 inline-flex h-6 w-11 shrink-0 items-center rounded-full border-2 border-transparent transition-colors",
+                    elevenEnabled ? "bg-emerald-500" : "bg-white/15",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform",
+                      elevenEnabled ? "translate-x-[22px]" : "translate-x-[2px]",
+                    )}
+                  />
+                </button>
+              </div>
+
+              {elevenEnabled ? (
+                <div className="flex flex-col gap-2">
+                  <label className="text-[11px] font-semibold uppercase tracking-wide text-white/40">ElevenLabs API key</label>
+                  <div className="relative">
+                    <Input
+                      type={showElevenKey ? "text" : "password"}
+                      placeholder="Paste ElevenLabs key…"
+                      value={elevenKey}
+                      onChange={(e) => saveElevenKey(e.target.value)}
+                      className="h-10 border-emerald-500/20 bg-black/40 pr-10 font-mono text-sm text-white placeholder:text-white/25 focus-visible:ring-emerald-500/40"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowElevenKey(!showElevenKey)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/40 transition hover:text-white/70"
+                    >
+                      {showElevenKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                  {elevenKey.trim() ? (
+                    <p className="text-[11px] text-emerald-400/80">Saved locally.</p>
+                  ) : (
+                    <p className="text-[11px] text-emerald-300/60">Enter a key to use your own ElevenLabs account for voice change.</p>
                   )}
                 </div>
               ) : null}
