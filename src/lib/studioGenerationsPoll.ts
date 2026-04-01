@@ -32,6 +32,30 @@ function isStudioGenerationInProgressStatus(s: string): boolean {
 }
 
 /**
+ * WaveSpeed can briefly return 404 / "task not found" right after submission
+ * even though the job is still queued/processing in their backend dashboard.
+ * Treat that as transient during a grace window instead of failing immediately.
+ */
+const WAVESPEED_LOOKUP_MISS_GRACE_MS = 10 * 60 * 1000;
+
+function isTransientWaveSpeedLookupMiss(err: unknown, row: StudioGenerationRow): boolean {
+  const message = err instanceof Error ? err.message : String(err ?? "");
+  const lower = message.toLowerCase();
+  const looksLikeLookupMiss =
+    /\b404\b/.test(lower) ||
+    lower.includes("not found") ||
+    lower.includes("does not exist") ||
+    lower.includes("task not found") ||
+    lower.includes("prediction not found") ||
+    lower.includes("expired");
+  if (!looksLikeLookupMiss) return false;
+
+  const createdAtMs = Number.isFinite(Date.parse(row.created_at)) ? Date.parse(row.created_at) : 0;
+  if (!(createdAtMs > 0)) return true;
+  return Date.now() - createdAtMs < WAVESPEED_LOOKUP_MISS_GRACE_MS;
+}
+
+/**
  * Poll Kie for one processing row and persist success/failure. Does not set credits_refund_hint_sent;
  * use sweepStudioRefundHints after so the client can grant credits once.
  */
@@ -119,10 +143,14 @@ export async function pollStudioGenerationRow(
       else if (predStatus === "failed") out = { kind: "fail", message: pred.error ?? "Translation failed" };
       else out = { kind: "processing" };
     } catch (err) {
-      out = {
-        kind: "fail",
-        message: err instanceof Error ? err.message : "WaveSpeed prediction lookup failed",
-      };
+      if (isTransientWaveSpeedLookupMiss(err, row)) {
+        out = { kind: "processing" };
+      } else {
+        out = {
+          kind: "fail",
+          message: err instanceof Error ? err.message : "WaveSpeed prediction lookup failed",
+        };
+      }
     }
   } else if (providerLc === "piapi" || isPiapiTaskId(row.external_task_id)) {
     /** Prefer user PiAPI key when present; otherwise platform key (piapiGetSeedanceTask fallback). */
