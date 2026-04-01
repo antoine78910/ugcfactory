@@ -23,6 +23,7 @@ export function isStudioVideoTabKindQuery(requestedKinds: string[]): boolean {
 }
 
 const LEGACY_LTA_LABEL_PREFIX = "link to ad";
+const LEGACY_TRANSLATE_LABEL_PREFIX = "traduction";
 
 /**
  * Rows created before dedicated L2A kinds still use `studio_image` / `studio_video` with a "Link to Ad …" label.
@@ -34,12 +35,22 @@ export function filterLegacyLinkToAdFromTabRows(
 ): StudioGenerationRow[] {
   const imageTab = isStudioImageTabKindQuery(requestedKinds);
   const videoTab = isStudioVideoTabKindQuery(requestedKinds);
-  if (!imageTab && !videoTab) return rows;
+  const motionControlTab = requestedKinds.length === 1 && requestedKinds[0] === "motion_control";
+  if (!imageTab && !videoTab && !motionControlTab) return rows;
   return rows.filter((r) => {
     const lab = (r.label ?? "").trim().toLowerCase();
-    if (!lab.startsWith(LEGACY_LTA_LABEL_PREFIX)) return true;
-    if (imageTab && r.kind === "studio_image") return false;
-    if (videoTab && r.kind === "studio_video") return false;
+    if (imageTab || videoTab) {
+      if (lab.startsWith(LEGACY_LTA_LABEL_PREFIX)) {
+        if (imageTab && r.kind === "studio_image") return false;
+        if (videoTab && r.kind === "studio_video") return false;
+      }
+    }
+    if (motionControlTab && r.kind === "motion_control") {
+      // Before `studio_translate_video`, Translate jobs were stored as `motion_control`.
+      // Hide those legacy rows in the Motion Control tab.
+      const provider = String(r.provider ?? "").toLowerCase();
+      if (provider === "wavespeed" || lab.startsWith(LEGACY_TRANSLATE_LABEL_PREFIX)) return false;
+    }
     return true;
   });
 }

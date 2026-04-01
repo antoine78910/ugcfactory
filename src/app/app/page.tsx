@@ -2573,7 +2573,7 @@ export default function AppBrandWizard() {
                     <div className="flex min-w-0 w-full flex-col lg:basis-1/4 lg:max-w-[24rem] lg:flex-none lg:shrink-0 lg:min-h-0 lg:overflow-hidden">
                       <div className="studio-params-scroll flex min-w-0 flex-col gap-2 lg:h-full lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pb-10">
                       <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
-                        {appSection === "ad_clone" ? "Traduction" : "Motion control"}
+                        {appSection === "ad_clone" ? "Translate" : "Motion control"}
                       </p>
                       <div className="rounded-2xl border border-white/10 bg-[#101014] p-3 space-y-3">
                         {appSection === "ad_clone" ? (
@@ -2588,7 +2588,7 @@ export default function AppBrandWizard() {
                                   : "border-white/10 bg-black/20 text-white/60 hover:bg-white/[0.04]",
                               )}
                             >
-                              Traduction video
+                              Video translation
                             </button>
                             <button
                               type="button"
@@ -2600,7 +2600,7 @@ export default function AppBrandWizard() {
                                   : "border-white/10 bg-black/20 text-white/60 hover:bg-white/[0.04]",
                               )}
                             >
-                              Changement de voix
+                              Voice change
                             </button>
                           </div>
                         ) : null}
@@ -2629,7 +2629,7 @@ export default function AppBrandWizard() {
                                     : "border-white/10 bg-black/20 text-white/60 hover:bg-white/[0.04]",
                                 )}
                               >
-                                Importer un fichier
+                                Upload file
                               </button>
                               <button
                                 type="button"
@@ -2641,7 +2641,7 @@ export default function AppBrandWizard() {
                                     : "border-white/10 bg-black/20 text-white/60 hover:bg-white/[0.04]",
                                 )}
                               >
-                                Video generee
+                                Generated video
                               </button>
                             </div>
 
@@ -2671,7 +2671,7 @@ export default function AppBrandWizard() {
                                     ) : (
                                       <div className="flex w-full max-w-md flex-col items-center gap-3">
                                         <p className="text-xs font-medium text-white">
-                                          {voiceChangeUploadFile?.name || "Fichier audio selectionne"}
+                                          {voiceChangeUploadFile?.name || "Selected audio file"}
                                         </p>
                                         <audio controls preload="metadata" className="w-full">
                                           <source src={voiceChangeUploadPreviewUrl} />
@@ -2682,10 +2682,10 @@ export default function AppBrandWizard() {
                                     <>
                                       <Play className="h-8 w-8 opacity-50" />
                                       <span className="text-xs font-medium text-white/45">
-                                        Ajoute un audio ou une video
+                                        Add audio or video
                                       </span>
                                       <span className="text-[10px] text-white/30">
-                                        Audio direct, ou video convertie en audio avant traitement
+                                        Direct audio, or video converted to audio before processing
                                       </span>
                                     </>
                                   )}
@@ -2700,21 +2700,21 @@ export default function AppBrandWizard() {
                                       onClick={clearVoiceChangeUpload}
                                       className="rounded-md border border-white/10 bg-black/20 px-2 py-1 text-[10px] text-white/65 transition hover:bg-white/[0.04]"
                                     >
-                                      Retirer
+                                      Remove
                                     </button>
                                   </div>
                                 ) : null}
                               </div>
                             ) : (
                               <div className="space-y-2 rounded-xl border border-white/10 bg-black/20 p-2.5">
-                                <Label className="text-xs text-white/45">Source video generee</Label>
+                                <Label className="text-xs text-white/45">Generated video source</Label>
                                 <Select value={voiceChangeHistoryUrl} onValueChange={setVoiceChangeHistoryUrl}>
                                   <SelectTrigger className="mt-1 h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
                                     <SelectValue
                                       placeholder={
                                         readyTranslateVideos.length
-                                          ? "Choisis une video traduite ou generee"
-                                          : "Aucune video prete dans cet historique"
+                                          ? "Choose a translated or generated video"
+                                          : "No ready video in this history"
                                       }
                                     />
                                   </SelectTrigger>
@@ -2731,7 +2731,7 @@ export default function AppBrandWizard() {
                                   </SelectContent>
                                 </Select>
                                 <p className="text-[10px] leading-snug text-white/35">
-                                  Utilise une video deja generee de cet historique comme source audio.
+                                  Use a previously generated video from this history as the audio source.
                                 </p>
                               </div>
                             )}
@@ -2762,7 +2762,7 @@ export default function AppBrandWizard() {
                                 assertStudioVideoUpload(f);
                               } catch (err) {
                                 toast.error("Vidéo incompatible", {
-                                  description: userMessageFromCaughtError(err, "Fichier non pris en charge."),
+                                  description: userMessageFromCaughtError(err, "Unsupported file."),
                                 });
                                 e.currentTarget.value = "";
                                 return;
@@ -2784,10 +2784,10 @@ export default function AppBrandWizard() {
                                 })
                                 .catch((err) => {
                                   if (motionVideoUploadTokenRef.current !== uploadToken) return;
-                                  toast.error("Impossible d’envoyer la vidéo.", {
+                                  toast.error("Could not upload the video.", {
                                     description: userMessageFromCaughtError(
                                       err,
-                                      "Réessaie ou choisis MP4 / MOV / WebM.",
+                                      "Try again or choose MP4 / MOV / WebM.",
                                     ),
                                   });
                                 })
@@ -2899,10 +2899,10 @@ export default function AppBrandWizard() {
                                 <>
                                   <Play className="h-8 w-8 opacity-50" />
                                   <span className="text-xs font-medium text-white/45">
-                                    {appSection === "ad_clone" ? "Ajoute une video a traduire" : "Add motion to copy"}
+                                    {appSection === "ad_clone" ? "Add a video to translate" : "Add motion to copy"}
                                   </span>
                                   <span className="text-[10px] text-white/30">
-                                    {appSection === "ad_clone" ? "MP4, MOV ou WebM" : "Video duration: 3–30 seconds"}
+                                    {appSection === "ad_clone" ? "MP4, MOV, or WebM" : "Video duration: 3–30 seconds"}
                                   </span>
                                 </>
                               )}
@@ -2992,22 +2992,22 @@ export default function AppBrandWizard() {
                                 <div className="flex items-center gap-2">
                                   <div className="h-8 w-8 rounded-lg border border-white/10 bg-white/5" />
                                   <div>
-                                    <p className="text-sm font-semibold text-white">Changement de voix</p>
+                                    <p className="text-sm font-semibold text-white">Voice change</p>
                                     <p className="text-[11px] text-white/40">
-                                      Remplace la voix d'une traduction ou d'une video deja generee
+                                      Replace the voice from a translation or already generated video
                                     </p>
                                   </div>
                                 </div>
                               </div>
 
                               <div className="rounded-xl border border-white/10 bg-black/20 p-2.5">
-                                <Label className="text-xs text-white/45">Voix</Label>
+                                <Label className="text-xs text-white/45">Voice</Label>
                                 <p className="mt-0.5 text-[10px] leading-snug text-white/35">
                                   Loaded from your available ElevenLabs voices.
                                 </p>
                                 <Select value={elevenVoiceId} onValueChange={setElevenVoiceId}>
                                   <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
-                                    <SelectValue placeholder={elevenVoicesLoading ? "Chargement des voix…" : "Choisis une voix"} />
+                                    <SelectValue placeholder={elevenVoicesLoading ? "Loading voices..." : "Choose a voice"} />
                                   </SelectTrigger>
                                   <SelectContent position="popper" className={studioSelectContentClass}>
                                     {elevenVoices.map((voice) => (
@@ -3026,7 +3026,7 @@ export default function AppBrandWizard() {
 
                               <details className="rounded-xl border border-white/10 bg-black/20 p-2.5">
                                 <summary className="cursor-pointer text-xs font-semibold text-white/70">
-                                  Parametres avances
+                                  Advanced settings
                                 </summary>
                                 <div className="mt-3 space-y-3">
                                   <div>
@@ -3059,7 +3059,7 @@ export default function AppBrandWizard() {
                                         <SelectValue />
                                       </SelectTrigger>
                                       <SelectContent position="popper" className={studioSelectContentClass}>
-                                          <SelectItem value="none" className={studioSelectItemClass}>aucun</SelectItem>
+                                          <SelectItem value="none" className={studioSelectItemClass}>none</SelectItem>
                                         {["0", "1", "2", "3", "4"].map((value) => (
                                           <SelectItem key={value} value={value} className={studioSelectItemClass}>
                                             {value}
@@ -3087,7 +3087,7 @@ export default function AppBrandWizard() {
                                     <Input
                                       value={voiceChangeSeed}
                                       onChange={(e) => setVoiceChangeSeed(e.target.value)}
-                                      placeholder="Seed deterministe optionnel"
+                                      placeholder="Optional deterministic seed"
                                       className="mt-1 h-11 rounded-xl border-white/15 bg-[#0a0a0d] text-white"
                                     />
                                   </div>
@@ -3135,18 +3135,18 @@ export default function AppBrandWizard() {
                                 <div className="flex items-center gap-2">
                                   <div className="h-8 w-8 rounded-lg border border-white/10 bg-white/5" />
                                   <div>
-                                    <p className="text-sm font-semibold text-white">Traduction video</p>
+                                    <p className="text-sm font-semibold text-white">Video translation</p>
                                   </div>
                                 </div>
                               </div>
                               <div className="rounded-xl border border-white/10 bg-black/20 p-2.5">
-                                <Label className="text-xs text-white/45">Langue cible</Label>
+                                <Label className="text-xs text-white/45">Target language</Label>
                                 <p className="mt-0.5 text-[10px] leading-snug text-white/35">
-                                  Choisis la langue de sortie parmi toutes les langues supportees.
+                                  Choose the output language from all supported languages.
                                 </p>
                                 <Select value={adCloneOutputLanguage} onValueChange={setAdCloneOutputLanguage}>
                                   <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
-                                    <SelectValue placeholder="Choisis une langue" />
+                                    <SelectValue placeholder="Choose a language" />
                                   </SelectTrigger>
                                   <SelectContent position="popper" className={studioSelectContentClass}>
                                     {WAVESPEED_HEYGEN_TRANSLATE_LANGUAGES.map((language) => (
@@ -3267,8 +3267,8 @@ export default function AppBrandWizard() {
                           const isTranslate = appSection === "ad_clone";
                           const isVoiceChange = isTranslate && translateToolMode === "voice_change";
                           if (motionServerHistory === null) {
-                            toast.message("Chargement de ta bibliotheque…", {
-                              description: "Attends un instant puis reessaie.",
+                              toast.message("Loading your library...", {
+                              description: "Wait a moment, then try again.",
                             });
                             return;
                           }
@@ -3278,15 +3278,15 @@ export default function AppBrandWizard() {
                           }
                           if (isVoiceChange) {
                             if (!elevenVoiceId.trim()) {
-                              toast.error("Choisis d'abord une voix.");
+                              toast.error("Choose a voice first.");
                               return;
                             }
                             if (voiceChangeSourceMode === "upload" && !voiceChangeUploadFile) {
-                              toast.error("Ajoute d'abord un audio ou une video.");
+                              toast.error("Add audio or video first.");
                               return;
                             }
                             if (voiceChangeSourceMode === "history" && !voiceChangeHistoryUrl) {
-                              toast.error("Choisis d'abord une video generee.");
+                              toast.error("Choose a generated video first.");
                               return;
                             }
                           }
@@ -3295,11 +3295,11 @@ export default function AppBrandWizard() {
                             return;
                           }
                           if (appSection !== "ad_clone" && !motionCharacterImageUrl) {
-                            toast.error("Choisis d'abord une image de personnage.");
+                            toast.error("Choose a character image first.");
                             return;
                           }
                           if (!motionVideoRefBlobUrl) {
-                            toast.error("Choisis d'abord une video de reference.");
+                            toast.error("Choose a reference video first.");
                             return;
                           }
                           if (
@@ -3307,7 +3307,7 @@ export default function AppBrandWizard() {
                             motionVideoDetectedDuration != null &&
                             (motionVideoDetectedDuration < 3 || motionVideoDetectedDuration > 30)
                           ) {
-                            toast.error("La video de reference doit durer entre 3 et 30 secondes.");
+                            toast.error("Reference video must be between 3 and 30 seconds.");
                             return;
                           }
                           if (!motionCreditBypass && creditsRef.current < motionCredits) {
@@ -3323,9 +3323,9 @@ export default function AppBrandWizard() {
                                 : motionCharacterImageUrl ?? undefined;
                           const startedAt = Date.now();
                           const historyLabel = isVoiceChange
-                            ? `Changement de voix (${selectedElevenVoice?.name || "personnalisee"})`
+                            ? `Voice change (${selectedElevenVoice?.name || "custom"})`
                             : isTranslate
-                              ? `Traduction (${adCloneOutputLanguage})`
+                              ? `Translation (${adCloneOutputLanguage})`
                               : "Motion control";
                           const bgSource =
                             motionSceneBackground === "video" ? "input_video" : "input_image";
@@ -3350,10 +3350,10 @@ export default function AppBrandWizard() {
                             try {
                               if (isVoiceChange) {
                                 setVoiceChangePreparing(true);
-                                toast.message("Preparation de l'audio…");
+                                toast.message("Preparing audio...");
                                 const audioFile = await prepareVoiceChangeAudioFile();
                                 if (audioFile.size > 50 * 1024 * 1024) {
-                                  throw new Error("L'audio extrait est trop lourd pour le changement de voix ElevenLabs (max 50 Mo).");
+                                  throw new Error("Extracted audio is too large for ElevenLabs voice change (max 50 MB).");
                                 }
 
                                 if (voiceChangeVoiceSettingsJson.trim()) {
@@ -3387,7 +3387,7 @@ export default function AppBrandWizard() {
                                   error?: string;
                                 };
                                 if (!res.ok || !json.rowId) {
-                                  throw new Error(json.error || "Le changement de voix a echoue.");
+                                  throw new Error(json.error || "Voice change failed.");
                                 }
                                 setMotionHistoryItems((prev) =>
                                   prev.map((i) =>
@@ -3403,14 +3403,14 @@ export default function AppBrandWizard() {
                                       : i,
                                   ),
                                 );
-                                toast.message("Changement de voix termine", {
-                                  description: "L'audio final est disponible dans ton historique Traduction.",
+                                toast.message("Voice change complete", {
+                                  description: "Final audio is available in your Translate history.",
                                 });
                                 return;
                               }
 
                               toast.message(
-                                appSection === "ad_clone" ? "Envoi de la video…" : "Envoi des references…",
+                                appSection === "ad_clone" ? "Uploading video..." : "Uploading references...",
                               );
                               const videoHttps = motionVideoUploadedUrl
                                 ? motionVideoUploadedUrl
@@ -3489,11 +3489,11 @@ export default function AppBrandWizard() {
                                   ),
                                 );
                               }
-                              toast.message(appSection === "ad_clone" ? "Traduction lancee" : "Motion control lance", {
+                              toast.message(appSection === "ad_clone" ? "Translation started" : "Motion control started", {
                                 description:
                                   appSection === "ad_clone"
-                                    ? "Traitement cote backend. Tu peux changer de page sans risque."
-                                    : "Traitement cote backend. Tu peux changer de page sans risque.",
+                                    ? "Processing on backend. You can safely switch pages."
+                                    : "Processing on backend. You can safely switch pages.",
                               });
                             } catch (err) {
                               const msg = err instanceof Error ? err.message : "Error";
@@ -3521,8 +3521,8 @@ export default function AppBrandWizard() {
                         <span className="inline-flex items-center gap-2">
                           {appSection === "ad_clone"
                             ? translateToolMode === "voice_change"
-                              ? "Changer la voix"
-                              : "Traduire"
+                              ? "Change voice"
+                              : "Translate"
                             : "Generate"}
                           <Sparkles className="h-5 w-5" />
                           {appSection === "ad_clone" && translateToolMode === "voice_change" ? (
@@ -3554,7 +3554,7 @@ export default function AppBrandWizard() {
                           <StudioGenerationsHistory
                             items={motionHistoryItems}
                             empty={<StudioEmptyExamples variant="motion" />}
-                            mediaLabel={appSection === "ad_clone" ? "Traduction" : "Motion"}
+                            mediaLabel={appSection === "ad_clone" ? "Translation" : "Motion"}
                             onItemDeleted={(id) =>
                               setMotionHistoryItems((prev) => prev.filter((i) => i.id !== id))
                             }

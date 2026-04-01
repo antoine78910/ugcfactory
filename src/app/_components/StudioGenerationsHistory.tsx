@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import VideoCard from "@/app/_components/VideoCard";
 import { isStudioGenerationRowId } from "@/lib/studioGenerationRowId";
+import { proxiedMediaSrc } from "@/lib/mediaProxyUrl";
 
 export type StudioHistoryMediaKind = "image" | "video" | "motion" | "audio";
 
@@ -291,6 +292,8 @@ export function StudioGenerationsHistory({
   );
 
   const grouped = useMemo(() => groupByDate(items), [items]);
+  const lightboxMediaUrl = lightboxItem?.url ? proxiedMediaSrc(lightboxItem.url) : "";
+  const lightboxPosterUrl = lightboxItem?.poster ? proxiedMediaSrc(lightboxItem.poster) : undefined;
   const isLightboxVideo = Boolean(
     lightboxItem &&
       (lightboxItem.kind === "video" || isProbablyVideoUrl(lightboxItem.url)) &&
@@ -640,15 +643,15 @@ export function StudioGenerationsHistory({
                     <Volume2 className="h-10 w-10 text-violet-200/80" aria-hidden />
                   </div>
                   <audio controls autoPlay preload="metadata" className="w-full">
-                    <source src={lightboxItem.url} />
+                    <source src={lightboxMediaUrl} />
                   </audio>
                 </div>
               ) : lightboxItem.kind === "video" || isProbablyVideoUrl(lightboxItem.url) ? (
                 // eslint-disable-next-line jsx-a11y/media-has-caption
                 <video
                   ref={lightboxVideoRef}
-                  src={lightboxItem.url}
-                  poster={lightboxItem.poster}
+                  src={lightboxMediaUrl}
+                  poster={lightboxPosterUrl}
                   controls
                   autoPlay
                   playsInline
@@ -658,7 +661,7 @@ export function StudioGenerationsHistory({
                 <>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={lightboxItem.url}
+                    src={lightboxMediaUrl}
                     alt="Fullscreen generation preview"
                     className="max-h-[min(78vh,880px)] w-full max-w-full object-contain object-center transition-transform duration-300 ease-out lg:max-h-[min(88vh,900px)]"
                   />

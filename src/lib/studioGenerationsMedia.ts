@@ -56,9 +56,10 @@ function sleep(ms: number): Promise<void> {
 
 async function fetchMediaBytes(url: string): Promise<{ buffer: Buffer; contentType: string } | null> {
   let lastStatus = 0;
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 5; attempt++) {
     if (attempt > 0) await sleep(400 * attempt);
     try {
+      const target = new URL(url);
       const res = await fetch(url, {
         redirect: "follow",
         cache: "no-store",
@@ -66,6 +67,9 @@ async function fetchMediaBytes(url: string): Promise<{ buffer: Buffer; contentTy
         headers: {
           Accept: "*/*",
           "User-Agent": "Mozilla/5.0 (compatible; YouryStudio/1.0; archival)",
+          // Some providers enforce anti-hotlink checks.
+          Referer: `${target.origin}/`,
+          Origin: target.origin,
         },
       });
       lastStatus = res.status;
