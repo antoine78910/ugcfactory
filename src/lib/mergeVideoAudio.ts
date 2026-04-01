@@ -10,17 +10,37 @@ import ffmpegPath from "ffmpeg-static";
 import ffmpeg from "fluent-ffmpeg";
 import { tmpdir } from "os";
 import { join } from "path";
-import { writeFile, readFile, unlink } from "fs/promises";
+import { access, chmod, writeFile, readFile, unlink } from "fs/promises";
 import { randomUUID } from "crypto";
 
 if (ffmpegPath) {
   ffmpeg.setFfmpegPath(ffmpegPath);
 }
 
+async function ensureFfmpegBinaryAvailable() {
+  if (!ffmpegPath) {
+    throw new Error("ffmpeg-static did not resolve a binary path.");
+  }
+  try {
+    await access(ffmpegPath);
+  } catch {
+    throw new Error(`ffmpeg binary not found at: ${ffmpegPath}`);
+  }
+  // On Linux, ensure it's executable (bundlers can lose mode bits).
+  if (process.platform !== "win32") {
+    try {
+      await chmod(ffmpegPath, 0o755);
+    } catch {
+      // best-effort
+    }
+  }
+}
+
 export async function mergeVideoWithAudioServer(
   videoBuffer: Buffer,
   audioBuffer: Buffer,
 ): Promise<Buffer> {
+  await ensureFfmpegBinaryAvailable();
   const id = randomUUID();
   const dir = tmpdir();
   const videoPath = join(dir, `merge-video-${id}.mp4`);

@@ -8,7 +8,10 @@ const nextConfig: NextConfig = {
     root: path.join(__dirname),
   },
   outputFileTracingIncludes: {
-    "/api/elevenlabs/speech-to-speech": ["./node_modules/ffmpeg-static/**/*"],
+    "/api/elevenlabs/speech-to-speech": [
+      "./node_modules/ffmpeg-static/**/*",
+      "./node_modules/fluent-ffmpeg/**/*",
+    ],
   },
   async headers() {
     return [
