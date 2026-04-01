@@ -11,13 +11,14 @@ import { join } from "path";
 import { tmpdir } from "os";
 import { randomUUID } from "crypto";
 import { execFile } from "child_process";
+import { gunzipSync } from "zlib";
 
 const FFMPEG_BIN = join(tmpdir(), "ffmpeg");
 
-const FFMPEG_DOWNLOAD_URL =
-  "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.0/linux-x64";
+const FFMPEG_GZ_URL =
+  "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-linux-x64.gz";
 
-const MIN_BINARY_SIZE = 30 * 1024 * 1024; // expect at least 30 MB
+const MIN_BINARY_SIZE = 30 * 1024 * 1024;
 
 async function ensureFfmpeg(): Promise<string> {
   if (existsSync(FFMPEG_BIN)) {
@@ -28,26 +29,27 @@ async function ensureFfmpeg(): Promise<string> {
     console.warn(`[merge] Existing ffmpeg binary too small (${size} bytes), re-downloading`);
   }
 
-  console.log("[merge] Downloading ffmpeg binary from", FFMPEG_DOWNLOAD_URL);
-  const res = await fetch(FFMPEG_DOWNLOAD_URL, { redirect: "follow" });
+  console.log("[merge] Downloading ffmpeg binary (gzip)...");
+  const res = await fetch(FFMPEG_GZ_URL, { redirect: "follow" });
   if (!res.ok) {
     throw new Error(`Failed to download ffmpeg: HTTP ${res.status} ${res.statusText}`);
   }
 
-  const arrayBuf = await res.arrayBuffer();
-  const buf = Buffer.from(arrayBuf);
-  console.log(`[merge] Downloaded ${buf.length} bytes`);
+  const gzBuf = Buffer.from(await res.arrayBuffer());
+  console.log(`[merge] Downloaded ${gzBuf.length} bytes (compressed), decompressing...`);
+
+  const buf = gunzipSync(gzBuf);
+  console.log(`[merge] Decompressed to ${buf.length} bytes`);
 
   if (buf.length < MIN_BINARY_SIZE) {
     throw new Error(
-      `Downloaded ffmpeg binary is too small (${buf.length} bytes). Expected at least ${MIN_BINARY_SIZE}.`,
+      `ffmpeg binary too small after decompression (${buf.length} bytes).`,
     );
   }
 
   await writeFile(FFMPEG_BIN, buf);
   await chmod(FFMPEG_BIN, 0o755);
 
-  // Verify the binary actually works
   const version = await new Promise<string>((resolve, reject) => {
     execFile(FFMPEG_BIN, ["-version"], { timeout: 10_000 }, (err, stdout) => {
       if (err) reject(new Error(`ffmpeg verification failed: ${err.message}`));
