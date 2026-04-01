@@ -651,12 +651,10 @@ export default function AppBrandWizard() {
     DEFAULT_WAVESPEED_HEYGEN_TRANSLATE_LANGUAGE,
   );
   const [translateToolMode, setTranslateToolMode] = useState<TranslateToolMode>("video_translate");
-  const [translateLanguageSearch, setTranslateLanguageSearch] = useState("");
   const [favoriteTranslateLanguages, setFavoriteTranslateLanguages] = useState<string[]>([]);
   const [elevenVoices, setElevenVoices] = useState<ElevenVoiceOption[]>([]);
   const [elevenVoicesLoading, setElevenVoicesLoading] = useState(false);
   const [elevenVoiceId, setElevenVoiceId] = useState<string>("");
-  const [elevenVoiceSearch, setElevenVoiceSearch] = useState("");
   const [favoriteElevenVoiceIds, setFavoriteElevenVoiceIds] = useState<string[]>([]);
   const [voiceChangeUploadKind, setVoiceChangeUploadKind] = useState<VoiceChangeUploadKind>("audio");
   const [voiceChangeUploadFile, setVoiceChangeUploadFile] = useState<File | null>(null);
@@ -860,36 +858,26 @@ export default function AppBrandWizard() {
   );
 
   const filteredElevenVoices = useMemo(() => {
-    const q = elevenVoiceSearch.trim().toLowerCase();
     const base = filteredElevenVoicesBase;
-    const filtered =
-      q.length === 0
-        ? base
-        : base.filter((v) => {
-            const hay = `${v.name} ${(v.labels?.gender ?? "")} ${(v.labels?.accent ?? "")}`.toLowerCase();
-            return hay.includes(q);
-          });
     const favoritesSet = new Set(favoriteElevenVoiceIds);
-    return [...filtered].sort((a, b) => {
+    return [...base].sort((a, b) => {
       const af = favoritesSet.has(a.voiceId) ? 1 : 0;
       const bf = favoritesSet.has(b.voiceId) ? 1 : 0;
       if (af !== bf) return bf - af;
       return a.name.localeCompare(b.name);
     });
-  }, [elevenVoiceSearch, filteredElevenVoicesBase, favoriteElevenVoiceIds]);
+  }, [filteredElevenVoicesBase, favoriteElevenVoiceIds]);
 
   const translateLanguagesFiltered = useMemo(() => {
-    const q = translateLanguageSearch.trim().toLowerCase();
     const base = WAVESPEED_HEYGEN_TRANSLATE_LANGUAGES as readonly string[];
-    const filtered = q.length === 0 ? [...base] : base.filter((l) => l.toLowerCase().includes(q));
     const fav = new Set(favoriteTranslateLanguages);
-    return filtered.sort((a, b) => {
+    return [...base].sort((a, b) => {
       const af = fav.has(a) ? 1 : 0;
       const bf = fav.has(b) ? 1 : 0;
       if (af !== bf) return bf - af;
       return a.localeCompare(b);
     });
-  }, [favoriteTranslateLanguages, translateLanguageSearch]);
+  }, [favoriteTranslateLanguages]);
 
   /**
    * The original video URL to merge with after a voice change.
@@ -3002,11 +2990,7 @@ export default function AppBrandWizard() {
                                 >
                                   <SelectTrigger className="h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
                                     <SelectValue
-                                      placeholder={
-                                        readyTranslateVideos.length
-                                          ? "Pick from your Translate history"
-                                          : "No ready video in your history"
-                                      }
+                                      placeholder="Pick from your Translate history"
                                     />
                                   </SelectTrigger>
                                   <SelectContent position="popper" className={studioSelectContentClass}>
@@ -3299,17 +3283,6 @@ export default function AppBrandWizard() {
                                   </SelectContent>
                                 </Select>
 
-                                {/* Voice search */}
-                                <div className="space-y-1">
-                                  <Label className="text-xs text-white/45">Search</Label>
-                                  <Input
-                                    value={elevenVoiceSearch}
-                                    onChange={(e) => setElevenVoiceSearch(e.target.value)}
-                                    placeholder="Search voices (name, gender, accent)"
-                                    className="h-10 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-xs text-white placeholder:text-white/35"
-                                  />
-                                </div>
-
                                 {/* Voice picker */}
                                 <Select value={elevenVoiceId} onValueChange={setElevenVoiceId}>
                                   <SelectTrigger className="h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
@@ -3396,15 +3369,6 @@ export default function AppBrandWizard() {
                                 <p className="mt-0.5 text-[10px] leading-snug text-white/35">
                                   Choose the output language from all supported languages.
                                 </p>
-                                <div className="mt-2 space-y-1">
-                                  <Label className="text-xs text-white/45">Search</Label>
-                                  <Input
-                                    value={translateLanguageSearch}
-                                    onChange={(e) => setTranslateLanguageSearch(e.target.value)}
-                                    placeholder="Search languages"
-                                    className="h-10 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-xs text-white placeholder:text-white/35"
-                                  />
-                                </div>
                                 <Select value={adCloneOutputLanguage} onValueChange={setAdCloneOutputLanguage}>
                                   <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
                                     <SelectValue placeholder="Choose a language" />
