@@ -14,10 +14,20 @@ export async function GET(req: Request) {
     const sharedPage = Math.max(0, Math.floor(Number(searchParams.get("sharedPage") ?? 0)));
     const sharedPageSize = Math.min(100, Math.max(1, Math.floor(Number(searchParams.get("sharedPageSize") ?? 100))));
     const includeAccount = (searchParams.get("includeAccount") ?? "true").toLowerCase() !== "false";
+    const language = (searchParams.get("language") ?? "").trim();
+    const gender = (searchParams.get("gender") ?? "").trim();
+    const search = (searchParams.get("search") ?? "").trim();
 
     const [accountVoices, sharedPageOut] = await Promise.all([
       includeAccount ? listElevenLabsVoices() : Promise.resolve([]),
-      listElevenLabsSharedVoicesPage({ page: sharedPage, pageSize: sharedPageSize, featured: false }),
+      listElevenLabsSharedVoicesPage({
+        page: sharedPage,
+        pageSize: sharedPageSize,
+        featured: false,
+        language: language || undefined,
+        gender: gender || undefined,
+        search: search || undefined,
+      }),
     ]);
     const sharedVoices = sharedPageOut.voices;
     const byId = new Map<string, (typeof accountVoices)[number]>();

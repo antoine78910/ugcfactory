@@ -70,9 +70,16 @@ export async function POST(req: Request) {
   if (!voiceId) {
     return NextResponse.json({ error: "Missing ElevenLabs voice id." }, { status: 400 });
   }
+  if (typeof seed === "number") {
+    if (!Number.isInteger(seed) || seed < 0 || seed > 4294967295) {
+      return NextResponse.json(
+        { error: "Invalid seed. Must be an integer between 0 and 4294967295." },
+        { status: 400 },
+      );
+    }
+  }
 
   const label = voiceName ? `Voice change (${voiceName})` : "Voice change";
-  const model = modelId ? `elevenlabs:${modelId}` : "elevenlabs";
   const { data: inserted, error: insertError } = await supabase
     .from("studio_generations")
     .insert({
@@ -82,7 +89,6 @@ export async function POST(req: Request) {
       label,
       external_task_id: `elevenlabs-sync:${crypto.randomUUID()}`,
       provider: "elevenlabs",
-      model,
       credits_charged: 0,
       uses_personal_api: false,
     })

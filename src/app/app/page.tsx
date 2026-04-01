@@ -124,8 +124,6 @@ type ElevenVoiceOption = {
   isShared?: boolean;
 };
 
-const LS_FAVORITE_ELEVEN_VOICE_IDS_KEY = "ugc_favorite_eleven_voice_ids_v1";
-
 function formatClockTime(totalSeconds: number): string {
   if (!Number.isFinite(totalSeconds) || totalSeconds < 0) return "0:00";
   const s = Math.floor(totalSeconds);
@@ -653,8 +651,8 @@ export default function AppBrandWizard() {
   const [elevenVoices, setElevenVoices] = useState<ElevenVoiceOption[]>([]);
   const [elevenVoicesLoading, setElevenVoicesLoading] = useState(false);
   const [elevenVoicesLoadMorePending, setElevenVoicesLoadMorePending] = useState(false);
-  const [elevenSharedVoicesPage, setElevenSharedVoicesPage] = useState(0);
-  const [elevenSharedVoicesHasMore, setElevenSharedVoicesHasMore] = useState(false);
+  const [elevenSharedVoicesPageByLang, setElevenSharedVoicesPageByLang] = useState<Record<string, number>>({});
+  const [elevenSharedVoicesHasMoreByLang, setElevenSharedVoicesHasMoreByLang] = useState<Record<string, boolean>>({});
   const [elevenVoiceId, setElevenVoiceId] = useState<string>("");
   const [favoriteElevenVoiceIds, setFavoriteElevenVoiceIds] = useState<string[]>([]);
   const [voiceChangeUploadKind, setVoiceChangeUploadKind] = useState<VoiceChangeUploadKind>("audio");
@@ -733,15 +731,26 @@ export default function AppBrandWizard() {
   );
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(LS_FAVORITE_ELEVEN_VOICE_IDS_KEY);
-      const parsed = raw ? (JSON.parse(raw) as unknown) : [];
-      if (Array.isArray(parsed)) {
-        setFavoriteElevenVoiceIds(parsed.map((x) => String(x)).filter(Boolean));
+    void (async () => {
+      try {
+        const res = await fetch("/api/elevenlabs/favorite-voices", { cache: "no-store" });
+        const json = (await res.json().catch(() => ({}))) as { favorites?: string[] };
+        if (!res.ok) return;
+        if (Array.isArray(json.favorites)) {
+          setFavoriteElevenVoiceIds(json.favorites.map((x) => String(x)).filter(Boolean));
+        }
+      } catch {
+        /* ignore */
       }
-    } catch {
-      /* ignore */
-    }
+    })();
+  }, []);
+
+  const saveFavoriteElevenVoices = useCallback(async (ids: string[]) => {
+    await fetch("/api/elevenlabs/favorite-voices", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ favorites: ids }),
+    });
   }, []);
 
   const toggleFavoriteElevenVoice = useCallback((voiceId: string) => {
@@ -750,14 +759,10 @@ export default function AppBrandWizard() {
     setFavoriteElevenVoiceIds((prev) => {
       const has = prev.includes(id);
       const next = has ? prev.filter((x) => x !== id) : [id, ...prev];
-      try {
-        localStorage.setItem(LS_FAVORITE_ELEVEN_VOICE_IDS_KEY, JSON.stringify(next));
-      } catch {
-        /* ignore */
-      }
+      void saveFavoriteElevenVoices(next);
       return next;
     });
-  }, []);
+  }, [saveFavoriteElevenVoices]);
 
 
   /** Billable seconds: real clip length, or placeholder so 720p ↔ 1080p updates credits before upload. */
@@ -871,11 +876,31 @@ export default function AppBrandWizard() {
     });
   }, [favoriteElevenVoiceIds, filteredElevenVoicesBase, voiceChangeVoiceTab]);
 
+  const elevenVoiceLangFilterKey = (voiceChangeLangFilter || "__all__").toLowerCase();
+  const elevenVoiceLangHasMore = elevenSharedVoicesHasMoreByLang[elevenVoiceLangFilterKey] ?? true;
+
   const translateLanguagesFiltered = useMemo(() => {
-    const base = WAVESPEED_HEYGEN_TRANSLATE_LANGUAGES as readonly string[];
-    return [...base].sort((a, b) => {
-      return a.localeCompare(b);
+    const base = [...(WAVESPEED_HEYGEN_TRANSLATE_LANGUAGES as readonly string[])];
+    const hasStandalone = new Set(base);
+    const variantsByRoot = new Map<string, string[]>();
+    for (const lang of base) {
+      const m = /^(.+?)\s+\(.+\)$/.exec(lang);
+      if (!m) continue;
+      const root = m[1]!.trim();
+      const list = variantsByRoot.get(root) ?? [];
+      list.push(lang);
+      variantsByRoot.set(root, list);
+    }
+    const deduped = base.filter((lang) => {
+      const m = /^(.+?)\s+\(.+\)$/.exec(lang);
+      if (!m) return true;
+      const root = m[1]!.trim();
+      const variants = variantsByRoot.get(root) ?? [];
+      // Keep regional variants only when there are multiple choices.
+      if (hasStandalone.has(root) && variants.length === 1) return false;
+      return true;
     });
+    return deduped.sort((a, b) => a.localeCompare(b));
   }, []);
 
   /**
@@ -959,7 +984,7 @@ export default function AppBrandWizard() {
     setElevenVoicesLoading(true);
     void (async () => {
       try {
-        const res = await fetch("/api/elevenlabs/voices?sharedPage=0", { cache: "no-store" });
+        const res = await fetch("/api/elevenlabs/voices?sharedPage=0&sharedPageSize=100", { cache: "no-store" });
         const json = (await res.json().catch(() => ({}))) as {
           voices?: ElevenVoiceOption[];
           sharedHasMore?: boolean;
@@ -968,8 +993,8 @@ export default function AppBrandWizard() {
         if (!res.ok) throw new Error(json.error || "Could not load voices");
         const voices = Array.isArray(json.voices) ? json.voices : [];
         setElevenVoices(voices);
-        setElevenSharedVoicesHasMore(Boolean(json.sharedHasMore));
-        setElevenSharedVoicesPage(0);
+        setElevenSharedVoicesHasMoreByLang({ __all__: Boolean(json.sharedHasMore) });
+        setElevenSharedVoicesPageByLang({ __all__: 0 });
         setElevenVoiceId((prev) => prev || voices[0]?.voiceId || "");
       } catch (err) {
         toast.error("Could not load voices.", {
@@ -983,13 +1008,20 @@ export default function AppBrandWizard() {
 
   const loadMoreElevenVoices = useCallback(async () => {
     if (elevenVoicesLoadMorePending) return;
-    if (!elevenSharedVoicesHasMore) return;
-    const nextPage = elevenSharedVoicesPage + 1;
+    const langKey = (voiceChangeLangFilter || "__all__").toLowerCase();
+    const hasMoreForFilter = elevenSharedVoicesHasMoreByLang[langKey] ?? true;
+    if (!hasMoreForFilter) return;
+    const currentPageForFilter = elevenSharedVoicesPageByLang[langKey] ?? -1;
+    const nextPage = currentPageForFilter + 1;
     setElevenVoicesLoadMorePending(true);
     try {
-      const res = await fetch(`/api/elevenlabs/voices?sharedPage=${encodeURIComponent(String(nextPage))}&includeAccount=false`, {
-        cache: "no-store",
+      const params = new URLSearchParams({
+        sharedPage: String(nextPage),
+        sharedPageSize: "10",
+        includeAccount: "false",
       });
+      if (langKey !== "__all__") params.set("language", voiceChangeLangFilter.trim().toLowerCase());
+      const res = await fetch(`/api/elevenlabs/voices?${params.toString()}`, { cache: "no-store" });
       const json = (await res.json().catch(() => ({}))) as {
         voices?: ElevenVoiceOption[];
         sharedHasMore?: boolean;
@@ -1003,8 +1035,14 @@ export default function AppBrandWizard() {
         for (const v of more) byId.set(v.voiceId, v);
         return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
       });
-      setElevenSharedVoicesHasMore(Boolean(json.sharedHasMore));
-      setElevenSharedVoicesPage(nextPage);
+      setElevenSharedVoicesHasMoreByLang((prev) => ({
+        ...prev,
+        [langKey]: Boolean(json.sharedHasMore),
+      }));
+      setElevenSharedVoicesPageByLang((prev) => ({
+        ...prev,
+        [langKey]: nextPage,
+      }));
     } catch (err) {
       toast.error("Could not load more voices.", {
         description: userMessageFromCaughtError(err, "Please try again in a moment."),
@@ -1012,7 +1050,12 @@ export default function AppBrandWizard() {
     } finally {
       setElevenVoicesLoadMorePending(false);
     }
-  }, [elevenSharedVoicesHasMore, elevenSharedVoicesPage, elevenVoicesLoadMorePending]);
+  }, [
+    elevenSharedVoicesHasMoreByLang,
+    elevenSharedVoicesPageByLang,
+    elevenVoicesLoadMorePending,
+    voiceChangeLangFilter,
+  ]);
 
   const applyMotionCharacterFile = useCallback((file: File) => {
     try {
@@ -3370,10 +3413,9 @@ export default function AppBrandWizard() {
                                               </span>
                                             ) : null}
                                             {voice.labels?.gender ? (
-                                              <span className="text-[10px] text-white/25">{voice.labels.gender}</span>
-                                            ) : null}
-                                            {voice.isShared ? (
-                                              <span className="text-[10px] text-violet-200/70">Shared</span>
+                                              <span className="text-[10px] text-white/25">
+                                                {voice.labels.gender.charAt(0).toUpperCase() + voice.labels.gender.slice(1)}
+                                              </span>
                                             ) : null}
                                           </span>
                                           <button
@@ -3408,14 +3450,14 @@ export default function AppBrandWizard() {
                                   </SelectContent>
                                 </Select>
 
-                                {elevenSharedVoicesHasMore ? (
+                                {voiceChangeVoiceTab === "all" && elevenVoiceLangHasMore ? (
                                   <button
                                     type="button"
                                     disabled={elevenVoicesLoadMorePending}
                                     onClick={() => void loadMoreElevenVoices()}
                                     className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-[11px] font-semibold text-white/70 transition hover:bg-white/[0.04] disabled:opacity-40"
                                   >
-                                    {elevenVoicesLoadMorePending ? "Loading..." : "Load more voices"}
+                                    {elevenVoicesLoadMorePending ? "Loading..." : "Load 10 more voices"}
                                   </button>
                                 ) : null}
 

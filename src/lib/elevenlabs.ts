@@ -66,6 +66,8 @@ type ElevenLabsSharedVoice = {
   category?: string;
   preview_url?: string | null;
   language?: string;
+  gender?: string;
+  accent?: string;
   labels?: Record<string, string>;
   public_owner_id?: string;
 };
@@ -74,16 +76,25 @@ export async function listElevenLabsSharedVoicesPage(opts?: {
   page?: number;
   pageSize?: number;
   featured?: boolean;
+  language?: string;
+  gender?: string;
+  search?: string;
 }): Promise<{ voices: ElevenLabsVoice[]; hasMore: boolean }> {
   const page = Math.max(0, Math.floor(Number(opts?.page ?? 0)));
   const pageSize = Math.min(100, Math.max(1, Math.floor(Number(opts?.pageSize ?? 100))));
   const featured = Boolean(opts?.featured ?? false);
+  const language = String(opts?.language ?? "").trim();
+  const gender = String(opts?.gender ?? "").trim();
+  const search = String(opts?.search ?? "").trim();
 
   const query = new URLSearchParams({
     page_size: String(pageSize),
     page: String(page),
     featured: featured ? "true" : "false",
   });
+  if (language) query.set("language", language);
+  if (gender) query.set("gender", gender);
+  if (search) query.set("search", search);
   const res = await fetch(`${ELEVENLABS_API_BASE}/shared-voices?${query.toString()}`, {
     method: "GET",
     headers: {
@@ -103,7 +114,12 @@ export async function listElevenLabsSharedVoicesPage(opts?: {
       name: voice.name,
       category: voice.category ?? "",
       preview_url: voice.preview_url ?? "",
-      labels: voice.labels ?? {},
+      labels: {
+        ...(voice.labels ?? {}),
+        ...(voice.gender ? { gender: voice.gender } : {}),
+        ...(voice.accent ? { accent: voice.accent } : {}),
+        ...(voice.language ? { language: voice.language } : {}),
+      },
       language: voice.language ?? "",
       public_owner_id: voice.public_owner_id ?? "",
       is_shared: true,

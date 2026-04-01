@@ -47,6 +47,10 @@ export async function piapiCreateSeedanceTask(opts: {
         aspect_ratio: opts.aspectRatio,
         image_urls: [opts.imageUrl],
       },
+      // Avoid workspace default "private/HYA" pool quota surprises.
+      config: {
+        service_mode: "public",
+      },
     }),
     cache: "no-store",
   });
@@ -55,10 +59,16 @@ export async function piapiCreateSeedanceTask(opts: {
     code?: number;
     message?: string;
     data?: { task_id?: string };
+    error?: { message?: string; raw_message?: string };
   };
   const id = json?.data?.task_id?.trim();
   if (!res.ok || json?.code !== 200 || !id) {
-    throw new Error(`PiAPI seedance create failed: HTTP ${res.status} / ${json?.message ?? "Unknown error"}`);
+    const reason =
+      json?.error?.message?.trim() ||
+      json?.error?.raw_message?.trim() ||
+      json?.message?.trim() ||
+      "Unknown error";
+    throw new Error(`PiAPI seedance create failed: HTTP ${res.status} / ${reason}`);
   }
   return id;
 }
