@@ -4,6 +4,7 @@ import { kieImageTaskPollOutcome } from "@/lib/kieTaskPoll";
 import type { StudioGenerationRow } from "@/lib/studioGenerationsMap";
 import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
 import { isPiapiTaskId, piapiGetSeedanceTask, piapiTaskStatusToLegacy } from "@/lib/piapiSeedance";
+import { serverLog } from "@/lib/serverLog";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import {
   isStudioMediaPublicUrl,
@@ -144,8 +145,20 @@ export async function pollStudioGenerationRow(
       else out = { kind: "processing" };
     } catch (err) {
       if (isTransientWaveSpeedLookupMiss(err, row)) {
+        serverLog("wavespeed_prediction_lookup_miss_grace", {
+          rowId: row.id,
+          externalTaskId: row.external_task_id,
+          provider: row.provider,
+          message: err instanceof Error ? err.message.slice(0, 500) : String(err ?? "").slice(0, 500),
+        });
         out = { kind: "processing" };
       } else {
+        serverLog("wavespeed_prediction_lookup_fail", {
+          rowId: row.id,
+          externalTaskId: row.external_task_id,
+          provider: row.provider,
+          message: err instanceof Error ? err.message.slice(0, 500) : String(err ?? "").slice(0, 500),
+        });
         out = {
           kind: "fail",
           message: err instanceof Error ? err.message : "WaveSpeed prediction lookup failed",
@@ -213,6 +226,14 @@ export async function pollStudioGenerationRow(
   }
 
   const rawFail = out.message ?? "Generation failed";
+  if (providerLc === WAVESPEED_PROVIDER || providerLc === WAVESPEED_CHAIN_PROVIDER) {
+    serverLog("wavespeed_generation_fail_persist", {
+      rowId: row.id,
+      provider: row.provider,
+      externalTaskId: row.external_task_id,
+      message: rawFail.slice(0, 500),
+    });
+  }
   logGenerationFailure("studioGenerationsPoll", rawFail, {
     rowId: row.id,
     kind: row.kind,

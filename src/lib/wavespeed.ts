@@ -44,6 +44,20 @@ async function readWaveSpeedJson(res: Response, fallbackMessage: string): Promis
     : json) ?? {};
 }
 
+async function fetchWaveSpeedJson(
+  endpoint: string,
+  fallbackMessage: string,
+): Promise<Record<string, unknown>> {
+  const res = await fetch(endpoint, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${getWaveSpeedApiKey()}`,
+    },
+    cache: "no-store",
+  });
+  return readWaveSpeedJson(res, fallbackMessage);
+}
+
 function parsePrediction(json: Record<string, unknown>): WaveSpeedPrediction {
   return {
     id: typeof json.id === "string" ? json.id : undefined,
@@ -160,14 +174,28 @@ export async function getWaveSpeedPrediction(taskId: string): Promise<WaveSpeedP
   const id = taskId.trim();
   if (!id) throw new Error("Missing WaveSpeed task id.");
 
-  const res = await fetch(`${WAVESPEED_API_BASE}/predictions/${encodeURIComponent(id)}`, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${getWaveSpeedApiKey()}`,
-    },
-    cache: "no-store",
-  });
+  const encodedId = encodeURIComponent(id);
+  const endpoints = [
+    `${WAVESPEED_API_BASE}/predictions/${encodedId}/result`,
+    `${WAVESPEED_API_BASE}/predictions/${encodedId}`,
+  ];
 
-  const json = await readWaveSpeedJson(res, "WaveSpeed prediction lookup failed.");
-  return parsePrediction(json);
+  let lastError: unknown = null;
+  for (const endpoint of endpoints) {
+    try {
+      const json = await fetchWaveSpeedJson(endpoint, "WaveSpeed prediction lookup failed.");
+      return parsePrediction(json);
+    } catch (err) {
+      lastError = err;
+      const message = err instanceof Error ? err.message.toLowerCase() : String(err ?? "").toLowerCase();
+      const isLookupMiss =
+        /\b404\b/.test(message) ||
+        message.includes("not found") ||
+        message.includes("does not exist") ||
+        message.includes("expired");
+      if (!isLookupMiss) throw err;
+    }
+  }
+
+  throw (lastError instanceof Error ? lastError : new Error("WaveSpeed prediction lookup failed."));
 }
