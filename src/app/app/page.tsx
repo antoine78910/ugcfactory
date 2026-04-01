@@ -124,6 +124,9 @@ type ElevenVoiceOption = {
   isShared?: boolean;
 };
 
+const LS_FAVORITE_ELEVEN_VOICE_IDS_KEY = "ugc_favorite_eleven_voice_ids_v1";
+const LS_FAVORITE_TRANSLATE_LANGUAGES_KEY = "ugc_favorite_translate_languages_v1";
+
 type ImageGenState =
   | { kind: "idle" }
   | { kind: "submitting" }
@@ -508,9 +511,13 @@ export default function AppBrandWizard() {
     DEFAULT_WAVESPEED_HEYGEN_TRANSLATE_LANGUAGE,
   );
   const [translateToolMode, setTranslateToolMode] = useState<TranslateToolMode>("video_translate");
+  const [translateLanguageSearch, setTranslateLanguageSearch] = useState("");
+  const [favoriteTranslateLanguages, setFavoriteTranslateLanguages] = useState<string[]>([]);
   const [elevenVoices, setElevenVoices] = useState<ElevenVoiceOption[]>([]);
   const [elevenVoicesLoading, setElevenVoicesLoading] = useState(false);
   const [elevenVoiceId, setElevenVoiceId] = useState<string>("");
+  const [elevenVoiceSearch, setElevenVoiceSearch] = useState("");
+  const [favoriteElevenVoiceIds, setFavoriteElevenVoiceIds] = useState<string[]>([]);
   const [voiceChangeUploadKind, setVoiceChangeUploadKind] = useState<VoiceChangeUploadKind>("audio");
   const [voiceChangeUploadFile, setVoiceChangeUploadFile] = useState<File | null>(null);
   const [voiceChangeUploadPreviewUrl, setVoiceChangeUploadPreviewUrl] = useState<string | null>(null);
@@ -560,6 +567,80 @@ export default function AppBrandWizard() {
         creditsRef.current += h.credits;
       }
     }
+  }, []);
+
+  const languageDisplayNames = useMemo(() => {
+    try {
+      // Use English UI labels consistently across the app.
+      return new Intl.DisplayNames(["en"], { type: "language" });
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const formatLanguageCodeLabel = useCallback(
+    (code: string): string => {
+      const raw = (code || "").trim();
+      if (!raw) return "Unknown";
+      // Handle locales like "en-US" / "pt_BR" / "zh-Hans".
+      const normalized = raw.replace("_", "-").toLowerCase();
+      const base = normalized.split("-")[0] || normalized;
+      const pretty = languageDisplayNames?.of(base);
+      if (pretty && pretty.trim()) return pretty;
+      return raw.toUpperCase();
+    },
+    [languageDisplayNames],
+  );
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(LS_FAVORITE_ELEVEN_VOICE_IDS_KEY);
+      const parsed = raw ? (JSON.parse(raw) as unknown) : [];
+      if (Array.isArray(parsed)) {
+        setFavoriteElevenVoiceIds(parsed.map((x) => String(x)).filter(Boolean));
+      }
+    } catch {
+      /* ignore */
+    }
+    try {
+      const raw = localStorage.getItem(LS_FAVORITE_TRANSLATE_LANGUAGES_KEY);
+      const parsed = raw ? (JSON.parse(raw) as unknown) : [];
+      if (Array.isArray(parsed)) {
+        setFavoriteTranslateLanguages(parsed.map((x) => String(x)).filter(Boolean));
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const toggleFavoriteElevenVoice = useCallback((voiceId: string) => {
+    const id = String(voiceId || "").trim();
+    if (!id) return;
+    setFavoriteElevenVoiceIds((prev) => {
+      const has = prev.includes(id);
+      const next = has ? prev.filter((x) => x !== id) : [id, ...prev];
+      try {
+        localStorage.setItem(LS_FAVORITE_ELEVEN_VOICE_IDS_KEY, JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleFavoriteTranslateLanguage = useCallback((language: string) => {
+    const v = String(language || "").trim();
+    if (!v) return;
+    setFavoriteTranslateLanguages((prev) => {
+      const has = prev.includes(v);
+      const next = has ? prev.filter((x) => x !== v) : [v, ...prev];
+      try {
+        localStorage.setItem(LS_FAVORITE_TRANSLATE_LANGUAGES_KEY, JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
   }, []);
 
 
@@ -628,7 +709,7 @@ export default function AppBrandWizard() {
   );
 
   /** Voice list filtered by the selected language (or all voices when filter is empty). */
-  const filteredElevenVoices = useMemo(
+  const filteredElevenVoicesBase = useMemo(
     () =>
       voiceChangeLangFilter
         ? elevenVoices.filter(
@@ -637,6 +718,38 @@ export default function AppBrandWizard() {
         : elevenVoices,
     [elevenVoices, voiceChangeLangFilter],
   );
+
+  const filteredElevenVoices = useMemo(() => {
+    const q = elevenVoiceSearch.trim().toLowerCase();
+    const base = filteredElevenVoicesBase;
+    const filtered =
+      q.length === 0
+        ? base
+        : base.filter((v) => {
+            const hay = `${v.name} ${(v.labels?.gender ?? "")} ${(v.labels?.accent ?? "")}`.toLowerCase();
+            return hay.includes(q);
+          });
+    const favoritesSet = new Set(favoriteElevenVoiceIds);
+    return [...filtered].sort((a, b) => {
+      const af = favoritesSet.has(a.voiceId) ? 1 : 0;
+      const bf = favoritesSet.has(b.voiceId) ? 1 : 0;
+      if (af !== bf) return bf - af;
+      return a.name.localeCompare(b.name);
+    });
+  }, [elevenVoiceSearch, filteredElevenVoicesBase, favoriteElevenVoiceIds]);
+
+  const translateLanguagesFiltered = useMemo(() => {
+    const q = translateLanguageSearch.trim().toLowerCase();
+    const base = WAVESPEED_HEYGEN_TRANSLATE_LANGUAGES as readonly string[];
+    const filtered = q.length === 0 ? [...base] : base.filter((l) => l.toLowerCase().includes(q));
+    const fav = new Set(favoriteTranslateLanguages);
+    return filtered.sort((a, b) => {
+      const af = fav.has(a) ? 1 : 0;
+      const bf = fav.has(b) ? 1 : 0;
+      if (af !== bf) return bf - af;
+      return a.localeCompare(b);
+    });
+  }, [favoriteTranslateLanguages, translateLanguageSearch]);
 
   /**
    * The original video URL to merge with after a voice change.
@@ -3031,11 +3144,23 @@ export default function AppBrandWizard() {
                                     </SelectItem>
                                     {elevenVoiceLanguages.map((lang) => (
                                       <SelectItem key={lang} value={lang} className={studioSelectItemClass}>
-                                        {lang.toUpperCase()}
+                                        {formatLanguageCodeLabel(lang)}{" "}
+                                        <span className="ml-1 text-[10px] text-white/25">({lang.toUpperCase()})</span>
                                       </SelectItem>
                                     ))}
                                   </SelectContent>
                                 </Select>
+
+                                {/* Voice search */}
+                                <div className="space-y-1">
+                                  <Label className="text-xs text-white/45">Search</Label>
+                                  <Input
+                                    value={elevenVoiceSearch}
+                                    onChange={(e) => setElevenVoiceSearch(e.target.value)}
+                                    placeholder="Search voices (name, gender, accent)"
+                                    className="h-10 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-xs text-white placeholder:text-white/35"
+                                  />
+                                </div>
 
                                 {/* Voice picker */}
                                 <Select value={elevenVoiceId} onValueChange={setElevenVoiceId}>
@@ -3057,7 +3182,7 @@ export default function AppBrandWizard() {
                                           <span>{voice.name}</span>
                                           {(voice.labels?.language || voice.language) ? (
                                             <span className="text-[10px] text-white/35">
-                                              {(voice.labels?.language || voice.language || "").toUpperCase()}
+                                              {formatLanguageCodeLabel((voice.labels?.language || voice.language || "").trim())}
                                             </span>
                                           ) : null}
                                           {voice.labels?.gender ? (
@@ -3066,11 +3191,29 @@ export default function AppBrandWizard() {
                                           {voice.isShared ? (
                                             <span className="text-[10px] text-violet-200/70">Shared</span>
                                           ) : null}
+                                          {favoriteElevenVoiceIds.includes(voice.voiceId) ? (
+                                            <span className="text-[10px] text-amber-200/80">★</span>
+                                          ) : null}
                                         </span>
                                       </SelectItem>
                                     ))}
                                   </SelectContent>
                                 </Select>
+
+                                {/* Favorites */}
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="text-[10px] text-white/35">
+                                    Favorites are stored on this device.
+                                  </p>
+                                  <button
+                                    type="button"
+                                    disabled={!elevenVoiceId.trim()}
+                                    onClick={() => toggleFavoriteElevenVoice(elevenVoiceId)}
+                                    className="rounded-md border border-white/10 bg-black/20 px-2 py-1 text-[10px] font-semibold text-white/70 transition hover:bg-white/[0.04] disabled:opacity-40"
+                                  >
+                                    {favoriteElevenVoiceIds.includes(elevenVoiceId) ? "★ Favorited" : "☆ Favorite"}
+                                  </button>
+                                </div>
 
                                 {/* Sample audio preview */}
                                 {selectedElevenVoice?.previewUrl ? (
@@ -3210,18 +3353,43 @@ export default function AppBrandWizard() {
                                 <p className="mt-0.5 text-[10px] leading-snug text-white/35">
                                   Choose the output language from all supported languages.
                                 </p>
+                                <div className="mt-2 space-y-1">
+                                  <Label className="text-xs text-white/45">Search</Label>
+                                  <Input
+                                    value={translateLanguageSearch}
+                                    onChange={(e) => setTranslateLanguageSearch(e.target.value)}
+                                    placeholder="Search languages"
+                                    className="h-10 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-xs text-white placeholder:text-white/35"
+                                  />
+                                </div>
                                 <Select value={adCloneOutputLanguage} onValueChange={setAdCloneOutputLanguage}>
                                   <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
                                     <SelectValue placeholder="Choose a language" />
                                   </SelectTrigger>
                                   <SelectContent position="popper" className={studioSelectContentClass}>
-                                    {WAVESPEED_HEYGEN_TRANSLATE_LANGUAGES.map((language) => (
+                                    {translateLanguagesFiltered.map((language) => (
                                       <SelectItem key={language} value={language} className={studioSelectItemClass}>
-                                        {language}
+                                        <span className="flex items-center justify-between gap-3">
+                                          <span className="truncate">{language}</span>
+                                          {favoriteTranslateLanguages.includes(language) ? (
+                                            <span className="text-[10px] text-amber-200/80">★</span>
+                                          ) : null}
+                                        </span>
                                       </SelectItem>
                                     ))}
                                   </SelectContent>
                                 </Select>
+                                <div className="mt-2 flex items-center justify-between gap-2">
+                                  <p className="text-[10px] text-white/35">Favorites are stored on this device.</p>
+                                  <button
+                                    type="button"
+                                    disabled={!adCloneOutputLanguage.trim()}
+                                    onClick={() => toggleFavoriteTranslateLanguage(adCloneOutputLanguage)}
+                                    className="rounded-md border border-white/10 bg-black/20 px-2 py-1 text-[10px] font-semibold text-white/70 transition hover:bg-white/[0.04] disabled:opacity-40"
+                                  >
+                                    {favoriteTranslateLanguages.includes(adCloneOutputLanguage) ? "★ Favorited" : "☆ Favorite"}
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           )
