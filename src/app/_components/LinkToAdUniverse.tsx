@@ -289,7 +289,9 @@ function NanoThreeImageGenerationGrid({
                   <div className="flex h-full items-center justify-center text-[11px] text-white/25">—</div>
                 )}
               </div>
-              <p className="line-clamp-2 break-words text-center text-[10px] leading-tight text-white/40">{cap}</p>
+              {!busy ? (
+                <p className="line-clamp-2 break-words text-center text-[10px] leading-tight text-white/40">{cap}</p>
+              ) : null}
             </div>
           );
         })}
@@ -4754,7 +4756,10 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                       </Button>
                     </div>
                   ) : null}
-                  {nanoBananaPromptsRaw && !nanoHasThreeImages ? (
+                  {nanoBananaPromptsRaw &&
+                  !nanoHasThreeImages &&
+                  !isNanoAllImagesSubmitting &&
+                  !nanoPollTaskId ? (
                     <div className="space-y-4">
                       <div>
                         <h3 className="text-base font-semibold tracking-tight text-white sm:text-lg">
