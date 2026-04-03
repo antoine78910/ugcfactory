@@ -418,12 +418,29 @@ async function fetchWithRetry(
   throw lastErr;
 }
 
+export type LinkToAdRecentRunChip = {
+  id: string;
+  title: string | null;
+  storeUrl: string;
+  createdAt: string;
+  thumbUrl: string | null;
+};
+
 export type LinkToAdUniverseProps = {
   /** When set, load this run once (e.g. from Projects). */
   resumeRunId?: string | null;
   onResumeConsumed?: () => void;
   /** Refresh Projects list after save. */
   onRunsChanged?: () => void;
+  /** Last few Link to Ad runs (e.g. 3 most recent) for quick switching. */
+  recentLinkToAdRuns?: LinkToAdRecentRunChip[];
+  /** Current run id (persisted) — highlights the active chip. */
+  activeRunId?: string | null;
+  onActiveRunIdChange?: (runId: string | null) => void;
+  /** Parent remounts Link to Ad for a clean session (Return to Link to Ad). */
+  onStartFreshLinkToAdSession?: () => void;
+  /** Load another run in place (same as Projects → open). */
+  onSwitchLinkToAdRun?: (runId: string) => void;
 };
 
 function confidenceToQuality(c: string | undefined) {
@@ -650,7 +667,16 @@ function PersonaPhotoSection({
   );
 }
 
-export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRunsChanged }: LinkToAdUniverseProps) {
+export default function LinkToAdUniverse({
+  resumeRunId,
+  onResumeConsumed,
+  onRunsChanged,
+  recentLinkToAdRuns = [],
+  activeRunId: activeRunIdProp = null,
+  onActiveRunIdChange,
+  onStartFreshLinkToAdSession,
+  onSwitchLinkToAdRun,
+}: LinkToAdUniverseProps) {
   const { planId, current: creditsBalance, spendCredits, grantCredits } = useCreditsPlan();
   /** After a fresh store scan starts, gate later steps against this snapshot so the wallet UI does not “jump” each step. Resync on image/video redo actions only. */
   const [ltaFrozenCredits, setLtaFrozenCredits] = useState<number | null>(null);
@@ -825,6 +851,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const [productImageLightboxUrl, setProductImageLightboxUrl] = useState<string | null>(null);
   const [expandedAngleBriefs, setExpandedAngleBriefs] = useState<Record<number, boolean>>({});
   const [angleSummaryDrafts, setAngleSummaryDrafts] = useState<Record<number, string>>({});
+  /** Screen-recording: hide recent-generation chips (stored in localStorage). */
+  const [hidePreviousLtaGenerations, setHidePreviousLtaGenerations] = useState(false);
 
   const nanoBananaPromptsSignatureRef = useRef<string | null>(null);
   /** Incremented when user abandons the flow so late pipeline responses do not re-hydrate the UI. */
@@ -889,6 +917,37 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     }
   }, []);
 
+  useEffect(() => {
+    return () => {
+      cancelCurrentGeneration({ silent: true });
+    };
+  }, [cancelCurrentGeneration]);
+
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem("link-to-ad-hide-previous-generations");
+      if (v === "1") setHidePreviousLtaGenerations(true);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    onActiveRunIdChange?.(universeRunId);
+  }, [universeRunId, onActiveRunIdChange]);
+
+  const toggleHidePreviousLtaGenerations = useCallback(() => {
+    setHidePreviousLtaGenerations((h) => {
+      const next = !h;
+      try {
+        localStorage.setItem("link-to-ad-hide-previous-generations", next ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }, []);
+
   const hasStartedLinkToAdFlow = useMemo(
     () =>
       Boolean(
@@ -936,7 +995,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       "The draft on this screen will be lost (URL, brief, scripts, uploads, in-progress media).",
       "Credits already spent will NOT be refunded.",
       "",
-      "Projects already saved to your account are not deleted.",
+      "Runs already saved to your Projects are not deleted.",
     ].join("\n");
     if (typeof window !== "undefined" && !window.confirm(msg)) return;
 
@@ -1010,6 +1069,32 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     onRunsChanged?.();
     toast.message("Link to Ad reset", { description: "You can start a new ad from scratch." });
   }, [cancelCurrentGeneration, onRunsChanged]);
+
+  const handleReturnToFreshLinkToAd = useCallback(() => {
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm(
+        "Start a new Link to Ad? Unsaved work on this screen will be cleared. Saved generations stay in Projects.",
+      )
+    ) {
+      return;
+    }
+    cancelCurrentGeneration({ silent: true });
+    onStartFreshLinkToAdSession?.();
+  }, [cancelCurrentGeneration, onStartFreshLinkToAdSession]);
+
+  const handleSwitchRecentRun = useCallback(
+    (runId: string) => {
+      const active = activeRunIdProp ?? universeRunId;
+      if (runId === active) {
+        toast.message("Already on this generation");
+        return;
+      }
+      cancelCurrentGeneration({ silent: true });
+      onSwitchLinkToAdRun?.(runId);
+    },
+    [activeRunIdProp, universeRunId, cancelCurrentGeneration, onSwitchLinkToAdRun],
+  );
 
   const selImg = nanoBananaSelectedImageIndex;
   const activeKlingSlot = useMemo(() => {
@@ -3639,7 +3724,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   return (
     <>
     <Card className="border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.10)]">
-      <CardHeader>
+      <CardHeader className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
             {hasStartedLinkToAdFlow ? (
@@ -3647,16 +3732,36 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                 type="button"
                 size="sm"
                 variant="secondary"
-                onClick={() => confirmAndResetLinkToAdToStart()}
-                className="h-8 shrink-0 gap-1.5 rounded-xl border border-white/15 bg-white/[0.04] px-2.5 text-xs font-semibold text-white/75 hover:border-red-400/35 hover:bg-red-500/10 hover:text-red-100"
+                onClick={() => handleReturnToFreshLinkToAd()}
+                className="h-8 shrink-0 gap-1.5 rounded-xl border border-white/15 bg-white/[0.04] px-2.5 text-xs font-semibold text-white/80 hover:border-violet-400/35 hover:bg-violet-500/10 hover:text-white"
               >
                 <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
-                Cancel the ad
+                Return to Link to Ad
               </Button>
             ) : null}
             <CardTitle className="text-base">Link to Ad</CardTitle>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
+            <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-white/10 bg-black/20 px-2 py-1.5 text-[10px] font-medium text-white/55 transition hover:border-white/15 hover:text-white/75">
+              <input
+                type="checkbox"
+                className="h-3.5 w-3.5 rounded border-white/25 bg-black/40 text-violet-500 focus:ring-violet-500/40"
+                checked={hidePreviousLtaGenerations}
+                onChange={toggleHidePreviousLtaGenerations}
+              />
+              Hide previous generations
+            </label>
+            {hasStartedLinkToAdFlow ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                onClick={() => confirmAndResetLinkToAdToStart()}
+                className="h-8 shrink-0 gap-1.5 rounded-xl border border-red-400/25 bg-red-500/10 px-2.5 text-xs font-semibold text-red-100/90 hover:border-red-400/45 hover:bg-red-500/20"
+              >
+                Cancel Link to Ad
+              </Button>
+            ) : null}
             {stage === "error" ? (
               <div className="flex items-center gap-2 text-xs text-red-300/90">
                 <span className="rounded-full border border-red-400/30 bg-red-500/10 px-2 py-1">Error</span>
@@ -3664,6 +3769,64 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
             ) : null}
           </div>
         </div>
+        {!hidePreviousLtaGenerations && recentLinkToAdRuns.length > 0 ? (
+          <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2.5">
+            <p className="text-[10px] leading-snug text-white/45">
+              All your Link to Ad generations are stored in your projects — switch between your last three here, or open
+              Projects for the full list.
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {recentLinkToAdRuns.map((r) => {
+                const active = (activeRunIdProp ?? universeRunId) === r.id;
+                const label =
+                  (r.title && r.title.trim()) ||
+                  (() => {
+                    try {
+                      return new URL(r.storeUrl).hostname.replace(/^www\./, "");
+                    } catch {
+                      return r.storeUrl.slice(0, 28);
+                    }
+                  })();
+                const dateShort = (() => {
+                  try {
+                    return new Date(r.createdAt).toLocaleDateString(undefined, {
+                      month: "short",
+                      day: "numeric",
+                    });
+                  } catch {
+                    return "";
+                  }
+                })();
+                return (
+                  <button
+                    key={r.id}
+                    type="button"
+                    onClick={() => handleSwitchRecentRun(r.id)}
+                    className={cn(
+                      "flex min-w-0 max-w-[11rem] items-center gap-2 rounded-lg border px-2 py-1.5 text-left transition",
+                      active
+                        ? "border-violet-400/50 bg-violet-500/15 text-white"
+                        : "border-white/10 bg-white/[0.03] text-white/75 hover:border-violet-400/35 hover:bg-white/[0.05]",
+                    )}
+                  >
+                    <span className="relative h-9 w-9 shrink-0 overflow-hidden rounded-md border border-white/10 bg-black/40">
+                      {r.thumbUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={r.thumbUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
+                      ) : (
+                        <span className="flex h-full w-full items-center justify-center text-[9px] text-white/30">—</span>
+                      )}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[11px] font-semibold leading-tight">{label}</span>
+                      <span className="text-[9px] text-white/40">{dateShort}</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
       </CardHeader>
 
       <CardContent className="space-y-6">

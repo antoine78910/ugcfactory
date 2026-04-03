@@ -540,6 +540,18 @@ export default function AppBrandWizard() {
   >([]);
   /** Open Link to Ad and hydrate from this run (Projects). */
   const [linkToAdResumeRunId, setLinkToAdResumeRunId] = useState<string | null>(null);
+  /** Remount Link to Ad for a clean session (Return to Link to Ad). */
+  const [linkToAdMountKey, setLinkToAdMountKey] = useState(0);
+  /**
+   * Once the user opens Link to Ad, keep the tree mounted when switching studio tabs
+   * (Image / Video / …) so in-flight generations, polling, and step state are not lost.
+   */
+  const linkToAdKeepAliveRef = useRef(false);
+  if (appSection === "link_to_ad") {
+    linkToAdKeepAliveRef.current = true;
+  }
+  /** Latest persisted run id reported by Link to Ad (for recent-run chips). */
+  const [linkToAdActiveRunId, setLinkToAdActiveRunId] = useState<string | null>(null);
   const [branchingNormalizedUrl, setBranchingNormalizedUrl] = useState<string | null>(null);
   const [deleteProjectDialog, setDeleteProjectDialog] = useState<{
     storeUrl: string;
@@ -1350,6 +1362,21 @@ export default function AppBrandWizard() {
     });
     out.sort((a, b) => new Date(b.runs[0].created_at).getTime() - new Date(a.runs[0].created_at).getTime());
     return out;
+  }, [savedRuns]);
+
+  /** Last 3 Link to Ad runs (any product) for quick switching without leaving this tab. */
+  const recentLinkToAdRuns = useMemo(() => {
+    return savedRuns
+      .filter((r) => runHasLinkToAdUniverse(r.extracted))
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, 3)
+      .map((r) => ({
+        id: r.id,
+        title: r.title,
+        storeUrl: r.store_url,
+        createdAt: r.created_at,
+        thumbUrl: universeThumbFromExtracted(r.extracted) || r.selected_image_url || null,
+      }));
   }, [savedRuns]);
 
   const selectedProject = useMemo(
@@ -3910,12 +3937,29 @@ export default function AppBrandWizard() {
                 </CardContent>
               </Card>
             ) : null}
-            {appSection === "link_to_ad" ? (
-              <LinkToAdUniverse
-                resumeRunId={linkToAdResumeRunId}
-                onResumeConsumed={() => setLinkToAdResumeRunId(null)}
-                onRunsChanged={() => void refreshMeAndRuns()}
-              />
+            {linkToAdKeepAliveRef.current ? (
+              <div
+                className={appSection === "link_to_ad" ? "contents" : "hidden"}
+                aria-hidden={appSection !== "link_to_ad"}
+              >
+                <LinkToAdUniverse
+                  key={linkToAdMountKey}
+                  resumeRunId={linkToAdResumeRunId}
+                  onResumeConsumed={() => setLinkToAdResumeRunId(null)}
+                  onRunsChanged={() => void refreshMeAndRuns()}
+                  recentLinkToAdRuns={recentLinkToAdRuns}
+                  activeRunId={linkToAdActiveRunId}
+                  onActiveRunIdChange={setLinkToAdActiveRunId}
+                  onStartFreshLinkToAdSession={() => {
+                    setLinkToAdResumeRunId(null);
+                    setLinkToAdMountKey((k) => k + 1);
+                    void refreshMeAndRuns();
+                  }}
+                  onSwitchLinkToAdRun={(runId) => {
+                    setLinkToAdResumeRunId(runId);
+                  }}
+                />
+              </div>
             ) : null}
 
             {appSection === "link_to_ad" && false && step === "url" && (
