@@ -3,6 +3,7 @@ import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { HeroVideoCarousel3D } from "./HeroVideoCarousel3D";
+import { LandingGenerateButton } from "./LandingGenerateButton";
 import { LandingRevealCarousel } from "./LandingRevealCarousel";
 import { LandingFaq } from "./LandingFaq";
 import { ArrowRight, Sparkles } from "lucide-react";
@@ -122,10 +123,15 @@ export default function LandingPage() {
 
         <div className="relative z-10 mx-auto w-full max-w-5xl px-5 pt-4 pb-10 text-center sm:pt-6 sm:pb-12 md:pt-8 md:pb-14">
           <h1 className="mx-auto max-w-4xl px-3 sm:px-6 text-4xl font-extrabold tracking-tight leading-[1.12] sm:text-5xl md:text-6xl">
-            Realistic AI UGC for{' '}
-            <span className="whitespace-nowrap">
-              <span className="text-violet-400">high-converting</span>
-              &nbsp;ads
+            <span className="mb-3 block text-sm font-semibold uppercase tracking-[0.18em] text-violet-300 sm:mb-3.5 sm:text-base md:mb-4 md:text-lg">
+              Seedance Pro 2.0 now available !
+            </span>
+            <span className="block">
+              Realistic AI UGC for{' '}
+              <span className="whitespace-nowrap">
+                <span className="text-violet-400">high-converting</span>
+                &nbsp;ads
+              </span>
             </span>
           </h1>
 
@@ -141,15 +147,9 @@ export default function LandingPage() {
                 placeholder="https://your-product-page.com"
                 className="h-11 flex-1 border-0 bg-transparent px-4 text-sm text-white placeholder:text-white/25 focus-visible:ring-0 focus-visible:ring-offset-0"
               />
-              <Button
-                asChild
-                className="h-auto min-h-10 shrink-0 rounded-xl bg-violet-400 px-3 py-2.5 text-center text-[11px] font-semibold leading-snug text-black border border-violet-200/40 shadow-[0_6px_0_0_rgba(76,29,149,0.9)] ring-offset-0 transition-all hover:-translate-y-[1px] hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9),0_0_32px_rgba(167,139,250,0.55)] focus-visible:border-violet-400/45 focus-visible:ring-violet-400/55 focus-visible:ring-[3px] active:translate-y-[6px] active:shadow-[0_0_0_0_rgba(76,29,149,0.9)] sm:rounded-2xl sm:px-5 sm:py-2.5 sm:text-xs md:text-sm"
-              >
-                <Link href="/signup" className="inline-flex items-center justify-center gap-1.5">
-                  <Sparkles className="h-4 w-4 shrink-0" aria-hidden />
-                  <span className="max-w-[14rem] sm:max-w-none">Seedance Pro 2.0 now available !</span>
-                </Link>
-              </Button>
+              <div className="flex shrink-0 items-center justify-center self-center sm:self-auto">
+                <LandingGenerateButton />
+              </div>
             </div>
             </div>
           </div>

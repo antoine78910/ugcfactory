@@ -559,10 +559,12 @@ export default function StudioVideoPanel({
   const [prompt, setPrompt] = useState("");
   const [multiShot, setMultiShot] = useState(false);
   const [soundOn, setSoundOn] = useState(true);
-  // Temporarily hide model selection; keep only duration in UI.
-  const HIDE_VIDEO_MODEL_PICKER = true;
+  /** Set to `true` to lock UI to a single model (e.g. maintenance). */
+  const HIDE_VIDEO_MODEL_PICKER = false;
+  /** Temporarily hide Video → Edit tab (edit models unavailable). */
+  const HIDE_VIDEO_EDIT_TAB = true;
   const FORCED_VIDEO_MODEL_ID: VideoModelId = "openai/sora-2";
-  const [modelId, setModelId] = useState<VideoModelId>(FORCED_VIDEO_MODEL_ID);
+  const [modelId, setModelId] = useState<VideoModelId>(VIDEO_MODEL_ACCESS_ORDER[0]!);
   const [duration, setDuration] = useState("10");
   const [aspect, setAspect] = useState("9:16");
   const [klingMode, setKlingMode] = useState<"std" | "pro">("std");
@@ -712,6 +714,10 @@ export default function StudioVideoPanel({
     const choices = getDurationChoices(FORCED_VIDEO_MODEL_ID);
     if (!choices.includes(duration)) setDuration(choices[0] ?? "10");
   }, [HIDE_VIDEO_MODEL_PICKER, modelId, duration]);
+
+  useEffect(() => {
+    if (HIDE_VIDEO_EDIT_TAB && tab === "edit") setTab("create");
+  }, [HIDE_VIDEO_EDIT_TAB, tab]);
 
   useEffect(() => {
     if (canUseStudioVideoModel(planId, modelId)) return;
@@ -1591,19 +1597,21 @@ export default function StudioVideoPanel({
           >
             Create
           </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            className={`h-7 rounded-md px-2.5 text-[11px] font-semibold ${tab === "edit" ? "bg-white text-black hover:bg-white/90" : "border-white/15 bg-white/5 text-white"}`}
-            onClick={() => setTab("edit")}
-          >
-            Edit
-          </Button>
+          {!HIDE_VIDEO_EDIT_TAB ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className={`h-7 rounded-md px-2.5 text-[11px] font-semibold ${tab === "edit" ? "bg-white text-black hover:bg-white/90" : "border-white/15 bg-white/5 text-white"}`}
+              onClick={() => setTab("edit")}
+            >
+              Edit
+            </Button>
+          ) : null}
         </div>
       </div>
 
-      {tab === "edit" ? (
+      {tab === "edit" && !HIDE_VIDEO_EDIT_TAB ? (
         <div className="flex flex-col gap-3 overflow-x-hidden lg:flex-row lg:items-start lg:gap-4 lg:h-[calc(100dvh-4rem)] lg:min-h-0">
           <div className={paramsColumnClass}>
             <div className="studio-params-scroll flex min-w-0 flex-col gap-2 overflow-y-auto lg:h-full lg:min-h-0 lg:flex-1 lg:pb-10">
