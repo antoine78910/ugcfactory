@@ -2,17 +2,19 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Sparkles } from "lucide-react";
+import { ArrowRight, CheckCircle2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import StudioShell from "@/app/_components/StudioShell";
 import { consumeCheckoutQueryParams, useCreditsPlan } from "@/app/_components/CreditsPlanContext";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { CREDIT_PACKS } from "@/lib/pricing";
+import { CREDIT_PACKS, calculateKling30VideoCredits } from "@/lib/pricing";
+import { CREDITS_NANO_PRO_PER_IMAGE } from "@/lib/linkToAd/generationCredits";
 
 type CreditPack = {
   key: string;
   price: string;
+  priceUsd: number;
   name: string;
   credits: number;
   description: string;
@@ -20,7 +22,7 @@ type CreditPack = {
   badge?: string;
 };
 
-const PACK_UI: Omit<CreditPack, "price" | "credits">[] = [
+const PACK_UI: Omit<CreditPack, "price" | "credits" | "priceUsd">[] = [
   {
     key: "starter",
     name: "Launch",
@@ -61,6 +63,7 @@ const creditPacks: CreditPack[] = PACK_UI.map((meta, i) => {
   return {
     ...meta,
     price: `$${row.price_usd}`,
+    priceUsd: row.price_usd,
     credits: row.credits,
   };
 });
@@ -68,6 +71,19 @@ const creditPacks: CreditPack[] = PACK_UI.map((meta, i) => {
 export default function CreditsPage() {
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const { planDisplayName } = useCreditsPlan();
+
+  // UI-only estimates for the pack marketing lines.
+  // Keep them stable even if you tweak billing rules elsewhere.
+  const creditsPerAiImage = CREDITS_NANO_PRO_PER_IMAGE;
+  const creditsPerAiVideo = calculateKling30VideoCredits(12, "pro", true); // 12s + audio + 1080p anchor
+
+  function estimateAiImages(credits: number) {
+    return Math.max(1, Math.floor(credits / creditsPerAiImage));
+  }
+
+  function estimateAiVideos(credits: number) {
+    return Math.max(1, Math.floor(credits / creditsPerAiVideo));
+  }
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -140,23 +156,9 @@ export default function CreditsPage() {
               </Link>
               .
             </p>
-
-            <p className="mt-4 text-xs text-white/35">
-              Current plan: <span className="text-white/55">{planDisplayName}</span>
-            </p>
           </header>
 
           <section>
-            <div className="mb-6 flex flex-col items-center gap-2 text-center sm:mb-8">
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1">
-                <Sparkles className="h-3.5 w-3.5 text-violet-300" aria-hidden />
-                <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/50">
-                  Credit packs
-                </span>
-              </div>
-              <p className="max-w-md text-sm text-white/45">Larger packs include a better price per credit.</p>
-            </div>
-
             <div className="mx-auto grid w-full max-w-5xl grid-cols-1 gap-5 px-3 pt-6 pb-1 sm:px-6 sm:pt-7 md:grid-cols-6 md:gap-5 lg:px-8">
               {creditPacks.map((p, packIndex) => {
                 const featured = p.key === "most-popular";
@@ -165,6 +167,10 @@ export default function CreditsPage() {
                 const savePercent = savePercentMatch?.[1] ?? null;
                 const topRow = packIndex < 3;
 
+                const oldPriceUsd = savePercent ? Math.round(p.priceUsd / (1 - Number(savePercent) / 100)) : null;
+                const imgCount = estimateAiImages(p.credits);
+                const vidCount = estimateAiVideos(p.credits);
+
                 return (
                   <div
                     key={p.key}
@@ -172,23 +178,10 @@ export default function CreditsPage() {
                       "relative flex min-w-0 w-full flex-col rounded-2xl border p-6 transition-all duration-300",
                       topRow ? "md:col-span-2" : "md:col-span-3",
                       featured || value
-                        ? "border-violet-400/35 bg-gradient-to-b from-violet-600/[0.14] via-[#0a0a10] to-[#06070d] shadow-[0_0_48px_rgba(139,92,246,0.12),0_8px_0_0_rgba(76,29,149,0.35)]"
+                        ? "border-violet-400/35 bg-gradient-to-b from-violet-600/[0.18] via-[#0a0a10] to-[#06070d] shadow-[0_0_48px_rgba(139,92,246,0.16),0_10px_0_0_rgba(76,29,149,0.35)]"
                         : "border-white/10 bg-white/[0.03] shadow-[0_0_24px_rgba(0,0,0,0.35)] hover:border-violet-500/25 hover:bg-white/[0.05]",
                     )}
                   >
-                    {savePercent ? (
-                      <div
-                        className="pointer-events-none z-[4] mb-2 inline-flex items-baseline gap-1 self-start rounded-full border border-emerald-400/25 bg-emerald-950/50 px-2.5 py-1 shadow-[0_4px_20px_rgba(16,185,129,0.18),inset_0_1px_0_rgba(255,255,255,0.1)] backdrop-blur-xl"
-                        aria-label={p.promoLine}
-                      >
-                        <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-emerald-200/75">
-                          Save
-                        </span>
-                        <span className="text-sm font-bold tabular-nums leading-none text-emerald-50 sm:text-base">
-                          {savePercent}%
-                        </span>
-                      </div>
-                    ) : null}
                     {p.badge ? (
                       <span
                         className={cn(
@@ -202,31 +195,37 @@ export default function CreditsPage() {
                       </span>
                     ) : null}
 
-                    <div className="mt-1 flex items-baseline justify-between gap-2">
-                      <h2 className="text-lg font-bold text-white">{p.name}</h2>
-                      <span className="text-2xl font-extrabold tabular-nums text-violet-100 sm:text-3xl">{p.price}</span>
-                    </div>
+                    <div className="mt-1 flex flex-col gap-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/40">
+                            Credits
+                          </p>
+                          <p className="mt-1 text-2xl font-extrabold tabular-nums tracking-tight text-white sm:text-3xl">
+                            {p.credits.toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
 
-                    <p className="mt-3 min-h-[2.75rem] text-sm leading-relaxed text-white/50">{p.description}</p>
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 text-[12px] font-medium text-white/55">
+                          <CheckCircle2 className="h-4 w-4 shrink-0 text-violet-200/70" aria-hidden />
+                          Up to {imgCount} AI images
+                        </div>
+                        <div className="flex items-center gap-2 text-[12px] font-medium text-white/55">
+                          <CheckCircle2 className="h-4 w-4 shrink-0 text-violet-200/70" aria-hidden />
+                          Up to {vidCount} AI videos
+                        </div>
+                      </div>
 
-                    <div className="mt-5">
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-white/35">You get</p>
-                      <p className="mt-1 text-3xl font-extrabold tabular-nums tracking-tight text-white">
-                        {p.credits.toLocaleString()}
-                        <span className="ml-1.5 text-base font-semibold text-white/40">credits</span>
-                      </p>
-                      {savePercent ? (
-                        <p className="mt-2 text-xs font-medium text-white/35">Better price per credit</p>
-                      ) : (
-                        <p
-                          className={cn(
-                            "mt-2 text-xs font-semibold",
-                            p.promoLine === "Entry pack" ? "text-white/40" : "text-violet-300/85",
-                          )}
-                        >
-                          {p.promoLine}
-                        </p>
-                      )}
+                      <div className="mt-2 flex items-baseline gap-2">
+                        <span className="text-3xl font-extrabold tabular-nums text-white">{p.price}</span>
+                        {oldPriceUsd != null && oldPriceUsd > p.priceUsd ? (
+                          <span className="text-sm font-semibold text-white/45 line-through">
+                            ${oldPriceUsd}
+                          </span>
+                        ) : null}
+                      </div>
                     </div>
 
                     <Button
@@ -244,7 +243,7 @@ export default function CreditsPage() {
                         <span className="inline-flex items-center gap-2">Redirecting…</span>
                       ) : (
                         <span className="inline-flex items-center gap-2">
-                          Buy pack
+                          Buy Now
                           <ArrowRight className="h-4 w-4" aria-hidden />
                         </span>
                       )}
