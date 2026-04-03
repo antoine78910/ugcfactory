@@ -809,8 +809,8 @@ export default function AppBrandWizard() {
         (item) =>
           item.status === "ready" &&
           Boolean(item.mediaUrl?.trim()) &&
-          isProbablyVideoUrl(item.mediaUrl) &&
-          item.kind !== "audio",
+          item.kind !== "audio" &&
+          (item.kind === "video" || item.kind === "motion" || isProbablyVideoUrl(item.mediaUrl)),
       ),
     [motionHistoryItems],
   );
