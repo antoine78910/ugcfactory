@@ -847,8 +847,8 @@ export const MOTION_CONTROL_CREDITS_PER_SECOND = {
 
 /** WaveSpeed / HeyGen video translate provider price from public docs. */
 export const WAVESPEED_HEYGEN_TRANSLATE_COST_USD_PER_SECOND = 0.0375;
-export const WAVESPEED_HEYGEN_TRANSLATE_CREDITS_PER_SECOND =
-  computeVideoModelFromCostUsd(WAVESPEED_HEYGEN_TRANSLATE_COST_USD_PER_SECOND).credits;
+/** Product billing rule: 1 credit per second of uploaded video. */
+export const WAVESPEED_HEYGEN_TRANSLATE_CREDITS_PER_SECOND = 1;
 
 /**
  * Motion control (Kling 3.0 MC): fixed credits/s by quality tier.
