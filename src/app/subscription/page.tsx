@@ -242,16 +242,9 @@ export default function SubscriptionPage() {
               <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1">
                 <Sparkles className="h-3.5 w-3.5 text-violet-300" aria-hidden />
                 <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/50">
-                  {isSubscribed ? "Your plan & upgrades" : "Compare plans"}
+                  Compare plans
                 </span>
               </div>
-              {isSubscribed ? (
-                <p className="max-w-lg text-sm text-white/50">
-                  Current plan:{" "}
-                  <span className="font-semibold text-white/85">{planDisplayName}</span>
-                  . All plans are shown — upgrade, switch yearly/monthly, or manage downgrades in billing.
-                </p>
-              ) : null}
             </div>
 
             <div className={cn("mx-auto grid max-w-6xl gap-5 pt-3", planGridClass)}>
