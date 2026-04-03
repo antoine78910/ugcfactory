@@ -682,6 +682,10 @@ export default function LinkToAdUniverse({
   const [ltaFrozenCredits, setLtaFrozenCredits] = useState<number | null>(null);
   const creditsBalanceRef = useRef(creditsBalance);
   creditsBalanceRef.current = creditsBalance;
+  /** When true, we already charged 10 credits once for regenerating the 3 Nano images. */
+  const [ltaPrepaidThreeImagesRegen, setLtaPrepaidThreeImagesRegen] = useState(false);
+  /** Previous images kept “warm” on the left when regenerating angles without recreating visuals. */
+  const [ltaWarmReferenceImages, setLtaWarmReferenceImages] = useState<string[]>([]);
 
   const [ltaCreditModal, setLtaCreditModal] = useState<{
     required: number;
@@ -2288,7 +2292,9 @@ export default function LinkToAdUniverse({
     }
   }
 
-  async function onRegenerateMarketingAngles() {
+  const [regenerateAnglesChoiceOpen, setRegenerateAnglesChoiceOpen] = useState(false);
+
+  async function onRegenerateMarketingAngles(opts?: { keepExistingImages?: boolean; regenImagesAlso?: boolean }) {
     const url = storeUrl.trim();
     if (!url || !lastExtractedJson || !summaryText.trim()) {
       toast.error("Incomplete data to regenerate angles.");
@@ -2305,6 +2311,19 @@ export default function LinkToAdUniverse({
       setLtaFrozenCredits(null);
       return;
     }
+    const wantsRegenImages = Boolean(opts?.regenImagesAlso);
+    if (wantsRegenImages && !ltaPrepaidThreeImagesRegen) {
+      if (!spendLtaCreditsIfEnough(10)) {
+        // Roll back the 2 credits if we cannot also pay the image refresh.
+        if (!isPlatformCreditBypassActive()) {
+          grantCredits(2);
+          creditsBalanceRef.current += 2;
+        }
+        setLtaFrozenCredits(null);
+        return;
+      }
+      setLtaPrepaidThreeImagesRegen(true);
+    }
 
     setIsWorking(true);
     setStage("writing_scripts");
@@ -2313,25 +2332,34 @@ export default function LinkToAdUniverse({
         .map((u) => u.trim())
         .filter((u, i, arr) => /^https?:\/\//i.test(u) && arr.indexOf(u) === i)
         .slice(0, 3);
-      const res = await fetch("/api/gpt/ugc-scripts-from-brief", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          storeUrl: url,
-          productTitle: extractedTitle,
-          brandBrief: summaryText.trim(),
-          previousScriptsText: scriptsText.trim(),
-          productImageUrls: resolvedProductUrlsForGpt(),
-          avatarImageUrls: personaRefs.length > 0 ? personaRefs : undefined,
-          videoDurationSeconds: videoDuration,
-          generationMode,
-          customUgcIntent: composeCustomUgcIntent(customUgcTopic, customUgcOffer, customUgcCta),
-          provider: scriptProvider,
-        }),
-      });
-      const json = (await res.json()) as { data?: string; error?: string };
-      if (!res.ok || !json.data) throw new Error(json.error || "Regenerate scripts failed");
-      const nextScripts = String(json.data);
+      const prevScripts = scriptsText.trim();
+      let nextScripts = "";
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const prevHint =
+          attempt === 0
+            ? prevScripts
+            : `${prevScripts}\n\nIMPORTANT: Generate 3 NEW angles that are clearly different from the previous set (different hooks, pains, and CTAs).`;
+        const res = await fetch("/api/gpt/ugc-scripts-from-brief", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            storeUrl: url,
+            productTitle: extractedTitle,
+            brandBrief: summaryText.trim(),
+            previousScriptsText: prevHint,
+            productImageUrls: resolvedProductUrlsForGpt(),
+            avatarImageUrls: personaRefs.length > 0 ? personaRefs : undefined,
+            videoDurationSeconds: videoDuration,
+            generationMode,
+            customUgcIntent: composeCustomUgcIntent(customUgcTopic, customUgcOffer, customUgcCta),
+            provider: scriptProvider,
+          }),
+        });
+        const json = (await res.json()) as { data?: string; error?: string };
+        if (!res.ok || !json.data) throw new Error(json.error || "Regenerate scripts failed");
+        nextScripts = String(json.data);
+        if (nextScripts.trim() && nextScripts.trim() !== prevScripts) break;
+      }
       const nextLabels = deriveAngleLabelsFromScripts(nextScripts);
 
       // Reset downstream generations to avoid mixing prompts/images/videos across different scripts.
@@ -2341,6 +2369,12 @@ export default function LinkToAdUniverse({
       setNanoBananaPromptsRaw("");
       setNanoBananaSelectedPromptIndex(0);
       setNanoBananaTaskId(null);
+      const keepImages = Boolean(opts?.keepExistingImages);
+      if (keepImages) {
+        const warm = nanoBananaImageUrls.filter((u) => typeof u === "string" && u.trim().length > 0);
+        if (warm.length) setLtaWarmReferenceImages((prev) => [...warm, ...prev].slice(0, 24));
+      }
+      // Always clear current 3-image state when scripts change (avoid mixing old visuals with new angles).
       setNanoBananaImageUrl(null);
       setNanoBananaImageUrls([]);
       setNanoBananaSelectedImageIndex(null);
@@ -2390,6 +2424,11 @@ export default function LinkToAdUniverse({
       if (!isPlatformCreditBypassActive()) {
         grantCredits(2);
         creditsBalanceRef.current += 2;
+        if (opts?.regenImagesAlso && ltaPrepaidThreeImagesRegen) {
+          grantCredits(10);
+          creditsBalanceRef.current += 10;
+          setLtaPrepaidThreeImagesRegen(false);
+        }
         setLtaFrozenCredits(null);
       }
       const msg = err instanceof Error ? err.message : "Regenerate failed";
@@ -2398,6 +2437,15 @@ export default function LinkToAdUniverse({
     } finally {
       setIsWorking(false);
     }
+  }
+
+  function requestRegenerateMarketingAngles() {
+    const hasImgs = nanoBananaImageUrls.some((u) => typeof u === "string" && u.trim().length > 0);
+    if (hasImgs) {
+      setRegenerateAnglesChoiceOpen(true);
+      return;
+    }
+    void onRegenerateMarketingAngles();
   }
 
   async function onRun(opts?: { bypassSavedProject?: boolean }) {
@@ -2880,12 +2928,24 @@ export default function LinkToAdUniverse({
     }
   }
 
-  async function onGenerateNanoBananaImagesFromAllPrompts() {
+  async function onGenerateNanoBananaImagesFromAllPrompts(opts?: { forceRegenerateCharge?: boolean }) {
     const url = storeUrl.trim();
     const idx = selectedAngleIndex;
     if (!url || !lastExtractedJson || idx === null) {
       toast.error("Project not ready to generate images.");
       return;
+    }
+    const force = Boolean(opts?.forceRegenerateCharge);
+    const hasExisting = nanoBananaImageUrls.some((u) => typeof u === "string" && u.trim().length > 0);
+    const shouldCharge = (force || hasExisting) && !ltaPrepaidThreeImagesRegen;
+    const usingPrepaid = ltaPrepaidThreeImagesRegen && !shouldCharge;
+    if (shouldCharge) {
+      const walletNow = creditsBalanceRef.current;
+      setLtaFrozenCredits(walletNow);
+      if (!spendLtaCreditsIfEnough(10)) {
+        setLtaFrozenCredits(null);
+        return;
+      }
     }
     const nanoRefs = resolveNanoProductImageUrls();
     const img = nanoRefs[0];
@@ -2960,8 +3020,16 @@ export default function LinkToAdUniverse({
       await persistNanoThreeGeneratedImages(url, prompts as [string, string, string], urlsByPrompt, lastTaskId);
 
       toast.success("3 images generated");
+      if (shouldCharge || usingPrepaid) setLtaPrepaidThreeImagesRegen(false);
+      setLtaFrozenCredits(null);
     } catch (e) {
       if (e instanceof DOMException && e.name === "AbortError") return;
+      if ((shouldCharge || usingPrepaid) && !isPlatformCreditBypassActive()) {
+        grantCredits(10);
+        creditsBalanceRef.current += 10;
+        setLtaPrepaidThreeImagesRegen(false);
+        setLtaFrozenCredits(null);
+      }
       toast.error("Image generation", {
         description: e instanceof Error ? e.message : "Unknown error",
       });
@@ -4446,7 +4514,7 @@ export default function LinkToAdUniverse({
                     type="button"
                     size="sm"
                     disabled={isWorking || stage === "writing_scripts"}
-                    onClick={() => void onRegenerateMarketingAngles()}
+                    onClick={() => requestRegenerateMarketingAngles()}
                     className={`${primaryBtnClass} h-auto min-h-12 shrink-0 px-4 py-2 text-sm inline-flex flex-col items-center justify-center gap-0.5`}
                   >
                     <span className="font-semibold leading-tight">Regenerate 3 new angles</span>
@@ -4854,15 +4922,56 @@ export default function LinkToAdUniverse({
                             selectedAngleIndex === null ||
                             !nanoBananaPromptsRaw.trim()
                           }
-                          onClick={() => void onGenerateNanoBananaImagesFromAllPrompts()}
+                          onClick={() => void onGenerateNanoBananaImagesFromAllPrompts({ forceRegenerateCharge: true })}
                           className="mt-1 text-[10px] font-medium text-violet-300/85 underline-offset-2 transition hover:text-violet-200 hover:underline disabled:cursor-not-allowed disabled:no-underline disabled:opacity-40"
                         >
-                          Regenerate 3 images
+                          Regenerate 3 images · 10 credits
                         </button>
                       ) : null}
                     </div>
                   ) : null}
                 </div>
+
+                {ltaWarmReferenceImages.length > 0 ? (
+                  <div className="mt-3 border-t border-white/10 pt-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
+                        Saved images
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setLtaWarmReferenceImages([])}
+                        className="text-[10px] font-medium text-white/40 underline-offset-2 transition hover:text-white/70 hover:underline"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {ltaWarmReferenceImages.map((url, i) => (
+                        <button
+                          key={`${url}-${i}`}
+                          type="button"
+                          className="group relative aspect-[9/16] w-[4.25rem] shrink-0 overflow-hidden rounded-lg border border-white/15 bg-black transition hover:border-violet-400/60"
+                          onClick={() => setNanoImageLightboxUrl(url)}
+                          aria-label="Open saved image"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={url}
+                            alt=""
+                            className="h-full w-full object-cover object-center"
+                            loading="lazy"
+                            decoding="async"
+                          />
+                          <span className="pointer-events-none absolute inset-0 bg-black/0 transition group-hover:bg-black/10" />
+                        </button>
+                      ))}
+                    </div>
+                    <p className="mt-2 text-[10px] leading-snug text-white/35">
+                      These are kept for reference when you regenerate angles.
+                    </p>
+                  </div>
+                ) : null}
 
                 {scriptsText.trim() ? (
                   <div className="mt-3 border-t border-white/10 pt-3">
@@ -5045,10 +5154,10 @@ export default function LinkToAdUniverse({
                               selectedAngleIndex === null ||
                               !nanoBananaPromptsRaw.trim()
                             }
-                            onClick={() => void onGenerateNanoBananaImagesFromAllPrompts()}
+                            onClick={() => void onGenerateNanoBananaImagesFromAllPrompts({ forceRegenerateCharge: true })}
                             className="mt-2 w-fit text-[10px] font-medium text-violet-300/85 underline-offset-2 transition hover:text-violet-200 hover:underline disabled:cursor-not-allowed disabled:no-underline disabled:opacity-40"
                           >
-                            Regenerate 3 images
+                            Regenerate 3 images · 10 credits
                           </button>
                         ) : null}
                       </div>
@@ -5741,6 +5850,57 @@ export default function LinkToAdUniverse({
           loading="eager"
           decoding="async"
         />
+      </div>
+    ) : null}
+
+    {regenerateAnglesChoiceOpen ? (
+      <div
+        className="fixed inset-0 z-[210] flex items-center justify-center bg-black/70 p-4 backdrop-blur-[2px]"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Regenerate angles"
+        onClick={() => setRegenerateAnglesChoiceOpen(false)}
+      >
+        <div
+          className="w-full max-w-md rounded-2xl border border-white/12 bg-[#101014] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.75)]"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <p className="text-sm font-semibold text-white">Regenerate 3 angles</p>
+          <p className="mt-1 text-xs leading-relaxed text-white/55">
+            You already have generated images. Do you want to keep them as references, or recreate new ones?
+          </p>
+          <div className="mt-4 grid gap-2">
+            <Button
+              type="button"
+              onClick={() => {
+                setRegenerateAnglesChoiceOpen(false);
+                void onRegenerateMarketingAngles({ keepExistingImages: true, regenImagesAlso: false });
+              }}
+              className="h-11 rounded-xl border border-white/10 bg-white/5 text-white hover:bg-white/10"
+              variant="secondary"
+            >
+              Keep existing images (no extra charge)
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                setRegenerateAnglesChoiceOpen(false);
+                void onRegenerateMarketingAngles({ keepExistingImages: false, regenImagesAlso: true });
+              }}
+              className="h-11 rounded-xl border border-violet-400/40 bg-violet-500/30 text-white hover:bg-violet-500/40"
+            >
+              Recreate images too (+10 credits)
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              className="h-10 text-white/70 hover:text-white hover:bg-white/10"
+              onClick={() => setRegenerateAnglesChoiceOpen(false)}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
       </div>
     ) : null}
 
