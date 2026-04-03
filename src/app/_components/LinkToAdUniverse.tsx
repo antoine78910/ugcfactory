@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -575,6 +575,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const [ltaFrozenCredits, setLtaFrozenCredits] = useState<number | null>(null);
   const creditsBalanceRef = useRef(creditsBalance);
   creditsBalanceRef.current = creditsBalance;
+  const prefersReducedMotion = useReducedMotion();
 
   const [ltaCreditModal, setLtaCreditModal] = useState<{
     required: number;
@@ -728,6 +729,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     "",
   ]);
   const [nanoPromptHasEdits, setNanoPromptHasEdits] = useState(false);
+  /** null = 3-up compact grid; 0–2 = full-width editor for that frame, others below. */
+  const [nanoPromptExpandedFrame, setNanoPromptExpandedFrame] = useState<0 | 1 | 2 | null>(null);
   /** Per reference image (0–2): Kling video URL, task id, history, saved motion prompt. */
   const [klingByRef, setKlingByRef] = useState<KlingReferenceSlotV1[]>(() => createEmptyKlingByReference());
   /** Which reference index the active Kling poll belongs to (single global poll). */
@@ -922,6 +925,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     setNanoPromptDrafts(["", "", ""]);
     setNanoPromptTechnicalTails(["", "", ""]);
     setNanoPromptHasEdits(false);
+    setNanoPromptExpandedFrame(null);
     setVideoPromptInlineEdit(false);
     setVideoPromptHasEdits(false);
     setVideoPromptEditVisible(false);
@@ -1235,7 +1239,35 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     setNanoPromptDrafts([parts[0].editable, parts[1].editable, parts[2].editable]);
     setNanoPromptTechnicalTails([parts[0].technicalTail, parts[1].technicalTail, parts[2].technicalTail]);
     setNanoPromptHasEdits(false);
+    setNanoPromptExpandedFrame(null);
   }, [nanoBananaPromptsRaw]);
+
+  const patchNanoPromptFrame = useCallback(
+    (frameIdx: 0 | 1 | 2, field: "person" | "scene" | "product", value: string) => {
+      setNanoPromptDrafts((prev) => {
+        const parsed = parseNanoEditableSections(prev[frameIdx] ?? "");
+        const nextEditable = composeNanoEditableSections({
+          person: field === "person" ? value : parsed.person,
+          scene: field === "scene" ? value : parsed.scene,
+          product: field === "product" ? value : parsed.product,
+        });
+        const next = [...prev] as [string, string, string];
+        next[frameIdx] = nextEditable;
+        return next;
+      });
+      setNanoPromptHasEdits(true);
+    },
+    [],
+  );
+
+  const setNanoPromptFrameRaw = useCallback((frameIdx: 0 | 1 | 2, value: string) => {
+    setNanoPromptDrafts((prev) => {
+      const next = [...prev] as [string, string, string];
+      next[frameIdx] = value;
+      return next;
+    });
+    setNanoPromptHasEdits(true);
+  }, []);
 
   async function saveEditedNanoPrompts() {
     for (let i = 0; i < 3; i++) {
@@ -4811,138 +4843,229 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                           Tweak who is on camera, setting, and product. Technical details still apply on generate.
                         </p>
                       </div>
-                      <div className="grid min-w-0 grid-cols-3 gap-1.5 sm:gap-2">
-                        {([0, 1, 2] as const).map((i) => {
-                          const draft = nanoPromptDrafts[i] ?? "";
-                          const parsed = parseNanoEditableSections(draft);
-                          const previewText = (value: string, max = 88) => {
-                            const t = value.replace(/\s+/g, " ").trim();
-                            if (!t) return "—";
-                            return t.length > max ? `${t.slice(0, max).trim()}…` : t;
-                          };
-                          const patchStructured = (field: "person" | "scene" | "product", value: string) => {
-                            const nextEditable = composeNanoEditableSections({
-                              person: field === "person" ? value : parsed.person,
-                              scene: field === "scene" ? value : parsed.scene,
-                              product: field === "product" ? value : parsed.product,
-                            });
-                            const next: [string, string, string] = [...nanoPromptDrafts] as [
-                              string,
-                              string,
-                              string,
-                            ];
-                            next[i] = nextEditable;
-                            setNanoPromptDrafts(next);
-                            setNanoPromptHasEdits(true);
-                          };
-                          return (
-                            <details
-                              key={i}
-                              className="min-w-0 rounded-lg border border-white/10 bg-black/25 px-2 py-1.5 text-[11px] leading-relaxed text-white/85 sm:rounded-xl sm:px-2.5 sm:py-2"
-                            >
-                              <summary className="cursor-pointer list-none">
-                                <div className="flex items-center justify-between gap-1">
-                                  <p className="text-[9px] font-semibold uppercase tracking-wide text-white/45">
-                                    Frame {i + 1}
-                                  </p>
-                                  <span className="shrink-0 text-[9px] text-white/35">Edit</span>
-                                </div>
-                                {parsed.isStructured ? (
-                                  <div className="mt-1.5 grid grid-cols-3 gap-1">
-                                    <div className="min-w-0 rounded border border-white/8 bg-white/[0.03] px-1 py-1">
-                                      <p className="text-[8px] font-medium uppercase tracking-wide text-white/40">
-                                        Avatar
-                                      </p>
-                                      <p className="mt-0.5 line-clamp-3 text-[9px] leading-snug text-white/75">
-                                        {previewText(parsed.person, 42)}
-                                      </p>
-                                    </div>
-                                    <div className="min-w-0 rounded border border-white/8 bg-white/[0.03] px-1 py-1">
-                                      <p className="text-[8px] font-medium uppercase tracking-wide text-white/40">
-                                        Scene
-                                      </p>
-                                      <p className="mt-0.5 line-clamp-3 text-[9px] leading-snug text-white/75">
-                                        {previewText(parsed.scene, 42)}
-                                      </p>
-                                    </div>
-                                    <div className="min-w-0 rounded border border-white/8 bg-white/[0.03] px-1 py-1">
-                                      <p className="text-[8px] font-medium uppercase tracking-wide text-white/40">
-                                        Product
-                                      </p>
-                                      <p className="mt-0.5 line-clamp-3 text-[9px] leading-snug text-white/75">
-                                        {previewText(parsed.product, 42)}
-                                      </p>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <p className="mt-1.5 line-clamp-4 text-[10px] leading-snug text-white/65">
-                                    {previewText(draft, 120)}
-                                  </p>
-                                )}
-                              </summary>
-                              <div className="mt-2 border-t border-white/10 pt-2">
-                                {parsed.isStructured ? (
-                                  <div className="grid gap-1.5">
-                                    <div>
-                                      <Label className="mb-0.5 block text-[9px] font-medium text-white/45">
-                                        Person / avatar
-                                      </Label>
-                                      <Textarea
-                                        value={parsed.person}
-                                        onChange={(e) => patchStructured("person", e.target.value)}
-                                        className="min-h-[52px] border-white/10 bg-black/25 text-[11px] leading-relaxed text-white/85"
-                                        spellCheck
-                                      />
-                                    </div>
-                                    <div>
-                                      <Label className="mb-0.5 block text-[9px] font-medium text-white/45">Scene</Label>
-                                      <Textarea
-                                        value={parsed.scene}
-                                        onChange={(e) => patchStructured("scene", e.target.value)}
-                                        className="min-h-[52px] border-white/10 bg-black/25 text-[11px] leading-relaxed text-white/85"
-                                        spellCheck
-                                      />
-                                    </div>
-                                    <div>
-                                      <Label className="mb-0.5 block text-[9px] font-medium text-white/45">
-                                        Product &amp; action
-                                      </Label>
-                                      <Textarea
-                                        value={parsed.product}
-                                        onChange={(e) => patchStructured("product", e.target.value)}
-                                        className="min-h-[52px] border-white/10 bg-black/25 text-[11px] leading-relaxed text-white/85"
-                                        spellCheck
-                                      />
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <>
-                                    <p className="mb-2 text-[10px] leading-snug text-amber-200/85">
-                                      Older prompt format: use &quot;Generate 3 prompts&quot; again for the short fields, or
-                                      edit the full text below.
+                      <AnimatePresence mode="wait">
+                        {nanoPromptExpandedFrame === null ? (
+                          <motion.div
+                            key="nano-prompts-grid"
+                            role="region"
+                            aria-label="Three reference prompts"
+                            initial={prefersReducedMotion ? false : { opacity: 0, y: 12 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={prefersReducedMotion ? undefined : { opacity: 0, y: -10 }}
+                            transition={
+                              prefersReducedMotion
+                                ? { duration: 0 }
+                                : { duration: 0.32, ease: [0.22, 1, 0.36, 1] }
+                            }
+                            className="grid min-w-0 grid-cols-3 gap-1.5 sm:gap-2"
+                          >
+                            {([0, 1, 2] as const).map((i) => {
+                              const draft = nanoPromptDrafts[i] ?? "";
+                              const parsed = parseNanoEditableSections(draft);
+                              const previewText = (value: string, max = 88) => {
+                                const t = value.replace(/\s+/g, " ").trim();
+                                if (!t) return "—";
+                                return t.length > max ? `${t.slice(0, max).trim()}…` : t;
+                              };
+                              return (
+                                <button
+                                  key={i}
+                                  type="button"
+                                  onClick={() => setNanoPromptExpandedFrame(i)}
+                                  className="min-w-0 rounded-lg border border-white/10 bg-black/25 px-2 py-1.5 text-left text-[11px] leading-relaxed text-white/85 transition hover:border-violet-400/35 hover:bg-white/[0.04] sm:rounded-xl sm:px-2.5 sm:py-2"
+                                >
+                                  <div className="flex items-center justify-between gap-1">
+                                    <p className="text-[9px] font-semibold uppercase tracking-wide text-white/45">
+                                      Frame {i + 1}
                                     </p>
-                                    <Textarea
-                                      value={draft}
-                                      onChange={(e) => {
-                                        const next: [string, string, string] = [...nanoPromptDrafts] as [
-                                          string,
-                                          string,
-                                          string,
-                                        ];
-                                        next[i] = e.target.value;
-                                        setNanoPromptDrafts(next);
-                                        setNanoPromptHasEdits(true);
-                                      }}
-                                      className="min-h-[96px] border-white/10 bg-black/25 text-xs leading-relaxed text-white/85"
-                                      spellCheck
-                                    />
-                                  </>
-                                )}
-                              </div>
-                            </details>
-                          );
-                        })}
-                      </div>
+                                    <span className="shrink-0 text-[9px] font-medium text-violet-300/90">Edit</span>
+                                  </div>
+                                  {parsed.isStructured ? (
+                                    <div className="mt-1.5 grid grid-cols-3 gap-1">
+                                      <div className="min-w-0 rounded border border-white/8 bg-white/[0.03] px-1 py-1">
+                                        <p className="text-[8px] font-medium uppercase tracking-wide text-white/40">
+                                          Avatar
+                                        </p>
+                                        <p className="mt-0.5 line-clamp-3 text-[9px] leading-snug text-white/75">
+                                          {previewText(parsed.person, 42)}
+                                        </p>
+                                      </div>
+                                      <div className="min-w-0 rounded border border-white/8 bg-white/[0.03] px-1 py-1">
+                                        <p className="text-[8px] font-medium uppercase tracking-wide text-white/40">
+                                          Scene
+                                        </p>
+                                        <p className="mt-0.5 line-clamp-3 text-[9px] leading-snug text-white/75">
+                                          {previewText(parsed.scene, 42)}
+                                        </p>
+                                      </div>
+                                      <div className="min-w-0 rounded border border-white/8 bg-white/[0.03] px-1 py-1">
+                                        <p className="text-[8px] font-medium uppercase tracking-wide text-white/40">
+                                          Product
+                                        </p>
+                                        <p className="mt-0.5 line-clamp-3 text-[9px] leading-snug text-white/75">
+                                          {previewText(parsed.product, 42)}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <p className="mt-1.5 line-clamp-4 text-[10px] leading-snug text-white/65">
+                                      {previewText(draft, 120)}
+                                    </p>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </motion.div>
+                        ) : (
+                          <motion.div
+                            key="nano-prompts-expanded"
+                            initial={prefersReducedMotion ? false : { opacity: 0, y: 14 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={prefersReducedMotion ? undefined : { opacity: 0, y: 8 }}
+                            transition={
+                              prefersReducedMotion
+                                ? { duration: 0 }
+                                : { duration: 0.34, ease: [0.22, 1, 0.36, 1] }
+                            }
+                            className="space-y-4"
+                          >
+                            {(() => {
+                              const i = nanoPromptExpandedFrame;
+                              const draft = nanoPromptDrafts[i] ?? "";
+                              const parsed = parseNanoEditableSections(draft);
+                              return (
+                                <div className="w-full overflow-hidden rounded-2xl border border-violet-500/30 bg-gradient-to-b from-violet-500/[0.12] via-[#0d0a14]/90 to-black/40 p-4 shadow-[0_0_40px_rgba(139,92,246,0.08)] sm:p-6">
+                                  <div className="mb-5 flex flex-wrap items-start justify-between gap-3 border-b border-white/10 pb-4">
+                                    <div>
+                                      <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-200/95">
+                                        Reference frame {i + 1}
+                                      </p>
+                                      <p className="mt-1 max-w-xl text-sm text-white/55">
+                                        Adjust avatar, scene, and product — full width for precise edits.
+                                      </p>
+                                    </div>
+                                    <Button
+                                      type="button"
+                                      variant="secondary"
+                                      size="sm"
+                                      onClick={() => setNanoPromptExpandedFrame(null)}
+                                      className="shrink-0 rounded-xl border border-white/15 bg-white/[0.06] text-xs text-white/85 hover:bg-white/10"
+                                    >
+                                      <ChevronUp className="mr-1.5 h-3.5 w-3.5 opacity-80" aria-hidden />
+                                      All frames
+                                    </Button>
+                                  </div>
+                                  {parsed.isStructured ? (
+                                    <div className="flex w-full flex-col gap-6">
+                                      <div className="w-full">
+                                        <Label className="mb-2 block text-xs font-semibold text-white/80">
+                                          Avatar / person on camera
+                                        </Label>
+                                        <p className="mb-2 text-[11px] leading-snug text-white/40">
+                                          Who appears on camera, styling, and energy.
+                                        </p>
+                                        <Textarea
+                                          value={parsed.person}
+                                          onChange={(e) => patchNanoPromptFrame(i, "person", e.target.value)}
+                                          className="min-h-[112px] w-full resize-y border-white/10 bg-black/35 px-3 py-2.5 text-sm leading-relaxed text-white/90"
+                                          spellCheck
+                                        />
+                                      </div>
+                                      <div className="w-full">
+                                        <Label className="mb-2 block text-xs font-semibold text-white/80">Scene</Label>
+                                        <p className="mb-2 text-[11px] leading-snug text-white/40">
+                                          Setting, lighting, and background mood.
+                                        </p>
+                                        <Textarea
+                                          value={parsed.scene}
+                                          onChange={(e) => patchNanoPromptFrame(i, "scene", e.target.value)}
+                                          className="min-h-[112px] w-full resize-y border-white/10 bg-black/35 px-3 py-2.5 text-sm leading-relaxed text-white/90"
+                                          spellCheck
+                                        />
+                                      </div>
+                                      <div className="w-full">
+                                        <Label className="mb-2 block text-xs font-semibold text-white/80">
+                                          Product &amp; action
+                                        </Label>
+                                        <p className="mb-2 text-[11px] leading-snug text-white/40">
+                                          How the product shows up and what happens in frame.
+                                        </p>
+                                        <Textarea
+                                          value={parsed.product}
+                                          onChange={(e) => patchNanoPromptFrame(i, "product", e.target.value)}
+                                          className="min-h-[112px] w-full resize-y border-white/10 bg-black/35 px-3 py-2.5 text-sm leading-relaxed text-white/90"
+                                          spellCheck
+                                        />
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="w-full">
+                                      <p className="mb-3 text-[11px] leading-snug text-amber-200/85">
+                                        Older prompt format: use &quot;Generate 3 prompts&quot; again for the short fields, or
+                                        edit the full text below.
+                                      </p>
+                                      <Textarea
+                                        value={draft}
+                                        onChange={(e) => setNanoPromptFrameRaw(i, e.target.value)}
+                                        className="min-h-[220px] w-full resize-y border-white/10 bg-black/35 px-3 py-2.5 text-sm leading-relaxed text-white/90"
+                                        spellCheck
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                              {([0, 1, 2] as const)
+                                .filter((j) => j !== nanoPromptExpandedFrame)
+                                .map((j) => {
+                                  const draft = nanoPromptDrafts[j] ?? "";
+                                  const parsed = parseNanoEditableSections(draft);
+                                  const previewText = (value: string, max = 72) => {
+                                    const t = value.replace(/\s+/g, " ").trim();
+                                    if (!t) return "—";
+                                    return t.length > max ? `${t.slice(0, max).trim()}…` : t;
+                                  };
+                                  return (
+                                    <button
+                                      key={j}
+                                      type="button"
+                                      onClick={() => setNanoPromptExpandedFrame(j)}
+                                      className="rounded-xl border border-white/10 bg-black/30 px-3 py-3 text-left transition hover:border-violet-400/40 hover:bg-white/[0.05]"
+                                    >
+                                      <div className="flex items-center justify-between gap-2">
+                                        <span className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
+                                          Frame {j + 1}
+                                        </span>
+                                        <span className="text-[10px] font-medium text-violet-300/90">Edit</span>
+                                      </div>
+                                      {parsed.isStructured ? (
+                                        <div className="mt-2 space-y-1.5 text-[10px] leading-snug text-white/55">
+                                          <p>
+                                            <span className="text-white/35">Avatar · </span>
+                                            {previewText(parsed.person, 64)}
+                                          </p>
+                                          <p>
+                                            <span className="text-white/35">Scene · </span>
+                                            {previewText(parsed.scene, 64)}
+                                          </p>
+                                          <p>
+                                            <span className="text-white/35">Product · </span>
+                                            {previewText(parsed.product, 64)}
+                                          </p>
+                                        </div>
+                                      ) : (
+                                        <p className="mt-2 line-clamp-3 text-[10px] leading-snug text-white/55">
+                                          {previewText(draft, 140)}
+                                        </p>
+                                      )}
+                                    </button>
+                                  );
+                                })}
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                       <div className="flex flex-col gap-2">
                         <div className="flex flex-wrap items-center gap-2">
                           <Button
