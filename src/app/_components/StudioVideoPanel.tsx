@@ -559,8 +559,11 @@ export default function StudioVideoPanel({
   const [prompt, setPrompt] = useState("");
   const [multiShot, setMultiShot] = useState(false);
   const [soundOn, setSoundOn] = useState(true);
-  const [modelId, setModelId] = useState<VideoModelId>("bytedance/seedance-1.5-pro");
-  const [duration, setDuration] = useState("12");
+  // Temporarily hide model selection; keep only duration in UI.
+  const HIDE_VIDEO_MODEL_PICKER = true;
+  const FORCED_VIDEO_MODEL_ID: VideoModelId = "openai/sora-2";
+  const [modelId, setModelId] = useState<VideoModelId>(FORCED_VIDEO_MODEL_ID);
+  const [duration, setDuration] = useState("10");
   const [aspect, setAspect] = useState("9:16");
   const [klingMode, setKlingMode] = useState<"std" | "pro">("std");
   const [veoAspect, setVeoAspect] = useState<"16:9" | "9:16" | "Auto">("9:16");
@@ -702,6 +705,13 @@ export default function StudioVideoPanel({
       }),
     [editPickerId, editVideoDurationSec, editMotionDurationSec, editKlingMode, editAutoSettings],
   );
+
+  useEffect(() => {
+    if (!HIDE_VIDEO_MODEL_PICKER) return;
+    if (modelId !== FORCED_VIDEO_MODEL_ID) setModelId(FORCED_VIDEO_MODEL_ID);
+    const choices = getDurationChoices(FORCED_VIDEO_MODEL_ID);
+    if (!choices.includes(duration)) setDuration(choices[0] ?? "10");
+  }, [HIDE_VIDEO_MODEL_PICKER, modelId, duration]);
 
   useEffect(() => {
     if (canUseStudioVideoModel(planId, modelId)) return;
@@ -1902,16 +1912,15 @@ export default function StudioVideoPanel({
 
             <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Parameters</p>
             <div className="rounded-2xl border border-white/10 bg-[#101014] p-3 space-y-3">
-              <div>
+              {HIDE_VIDEO_MODEL_PICKER ? null : (
+                <div>
                   <StudioModelPicker
                     value={modelId}
                     items={VIDEO_MODEL_PICKER_ITEMS}
                     triggerVariant="bar"
                     panelMode="dropdown"
                     hideMeta
-                    isItemLocked={(id) =>
-                      !isPersonalApiActive() && !canUseStudioVideoModel(planId, id)
-                    }
+                    isItemLocked={(id) => !isPersonalApiActive() && !canUseStudioVideoModel(planId, id)}
                     onLockedPick={(id) => {
                       setBilling({ open: true, reason: "plan", blockedId: id, studioMode: "video" });
                     }}
@@ -1923,7 +1932,8 @@ export default function StudioVideoPanel({
                     }}
                     featuredTitle="Video models"
                   />
-              </div>
+                </div>
+              )}
 
               {modelHasMultiShot(modelId) ? (
                 <div className="flex items-center justify-between gap-3">
