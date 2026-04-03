@@ -8,8 +8,7 @@ import StudioShell from "@/app/_components/StudioShell";
 import { consumeCheckoutQueryParams, useCreditsPlan } from "@/app/_components/CreditsPlanContext";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { CREDIT_PACKS, calculateKling30VideoCredits } from "@/lib/pricing";
-import { CREDITS_NANO_PRO_PER_IMAGE } from "@/lib/linkToAd/generationCredits";
+import { CREDIT_PACKS } from "@/lib/pricing";
 
 type CreditPack = {
   key: string;
@@ -73,16 +72,16 @@ export default function CreditsPage() {
   const { planDisplayName } = useCreditsPlan();
 
   // UI-only estimates for the pack marketing lines.
-  // Keep them stable even if you tweak billing rules elsewhere.
-  const creditsPerAiImage = CREDITS_NANO_PRO_PER_IMAGE;
-  const creditsPerAiVideo = calculateKling30VideoCredits(12, "pro", true); // 12s + audio + 1080p anchor
+  // As requested: Sora 2 videos use 5 credits each; Nanobanana images use 0.5 credits each.
+  const CREDITS_PER_SORA2_VIDEO = 5;
+  const CREDITS_PER_NANOBANANA_IMAGE = 0.5;
 
-  function estimateAiImages(credits: number) {
-    return Math.max(1, Math.floor(credits / creditsPerAiImage));
+  function upToAiImagesFromCredits(credits: number) {
+    return Math.max(1, Math.floor(credits / CREDITS_PER_NANOBANANA_IMAGE));
   }
 
-  function estimateAiVideos(credits: number) {
-    return Math.max(1, Math.floor(credits / creditsPerAiVideo));
+  function upToAiVideosFromCredits(credits: number) {
+    return Math.max(1, Math.floor(credits / CREDITS_PER_SORA2_VIDEO));
   }
 
   useEffect(() => {
@@ -168,8 +167,8 @@ export default function CreditsPage() {
                 const topRow = packIndex < 3;
 
                 const oldPriceUsd = savePercent ? Math.round(p.priceUsd / (1 - Number(savePercent) / 100)) : null;
-                const imgCount = estimateAiImages(p.credits);
-                const vidCount = estimateAiVideos(p.credits);
+                const imgCount = upToAiImagesFromCredits(p.credits);
+                const vidCount = upToAiVideosFromCredits(p.credits);
 
                 return (
                   <div
@@ -210,11 +209,11 @@ export default function CreditsPage() {
                       <div className="space-y-1">
                         <div className="flex items-center gap-2 text-[12px] font-medium text-white/55">
                           <CheckCircle2 className="h-4 w-4 shrink-0 text-violet-200/70" aria-hidden />
-                          Up to {imgCount} AI images
+                          Up to {imgCount} AI images (Nanobanana)
                         </div>
                         <div className="flex items-center gap-2 text-[12px] font-medium text-white/55">
                           <CheckCircle2 className="h-4 w-4 shrink-0 text-violet-200/70" aria-hidden />
-                          Up to {vidCount} AI videos
+                          Up to {vidCount} AI videos (Sora 2)
                         </div>
                       </div>
 
@@ -256,6 +255,8 @@ export default function CreditsPage() {
 
           <p className="pb-4 text-center text-[11px] text-white/30">
             Secure checkout with Stripe. Credits are applied when payment succeeds.
+            <br />
+            Pack credits expire 3 months after purchase if unused.
           </p>
         </div>
       </div>

@@ -36,6 +36,17 @@ type PlanDef = {
   highlight?: boolean;
 };
 
+const CREDITS_PER_NANOBANANA_IMAGE = 0.5;
+const CREDITS_PER_SORA2_VIDEO = 5;
+
+function upToAiImagesFromMonthlyCredits(creditsPerMonth: number): string {
+  return String(Math.max(1, Math.floor(creditsPerMonth / CREDITS_PER_NANOBANANA_IMAGE)));
+}
+
+function upToAiVideosFromMonthlyCredits(creditsPerMonth: number): string {
+  return String(Math.max(1, Math.floor(creditsPerMonth / CREDITS_PER_SORA2_VIDEO)));
+}
+
 const PLANS: PlanDef[] = [
   {
     id: "starter",
@@ -43,7 +54,11 @@ const PLANS: PlanDef[] = [
     description: "Learn the workflow and launch your first campaigns.",
     monthly: SUBSCRIPTIONS[0].price_usd,
     credits: SUBSCRIPTIONS[0].credits_per_month,
-    usage: { linkToAd: "4", images: "125", videos: "24" },
+    usage: {
+      linkToAd: "4",
+      images: upToAiImagesFromMonthlyCredits(SUBSCRIPTIONS[0].credits_per_month),
+      videos: upToAiVideosFromMonthlyCredits(SUBSCRIPTIONS[0].credits_per_month),
+    },
   },
   {
     id: "growth",
@@ -52,7 +67,11 @@ const PLANS: PlanDef[] = [
     description: "The plan most teams pick once content is weekly.",
     monthly: SUBSCRIPTIONS[1].price_usd,
     credits: SUBSCRIPTIONS[1].credits_per_month,
-    usage: { linkToAd: "10", images: "300", videos: "60" },
+    usage: {
+      linkToAd: "10",
+      images: upToAiImagesFromMonthlyCredits(SUBSCRIPTIONS[1].credits_per_month),
+      videos: upToAiVideosFromMonthlyCredits(SUBSCRIPTIONS[1].credits_per_month),
+    },
     highlight: true,
   },
   {
@@ -61,7 +80,11 @@ const PLANS: PlanDef[] = [
     description: "Scale creatives without hitting limits every few days.",
     monthly: SUBSCRIPTIONS[2].price_usd,
     credits: SUBSCRIPTIONS[2].credits_per_month,
-    usage: { linkToAd: "24", images: "700", videos: "140" },
+    usage: {
+      linkToAd: "24",
+      images: upToAiImagesFromMonthlyCredits(SUBSCRIPTIONS[2].credits_per_month),
+      videos: upToAiVideosFromMonthlyCredits(SUBSCRIPTIONS[2].credits_per_month),
+    },
   },
   {
     id: "scale",
@@ -69,7 +92,11 @@ const PLANS: PlanDef[] = [
     description: "Agencies and brands running multiple products at once.",
     monthly: SUBSCRIPTIONS[3].price_usd,
     credits: SUBSCRIPTIONS[3].credits_per_month,
-    usage: { linkToAd: "55", images: "1600", videos: "320" },
+    usage: {
+      linkToAd: "55",
+      images: upToAiImagesFromMonthlyCredits(SUBSCRIPTIONS[3].credits_per_month),
+      videos: upToAiVideosFromMonthlyCredits(SUBSCRIPTIONS[3].credits_per_month),
+    },
   },
 ];
 
@@ -383,10 +410,10 @@ export default function SubscriptionPage() {
                         <span className="text-white/70">Link to Ad:</span> {plan.usage.linkToAd}
                       </li>
                       <li className="pl-1 text-white/50">
-                        <span className="text-white/70">Images:</span> {plan.usage.images}
+                        <span className="text-white/70">Up to AI images (Nanobanana):</span> {plan.usage.images}
                       </li>
                       <li className="pl-1 text-white/50">
-                        <span className="text-white/70">Videos:</span> {plan.usage.videos}
+                        <span className="text-white/70">Up to AI videos (Sora 2):</span> {plan.usage.videos}
                       </li>
                       <li className="pt-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-white/45">
                         Included models
@@ -429,18 +456,6 @@ export default function SubscriptionPage() {
             </div>
           </section>
 
-          <div className="mx-auto max-w-4xl pb-2 text-center">
-            <p className="pb-6 text-center text-[11px] text-white/28">Checkout is powered by Stripe.</p>
-            <Button
-              type="button"
-              variant="secondary"
-              className="rounded-xl border border-white/15 bg-white/5 text-white hover:bg-white/10"
-              onClick={() => window.open(BILLING_PORTAL_URL, "_blank", "noopener,noreferrer")}
-            >
-              Manage billing
-            </Button>
-          </div>
-
           <section className="mx-auto max-w-4xl">
             <h2 className="text-center text-xs font-bold uppercase tracking-[0.16em] text-white/40">Your account</h2>
             <div className="mt-4 rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.05] to-transparent p-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] md:p-8">
@@ -468,6 +483,24 @@ export default function SubscriptionPage() {
                         ? "Your monthly credits refresh with your plan. Use them across Link to Ad, Image, and Video in the studio."
                         : "You’re on the free tier. Add a subscription for monthly credits or buy packs on the Credits page."}
                     </p>
+
+                    {isSubscribed ? (
+                      <div className="mt-4 flex flex-col gap-3">
+                        <p className="text-center text-[11px] text-white/28">
+                          Checkout is powered by Stripe. Subscription credits reset each billing cycle and do not carry over.
+                        </p>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          className="mx-auto w-full rounded-xl border border-white/15 bg-white/5 text-white hover:bg-white/10 sm:w-auto"
+                          onClick={() =>
+                            window.open(BILLING_PORTAL_URL, "_blank", "noopener,noreferrer")
+                          }
+                        >
+                          Manage billing
+                        </Button>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               </div>

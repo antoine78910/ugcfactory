@@ -26,6 +26,10 @@ import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import { isSubscriptionPlanId } from "@/lib/stripe/subscriptionPrices";
 import { isCreditPackKey } from "@/lib/stripe/creditPackPrices";
 import { serverLog } from "@/lib/serverLog";
+import {
+  resetSubscriptionCredits,
+  addPackCredits as addPackCreditsLedger,
+} from "@/lib/creditGrants";
 
 // Credit pack key → credits amount (must stay in sync with pricing.ts CREDIT_PACKS)
 const CREDIT_PACK_CREDITS: Record<string, number> = {
@@ -43,12 +47,6 @@ const SUBSCRIPTION_CREDITS: Record<string, number> = {
   pro: 1400,
   scale: 3200,
 };
-
-async function grantCredits(admin: ReturnType<typeof createSupabaseServiceClient>, userId: string, amount: number) {
-  if (!admin || amount <= 0) return;
-  // Upsert: create the row if it doesn't exist, then increment
-  await admin.rpc("increment_user_credits", { p_user_id: userId, p_amount: amount });
-}
 
 export async function POST(req: Request) {
   const secret = process.env.STRIPE_SECRET_KEY?.trim();
@@ -99,6 +97,7 @@ export async function POST(req: Request) {
           const billing = (session.metadata?.subscription_billing === "yearly" ? "yearly" : "monthly") as "monthly" | "yearly";
 
           if (isSubscriptionPlanId(planId)) {
+            const periodEnd = new Date((sub as any).current_period_end * 1000);
             await admin.from("user_subscriptions").upsert({
               user_id: userId,
               stripe_subscription_id: sub.id,
@@ -106,12 +105,12 @@ export async function POST(req: Request) {
               plan_id: planId,
               billing,
               status: sub.status,
-              current_period_end: new Date((sub as any).current_period_end * 1000).toISOString(),
+              current_period_end: periodEnd.toISOString(),
             }, { onConflict: "user_id" });
 
-            // Grant first month credits
+            // Reset subscription credits (non-cumulative): invalidate old, create fresh grant expiring at period end
             const credits = SUBSCRIPTION_CREDITS[planId] ?? 0;
-            await grantCredits(admin, userId, credits);
+            await resetSubscriptionCredits(admin, userId, credits, periodEnd);
             serverLog("stripe_webhook_subscription_start", { userId, planId, credits });
           }
         }
@@ -120,7 +119,8 @@ export async function POST(req: Request) {
           const packKey = session.metadata?.credit_pack ?? "";
           if (isCreditPackKey(packKey)) {
             const credits = CREDIT_PACK_CREDITS[packKey] ?? 0;
-            await grantCredits(admin, userId, credits);
+            // Pack credits expire after 3 months
+            await addPackCreditsLedger(admin, userId, credits);
             serverLog("stripe_webhook_credits_granted", { userId, packKey, credits });
           }
         }
@@ -138,6 +138,21 @@ export async function POST(req: Request) {
         const subId = typeof (invoice as any).subscription === "string" ? (invoice as any).subscription : null;
         if (!subId) break;
 
+        // Fetch the live subscription to get the new current_period_end
+        const stripe = new Stripe(secret, { apiVersion: "2026-02-25.clover" });
+        let renewalPeriodEnd: Date | null = null;
+        try {
+          const liveSub = await stripe.subscriptions.retrieve(subId);
+          renewalPeriodEnd = new Date((liveSub as any).current_period_end * 1000);
+          // Update the DB row with the new period end
+          await admin.from("user_subscriptions").update({
+            current_period_end: renewalPeriodEnd.toISOString(),
+          }).eq("stripe_subscription_id", subId);
+        } catch {
+          // Fallback: assume 1 month from now
+          renewalPeriodEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+        }
+
         const { data: row } = await admin
           .from("user_subscriptions")
           .select("user_id, plan_id")
@@ -146,7 +161,8 @@ export async function POST(req: Request) {
 
         if (row?.user_id && row.plan_id) {
           const credits = SUBSCRIPTION_CREDITS[row.plan_id] ?? 0;
-          await grantCredits(admin, row.user_id, credits);
+          // Reset (not accumulate): invalidate leftover subscription credits, create fresh grant
+          await resetSubscriptionCredits(admin, row.user_id, credits, renewalPeriodEnd);
           serverLog("stripe_webhook_subscription_renewal", { userId: row.user_id, planId: row.plan_id, credits });
         }
         break;

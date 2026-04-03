@@ -7,6 +7,7 @@ import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import { parseAccountPlan, type AccountPlanId } from "@/lib/subscriptionModelAccess";
 import { getPlanFromPriceId } from "@/lib/stripe/subscriptionPrices";
 import { isAllowedUser } from "@/lib/allowedUsers";
+import { getUserCreditBalance } from "@/lib/creditGrants";
 
 export type MeSubscriptionResponse = {
   planId: AccountPlanId;
@@ -20,6 +21,8 @@ export type MeSubscriptionResponse = {
    * Only set for emails in the server-side allowlist — never exposed for other users.
    */
   autoEnablePersonalApi?: boolean;
+  /** Server-authoritative credit balance from the ledger (sum of non-expired grants). */
+  creditBalance?: number;
 };
 
 /**
@@ -38,13 +41,26 @@ export async function GET() {
       billing: null,
       userId: auth.user.id,
       unlimited: true,
-      // Tells the client to auto-activate localStorage personal API keys (KIE + PiAPI)
-      // so generations use the founder's own provider accounts, not the platform keys.
       autoEnablePersonalApi: true,
+      creditBalance: 999_999,
     } satisfies MeSubscriptionResponse);
   }
 
-  const free: MeSubscriptionResponse = { planId: "free", billing: null, userId: auth.user.id };
+  const userId = auth.user.id;
+
+  // Helper: attach credit balance to any response
+  async function withCreditBalance(base: MeSubscriptionResponse): Promise<MeSubscriptionResponse> {
+    try {
+      const a = createSupabaseServiceClient();
+      if (a) {
+        const bal = await getUserCreditBalance(a, userId);
+        return { ...base, creditBalance: bal.balance };
+      }
+    } catch { /* non-critical */ }
+    return { ...base, creditBalance: 0 };
+  }
+
+  const free: MeSubscriptionResponse = { planId: "free", billing: null, userId };
 
   const secret = process.env.STRIPE_SECRET_KEY?.trim();
 
@@ -104,10 +120,21 @@ export async function GET() {
               console.error("[me/subscription] DB sync error:", dbErr);
             }
 
+            // Fetch authoritative credit balance from the ledger
+            let creditBalance = 0;
+            try {
+              const adminForBalance = createSupabaseServiceClient();
+              if (adminForBalance) {
+                const bal = await getUserCreditBalance(adminForBalance, userId);
+                creditBalance = bal.balance;
+              }
+            } catch { /* non-critical */ }
+
             return NextResponse.json({
               planId,
               billing,
               userId: auth.user.id,
+              creditBalance,
             } satisfies MeSubscriptionResponse);
           }
         }
@@ -127,7 +154,7 @@ export async function GET() {
         // non-critical
       }
 
-      return NextResponse.json(free satisfies MeSubscriptionResponse);
+      return NextResponse.json(await withCreditBalance(free));
     } catch (err) {
       console.error("[me/subscription] Stripe error:", err);
       // Fall through to DB fallback below
@@ -137,7 +164,7 @@ export async function GET() {
   // ── 2. Fallback: read from DB (when Stripe key is missing or Stripe failed) ─
   try {
     const admin = createSupabaseServiceClient();
-    if (!admin) return NextResponse.json(free satisfies MeSubscriptionResponse);
+    if (!admin) return NextResponse.json(await withCreditBalance(free));
 
     const { data, error } = await admin
       .from("user_subscriptions")
@@ -145,22 +172,22 @@ export async function GET() {
       .eq("user_id", auth.user.id)
       .maybeSingle();
 
-    if (error || !data) return NextResponse.json(free satisfies MeSubscriptionResponse);
+    if (error || !data) return NextResponse.json(await withCreditBalance(free));
     if (data.status !== "active" && data.status !== "trialing") {
-      return NextResponse.json(free satisfies MeSubscriptionResponse);
+      return NextResponse.json(await withCreditBalance(free));
     }
 
     const planId = parseAccountPlan(data.plan_id);
     const raw = data.billing;
     const billing = raw === "yearly" ? "yearly" : raw === "monthly" ? "monthly" : null;
 
-    return NextResponse.json({
+    return NextResponse.json(await withCreditBalance({
       planId,
       billing: planId === "free" ? null : billing,
       userId: auth.user.id,
-    } satisfies MeSubscriptionResponse);
+    }));
   } catch (err) {
     console.error("[me/subscription] DB fallback error:", err);
-    return NextResponse.json(free satisfies MeSubscriptionResponse);
+    return NextResponse.json(await withCreditBalance(free));
   }
 }

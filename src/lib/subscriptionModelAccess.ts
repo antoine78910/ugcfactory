@@ -43,11 +43,13 @@ const IMAGE_MIN_RANK: Record<"nano" | "pro", number> = {
 const VIDEO_MIN_RANK: Record<string, number> = {
   "bytedance/seedance-1.5-pro": 0,
   "kling-2.6/video": 1, // Starter+
-  "bytedance/seedance-2.0-pro": 1,
+  // Starter should not include Seedance 2.0; unlock on Growth+
+  "bytedance/seedance-2.0-pro": 2,
   "veo3_fast": 2,
   "kling-3.0/video": 2,
   veo3: 2,
-  "openai/sora-2": 2,
+  // Starter should include Sora 2
+  "openai/sora-2": 1,
 };
 
 /** Studio Edit Video tab: picker ids (`studio-edit/…`), not raw Kie strings. */

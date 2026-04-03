@@ -330,7 +330,7 @@ export function CreditsPlanProvider({
     if (!activeUserId) return;
     fetch("/api/me/subscription")
       .then((r) => (r.ok ? r.json() : null))
-      .then((data: { planId: string; userId?: string; unlimited?: boolean; autoEnablePersonalApi?: boolean } | null) => {
+      .then((data: { planId: string; userId?: string; unlimited?: boolean; autoEnablePersonalApi?: boolean; creditBalance?: number } | null) => {
         if (!data) return;
 
         // Founder account: auto-enable stored personal API keys if they exist.
@@ -359,6 +359,12 @@ export function CreditsPlanProvider({
           lsSet(LS_OWNER, confirmedUid);
         }
 
+        // Server-authoritative credit balance from the ledger.
+        // This reflects expiration and non-accumulation rules.
+        const serverBalance = typeof data.creditBalance === "number" && Number.isFinite(data.creditBalance)
+          ? data.creditBalance
+          : null;
+
         if (serverPlan === "free") {
           // Check grace period: if checkout happened < 5 min ago, the webhook may
           // not have fired yet — keep the plan written by consumeCheckoutQueryParams.
@@ -366,28 +372,30 @@ export function CreditsPlanProvider({
           const inGrace = Number.isFinite(ts) && Date.now() - ts < 5 * 60 * 1000;
           if (inGrace) return;
 
-          // Server is authoritative: downgrade to free.
+          // Server is authoritative: apply free plan with ledger balance.
           const localPlan = parseAccountPlan(lsGet(LS_PLAN));
-          if (localPlan !== "free") {
+          if (localPlan !== "free" || serverBalance !== null) {
             lsSet(LS_PLAN, "free");
-            lsSet(LS_CREDITS, "0");
-            lsRemove(LS_CAP);
+            const bal = serverBalance ?? 0;
+            lsSet(LS_CREDITS, String(bal));
+            lsSet(LS_CAP, String(bal));
             setState(readState(confirmedUid));
           }
           return;
         }
 
-        // Server confirms a paid plan — apply it.
-        const localPlan = parseAccountPlan(lsGet(LS_PLAN));
-        if (serverPlan !== localPlan) {
-          const alloc = subscriptionCredits(serverPlan);
-          lsSet(LS_PLAN, serverPlan);
+        // Server confirms a paid plan — apply it with the authoritative ledger balance.
+        const alloc = subscriptionCredits(serverPlan);
+        lsSet(LS_PLAN, serverPlan);
+        if (serverBalance !== null) {
+          lsSet(LS_CREDITS, String(serverBalance));
+        } else {
           const localCredits = Number(lsGet(LS_CREDITS));
           if (!Number.isFinite(localCredits) || localCredits > alloc * 2) {
             lsSet(LS_CREDITS, String(alloc));
           }
-          setState(readState(confirmedUid));
         }
+        setState(readState(confirmedUid));
       })
       .catch(() => {
         /* network error — keep local state */
@@ -463,6 +471,14 @@ export function CreditsPlanProvider({
           ? prev.total
           : Math.max(subscriptionCredits(prev.planId), nextCurrent);
       commit({ ...prev, current: nextCurrent, total: nextTotal });
+
+      // Server-side ledger deduction (fire-and-forget)
+      void fetch("/api/me/credits/spend", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount: k }),
+      }).catch(() => {});
     },
     [activeUserId, commit, isUnlimited],
   );
@@ -478,6 +494,14 @@ export function CreditsPlanProvider({
           ? Math.max(prev.total, nextCurrent)
           : Math.max(subscriptionCredits(prev.planId), nextCurrent);
       commit({ planId: prev.planId, current: nextCurrent, total: nextTotal });
+
+      // Server-side ledger refund (fire-and-forget)
+      void fetch("/api/me/credits/refund", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount: k }),
+      }).catch(() => {});
     },
     [activeUserId, commit],
   );
