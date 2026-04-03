@@ -395,11 +395,14 @@ export default function StudioUpscalePanel() {
         </div>
       </div>
 
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4 lg:h-[calc(100dvh-4rem)] lg:min-h-0">
-        <div className="flex min-h-0 min-w-0 w-full flex-col gap-2 lg:basis-[30%] lg:max-w-[28rem] lg:flex-none lg:shrink-0 lg:overflow-hidden">
-          {/* Scroll the form; keep the CTA pinned at the bottom of this column so it never falls off-screen */}
+      <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-stretch lg:gap-4 lg:h-[calc(100dvh-4rem)] lg:min-h-0">
+        <div className="flex min-h-0 min-w-0 w-full flex-col gap-2 lg:h-full lg:basis-[30%] lg:max-w-[28rem] lg:flex-none lg:shrink-0 lg:overflow-hidden">
+          {/*
+            Stretch + h-full so this column matches the row height; min-h-0 lets flex-1 shrink.
+            Scroll params only; CTA stays in view at the bottom (no clip from items-start + overflow).
+          */}
           <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 lg:min-h-0 lg:h-full">
-          <div className="studio-params-scroll flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-y-auto pb-2 max-h-[min(86vh,calc(100dvh-5rem))] lg:max-h-none lg:flex-1">
+          <div className="studio-params-scroll flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-y-auto pb-2 max-h-[min(86vh,calc(100dvh-5rem))] lg:min-h-0 lg:max-h-none lg:flex-1">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Upscale model</p>
           <div className="rounded-2xl border border-white/10 bg-[#101014] p-3">
             <StudioModelPicker

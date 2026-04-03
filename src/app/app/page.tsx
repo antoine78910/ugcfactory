@@ -3935,11 +3935,11 @@ export default function AppBrandWizard() {
               </Card>
             ) : null}
             {appSection === "upscale" ? (
-              <Card className="gap-2 border-white/10 bg-[#0b0912]/85 py-3 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
+              <Card className="min-h-0 gap-2 border-white/10 bg-[#0b0912]/85 py-3 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
                 <CardHeader className="space-y-0 px-6 pb-0 pt-2">
                   <CardTitle className="text-sm">Upscale</CardTitle>
                 </CardHeader>
-                <CardContent className="px-6 pb-3 pt-0">
+                <CardContent className="min-h-0 px-6 pb-3 pt-0">
                   <StudioUpscalePanel />
                 </CardContent>
               </Card>
