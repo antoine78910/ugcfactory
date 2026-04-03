@@ -130,6 +130,8 @@ export async function POST(req: Request) {
     : undefined;
 
   const label = voiceName ? `Voice change (${voiceName})` : "Voice change";
+  const usesPersonalApi = Boolean(personalElevenLabsApiKey);
+  const creditsCharged = usesPersonalApi ? 0 : 5;
   const { data: inserted, error: insertError } = await supabase
     .from("studio_generations")
     .insert({
@@ -139,8 +141,8 @@ export async function POST(req: Request) {
       label,
       external_task_id: `elevenlabs-sync:${crypto.randomUUID()}`,
       provider: "elevenlabs",
-      credits_charged: 0,
-      uses_personal_api: false,
+      credits_charged: creditsCharged,
+      uses_personal_api: usesPersonalApi,
       ...(inputPublicUrl ? { input_urls: [inputPublicUrl] } : {}),
     })
     .select("id")

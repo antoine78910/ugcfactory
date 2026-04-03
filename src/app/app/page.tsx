@@ -788,7 +788,7 @@ export default function AppBrandWizard() {
   const motionCredits = useMemo(
     () =>
       appSection === "ad_clone" && translateToolMode === "voice_change"
-        ? 0
+        ? 5
         : adCloneTranslateEnabled
         ? calculateWaveSpeedVideoTranslateCredits(motionBillableSeconds)
         : calculateMotionControlCredits({
@@ -3567,10 +3567,17 @@ export default function AppBrandWizard() {
                             },
                             ...prev,
                           ]);
-                          const platformChargeMotion = isVoiceChange || motionCreditBypass ? 0 : motionCredits;
-                          if (!isVoiceChange && !motionCreditBypass) {
-                            spendCredits(motionCredits);
-                            creditsRef.current = Math.max(0, creditsRef.current - motionCredits);
+                          const voiceChangeCredits = 5;
+                          const platformChargeMotion = motionCreditBypass
+                            ? 0
+                            : isVoiceChange
+                              ? voiceChangeCredits
+                              : motionCredits;
+
+                          if (!motionCreditBypass) {
+                            const toSpend = isVoiceChange ? voiceChangeCredits : motionCredits;
+                            spendCredits(toSpend);
+                            creditsRef.current = Math.max(0, creditsRef.current - toSpend);
                           }
                           setMotionBusy(true);
                           void (async () => {
