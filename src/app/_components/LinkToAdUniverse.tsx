@@ -3290,6 +3290,8 @@ export default function LinkToAdUniverse({
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
         body: JSON.stringify({
+          linkToAd: true,
+          accountPlan: planId,
           marketModel: LINK_TO_AD_VIDEO_MARKET_MODEL,
           prompt: klingPrompt,
           imageUrl: img,

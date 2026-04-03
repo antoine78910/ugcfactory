@@ -19,6 +19,8 @@ type KlingMode = "std" | "pro";
 type Body = {
   /** Client plan (demo: localStorage). When set, premium models are rejected for lower tiers. */
   accountPlan?: string;
+  /** Link to Ad video: do not gate by subscription tier (credits still apply in-app). */
+  linkToAd?: boolean;
   // KIE Market model id (optional; defaults to Kling 3.0)
   marketModel?: string;
   prompt: string;
@@ -99,7 +101,8 @@ export async function POST(req: Request) {
     // Fetch plan from DB (server-side); fall back to client claim only if table not yet available
     const dbPlan = await getUserPlan(user.id);
     const accountPlan = dbPlan !== "free" ? dbPlan : parseAccountPlan(body.accountPlan);
-    if (!canUseStudioVideoModel(accountPlan, model)) {
+    const skipTierGate = body.linkToAd === true;
+    if (!skipTierGate && !canUseStudioVideoModel(accountPlan, model)) {
       return NextResponse.json(
         {
           error: studioVideoUpgradeMessage(accountPlan, model) ?? "Subscription upgrade required for this model.",
