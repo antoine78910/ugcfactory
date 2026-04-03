@@ -10,8 +10,8 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { SUBSCRIPTIONS } from "@/lib/pricing";
 import {
-  listAllowedStudioImageModels,
-  listAllowedStudioVideoModels,
+  planRank,
+  SUBSCRIPTION_MODEL_MATRIX_ROWS,
   type AccountPlanId,
 } from "@/lib/subscriptionModelAccess";
 import {
@@ -165,6 +165,13 @@ export default function SubscriptionPage() {
     };
   }
 
+  function isModelIncluded(planIdRaw: string, row: (typeof SUBSCRIPTION_MODEL_MATRIX_ROWS)[number]): boolean {
+    const planId = (planIdRaw === "free" ? "free" : planIdRaw) as AccountPlanId;
+    const r = planRank(planId);
+    const idx = Math.max(0, Math.min(3, r - 1));
+    return row.tiers[idx];
+  }
+
   const isSubscribed = planId !== "free";
 
   const planGridClass = "grid-cols-1 sm:grid-cols-2 xl:grid-cols-4";
@@ -274,8 +281,6 @@ export default function SubscriptionPage() {
                 const showYearlySavingsBadge =
                   billing === "yearly" &&
                   !(isSameTier && serverBillResolved === "yearly");
-                const allowedImages = listAllowedStudioImageModels(plan.id as AccountPlanId);
-                const allowedVideos = listAllowedStudioVideoModels(plan.id as AccountPlanId);
 
                 return (
                   <div
@@ -394,10 +399,35 @@ export default function SubscriptionPage() {
                         Included models
                       </li>
                       <li className="pl-1 text-white/55">
-                        <span className="text-white/70">Image:</span> {allowedImages.join(", ")}
-                      </li>
-                      <li className="pl-1 text-white/55">
-                        <span className="text-white/70">Video:</span> {allowedVideos.join(", ")}
+                        <div className="space-y-1.5">
+                          {SUBSCRIPTION_MODEL_MATRIX_ROWS.map((row) => {
+                            const included = isModelIncluded(plan.id, row);
+                            return (
+                              <div key={row.label} className="flex items-center justify-between gap-3">
+                                <div className="flex min-w-0 items-center gap-2">
+                                  <span
+                                    className={cn(
+                                      "flex h-5 w-5 items-center justify-center rounded-md border text-[10px] font-semibold",
+                                      included
+                                        ? "border-emerald-400/40 bg-emerald-500/15 text-emerald-200"
+                                        : "border-red-400/30 bg-red-500/10 text-red-200/90",
+                                    )}
+                                    aria-label={included ? "Included" : "Not included"}
+                                  >
+                                    {included ? (
+                                      <Check className="h-3.5 w-3.5" />
+                                    ) : (
+                                      <X className="h-3.5 w-3.5" />
+                                    )}
+                                  </span>
+                                  <span className="truncate text-xs text-white/70" title={row.label}>
+                                    {row.label}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </li>
                     </ul>
                   </div>
