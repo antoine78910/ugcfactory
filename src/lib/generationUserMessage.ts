@@ -45,7 +45,7 @@ export function userFacingProviderError(raw: string | null | undefined): string 
     return "A resource was missing or expired (for example the image link). Re-upload and try again.";
   }
   if (/size|too large|dimension|resolution|exceeds limit|file too/.test(lower)) {
-    return "File or media constraints were not met (size, format, or resolution). Try another file.";
+    return "Vidéo refusée (taille/format/résolution). Formats acceptés : MP4, MOV ou WebM. Réduis le poids (Translate <= 300MB, Motion control <= 100MB) et exporte en 720p–1080p si besoin.";
   }
   if (/invalid|bad request|\b400\b|malformed|parameter error|validation failed/.test(lower)) {
     return "Invalid parameters or inputs. Adjust settings and retry.";
