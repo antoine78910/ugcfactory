@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import {
   useCreditsPlan,
   getPersonalApiKey,
@@ -8,7 +8,7 @@ import {
   isPlatformCreditBypassActive,
 } from "@/app/_components/CreditsPlanContext";
 import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
-import { Sparkles, Upload, Wand2 } from "lucide-react";
+import { Sparkles, Upload, Video, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -24,6 +24,8 @@ import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
 import { userMessageFromCaughtError } from "@/lib/generationUserMessage";
 import { uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
 import {
+  assertStudioVideoUpload,
+  FORMAT_HINT_VIDEO_FR,
   STUDIO_IMAGE_FILE_ACCEPT,
   STUDIO_VIDEO_FILE_ACCEPT,
 } from "@/lib/studioUploadValidation";
@@ -74,6 +76,8 @@ export default function StudioUpscalePanel() {
   creditsRef.current = creditsBalance;
 
   const [videoUrl, setVideoUrl] = useState("");
+  const [videoSourceLabel, setVideoSourceLabel] = useState("");
+  const videoFileInputRef = useRef<HTMLInputElement>(null);
   const [imageUrl, setImageUrl] = useState("");
   // Video duration is only known after metadata is loaded; keep it null until then.
   const [durationSec, setDurationSec] = useState<number | null>(null);
@@ -186,33 +190,39 @@ export default function StudioUpscalePanel() {
     return () => window.clearInterval(id);
   }, [serverHistory]);
 
-  const onPickVideo = () => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = STUDIO_VIDEO_FILE_ACCEPT;
-    input.onchange = async () => {
-      const f = input.files?.[0];
-      if (!f) return;
-      const blobUrl = URL.createObjectURL(f);
-      setVideoPreviewBlob(blobUrl);
-      setImagePreviewBlob(null);
-      setImageUrl("");
-      setBusy(true);
-      try {
-        const url = await uploadFile(f, "video");
+  const onVideoFileSelected = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.currentTarget.value = "";
+    if (!f) return;
+    try {
+      assertStudioVideoUpload(f);
+    } catch (err) {
+      toast.error("Vidéo non prise en charge", {
+        description: userMessageFromCaughtError(err, FORMAT_HINT_VIDEO_FR),
+      });
+      return;
+    }
+    setVideoSourceLabel(f.name);
+    const blobUrl = URL.createObjectURL(f);
+    setVideoPreviewBlob(blobUrl);
+    setImagePreviewBlob(null);
+    setImageUrl("");
+    setBusy(true);
+    void uploadFile(f, "video")
+      .then((url) => {
         setVideoUrl(url);
         toast.success("Video importee");
         setVideoPreviewBlob(null);
-      } catch (e) {
+      })
+      .catch((err) => {
         toast.error("Échec de l’import", {
-          description: userMessageFromCaughtError(e, "Utilise MP4, MOV ou WebM."),
+          description: userMessageFromCaughtError(err, "Utilise MP4, MOV ou WebM."),
         });
-      } finally {
+      })
+      .finally(() => {
         setBusy(false);
-      }
-    };
-    input.click();
-  };
+      });
+  }, []);
 
   const onPickImage = () => {
     const input = document.createElement("input");
@@ -359,6 +369,7 @@ export default function StudioUpscalePanel() {
               setUpscalePickerId("upscale/image");
               setVideoPreviewBlob(null);
               setVideoUrl("");
+              setVideoSourceLabel("");
             }}
           >
             Image
@@ -389,19 +400,49 @@ export default function StudioUpscalePanel() {
             <Label className="text-xs text-white/45">
               {upscalePickerId === "upscale/image" ? "Source image" : "Source video"}
             </Label>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                disabled={busy}
-                className="rounded-xl border border-white/10 bg-white/5"
-                onClick={() => (upscalePickerId === "upscale/image" ? onPickImage : onPickVideo)()}
-              >
-                <Upload className="mr-2 h-4 w-4" />
-                Upload
-              </Button>
-            </div>
+            {upscalePickerId === "upscale/image" ? (
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={busy}
+                  className="rounded-xl border border-white/10 bg-white/5"
+                  onClick={() => onPickImage()}
+                >
+                  <Upload className="mr-2 h-4 w-4" />
+                  Upload
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <input
+                  ref={videoFileInputRef}
+                  type="file"
+                  accept={STUDIO_VIDEO_FILE_ACCEPT}
+                  className="sr-only"
+                  disabled={busy}
+                  onChange={onVideoFileSelected}
+                />
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => videoFileInputRef.current?.click()}
+                  className="group flex h-11 w-full items-center gap-2 rounded-xl border border-white/15 bg-[#0a0a0d] px-3 text-left shadow-sm transition hover:border-violet-400/35 hover:bg-white/[0.03] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Video className="h-4 w-4 shrink-0 text-violet-400/90" aria-hidden />
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-white/80">
+                    {videoSourceLabel || "Choisir une vidéo…"}
+                  </span>
+                  <span className="shrink-0 rounded-lg border border-white/12 bg-white/[0.05] px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white/55 transition group-hover:border-violet-400/30 group-hover:text-white/80">
+                    Parcourir
+                  </span>
+                </button>
+                <p className="text-[10px] leading-snug text-white/35">
+                  MP4, MOV ou WebM — clic sur la ligne pour importer (comme Translate).
+                </p>
+              </div>
+            )}
             {previewSrc ? (
               <div className="relative mt-1 w-full max-w-md space-y-1.5">
                 <div className="relative overflow-hidden rounded-xl border border-white/10 bg-black">
@@ -487,6 +528,11 @@ export default function StudioUpscalePanel() {
               <Sparkles className="h-5 w-5" />
               {upscalePickerId === "upscale/image" || durationSec !== null ? (
                 <>
+                  {upscalePickerId === "upscale/video" && durationSec !== null ? (
+                    <span className="rounded-md bg-white/10 px-2 py-0.5 text-sm tabular-nums text-white/90 sm:text-base">
+                      {durationSec}s
+                    </span>
+                  ) : null}
                   <span className="rounded-md bg-white/15 px-2 py-0.5 text-base tabular-nums">{credits}</span>
                   <span className="text-xs font-normal text-white/80 sm:text-sm">credits</span>
                 </>

@@ -10,10 +10,10 @@ export function LandingSeedanceTopButton() {
   const paint1 = `paint1_${uid}`;
 
   return (
-    <div className="mx-auto mb-5 flex w-full max-w-4xl justify-center px-3 sm:mb-6">
+    <div className="mx-auto mb-2 flex w-full max-w-4xl justify-center px-3 sm:mb-3">
       <Link
         href="/signup"
-        className={`group relative inline-flex overflow-hidden rounded-full bg-neutral-800 p-px ${styles.link}`}
+        className={`group relative inline-flex overflow-hidden rounded-full bg-violet-600/35 p-px shadow-[0_0_24px_rgba(139,92,246,0.22)] ${styles.link}`}
       >
         <span className="absolute inset-0 rounded-full overflow-hidden">
           <span className="pointer-events-none absolute inset-0 select-none">
@@ -31,7 +31,7 @@ export function LandingSeedanceTopButton() {
             className={`absolute left-1/2 top-0 block h-full w-12 -translate-x-1/2 rounded-full blur-xl ${styles.borderGlowInner}`}
           />
         </span>
-        <span className="relative z-[1] flex w-full max-w-[min(100%,28rem)] items-center justify-center gap-1 rounded-full bg-[#0a0a0d]/92 py-2 pl-2 pr-3 sm:max-w-none sm:py-2.5 sm:pr-4">
+        <span className="relative z-[1] flex w-full max-w-[min(100%,28rem)] items-center justify-center gap-1 rounded-full bg-gradient-to-b from-violet-950/95 via-[#140a1f]/96 to-[#0a0610]/97 py-1.5 pl-2 pr-3 ring-1 ring-violet-400/25 sm:max-w-none sm:py-2 sm:pr-4">
           <span className="relative shrink-0 transition-transform duration-500 group-hover:rotate-[360deg] group-hover:scale-105">
             <svg
               width={18}
@@ -58,9 +58,9 @@ export function LandingSeedanceTopButton() {
                   y2="-1.5"
                   gradientUnits="userSpaceOnUse"
                 >
-                  <stop stopColor="#7A69F9" />
-                  <stop offset="0.575" stopColor="#F26378" />
-                  <stop offset={1} stopColor="#F5833F" />
+                  <stop stopColor="#C4B5FD" />
+                  <stop offset="0.45" stopColor="#A78BFA" />
+                  <stop offset={1} stopColor="#7C3AED" />
                 </linearGradient>
                 <linearGradient
                   id={paint1}
@@ -70,9 +70,9 @@ export function LandingSeedanceTopButton() {
                   y2="-1.5"
                   gradientUnits="userSpaceOnUse"
                 >
-                  <stop stopColor="#7A69F9" />
-                  <stop offset="0.575" stopColor="#F26378" />
-                  <stop offset={1} stopColor="#F5833F" />
+                  <stop stopColor="#DDD6FE" />
+                  <stop offset="0.5" stopColor="#8B5CF6" />
+                  <stop offset={1} stopColor="#5B21B6" />
                 </linearGradient>
               </defs>
             </svg>
@@ -81,7 +81,7 @@ export function LandingSeedanceTopButton() {
               aria-hidden
             />
           </span>
-          <span className="ml-1.5 bg-gradient-to-b from-white to-white/55 bg-clip-text text-left text-[11px] font-medium leading-snug text-transparent transition-transform group-hover:scale-[1.02] sm:text-xs">
+          <span className="ml-1.5 bg-gradient-to-r from-violet-100 via-white to-violet-200/95 bg-clip-text text-left text-[11px] font-semibold leading-snug text-transparent transition-transform group-hover:scale-[1.02] sm:text-xs">
             Seedance Pro 2.0 now available !
           </span>
         </span>

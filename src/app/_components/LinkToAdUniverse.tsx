@@ -42,6 +42,7 @@ import {
   normalizeKlingByReference,
   normalizePipelineByAngle,
   mergeNanoPromptForApi,
+  composeThreeLabeledPrompts,
   composeVideoPromptEditableSections,
   parseNanoEditableSections,
   parseThreeLabeledPrompts,
@@ -587,12 +588,6 @@ function PersonaPhotoSection({
           </button>
         </div>
       </div>
-      <p className="text-[10px] leading-snug text-white/30">
-        Avatar generation (Studio):{" "}
-        <span className="text-white/45">1K = 1 credit</span> ·{" "}
-        <span className="text-white/45">2K = 2 credits</span> ·{" "}
-        <span className="text-white/45">4K = 3 credits</span>
-      </p>
       {personaPhotoUrls.length > 0 || pendingPersonaUploads.length > 0 ? (
         <div className="flex flex-wrap gap-2">
           {pendingPersonaUploads.map((row) => (
@@ -1312,10 +1307,21 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   }, [angleLabels, hasAvatarPhoto, hasPersonaPhoto, sanitizeAngleLabelForAvatar, scriptOptionBodiesAll]);
 
   useEffect(() => {
+    const norm = (s: string) => s.replace(/\r\n/g, "\n").trim();
+    const merged: [string, string, string] = [
+      mergeNanoPromptForApi(nanoPromptDrafts[0] ?? "", nanoPromptTechnicalTails[0] ?? ""),
+      mergeNanoPromptForApi(nanoPromptDrafts[1] ?? "", nanoPromptTechnicalTails[1] ?? ""),
+      mergeNanoPromptForApi(nanoPromptDrafts[2] ?? "", nanoPromptTechnicalTails[2] ?? ""),
+    ];
+    const composed = composeThreeLabeledPrompts(merged);
+    if (norm(composed) === norm(nanoBananaPromptsRaw)) {
+      return;
+    }
     const parsed = parseThreeLabeledPrompts(nanoBananaPromptsRaw);
     const parts = parsed.map((p) => splitNanoPromptBodyForEditing(p));
     setNanoPromptDrafts([parts[0].editable, parts[1].editable, parts[2].editable]);
     setNanoPromptTechnicalTails([parts[0].technicalTail, parts[1].technicalTail, parts[2].technicalTail]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- drafts/tails read for compose guard when raw changes (skip re-parse after user edit)
   }, [nanoBananaPromptsRaw]);
 
   const factorWordRules = useMemo(
@@ -4755,10 +4761,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                                   className="min-h-[120px] border-white/10 bg-black/25 text-xs leading-relaxed text-white/85"
                                   spellCheck
                                 />
-                                <div className="flex items-center justify-between gap-2">
-                                  <p className="text-[10px] text-white/45">
-                                    Edit the angle text (Hook, Problem, Solution, CTA). No metadata/persona.
-                                  </p>
+                                <div className="flex justify-end">
                                   <Button
                                     type="button"
                                     size="sm"
@@ -4785,7 +4788,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
             {/* Right: generate prompts, generate video, Kling / video stage */}
             <div className="flex min-w-0 flex-1 flex-col gap-4">
               {!showVideoStageLayout ? (
-                <div className="flex flex-col gap-4 rounded-xl border border-violet-500/25 bg-violet-500/[0.06] p-4">
+                <div className="flex flex-col gap-4 rounded-xl border border-violet-500/25 bg-violet-500/[0.06] px-4 pb-4 pt-2">
                   {showUniverseLoading && universeLoadingState.message ? (
                     <div className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/25 px-3 py-2.5">
                       <div className="flex min-w-0 items-center gap-2">
@@ -4803,6 +4806,44 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                       >
                         Cancel
                       </Button>
+                    </div>
+                  ) : null}
+                  {nanoBananaPromptsRaw.trim() ? (
+                    <div className="rounded-xl border border-white/10 bg-black/25 px-4 pb-3 pt-2">
+                      <p className="text-xs font-semibold text-white/90">Image prompts (3)</p>
+                      <p className="mt-0.5 text-[10px] leading-snug text-white/40">
+                        Ajuste le texte éditable de chaque prompt avant de lancer la génération d’images. Les blocs
+                        techniques (lumière, caméra, etc.) restent fusionnés automatiquement.
+                      </p>
+                      <div className="mt-3 grid grid-cols-1 gap-3">
+                        {([0, 1, 2] as const).map((i) => (
+                          <div key={i} className="space-y-1">
+                            <Label className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
+                              Prompt {i + 1}
+                            </Label>
+                            <Textarea
+                              value={nanoPromptDrafts[i]}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                setNanoPromptDrafts((prev) => {
+                                  const next: [string, string, string] = [prev[0], prev[1], prev[2]];
+                                  next[i] = v;
+                                  setNanoBananaPromptsRaw(
+                                    composeThreeLabeledPrompts([
+                                      mergeNanoPromptForApi(next[0], nanoPromptTechnicalTails[0]),
+                                      mergeNanoPromptForApi(next[1], nanoPromptTechnicalTails[1]),
+                                      mergeNanoPromptForApi(next[2], nanoPromptTechnicalTails[2]),
+                                    ]),
+                                  );
+                                  return next;
+                                });
+                              }}
+                              className="min-h-[100px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/85"
+                              spellCheck
+                            />
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   ) : null}
                   {nanoBananaPromptsRaw &&
@@ -4949,8 +4990,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                     isNanoPromptsLoading ||
                     nanoPollTaskId ||
                     isNanoAllImagesSubmitting) ? (
-                    <div className="shrink-0 rounded-xl border border-white/10 bg-black/25 p-4">
-                      <div className="flex flex-col gap-3">
+                    <div className="shrink-0 rounded-xl border border-white/10 bg-black/25 px-4 pb-3 pt-2">
+                      <div className="flex flex-col gap-2">
                         {!nanoBananaPromptsRaw.trim() &&
                         !isNanoPromptsLoading &&
                         !isNanoAllImagesSubmitting &&
@@ -4958,7 +4999,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                           <>
                             <div className="space-y-2">
                               <div className="flex items-center justify-between gap-2">
-                                <div className="min-h-[1rem]">
+                                <div className={scriptHasEdits ? "min-h-[1rem]" : undefined}>
                                   {scriptHasEdits ? (
                                     <span className="text-[10px] text-violet-200/85">Edited factors ready</span>
                                   ) : null}
@@ -4979,30 +5020,16 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                               </div>
                               {scriptEditVisible ? (
                                 <>
-                                  <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                                    <p className="text-[11px] font-medium text-white/75">
-                                      Intentionally limited edits (to avoid lip-sync desync or story inconsistencies across the video).
-                                    </p>
-                                    <p className="mt-1 text-[10px] leading-snug text-white/45">
-                                      Hook: 3–5 words · Problem: 5–7 words · Solution: 10–14 words · CTA: 3–4 words
-                                    </p>
-                                  </div>
                                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                                   <div className="space-y-1">
                                     <div className="flex items-center justify-between gap-2">
                                       <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
                                         {factorWordRules.hook.label}
                                       </p>
-                                      <span
-                                        className={cn(
-                                          "text-[10px] tabular-nums",
-                                          factorWordsValid.hook ? "text-white/45" : "text-red-200/80",
-                                        )}
-                                      >
+                                      <span className="text-[10px] tabular-nums text-white/45">
                                         {factorWordCounts.hook}/{factorWordRules.hook.max}
                                       </span>
                                     </div>
-                                    <p className="text-[10px] text-white/35">{factorWordRules.hook.hint}</p>
                                     <Textarea
                                       value={scriptFactors.hook}
                                       onChange={(e) => {
@@ -5012,10 +5039,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                                         setEditableScript(composeScriptFromFactors(next));
                                         setScriptHasEdits(true);
                                       }}
-                                      className={cn(
-                                        "min-h-[74px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/80",
-                                        !factorWordsValid.hook && "border-red-500/35",
-                                      )}
+                                      className="min-h-[74px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/80"
                                     />
                                   </div>
                                   <div className="space-y-1">
@@ -5023,16 +5047,10 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                                       <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
                                         {factorWordRules.problem.label}
                                       </p>
-                                      <span
-                                        className={cn(
-                                          "text-[10px] tabular-nums",
-                                          factorWordsValid.problem ? "text-white/45" : "text-red-200/80",
-                                        )}
-                                      >
+                                      <span className="text-[10px] tabular-nums text-white/45">
                                         {factorWordCounts.problem}/{factorWordRules.problem.max}
                                       </span>
                                     </div>
-                                    <p className="text-[10px] text-white/35">{factorWordRules.problem.hint}</p>
                                     <Textarea
                                       value={scriptFactors.problem}
                                       onChange={(e) => {
@@ -5042,10 +5060,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                                         setEditableScript(composeScriptFromFactors(next));
                                         setScriptHasEdits(true);
                                       }}
-                                      className={cn(
-                                        "min-h-[74px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/80",
-                                        !factorWordsValid.problem && "border-red-500/35",
-                                      )}
+                                      className="min-h-[74px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/80"
                                     />
                                   </div>
                                   <div className="space-y-1">
@@ -5071,16 +5086,10 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                                       <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
                                         {factorWordRules.benefits.label}
                                       </p>
-                                      <span
-                                        className={cn(
-                                          "text-[10px] tabular-nums",
-                                          factorWordsValid.benefits ? "text-white/45" : "text-red-200/80",
-                                        )}
-                                      >
+                                      <span className="text-[10px] tabular-nums text-white/45">
                                         {factorWordCounts.benefits}/{factorWordRules.benefits.max}
                                       </span>
                                     </div>
-                                    <p className="text-[10px] text-white/35">{factorWordRules.benefits.hint}</p>
                                     <Textarea
                                       value={scriptFactors.benefits}
                                       onChange={(e) => {
@@ -5090,10 +5099,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                                         setEditableScript(composeScriptFromFactors(next));
                                         setScriptHasEdits(true);
                                       }}
-                                      className={cn(
-                                        "min-h-[74px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/80",
-                                        !factorWordsValid.benefits && "border-red-500/35",
-                                      )}
+                                      className="min-h-[74px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/80"
                                     />
                                   </div>
                                   <div className="space-y-1">
@@ -5109,16 +5115,10 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                                       <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
                                         {factorWordRules.cta.label}
                                       </p>
-                                      <span
-                                        className={cn(
-                                          "text-[10px] tabular-nums",
-                                          factorWordsValid.cta ? "text-white/45" : "text-red-200/80",
-                                        )}
-                                      >
+                                      <span className="text-[10px] tabular-nums text-white/45">
                                         {factorWordCounts.cta}/{factorWordRules.cta.max}
                                       </span>
                                     </div>
-                                    <p className="text-[10px] text-white/35">{factorWordRules.cta.hint}</p>
                                     <Textarea
                                       value={scriptFactors.cta}
                                       onChange={(e) => {
@@ -5128,10 +5128,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                                         setEditableScript(composeScriptFromFactors(next));
                                         setScriptHasEdits(true);
                                       }}
-                                      className={cn(
-                                        "min-h-[74px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/80",
-                                        !factorWordsValid.cta && "border-red-500/35",
-                                      )}
+                                      className="min-h-[74px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/80"
                                     />
                                   </div>
                                   <div className="space-y-1">

@@ -667,6 +667,15 @@ export function parseThreeLabeledPrompts(text: string): [string, string, string]
   return [byNum[1], byNum[2], byNum[3]];
 }
 
+/** Inverse of `parseThreeLabeledPrompts` — stable PROMPT 1/2/3 blocks for persistence and editing. */
+export function composeThreeLabeledPrompts(bodies: [string, string, string]): string {
+  const b = bodies.map((x) => x.replace(/\r\n/g, "\n").trim());
+  if (!b[0] && !b[1] && !b[2]) return "";
+  return ([1, 2, 3] as const)
+    .map((n, i) => `PROMPT ${n}\n${b[i]}`)
+    .join("\n\n");
+}
+
 export type NanoEditableSections = {
   person: string;
   scene: string;

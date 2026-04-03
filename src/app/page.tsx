@@ -3,7 +3,6 @@ import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { HeroVideoCarousel3D } from "./HeroVideoCarousel3D";
-import { LandingGenerateButton } from "./LandingGenerateButton";
 import { LandingSeedanceTopButton } from "./LandingSeedanceTopButton";
 import { LandingRevealCarousel } from "./LandingRevealCarousel";
 import { LandingFaq } from "./LandingFaq";
@@ -52,49 +51,8 @@ const HERO_STUDIO_VIDEOS = [
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-[#050507] text-white selection:bg-violet-500/30">
-      {/* ── Sticky header: nav only (no promo bar) ── */}
-      <header className="sticky top-0 z-50 bg-transparent backdrop-blur-xl">
-        <div className="mx-auto flex max-w-6xl items-center px-5 py-4">
-          <Link
-            href="/"
-            className="flex items-center flex-shrink-0"
-          >
-            <Image
-              src="/youry-logo.png"
-              alt="Youry"
-              width={174}
-              height={52}
-              className="h-9 w-auto sm:h-10"
-              priority
-            />
-          </Link>
-
-          <div className="ml-auto flex items-center gap-3">
-            <Button
-              asChild
-              variant="ghost"
-              size="sm"
-              className="text-white/60 hover:text-white hover:bg-white/5"
-            >
-              <Link href="/signin">Log in</Link>
-            </Button>
-            <Button
-              asChild
-              size="sm"
-              className="rounded-2xl bg-violet-400 px-5 text-black font-semibold border border-violet-200/40 shadow-[0_6px_0_0_rgba(76,29,149,0.9)] ring-offset-0 transition-all hover:-translate-y-[1px] hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9),0_0_28px_rgba(167,139,250,0.5)] focus-visible:border-violet-400/45 focus-visible:ring-violet-400/55 focus-visible:ring-[3px] active:translate-y-[6px] active:shadow-[0_0_0_0_rgba(76,29,149,0.9)]"
-            >
-              <Link href="/signup">
-                <Sparkles className="mr-1 h-3.5 w-3.5" />
-                Get started
-                <ArrowRight className="ml-1 h-3.5 w-3.5" />
-              </Link>
-            </Button>
-          </div>
-        </div>
-      </header>
-
-      {/* ── Hero (texture behind headline: Turn any product / AI Reels…) ── */}
-      <section className="relative min-h-[min(92svh,880px)] overflow-hidden">
+      {/* ── Hero: shared texture under sticky nav + headline (overflow-x only so sticky works) ── */}
+      <section className="relative min-h-[min(92svh,880px)] overflow-x-hidden">
         <Image
           src="/hero-bg-texture.png"
           alt=""
@@ -102,14 +60,54 @@ export default function LandingPage() {
           priority
           fetchPriority="high"
           sizes="100vw"
-          className="pointer-events-none z-0 object-cover"
+          className="pointer-events-none z-0 object-cover object-top"
           aria-hidden
         />
-        <div className="pointer-events-none absolute inset-0 z-[3] bg-gradient-to-b from-[#050507]/60 via-[#050507]/25 via-40% to-transparent" />
+        <div className="pointer-events-none absolute inset-0 z-[3] bg-gradient-to-b from-[#050507]/55 via-[#050507]/22 via-40% to-transparent" />
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[3] h-8 bg-gradient-to-b from-transparent to-[#050507]" />
         <div className="pointer-events-none absolute left-1/2 top-0 z-[3] -translate-x-1/2 h-[700px] w-[1000px] rounded-full bg-violet-600/[0.12] blur-[140px]" />
 
-        <div className="relative z-10 mx-auto w-full max-w-5xl px-5 pt-4 pb-10 text-center sm:pt-6 sm:pb-12 md:pt-8 md:pb-14">
+        <header className="sticky top-0 z-50 border-b border-white/[0.08] bg-[#050507]/20 backdrop-blur-md">
+          <div className="mx-auto flex max-w-6xl items-center px-5 py-4">
+            <Link
+              href="/"
+              className="flex items-center flex-shrink-0"
+            >
+              <Image
+                src="/youry-logo.png"
+                alt="Youry"
+                width={174}
+                height={52}
+                className="h-9 w-auto sm:h-10"
+                priority
+              />
+            </Link>
+
+            <div className="ml-auto flex items-center gap-3">
+              <Button
+                asChild
+                variant="ghost"
+                size="sm"
+                className="text-white/70 hover:text-white hover:bg-white/10"
+              >
+                <Link href="/signin">Log in</Link>
+              </Button>
+              <Button
+                asChild
+                size="sm"
+                className="rounded-2xl bg-violet-400 px-5 text-black font-semibold border border-violet-200/40 shadow-[0_6px_0_0_rgba(76,29,149,0.9)] ring-offset-0 transition-all hover:-translate-y-[1px] hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9),0_0_28px_rgba(167,139,250,0.5)] focus-visible:border-violet-400/45 focus-visible:ring-violet-400/55 focus-visible:ring-[3px] active:translate-y-[6px] active:shadow-[0_0_0_0_rgba(76,29,149,0.9)]"
+              >
+                <Link href="/signup">
+                  <Sparkles className="mr-1 h-3.5 w-3.5" />
+                  Get started
+                  <ArrowRight className="ml-1 h-3.5 w-3.5" />
+                </Link>
+              </Button>
+            </div>
+          </div>
+        </header>
+
+        <div className="relative z-10 mx-auto w-full max-w-5xl px-5 pt-2 pb-10 text-center sm:pt-3 sm:pb-12 md:pt-4 md:pb-14">
           <LandingSeedanceTopButton />
           <h1 className="mx-auto max-w-4xl px-3 sm:px-6 text-4xl font-extrabold tracking-tight leading-[1.12] sm:text-5xl md:text-6xl">
             <span className="block">
@@ -133,17 +131,23 @@ export default function LandingPage() {
                 placeholder="https://your-product-page.com"
                 className="h-11 flex-1 border-0 bg-transparent px-4 text-sm text-white placeholder:text-white/25 focus-visible:ring-0 focus-visible:ring-offset-0"
               />
-              <div className="flex shrink-0 items-center justify-center self-center sm:self-auto">
-                <LandingGenerateButton />
-              </div>
+              <Button
+                asChild
+                className="h-auto min-h-10 shrink-0 rounded-xl bg-violet-400 px-3 py-2.5 text-center text-[11px] font-semibold leading-snug text-black border border-violet-200/40 shadow-[0_6px_0_0_rgba(76,29,149,0.9)] ring-offset-0 transition-all hover:-translate-y-[1px] hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9),0_0_32px_rgba(167,139,250,0.55)] focus-visible:border-violet-400/45 focus-visible:ring-violet-400/55 focus-visible:ring-[3px] active:translate-y-[6px] active:shadow-[0_0_0_0_rgba(76,29,149,0.9)] sm:rounded-2xl sm:px-5 sm:py-2.5 sm:text-xs md:text-sm"
+              >
+                <Link href="/signup" className="inline-flex items-center justify-center gap-1.5">
+                  <Sparkles className="h-4 w-4 shrink-0" aria-hidden />
+                  <span>Generate</span>
+                </Link>
+              </Button>
             </div>
             </div>
           </div>
         </div>
 
-        {/* 3D video cylinder */}
+        {/* 3D video cylinder — clip overflow here so section can use overflow-x-hidden for sticky nav */}
         <div
-          className="pointer-events-none absolute inset-x-0 bottom-0 z-[2] h-[min(460px,56svh)] translate-y-10 overflow-visible sm:h-[min(530px,60svh)] sm:translate-y-8 lg:h-[min(640px,66svh)] lg:translate-y-6"
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-[2] h-[min(460px,56svh)] translate-y-10 overflow-hidden sm:h-[min(530px,60svh)] sm:translate-y-8 lg:h-[min(640px,66svh)] lg:translate-y-6"
           aria-hidden
         >
           <HeroVideoCarousel3D srcs={HERO_STUDIO_VIDEOS} />

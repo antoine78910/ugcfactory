@@ -5,7 +5,13 @@
 }
 
 .blob {
-  background: linear-gradient(135deg, rgb(122, 105, 249), rgb(242, 99, 120), rgb(245, 131, 63));
+  background: linear-gradient(
+    135deg,
+    rgb(167, 139, 250),
+    rgb(139, 92, 246),
+    rgb(124, 58, 237),
+    rgb(91, 33, 182)
+  );
 }
 
 .borderGlow {
@@ -17,7 +23,12 @@
   height: 100%;
   width: 3rem;
   animation: borderGlowScale 10s ease-in-out infinite alternate;
-  background: linear-gradient(135deg, rgb(122, 105, 249), rgb(242, 99, 120), rgb(245, 131, 63));
+  background: linear-gradient(
+    135deg,
+    rgb(196, 181, 253),
+    rgb(139, 92, 246),
+    rgb(109, 40, 217)
+  );
 }
 
 @keyframes borderGlowTranslate {
@@ -47,7 +58,12 @@
 
 .starHalo {
   animation: starShine 14s ease-in-out infinite alternate;
-  background: linear-gradient(135deg, rgb(59, 196, 242), rgb(122, 105, 249), rgb(242, 99, 120), rgb(245, 131, 63));
+  background: linear-gradient(
+    135deg,
+    rgb(196, 181, 253),
+    rgb(167, 139, 250),
+    rgb(124, 58, 237)
+  );
 }
 
 @keyframes starRotate {
