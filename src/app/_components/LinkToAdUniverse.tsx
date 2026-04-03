@@ -5579,11 +5579,6 @@ export default function LinkToAdUniverse({
                         </details>
                       ) : null}
                       <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-white/50">Your video</p>
-                        <p className="mt-1 text-xs text-white/45">
-                          Preview in 9:16. Regenerate adds the last clip below; switch reference images to see each
-                          frame&apos;s ads.
-                        </p>
                         {isVideoPromptLoading ? (
                           <div className="mt-3 flex items-center gap-2 text-xs text-violet-200">
                             <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
@@ -5736,15 +5731,43 @@ export default function LinkToAdUniverse({
                         !klingVideoUrl &&
                         !klingPollTaskId &&
                         !isKlingSubmitting ? (
-                          <Button
-                            type="button"
-                            className={`mt-4 h-auto min-h-11 py-2.5 ${primaryBtnClass}`}
-                            onClick={() => {
-                              void onGenerateKlingVideo();
-                            }}
-                          >
-                            <span className="text-sm font-semibold leading-tight">Retry video render</span>
-                          </Button>
+                          <div className="mt-4 rounded-xl border border-white/10 bg-black/30 p-3">
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
+                              Ready to render
+                            </p>
+                            <div className="mt-2 flex items-center gap-3">
+                              <div className="group relative h-12 w-12 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-black">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={nanoBananaImageUrl}
+                                  alt="Selected reference"
+                                  className="h-full w-full object-cover object-center"
+                                  loading="eager"
+                                  decoding="async"
+                                />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-xs font-medium text-white/80 truncate">
+                                  Using the selected image as the start frame
+                                </p>
+                                <p className="mt-0.5 text-[10px] text-white/40">
+                                  Confirm to generate the video.
+                                </p>
+                              </div>
+                            </div>
+                            <Button
+                              type="button"
+                              className={`mt-3 h-auto min-h-11 w-full py-2.5 ${primaryBtnClass}`}
+                              onClick={() => {
+                                void onGenerateKlingVideo();
+                              }}
+                            >
+                              <span className="inline-flex items-center justify-center gap-2 text-sm font-semibold leading-tight">
+                                <Video className="h-4 w-4 shrink-0" aria-hidden />
+                                Generate video from selected image
+                              </span>
+                            </Button>
+                          </div>
                         ) : null}
                       </div>
 
