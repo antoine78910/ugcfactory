@@ -6,6 +6,7 @@ import { HeroVideoCarousel3D } from "./HeroVideoCarousel3D";
 import { LandingRevealCarousel } from "./LandingRevealCarousel";
 import { LandingFaq } from "./LandingFaq";
 import { ArrowRight, Sparkles } from "lucide-react";
+import { SeedanceGlowButton } from "./_components/SeedanceGlowButton";
 
 const STEPS = [
   {
@@ -159,13 +160,16 @@ export default function LandingPage() {
                 </Link>
               </Button>
             </div>
+              <div className="mt-4 flex justify-center">
+                <SeedanceGlowButton href="/signup" />
+              </div>
             </div>
           </div>
         </div>
 
         {/* 3D video cylinder */}
         <div
-          className="pointer-events-none absolute inset-x-0 bottom-0 z-[2] h-[min(460px,56svh)] overflow-visible sm:h-[min(530px,60svh)] lg:h-[min(640px,66svh)]"
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-[2] h-[min(460px,56svh)] translate-y-3 overflow-visible sm:h-[min(530px,60svh)] sm:translate-y-2 lg:h-[min(640px,66svh)] lg:translate-y-1"
           aria-hidden
         >
           <HeroVideoCarousel3D srcs={HERO_STUDIO_VIDEOS} />

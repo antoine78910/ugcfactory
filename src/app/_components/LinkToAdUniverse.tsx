@@ -738,7 +738,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const [generationMode, setGenerationMode] = useState<"automatic" | "custom_ugc">("automatic");
   const scriptProvider = "claude" as const;
 
-  const [videoModel, setVideoModel] = useState<LinkToAdVideoModelId>(LINK_TO_AD_DEFAULT_VIDEO_MODEL);
+  // Link to Ad: temporarily force Seedance 2.0 only (no Kling) to avoid interference.
+  const [videoModel] = useState<LinkToAdVideoModelId>("seedance");
   const [videoDuration, setVideoDuration] = useState<number>(LINK_TO_AD_DEFAULT_VIDEO_DURATION_SEC);
   const [customUgcTopic, setCustomUgcTopic] = useState("");
   const [customUgcOffer, setCustomUgcOffer] = useState("");
@@ -3728,47 +3729,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         <div className="flex flex-wrap items-center gap-4">
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Video model</p>
-            <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] px-1 pb-1 pt-2.5">
-              {(Object.keys(LINK_TO_AD_VIDEO_MODELS) as LinkToAdVideoModelId[]).map((id) => {
-                const pillClass = cn(
-                  "rounded-md px-3 py-1.5 text-xs font-semibold transition whitespace-nowrap inline-flex items-center",
-                  videoModel === id
-                    ? "bg-violet-500/15 text-white border border-violet-400/60"
-                    : "bg-black/20 text-white/65 hover:border-white/20 border border-white/10",
-                );
-                const label = LINK_TO_AD_VIDEO_MODELS[id].label;
-                if (id === "seedance") {
-                  return (
-                    <span key={id} className="relative inline-flex">
-                      <span
-                        className="pointer-events-none absolute -top-2 right-0 z-[1] translate-x-0.5 rounded-md border border-teal-400/50 bg-gradient-to-b from-teal-500/30 to-teal-950/90 px-1.5 py-px text-[8px] font-semibold uppercase leading-tight tracking-wide text-teal-100 shadow-[0_2px_10px_rgba(0,0,0,0.35)]"
-                        title="Best results — recommended for motion and lipsync"
-                      >
-                        Best results
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setVideoModel(id)}
-                        disabled={isWorking}
-                        className={pillClass}
-                      >
-                        {label}
-                      </button>
-                    </span>
-                  );
-                }
-                return (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => setVideoModel(id)}
-                    disabled={isWorking}
-                    className={pillClass}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
+            <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
+              <span className="text-xs font-semibold text-white">{LINK_TO_AD_VIDEO_MODELS[videoModel].label}</span>
             </div>
           </div>
           <div className="space-y-1">
