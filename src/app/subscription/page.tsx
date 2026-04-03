@@ -411,7 +411,6 @@ export default function SubscriptionPage() {
                         </span>
                         <span>
                           <span className="font-semibold text-white">{plan.credits.toLocaleString()} credits</span>
-                          <span className="text-white/45"> / month</span>
                         </span>
                       </li>
                       <li className="pl-1 text-white/50">
