@@ -52,26 +52,8 @@ const HERO_STUDIO_VIDEOS = [
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-[#050507] text-white selection:bg-violet-500/30">
-      {/* Seedance announcement — above sticky header; hero URL row keeps the original Generate button */}
-      <div className="relative z-[60]">
-        <LandingSeedanceTopButton />
-      </div>
-
-      {/* ── Sticky header: Nano Banana bar + nav (no hero texture here) ── */}
+      {/* ── Sticky header: nav only (no promo bar) ── */}
       <header className="sticky top-0 z-50 bg-transparent backdrop-blur-xl">
-        <div className="relative border-b-[4px] border-[#0b0912] bg-[#987eee] px-4 py-1.5 text-center">
-          <p className="text-[11px] font-semibold text-[#0b0912]/90 sm:text-xs">
-            Nano Banana 2 UNLIMITED. Kling 3.0 & Motion Control Available.
-            Special 73% OFF
-          </p>
-          <button
-            type="button"
-            aria-label="Close announcement"
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-[#0b0912]/55 transition-colors hover:text-[#0b0912]"
-          >
-            ×
-          </button>
-        </div>
         <div className="mx-auto flex max-w-6xl items-center px-5 py-4">
           <Link
             href="/"
@@ -128,6 +110,7 @@ export default function LandingPage() {
         <div className="pointer-events-none absolute left-1/2 top-0 z-[3] -translate-x-1/2 h-[700px] w-[1000px] rounded-full bg-violet-600/[0.12] blur-[140px]" />
 
         <div className="relative z-10 mx-auto w-full max-w-5xl px-5 pt-4 pb-10 text-center sm:pt-6 sm:pb-12 md:pt-8 md:pb-14">
+          <LandingSeedanceTopButton />
           <h1 className="mx-auto max-w-4xl px-3 sm:px-6 text-4xl font-extrabold tracking-tight leading-[1.12] sm:text-5xl md:text-6xl">
             <span className="block">
               Realistic AI UGC for{' '}

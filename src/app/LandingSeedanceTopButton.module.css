@@ -1,77 +1,72 @@
-/* Port of the green “I’M READY” button — brand violet instead of #1BFD9C */
-.wrapper {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 0.65rem 1rem;
-  background: linear-gradient(to bottom, rgba(12, 10, 18, 0.98), rgba(5, 5, 7, 0.96));
-  border-bottom: 1px solid rgba(167, 139, 250, 0.12);
-}
-
-.btn {
-  --violet: #a78bfa;
-  --violet-soft: rgba(167, 139, 250, 0.12);
-  --violet-glow: rgba(167, 139, 250, 0.45);
-
-  position: relative;
-  display: inline-block;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  line-height: 1.35;
-  padding: 0.65em 1.6em;
-  border-radius: 0.55em;
-  overflow: hidden;
-  transition: all 0.3s;
-  border: 2px solid var(--violet);
-  background: linear-gradient(
-    to right,
-    var(--violet-soft) 1%,
-    transparent 40%,
-    transparent 60%,
-    var(--violet-soft) 100%
-  );
-  color: var(--violet);
-  box-shadow:
-    inset 0 0 10px rgba(167, 139, 250, 0.35),
-    0 0 9px 3px rgba(167, 139, 250, 0.12);
+/* Animated gradient ring + star — landing Seedance announcement */
+.link {
   text-decoration: none;
-  text-align: center;
-  max-width: min(100%, 36rem);
+  color: inherit;
 }
 
-.btn:hover {
-  color: #ddd6fe;
-  box-shadow:
-    inset 0 0 12px rgba(167, 139, 250, 0.55),
-    0 0 12px 4px rgba(167, 139, 250, 0.22);
+.blob {
+  background: linear-gradient(135deg, rgb(122, 105, 249), rgb(242, 99, 120), rgb(245, 131, 63));
 }
 
-.btn::before {
-  content: "";
-  position: absolute;
-  left: -4em;
-  width: 4em;
+.borderGlow {
+  animation: borderGlowTranslate 10s ease-in-out infinite alternate;
+}
+
+.borderGlowInner {
+  z-index: 0;
   height: 100%;
-  top: 0;
-  transition: transform 0.4s ease-in-out;
-  background: linear-gradient(
-    to right,
-    transparent 1%,
-    rgba(167, 139, 250, 0.14) 40%,
-    rgba(167, 139, 250, 0.14) 60%,
-    transparent 100%
-  );
-  pointer-events: none;
+  width: 3rem;
+  animation: borderGlowScale 10s ease-in-out infinite alternate;
+  background: linear-gradient(135deg, rgb(122, 105, 249), rgb(242, 99, 120), rgb(245, 131, 63));
 }
 
-.btn:hover::before {
-  transform: translateX(22em);
+@keyframes borderGlowTranslate {
+  0% {
+    transform: translate(-15%, -10%);
+  }
+  100% {
+    transform: translate(15%, 10%);
+  }
 }
 
-@media (min-width: 640px) {
-  .btn {
-    font-size: 15px;
-    padding: 0.7em 2.7em;
+@keyframes borderGlowScale {
+  0%,
+  100% {
+    transform: translateX(-50%) scale(1);
+    opacity: 0.85;
+  }
+  50% {
+    transform: translateX(-50%) scale(1.2);
+    opacity: 1;
+  }
+}
+
+.star {
+  animation: starRotate 14s cubic-bezier(0.68, -0.55, 0.27, 1.55) infinite;
+}
+
+.starHalo {
+  animation: starShine 14s ease-in-out infinite alternate;
+  background: linear-gradient(135deg, rgb(59, 196, 242), rgb(122, 105, 249), rgb(242, 99, 120), rgb(245, 131, 63));
+}
+
+@keyframes starRotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes starShine {
+  0%,
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.9);
+  }
+  50% {
+    opacity: 0.35;
+    transform: translate(-50%, -50%) scale(1.05);
   }
 }
