@@ -415,7 +415,7 @@ export default function SubscriptionPage() {
                         </span>
                       </li>
                       <li className="pl-1 text-white/50">
-                        <span className="text-white/70">Link to Ad:</span> {plan.usage.linkToAd}
+                        <span className="text-white/70">Link to Ad:</span> Included
                       </li>
                       <li className="pl-1 text-white/50">
                         <span className="text-white/70">Up to AI images (Nanobanana):</span> {plan.usage.images}
