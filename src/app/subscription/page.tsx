@@ -436,6 +436,18 @@ export default function SubscriptionPage() {
             </div>
           </section>
 
+          <div className="mx-auto max-w-4xl pb-2 text-center">
+            <p className="pb-6 text-center text-[11px] text-white/28">Checkout is powered by Stripe.</p>
+            <Button
+              type="button"
+              variant="secondary"
+              className="rounded-xl border border-white/15 bg-white/5 text-white hover:bg-white/10"
+              onClick={() => window.open(BILLING_PORTAL_URL, "_blank", "noopener,noreferrer")}
+            >
+              Manage billing
+            </Button>
+          </div>
+
           <section className="mx-auto max-w-4xl">
             <h2 className="text-center text-xs font-bold uppercase tracking-[0.16em] text-white/40">Your account</h2>
             <div className="mt-4 rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.05] to-transparent p-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] md:p-8">
@@ -469,18 +481,6 @@ export default function SubscriptionPage() {
 
             </div>
           </section>
-
-          <p className="pb-6 text-center text-[11px] text-white/28">Checkout is powered by Stripe.</p>
-          <div className="pb-2 text-center">
-            <Button
-              type="button"
-              variant="secondary"
-              className="rounded-xl border border-white/15 bg-white/5 text-white hover:bg-white/10"
-              onClick={() => window.open(BILLING_PORTAL_URL, "_blank", "noopener,noreferrer")}
-            >
-              Manage billing
-            </Button>
-          </div>
         </div>
       </div>
     </StudioShell>
