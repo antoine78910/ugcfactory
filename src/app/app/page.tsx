@@ -1247,6 +1247,7 @@ export default function AppBrandWizard() {
       if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
       return null;
     });
+    setVoiceChangeHistoryUrl("");
   }, []);
 
   const motionSectionRef = useRef<"ad_clone" | "motion_control" | null>(null);
@@ -1667,19 +1668,19 @@ export default function AppBrandWizard() {
   const handleChangeVoiceFromHistory = useCallback(
     (item: StudioHistoryItem) => {
       if (!item.mediaUrl) return;
-      // Ensure the item is available in the translate section history list
-      // (readyTranslateVideos only reads from motionHistoryItems)
       setMotionHistoryItems((prev) => {
         if (prev.some((i) => i.mediaUrl === item.mediaUrl)) return prev;
         return [{ ...item, kind: "video" as const }, ...prev];
       });
       setAppSectionNav("ad_clone");
       setTranslateToolMode("voice_change");
-      clearVoiceChangeUpload();
+      setVoiceChangeUploadFile(null);
       setVoiceChangeHistoryUrl(item.mediaUrl);
+      setVoiceChangeUploadKind("video");
+      setVoiceChangeUploadPreviewUrl(proxiedMediaSrc(item.mediaUrl));
       toast.message("Video loaded", { description: "Select a voice and generate." });
     },
-    [clearVoiceChangeUpload, setAppSectionNav],
+    [setAppSectionNav],
   );
 
   const searchKey = searchParams.toString();
@@ -2919,7 +2920,10 @@ export default function AppBrandWizard() {
                               </div>
                               <div className="flex items-center justify-between gap-2">
                                 <p className="truncate text-[11px] text-white/45">
-                                  {voiceChangeUploadFile?.name || "No uploaded source"}
+                                  {voiceChangeUploadFile?.name
+                                    || (voiceChangeHistoryUrl
+                                      ? readyTranslateVideos.find((i) => i.mediaUrl === voiceChangeHistoryUrl)?.label ?? "History video"
+                                      : "No uploaded source")}
                                 </p>
                                 {voiceChangeUploadPreviewUrl ? (
                                   <button
@@ -2937,8 +2941,10 @@ export default function AppBrandWizard() {
                                 <Select
                                   value={voiceChangeHistoryUrl}
                                   onValueChange={(v) => {
-                                    clearVoiceChangeUpload();
+                                    setVoiceChangeUploadFile(null);
                                     setVoiceChangeHistoryUrl(v);
+                                    setVoiceChangeUploadKind("video");
+                                    setVoiceChangeUploadPreviewUrl(proxiedMediaSrc(v));
                                   }}
                                 >
                                   <SelectTrigger className="h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
