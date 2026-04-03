@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { ledgerTicksToDisplayCredits } from "@/lib/creditLedgerTicks";
 import { kieMarketRecordInfo } from "@/lib/kieMarket";
 import { kieImageTaskPollOutcome } from "@/lib/kieTaskPoll";
 import type { StudioGenerationRow } from "@/lib/studioGenerationsMap";
@@ -282,7 +283,7 @@ export async function sweepStudioRefundHints(
       .maybeSingle();
 
     if (upErr) throw upErr;
-    if (updated) hints.push({ jobId: row.id, credits: row.credits_charged });
+    if (updated) hints.push({ jobId: row.id, credits: ledgerTicksToDisplayCredits(row.credits_charged) });
   }
 
   return hints;

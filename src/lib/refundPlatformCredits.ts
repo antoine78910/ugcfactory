@@ -7,7 +7,7 @@ export function refundPlatformCredits(
   grantCredits: (amount: number) => void,
   creditsRef?: { current: number },
 ): void {
-  const n = Math.max(0, Math.floor(chargedAmount));
+  const n = Math.max(0, Number(chargedAmount) || 0);
   if (n <= 0) return;
   grantCredits(n);
   if (creditsRef) creditsRef.current += n;

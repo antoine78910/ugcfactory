@@ -12,6 +12,7 @@ import { createStudioKieImageTasks } from "@/lib/studioKieImageTask";
 import type { StudioGenerationRow } from "@/lib/studioGenerationsMap";
 import type { NanoBananaProAspectRatio } from "@/lib/nanobanana";
 import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
+import { displayCreditsToLedgerTicks } from "@/lib/creditLedgerTicks";
 import { studioImageCreditsChargedTotal } from "@/lib/pricing";
 import { isStudioImageKiePickerModelId } from "@/lib/studioImageModels";
 import { getUserPlan } from "@/lib/supabase/getUserPlan";
@@ -85,7 +86,8 @@ export async function POST(req: Request) {
   // Calculate credits server-side — never trust the client-provided value
   const numImages = Math.max(1, Math.min(Number(body.numImages) || 1, 10));
   const resolution = (body.resolution as "1K" | "2K" | "4K" | undefined) ?? "1K";
-  const creditsCharged = usesPersonalApi ? 0 : computeImageCredits(model, resolution, numImages);
+  const creditsDisplay = usesPersonalApi ? 0 : computeImageCredits(model, resolution, numImages);
+  const totalTicks = displayCreditsToLedgerTicks(creditsDisplay);
 
   const refUrls = Array.isArray(body.imageUrls)
     ? body.imageUrls.filter((u): u is string => typeof u === "string" && u.trim().length > 0)
@@ -116,8 +118,8 @@ export async function POST(req: Request) {
   }
 
   const n = taskIds.length;
-  const baseCharge = n > 0 ? Math.floor(creditsCharged / n) : 0;
-  const remainder = creditsCharged - baseCharge * n;
+  const baseCharge = n > 0 ? Math.floor(totalTicks / n) : 0;
+  const remainder = totalTicks - baseCharge * n;
   const inputUrls = Array.isArray(body.imageUrls)
     ? body.imageUrls.filter((u): u is string => typeof u === "string" && u.trim().length > 0)
     : [];

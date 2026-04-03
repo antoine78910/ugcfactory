@@ -1,6 +1,7 @@
 export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
+import { ledgerTicksToDisplayCredits } from "@/lib/creditLedgerTicks";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/admin";
 
@@ -34,7 +35,8 @@ export async function GET() {
   let processingCount = 0;
   if (creditRows) {
     for (const r of creditRows) {
-      totalCreditsSpent += (r as { credits_charged: number }).credits_charged ?? 0;
+      const ticks = (r as { credits_charged: number }).credits_charged ?? 0;
+      totalCreditsSpent += ledgerTicksToDisplayCredits(ticks);
       const s = (r as { status: string }).status;
       if (s === "ready") readyCount++;
       else if (s === "failed") failedCount++;

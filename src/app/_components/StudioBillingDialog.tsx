@@ -6,6 +6,7 @@ import { Dialog } from "radix-ui";
 import { Coins, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { AccountPlanId } from "@/lib/subscriptionModelAccess";
+import { formatDisplayCredits } from "@/lib/creditLedgerTicks";
 import {
   listAllowedStudioImageModels,
   listAllowedStudioVideoEditPickers,
@@ -19,6 +20,10 @@ import {
   studioVideoEditPickerDisplayLabel,
   upgradePlanMessage,
 } from "@/lib/subscriptionModelAccess";
+
+function creditLabel(n: number): string {
+  return n === 1 ? "credit" : "credits";
+}
 
 export type StudioBillingVariant =
   | { kind: "plan"; blockedModelId: string }
@@ -66,10 +71,10 @@ export function StudioBillingDialog({ open, onOpenChange, planId, studioMode, va
     title = "Not enough credits";
     description = (
       <>
-        You have <strong className="text-white/90">{currentCredits}</strong>{" "}
-        {currentCredits === 1 ? "credit" : "credits"}. This generation needs{" "}
-        <strong className="text-white/90">{requiredCredits}</strong>{" "}
-        {requiredCredits === 1 ? "credit" : "credits"}.
+        You have <strong className="text-white/90">{formatDisplayCredits(currentCredits)}</strong>{" "}
+        {creditLabel(currentCredits)}. This generation needs{" "}
+        <strong className="text-white/90">{formatDisplayCredits(requiredCredits)}</strong>{" "}
+        {creditLabel(requiredCredits)}.
       </>
     );
   }

@@ -2,6 +2,7 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
+import { displayCreditsToLedgerTicks } from "@/lib/creditLedgerTicks";
 import { serverLog } from "@/lib/serverLog";
 
 type Body = {
@@ -30,7 +31,8 @@ export async function POST(req: Request) {
   const kind = String(body.kind ?? "").trim();
   const label = String(body.label ?? "").trim() || "Studio";
   const provider = String(body.provider ?? "kie-market").trim() || "kie-market";
-  const creditsCharged = Math.max(0, Math.floor(Number(body.creditsCharged) || 0));
+  const creditsDisplay = Math.max(0, Number(body.creditsCharged) || 0);
+  const totalTicks = displayCreditsToLedgerTicks(creditsDisplay);
   const hasKiePersonal = Boolean(String(body.personalApiKey ?? "").trim());
   const hasPiapiPersonal = Boolean(String(body.piapiApiKey ?? "").trim());
   const providerLc = provider.toLowerCase();
@@ -47,8 +49,8 @@ export async function POST(req: Request) {
   }
 
   const n = taskIds.length;
-  const baseCharge = Math.floor(creditsCharged / n);
-  const remainder = creditsCharged - baseCharge * n;
+  const baseCharge = Math.floor(totalTicks / n);
+  const remainder = totalTicks - baseCharge * n;
   const inputUrls = Array.isArray(body.inputUrls)
     ? body.inputUrls.filter((u): u is string => typeof u === "string" && u.trim().length > 0)
     : [];

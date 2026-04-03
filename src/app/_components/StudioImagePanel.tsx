@@ -25,6 +25,7 @@ import { StudioEmptyExamples, StudioOutputPane } from "@/app/_components/StudioE
 import { StudioGenerationsHistory } from "@/app/_components/StudioGenerationsHistory";
 import type { StudioHistoryItem, StudioImageLightboxEditModelOption } from "@/app/_components/StudioGenerationsHistory";
 import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
+import { formatDisplayCredits } from "@/lib/creditLedgerTicks";
 import {
   studioImageCreditsChargedTotal,
   studioImageCreditsPerOutput,
@@ -826,7 +827,9 @@ export default function StudioImagePanel() {
           <span className="inline-flex items-center gap-2">
             Generate
             <Sparkles className="h-5 w-5" />
-            <span className="rounded-md bg-white/15 px-2 py-0.5 text-base tabular-nums">{totalCredits}</span>
+            <span className="rounded-md bg-white/15 px-2 py-0.5 text-base tabular-nums">
+              {formatDisplayCredits(totalCredits)}
+            </span>
             <span className="text-sm font-normal text-white/80">credits</span>
           </span>
         </Button>

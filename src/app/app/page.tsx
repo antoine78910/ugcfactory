@@ -3839,7 +3839,14 @@ export default function AppBrandWizard() {
                               : "Translate"
                             : "Generate"}
                           <Sparkles className="h-5 w-5" />
-                          {appSection === "ad_clone" && translateToolMode === "voice_change" ? null : (
+                          {appSection === "ad_clone" && translateToolMode === "voice_change" ? (
+                            <>
+                              <span className="rounded-md bg-white/15 px-2 py-0.5 text-base tabular-nums">
+                                {motionCredits}
+                              </span>
+                              <span className="text-sm font-normal text-white/80">credits</span>
+                            </>
+                          ) : (
                             <>
                               <span className="rounded-md bg-white/15 px-2 py-0.5 text-base tabular-nums">
                                 {motionCredits}

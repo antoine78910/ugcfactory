@@ -18,6 +18,7 @@ import { StudioGenerationsHistory } from "@/app/_components/StudioGenerationsHis
 import type { StudioHistoryItem } from "@/app/_components/StudioGenerationsHistory";
 import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
 import { StudioModelPicker, type StudioModelPickerItem } from "@/app/_components/StudioModelPicker";
+import { StudioUpscaleDiscreteSlider } from "@/app/_components/StudioUpscaleDiscreteSlider";
 import {
   topazImageUpscaleCredits,
   topazImageUpscaleKieFactorToTierLabel,
@@ -62,6 +63,11 @@ function videoAspectBoxClass(preset: VideoAspectPreset): string {
   if (preset === "1:1") return "aspect-square";
   return "aspect-[9/16]";
 }
+
+const VIDEO_UPSCALE_OPTIONS = ["1", "2", "4"] as const;
+const VIDEO_UPSCALE_TICKS = ["1×", "2×", "4×"] as const;
+const IMAGE_TIER_OPTIONS = ["2", "4", "8"] as const;
+const IMAGE_TIER_TICKS = ["2K", "4K", "8K"] as const;
 
 const UPSCALE_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
   {
@@ -393,7 +399,7 @@ export default function StudioUpscalePanel() {
         <div className="flex min-h-0 min-w-0 w-full flex-col gap-2 lg:basis-[30%] lg:max-w-[28rem] lg:flex-none lg:shrink-0 lg:overflow-hidden">
           {/* Scroll the form; keep the CTA pinned at the bottom of this column so it never falls off-screen */}
           <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 lg:min-h-0 lg:h-full">
-          <div className="studio-params-scroll flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-y-auto pb-4 max-h-[min(86vh,calc(100dvh-5rem))] lg:max-h-none lg:flex-1 lg:pb-2">
+          <div className="studio-params-scroll flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-y-auto pb-2 max-h-[min(86vh,calc(100dvh-5rem))] lg:max-h-none lg:flex-1">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Upscale model</p>
           <div className="rounded-2xl border border-white/10 bg-[#101014] p-3">
             <StudioModelPicker
@@ -408,7 +414,7 @@ export default function StudioUpscalePanel() {
           </div>
 
           <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Source &amp; billing</p>
-          <div className="rounded-2xl border border-white/10 bg-[#101014] p-4 space-y-3">
+          <div className="rounded-2xl border border-white/10 bg-[#101014] p-3 sm:p-4 space-y-2">
             <Label className="text-xs text-white/45">
               {upscalePickerId === "upscale/image" ? "Source image" : "Source video"}
             </Label>
@@ -586,42 +592,23 @@ export default function StudioUpscalePanel() {
                 </div>
               </div>
             ) : null}
-            <div className="grid grid-cols-1 gap-3">
-              <div>
-                <Label className="text-xs text-white/45">
-                  {upscalePickerId === "upscale/image" ? "Output tier (Topaz)" : "Upscale factor"}
-                </Label>
-                {upscalePickerId === "upscale/image" ? (
-                  <Select
-                    value={imageUpscaleTier}
-                    onValueChange={(v) => setImageUpscaleTier(v as "2" | "4" | "8")}
-                  >
-                    <SelectTrigger className="mt-2 h-11 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="border-white/10 bg-[#0c0c10] text-white">
-                      <SelectItem value="2">2K — 2 credits</SelectItem>
-                      <SelectItem value="4">4K — 3 credits</SelectItem>
-                      <SelectItem value="8">8K — 5 credits</SelectItem>
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <Select
-                    value={videoUpscaleFactor}
-                    onValueChange={(v) => setVideoUpscaleFactor(v as "1" | "2" | "4")}
-                  >
-                    <SelectTrigger className="mt-2 h-11 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="border-white/10 bg-[#0c0c10] text-white">
-                      <SelectItem value="1">1×</SelectItem>
-                      <SelectItem value="2">2×</SelectItem>
-                      <SelectItem value="4">4×</SelectItem>
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-            </div>
+            {upscalePickerId === "upscale/image" ? (
+              <StudioUpscaleDiscreteSlider
+                label="Output tier (Topaz)"
+                value={imageUpscaleTier}
+                options={IMAGE_TIER_OPTIONS}
+                tickLabels={IMAGE_TIER_TICKS}
+                onChange={(v) => setImageUpscaleTier(v as "2" | "4" | "8")}
+              />
+            ) : (
+              <StudioUpscaleDiscreteSlider
+                label="Upscale factor"
+                value={videoUpscaleFactor}
+                options={VIDEO_UPSCALE_OPTIONS}
+                tickLabels={VIDEO_UPSCALE_TICKS}
+                onChange={(v) => setVideoUpscaleFactor(v as "1" | "2" | "4")}
+              />
+            )}
           </div>
 
           </div>

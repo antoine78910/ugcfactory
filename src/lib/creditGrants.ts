@@ -6,6 +6,10 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  displayCreditsToLedgerTicks,
+  ledgerTicksToDisplayCredits,
+} from "@/lib/creditLedgerTicks";
 
 export type CreditGrantsBalance = {
   balance: number;
@@ -22,7 +26,7 @@ export async function getUserCreditBalance(
     p_user_id: userId,
   });
 
-  const balance = typeof data === "number" ? data : 0;
+  const balanceTicks = typeof data === "number" ? data : 0;
   if (error) console.error("[creditGrants] get_user_credit_balance error:", error);
 
   const { data: rows } = await admin
@@ -35,25 +39,33 @@ export async function getUserCreditBalance(
   let subscriptionCredits = 0;
   let packCredits = 0;
   for (const r of rows ?? []) {
-    if (r.source === "subscription") subscriptionCredits += r.remaining;
-    else packCredits += r.remaining;
+    const rem = ledgerTicksToDisplayCredits(r.remaining);
+    if (r.source === "subscription") subscriptionCredits += rem;
+    else packCredits += rem;
   }
 
-  return { balance, subscriptionCredits, packCredits };
+  return {
+    balance: ledgerTicksToDisplayCredits(balanceTicks),
+    subscriptionCredits,
+    packCredits,
+  };
 }
 
-/** FIFO spend — returns credits actually spent. */
+/** FIFO spend — `amount` is display credits (e.g. 0.5); returns display credits actually spent. */
 export async function spendUserCredits(
   admin: SupabaseClient,
   userId: string,
   amount: number,
 ): Promise<number> {
+  const ticks = displayCreditsToLedgerTicks(amount);
+  if (ticks <= 0) return 0;
   const { data, error } = await admin.rpc("spend_user_credits_fifo", {
     p_user_id: userId,
-    p_amount: Math.max(0, Math.floor(amount)),
+    p_amount: ticks,
   });
   if (error) console.error("[creditGrants] spend_user_credits_fifo error:", error);
-  return typeof data === "number" ? data : 0;
+  const spentTicks = typeof data === "number" ? data : 0;
+  return ledgerTicksToDisplayCredits(spentTicks);
 }
 
 /** Refund credits (e.g. failed generation). */
@@ -62,9 +74,11 @@ export async function refundUserCredits(
   userId: string,
   amount: number,
 ): Promise<void> {
+  const ticks = displayCreditsToLedgerTicks(amount);
+  if (ticks <= 0) return;
   const { error } = await admin.rpc("refund_user_credits", {
     p_user_id: userId,
-    p_amount: Math.max(0, Math.floor(amount)),
+    p_amount: ticks,
   });
   if (error) console.error("[creditGrants] refund_user_credits error:", error);
 }
@@ -79,9 +93,11 @@ export async function resetSubscriptionCredits(
   amount: number,
   expiresAt: Date,
 ): Promise<void> {
+  const ticks = displayCreditsToLedgerTicks(amount);
+  if (ticks <= 0) return;
   const { error } = await admin.rpc("reset_subscription_credits", {
     p_user_id: userId,
-    p_amount: amount,
+    p_amount: ticks,
     p_expires_at: expiresAt.toISOString(),
   });
   if (error) console.error("[creditGrants] reset_subscription_credits error:", error);
@@ -93,9 +109,11 @@ export async function addPackCredits(
   userId: string,
   amount: number,
 ): Promise<void> {
+  const ticks = displayCreditsToLedgerTicks(amount);
+  if (ticks <= 0) return;
   const { error } = await admin.rpc("add_pack_credits", {
     p_user_id: userId,
-    p_amount: amount,
+    p_amount: ticks,
   });
   if (error) console.error("[creditGrants] add_pack_credits error:", error);
 }

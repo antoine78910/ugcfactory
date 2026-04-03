@@ -20,6 +20,7 @@ import {
   isSubscriptionPlanId,
 } from "@/lib/stripe/subscriptionPrices";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { displayCreditsToLedgerTicks } from "@/lib/creditLedgerTicks";
 
 // ---------------------------------------------------------------------------
 // localStorage keys — bare (no namespace).
@@ -462,10 +463,10 @@ export function CreditsPlanProvider({
     (n: number) => {
       // Unlimited accounts are never charged.
       if (isUnlimited) return;
-      const k = Math.max(0, Math.floor(n));
-      if (k === 0) return;
+      const amount = Number(n);
+      if (!Number.isFinite(amount) || amount <= 0 || displayCreditsToLedgerTicks(amount) <= 0) return;
       const prev = readState(activeUserId);
-      const nextCurrent = Math.max(0, prev.current - k);
+      const nextCurrent = Math.max(0, prev.current - amount);
       const nextTotal =
         prev.planId === "free"
           ? prev.total
@@ -477,7 +478,7 @@ export function CreditsPlanProvider({
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: k }),
+        body: JSON.stringify({ amount }),
       }).catch(() => {});
     },
     [activeUserId, commit, isUnlimited],
@@ -485,10 +486,10 @@ export function CreditsPlanProvider({
 
   const grantCredits = useCallback(
     (n: number) => {
-      const k = Math.max(0, Math.floor(n));
-      if (k === 0) return;
+      const amount = Number(n);
+      if (!Number.isFinite(amount) || amount <= 0 || displayCreditsToLedgerTicks(amount) <= 0) return;
       const prev = readState(activeUserId);
-      const nextCurrent = prev.current + k;
+      const nextCurrent = prev.current + amount;
       const nextTotal =
         prev.planId === "free"
           ? Math.max(prev.total, nextCurrent)
@@ -500,7 +501,7 @@ export function CreditsPlanProvider({
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: k }),
+        body: JSON.stringify({ amount }),
       }).catch(() => {});
     },
     [activeUserId, commit],

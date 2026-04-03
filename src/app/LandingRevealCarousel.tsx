@@ -227,7 +227,7 @@ export function LandingRevealCarousel() {
   return (
     <section
       ref={revealSectionRef}
-      className="overflow-hidden bg-gradient-to-b from-[#0c0a14]/35 via-[#09080f]/20 to-transparent -mt-14 pb-10 pt-14 sm:-mt-20 sm:pt-16"
+      className="overflow-hidden bg-gradient-to-b from-[#0c0a14]/35 via-[#09080f]/20 to-transparent mt-12 pb-10 pt-14 sm:mt-16 sm:pb-12 sm:pt-16"
     >
       <div className="mx-auto mb-14 max-w-6xl px-5 text-center">
         <h2 className="text-3xl font-bold tracking-tight sm:text-4xl md:text-5xl">

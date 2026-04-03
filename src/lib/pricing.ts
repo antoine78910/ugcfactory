@@ -594,8 +594,8 @@ export function studioImageCreditsPerOutput(opts: {
 }
 
 /**
- * Integer credits charged for a Studio image job (`credits_charged` is int in DB).
- * Half-credit models: ceil(perImage × numImages).
+ * Display credits charged for a Studio image job (may be 0.5 steps for Google Nano Banana).
+ * Persisted server-side as ledger ticks: `displayCreditsToLedgerTicks(total)`.
  */
 export function studioImageCreditsChargedTotal(opts: {
   studioModel: string;
@@ -607,7 +607,8 @@ export function studioImageCreditsChargedTotal(opts: {
     studioModel: opts.studioModel,
     resolution: opts.resolution,
   });
-  return Math.max(1, Math.ceil(per * n));
+  const raw = per * n;
+  return Math.ceil(raw * 2) / 2;
 }
 
 // ---------------------------------------------------------------------------

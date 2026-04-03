@@ -51,65 +51,69 @@ const HERO_STUDIO_VIDEOS = [
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-[#050507] text-white selection:bg-violet-500/30">
-      {/* ── Hero: shared texture under sticky nav + headline (overflow-x only so sticky works) ── */}
-      <section className="relative min-h-[min(100svh,980px)] overflow-x-hidden">
-        <Image
-          src="/hero-bg-texture.png"
-          alt=""
-          fill
-          priority
-          fetchPriority="high"
-          sizes="100vw"
-          className="pointer-events-none z-0 object-cover object-top"
-          aria-hidden
-        />
-        <div className="pointer-events-none absolute inset-0 z-[3] bg-gradient-to-b from-[#050507]/55 via-[#050507]/22 via-40% to-transparent" />
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[3] h-8 bg-gradient-to-b from-transparent to-[#050507]" />
-        <div className="pointer-events-none absolute left-1/2 top-0 z-[3] -translate-x-1/2 h-[700px] w-[1000px] rounded-full bg-violet-600/[0.12] blur-[140px]" />
+      {/*
+        Sticky nav must NOT sit inside an ancestor with overflow-x hidden (breaks sticky / nested scroll).
+        Hero art lives in a sibling layer; horizontal clip is confined to that layer.
+      */}
+      <div className="relative">
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-0 h-[min(100svh,1040px)] overflow-x-hidden">
+          <Image
+            src="/hero-bg-texture.png"
+            alt=""
+            fill
+            priority
+            fetchPriority="high"
+            sizes="100vw"
+            className="object-cover object-top"
+            aria-hidden
+          />
+          <div className="absolute inset-0 z-[3] bg-gradient-to-b from-[#050507]/55 via-[#050507]/22 via-40% to-transparent" />
+          <div className="absolute inset-x-0 bottom-0 z-[3] h-8 bg-gradient-to-b from-transparent to-[#050507]" />
+          <div className="absolute left-1/2 top-0 z-[3] h-[700px] w-[1000px] -translate-x-1/2 rounded-full bg-violet-600/[0.12] blur-[140px]" />
+        </div>
 
         <header className="sticky top-0 z-50 border-b border-white/[0.08] bg-[#050507]/20 backdrop-blur-md">
-          <div className="mx-auto flex max-w-6xl items-center px-5 py-4">
-            <Link
-              href="/"
-              className="flex items-center flex-shrink-0"
-            >
+          <div className="mx-auto flex max-w-6xl items-center px-5 py-5 sm:px-6 sm:py-6">
+            <Link href="/" className="flex flex-shrink-0 items-center">
               <Image
                 src="/youry-logo.png"
                 alt="Youry"
                 width={174}
                 height={52}
-                className="h-9 w-auto sm:h-10"
+                className="h-10 w-auto sm:h-11 md:h-12"
                 priority
               />
             </Link>
 
-            <div className="ml-auto flex items-center gap-3">
+            <div className="ml-auto flex items-center gap-3 sm:gap-4">
               <Button
                 asChild
                 variant="ghost"
                 size="sm"
-                className="text-white/70 hover:text-white hover:bg-white/10"
+                className="h-9 px-4 text-sm text-white/70 hover:bg-white/10 hover:text-white sm:h-10 sm:px-5"
               >
                 <Link href="/signin">Log in</Link>
               </Button>
               <Button
                 asChild
                 size="sm"
-                className="rounded-2xl bg-violet-400 px-5 text-black font-semibold border border-violet-200/40 shadow-[0_6px_0_0_rgba(76,29,149,0.9)] ring-offset-0 transition-all hover:-translate-y-[1px] hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9),0_0_28px_rgba(167,139,250,0.5)] focus-visible:border-violet-400/45 focus-visible:ring-violet-400/55 focus-visible:ring-[3px] active:translate-y-[6px] active:shadow-[0_0_0_0_rgba(76,29,149,0.9)]"
+                className="h-9 rounded-2xl border border-violet-200/40 bg-violet-400 px-4 text-sm font-semibold text-black shadow-[0_6px_0_0_rgba(76,29,149,0.9)] ring-offset-0 transition-all hover:-translate-y-[1px] hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9),0_0_28px_rgba(167,139,250,0.5)] focus-visible:border-violet-400/45 focus-visible:ring-violet-400/55 focus-visible:ring-[3px] active:translate-y-[6px] active:shadow-[0_0_0_0_rgba(76,29,149,0.9)] sm:h-10 sm:px-6 sm:text-base"
               >
                 <Link href="/signup">
-                  <Sparkles className="mr-1 h-3.5 w-3.5" />
+                  <Sparkles className="mr-1 h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   Get started
-                  <ArrowRight className="ml-1 h-3.5 w-3.5" />
+                  <ArrowRight className="ml-1 h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 </Link>
               </Button>
             </div>
           </div>
         </header>
 
-        <div className="relative z-10 mx-auto w-full max-w-5xl px-5 pt-4 pb-12 text-center sm:pt-6 sm:pb-14 md:pt-7 md:pb-16">
+        {/* ── Hero: headline + 3D strip (texture is the absolute layer above) ── */}
+        <section className="relative z-10 min-h-[min(100svh,1040px)]">
+        <div className="relative z-10 mx-auto w-full max-w-5xl px-5 pb-20 pt-5 text-center sm:px-6 sm:pb-24 sm:pt-7 md:pb-28 md:pt-8">
           <LandingSeedanceTopButton />
-          <h1 className="mx-auto max-w-4xl px-3 sm:px-6 text-4xl font-extrabold tracking-tight leading-[1.12] sm:text-5xl md:text-6xl">
+          <h1 className="mx-auto max-w-4xl px-3 sm:px-6 text-[2.35rem] font-extrabold tracking-tight leading-[1.12] sm:text-5xl md:text-6xl lg:text-[3.5rem] lg:leading-[1.08]">
             <span className="block">
               Realistic AI UGC for{' '}
               <span className="whitespace-nowrap">
@@ -119,8 +123,8 @@ export default function LandingPage() {
             </span>
           </h1>
 
-          <div className="mx-auto mt-5 max-w-xl sm:mt-6">
-            <p className="mb-2 text-sm text-white/55">
+          <div className="mx-auto mt-7 max-w-xl sm:mt-9">
+            <p className="mb-2 text-sm text-white/55 sm:text-base">
               Discover winning angles and generate authentic videos at scale.
             </p>
             <div className="relative">
@@ -145,14 +149,15 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* 3D video cylinder — clip overflow here so section can use overflow-x-hidden for sticky nav */}
+        {/* 3D video cylinder */}
         <div
-          className="pointer-events-none absolute inset-x-0 bottom-0 z-[2] h-[min(460px,56svh)] translate-y-10 overflow-hidden sm:h-[min(530px,60svh)] sm:translate-y-8 lg:h-[min(640px,66svh)] lg:translate-y-6"
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-[2] h-[min(460px,56svh)] translate-y-14 overflow-hidden sm:h-[min(530px,60svh)] sm:translate-y-12 lg:h-[min(640px,66svh)] lg:translate-y-10"
           aria-hidden
         >
           <HeroVideoCarousel3D srcs={HERO_STUDIO_VIDEOS} />
         </div>
       </section>
+      </div>
 
       {/* ── 3 Steps ── */}
       <section className="mx-auto max-w-6xl px-5 py-24 bg-gradient-to-b from-transparent via-[#0c0a14]/25 to-[#0c0a14]/35">

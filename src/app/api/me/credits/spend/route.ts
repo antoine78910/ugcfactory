@@ -5,6 +5,7 @@ import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import { spendUserCredits, getUserCreditBalance } from "@/lib/creditGrants";
 import { isAllowedUser } from "@/lib/allowedUsers";
+import { displayCreditsToLedgerTicks } from "@/lib/creditLedgerTicks";
 
 export async function POST(req: Request) {
   const auth = await requireSupabaseUser();
@@ -15,8 +16,8 @@ export async function POST(req: Request) {
   }
 
   const body = (await req.json()) as { amount?: number };
-  const amount = Math.max(0, Math.floor(Number(body.amount) || 0));
-  if (amount <= 0) {
+  const display = Math.max(0, Number(body.amount) || 0);
+  if (displayCreditsToLedgerTicks(display) <= 0) {
     return NextResponse.json({ spent: 0, balance: 0 });
   }
 
@@ -25,7 +26,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "DB not configured" }, { status: 503 });
   }
 
-  const spent = await spendUserCredits(admin, auth.user.id, amount);
+  const spent = await spendUserCredits(admin, auth.user.id, display);
   const { balance } = await getUserCreditBalance(admin, auth.user.id);
   return NextResponse.json({ spent, balance });
 }

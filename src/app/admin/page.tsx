@@ -16,6 +16,7 @@ import {
   Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ledgerTicksToDisplayCredits } from "@/lib/creditLedgerTicks";
 
 type Tab = "generations" | "runs";
 
@@ -427,7 +428,11 @@ export default function AdminPage() {
                         </span>
                       </td>
                       <td className="px-3 py-2.5 tabular-nums text-white/60">
-                        {row.credits_charged > 0 ? row.credits_charged : row.uses_personal_api ? "API key" : "—"}
+                        {row.credits_charged > 0
+                          ? ledgerTicksToDisplayCredits(row.credits_charged)
+                          : row.uses_personal_api
+                            ? "API key"
+                            : "—"}
                       </td>
                       <td className="px-3 py-2.5">
                         <span className="max-w-[180px] truncate block text-white/55" title={row.model || ""}>

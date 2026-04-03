@@ -2,6 +2,7 @@ export const runtime = "nodejs";
 export const maxDuration = 120;
 
 import { NextResponse } from "next/server";
+import { displayCreditsToLedgerTicks } from "@/lib/creditLedgerTicks";
 import { convertSpeechToSpeechWithElevenLabs } from "@/lib/elevenlabs";
 import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
 import { STUDIO_MEDIA_BUCKET } from "@/lib/studioGenerationsMedia";
@@ -142,7 +143,7 @@ export async function POST(req: Request) {
       label,
       external_task_id: `elevenlabs-sync:${crypto.randomUUID()}`,
       provider: "elevenlabs",
-      credits_charged: creditsCharged,
+      credits_charged: displayCreditsToLedgerTicks(creditsCharged),
       uses_personal_api: usesPersonalApi,
       ...(inputPublicUrl ? { input_urls: [inputPublicUrl] } : {}),
     })

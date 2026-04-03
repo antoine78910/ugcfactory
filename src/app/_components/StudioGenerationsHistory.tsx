@@ -8,11 +8,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { StudioUpscaleDiscreteSlider } from "@/app/_components/StudioUpscaleDiscreteSlider";
 import VideoCard from "@/app/_components/VideoCard";
 import { isStudioGenerationRowId } from "@/lib/studioGenerationRowId";
 import { proxiedMediaSrc } from "@/lib/mediaProxyUrl";
 import { isStudioSeedreamImagePickerId, studioImageModelSupportsResolutionPicker } from "@/lib/studioImageModels";
-import { studioImageCreditsChargedTotal } from "@/lib/pricing";
+import { formatDisplayCredits } from "@/lib/creditLedgerTicks";
+import { studioImageCreditsChargedTotal, VOICE_CHANGE_CREDITS_FLAT } from "@/lib/pricing";
 
 export type StudioHistoryMediaKind = "image" | "video" | "motion" | "audio";
 
@@ -745,7 +747,13 @@ export function StudioGenerationsHistory({
                       className="inline-flex min-w-[7rem] flex-1 items-center justify-center gap-1.5 rounded-md border border-violet-500/35 bg-violet-950/40 px-3 py-2 text-center text-[11px] font-semibold text-violet-100/90 transition hover:bg-violet-900/50"
                     >
                       <Mic className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                      Change Voice
+                      <span className="inline-flex flex-wrap items-center justify-center gap-x-1 gap-y-0.5">
+                        <span>Change Voice</span>
+                        <span className="rounded bg-white/10 px-1.5 py-0.5 tabular-nums text-[10px] text-white/90">
+                          {VOICE_CHANGE_CREDITS_FLAT}
+                        </span>
+                        <span className="text-[10px] font-normal text-white/60">credits</span>
+                      </span>
                     </button>
                   ) : null}
                   <a
@@ -821,35 +829,24 @@ export function StudioGenerationsHistory({
               (imageLightboxUpscale || imageLightboxEdit) ? (
                 <>
                 {imageLightboxUpscale ? (
-                  <div className="rounded-xl border border-white/10 bg-[#14141c]/80 p-3.5">
-                    <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-white/90">
+                  <div className="rounded-xl border border-white/10 bg-[#14141c]/80 p-3">
+                    <div className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-white/90">
                       <Wand2 className="h-4 w-4 text-emerald-300/90" aria-hidden />
                       Topaz image upscale (KIE)
                     </div>
-                    <p className="mb-3 text-[11px] leading-snug text-white/45">
+                    <p className="mb-2 text-[11px] leading-snug text-white/45">
                       Sharper, higher-resolution output. Billing follows the selected scale (2K / 4K / 8K tier).
                     </p>
-                    <div className="space-y-3">
-                      <div>
-                        <Label className="text-[10px] uppercase tracking-wide text-white/40">Output tier</Label>
-                        <Select
-                          value={upscaleFactor}
-                          onValueChange={(v) => setUpscaleFactor(v as "2" | "4" | "8")}
-                        >
-                          <SelectTrigger className="mt-1.5 h-10 border-white/15 bg-black/40 text-white">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {(imageLightboxUpscale.upscaleFactorOptions ?? (["2", "4", "8"] as const)).map(
-                              (opt) => (
-                                <SelectItem key={opt} value={opt}>
-                                  {opt === "8" ? "8K" : opt === "4" ? "4K" : "2K"}
-                                </SelectItem>
-                              ),
-                            )}
-                          </SelectContent>
-                        </Select>
-                      </div>
+                    <div className="space-y-2">
+                      <StudioUpscaleDiscreteSlider
+                        label="Output tier"
+                        value={upscaleFactor}
+                        options={imageLightboxUpscale.upscaleFactorOptions ?? (["2", "4", "8"] as const)}
+                        tickLabels={(imageLightboxUpscale.upscaleFactorOptions ?? (["2", "4", "8"] as const)).map(
+                          (opt) => (opt === "8" ? "8K" : opt === "4" ? "4K" : "2K"),
+                        )}
+                        onChange={(v) => setUpscaleFactor(v as "2" | "4" | "8")}
+                      />
                       <Button
                         type="button"
                         className="h-11 w-full border border-emerald-500/35 bg-emerald-700/90 text-white transition-colors duration-200 hover:bg-emerald-600"
@@ -964,13 +961,15 @@ export function StudioGenerationsHistory({
                         }}
                       >
                         Run edit ·{" "}
-                        {studioImageCreditsChargedTotal({
-                          studioModel: editModel,
-                          resolution: studioImageModelSupportsResolutionPicker(editModel)
-                            ? editResolution
-                            : "2K",
-                          numImages: 1,
-                        })}{" "}
+                        {formatDisplayCredits(
+                          studioImageCreditsChargedTotal({
+                            studioModel: editModel,
+                            resolution: studioImageModelSupportsResolutionPicker(editModel)
+                              ? editResolution
+                              : "2K",
+                            numImages: 1,
+                          }),
+                        )}{" "}
                         credits
                       </Button>
                     </div>
