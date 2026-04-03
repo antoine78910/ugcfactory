@@ -3774,12 +3774,9 @@ export default function AppBrandWizard() {
                                   ),
                                 );
                               }
-                              toast.message(appSection === "ad_clone" ? "Translation started" : "Motion control started", {
-                                description:
-                                  appSection === "ad_clone"
-                                    ? "Processing on backend. You can safely switch pages."
-                                    : "Processing on backend. You can safely switch pages.",
-                              });
+                              toast.message(
+                                appSection === "ad_clone" ? "Translation started" : "Motion control started",
+                              );
                             } catch (err) {
                               const msg =
                                 err instanceof Error

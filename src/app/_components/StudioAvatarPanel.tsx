@@ -370,21 +370,16 @@ export default function StudioAvatarPanel({
                 </SelectTrigger>
                 <SelectContent className="border-white/10 bg-[#111] text-white">
                   <SelectItem value="1K" className="text-sm">
-                    1K — 1 credit
+                    1K
                   </SelectItem>
                   <SelectItem value="2K" className="text-sm">
-                    2K — 2 credits
+                    2K
                   </SelectItem>
                   <SelectItem value="4K" className="text-sm">
-                    4K — 3 credits
+                    4K
                   </SelectItem>
                 </SelectContent>
               </Select>
-              <p className="text-[11px] leading-snug text-white/35">
-                Price: <span className="text-white/55">1 credit</span> for 1K ·{" "}
-                <span className="text-white/55">2 credits</span> for 2K · <span className="text-white/55">3 credits</span>{" "}
-                for 4K
-              </p>
             </div>
             <SelectField label="Sex" value={params.sex} onValueChange={(v) => set("sex", v)} options={SEX_OPTIONS} />
             <SelectField label="Age" value={params.age} onValueChange={(v) => set("age", v)} options={AGE_OPTIONS} />

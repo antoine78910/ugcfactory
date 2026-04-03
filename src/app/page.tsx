@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { HeroVideoCarousel3D } from "./HeroVideoCarousel3D";
 import { LandingGenerateButton } from "./LandingGenerateButton";
+import { LandingSeedanceTopButton } from "./LandingSeedanceTopButton";
 import { LandingRevealCarousel } from "./LandingRevealCarousel";
 import { LandingFaq } from "./LandingFaq";
 import { ArrowRight, Sparkles } from "lucide-react";
@@ -51,11 +52,9 @@ const HERO_STUDIO_VIDEOS = [
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-[#050507] text-white selection:bg-violet-500/30">
-      {/* Product announcement — above sticky header (hero input still uses the Generate button) */}
-      <div className="relative z-[60] border-b border-white/[0.06] bg-gradient-to-r from-violet-950/90 via-[#1a1028] to-violet-950/90 px-4 py-2 text-center">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-violet-200/95 sm:text-xs">
-          Seedance Pro 2.0 now available !
-        </p>
+      {/* Seedance announcement — above sticky header; hero URL row keeps the original Generate button */}
+      <div className="relative z-[60]">
+        <LandingSeedanceTopButton />
       </div>
 
       {/* ── Sticky header: Nano Banana bar + nav (no hero texture here) ── */}

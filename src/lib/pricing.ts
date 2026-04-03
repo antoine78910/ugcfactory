@@ -139,7 +139,8 @@ const GOOGLE_NANO_2_2K = googleImageTier({
 });
 const GOOGLE_NANO_2_4K = googleImageTier({
   model: "google_nano_banana_2_4k",
-  cost_usd: 0.09,
+  /** COGS tuned so billed credits = 3 at current STARTER_CREDIT_VALUE_USD (1K=1, 2K=2, 4K=3). */
+  cost_usd: 0.11,
   fal_list_price_usd: 0.16,
 });
 const GOOGLE_NANO_PRO_12K = googleImageTier({

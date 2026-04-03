@@ -316,10 +316,6 @@ export default function StudioUpscalePanel() {
             ),
           );
         }
-
-        toast.message("Upscale lance", {
-          description: "Traitement cote backend. Tu peux changer de page sans risque.",
-        });
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Error";
         refundPlatformCredits(platformCharge, grantCredits, creditsRef);
