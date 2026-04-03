@@ -1,7 +1,10 @@
 import { absolutizeImageUrl } from "@/lib/imageUrl";
 
-/** Max product reference images sent to GPT vision (multi-angle understanding). */
-export const MAX_GPT_PRODUCT_REFERENCE_IMAGES = 3;
+/** Max product reference images sent to GPT/Claude vision (multi-angle understanding). */
+export const MAX_GPT_PRODUCT_REFERENCE_IMAGES = 8;
+
+/** Max product reference URLs passed to KIE Nano Banana Pro `image_input` (provider accepts multiple). */
+export const MAX_NANO_BANANA_PRODUCT_REFERENCE_IMAGES = 8;
 
 function isAbsoluteHttp(s: string): boolean {
   return /^https?:\/\//i.test(s.trim());
@@ -14,6 +17,20 @@ export function absolutizeProductImageUrl(raw: string, pageUrl: string): string 
   const base = pageUrl.trim();
   if (!base) return t;
   return absolutizeImageUrl(t, base) ?? t;
+}
+
+/** Dedupe absolute HTTPS URLs (after absolutize) for stable lists / snapshots. */
+export function dedupeHttpsProductUrls(pageUrl: string, urls: string[]): string[] {
+  const base = pageUrl.trim();
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of urls) {
+    const a = absolutizeProductImageUrl(raw, base);
+    if (!a || !/^https?:\/\//i.test(a) || seen.has(a)) continue;
+    seen.add(a);
+    out.push(a);
+  }
+  return out;
 }
 
 /**
@@ -46,7 +63,31 @@ export function productUrlsForGpt(opts: {
 }
 
 /**
- * NanoBanana accepts a single reference image: prefer user neutral upload, else best-ranked packshot (first candidate), else fallback.
+ * All HTTPS product reference URLs for Nano Banana Pro (same priority as {@link pickBestProductUrlForNanoBanana}, capped).
+ */
+export function allProductUrlsForNanoBanana(opts: {
+  pageUrl: string;
+  neutralUploadUrl: string | null | undefined;
+  candidateUrls: string[];
+  fallbackUrl: string | null | undefined;
+}): string[] {
+  const base = opts.pageUrl.trim();
+  const seen = new Set<string>();
+  const out: string[] = [];
+  const push = (raw: string | null | undefined) => {
+    const a = raw ? absolutizeProductImageUrl(raw, base) : "";
+    if (!a || !/^https?:\/\//i.test(a) || seen.has(a)) return;
+    seen.add(a);
+    out.push(a);
+  };
+  push(opts.neutralUploadUrl);
+  for (const u of opts.candidateUrls) push(u);
+  push(opts.fallbackUrl);
+  return out.slice(0, MAX_NANO_BANANA_PRODUCT_REFERENCE_IMAGES);
+}
+
+/**
+ * NanoBanana accepts reference image(s): prefer user neutral upload, else best-ranked packshot (first candidate), else fallback.
  */
 export function pickBestProductUrlForNanoBanana(opts: {
   pageUrl: string;
@@ -54,20 +95,8 @@ export function pickBestProductUrlForNanoBanana(opts: {
   candidateUrls: string[];
   fallbackUrl: string | null | undefined;
 }): string | null {
-  const base = opts.pageUrl.trim();
-  if (opts.neutralUploadUrl?.trim()) {
-    const n = absolutizeProductImageUrl(opts.neutralUploadUrl, base);
-    if (n && /^https?:\/\//i.test(n)) return n;
-  }
-  for (const u of opts.candidateUrls) {
-    const a = absolutizeProductImageUrl(u, base);
-    if (a && /^https?:\/\//i.test(a)) return a;
-  }
-  if (opts.fallbackUrl?.trim()) {
-    const a = absolutizeProductImageUrl(opts.fallbackUrl, base);
-    if (a && /^https?:\/\//i.test(a)) return a;
-  }
-  return null;
+  const all = allProductUrlsForNanoBanana(opts);
+  return all[0] ?? null;
 }
 
 /** Wizard packshots are usually already absolute; still normalize for GPT list. */

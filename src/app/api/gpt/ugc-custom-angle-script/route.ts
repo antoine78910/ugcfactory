@@ -9,6 +9,7 @@ import {
   normalizeUgcScriptVideoDurationSec,
   UGC_SCRIPT_INSTRUCTIONS,
 } from "@/lib/ugcAiScriptBrief";
+import { MAX_GPT_PRODUCT_REFERENCE_IMAGES } from "@/lib/productReferenceImages";
 
 type Body = {
   brandBrief: string;
@@ -23,7 +24,7 @@ function collectHttpsUrls(urls: unknown): string[] {
   return urls
     .filter((u): u is string => typeof u === "string" && /^https?:\/\//i.test(u.trim()))
     .map((u) => u.trim())
-    .slice(0, 3);
+    .slice(0, MAX_GPT_PRODUCT_REFERENCE_IMAGES);
 }
 
 export async function POST(req: Request) {

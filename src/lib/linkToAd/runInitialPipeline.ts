@@ -5,7 +5,7 @@ import {
   UNIVERSE_PIPELINE_CLEAR,
   type LinkToAdUniverseSnapshotV1,
 } from "@/lib/linkToAdUniverse";
-import { productUrlsForGpt } from "@/lib/productReferenceImages";
+import { dedupeHttpsProductUrls, productUrlsForGpt } from "@/lib/productReferenceImages";
 import type { InternalFetch } from "@/lib/linkToAd/internalFetch";
 import { LINK_TO_AD_DEFAULT_VIDEO_DURATION_SEC } from "@/lib/linkToAd/generationCredits";
 import { normalizeUgcScriptVideoDurationSec } from "@/lib/ugcAiScriptBrief";
@@ -54,6 +54,10 @@ export async function runInitialPipeline(
   opts: {
     storeUrl: string;
     neutralUploadUrl: string | null;
+    /** User product uploads (main + additional) captured before a fresh run — used when main slot is empty. */
+    userProductImageUrls?: string[];
+    /** Persona / avatar reference URLs for script generation vision. */
+    personaImageUrls?: string[];
     generationMode?: "automatic" | "custom_ugc";
     customUgcIntent?: string;
     aiProvider?: "gpt" | "claude";
@@ -63,7 +67,16 @@ export async function runInitialPipeline(
   onProgress?: (step: InitialPipelineStepIndex) => void,
 ): Promise<InitialPipelineResult> {
   const url = opts.storeUrl.trim();
-  const userUploadedImageUrl = opts.neutralUploadUrl;
+  const userPrefill = (opts.userProductImageUrls ?? [])
+    .map((u) => (typeof u === "string" ? u.trim() : ""))
+    .filter(Boolean);
+  const explicitNeutral = opts.neutralUploadUrl?.trim() || null;
+  const effectiveNeutral = explicitNeutral || userPrefill[0] || null;
+  const prefillTail =
+    effectiveNeutral && userPrefill[0] === effectiveNeutral ? userPrefill.slice(1) : [...userPrefill];
+  const personaForScripts = (opts.personaImageUrls ?? [])
+    .map((u) => (typeof u === "string" ? u.trim() : ""))
+    .filter((u) => /^https?:\/\//i.test(u));
   const generationMode = opts.generationMode === "custom_ugc" ? "custom_ugc" : "automatic";
   const customUgcIntent = (opts.customUgcIntent ?? "").trim();
   const aiProvider = opts.aiProvider === "claude" ? "claude" : "gpt";
@@ -170,12 +183,15 @@ export async function runInitialPipeline(
     const summaryJson = (await summaryRes.json()) as { data?: string };
     const summaryStr = String(summaryJson?.data ?? "");
 
+    const combinedProductCandidates = dedupeHttpsProductUrls(url, [...prefillTail, ...urlsOnly]);
     const gptImages = productUrlsForGpt({
       pageUrl: url,
-      neutralUploadUrl: userUploadedImageUrl,
-      candidateUrls: urlsOnly,
+      neutralUploadUrl: effectiveNeutral,
+      candidateUrls: combinedProductCandidates,
       fallbackUrl: firstOther?.trim() || images[0] || null,
     });
+
+    const snapshotProductOnly = dedupeHttpsProductUrls(url, [...userPrefill, ...urlsOnly]);
 
     const snapAfterSummary: LinkToAdUniverseSnapshotV1 = {
       v: 1,
@@ -186,8 +202,9 @@ export async function runInitialPipeline(
       cleanCandidate: cleanUrl ? { url: cleanUrl, reason } : null,
       fallbackImageUrl: firstOther?.trim() || images[0] || null,
       confidence: confidenceStr,
-      neutralUploadUrl: userUploadedImageUrl,
-      productOnlyImageUrls: urlsOnly.length ? urlsOnly : undefined,
+      neutralUploadUrl: effectiveNeutral,
+      productOnlyImageUrls: snapshotProductOnly.length ? snapshotProductOnly : undefined,
+      personaPhotoUrls: personaForScripts.length ? personaForScripts : undefined,
       summaryText: summaryStr,
       scriptsText: "",
       angleLabels: ["", "", ""],
@@ -218,6 +235,7 @@ export async function runInitialPipeline(
           brandBrief: summaryStr,
           productImageUrl: gptImages[0] ?? null,
           productImageUrls: gptImages,
+          avatarImageUrls: personaForScripts,
           videoDurationSeconds: scriptTargetDurationSec,
           generationMode,
           customUgcIntent,
@@ -248,8 +266,9 @@ export async function runInitialPipeline(
         cleanCandidate: cleanUrl ? { url: cleanUrl, reason } : null,
         fallbackImageUrl: firstOther?.trim() || images[0] || null,
         confidence: confidenceStr,
-        neutralUploadUrl: userUploadedImageUrl,
-        productOnlyImageUrls: urlsOnly.length ? urlsOnly : undefined,
+        neutralUploadUrl: effectiveNeutral,
+        productOnlyImageUrls: snapshotProductOnly.length ? snapshotProductOnly : undefined,
+        personaPhotoUrls: personaForScripts.length ? personaForScripts : undefined,
         summaryText: summaryStr,
         scriptsText: scriptsStr,
         angleLabels: labels,
@@ -329,6 +348,10 @@ export async function runContinueScriptsPipeline(
     fallbackUrl: snap.fallbackImageUrl,
   });
 
+  const personaForScripts = (snap.personaPhotoUrls ?? [])
+    .map((u) => u.trim())
+    .filter((u) => /^https?:\/\//i.test(u));
+
   const scriptTargetDurationSec = normalizeUgcScriptVideoDurationSec(
     opts?.videoDurationSeconds ?? LINK_TO_AD_DEFAULT_VIDEO_DURATION_SEC,
   );
@@ -342,6 +365,7 @@ export async function runContinueScriptsPipeline(
         brandBrief: snap.summaryText,
         productImageUrl: gptImages[0] ?? null,
         productImageUrls: gptImages,
+        avatarImageUrls: personaForScripts,
         videoDurationSeconds: scriptTargetDurationSec,
         generationMode,
         customUgcIntent,
@@ -368,6 +392,7 @@ export async function runContinueScriptsPipeline(
       confidence: snap.confidence,
       neutralUploadUrl: snap.neutralUploadUrl,
       productOnlyImageUrls: candidates.length ? candidates : undefined,
+      personaPhotoUrls: snap.personaPhotoUrls?.length ? snap.personaPhotoUrls : undefined,
       summaryText: snap.summaryText,
       scriptsText: scriptsStr,
       angleLabels: labels,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -27,7 +27,11 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
 import { absolutizeImageUrl } from "@/lib/imageUrl";
-import { pickBestProductUrlForNanoBanana, productUrlsForGpt } from "@/lib/productReferenceImages";
+import {
+  allProductUrlsForNanoBanana,
+  pickBestProductUrlForNanoBanana,
+  productUrlsForGpt,
+} from "@/lib/productReferenceImages";
 import {
   cloneAnglePipeline,
   cloneExtractedBase,
@@ -38,7 +42,6 @@ import {
   normalizeKlingByReference,
   normalizePipelineByAngle,
   mergeNanoPromptForApi,
-  composeNanoEditableSections,
   composeVideoPromptEditableSections,
   parseNanoEditableSections,
   parseThreeLabeledPrompts,
@@ -302,6 +305,84 @@ function NanoThreeImageGenerationGrid({
           <span>{filled >= 3 ? "Saving project…" : `Generating images… (${filled}/3 ready)`}</span>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/** Large 9:16 stage while Kling renders — same visual language as Nano image generation (feed-ready). */
+function KlingVideoGenerationPlaceholder({
+  posterUrl,
+  statusText,
+}: {
+  posterUrl: string | null | undefined;
+  statusText: string;
+}) {
+  const reduceMotion = useReducedMotion();
+  const poster = posterUrl?.trim();
+  return (
+    <div className="relative mx-auto mt-4 w-full max-w-[min(22rem,94vw)] sm:max-w-[24rem]">
+      <div
+        className="relative aspect-[9/16] overflow-hidden rounded-2xl border border-white/12 bg-black/45 shadow-[0_24px_64px_-16px_rgba(0,0,0,0.75)]"
+        role="status"
+        aria-live="polite"
+        aria-label={statusText}
+      >
+        {poster ? (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={proxiedMediaSrc(poster)}
+              alt=""
+              className="absolute inset-0 h-full w-full scale-[1.08] object-cover object-center opacity-40 blur-md"
+              loading="eager"
+              decoding="async"
+            />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={proxiedMediaSrc(poster)}
+              alt=""
+              className="absolute inset-0 h-full w-full object-cover object-center opacity-[0.22]"
+              loading="eager"
+              decoding="async"
+            />
+          </>
+        ) : (
+          <div className="absolute inset-0 bg-gradient-to-br from-violet-950/95 via-black to-indigo-950/90" />
+        )}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/35 via-black/50 to-black/80" />
+        <ShapeGrid
+          direction="diagonal"
+          speed={0.52}
+          squareSize={18}
+          borderColor="#4c1d95"
+          hoverFillColor="#2e1065"
+          shape="hexagon"
+          hoverTrailAmount={0}
+          className="absolute inset-0 h-full w-full opacity-[0.5]"
+        />
+        <motion.div
+          className="pointer-events-none absolute -left-[38%] top-0 h-full w-[44%] bg-gradient-to-r from-transparent via-fuchsia-200/14 to-transparent"
+          animate={reduceMotion ? undefined : { x: ["0%", "320%"] }}
+          transition={{ duration: 2.05, repeat: Infinity, ease: "linear" }}
+        />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-violet-950/30 via-transparent to-violet-500/5" />
+        <div className="absolute left-3 top-3 rounded-full border border-white/12 bg-black/40 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white/65">
+          9:16 · Feed
+        </div>
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-5 px-6 text-center">
+          <motion.div
+            className="relative flex h-[4.25rem] w-[4.25rem] items-center justify-center rounded-full border border-violet-400/20 bg-black/35 shadow-[0_0_40px_rgba(139,92,246,0.28)]"
+            animate={reduceMotion ? undefined : { scale: [1, 1.05, 1] }}
+            transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
+          >
+            <Loader2 className="h-9 w-9 animate-spin text-violet-200/95" aria-hidden />
+          </motion.div>
+          <div className="space-y-1.5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/40">Video</p>
+            <StatusLineShimmer text={statusText} className="text-sm font-medium text-white/88" />
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -575,7 +656,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const [ltaFrozenCredits, setLtaFrozenCredits] = useState<number | null>(null);
   const creditsBalanceRef = useRef(creditsBalance);
   creditsBalanceRef.current = creditsBalance;
-  const prefersReducedMotion = useReducedMotion();
 
   const [ltaCreditModal, setLtaCreditModal] = useState<{
     required: number;
@@ -706,9 +786,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const [videoPromptTechnicalTail, setVideoPromptTechnicalTail] = useState("");
   /** Older one-blob prompts without EDIT — sections.motion holds the full creative text. */
   const [videoPromptIsLegacyBlob, setVideoPromptIsLegacyBlob] = useState(false);
-  const [videoPromptInlineEdit, setVideoPromptInlineEdit] = useState(false);
-  const [videoPromptHasEdits, setVideoPromptHasEdits] = useState(false);
-  const [videoPromptEditVisible, setVideoPromptEditVisible] = useState(false);
+  /** Native <details> open state — hide summary preview while editing to avoid duplicating Motion/Dialogue/Ambience. */
+  const [videoBriefDetailsOpen, setVideoBriefDetailsOpen] = useState(false);
   /** Saved Nano + Kling pipeline per script angle (inactive slots + hydrate); active angle also in flat state below. */
   const [pipelineByAngle, setPipelineByAngle] = useState<
     [LinkToAdAnglePipelineV1, LinkToAdAnglePipelineV1, LinkToAdAnglePipelineV1]
@@ -728,9 +807,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     "",
     "",
   ]);
-  const [nanoPromptHasEdits, setNanoPromptHasEdits] = useState(false);
-  /** null = 3-up compact grid; 0–2 = full-width editor for that frame, others below. */
-  const [nanoPromptExpandedFrame, setNanoPromptExpandedFrame] = useState<0 | 1 | 2 | null>(null);
   /** Per reference image (0–2): Kling video URL, task id, history, saved motion prompt. */
   const [klingByRef, setKlingByRef] = useState<KlingReferenceSlotV1[]>(() => createEmptyKlingByReference());
   /** Which reference index the active Kling poll belongs to (single global poll). */
@@ -924,11 +1000,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     setProductImageLightboxUrl(null);
     setNanoPromptDrafts(["", "", ""]);
     setNanoPromptTechnicalTails(["", "", ""]);
-    setNanoPromptHasEdits(false);
-    setNanoPromptExpandedFrame(null);
-    setVideoPromptInlineEdit(false);
-    setVideoPromptHasEdits(false);
-    setVideoPromptEditVisible(false);
     setGenerationMode("automatic");
     setCustomUgcTopic("");
     setCustomUgcOffer("");
@@ -962,6 +1033,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       klingPollImageIndex !== null &&
       klingPollImageIndex === nanoBananaSelectedImageIndex,
   );
+  const showKlingVideoGeneratingUi = isKlingSubmitting || klingRenderingThisReference;
 
   function patchKlingSlot(i: 0 | 1 | 2, patch: Partial<KlingReferenceSlotV1>) {
     setKlingByRef((prev) => {
@@ -1145,6 +1217,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       neutralUploadUrl,
       productOnlyImageUrls: productOnlyImageUrls.length ? productOnlyImageUrls : undefined,
       userPhotoUrls: userPhotoUrls.length ? userPhotoUrls : undefined,
+      personaPhotoUrls: personaPhotoUrls.length ? personaPhotoUrls : undefined,
       summaryText,
       scriptsText,
       angleLabels,
@@ -1168,6 +1241,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     neutralUploadUrl,
     productOnlyImageUrls,
     userPhotoUrls,
+    personaPhotoUrls,
     generationMode,
     customUgcTopic,
     customUgcOffer,
@@ -1238,96 +1312,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     const parts = parsed.map((p) => splitNanoPromptBodyForEditing(p));
     setNanoPromptDrafts([parts[0].editable, parts[1].editable, parts[2].editable]);
     setNanoPromptTechnicalTails([parts[0].technicalTail, parts[1].technicalTail, parts[2].technicalTail]);
-    setNanoPromptHasEdits(false);
-    setNanoPromptExpandedFrame(null);
   }, [nanoBananaPromptsRaw]);
-
-  const patchNanoPromptFrame = useCallback(
-    (frameIdx: 0 | 1 | 2, field: "person" | "scene" | "product", value: string) => {
-      setNanoPromptDrafts((prev) => {
-        const parsed = parseNanoEditableSections(prev[frameIdx] ?? "");
-        const nextEditable = composeNanoEditableSections({
-          person: field === "person" ? value : parsed.person,
-          scene: field === "scene" ? value : parsed.scene,
-          product: field === "product" ? value : parsed.product,
-        });
-        const next = [...prev] as [string, string, string];
-        next[frameIdx] = nextEditable;
-        return next;
-      });
-      setNanoPromptHasEdits(true);
-    },
-    [],
-  );
-
-  const setNanoPromptFrameRaw = useCallback((frameIdx: 0 | 1 | 2, value: string) => {
-    setNanoPromptDrafts((prev) => {
-      const next = [...prev] as [string, string, string];
-      next[frameIdx] = value;
-      return next;
-    });
-    setNanoPromptHasEdits(true);
-  }, []);
-
-  async function saveEditedNanoPrompts() {
-    for (let i = 0; i < 3; i++) {
-      const sec = parseNanoEditableSections(nanoPromptDrafts[i] ?? "");
-      if (sec.isStructured && (!sec.person.trim() || !sec.scene.trim() || !sec.product.trim())) {
-        toast.error(`Complete the three fields for reference image ${i + 1} (Person, Scene, Product).`);
-        return;
-      }
-    }
-    const [p1, p2, p3] = [0, 1, 2].map((i) =>
-      mergeNanoPromptForApi(nanoPromptDrafts[i] ?? "", nanoPromptTechnicalTails[i] ?? "").trim(),
-    ) as [string, string, string];
-    if (!p1 || !p2 || !p3) {
-      toast.error("All 3 prompts are required.");
-      return;
-    }
-    const composed = `PROMPT 1\n${p1}\n\nPROMPT 2\n${p2}\n\nPROMPT 3\n${p3}`.trim();
-    setNanoBananaPromptsRaw(composed);
-    setNanoPromptHasEdits(false);
-    // Prompts changed → reset downstream to avoid mismatched references.
-    setNanoBananaTaskId(null);
-    setNanoBananaImageUrl(null);
-    setNanoBananaImageUrls([]);
-    setNanoBananaSelectedImageIndex(null);
-    setUgcVideoPromptGpt("");
-    hydrateVideoPromptFromStored("");
-    setKlingByRef(createEmptyKlingByReference());
-    setNanoPollTaskId(null);
-    setNanoPollingSlotIndex(null);
-    setKlingPollTaskId(null);
-    setKlingPollImageIndex(null);
-    setUserStartedVideoFromImage(false);
-    setVideoStageMode(false);
-
-    const url0 = storeUrl.trim();
-    const base = latestSnapRef.current;
-    if (base && lastExtractedJson && url0) {
-      const snap: LinkToAdUniverseSnapshotV1 = {
-        ...base,
-        nanoBananaPromptsRaw: composed,
-        nanoBananaSelectedPromptIndex: 0,
-        nanoBananaTaskId: null,
-        nanoBananaImageUrl: null,
-        nanoBananaImageUrls: undefined,
-        nanoBananaSelectedImageIndex: null,
-        ugcVideoPromptGpt: "",
-        klingTaskId: null,
-        klingVideoUrl: null,
-        klingByReferenceIndex: undefined,
-      };
-      try {
-        await persistUniverse(universeRunId, url0, extractedTitle, lastExtractedJson, snap, packshotsForSave(), {
-          imagePrompt: composed,
-        });
-      } catch {
-        /* ignore */
-      }
-    }
-    toast.success("Image prompts updated");
-  }
 
   const factorWordRules = useMemo(
     () => ({
@@ -1409,7 +1394,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       setScriptsText,
     ],
   );
-  const displayedProductImageUrl = neutralUploadUrl ?? cleanCandidate?.url ?? fallbackImageUrl ?? null;
+  const displayedProductImageUrl =
+    neutralUploadUrl ?? productOnlyImageUrls[0] ?? cleanCandidate?.url ?? fallbackImageUrl ?? null;
 
   const resolveMaybeRelativeUrl = useCallback(
     (url: string | null | undefined): string | null => {
@@ -1540,9 +1526,10 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
               : [],
       );
       setUserPhotoUrls(
-        (snap as any).userPhotoUrls && Array.isArray((snap as any).userPhotoUrls)
-          ? (snap as any).userPhotoUrls
-          : [],
+        snap.userPhotoUrls && Array.isArray(snap.userPhotoUrls) ? snap.userPhotoUrls : [],
+      );
+      setPersonaPhotoUrls(
+        snap.personaPhotoUrls && Array.isArray(snap.personaPhotoUrls) ? snap.personaPhotoUrls : [],
       );
       setSummaryText(snap.summaryText);
       setScriptsText(snap.scriptsText);
@@ -1750,6 +1737,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           const url = parsed.value.url;
           setUserPhotoUrls((prev) => [...prev, url]);
           setProductOnlyImageUrls((prev) => [...prev, url]);
+          setNeutralUploadUrl((n) => n ?? url);
           added++;
         } catch (err) {
           lastError = err instanceof Error ? err.message : "Upload failed";
@@ -2137,18 +2125,26 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     return out;
   }
 
-  /** Same image logic as the preview when possible (avoids “button enabled but no HTTPS product” mismatches). */
-  function resolveNanoProductImageUrl(): string | null {
+  /** All HTTPS product reference URLs for Nano Banana Pro (multi-angle when available). */
+  function resolveNanoProductImageUrls(): string[] {
     const pageUrl = storeUrl.trim();
-    const fromPick = pickBestProductUrlForNanoBanana({
+    if (!pageUrl) return [];
+    const all = allProductUrlsForNanoBanana({
       pageUrl,
       neutralUploadUrl,
       candidateUrls: buildProductPackshotCandidatesForNano(),
       fallbackUrl: fallbackImageUrl,
     });
-    if (fromPick && /^https?:\/\//i.test(fromPick)) return fromPick;
+    if (all.length > 0) return all;
     const preview = (resolvedPreviewUrl || "").trim();
-    if (preview && /^https?:\/\//i.test(preview)) return preview;
+    if (preview && /^https?:\/\//i.test(preview)) return [preview];
+    return [];
+  }
+
+  /** Same image logic as the preview when possible (avoids “button enabled but no HTTPS product” mismatches). */
+  function resolveNanoProductImageUrl(): string | null {
+    const first = resolveNanoProductImageUrls()[0];
+    if (first && /^https?:\/\//i.test(first)) return first;
     return null;
   }
 
@@ -2369,6 +2365,9 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     }
     chargedFullBundle = true;
 
+    const pipelineProductUrls = [...productOnlyImageUrls];
+    const pipelinePersonaUrls = [...personaPhotoUrls];
+
     setSummaryText("");
     setScriptsText("");
     setPendingCustomAnglePreview(null);
@@ -2412,6 +2411,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         {
           storeUrl: url,
           neutralUploadUrl: userUploadedImageUrl,
+          userProductImageUrls: pipelineProductUrls,
+          personaImageUrls: pipelinePersonaUrls,
           generationMode,
           customUgcIntent: composeCustomUgcIntent(customUgcTopic, customUgcOffer, customUgcCta),
           aiProvider: scriptProvider,
@@ -2495,8 +2496,9 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       .filter((u, i, arr) => /^https?:\/\//i.test(u) && arr.indexOf(u) === i)
       .slice(-3)
       .reverse();
-    const img = resolveNanoProductImageUrl();
-    const signature = `script:${fnv1aHash(script)}|img:${img ?? ""}|avatars:${avatarRefs.join(",")}|provider:${scriptProvider}`;
+    const nanoRefs = resolveNanoProductImageUrls();
+    const img = nanoRefs[0] ?? null;
+    const signature = `script:${fnv1aHash(script)}|imgs:${nanoRefs.join(",")}|avatars:${avatarRefs.join(",")}|provider:${scriptProvider}`;
     if (!url || !lastExtractedJson || idx === null || !script.trim()) {
       toast.error("Pick an angle and make sure the script is ready.");
       return null;
@@ -2519,6 +2521,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         body: JSON.stringify({
           marketingScript: script,
           productImageUrl: img,
+          productImageUrls: nanoRefs,
           avatarImageUrls: avatarRefs,
           generationMode,
           customUgcIntent: composeCustomUgcIntent(customUgcTopic, customUgcOffer, customUgcCta),
@@ -2569,7 +2572,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
 
   async function onGenerateNanoBananaImage() {
     const url = storeUrl.trim();
-    const img = resolveNanoProductImageUrl();
+    const nanoRefs = resolveNanoProductImageUrls();
+    const img = nanoRefs[0];
     const prompt = fullNanoPromptsTriple[nanoBananaSelectedPromptIndex]?.trim();
     if (!url || !lastExtractedJson || !prompt) {
       toast.error("Generate the 3 image prompts first, then choose a valid prompt.");
@@ -2594,7 +2598,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
           accountPlan: planId,
           model: "pro",
           prompt,
-          imageUrls: [img],
+          imageUrls: nanoRefs.length ? nanoRefs : [img],
           resolution: "4K",
           aspectRatio: "9:16",
           personalApiKey: getPersonalApiKey(),
@@ -2689,11 +2693,14 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
    * provider tasks; parallel did not reduce cost and was not faster enough for Link to Ad).
    */
   async function runNanoBananaProThreeSequential(
-    img: string,
+    imageUrls: string[],
     prompts: [string, string, string],
     opts?: { labelPrefix?: string },
     signal?: AbortSignal,
   ): Promise<{ urlsByPrompt: string[]; lastTaskId: string | null; taskIds: string[] }> {
+    if (!imageUrls.length) {
+      throw new Error("No product reference images.");
+    }
     const urlsByPrompt: string[] = ["", "", ""];
     let lastTaskId: string | null = null;
     const taskIds: string[] = [];
@@ -2714,7 +2721,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
             accountPlan: planId,
             model: "pro",
             prompt,
-            imageUrls: [img],
+            imageUrls: imageUrls.length ? imageUrls : [],
             resolution: "4K",
             aspectRatio: "9:16",
             personalApiKey: getPersonalApiKey(),
@@ -2785,7 +2792,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       toast.error("Project not ready to generate images.");
       return;
     }
-    const img = resolveNanoProductImageUrl();
+    const nanoRefs = resolveNanoProductImageUrls();
+    const img = nanoRefs[0];
     if (!img || !/^https?:\/\//i.test(img)) {
       toast.error("HTTPS product image is required to generate images.");
       return;
@@ -2800,7 +2808,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       .filter((u, i, arr) => /^https?:\/\//i.test(u) && arr.indexOf(u) === i)
       .slice(-3)
       .reverse();
-    const signature = `script:${fnv1aHash(script)}|img:${img}|avatars:${avatarRefs.join(",")}|provider:${scriptProvider}`;
+    const signature = `script:${fnv1aHash(script)}|imgs:${nanoRefs.join(",")}|avatars:${avatarRefs.join(",")}|provider:${scriptProvider}`;
 
     let promptsText = nanoBananaPromptsRaw;
     const signatureMatches = promptsText.trim().length > 0 && nanoBananaPromptsSignatureRef.current === signature;
@@ -2844,7 +2852,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       const controller = new AbortController();
       nanoThreeAbortRef.current = controller;
       const { urlsByPrompt, lastTaskId } = await runNanoBananaProThreeSequential(
-        img,
+        nanoRefs,
         prompts as [string, string, string],
         { labelPrefix: `Link to Ad · Angle ${idx + 1}` },
         controller.signal,
@@ -3065,9 +3073,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       const text = String(json.data);
       setUgcVideoPromptGpt(text);
       hydrateVideoPromptFromStored(text);
-      setVideoPromptInlineEdit(false);
-      setVideoPromptHasEdits(false);
-      setVideoPromptEditVisible(true);
       const idx = nanoBananaSelectedImageIndex;
       if (idx === 0 || idx === 1 || idx === 2) {
         patchKlingSlot(idx, { ugcVideoPrompt: text });
@@ -3544,12 +3549,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     if (isVideoPromptLoading || isKlingSubmitting || Boolean(klingPollTaskId)) return;
     setVideoStageMode(true);
     setUserStartedVideoFromImage(true);
-    const t = await onGenerateUgcVideoPrompt();
-    if (t?.trim()) {
-      setVideoPromptInlineEdit(false);
-      setVideoPromptHasEdits(false);
-      setVideoPromptEditVisible(true);
-    }
+    await onGenerateUgcVideoPrompt();
   }
 
   async function handleConfirmVideoGeneration() {
@@ -3559,7 +3559,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       return;
     }
     setUgcVideoPromptGpt(prompt);
-    setVideoPromptEditVisible(false);
     await onGenerateKlingVideo(prompt);
   }
 
@@ -4716,6 +4715,23 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                           );
                         })}
                       </div>
+                      {nanoHasThreeImages && showVideoStageLayout ? (
+                        <button
+                          type="button"
+                          disabled={
+                            isNanoAllImagesSubmitting ||
+                            isNanoPromptsLoading ||
+                            Boolean(nanoPollTaskId) ||
+                            isWorking ||
+                            selectedAngleIndex === null ||
+                            !nanoBananaPromptsRaw.trim()
+                          }
+                          onClick={() => void onGenerateNanoBananaImagesFromAllPrompts()}
+                          className="mt-1 text-[10px] font-medium text-violet-300/85 underline-offset-2 transition hover:text-violet-200 hover:underline disabled:cursor-not-allowed disabled:no-underline disabled:opacity-40"
+                        >
+                          Regenerate 3 images
+                        </button>
+                      ) : null}
                     </div>
                   ) : null}
                 </div>
@@ -4834,262 +4850,15 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                   !nanoHasThreeImages &&
                   !isNanoAllImagesSubmitting &&
                   !nanoPollTaskId ? (
-                    <div className="space-y-4">
-                      <div>
-                        <h3 className="text-base font-semibold tracking-tight text-white sm:text-lg">
-                          Reference image — creative brief
-                        </h3>
-                        <p className="mt-1 text-xs leading-snug text-white/65 sm:text-sm sm:text-white/70">
-                          Tweak who is on camera, setting, and product. Technical details still apply on generate.
-                        </p>
-                      </div>
-                      <AnimatePresence mode="wait">
-                        {nanoPromptExpandedFrame === null ? (
-                          <motion.div
-                            key="nano-prompts-grid"
-                            role="region"
-                            aria-label="Three reference prompts"
-                            initial={prefersReducedMotion ? false : { opacity: 0, y: 12 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={prefersReducedMotion ? undefined : { opacity: 0, y: -10 }}
-                            transition={
-                              prefersReducedMotion
-                                ? { duration: 0 }
-                                : { duration: 0.32, ease: [0.22, 1, 0.36, 1] }
-                            }
-                            className="grid min-w-0 grid-cols-3 gap-1.5 sm:gap-2"
-                          >
-                            {([0, 1, 2] as const).map((i) => {
-                              const draft = nanoPromptDrafts[i] ?? "";
-                              const parsed = parseNanoEditableSections(draft);
-                              const previewText = (value: string, max = 88) => {
-                                const t = value.replace(/\s+/g, " ").trim();
-                                if (!t) return "—";
-                                return t.length > max ? `${t.slice(0, max).trim()}…` : t;
-                              };
-                              return (
-                                <button
-                                  key={i}
-                                  type="button"
-                                  onClick={() => setNanoPromptExpandedFrame(i)}
-                                  className="min-w-0 rounded-lg border border-white/10 bg-black/25 px-2 py-1.5 text-left text-[11px] leading-relaxed text-white/85 transition hover:border-violet-400/35 hover:bg-white/[0.04] sm:rounded-xl sm:px-2.5 sm:py-2"
-                                >
-                                  <div className="flex items-center justify-between gap-1">
-                                    <p className="text-[9px] font-semibold uppercase tracking-wide text-white/45">
-                                      Frame {i + 1}
-                                    </p>
-                                    <span className="shrink-0 text-[9px] font-medium text-violet-300/90">Edit</span>
-                                  </div>
-                                  {parsed.isStructured ? (
-                                    <div className="mt-1.5 grid grid-cols-3 gap-1">
-                                      <div className="min-w-0 rounded border border-white/8 bg-white/[0.03] px-1 py-1">
-                                        <p className="text-[8px] font-medium uppercase tracking-wide text-white/40">
-                                          Avatar
-                                        </p>
-                                        <p className="mt-0.5 line-clamp-3 text-[9px] leading-snug text-white/75">
-                                          {previewText(parsed.person, 42)}
-                                        </p>
-                                      </div>
-                                      <div className="min-w-0 rounded border border-white/8 bg-white/[0.03] px-1 py-1">
-                                        <p className="text-[8px] font-medium uppercase tracking-wide text-white/40">
-                                          Scene
-                                        </p>
-                                        <p className="mt-0.5 line-clamp-3 text-[9px] leading-snug text-white/75">
-                                          {previewText(parsed.scene, 42)}
-                                        </p>
-                                      </div>
-                                      <div className="min-w-0 rounded border border-white/8 bg-white/[0.03] px-1 py-1">
-                                        <p className="text-[8px] font-medium uppercase tracking-wide text-white/40">
-                                          Product
-                                        </p>
-                                        <p className="mt-0.5 line-clamp-3 text-[9px] leading-snug text-white/75">
-                                          {previewText(parsed.product, 42)}
-                                        </p>
-                                      </div>
-                                    </div>
-                                  ) : (
-                                    <p className="mt-1.5 line-clamp-4 text-[10px] leading-snug text-white/65">
-                                      {previewText(draft, 120)}
-                                    </p>
-                                  )}
-                                </button>
-                              );
-                            })}
-                          </motion.div>
-                        ) : (
-                          <motion.div
-                            key="nano-prompts-expanded"
-                            initial={prefersReducedMotion ? false : { opacity: 0, y: 14 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={prefersReducedMotion ? undefined : { opacity: 0, y: 8 }}
-                            transition={
-                              prefersReducedMotion
-                                ? { duration: 0 }
-                                : { duration: 0.34, ease: [0.22, 1, 0.36, 1] }
-                            }
-                            className="space-y-4"
-                          >
-                            {(() => {
-                              const i = nanoPromptExpandedFrame;
-                              const draft = nanoPromptDrafts[i] ?? "";
-                              const parsed = parseNanoEditableSections(draft);
-                              return (
-                                <div className="w-full overflow-hidden rounded-2xl border border-violet-500/30 bg-gradient-to-b from-violet-500/[0.12] via-[#0d0a14]/90 to-black/40 p-4 shadow-[0_0_40px_rgba(139,92,246,0.08)] sm:p-6">
-                                  <div className="mb-5 flex flex-wrap items-start justify-between gap-3 border-b border-white/10 pb-4">
-                                    <div>
-                                      <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-200/95">
-                                        Reference frame {i + 1}
-                                      </p>
-                                      <p className="mt-1 max-w-xl text-sm text-white/55">
-                                        Adjust avatar, scene, and product — full width for precise edits.
-                                      </p>
-                                    </div>
-                                    <Button
-                                      type="button"
-                                      variant="secondary"
-                                      size="sm"
-                                      onClick={() => setNanoPromptExpandedFrame(null)}
-                                      className="shrink-0 rounded-xl border border-white/15 bg-white/[0.06] text-xs text-white/85 hover:bg-white/10"
-                                    >
-                                      <ChevronUp className="mr-1.5 h-3.5 w-3.5 opacity-80" aria-hidden />
-                                      All frames
-                                    </Button>
-                                  </div>
-                                  {parsed.isStructured ? (
-                                    <div className="flex w-full flex-col gap-6">
-                                      <div className="w-full">
-                                        <Label className="mb-2 block text-xs font-semibold text-white/80">
-                                          Avatar / person on camera
-                                        </Label>
-                                        <p className="mb-2 text-[11px] leading-snug text-white/40">
-                                          Who appears on camera, styling, and energy.
-                                        </p>
-                                        <Textarea
-                                          value={parsed.person}
-                                          onChange={(e) => patchNanoPromptFrame(i, "person", e.target.value)}
-                                          className="min-h-[112px] w-full resize-y border-white/10 bg-black/35 px-3 py-2.5 text-sm leading-relaxed text-white/90"
-                                          spellCheck
-                                        />
-                                      </div>
-                                      <div className="w-full">
-                                        <Label className="mb-2 block text-xs font-semibold text-white/80">Scene</Label>
-                                        <p className="mb-2 text-[11px] leading-snug text-white/40">
-                                          Setting, lighting, and background mood.
-                                        </p>
-                                        <Textarea
-                                          value={parsed.scene}
-                                          onChange={(e) => patchNanoPromptFrame(i, "scene", e.target.value)}
-                                          className="min-h-[112px] w-full resize-y border-white/10 bg-black/35 px-3 py-2.5 text-sm leading-relaxed text-white/90"
-                                          spellCheck
-                                        />
-                                      </div>
-                                      <div className="w-full">
-                                        <Label className="mb-2 block text-xs font-semibold text-white/80">
-                                          Product &amp; action
-                                        </Label>
-                                        <p className="mb-2 text-[11px] leading-snug text-white/40">
-                                          How the product shows up and what happens in frame.
-                                        </p>
-                                        <Textarea
-                                          value={parsed.product}
-                                          onChange={(e) => patchNanoPromptFrame(i, "product", e.target.value)}
-                                          className="min-h-[112px] w-full resize-y border-white/10 bg-black/35 px-3 py-2.5 text-sm leading-relaxed text-white/90"
-                                          spellCheck
-                                        />
-                                      </div>
-                                    </div>
-                                  ) : (
-                                    <div className="w-full">
-                                      <p className="mb-3 text-[11px] leading-snug text-amber-200/85">
-                                        Older prompt format: use &quot;Generate 3 prompts&quot; again for the short fields, or
-                                        edit the full text below.
-                                      </p>
-                                      <Textarea
-                                        value={draft}
-                                        onChange={(e) => setNanoPromptFrameRaw(i, e.target.value)}
-                                        className="min-h-[220px] w-full resize-y border-white/10 bg-black/35 px-3 py-2.5 text-sm leading-relaxed text-white/90"
-                                        spellCheck
-                                      />
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })()}
-                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                              {([0, 1, 2] as const)
-                                .filter((j) => j !== nanoPromptExpandedFrame)
-                                .map((j) => {
-                                  const draft = nanoPromptDrafts[j] ?? "";
-                                  const parsed = parseNanoEditableSections(draft);
-                                  const previewText = (value: string, max = 72) => {
-                                    const t = value.replace(/\s+/g, " ").trim();
-                                    if (!t) return "—";
-                                    return t.length > max ? `${t.slice(0, max).trim()}…` : t;
-                                  };
-                                  return (
-                                    <button
-                                      key={j}
-                                      type="button"
-                                      onClick={() => setNanoPromptExpandedFrame(j)}
-                                      className="rounded-xl border border-white/10 bg-black/30 px-3 py-3 text-left transition hover:border-violet-400/40 hover:bg-white/[0.05]"
-                                    >
-                                      <div className="flex items-center justify-between gap-2">
-                                        <span className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
-                                          Frame {j + 1}
-                                        </span>
-                                        <span className="text-[10px] font-medium text-violet-300/90">Edit</span>
-                                      </div>
-                                      {parsed.isStructured ? (
-                                        <div className="mt-2 space-y-1.5 text-[10px] leading-snug text-white/55">
-                                          <p>
-                                            <span className="text-white/35">Avatar · </span>
-                                            {previewText(parsed.person, 64)}
-                                          </p>
-                                          <p>
-                                            <span className="text-white/35">Scene · </span>
-                                            {previewText(parsed.scene, 64)}
-                                          </p>
-                                          <p>
-                                            <span className="text-white/35">Product · </span>
-                                            {previewText(parsed.product, 64)}
-                                          </p>
-                                        </div>
-                                      ) : (
-                                        <p className="mt-2 line-clamp-3 text-[10px] leading-snug text-white/55">
-                                          {previewText(draft, 140)}
-                                        </p>
-                                      )}
-                                    </button>
-                                  );
-                                })}
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                      <div className="flex flex-col gap-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            disabled={!nanoPromptHasEdits}
-                            onClick={() => void saveEditedNanoPrompts()}
-                            className="h-10 rounded-lg border border-emerald-400/35 bg-emerald-500/20 px-4 text-xs text-white hover:bg-emerald-500/35 disabled:opacity-50"
-                          >
-                            Save prompts
-                          </Button>
-                          <p className="text-xs text-white/45">
-                            Edit your prompts, save, then generate images.
-                          </p>
-                        </div>
-                        <Button
-                          type="button"
-                          disabled={isNanoAllImagesSubmitting || selectedAngleIndex === null || !nanoBananaPromptsRaw.trim()}
-                          onClick={() => void onGenerateNanoBananaImagesFromAllPrompts()}
-                          className={`h-auto min-h-12 w-full max-w-md flex-col gap-1 py-2.5 ${primaryBtnClass}`}
-                        >
-                          <span className="text-sm font-semibold leading-tight">Generate 3 images</span>
-                        </Button>
-                      </div>
+                    <div className="flex flex-col gap-2">
+                      <Button
+                        type="button"
+                        disabled={isNanoAllImagesSubmitting || selectedAngleIndex === null || !nanoBananaPromptsRaw.trim()}
+                        onClick={() => void onGenerateNanoBananaImagesFromAllPrompts()}
+                        className={`h-auto min-h-12 w-full max-w-md flex-col gap-1 py-2.5 ${primaryBtnClass}`}
+                      >
+                        <span className="text-sm font-semibold leading-tight">Generate 3 images</span>
+                      </Button>
                     </div>
                   ) : null}
 
@@ -5102,6 +4871,23 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                         <p className="mt-2 text-sm leading-snug text-white/70">
                           Pick a 1:1 reference below (or use the strip on the left), then generate your UGC video.
                         </p>
+                        {nanoHasThreeImages && !showVideoStageLayout ? (
+                          <button
+                            type="button"
+                            disabled={
+                              isNanoAllImagesSubmitting ||
+                              isNanoPromptsLoading ||
+                              Boolean(nanoPollTaskId) ||
+                              isWorking ||
+                              selectedAngleIndex === null ||
+                              !nanoBananaPromptsRaw.trim()
+                            }
+                            onClick={() => void onGenerateNanoBananaImagesFromAllPrompts()}
+                            className="mt-2 w-fit text-[10px] font-medium text-violet-300/85 underline-offset-2 transition hover:text-violet-200 hover:underline disabled:cursor-not-allowed disabled:no-underline disabled:opacity-40"
+                          >
+                            Regenerate 3 images
+                          </button>
+                        ) : null}
                       </div>
                       <div className="grid w-full max-w-md grid-cols-3 gap-2 sm:max-w-lg sm:gap-3">
                         {([0, 1, 2] as const).map((i) => {
@@ -5437,34 +5223,14 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                 </div>
               ) : (
                 <div className="flex flex-col gap-5 rounded-xl border border-violet-500/25 bg-violet-500/[0.06] p-4">
-                  <div className="flex flex-col gap-2 border-b border-white/10 pb-4">
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-white/50">Actions</p>
-                    <Button
-                      type="button"
-                      className={`h-auto min-h-11 w-full max-w-sm flex-col gap-1 px-3 py-2.5 ${primaryBtnClass}`}
-                      disabled={
-                        isNanoAllImagesSubmitting ||
-                        isNanoPromptsLoading ||
-                        Boolean(nanoPollTaskId) ||
-                        isWorking ||
-                        isVideoPromptLoading ||
-                        isKlingSubmitting ||
-                        Boolean(klingPollTaskId)
-                      }
-                      onClick={() => void onGenerateNanoBananaImagesFromAllPrompts()}
-                    >
-                      <span className="text-sm font-semibold leading-tight">New 3 images</span>
-                    </Button>
-                    <p className="text-[10px] leading-snug text-white/35">
-                      Angles &amp; reference frames are on the left.
-                    </p>
-                  </div>
-
                   <div className="flex min-w-0 flex-1 flex-col gap-6">
                     {showVideoWorkPanel ? (
                     <>
-                      {videoPromptEditVisible && mergedVideoPromptDraft && !klingVideoUrl ? (
-                        <details className="rounded-xl border border-violet-500/25 bg-violet-500/[0.06] p-3">
+                      {mergedVideoPromptDraft && ugcVideoPromptGpt.trim() ? (
+                        <details
+                          className="rounded-xl border border-violet-500/25 bg-violet-500/[0.06] p-3"
+                          onToggle={(e) => setVideoBriefDetailsOpen(e.currentTarget.open)}
+                        >
                           <summary className="cursor-pointer list-none">
                             <div className="flex items-start justify-between gap-3">
                               <div>
@@ -5473,38 +5239,41 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                                   Ajuste le mouvement, ce qui est dit, et l’ambiance sonore.
                                 </p>
                               </div>
-                              <span className="text-[10px] font-medium text-violet-200/80">Edit</span>
+                              <span className="text-[10px] font-medium text-violet-200/80">
+                                {videoBriefDetailsOpen ? "Close" : "Edit"}
+                              </span>
                             </div>
-                            {videoPromptIsLegacyBlob ? (
-                              <div className="mt-2 rounded-lg border border-white/10 bg-black/30 px-2 py-1.5">
-                                <p className="text-[9px] font-semibold uppercase tracking-wide text-white/45">Brief</p>
-                                <p className="mt-0.5 text-[11px] leading-snug text-white/75 line-clamp-3">
-                                  {videoPromptSections.motion.trim() || "—"}
-                                </p>
-                              </div>
-                            ) : (
-                              <div className="mt-2 grid gap-1.5">
-                                {(
-                                  [
-                                    ["Motion", videoPromptSections.motion],
-                                    ["Dialogue", videoPromptSections.dialogue],
-                                    ["Ambience", videoPromptSections.ambience],
-                                  ] as const
-                                ).map(([label, value]) => (
-                                  <div
-                                    key={label}
-                                    className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5"
-                                  >
-                                    <p className="text-[9px] font-semibold uppercase tracking-wide text-white/45">
-                                      {label}
-                                    </p>
-                                    <p className="mt-0.5 text-[11px] leading-snug text-white/75 line-clamp-2">
-                                      {value.trim() || "—"}
-                                    </p>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
+                            {!videoBriefDetailsOpen &&
+                              (videoPromptIsLegacyBlob ? (
+                                <div className="mt-2 rounded-lg border border-white/10 bg-black/30 px-2 py-1.5">
+                                  <p className="text-[9px] font-semibold uppercase tracking-wide text-white/45">Brief</p>
+                                  <p className="mt-0.5 text-[11px] leading-snug text-white/75 line-clamp-6">
+                                    {videoPromptSections.motion.trim() || "—"}
+                                  </p>
+                                </div>
+                              ) : (
+                                <div className="mt-2 grid gap-1.5">
+                                  {(
+                                    [
+                                      ["Motion", videoPromptSections.motion],
+                                      ["Dialogue", videoPromptSections.dialogue],
+                                      ["Ambience", videoPromptSections.ambience],
+                                    ] as const
+                                  ).map(([label, value]) => (
+                                    <div
+                                      key={label}
+                                      className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5"
+                                    >
+                                      <p className="text-[9px] font-semibold uppercase tracking-wide text-white/45">
+                                        {label}
+                                      </p>
+                                      <p className="mt-0.5 text-[11px] leading-snug text-white/75 line-clamp-5">
+                                        {value.trim() || "—"}
+                                      </p>
+                                    </div>
+                                  ))}
+                                </div>
+                              ))}
                           </summary>
                           <div className="mt-3 space-y-2 border-t border-white/10 pt-3">
                             {videoPromptIsLegacyBlob ? (
@@ -5517,7 +5286,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                                   onChange={(e) =>
                                     setVideoPromptSections((prev) => ({ ...prev, motion: e.target.value }))
                                   }
-                                  className="min-h-[64px] border-white/10 bg-black/30 text-[11px] leading-snug text-white/80"
+                                  className="min-h-[120px] border-white/10 bg-black/30 text-[11px] leading-snug text-white/80"
                                   spellCheck
                                 />
                               </div>
@@ -5530,7 +5299,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                                     onChange={(e) =>
                                       setVideoPromptSections((prev) => ({ ...prev, motion: e.target.value }))
                                     }
-                                    className="min-h-[52px] border-white/10 bg-black/30 text-[11px] leading-snug text-white/80"
+                                    className="min-h-[100px] border-white/10 bg-black/30 text-[11px] leading-snug text-white/80"
                                     spellCheck
                                   />
                                 </div>
@@ -5541,7 +5310,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                                     onChange={(e) =>
                                       setVideoPromptSections((prev) => ({ ...prev, dialogue: e.target.value }))
                                     }
-                                    className="min-h-[52px] border-white/10 bg-black/30 text-[11px] leading-snug text-white/80"
+                                    className="min-h-[100px] border-white/10 bg-black/30 text-[11px] leading-snug text-white/80"
                                     spellCheck
                                   />
                                 </div>
@@ -5552,7 +5321,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                                     onChange={(e) =>
                                       setVideoPromptSections((prev) => ({ ...prev, ambience: e.target.value }))
                                     }
-                                    className="min-h-[44px] border-white/10 bg-black/30 text-[11px] leading-snug text-white/80"
+                                    className="min-h-[72px] border-white/10 bg-black/30 text-[11px] leading-snug text-white/80"
                                     spellCheck
                                   />
                                 </div>
@@ -5567,6 +5336,10 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                               {isKlingSubmitting || klingPollTaskId ? (
                                 <span className="inline-flex items-center gap-2 text-sm font-semibold">
                                   <Loader2 className="h-4 w-4 animate-spin" /> Working…
+                                </span>
+                              ) : klingVideoUrl ? (
+                                <span className="inline-flex items-center gap-2 text-sm font-semibold">
+                                  <RefreshCw className="h-4 w-4" /> Regenerate video
                                 </span>
                               ) : (
                                 <span className="inline-flex items-center gap-2 text-sm font-semibold">
@@ -5583,7 +5356,37 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                           Preview in 9:16. Regenerate adds the last clip below; switch reference images to see each
                           frame&apos;s ads.
                         </p>
-                        {klingVideoUrl ? (
+                        {isVideoPromptLoading ? (
+                          <div className="mt-3 flex items-center gap-2 text-xs text-violet-200">
+                            <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+                            <span>{LINK_TO_AD_LOADING_MESSAGES.video_prompt}</span>
+                          </div>
+                        ) : null}
+                        {nanoBananaImageUrl &&
+                        userStartedVideoFromImage &&
+                        !ugcVideoPromptGpt.trim() &&
+                        !isVideoPromptLoading &&
+                        selectedAngleIndex !== null ? (
+                          <Button
+                            type="button"
+                            className={`mt-3 h-auto min-h-11 py-2.5 ${primaryBtnClass}`}
+                            onClick={() => {
+                              void onGenerateUgcVideoPrompt();
+                            }}
+                          >
+                            <span className="text-sm font-semibold leading-tight">Retry video prompt</span>
+                          </Button>
+                        ) : null}
+                        {showKlingVideoGeneratingUi ? (
+                          <KlingVideoGenerationPlaceholder
+                            posterUrl={nanoBananaImageUrl}
+                            statusText={
+                              isKlingSubmitting
+                                ? LINK_TO_AD_LOADING_MESSAGES.kling_starting
+                                : LINK_TO_AD_LOADING_MESSAGES.kling_rendering
+                            }
+                          />
+                        ) : klingVideoUrl ? (
                           <>
                             <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-5">
                               <div className="mx-auto w-[11.5rem] max-w-full shrink-0 sm:mx-0 sm:w-[12.5rem]">
@@ -5715,153 +5518,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                             <span className="text-sm font-semibold leading-tight">Retry video render</span>
                           </Button>
                         ) : null}
-                        {isKlingSubmitting ? (
-                          <div className="mt-4 flex items-center gap-2 text-xs text-violet-200">
-                            <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
-                            <span>{LINK_TO_AD_LOADING_MESSAGES.kling_starting}</span>
-                          </div>
-                        ) : null}
-                        {klingRenderingThisReference ? (
-                          <p className="mt-4 flex items-center gap-2 text-xs text-violet-200">
-                            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
-                            <span>{LINK_TO_AD_LOADING_MESSAGES.kling_rendering}</span>
-                          </p>
-                        ) : null}
                       </div>
 
-                      {!(videoPromptEditVisible && mergedVideoPromptDraft && !klingVideoUrl) ? (
-                        <div className="space-y-3 border-t border-white/10 pt-4">
-                          <div>
-                            <p className="text-sm font-semibold text-white/90">Video</p>
-                            <p className="mt-1 text-[11px] leading-snug text-white/45">
-                              Final render below. The motion prompt shows only what matters to tweak; the rest is applied
-                              for you.
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-[10px] font-semibold uppercase tracking-wide text-white/50">Prompt</p>
-                            {nanoBananaImageUrl &&
-                            userStartedVideoFromImage &&
-                            !ugcVideoPromptGpt.trim() &&
-                            !isVideoPromptLoading &&
-                            selectedAngleIndex !== null ? (
-                              <Button
-                                type="button"
-                                className={`mt-2 h-auto min-h-11 py-2.5 ${primaryBtnClass}`}
-                                onClick={() => {
-                                  void onGenerateUgcVideoPrompt();
-                                }}
-                              >
-                                <span className="text-sm font-semibold leading-tight">Retry video prompt</span>
-                              </Button>
-                            ) : null}
-                            {isVideoPromptLoading ? (
-                              <div className="mt-3 flex items-center gap-2 text-xs text-violet-200">
-                                <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
-                                <span>{LINK_TO_AD_LOADING_MESSAGES.video_prompt}</span>
-                              </div>
-                            ) : null}
-                            {ugcVideoPromptGpt ? (
-                              <div className="mt-2 space-y-2">
-                                <div className="flex items-center justify-between gap-2">
-                                  <span className="text-[9px] text-white/40">
-                                    {videoPromptHasEdits ? "Edited (not rendered yet)" : "Motion · dialogue · sound"}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    className="text-[10px] font-medium text-violet-300/85 transition hover:text-violet-200"
-                                    onClick={() => {
-                                      if (!videoPromptInlineEdit) {
-                                        hydrateVideoPromptFromStored(ugcVideoPromptGpt);
-                                      }
-                                      setVideoPromptInlineEdit((v) => !v);
-                                    }}
-                                  >
-                                    {videoPromptInlineEdit ? "Done" : "Edit"}
-                                  </button>
-                                </div>
-                                {videoPromptIsLegacyBlob ? (
-                                  <div className="rounded-lg border border-white/10 bg-black/30 p-2">
-                                    <p className="text-[9px] font-semibold uppercase tracking-wide text-white/45">Brief</p>
-                                    {videoPromptInlineEdit ? (
-                                      <Textarea
-                                        value={videoPromptSections.motion}
-                                        onChange={(e) => {
-                                          setVideoPromptSections((prev) => ({ ...prev, motion: e.target.value }));
-                                          setVideoPromptHasEdits(true);
-                                        }}
-                                        className="mt-1 min-h-[56px] border-white/10 bg-black/35 text-[11px] leading-snug text-white/80"
-                                      />
-                                    ) : (
-                                      <p className="mt-1 text-[11px] leading-snug text-white/75 line-clamp-3">
-                                        {videoPromptSections.motion.trim() || "—"}
-                                      </p>
-                                    )}
-                                  </div>
-                                ) : (
-                                  <div className="space-y-1.5">
-                                    {(
-                                      [
-                                        ["Motion", "motion"],
-                                        ["Dialogue", "dialogue"],
-                                        ["Ambience", "ambience"],
-                                      ] as const
-                                    ).map(([label, key]) => (
-                                      <div
-                                        key={key}
-                                        className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5"
-                                      >
-                                        <p className="text-[9px] font-semibold uppercase tracking-wide text-white/45">
-                                          {label}
-                                        </p>
-                                        {videoPromptInlineEdit ? (
-                                          <Textarea
-                                            value={videoPromptSections[key]}
-                                            onChange={(e) => {
-                                              setVideoPromptSections((prev) => ({ ...prev, [key]: e.target.value }));
-                                              setVideoPromptHasEdits(true);
-                                            }}
-                                            className="mt-0.5 min-h-[44px] border-white/10 bg-black/35 text-[11px] leading-snug text-white/80"
-                                          />
-                                        ) : (
-                                          <p className="mt-0.5 text-[11px] leading-snug text-white/75 line-clamp-3">
-                                            {videoPromptSections[key].trim() || "—"}
-                                          </p>
-                                        )}
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                                {videoPromptHasEdits ? (
-                                  <Button
-                                    type="button"
-                                    className={`h-9 py-2 text-sm ${primaryBtnClass}`}
-                                    disabled={
-                                      isKlingSubmitting ||
-                                      Boolean(klingPollTaskId) ||
-                                      !nanoBananaImageUrl ||
-                                      !mergedVideoPromptDraft
-                                    }
-                                    onClick={() => {
-                                      const nextPrompt = mergedVideoPromptDraft;
-                                      if (!nextPrompt) return;
-                                      setUgcVideoPromptGpt(nextPrompt);
-                                      setVideoPromptHasEdits(false);
-                                      setVideoPromptInlineEdit(false);
-                                      void onGenerateKlingVideo(nextPrompt);
-                                    }}
-                                  >
-                                    <span className="inline-flex items-center gap-2 text-sm font-semibold leading-tight">
-                                      <RefreshCw className="h-4 w-4 shrink-0" aria-hidden />
-                                      Regenerate video
-                                    </span>
-                                  </Button>
-                                ) : null}
-                              </div>
-                            ) : null}
-                          </div>
-                        </div>
-                      ) : null}
                     </>
                   ) : (
                     <div className="flex min-h-[220px] flex-col items-center justify-center gap-4 rounded-xl border border-white/10 bg-black/20 px-4 py-8 text-center">

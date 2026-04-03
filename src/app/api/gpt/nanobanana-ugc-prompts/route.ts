@@ -4,10 +4,13 @@ import { NextResponse } from "next/server";
 import { openaiResponsesTextWithImages } from "@/lib/openaiResponses";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { claudeMessagesTextWithImages } from "@/lib/claudeResponses";
+import { MAX_NANO_BANANA_PRODUCT_REFERENCE_IMAGES } from "@/lib/productReferenceImages";
 
 type Body = {
   marketingScript: string;
   productImageUrl: string;
+  /** Optional: multiple product angles (preferred over single URL when provided). */
+  productImageUrls?: string[] | null;
   /** Optional human/avatar refs to guide persona appearance. */
   avatarImageUrls?: string[] | null;
   generationMode?: "automatic" | "custom_ugc";
@@ -511,14 +514,26 @@ export async function POST(req: Request) {
   if (!script) {
     return NextResponse.json({ error: "Missing `marketingScript`." }, { status: 400 });
   }
+  const multiRaw = Array.isArray(body?.productImageUrls)
+    ? body!.productImageUrls!.map((x) => (typeof x === "string" ? x.trim() : "")).filter((u) => /^https?:\/\//i.test(u))
+    : [];
   const imageUrl =
     rawImg && /^https:\/\//i.test(rawImg)
       ? rawImg
       : rawImg && /^http:\/\//i.test(rawImg)
         ? rawImg
         : null;
-  if (!imageUrl) {
-    return NextResponse.json({ error: "Missing or invalid `productImageUrl` (must be http(s))." }, { status: 400 });
+  const productVisionUrls =
+    multiRaw.length > 0
+      ? multiRaw.slice(0, MAX_NANO_BANANA_PRODUCT_REFERENCE_IMAGES)
+      : imageUrl
+        ? [imageUrl]
+        : [];
+  if (!productVisionUrls.length) {
+    return NextResponse.json(
+      { error: "Missing or invalid product image URL(s) (must be http(s)). Pass `productImageUrl` or `productImageUrls`." },
+      { status: 400 },
+    );
   }
   const avatarRefs = Array.isArray(body?.avatarImageUrls)
     ? body.avatarImageUrls
@@ -552,17 +567,18 @@ export async function POST(req: Request) {
   ].join("\n");
 
   try {
+    const visionUrls = [...productVisionUrls, ...avatarRefs];
     const text =
       provider === "claude"
         ? await claudeMessagesTextWithImages({
             system: developer,
             user: userText,
-            imageUrls: [imageUrl, ...avatarRefs],
+            imageUrls: visionUrls,
           })
         : (await openaiResponsesTextWithImages({
             developer,
             userText,
-            imageUrls: [imageUrl, ...avatarRefs],
+            imageUrls: visionUrls,
           })).text;
 
     const trimmed = String(text ?? "").trim();

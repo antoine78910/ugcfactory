@@ -17,6 +17,8 @@ export type LinkToAdUniverseSnapshotV1 = {
   productOnlyImageUrls?: string[] | null;
   /** User-uploaded additional product photos. */
   userPhotoUrls?: string[] | null;
+  /** Persona / avatar reference URLs for scripts and Nano prompts. */
+  personaPhotoUrls?: string[] | null;
   summaryText: string;
   scriptsText: string;
   /** One label per script angle (3 or 4 SCRIPT OPTION blocks). */
@@ -857,6 +859,14 @@ export function readUniverseFromExtracted(extracted: unknown): LinkToAdUniverseS
     productOnlyImageUrls:
       Array.isArray(o.productOnlyImageUrls) && o.productOnlyImageUrls.every((x) => typeof x === "string")
         ? (o.productOnlyImageUrls as string[])
+        : null,
+    userPhotoUrls:
+      Array.isArray(o.userPhotoUrls) && o.userPhotoUrls.every((x) => typeof x === "string")
+        ? (o.userPhotoUrls as string[])
+        : null,
+    personaPhotoUrls:
+      Array.isArray(o.personaPhotoUrls) && o.personaPhotoUrls.every((x) => typeof x === "string")
+        ? (o.personaPhotoUrls as string[])
         : null,
     summaryText: typeof o.summaryText === "string" ? o.summaryText : "",
     scriptsText: typeof o.scriptsText === "string" ? o.scriptsText : "",

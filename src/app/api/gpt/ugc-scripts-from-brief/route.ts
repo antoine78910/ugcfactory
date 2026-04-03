@@ -10,6 +10,7 @@ import {
   normalizeUgcScriptVideoDurationSec,
   UGC_SCRIPT_INSTRUCTIONS,
 } from "@/lib/ugcAiScriptBrief";
+import { MAX_GPT_PRODUCT_REFERENCE_IMAGES } from "@/lib/productReferenceImages";
 
 type Body = {
   storeUrl?: string;
@@ -45,7 +46,7 @@ function collectHttpsProductImageUrls(body: Body): string[] {
     if (!/^https?:\/\//i.test(r) || seen.has(r)) continue;
     seen.add(r);
     out.push(r);
-    if (out.length >= 3) break;
+    if (out.length >= MAX_GPT_PRODUCT_REFERENCE_IMAGES) break;
   }
   return out;
 }
