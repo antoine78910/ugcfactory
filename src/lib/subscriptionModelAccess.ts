@@ -310,42 +310,42 @@ function tierBools(minRank: number): [boolean, boolean, boolean, boolean] {
 /** Rows shown under “Model access” on /subscription; synced with gates above. */
 export const SUBSCRIPTION_MODEL_MATRIX_ROWS: SubscriptionModelMatrixRow[] = [
   {
-    label: "NanoBanana: images",
+    label: "NanoBanana",
     tiers: tierBools(IMAGE_MIN_RANK.nano),
   },
   {
-    label: "NanoBanana Pro: images",
+    label: "NanoBanana Pro",
     tiers: tierBools(IMAGE_MIN_RANK.pro),
   },
   {
-    label: "Seedream 4.5: images (text + edit)",
+    label: "Seedream 4.5",
     tiers: tierBools(IMAGE_MIN_RANK.pro),
   },
   {
-    label: "Seedream 5.0 Lite: images (text + image-to-image)",
+    label: "Seedream 5.0",
     tiers: tierBools(IMAGE_MIN_RANK.pro),
   },
   {
-    label: "Seedance 1.5 Pro: video",
+    label: "Seedance 1.5",
     tiers: tierBools(VIDEO_MIN_RANK["bytedance/seedance-1.5-pro"]),
   },
-  { label: "Kling 2.6: video", tiers: tierBools(VIDEO_MIN_RANK["kling-2.6/video"]) },
-  { label: "Seedance 2.0 Pro: video", tiers: tierBools(VIDEO_MIN_RANK["bytedance/seedance-2.0-pro"]) },
+  { label: "Kling 2.6", tiers: tierBools(VIDEO_MIN_RANK["kling-2.6/video"]) },
+  { label: "Seedance 2.0", tiers: tierBools(VIDEO_MIN_RANK["bytedance/seedance-2.0-pro"]) },
   {
-    label: "Veo 3.1 Fast: video",
+    label: "Veo 3.1 Fast",
     tiers: tierBools(VIDEO_MIN_RANK.veo3_fast),
   },
   {
-    label: "Kling 3.0: video",
+    label: "Kling 3.0",
     tiers: tierBools(VIDEO_MIN_RANK["kling-3.0/video"]),
   },
-  { label: "Veo 3.1: video", tiers: tierBools(VIDEO_MIN_RANK.veo3) },
+  { label: "Veo 3.1", tiers: tierBools(VIDEO_MIN_RANK.veo3) },
   {
-    label: "Sora 2: video",
+    label: "Sora 2",
     tiers: tierBools(VIDEO_MIN_RANK["openai/sora-2"]),
   },
   {
-    label: "Motion Control (Kling 3.0)",
+    label: "Motion Control",
     tiers: tierBools(VIDEO_MIN_RANK["kling-3.0/video"]),
   },
 ];

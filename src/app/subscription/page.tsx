@@ -431,11 +431,11 @@ export default function SubscriptionPage() {
                           {SUBSCRIPTION_MODEL_MATRIX_ROWS.map((row) => {
                             const included = isModelIncluded(plan.id, row);
                             return (
-                              <div key={row.label} className="flex items-center justify-between gap-3">
-                                <div className="flex min-w-0 items-center gap-2">
+                              <div key={row.label} className="flex items-center gap-2.5">
+                                <div className="flex min-w-0 flex-1 items-center gap-2">
                                   <span
                                     className={cn(
-                                      "flex h-5 w-5 items-center justify-center rounded-md border text-[10px] font-semibold",
+                                      "flex h-5 w-5 flex-none shrink-0 items-center justify-center rounded-md border text-[10px] font-semibold",
                                       included
                                         ? "border-emerald-400/40 bg-emerald-500/15 text-emerald-200"
                                         : "border-red-400/30 bg-red-500/10 text-red-200/90",
@@ -448,7 +448,7 @@ export default function SubscriptionPage() {
                                       <X className="h-3.5 w-3.5" />
                                     )}
                                   </span>
-                                  <span className="truncate text-xs text-white/70" title={row.label}>
+                                  <span className="min-w-0 truncate text-xs text-white/70" title={row.label}>
                                     {row.label}
                                   </span>
                                 </div>
