@@ -768,9 +768,7 @@ export default function AppBrandWizard() {
   const MOTION_VIDEO_MAX_BYTES = 100 * 1024 * 1024; // 100 MB
   const historyKindsKey =
     appSection === "ad_clone"
-      ? translateToolMode === "voice_change"
-        ? "studio_audio"
-        : STUDIO_GENERATION_KIND_STUDIO_TRANSLATE_VIDEO
+      ? `${STUDIO_GENERATION_KIND_STUDIO_TRANSLATE_VIDEO},studio_audio,studio_video`
       : "motion_control";
   const motionVideoPreviewSrc = useMemo(
     () => proxiedMediaSrc(motionVideoUploadedUrl || motionVideoRefBlobUrl),
