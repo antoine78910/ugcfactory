@@ -211,14 +211,6 @@ export default function SubscriptionPage() {
 
         <div className="relative mx-auto max-w-6xl space-y-14 px-5 py-10 md:px-8 md:py-12">
           <header className="mx-auto max-w-2xl text-center">
-            <div className="mb-2 flex items-center justify-center gap-2">
-              <span className="inline-flex items-center gap-2 rounded-full border border-violet-400/35 bg-violet-500/15 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-violet-200">
-                Seedance 2.0 now available
-                <span className="rounded-full bg-emerald-400/20 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-100 shadow-[0_0_16px_rgba(16,185,129,0.18)]">
-                  NEW
-                </span>
-              </span>
-            </div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-violet-400/90">Subscription</p>
             <h1 className="mt-3 bg-gradient-to-b from-white via-white to-white/55 bg-clip-text text-3xl font-bold tracking-tight text-transparent sm:text-4xl md:text-[2.75rem] md:leading-[1.08]">
               Grow with a plan that keeps up
