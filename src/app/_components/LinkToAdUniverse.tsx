@@ -5050,13 +5050,12 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                         !nanoPollTaskId ? (
                           <>
                             <div className="space-y-2">
-                              <div className="flex items-center justify-between">
-                                <p className="text-sm text-white/75">
-                                  Optional: edit the script before generating images.
-                                </p>
-                                {scriptHasEdits ? (
-                                  <span className="text-[10px] text-violet-200/85">Edited factors ready</span>
-                                ) : null}
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="min-h-[1rem]">
+                                  {scriptHasEdits ? (
+                                    <span className="text-[10px] text-violet-200/85">Edited factors ready</span>
+                                  ) : null}
+                                </div>
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -5239,7 +5238,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                             <Button
                               type="button"
                               disabled={
-                                !resolvedPreviewUrl ||
+                                !resolveNanoProductImageUrl() ||
                                 (scriptEditVisible && !factorWordsValid.all) ||
                                 isNanoPromptsLoading ||
                                 isWorking ||
