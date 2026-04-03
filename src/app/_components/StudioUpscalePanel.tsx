@@ -307,6 +307,7 @@ export default function StudioUpscalePanel() {
           taskId: json.taskId,
           creditsCharged: platformCharge,
           personalApiKey: upPKey,
+          inputUrls: inputUrl ? [inputUrl] : undefined,
         });
         if (rowId) {
           setHistoryItems((prev) =>

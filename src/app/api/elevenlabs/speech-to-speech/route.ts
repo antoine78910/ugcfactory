@@ -120,6 +120,15 @@ export async function POST(req: Request) {
   ) as ArrayBuffer;
   const audioFile = new File([ab], `input.${ext}`, { type: inputContentType });
 
+  // Save input to studio-media so we can show it in generation details
+  const inputStoragePath = `${user.id}/inputs/voice-change-${crypto.randomUUID()}.${ext}`;
+  const { data: inputUploaded } = await admin.storage
+    .from(STUDIO_MEDIA_BUCKET)
+    .upload(inputStoragePath, inputBuffer, { contentType: inputContentType, upsert: false });
+  const inputPublicUrl = inputUploaded?.path
+    ? admin.storage.from(STUDIO_MEDIA_BUCKET).getPublicUrl(inputUploaded.path).data.publicUrl
+    : undefined;
+
   const label = voiceName ? `Voice change (${voiceName})` : "Voice change";
   const { data: inserted, error: insertError } = await supabase
     .from("studio_generations")
@@ -132,6 +141,7 @@ export async function POST(req: Request) {
       provider: "elevenlabs",
       credits_charged: 0,
       uses_personal_api: false,
+      ...(inputPublicUrl ? { input_urls: [inputPublicUrl] } : {}),
     })
     .select("id")
     .single();

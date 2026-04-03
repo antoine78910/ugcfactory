@@ -3742,6 +3742,7 @@ export default function AppBrandWizard() {
                                 appSection === "ad_clone"
                                   ? `wavespeed:heygen_translate:${adCloneOutputLanguage}`
                                   : `kling:motion_control:${motionQuality}:${motionSceneBackground}`;
+                              const motionInputUrls = [videoHttps].filter(Boolean);
                               const rowId = await registerStudioGenerationClient({
                                 kind: generationKind,
                                 label: historyLabel,
@@ -3750,6 +3751,7 @@ export default function AppBrandWizard() {
                                 model,
                                 creditsCharged: platformChargeMotion,
                                 personalApiKey: getPersonalApiKey() ?? undefined,
+                                inputUrls: motionInputUrls.length > 0 ? motionInputUrls : undefined,
                               });
                               if (rowId) {
                                 setMotionHistoryItems((prev) =>

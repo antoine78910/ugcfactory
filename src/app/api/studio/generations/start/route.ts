@@ -115,6 +115,10 @@ export async function POST(req: Request) {
   const n = taskIds.length;
   const baseCharge = n > 0 ? Math.floor(creditsCharged / n) : 0;
   const remainder = creditsCharged - baseCharge * n;
+  const inputUrls = Array.isArray(body.imageUrls)
+    ? body.imageUrls.filter((u): u is string => typeof u === "string" && u.trim().length > 0)
+    : [];
+
   const rowsPayload = taskIds.map((external_task_id, i) => ({
     user_id: user.id,
     kind,
@@ -124,6 +128,7 @@ export async function POST(req: Request) {
     provider: "kie-market",
     credits_charged: baseCharge + (i === 0 ? remainder : 0),
     uses_personal_api: usesPersonalApi,
+    ...(inputUrls.length > 0 ? { input_urls: inputUrls } : {}),
   }));
 
   const { data: inserted, error: insErr } = await supabase.from("studio_generations").insert(rowsPayload).select("*");

@@ -470,6 +470,7 @@ async function registerStudioTask(params: {
   provider?: string;
   creditsCharged: number;
   personalApiKey?: string;
+  inputUrls?: string[];
 }) {
   try {
     await fetch("/api/studio/generations/register", {
@@ -1182,6 +1183,7 @@ export default function StudioVideoPanel({
             taskId: json.taskId,
             creditsCharged: platformChargeEdit,
             personalApiKey: editPKey,
+            inputUrls: [snap.editMotionImageUrl, snap.editMotionVideoUrl].filter(Boolean) as string[],
           });
           toast.message("Motion control started", { description: "Polling…" });
           const url = await pollKlingVideo(json.taskId, editPKey);
@@ -1228,6 +1230,7 @@ export default function StudioVideoPanel({
           taskId: json.taskId,
           creditsCharged: platformChargeEdit,
           personalApiKey: editPKey,
+          inputUrls: [snap.editVideoUrl, ...(snap.editElementUrls || [])].filter(Boolean) as string[],
         });
         toast.message("Edit started", { description: "Polling provider…" });
         const url = await pollKlingVideo(json.taskId, editPKey);
@@ -1348,6 +1351,7 @@ export default function StudioVideoPanel({
             taskId: json.taskId,
             creditsCharged: platformChargeCreate,
             personalApiKey: pKey,
+            inputUrls: snap.startUrl ? [snap.startUrl] : undefined,
           });
           toast.message("Sora 2 started", { description: "Rendering…" });
           const url = await pollKlingVideo(json.taskId, pKey);
@@ -1399,6 +1403,7 @@ export default function StudioVideoPanel({
             taskId: json.taskId,
             creditsCharged: platformChargeCreate,
             personalApiKey: pKey,
+            inputUrls: urls.length ? urls : undefined,
           });
           toast.message("Veo started", { description: "Rendering…" });
           const url = await pollVeoVideo(json.taskId, pKey);
@@ -1450,6 +1455,7 @@ export default function StudioVideoPanel({
           provider: json.provider,
           creditsCharged: platformChargeCreate,
           personalApiKey: pKey,
+          inputUrls: snap.startUrl ? [snap.startUrl] : undefined,
         });
         toast.message("Generation started", { description: "Polling provider…" });
         const url = await pollKlingVideo(json.taskId, pKey);

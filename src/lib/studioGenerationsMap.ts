@@ -65,6 +65,7 @@ export type StudioGenerationRow = {
   external_task_id: string;
   provider: string;
   result_urls: string[] | null;
+  input_urls: string[] | null;
   error_message: string | null;
   credits_charged: number;
   uses_personal_api: boolean;
@@ -99,12 +100,13 @@ export function studioGenerationRowToHistoryItem(row: StudioGenerationRow): Stud
   const createdAt = new Date(row.created_at).getTime();
   const status = String(row.status ?? "").toLowerCase();
   const resultUrls = normalizeResultUrls(row.result_urls as unknown);
+  const inputUrls = normalizeResultUrls(row.input_urls as unknown);
   const mediaKind = rowKindToMediaKind(row.kind, resultUrls, row.label ?? "");
   const hasUrls = resultUrls.length > 0;
   const hasError = typeof row.error_message === "string" && row.error_message.trim().length > 0;
   const isReady = ["ready", "success", "succeeded", "completed", "done"].includes(status);
   const isFailed = ["failed", "error", "errored", "cancelled", "canceled"].includes(status);
-  // Be defensive: some providers may persist `result_urls` / `error_message` before (or without) normalizing `status`.
+  const inputUrlsOrUndef = inputUrls.length > 0 ? inputUrls : undefined;
   if (hasUrls || isReady) {
     return {
       id: row.id,
@@ -114,6 +116,7 @@ export function studioGenerationRowToHistoryItem(row: StudioGenerationRow): Stud
       mediaUrl: resultUrls[0],
       createdAt,
       studioGenerationKind: row.kind,
+      inputUrls: inputUrlsOrUndef,
     };
   }
   if (hasError || isFailed) {
@@ -126,6 +129,7 @@ export function studioGenerationRowToHistoryItem(row: StudioGenerationRow): Stud
       creditsRefunded: Boolean(row.credits_refund_hint_sent),
       createdAt,
       studioGenerationKind: row.kind,
+      inputUrls: inputUrlsOrUndef,
     };
   }
   return {
@@ -135,5 +139,6 @@ export function studioGenerationRowToHistoryItem(row: StudioGenerationRow): Stud
     label: row.label || "Generating…",
     createdAt,
     studioGenerationKind: row.kind,
+    inputUrls: inputUrlsOrUndef,
   };
 }

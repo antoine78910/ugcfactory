@@ -116,6 +116,7 @@ create table if not exists public.studio_generations (
   provider text not null default 'kie-market',
   model text not null default '',
   result_urls text[],
+  input_urls text[],
   error_message text,
   credits_charged int not null default 0,
   uses_personal_api boolean not null default false,

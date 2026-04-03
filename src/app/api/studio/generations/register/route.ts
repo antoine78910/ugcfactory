@@ -13,6 +13,7 @@ type Body = {
   creditsCharged?: number;
   personalApiKey?: string;
   piapiApiKey?: string;
+  inputUrls?: string[];
 };
 
 export async function POST(req: Request) {
@@ -48,6 +49,10 @@ export async function POST(req: Request) {
   const n = taskIds.length;
   const baseCharge = Math.floor(creditsCharged / n);
   const remainder = creditsCharged - baseCharge * n;
+  const inputUrls = Array.isArray(body.inputUrls)
+    ? body.inputUrls.filter((u): u is string => typeof u === "string" && u.trim().length > 0)
+    : [];
+
   const payload = taskIds.map((externalTaskId, i) => ({
     user_id: user.id,
     kind,
@@ -57,6 +62,7 @@ export async function POST(req: Request) {
     provider,
     credits_charged: baseCharge + (i === 0 ? remainder : 0),
     uses_personal_api: usesPersonalApi,
+    ...(inputUrls.length > 0 ? { input_urls: inputUrls } : {}),
   }));
 
   const { data, error } = await supabase.from("studio_generations").insert(payload).select("id, external_task_id");

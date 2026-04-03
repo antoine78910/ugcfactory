@@ -25,6 +25,7 @@ create table if not exists public.studio_generations (
 alter table public.studio_generations add column if not exists started_at timestamptz not null default now();
 alter table public.studio_generations add column if not exists completed_at timestamptz;
 alter table public.studio_generations add column if not exists model text not null default '';
+alter table public.studio_generations add column if not exists input_urls text[];
 
 create index if not exists studio_generations_user_kind_created_idx
   on public.studio_generations (user_id, kind, created_at desc);

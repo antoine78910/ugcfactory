@@ -29,6 +29,8 @@ export type StudioHistoryItem = {
   createdAt: number;
   /** When row comes from `studio_generations` (avatar, studio_image, …). */
   studioGenerationKind?: string;
+  /** Input image/video URLs used for this generation. */
+  inputUrls?: string[];
 };
 
 function formatHistoryDate(ts: number): string {
@@ -150,6 +152,7 @@ export function StudioGenerationsHistory({
     poster?: string;
     kind: "image" | "video" | "audio";
     prompt: string;
+    inputUrls?: string[];
   } | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editPrompt, setEditPrompt] = useState("");
@@ -548,6 +551,7 @@ export function StudioGenerationsHistory({
                               poster: item.posterUrl,
                               kind: "video",
                               prompt: item.label || "",
+                              inputUrls: item.inputUrls,
                             });
                           }}
                         />
@@ -565,6 +569,7 @@ export function StudioGenerationsHistory({
                                 poster: item.posterUrl,
                                 kind: "image",
                                 prompt: item.label || "",
+                                inputUrls: item.inputUrls,
                               });
                             }}
                             className="block h-full w-full"
@@ -759,6 +764,45 @@ export function StudioGenerationsHistory({
                   ) : null}
                 </div>
               </div>
+
+              {lightboxItem.inputUrls && lightboxItem.inputUrls.length > 0 ? (
+                <div className="rounded-xl border border-white/10 bg-[#14141c]/80 p-3.5">
+                  <div className="mb-2 text-sm font-semibold text-white/90">
+                    {lightboxItem.inputUrls.length === 1 ? "Input" : "Inputs"}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {lightboxItem.inputUrls.map((inputUrl, idx) => {
+                      const isVideo = /\.(mp4|mov|webm|mkv|m4v)/i.test(inputUrl);
+                      return (
+                        <a
+                          key={idx}
+                          href={inputUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="group/input relative block overflow-hidden rounded-lg border border-white/10 bg-black/40 transition hover:border-white/25"
+                        >
+                          {isVideo ? (
+                            <video
+                              src={inputUrl}
+                              muted
+                              playsInline
+                              preload="metadata"
+                              className="h-20 w-20 object-cover"
+                            />
+                          ) : (
+                            <img
+                              src={inputUrl}
+                              alt={`Input ${idx + 1}`}
+                              className="h-20 w-20 object-cover"
+                            />
+                          )}
+                        </a>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
 
               {lightboxItem.kind === "image" &&
               !isProbablyVideoUrl(lightboxItem.url) &&
