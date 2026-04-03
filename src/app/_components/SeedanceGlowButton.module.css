@@ -8,7 +8,8 @@
   --padding: 4px;
   --transition: 0.4s;
   --button-color: #101010;
-  --highlight-color-hue: 210deg;
+  /* violet glow (was blue) */
+  --highlight-color-hue: 270deg;
 
   user-select: none;
   position: relative;

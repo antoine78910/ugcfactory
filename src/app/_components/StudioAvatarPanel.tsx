@@ -17,7 +17,7 @@ import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
 import { StudioOutputPane } from "@/app/_components/StudioEmptyExamples";
 import { StudioGenerationsHistory } from "@/app/_components/StudioGenerationsHistory";
 import type { StudioHistoryItem } from "@/app/_components/StudioGenerationsHistory";
-import { studioImageCreditsPerOutput } from "@/lib/pricing";
+import { studioImageCreditsPerOutput, type StudioImageOutputResolution } from "@/lib/pricing";
 import { AvatarPickerDialog } from "@/app/_components/AvatarPickerDialog";
 
 const LS_AVATAR_HISTORY = "ugc_studio_avatar_history_v1";
@@ -61,9 +61,11 @@ const DEFAULTS: AvatarParams = {
   moreDetails: "",
 };
 
-function buildAvatarPrompt(p: AvatarParams): string {
+function buildAvatarPrompt(p: AvatarParams, resolution: StudioImageOutputResolution): string {
   const sexLower = p.sex.toLowerCase();
   const details = p.moreDetails.trim();
+  const resLabel =
+    resolution === "1K" ? "1K portrait" : resolution === "2K" ? "2K portrait" : "4K portrait";
   return [
     `Ultra-realistic studio portrait of a ${p.age} year old ${sexLower},`,
     `${p.ethnicity} ethnicity, ${p.bodyType.toLowerCase()} body type,`,
@@ -72,7 +74,7 @@ function buildAvatarPrompt(p: AvatarParams): string {
     `${p.expression.toLowerCase()} expression.`,
     details ? `Additional details: ${details}.` : "",
     `Professional UGC creator look, natural lighting, clean background,`,
-    `high detail face, 4K portrait, photorealistic.`,
+    `high detail face, ${resLabel}, photorealistic.`,
   ]
     .filter(Boolean)
     .join(" ");
@@ -191,6 +193,7 @@ export default function StudioAvatarPanel({
   creditsRef.current = creditsBalance;
 
   const [params, setParams] = useState<AvatarParams>(DEFAULTS);
+  const [outputResolution, setOutputResolution] = useState<StudioImageOutputResolution>("1K");
   const [busy, setBusy] = useState(false);
   const [historyItems, setHistoryItems] = useState<StudioHistoryItem[]>([]);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
@@ -201,7 +204,7 @@ export default function StudioAvatarPanel({
   type Bill = { open: false } | { open: true; reason: "credits"; required: number };
   const [billing, setBilling] = useState<Bill>({ open: false });
 
-  const credits = studioImageCreditsPerOutput({ studioModel: "nano", resolution: "1K" });
+  const credits = studioImageCreditsPerOutput({ studioModel: "nano", resolution: outputResolution });
   const avatarLibraryUrls = historyItems
     .filter((item) => item.status === "ready" && item.kind === "image" && typeof item.mediaUrl === "string")
     .map((item) => item.mediaUrl!.trim())
@@ -290,7 +293,7 @@ export default function StudioAvatarPanel({
       creditsRef.current = Math.max(0, creditsRef.current - credits);
     }
 
-    const prompt = buildAvatarPrompt(params);
+    const prompt = buildAvatarPrompt(params, outputResolution);
     const label = `${params.sex} · ${params.age} · ${params.ethnicity}`;
     setBusy(true);
 
@@ -306,7 +309,7 @@ export default function StudioAvatarPanel({
             prompt,
             model: "nano",
             aspectRatio: "3:4",
-            resolution: "1K",
+            resolution: outputResolution,
             numImages: 1,
             creditsCharged: platformCharge,
             personalApiKey: getPersonalApiKey(),
@@ -340,7 +343,7 @@ export default function StudioAvatarPanel({
         setBusy(false);
       }
     })();
-  }, [params, planId, credits, spendCredits, grantCredits, serverHistory]);
+  }, [params, outputResolution, planId, credits, spendCredits, grantCredits, serverHistory]);
 
   return (
     <>
@@ -359,6 +362,30 @@ export default function StudioAvatarPanel({
           </div>
 
           <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
+            <div className="col-span-2 flex flex-col gap-1.5 sm:col-span-3">
+              <Label className="text-[11px] font-semibold uppercase tracking-wide text-white/45">Resolution</Label>
+              <Select value={outputResolution} onValueChange={(v) => setOutputResolution(v as StudioImageOutputResolution)}>
+                <SelectTrigger className="h-9 border-white/10 bg-white/[0.04] text-sm text-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="border-white/10 bg-[#111] text-white">
+                  <SelectItem value="1K" className="text-sm">
+                    1K — 1 credit
+                  </SelectItem>
+                  <SelectItem value="2K" className="text-sm">
+                    2K — 2 credits
+                  </SelectItem>
+                  <SelectItem value="4K" className="text-sm">
+                    4K — 3 credits
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] leading-snug text-white/35">
+                Price: <span className="text-white/55">1 credit</span> for 1K ·{" "}
+                <span className="text-white/55">2 credits</span> for 2K · <span className="text-white/55">3 credits</span>{" "}
+                for 4K
+              </p>
+            </div>
             <SelectField label="Sex" value={params.sex} onValueChange={(v) => set("sex", v)} options={SEX_OPTIONS} />
             <SelectField label="Age" value={params.age} onValueChange={(v) => set("age", v)} options={AGE_OPTIONS} />
             <SelectField label="Ethnicity" value={params.ethnicity} onValueChange={(v) => set("ethnicity", v)} options={ETHNICITY_OPTIONS} />

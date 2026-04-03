@@ -8,6 +8,7 @@ import {
   CLAUDE_AI_CREDITS,
   IMAGE_MODEL,
   LINK_TO_AD_VIDEO_MODELS,
+  LINK_TO_AD_VIDEO_MARKET_MODEL,
   type LinkToAdVideoModelId,
   calculateMotionControlCreditsFromDuration,
   calculateVideoCreditsForModel,
@@ -36,7 +37,7 @@ export const CREDITS_LINK_TO_AD_VIDEO_PROMPT_AI = CLAUDE_AI_CREDITS;
 // Video — dynamic pricing by model + duration (Link to Ad)
 // ---------------------------------------------------------------------------
 
-export { linkToAdVideoCredits, LINK_TO_AD_VIDEO_MODELS };
+export { linkToAdVideoCredits, LINK_TO_AD_VIDEO_MODELS, LINK_TO_AD_VIDEO_MARKET_MODEL };
 export type { LinkToAdVideoModelId };
 
 export const LINK_TO_AD_DEFAULT_VIDEO_MODEL: LinkToAdVideoModelId = "seedance";

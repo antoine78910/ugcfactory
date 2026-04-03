@@ -83,10 +83,9 @@ import { assertStudioImageUpload, STUDIO_IMAGE_FILE_ACCEPT } from "@/lib/studioU
 import {
   creditsLinkToAdFullPipeline,
   creditsLinkToAdVideoFromImage,
-  LINK_TO_AD_VIDEO_MODELS,
   LINK_TO_AD_DEFAULT_VIDEO_MODEL,
   LINK_TO_AD_DEFAULT_VIDEO_DURATION_SEC,
-  type LinkToAdVideoModelId,
+  LINK_TO_AD_VIDEO_MARKET_MODEL,
 } from "@/lib/linkToAd/generationCredits";
 import type { InternalFetch } from "@/lib/linkToAd/internalFetch";
 import { runInitialPipeline } from "@/lib/linkToAd/runInitialPipeline";
@@ -588,6 +587,12 @@ function PersonaPhotoSection({
           </button>
         </div>
       </div>
+      <p className="text-[10px] leading-snug text-white/30">
+        Avatar generation (Studio):{" "}
+        <span className="text-white/45">1K = 1 credit</span> ·{" "}
+        <span className="text-white/45">2K = 2 credits</span> ·{" "}
+        <span className="text-white/45">4K = 3 credits</span>
+      </p>
       {personaPhotoUrls.length > 0 || pendingPersonaUploads.length > 0 ? (
         <div className="flex flex-wrap gap-2">
           {pendingPersonaUploads.map((row) => (
@@ -738,8 +743,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   const [generationMode, setGenerationMode] = useState<"automatic" | "custom_ugc">("automatic");
   const scriptProvider = "claude" as const;
 
-  // Link to Ad: temporarily force Seedance 2.0 only (no Kling) to avoid interference.
-  const [videoModel] = useState<LinkToAdVideoModelId>("seedance");
   const [videoDuration, setVideoDuration] = useState<number>(LINK_TO_AD_DEFAULT_VIDEO_DURATION_SEC);
   const [customUgcTopic, setCustomUgcTopic] = useState("");
   const [customUgcOffer, setCustomUgcOffer] = useState("");
@@ -3128,7 +3131,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
         body: JSON.stringify({
-          marketModel: LINK_TO_AD_VIDEO_MODELS[videoModel].marketModel,
+          marketModel: LINK_TO_AD_VIDEO_MARKET_MODEL,
           prompt: klingPrompt,
           imageUrl: img,
           duration: videoDuration,
@@ -3464,12 +3467,12 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
   );
 
   const ltaGenerateCredits = useMemo(
-    () => creditsLinkToAdFullPipeline(videoModel, videoDuration),
-    [videoModel, videoDuration],
+    () => creditsLinkToAdFullPipeline(LINK_TO_AD_DEFAULT_VIDEO_MODEL, videoDuration),
+    [videoDuration],
   );
   const ltaVideoOnlyCredits = useMemo(
-    () => creditsLinkToAdVideoFromImage(videoModel, videoDuration),
-    [videoModel, videoDuration],
+    () => creditsLinkToAdVideoFromImage(LINK_TO_AD_DEFAULT_VIDEO_MODEL, videoDuration),
+    [videoDuration],
   );
 
   /** Match product image resolution used for Nano prompts (preview or packshots), not only main preview URL. */
@@ -3725,14 +3728,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
             )}
           </div>
         ) : null}
-        {/* Video model + duration pickers */}
+        {/* Duration */}
         <div className="flex flex-wrap items-center gap-4">
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Video model</p>
-            <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
-              <span className="text-xs font-semibold text-white">{LINK_TO_AD_VIDEO_MODELS[videoModel].label}</span>
-            </div>
-          </div>
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Duration</p>
             <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] p-1">

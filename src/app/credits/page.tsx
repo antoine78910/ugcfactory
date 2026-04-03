@@ -209,11 +209,11 @@ export default function CreditsPage() {
                       <div className="space-y-1">
                         <div className="flex items-center gap-2 text-[12px] font-medium text-white/55">
                           <CheckCircle2 className="h-4 w-4 shrink-0 text-violet-200/70" aria-hidden />
-                          Up to {imgCount} AI images (Nanobanana)
+                          Up to 1200 AI images (Nanobanana)
                         </div>
                         <div className="flex items-center gap-2 text-[12px] font-medium text-white/55">
                           <CheckCircle2 className="h-4 w-4 shrink-0 text-violet-200/70" aria-hidden />
-                          Up to {vidCount} AI videos (Sora 2)
+                          Up to 120 AI videos (Sora 2)
                         </div>
                       </div>
 

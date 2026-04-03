@@ -8,6 +8,7 @@ import { STUDIO_MEDIA_BUCKET } from "@/lib/studioGenerationsMedia";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { mergeVideoWithAudioServer } from "@/lib/mergeVideoAudio";
+import { VOICE_CHANGE_CREDITS_FLAT } from "@/lib/pricing";
 
 const UGC_UPLOADS_BUCKET = "ugc-uploads";
 
@@ -131,7 +132,7 @@ export async function POST(req: Request) {
 
   const label = voiceName ? `Voice change (${voiceName})` : "Voice change";
   const usesPersonalApi = Boolean(personalElevenLabsApiKey);
-  const creditsCharged = usesPersonalApi ? 0 : 5;
+  const creditsCharged = usesPersonalApi ? 0 : VOICE_CHANGE_CREDITS_FLAT;
   const { data: inserted, error: insertError } = await supabase
     .from("studio_generations")
     .insert({

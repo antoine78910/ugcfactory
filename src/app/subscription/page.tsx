@@ -403,25 +403,10 @@ export default function SubscriptionPage() {
                         </span>
                         <span className="min-w-0">
                           <span className="font-semibold text-white">{plan.credits.toLocaleString()} credits</span>
-                          <span className="text-white/45"> · </span>
-                          <span className="text-white/75">
-                            {plan.usage.images} AI images <span className="text-white/45">(Nanobanana)</span>
-                          </span>
-                          <span className="text-white/45"> · </span>
-                          <span className="text-white/75">
-                            {plan.usage.videos} AI videos <span className="text-white/45">(Sora 2)</span>
-                          </span>
                         </span>
                       </li>
-                      <li className="pl-1 text-white/50">
-                        <span className="text-white/70">Link to Ad:</span> Included
-                      </li>
-                      <li className="pl-1 text-white/50">
-                        <span className="text-white/70">Up to AI images (Nanobanana):</span> {plan.usage.images}
-                      </li>
-                      <li className="pl-1 text-white/50">
-                        <span className="text-white/70">Up to AI videos (Sora 2):</span> {plan.usage.videos}
-                      </li>
+                      <li className="pl-1 text-white/50">Up to 1200 AI images (Nanobanana)</li>
+                      <li className="pl-1 text-white/50">Up to 120 AI videos (Sora 2)</li>
                       <li className="pt-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-white/45">
                         Included models
                       </li>
@@ -485,6 +470,22 @@ export default function SubscriptionPage() {
                       </span>
                     </div>
                     <h3 className="mt-2 text-2xl font-bold text-white">{planDisplayName}</h3>
+
+                    {isSubscribed ? (
+                      <div className="mt-3">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          className="w-full rounded-xl border border-white/15 bg-white/5 text-white hover:bg-white/10 sm:w-auto"
+                          onClick={() =>
+                            window.open(BILLING_PORTAL_URL, "_blank", "noopener,noreferrer")
+                          }
+                        >
+                          Manage billing
+                        </Button>
+                      </div>
+                    ) : null}
+
                     <p className="mt-2 max-w-md text-sm leading-relaxed text-white/48">
                       {isSubscribed
                         ? "Your monthly credits refresh with your plan. Use them across Link to Ad, Image, and Video in the studio."
@@ -496,16 +497,6 @@ export default function SubscriptionPage() {
                         <p className="text-center text-[11px] text-white/28">
                           Checkout is powered by Stripe. Subscription credits reset each billing cycle and do not carry over.
                         </p>
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          className="mx-auto w-full rounded-xl border border-white/15 bg-white/5 text-white hover:bg-white/10 sm:w-auto"
-                          onClick={() =>
-                            window.open(BILLING_PORTAL_URL, "_blank", "noopener,noreferrer")
-                          }
-                        >
-                          Manage billing
-                        </Button>
                       </div>
                     ) : null}
                   </div>
