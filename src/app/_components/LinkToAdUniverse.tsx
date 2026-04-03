@@ -3390,7 +3390,8 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     [videoModel, videoDuration],
   );
 
-  const step1Done = Boolean(summaryText.trim() && resolvedPreviewUrl);
+  /** Match product image resolution used for Nano prompts (preview or packshots), not only main preview URL. */
+  const step1Done = Boolean(summaryText.trim() && resolveNanoProductImageUrl());
   const step2Done = Boolean(scriptsText.trim() && selectedAngleIndex !== null);
   const step3Done = Boolean(nanoHasThreeImages && nanoBananaImageUrl);
   /** Step 4 = full video flow (prompt + render) until a final video exists. */
@@ -3581,13 +3582,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       </CardHeader>
 
       <CardContent className="space-y-6">
-        <LinkToAdUniverseStepper
-          currentStep={universeCurrentStep}
-          step1Done={step1Done}
-          step2Done={step2Done}
-          step3Done={step3Done}
-          step4Done={step4Done}
-        />
+        <LinkToAdUniverseStepper currentStep={universeCurrentStep} />
         {showTopUniverseLoading ? (
           <div className="-mt-2 mb-2 flex min-h-[4.25rem] items-center gap-3 rounded-xl border border-violet-500/15 bg-violet-500/[0.06] px-3 py-3 sm:gap-4 sm:px-4 shadow-[0_0_24px_rgba(139,92,246,0.12)]">
             {isWorking &&

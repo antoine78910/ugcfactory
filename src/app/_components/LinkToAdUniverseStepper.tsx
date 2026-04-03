@@ -8,22 +8,17 @@ import { cn } from "@/lib/utils";
 const STEP_LABELS = ["Store", "Scripts", "Images", "Video"] as const;
 
 export type LinkToAdUniverseStepperProps = {
-  /** 1–4 = current step, 5 = all done */
+  /**
+   * Single source of truth (see `universeCurrentStep` in Link to Ad).
+   * 1–4 = active step; 5 = all steps completed.
+   * Completed steps show a check; the active step shows its number; later steps are dimmed.
+   */
   currentStep: number;
-  step1Done: boolean;
-  step2Done: boolean;
-  step3Done: boolean;
-  step4Done: boolean;
 };
 
-export function LinkToAdUniverseStepper({
-  currentStep,
-  step1Done,
-  step2Done,
-  step3Done,
-  step4Done,
-}: LinkToAdUniverseStepperProps) {
-  const doneFlags = [step1Done, step2Done, step3Done, step4Done];
+export function LinkToAdUniverseStepper({ currentStep }: LinkToAdUniverseStepperProps) {
+  /** Avoid mixing per-step “content ready” flags with “which step we’re on” — that showed a check on the active step. */
+  const pos = Math.min(Math.max(currentStep, 1), 5);
 
   return (
     <div
@@ -33,9 +28,9 @@ export function LinkToAdUniverseStepper({
       <div className="flex w-full items-start justify-center">
         {STEP_LABELS.map((label, i) => {
           const n = i + 1;
-          const done = doneFlags[i];
-          const isCurrent = !done && currentStep === n;
-          const isUpcoming = !done && currentStep !== n;
+          const isCompleted = pos === 5 || pos > n;
+          const isCurrent = pos < 5 && pos === n;
+          const isUpcoming = pos < n;
 
           return (
             <Fragment key={n}>
@@ -44,7 +39,7 @@ export function LinkToAdUniverseStepper({
                   className={cn(
                     "mx-0.5 mt-[17px] h-0.5 min-w-[8px] flex-1 max-sm:mx-0 sm:mt-[18px] sm:min-w-[12px]",
                     "rounded-full transition-colors duration-500 ease-out",
-                    doneFlags[i - 1] ? "bg-emerald-500/55" : "bg-white/10",
+                    pos > i ? "bg-emerald-500/55" : "bg-white/10",
                   )}
                   aria-hidden
                 />
@@ -54,7 +49,7 @@ export function LinkToAdUniverseStepper({
                   layout
                   className={cn(
                     "relative flex h-9 w-9 items-center justify-center rounded-full border-2 text-xs font-bold transition-colors duration-300 sm:h-10 sm:w-10 sm:text-sm",
-                    done &&
+                    isCompleted &&
                       "border-emerald-400/90 bg-emerald-500/20 text-emerald-200 shadow-[0_0_16px_rgba(52,211,153,0.2)]",
                     isCurrent &&
                       "border-violet-400 bg-violet-500/25 text-violet-100 shadow-[0_0_22px_rgba(139,92,246,0.45)]",
@@ -62,7 +57,7 @@ export function LinkToAdUniverseStepper({
                   )}
                 >
                   <AnimatePresence mode="wait" initial={false}>
-                    {done ? (
+                    {isCompleted ? (
                       <motion.span
                         key="check"
                         initial={{ scale: 0.35, opacity: 0, rotate: -50 }}
@@ -97,7 +92,7 @@ export function LinkToAdUniverseStepper({
                 <span
                   className={cn(
                     "text-center text-[9px] font-semibold uppercase leading-tight tracking-wide sm:text-[10px]",
-                    done && "text-emerald-200/90",
+                    isCompleted && "text-emerald-200/90",
                     isCurrent && "text-violet-200",
                     isUpcoming && "text-white/35",
                   )}
