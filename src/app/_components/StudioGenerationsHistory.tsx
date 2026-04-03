@@ -107,8 +107,9 @@ export type StudioImageLightboxEditConfig = {
 
 /** Studio Images: Topaz image upscale (KIE) from history lightbox. */
 export type StudioImageLightboxUpscaleConfig = {
-  upscaleFactorOptions?: readonly ("1" | "2" | "4" | "8")[];
-  seedFactor?: "1" | "2" | "4" | "8";
+  /** Kie factors 2 / 4 / 8 → 2K / 4K / 8K (not video-style 1×/2×/4×). */
+  upscaleFactorOptions?: readonly ("2" | "4" | "8")[];
+  seedFactor?: "2" | "4" | "8";
   creditsFor: (factor: string) => number;
   onSubmitUpscale: (payload: { sourceUrl: string; upscaleFactor: string }) => void;
 };
@@ -159,7 +160,7 @@ export function StudioGenerationsHistory({
   const [editModel, setEditModel] = useState<string>("pro");
   const [editAspect, setEditAspect] = useState("3:4");
   const [editResolution, setEditResolution] = useState<"1K" | "2K" | "4K">("2K");
-  const [upscaleFactor, setUpscaleFactor] = useState<"1" | "2" | "4" | "8">("2");
+  const [upscaleFactor, setUpscaleFactor] = useState<"2" | "4" | "8">("2");
   const lightboxVideoRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
@@ -819,19 +820,19 @@ export function StudioGenerationsHistory({
                     </p>
                     <div className="space-y-3">
                       <div>
-                        <Label className="text-[10px] uppercase tracking-wide text-white/40">Upscale factor</Label>
+                        <Label className="text-[10px] uppercase tracking-wide text-white/40">Output tier</Label>
                         <Select
                           value={upscaleFactor}
-                          onValueChange={(v) => setUpscaleFactor(v as "1" | "2" | "4" | "8")}
+                          onValueChange={(v) => setUpscaleFactor(v as "2" | "4" | "8")}
                         >
                           <SelectTrigger className="mt-1.5 h-10 border-white/15 bg-black/40 text-white">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            {(imageLightboxUpscale.upscaleFactorOptions ?? (["1", "2", "4", "8"] as const)).map(
+                            {(imageLightboxUpscale.upscaleFactorOptions ?? (["2", "4", "8"] as const)).map(
                               (opt) => (
                                 <SelectItem key={opt} value={opt}>
-                                  {opt}×
+                                  {opt === "8" ? "8K" : opt === "4" ? "4K" : "2K"}
                                 </SelectItem>
                               ),
                             )}

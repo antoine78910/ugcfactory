@@ -25,7 +25,11 @@ import { StudioEmptyExamples, StudioOutputPane } from "@/app/_components/StudioE
 import { StudioGenerationsHistory } from "@/app/_components/StudioGenerationsHistory";
 import type { StudioHistoryItem, StudioImageLightboxEditModelOption } from "@/app/_components/StudioGenerationsHistory";
 import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
-import { studioImageCreditsPerOutput, topazImageUpscaleCredits } from "@/lib/pricing";
+import {
+  studioImageCreditsPerOutput,
+  topazImageUpscaleCredits,
+  topazImageUpscaleKieFactorToTierLabel,
+} from "@/lib/pricing";
 import { NANO_BANANA_2_ASPECT_RATIOS } from "@/lib/nanobanana";
 import { dedupeStudioImageHistoryByMediaUrl } from "@/lib/studioHistoryDedupe";
 import { readStudioHistoryLocal, writeStudioHistoryLocal } from "@/lib/studioHistoryLocalStorage";
@@ -278,8 +282,8 @@ export default function StudioImagePanel() {
       const url = opts.sourceUrl.trim();
       const f = opts.upscaleFactor.trim();
       if (!url) return;
-      if (!["1", "2", "4", "8"].includes(f)) {
-        toast.error("Invalid upscale factor.");
+      if (!["2", "4", "8"].includes(f)) {
+        toast.error("Invalid upscale tier.");
         return;
       }
       if (serverHistory !== true) {
@@ -300,7 +304,7 @@ export default function StudioImagePanel() {
         creditsRef.current = Math.max(0, creditsRef.current - charge);
       }
 
-      const label = `Topaz ${f}× image`;
+      const label = `Topaz Image ${topazImageUpscaleKieFactorToTierLabel(f)}`;
 
       void (async () => {
         const pKey = getPersonalApiKey() ?? undefined;

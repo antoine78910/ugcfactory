@@ -8,7 +8,7 @@ import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/ge
 
 type Body = {
   imageUrl: string;
-  /** Kie: "1" | "2" | "4" | "8" */
+  /** Kie Topaz image-upscale: "2" | "4" | "8" → 2K / 4K / 8K tiers */
   upscaleFactor?: string;
   personalApiKey?: string;
 };
@@ -27,8 +27,11 @@ export async function POST(req: Request) {
   }
 
   const f = (body.upscaleFactor ?? "2").trim();
-  if (!["1", "2", "4", "8"].includes(f)) {
-    return NextResponse.json({ error: "`upscaleFactor` must be 1, 2, 4, or 8." }, { status: 400 });
+  if (!["2", "4", "8"].includes(f)) {
+    return NextResponse.json(
+      { error: "`upscaleFactor` must be 2, 4, or 8 (Topaz image 2K / 4K / 8K tier)." },
+      { status: 400 },
+    );
   }
 
   const callBackUrl =

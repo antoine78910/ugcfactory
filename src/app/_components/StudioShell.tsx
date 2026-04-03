@@ -163,8 +163,8 @@ function StudioShellInner({
           className={cn(
             /* z-20 + overflow-visible so account dropdown (collapsed) can extend over the main column */
             "sticky top-0 z-20 flex h-screen flex-col overflow-visible border-r border-white/10 bg-[#06070d] py-4",
-            /* No text I-beam: feels natural to scroll the nav with the wheel over labels */
-            "select-none [&_*]:cursor-default [&_a]:cursor-pointer [&_button]:cursor-pointer",
+            /* Double-click: avoid selecting nav labels; cursors stay native (pointer on links/buttons, text in inputs) */
+            "select-none",
             navCollapsed ? "px-1.5" : "px-3",
           )}
         >

@@ -52,7 +52,7 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen bg-[#050507] text-white selection:bg-violet-500/30">
       {/* ── Hero: shared texture under sticky nav + headline (overflow-x only so sticky works) ── */}
-      <section className="relative min-h-[min(92svh,880px)] overflow-x-hidden">
+      <section className="relative min-h-[min(100svh,980px)] overflow-x-hidden">
         <Image
           src="/hero-bg-texture.png"
           alt=""
@@ -107,7 +107,7 @@ export default function LandingPage() {
           </div>
         </header>
 
-        <div className="relative z-10 mx-auto w-full max-w-5xl px-5 pt-2 pb-10 text-center sm:pt-3 sm:pb-12 md:pt-4 md:pb-14">
+        <div className="relative z-10 mx-auto w-full max-w-5xl px-5 pt-4 pb-12 text-center sm:pt-6 sm:pb-14 md:pt-7 md:pb-16">
           <LandingSeedanceTopButton />
           <h1 className="mx-auto max-w-4xl px-3 sm:px-6 text-4xl font-extrabold tracking-tight leading-[1.12] sm:text-5xl md:text-6xl">
             <span className="block">

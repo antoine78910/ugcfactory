@@ -225,7 +225,12 @@ function getDurationChoices(modelId: VideoModelId): string[] {
 }
 
 function modelHasQuality(id: VideoModelId): boolean {
-  return id === "kling-3.0/video" || id === "kling-2.6/video" || id === "openai/sora-2-pro";
+  return (
+    id === "kling-3.0/video" ||
+    id === "kling-2.6/video" ||
+    id === "openai/sora-2" ||
+    id === "openai/sora-2-pro"
+  );
 }
 
 function modelHasAudio(id: VideoModelId): boolean {
@@ -1368,7 +1373,10 @@ export default function StudioVideoPanel({
               prompt: snap.prompt,
               imageUrl: snap.startUrl ?? undefined,
               duration: Number(snap.duration),
-              mode: snap.modelId === "openai/sora-2-pro" ? snap.klingMode : undefined,
+              mode:
+                snap.modelId === "openai/sora-2-pro" || snap.modelId === "openai/sora-2"
+                  ? snap.klingMode
+                  : undefined,
               personalApiKey: pKey,
             }),
           });
@@ -2027,21 +2035,47 @@ export default function StudioVideoPanel({
                     <div>
                       <Label className="text-xs text-white/45">Quality</Label>
                       <p className="mt-0.5 text-[10px] leading-snug text-white/35">
-                        {modelId === "kling-2.6/video"
-                          ? "720p (Std) or 1080p (Pro). Pro works best with audio on."
-                          : "720p (Std) or 1080p (Pro) for Kling 3.0."}
+                        {modelId === "openai/sora-2"
+                          ? "Standard or Stable (stable uses the higher Fal tier — credits update accordingly)."
+                          : modelId === "openai/sora-2-pro"
+                            ? "Standard or High (Pro). Credits match the Sora 2 Pro sheet."
+                            : modelId === "kling-2.6/video"
+                              ? "720p (Std) or 1080p (Pro). Pro works best with audio on."
+                              : "720p (Std) or 1080p (Pro) for Kling 3.0."}
                       </p>
                       <Select value={klingMode} onValueChange={(v) => setKlingMode(v as "std" | "pro")}>
                         <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent position="popper" className={studioSelectContentClass}>
-                          <SelectItem value="std" className={studioSelectItemClass}>
-                            720p
-                          </SelectItem>
-                          <SelectItem value="pro" className={studioSelectItemClass}>
-                            1080p
-                          </SelectItem>
+                          {modelId === "openai/sora-2" ? (
+                            <>
+                              <SelectItem value="std" className={studioSelectItemClass}>
+                                Standard
+                              </SelectItem>
+                              <SelectItem value="pro" className={studioSelectItemClass}>
+                                Stable
+                              </SelectItem>
+                            </>
+                          ) : modelId === "openai/sora-2-pro" ? (
+                            <>
+                              <SelectItem value="std" className={studioSelectItemClass}>
+                                Standard
+                              </SelectItem>
+                              <SelectItem value="pro" className={studioSelectItemClass}>
+                                High
+                              </SelectItem>
+                            </>
+                          ) : (
+                            <>
+                              <SelectItem value="std" className={studioSelectItemClass}>
+                                720p
+                              </SelectItem>
+                              <SelectItem value="pro" className={studioSelectItemClass}>
+                                1080p
+                              </SelectItem>
+                            </>
+                          )}
                         </SelectContent>
                       </Select>
                     </div>

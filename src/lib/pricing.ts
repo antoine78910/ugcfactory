@@ -33,9 +33,6 @@ export const PRICING_BASE = {
 /** Effective $/credit reference from Starter subscription (requested baseline). */
 export const STARTER_CREDIT_VALUE_USD = 29.99 / 250;
 
-/** Credits charged per second of Kling 3.0–style video (dynamic rule). */
-export const KLING_3_VIDEO_CREDITS_PER_SECOND = 2.25;
-
 // ---------------------------------------------------------------------------
 // Link to Ad — video model pricing (fixed reference: 15s)
 // ---------------------------------------------------------------------------
@@ -316,12 +313,24 @@ export function topazVideoUpscaleCredits(durationSeconds: number, upscaleFactor:
   return Math.max(1, Math.ceil(d * TOPAZ_VIDEO_UPSCALER.credits_per_second));
 }
 
-/** Topaz image upscale (Kie): factor 1 / 2 → 2K tier, 4 → 4K, 8 → 8K credits. */
+/**
+ * Topaz Image Upscale (Kie `topaz/image-upscale`): `upscale_factor` is **2 | 4 | 8**
+ * matching **2K / 4K / 8K** output tiers (not 1×/2×/4× like video).
+ * Product credits: 2 / 3 / 5 per image (see `TOPAZ_IMAGE_UPSCALER.tiers`).
+ */
 export function topazImageUpscaleCredits(factor: string): number {
   const f = factor.trim();
   if (f === "8") return TOPAZ_IMAGE_UPSCALER.tiers["8K"].credits_per_image;
   if (f === "4") return TOPAZ_IMAGE_UPSCALER.tiers["4K"].credits_per_image;
   return TOPAZ_IMAGE_UPSCALER.tiers["2K"].credits_per_image;
+}
+
+/** Kie image upscale_factor string → tier label for UI / history labels. */
+export function topazImageUpscaleKieFactorToTierLabel(factor: string): "2K" | "4K" | "8K" {
+  const f = factor.trim();
+  if (f === "8") return "8K";
+  if (f === "4") return "4K";
+  return "2K";
 }
 
 /** Wholesale discount vs Fal list: (cost_usd − fal_list) / fal_list. */
@@ -644,24 +653,54 @@ export function studioImageCreditsPerOutput(opts: {
 // ---------------------------------------------------------------------------
 
 /**
- * Kling 3.0 / 2.6 — quality + audio multipliers (ratios vs 1080p + audio anchor).
- * Anchor: 2.25 credits/s at 1080p + audio (e.g. 12s → 27 credits).
+ * Kling 3.0 / 2.6 — 720p (`std`) vs 1080p (`pro`).
  */
 export function is1080pVideoQuality(quality: string | undefined): boolean {
   return quality === "pro" || quality === "1080p";
 }
 
-/** Multiplier on (duration × KLING_3_VIDEO_CREDITS_PER_SECOND). */
-export function kling30CreditsMultiplier(quality: string | undefined, audio: boolean): number {
+/**
+ * Kling 3.0 — provider Our price ($/s) × 2 → retail $/s → credits/s at $0.07/credit (same as Sora sheet).
+ * Sheet: 1080p+audio $0.135/s → 4 cr/s · 1080p $0.09/s → 3 · 720p+audio $0.10/s → 3 · 720p $0.07/s → 2
+ */
+export function kling30CreditsPerSecondFromSheet(quality: string | undefined, audio: boolean): number {
   const is1080 = is1080pVideoQuality(quality);
-  if (is1080 && audio) return 1;
-  if (is1080 && !audio) return 18 / 27;
-  if (!is1080 && audio) return 20 / 27;
-  return 14 / 27;
+  const ourPerSec = is1080
+    ? audio
+      ? 0.135
+      : 0.09
+    : audio
+      ? 0.1
+      : 0.07;
+  const retailPerSec = ourPerSec * 2;
+  return Math.max(1, Math.round(retailPerSec / 0.07));
 }
 
 /**
- * Kling 3.0–style video credits (studio + API).
+ * Kling 2.6 — Fal "Our price" **per video** (5s / 10s × audio). Text vs image same $ on sheet.
+ * Retail = ×2 → credits = round(retail / 0.07). Quality (720p/1080p) not priced separately on sheet — ignored for billing.
+ */
+export function calculateKling26VideoCredits(
+  durationSec: number,
+  _quality: string | undefined,
+  audio: boolean,
+): number {
+  const d = Math.max(0, Number(durationSec) || 0);
+  const use10s = d > 5;
+  const withAudio = Boolean(audio);
+  const ourUsd = use10s
+    ? withAudio
+      ? 1.1
+      : 0.55
+    : withAudio
+      ? 0.55
+      : 0.275;
+  const retailUsd = ourUsd * 2;
+  return Math.max(1, Math.round(retailUsd / 0.07));
+}
+
+/**
+ * Kling 3.0 video credits (studio + API): duration × credits/s from Fal sheet.
  */
 export function calculateKling30VideoCredits(
   durationSec: number,
@@ -669,19 +708,18 @@ export function calculateKling30VideoCredits(
   audio: boolean,
 ): number {
   const d = Math.max(0, Number(durationSec) || 0);
-  const mult = kling30CreditsMultiplier(quality, audio);
-  return Math.max(1, Math.ceil(d * KLING_3_VIDEO_CREDITS_PER_SECOND * mult));
+  const perSec = kling30CreditsPerSecondFromSheet(quality, audio);
+  return Math.max(1, Math.ceil(d * perSec));
 }
 
 /**
- * Shorthand: anchor tier only (1080p + audio). For legacy call sites.
- * Example: 12s → 27 credits.
+ * Shorthand: Kling 3.0, 1080p + audio. Example: 12s → 48 credits (4 cr/s sheet).
  */
 export function calculateVideoCreditsFromDuration(durationSec: number): number {
   return calculateKling30VideoCredits(durationSec, "pro", true);
 }
 
-/** Reference row from spec: 12s + audio @ 1080p. */
+/** Reference row: Kling 3.0, 12s + audio @ 1080p (sheet $0.135/s → 4 cr/s). */
 export const KLING_3_0_12S_AUDIO_REFERENCE = {
   model: "kling_3_0_12s_audio",
   duration_sec: 12,
@@ -695,15 +733,6 @@ export const KLING_3_0_12S_AUDIO_REFERENCE = {
 // ---------------------------------------------------------------------------
 // Video — Sora (optional fixed tiers)
 // ---------------------------------------------------------------------------
-
-export const SORA_10S = {
-  model: "sora_10s",
-  cost_usd: 0.175,
-  cost_with_buffer: 0.236,
-  target_margin: PRICING_BASE.target_margins.video,
-  price_usd: 0.59,
-  credits: 4,
-} as const;
 
 type VideoTierPricing = {
   model: string;
@@ -720,21 +749,32 @@ type VideoTierPricing = {
   discount_pct_vs_fal: number | null;
 };
 
-function makeVideoTierFromOurAndFal(opts: {
+/**
+ * Sora 2 Pro billing: retail USD = provider “Our price” × 2 (min 2×), then
+ * credits = round(retail / {@link SORA_2_PRO_BILLING_CREDIT_USD}).
+ * Example: $1.65 → $3.30 → 3.30/0.07 ≈ 47 credits.
+ *
+ * Sheet rows (provider Our price) — i2v/t2v/storyboard share the same $ for a given quality+duration:
+ * High 10s $1.65 → 47 · High 15s $3.15 → 90 · Std 10s $0.75 → 21 · Std 15s $1.35 → 39
+ */
+export const SORA_2_PRO_BILLING_CREDIT_USD = 0.07;
+const SORA_2_PRO_RETAIL_MULTIPLIER = 2;
+
+function makeSora2ProTier(opts: {
   model: string;
-  /** Our revenue price (USD) from your sheet. */
+  /** Provider “Our price” (USD) per gen from Fal sheet. */
   our_price_usd: number;
-  /** Fal list price (USD) from your sheet (or null for N/A). */
   fal_list_price_usd: number | null;
 }): VideoTierPricing {
   const target_margin = PRICING_BASE.target_margins.video;
-  const price_usd = opts.our_price_usd;
+  const retail_usd = opts.our_price_usd * SORA_2_PRO_RETAIL_MULTIPLIER;
+  const credits = Math.max(1, Math.round(retail_usd / SORA_2_PRO_BILLING_CREDIT_USD));
+  const price_usd = retail_usd;
   const cost_with_buffer = price_usd * (1 - target_margin);
   const cost_usd = cost_with_buffer / PRICING_BASE.cost_buffer;
-  const credits = Math.max(1, Math.ceil(price_usd / PRICING_BASE.credit_value_usd));
   const discount_pct_vs_fal =
     opts.fal_list_price_usd != null && opts.fal_list_price_usd > 0
-      ? ((price_usd - opts.fal_list_price_usd) / opts.fal_list_price_usd) * 100
+      ? ((opts.our_price_usd - opts.fal_list_price_usd) / opts.fal_list_price_usd) * 100
       : null;
   return {
     model: opts.model,
@@ -749,36 +789,93 @@ function makeVideoTierFromOurAndFal(opts: {
 }
 
 /**
- * OpenAI Sora 2 Pro tiers (from your sheet).
+ * OpenAI Sora 2 Pro tiers (Fal provider “Our price” → 2× retail → credits @ $0.07/credit).
  * Mapping: `klingMode` -> Standard vs High.
  */
-export const SORA_2_PRO_HIGH_10S = makeVideoTierFromOurAndFal({
+export const SORA_2_PRO_HIGH_10S = makeSora2ProTier({
   model: "sora_2_pro_high_10s",
   our_price_usd: 1.65,
   fal_list_price_usd: 5.0,
 });
-export const SORA_2_PRO_HIGH_15S = makeVideoTierFromOurAndFal({
+export const SORA_2_PRO_HIGH_15S = makeSora2ProTier({
   model: "sora_2_pro_high_15s",
   our_price_usd: 3.15,
   fal_list_price_usd: 7.5,
 });
-export const SORA_2_PRO_STANDARD_10S = makeVideoTierFromOurAndFal({
+export const SORA_2_PRO_STANDARD_10S = makeSora2ProTier({
   model: "sora_2_pro_standard_10s",
   our_price_usd: 0.75,
   fal_list_price_usd: 3.0,
 });
-export const SORA_2_PRO_STANDARD_15S = makeVideoTierFromOurAndFal({
+export const SORA_2_PRO_STANDARD_15S = makeSora2ProTier({
   model: "sora_2_pro_standard_15s",
   our_price_usd: 1.35,
   fal_list_price_usd: 4.5,
 });
 
-/** Sora: 10s tier = 4 credits; 15s not in spec — proportional bump. */
-export function calculateSoraCredits(durationSec: number): number {
+/**
+ * OpenAI Sora 2 (non-Pro): Fal “stable” vs “Standard”, same retail formula as Sora 2 Pro.
+ * UI: `klingMode` std = Standard, pro = stable (stable is higher $).
+ */
+export const SORA_2_STABLE_10S = makeSora2ProTier({
+  model: "sora_2_stable_10s",
+  our_price_usd: 0.175,
+  fal_list_price_usd: 1.0,
+});
+export const SORA_2_STABLE_15S = makeSora2ProTier({
+  model: "sora_2_stable_15s",
+  our_price_usd: 0.2,
+  fal_list_price_usd: 1.0,
+});
+export const SORA_2_STANDARD_10S = makeSora2ProTier({
+  model: "sora_2_standard_10s",
+  our_price_usd: 0.15,
+  fal_list_price_usd: 1.0,
+});
+export const SORA_2_STANDARD_15S = makeSora2ProTier({
+  model: "sora_2_standard_15s",
+  our_price_usd: 0.175,
+  fal_list_price_usd: 1.5,
+});
+
+/** @deprecated Use `SORA_2_STANDARD_10S` — kept for `/api/pricing` reference row name */
+export const SORA_10S = SORA_2_STANDARD_10S;
+
+/**
+ * Sora 2 (non-Pro): std → Standard tier, pro → stable tier (see Fal sheet).
+ */
+export function calculateSora2BaseCredits(durationSec: number, quality: string | undefined): number {
   const d = Number(durationSec) || 0;
-  if (d <= 10) return SORA_10S.credits;
-  return 6;
+  const isStable = quality === "pro" || quality === "1080p" || quality === "high";
+  if (d <= 10) return isStable ? SORA_2_STABLE_10S.credits : SORA_2_STANDARD_10S.credits;
+  return isStable ? SORA_2_STABLE_15S.credits : SORA_2_STANDARD_15S.credits;
 }
+
+/** @deprecated Use {@link calculateSora2BaseCredits} with quality — defaults to Standard. */
+export function calculateSoraCredits(durationSec: number): number {
+  return calculateSora2BaseCredits(durationSec, "std");
+}
+
+// ---------------------------------------------------------------------------
+// Video — Veo 3.1 (fixed per-video tiers)
+// ---------------------------------------------------------------------------
+
+/**
+ * Google Veo 3.1 pricing (Fal sheet):
+ * - Fast: $0.30 / video
+ * - Quality: $1.25 / video
+ * We bill: retail = our_price × 2, credits = round(retail / $0.07).
+ */
+export const VEO_3_1_FAST = makeSora2ProTier({
+  model: "veo_3_1_fast",
+  our_price_usd: 0.3,
+  fal_list_price_usd: 1.2,
+});
+export const VEO_3_1_QUALITY = makeSora2ProTier({
+  model: "veo_3_1_quality",
+  our_price_usd: 1.25,
+  fal_list_price_usd: 3.2,
+});
 
 /** Sora 2 Pro: quality controlled by kling `mode` (std => Standard, pro => High). */
 export function calculateSora2ProCredits(durationSec: number, quality: string | undefined): number {
@@ -872,14 +969,19 @@ export function calculateVideoCreditsForModel(opts: VideoCreditOptions): number 
   const quality = opts.quality;
 
   switch (opts.modelId) {
+    case "veo3":
+      return VEO_3_1_QUALITY.credits;
+    case "veo3_fast":
+      return VEO_3_1_FAST.credits;
     case "openai/sora-2":
-      return calculateSoraCredits(d);
+      return calculateSora2BaseCredits(d, quality);
     case "openai/sora-2-pro":
       return calculateSora2ProCredits(d, quality);
 
     case "kling-3.0/video":
-    case "kling-2.6/video":
       return calculateKling30VideoCredits(d, quality, audio);
+    case "kling-2.6/video":
+      return calculateKling26VideoCredits(d, quality, audio);
 
     default:
       // Seedance, Veo, etc.: anchor tier until per-model tables exist

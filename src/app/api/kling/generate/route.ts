@@ -157,8 +157,8 @@ export async function POST(req: Request) {
         prompt,
         duration: String(body.duration ?? 10),
       };
-      if (model === "openai/sora-2-pro" && body.mode) {
-        // Forward mode so provider can differentiate Standard vs High.
+      if ((model === "openai/sora-2-pro" || model === "openai/sora-2") && body.mode) {
+        // Sora 2 Pro: Standard vs High. Sora 2: Standard vs stable.
         input.mode = body.mode;
       }
       if (imageUrl) {

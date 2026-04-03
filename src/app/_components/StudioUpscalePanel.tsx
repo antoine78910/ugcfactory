@@ -8,7 +8,7 @@ import {
   isPlatformCreditBypassActive,
 } from "@/app/_components/CreditsPlanContext";
 import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
-import { Sparkles, Upload, Video, Wand2 } from "lucide-react";
+import { Play, Plus, Sparkles, Wand2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -18,7 +18,11 @@ import { StudioGenerationsHistory } from "@/app/_components/StudioGenerationsHis
 import type { StudioHistoryItem } from "@/app/_components/StudioGenerationsHistory";
 import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
 import { StudioModelPicker, type StudioModelPickerItem } from "@/app/_components/StudioModelPicker";
-import { topazImageUpscaleCredits, topazVideoUpscaleCredits } from "@/lib/pricing";
+import {
+  topazImageUpscaleCredits,
+  topazImageUpscaleKieFactorToTierLabel,
+  topazVideoUpscaleCredits,
+} from "@/lib/pricing";
 import { registerStudioGenerationClient } from "@/lib/registerStudioGenerationClient";
 import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
 import { userMessageFromCaughtError } from "@/lib/generationUserMessage";
@@ -51,6 +55,14 @@ function applyRefundHints(
 
 type UpscalePickerId = "upscale/video" | "upscale/image";
 
+type VideoAspectPreset = "9:16" | "16:9" | "1:1";
+
+function videoAspectBoxClass(preset: VideoAspectPreset): string {
+  if (preset === "16:9") return "aspect-video";
+  if (preset === "1:1") return "aspect-square";
+  return "aspect-[9/16]";
+}
+
 const UPSCALE_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
   {
     id: "upscale/video",
@@ -76,12 +88,16 @@ export default function StudioUpscalePanel() {
   creditsRef.current = creditsBalance;
 
   const [videoUrl, setVideoUrl] = useState("");
-  const [videoSourceLabel, setVideoSourceLabel] = useState("");
   const videoFileInputRef = useRef<HTMLInputElement>(null);
   const [imageUrl, setImageUrl] = useState("");
   // Video duration is only known after metadata is loaded; keep it null until then.
   const [durationSec, setDurationSec] = useState<number | null>(null);
-  const [factor, setFactor] = useState<"1" | "2" | "4">("2");
+  /** Video Topaz: 1× / 2× / 4× (Kie `topaz/video-upscale`). */
+  const [videoUpscaleFactor, setVideoUpscaleFactor] = useState<"1" | "2" | "4">("2");
+  /** Image Topaz: Kie factors 2 / 4 / 8 → 2K / 4K / 8K tiers (`topaz/image-upscale`). */
+  const [imageUpscaleTier, setImageUpscaleTier] = useState<"2" | "4" | "8">("2");
+  /** Preview / dropzone framing only (short-form default); does not change Topaz output. */
+  const [videoAspectPreset, setVideoAspectPreset] = useState<VideoAspectPreset>("9:16");
   const [upscalePickerId, setUpscalePickerId] = useState<UpscalePickerId>("upscale/video");
   const [busy, setBusy] = useState(false);
   const [videoPreviewBlob, setVideoPreviewBlob] = useState<string | null>(null);
@@ -95,10 +111,10 @@ export default function StudioUpscalePanel() {
   grantCreditsRef.current = grantCredits;
 
   const credits = useMemo(() => {
-    if (upscalePickerId === "upscale/image") return topazImageUpscaleCredits(factor);
+    if (upscalePickerId === "upscale/image") return topazImageUpscaleCredits(imageUpscaleTier);
     if (durationSec == null) return 0;
-    return topazVideoUpscaleCredits(durationSec, factor);
-  }, [upscalePickerId, durationSec, factor]);
+    return topazVideoUpscaleCredits(durationSec, videoUpscaleFactor);
+  }, [upscalePickerId, durationSec, imageUpscaleTier, videoUpscaleFactor]);
 
   const probeDuration = useCallback((url: string) => {
     if (!url) return;
@@ -202,7 +218,6 @@ export default function StudioUpscalePanel() {
       });
       return;
     }
-    setVideoSourceLabel(f.name);
     const blobUrl = URL.createObjectURL(f);
     setVideoPreviewBlob(blobUrl);
     setImagePreviewBlob(null);
@@ -224,33 +239,28 @@ export default function StudioUpscalePanel() {
       });
   }, []);
 
-  const onPickImage = () => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = STUDIO_IMAGE_FILE_ACCEPT;
-    input.onchange = async () => {
-      const f = input.files?.[0];
-      if (!f) return;
-      const blobUrl = URL.createObjectURL(f);
-      setImagePreviewBlob(blobUrl);
-      setVideoPreviewBlob(null);
-      setVideoUrl("");
-      setBusy(true);
-      try {
-        const url = await uploadFile(f, "image");
+  const onImageFileSelected = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.currentTarget.value = "";
+    if (!f) return;
+    const blobUrl = URL.createObjectURL(f);
+    setImagePreviewBlob(blobUrl);
+    setVideoPreviewBlob(null);
+    setVideoUrl("");
+    setBusy(true);
+    void uploadFile(f, "image")
+      .then((url) => {
         setImageUrl(url);
         toast.success("Image importee");
         setImagePreviewBlob(null);
-      } catch (e) {
+      })
+      .catch((err) => {
         toast.error("Échec de l’import", {
-          description: userMessageFromCaughtError(e, "Utilise JPEG, PNG, WebP ou GIF."),
+          description: userMessageFromCaughtError(err, "Utilise JPEG, PNG, WebP ou GIF."),
         });
-      } finally {
-        setBusy(false);
-      }
-    };
-    input.click();
-  };
+      })
+      .finally(() => setBusy(false));
+  }, []);
 
   const generate = () => {
     if (serverHistory === null) {
@@ -283,7 +293,9 @@ export default function StudioUpscalePanel() {
       return;
     }
 
-    const label = isImage ? `Topaz Image ${factor}×` : `Topaz ${factor}×`;
+    const label = isImage
+      ? `Topaz Image ${topazImageUpscaleKieFactorToTierLabel(imageUpscaleTier)}`
+      : `Topaz ${videoUpscaleFactor}×`;
 
     if (!creditBypass) {
       spendCredits(credits);
@@ -300,8 +312,8 @@ export default function StudioUpscalePanel() {
         const upPKey = getPersonalApiKey();
         const endpoint = isImage ? "/api/kie/upscale/image" : "/api/kie/upscale/video";
         const body = isImage
-          ? { imageUrl: inputUrl, upscaleFactor: factor, personalApiKey: upPKey }
-          : { videoUrl: inputUrl, upscaleFactor: factor, personalApiKey: upPKey };
+          ? { imageUrl: inputUrl, upscaleFactor: imageUpscaleTier, personalApiKey: upPKey }
+          : { videoUrl: inputUrl, upscaleFactor: videoUpscaleFactor, personalApiKey: upPKey };
 
         const res = await fetch(endpoint, {
           method: "POST",
@@ -354,6 +366,7 @@ export default function StudioUpscalePanel() {
             onClick={() => {
               setUpscalePickerId("upscale/video");
               setDurationSec(null);
+              setVideoAspectPreset("9:16");
               setImagePreviewBlob(null);
               setImageUrl("");
             }}
@@ -369,7 +382,6 @@ export default function StudioUpscalePanel() {
               setUpscalePickerId("upscale/image");
               setVideoPreviewBlob(null);
               setVideoUrl("");
-              setVideoSourceLabel("");
             }}
           >
             Image
@@ -401,21 +413,88 @@ export default function StudioUpscalePanel() {
               {upscalePickerId === "upscale/image" ? "Source image" : "Source video"}
             </Label>
             {upscalePickerId === "upscale/image" ? (
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
+              <div className="space-y-2">
+                <input
+                  type="file"
+                  accept={STUDIO_IMAGE_FILE_ACCEPT}
+                  className="sr-only"
                   disabled={busy}
-                  className="rounded-xl border border-white/10 bg-white/5"
-                  onClick={() => onPickImage()}
-                >
-                  <Upload className="mr-2 h-4 w-4" />
-                  Upload
-                </Button>
+                  onChange={onImageFileSelected}
+                  ref={(el) => {
+                    // keep a stable ref-like handle without adding another useRef
+                    (window as unknown as { __upscaleImageInput?: HTMLInputElement | null }).__upscaleImageInput = el;
+                  }}
+                />
+                <div className="relative w-full max-w-md">
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(ev) => {
+                      if (ev.key === "Enter" || ev.key === " ") {
+                        ev.preventDefault();
+                        if (busy) return;
+                        (window as unknown as { __upscaleImageInput?: HTMLInputElement | null }).__upscaleImageInput?.click();
+                      }
+                    }}
+                    onClick={() => {
+                      if (busy) return;
+                      (window as unknown as { __upscaleImageInput?: HTMLInputElement | null }).__upscaleImageInput?.click();
+                    }}
+                    className={`relative flex aspect-[3/4] w-full max-h-[min(52vh,420px)] cursor-pointer flex-col items-center justify-center gap-1.5 overflow-hidden rounded-xl border border-dashed border-white/20 bg-[#0c0c10] text-white/50 transition hover:border-violet-400/40 hover:bg-white/[0.03] ${busy ? "pointer-events-none opacity-60" : ""}`}
+                  >
+                    {previewSrc ? (
+                      <>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={previewSrc}
+                          alt="Source for upscale"
+                          className="absolute inset-0 z-[1] h-full w-full bg-black object-cover"
+                        />
+                        <UploadBusyOverlay active={busy} className="rounded-xl" />
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="h-8 w-8 opacity-50" aria-hidden />
+                        <span className="text-xs font-medium text-white/45">Add an image to upscale</span>
+                        <span className="text-[10px] text-white/30">JPEG, PNG, WebP, or GIF</span>
+                      </>
+                    )}
+                  </div>
+                  {previewSrc && imageUrl.trim() && !imagePreviewBlob ? (
+                    <button
+                      type="button"
+                      aria-label="Remove image"
+                      className="absolute right-1.5 top-1.5 z-[5] flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-black/70 text-white/90 shadow-md backdrop-blur-sm transition hover:bg-red-500/90 hover:text-white"
+                      onClick={(ev) => {
+                        ev.preventDefault();
+                        ev.stopPropagation();
+                        setImageUrl("");
+                        setImagePreviewBlob(null);
+                      }}
+                    >
+                      <X className="h-4 w-4" aria-hidden />
+                    </button>
+                  ) : null}
+                </div>
               </div>
             ) : (
-              <div className="space-y-1.5">
+              <div className="space-y-2">
+                <div>
+                  <Label className="text-xs text-white/45">Format</Label>
+                  <Select
+                    value={videoAspectPreset}
+                    onValueChange={(v) => setVideoAspectPreset(v as VideoAspectPreset)}
+                  >
+                    <SelectTrigger className="mt-1.5 h-10 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="border-white/10 bg-[#0c0c10] text-white">
+                      <SelectItem value="9:16">9:16 (short)</SelectItem>
+                      <SelectItem value="16:9">16:9</SelectItem>
+                      <SelectItem value="1:1">1:1</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 <input
                   ref={videoFileInputRef}
                   type="file"
@@ -424,87 +503,123 @@ export default function StudioUpscalePanel() {
                   disabled={busy}
                   onChange={onVideoFileSelected}
                 />
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => videoFileInputRef.current?.click()}
-                  className="group flex h-11 w-full items-center gap-2 rounded-xl border border-white/15 bg-[#0a0a0d] px-3 text-left shadow-sm transition hover:border-violet-400/35 hover:bg-white/[0.03] disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <Video className="h-4 w-4 shrink-0 text-violet-400/90" aria-hidden />
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-white/80">
-                    {videoSourceLabel || "Choisir une vidéo…"}
-                  </span>
-                  <span className="shrink-0 rounded-lg border border-white/12 bg-white/[0.05] px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white/55 transition group-hover:border-violet-400/30 group-hover:text-white/80">
-                    Parcourir
-                  </span>
-                </button>
-                <p className="text-[10px] leading-snug text-white/35">
-                  MP4, MOV ou WebM — clic sur la ligne pour importer (comme Translate).
-                </p>
+                <div className="relative w-full max-w-md">
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(ev) => {
+                      if (ev.key === "Enter" || ev.key === " ") {
+                        ev.preventDefault();
+                        if (!busy) videoFileInputRef.current?.click();
+                      }
+                    }}
+                    onClick={() => {
+                      if (!busy) videoFileInputRef.current?.click();
+                    }}
+                    className={`relative flex ${videoAspectBoxClass(videoAspectPreset)} w-full max-h-[min(52vh,420px)] cursor-pointer flex-col items-center justify-center gap-1.5 overflow-hidden rounded-xl border border-dashed border-white/20 bg-[#0c0c10] text-white/50 transition hover:border-violet-400/40 hover:bg-white/[0.03] ${busy ? "pointer-events-none opacity-60" : ""}`}
+                  >
+                    {previewSrc ? (
+                      <>
+                        {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                        <video
+                          key={previewSrc}
+                          src={previewSrc}
+                          className="absolute inset-0 z-[1] h-full w-full bg-black object-contain"
+                          controls
+                          playsInline
+                          preload="metadata"
+                          onLoadedData={(ev) => {
+                            const v = ev.currentTarget;
+                            if (!v.src.startsWith("blob:")) return;
+                            try {
+                              if (v.readyState < 2) return;
+                              const d = v.duration;
+                              const t =
+                                Number.isFinite(d) && d > 0
+                                  ? Math.min(0.12, Math.max(0.02, d * 0.02))
+                                  : 0.05;
+                              v.currentTime = t;
+                            } catch {
+                              /* ignore seek errors */
+                            }
+                          }}
+                        />
+                        <UploadBusyOverlay active={busy} className="rounded-xl" />
+                      </>
+                    ) : (
+                      <>
+                        <Play className="h-8 w-8 opacity-50" aria-hidden />
+                        <span className="text-xs font-medium text-white/45">Add a video to upscale</span>
+                        <span className="text-[10px] text-white/30">MP4, MOV, or WebM</span>
+                      </>
+                    )}
+                  </div>
+                  {previewSrc && videoUrl.trim() && !videoPreviewBlob ? (
+                    <button
+                      type="button"
+                      aria-label="Remove video"
+                      className="absolute right-1.5 top-1.5 z-[5] flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-black/70 text-white/90 shadow-md backdrop-blur-sm transition hover:bg-red-500/90 hover:text-white"
+                      onClick={(ev) => {
+                        ev.preventDefault();
+                        ev.stopPropagation();
+                        setVideoUrl("");
+                        setVideoPreviewBlob(null);
+                        setDurationSec(null);
+                      }}
+                    >
+                      <X className="h-4 w-4" aria-hidden />
+                    </button>
+                  ) : null}
+                </div>
               </div>
             )}
-            {previewSrc ? (
+            {previewSrc && upscalePickerId === "upscale/image" ? (
               <div className="relative mt-1 w-full max-w-md space-y-1.5">
                 <div className="relative overflow-hidden rounded-xl border border-white/10 bg-black">
-                  {upscalePickerId === "upscale/image" ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={previewSrc}
-                      alt="Source for upscale"
-                      className="max-h-[min(40vh,320px)] w-full bg-black object-contain lg:max-h-[min(52vh,420px)]"
-                    />
-                  ) : (
-                    /* eslint-disable-next-line jsx-a11y/media-has-caption */
-                    <video
-                      key={previewSrc}
-                      src={previewSrc}
-                      className="aspect-video max-h-[min(52vh,420px)] w-full bg-black object-contain"
-                      controls
-                      playsInline
-                      preload="metadata"
-                      onLoadedData={(ev) => {
-                        const v = ev.currentTarget;
-                        if (!v.src.startsWith("blob:")) return;
-                        try {
-                          if (v.readyState < 2) return;
-                          const d = v.duration;
-                          const t =
-                            Number.isFinite(d) && d > 0
-                              ? Math.min(0.12, Math.max(0.02, d * 0.02))
-                              : 0.05;
-                          v.currentTime = t;
-                        } catch {
-                          /* ignore seek errors */
-                        }
-                      }}
-                    />
-                  )}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={previewSrc}
+                    alt="Source for upscale"
+                    className="max-h-[min(40vh,320px)] w-full bg-black object-contain lg:max-h-[min(52vh,420px)]"
+                  />
                   <UploadBusyOverlay active={busy} className="rounded-xl" />
                 </div>
-                <p className="text-[10px] leading-snug text-white/40">
-                  {upscalePickerId === "upscale/image"
-                    ? imageUrl.trim() && !imagePreviewBlob
-                      ? "Utilise l'aperçu pour confirmer l'import."
-                      : "Aperçu en attente de fin d'import."
-                    : videoUrl.trim() && !videoPreviewBlob
-                      ? "Utilise le lecteur pour lire, mettre en pause et naviguer dans la video importee."
-                      : "Aperçu en attente de fin d'import. Ensuite, utilise les controles pour verifier le fichier heberge."}
-                </p>
               </div>
             ) : null}
             <div className="grid grid-cols-1 gap-3">
               <div>
-                <Label className="text-xs text-white/45">Upscale factor</Label>
-                <Select value={factor} onValueChange={(v) => setFactor(v as "1" | "2" | "4")}>
-                  <SelectTrigger className="mt-2 h-11 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="border-white/10 bg-[#0c0c10] text-white">
-                    <SelectItem value="1">1×</SelectItem>
-                    <SelectItem value="2">2×</SelectItem>
-                    <SelectItem value="4">4×</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label className="text-xs text-white/45">
+                  {upscalePickerId === "upscale/image" ? "Output tier (Topaz)" : "Upscale factor"}
+                </Label>
+                {upscalePickerId === "upscale/image" ? (
+                  <Select
+                    value={imageUpscaleTier}
+                    onValueChange={(v) => setImageUpscaleTier(v as "2" | "4" | "8")}
+                  >
+                    <SelectTrigger className="mt-2 h-11 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="border-white/10 bg-[#0c0c10] text-white">
+                      <SelectItem value="2">2K — 2 credits</SelectItem>
+                      <SelectItem value="4">4K — 3 credits</SelectItem>
+                      <SelectItem value="8">8K — 5 credits</SelectItem>
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Select
+                    value={videoUpscaleFactor}
+                    onValueChange={(v) => setVideoUpscaleFactor(v as "1" | "2" | "4")}
+                  >
+                    <SelectTrigger className="mt-2 h-11 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="border-white/10 bg-[#0c0c10] text-white">
+                      <SelectItem value="1">1×</SelectItem>
+                      <SelectItem value="2">2×</SelectItem>
+                      <SelectItem value="4">4×</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
             </div>
           </div>
@@ -528,11 +643,6 @@ export default function StudioUpscalePanel() {
               <Sparkles className="h-5 w-5" />
               {upscalePickerId === "upscale/image" || durationSec !== null ? (
                 <>
-                  {upscalePickerId === "upscale/video" && durationSec !== null ? (
-                    <span className="rounded-md bg-white/10 px-2 py-0.5 text-sm tabular-nums text-white/90 sm:text-base">
-                      {durationSec}s
-                    </span>
-                  ) : null}
                   <span className="rounded-md bg-white/15 px-2 py-0.5 text-base tabular-nums">{credits}</span>
                   <span className="text-xs font-normal text-white/80 sm:text-sm">credits</span>
                 </>
