@@ -50,6 +50,7 @@ const VIDEO_MIN_RANK: Record<string, number> = {
   veo3: 2,
   // Starter should include Sora 2
   "openai/sora-2": 1,
+  "openai/sora-2-pro": 2,
 };
 
 /** Studio Edit Video tab: picker ids (`studio-edit/…`), not raw Kie strings. */
@@ -167,6 +168,7 @@ const STUDIO_VIDEO_LABELS: Record<string, string> = {
   "kling-3.0/video": "Kling 3.0",
   "kling-2.6/video": "Kling 2.6",
   "openai/sora-2": "Sora 2",
+  "openai/sora-2-pro": "Sora 2 Pro",
   "bytedance/seedance-1.5-pro": "Seedance 1.5 Pro",
   "bytedance/seedance-2.0-pro": "Seedance 2.0 Pro",
   veo3_fast: "Veo 3.1 Fast",
@@ -190,6 +192,7 @@ export const STUDIO_VIDEO_IDS_ORDERED: readonly string[] = [
   "kling-3.0/video",
   "veo3",
   "openai/sora-2",
+  "openai/sora-2-pro",
 ];
 
 export function studioVideoDisplayLabel(modelId: string): string {
@@ -343,6 +346,10 @@ export const SUBSCRIPTION_MODEL_MATRIX_ROWS: SubscriptionModelMatrixRow[] = [
   {
     label: "Sora 2",
     tiers: tierBools(VIDEO_MIN_RANK["openai/sora-2"]),
+  },
+  {
+    label: "Sora 2 Pro",
+    tiers: tierBools(VIDEO_MIN_RANK["openai/sora-2-pro"]),
   },
   {
     label: "Motion Control",

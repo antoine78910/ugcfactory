@@ -9,6 +9,10 @@ import {
   KLING_3_VIDEO_CREDITS_PER_SECOND,
   PRICING_BASE,
   SORA_10S,
+  SORA_2_PRO_HIGH_10S,
+  SORA_2_PRO_HIGH_15S,
+  SORA_2_PRO_STANDARD_10S,
+  SORA_2_PRO_STANDARD_15S,
   SUBSCRIPTIONS,
   TOPAZ_IMAGE_UPSCALER,
   TOPAZ_VIDEO_UPSCALER,
@@ -37,6 +41,12 @@ export async function GET() {
       example_12s_credits: calculateVideoCreditsFromDuration(12),
       kling_3_0_12s_audio_reference: KLING_3_0_12S_AUDIO_REFERENCE,
       sora_10s: SORA_10S,
+      sora_2_pro: {
+        high_10s: SORA_2_PRO_HIGH_10S,
+        high_15s: SORA_2_PRO_HIGH_15S,
+        standard_10s: SORA_2_PRO_STANDARD_10S,
+        standard_15s: SORA_2_PRO_STANDARD_15S,
+      },
     },
     ads: {
       credits_fixed: AD_CREDITS,

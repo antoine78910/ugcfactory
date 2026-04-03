@@ -58,6 +58,7 @@ type VideoModelId =
   | "kling-3.0/video"
   | "kling-2.6/video"
   | "openai/sora-2"
+  | "openai/sora-2-pro"
   | "bytedance/seedance-1.5-pro"
   | "bytedance/seedance-2.0-pro"
   | "veo3_fast"
@@ -69,6 +70,7 @@ const MODEL_OPTIONS: { id: VideoModelId; label: string; family: VideoFamily }[] 
   { id: "kling-3.0/video", label: "Kling 3.0", family: "kie" },
   { id: "kling-2.6/video", label: "Kling 2.6", family: "kie" },
   { id: "openai/sora-2", label: "Sora 2", family: "sora" },
+  { id: "openai/sora-2-pro", label: "Sora 2 Pro", family: "sora" },
   { id: "bytedance/seedance-1.5-pro", label: "Seedance 1.5 Pro", family: "kie" },
   { id: "bytedance/seedance-2.0-pro", label: "Seedance 2.0 Pro", family: "kie" },
   { id: "veo3_fast", label: "Veo 3.1 Fast", family: "veo" },
@@ -150,6 +152,13 @@ const VIDEO_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
     durationRange: "10–15s",
   },
   {
+    id: "openai/sora-2-pro",
+    label: "Sora 2 Pro",
+    icon: "sora",
+    resolution: "1080p",
+    durationRange: "10–15s",
+  },
+  {
     id: "bytedance/seedance-1.5-pro",
     label: "Seedance 1.5 Pro",
     icon: "seedance",
@@ -193,6 +202,7 @@ const VIDEO_MODEL_ACCESS_ORDER: VideoModelId[] = [
   "kling-3.0/video",
   "veo3",
   "openai/sora-2",
+  "openai/sora-2-pro",
 ];
 
 function getDurationChoices(modelId: VideoModelId): string[] {
@@ -202,6 +212,8 @@ function getDurationChoices(modelId: VideoModelId): string[] {
     case "kling-2.6/video":
       return ["5", "10"];
     case "openai/sora-2":
+      return ["10", "15"];
+    case "openai/sora-2-pro":
       return ["10", "15"];
     case "bytedance/seedance-1.5-pro":
       return ["5", "10", "15"];
@@ -213,7 +225,7 @@ function getDurationChoices(modelId: VideoModelId): string[] {
 }
 
 function modelHasQuality(id: VideoModelId): boolean {
-  return id === "kling-3.0/video" || id === "kling-2.6/video";
+  return id === "kling-3.0/video" || id === "kling-2.6/video" || id === "openai/sora-2-pro";
 }
 
 function modelHasAudio(id: VideoModelId): boolean {
@@ -1336,15 +1348,17 @@ export default function StudioVideoPanel({
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               accountPlan: snap.planId,
-              marketModel: "openai/sora-2",
+              marketModel: snap.modelId,
               prompt: snap.prompt,
               imageUrl: snap.startUrl ?? undefined,
               duration: Number(snap.duration),
+              mode: snap.modelId === "openai/sora-2-pro" ? snap.klingMode : undefined,
               personalApiKey: pKey,
             }),
           });
           const json = (await res.json()) as { taskId?: string; error?: string };
-          if (!res.ok || !json.taskId) throw new Error(json.error || "Sora 2 failed");
+          if (!res.ok || !json.taskId)
+            throw new Error(json.error || (snap.modelId === "openai/sora-2-pro" ? "Sora 2 Pro failed" : "Sora 2 failed"));
           await registerStudioTask({
             kind: "studio_video",
             label,
@@ -1353,7 +1367,10 @@ export default function StudioVideoPanel({
             personalApiKey: pKey,
             inputUrls: snap.startUrl ? [snap.startUrl] : undefined,
           });
-          toast.message("Sora 2 started", { description: "Rendering…" });
+          toast.message(
+            snap.modelId === "openai/sora-2-pro" ? "Sora 2 Pro started" : "Sora 2 started",
+            { description: "Rendering…" },
+          );
           const url = await pollKlingVideo(json.taskId, pKey);
           const doneAt = Date.now();
           setHistoryItems((prev) => {
@@ -1429,6 +1446,7 @@ export default function StudioVideoPanel({
 
         const isKling30 = snap.modelId === "kling-3.0/video";
         const isKling26 = snap.modelId === "kling-2.6/video";
+        const isSora2Pro = snap.modelId === "openai/sora-2-pro";
         const res = await fetch("/api/kling/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1440,7 +1458,7 @@ export default function StudioVideoPanel({
             duration: Number(snap.duration),
             aspectRatio: (isKling30 || isKling26) && !snap.startUrl ? snap.aspect : undefined,
             sound: modelHasAudio(snap.modelId) ? snap.soundOn : undefined,
-            mode: isKling30 || isKling26 ? snap.klingMode : undefined,
+            mode: isKling30 || isKling26 || isSora2Pro ? snap.klingMode : undefined,
             multiShots: isKling30 ? snap.multiShot : undefined,
             personalApiKey: pKey,
             piapiApiKey: getPersonalPiapiApiKey() ?? undefined,

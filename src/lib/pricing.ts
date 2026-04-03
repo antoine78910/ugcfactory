@@ -701,11 +701,87 @@ export const SORA_10S = {
   credits: 4,
 } as const;
 
+type VideoTierPricing = {
+  model: string;
+  cost_usd: number;
+  cost_with_buffer: number;
+  target_margin: number;
+  price_usd: number;
+  credits: number;
+  fal_list_price_usd: number | null;
+  /**
+   * DISCOUNT vs Fal (%).
+   * Negative when `our_price_usd < fal_list_price_usd` (ex: -67%).
+   */
+  discount_pct_vs_fal: number | null;
+};
+
+function makeVideoTierFromOurAndFal(opts: {
+  model: string;
+  /** Our revenue price (USD) from your sheet. */
+  our_price_usd: number;
+  /** Fal list price (USD) from your sheet (or null for N/A). */
+  fal_list_price_usd: number | null;
+}): VideoTierPricing {
+  const target_margin = PRICING_BASE.target_margins.video;
+  const price_usd = opts.our_price_usd;
+  const cost_with_buffer = price_usd * (1 - target_margin);
+  const cost_usd = cost_with_buffer / PRICING_BASE.cost_buffer;
+  const credits = Math.max(1, Math.ceil(price_usd / PRICING_BASE.credit_value_usd));
+  const discount_pct_vs_fal =
+    opts.fal_list_price_usd != null && opts.fal_list_price_usd > 0
+      ? ((price_usd - opts.fal_list_price_usd) / opts.fal_list_price_usd) * 100
+      : null;
+  return {
+    model: opts.model,
+    cost_usd,
+    cost_with_buffer,
+    target_margin,
+    price_usd,
+    credits,
+    fal_list_price_usd: opts.fal_list_price_usd,
+    discount_pct_vs_fal: discount_pct_vs_fal != null ? Math.round(discount_pct_vs_fal * 10) / 10 : null,
+  };
+}
+
+/**
+ * OpenAI Sora 2 Pro tiers (from your sheet).
+ * Mapping: `klingMode` -> Standard vs High.
+ */
+export const SORA_2_PRO_HIGH_10S = makeVideoTierFromOurAndFal({
+  model: "sora_2_pro_high_10s",
+  our_price_usd: 1.65,
+  fal_list_price_usd: 5.0,
+});
+export const SORA_2_PRO_HIGH_15S = makeVideoTierFromOurAndFal({
+  model: "sora_2_pro_high_15s",
+  our_price_usd: 3.15,
+  fal_list_price_usd: 7.5,
+});
+export const SORA_2_PRO_STANDARD_10S = makeVideoTierFromOurAndFal({
+  model: "sora_2_pro_standard_10s",
+  our_price_usd: 0.75,
+  fal_list_price_usd: 3.0,
+});
+export const SORA_2_PRO_STANDARD_15S = makeVideoTierFromOurAndFal({
+  model: "sora_2_pro_standard_15s",
+  our_price_usd: 1.35,
+  fal_list_price_usd: 4.5,
+});
+
 /** Sora: 10s tier = 4 credits; 15s not in spec — proportional bump. */
 export function calculateSoraCredits(durationSec: number): number {
   const d = Number(durationSec) || 0;
   if (d <= 10) return SORA_10S.credits;
   return 6;
+}
+
+/** Sora 2 Pro: quality controlled by kling `mode` (std => Standard, pro => High). */
+export function calculateSora2ProCredits(durationSec: number, quality: string | undefined): number {
+  const d = Number(durationSec) || 0;
+  const isHigh = quality === "pro" || quality === "1080p" || quality === "high";
+  if (d <= 10) return isHigh ? SORA_2_PRO_HIGH_10S.credits : SORA_2_PRO_STANDARD_10S.credits;
+  return isHigh ? SORA_2_PRO_HIGH_15S.credits : SORA_2_PRO_STANDARD_15S.credits;
 }
 
 // ---------------------------------------------------------------------------
@@ -794,6 +870,8 @@ export function calculateVideoCreditsForModel(opts: VideoCreditOptions): number 
   switch (opts.modelId) {
     case "openai/sora-2":
       return calculateSoraCredits(d);
+    case "openai/sora-2-pro":
+      return calculateSora2ProCredits(d, quality);
 
     case "kling-3.0/video":
     case "kling-2.6/video":

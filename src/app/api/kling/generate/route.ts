@@ -53,6 +53,12 @@ function validateDurationForModel(model: string, duration: number | undefined) {
     }
     return;
   }
+  if (model === "openai/sora-2-pro") {
+    if (duration !== 10 && duration !== 15) {
+      throw new Error("Invalid duration for Sora 2 Pro. Must be 10 or 15.");
+    }
+    return;
+  }
   if (model === "bytedance/seedance-1.5-pro") {
     if (duration !== 5 && duration !== 10 && duration !== 15) {
       throw new Error("Invalid duration for Seedance 1.5 Pro. Must be 5, 10, or 15.");
@@ -146,11 +152,15 @@ export async function POST(req: Request) {
       } else if (body.aspectRatio) {
         input.aspect_ratio = body.aspectRatio;
       }
-    } else if (model === "openai/sora-2") {
+    } else if (model === "openai/sora-2" || model === "openai/sora-2-pro") {
       input = {
         prompt,
         duration: String(body.duration ?? 10),
       };
+      if (model === "openai/sora-2-pro" && body.mode) {
+        // Forward mode so provider can differentiate Standard vs High.
+        input.mode = body.mode;
+      }
       if (imageUrl) {
         input.image_urls = [imageUrl];
       }
