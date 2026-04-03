@@ -51,6 +51,13 @@ const HERO_STUDIO_VIDEOS = [
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-[#050507] text-white selection:bg-violet-500/30">
+      {/* Product announcement — above sticky header (hero input still uses the Generate button) */}
+      <div className="relative z-[60] border-b border-white/[0.06] bg-gradient-to-r from-violet-950/90 via-[#1a1028] to-violet-950/90 px-4 py-2 text-center">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-violet-200/95 sm:text-xs">
+          Seedance Pro 2.0 now available !
+        </p>
+      </div>
+
       {/* ── Sticky header: Nano Banana bar + nav (no hero texture here) ── */}
       <header className="sticky top-0 z-50 bg-transparent backdrop-blur-xl">
         <div className="relative border-b-[4px] border-[#0b0912] bg-[#987eee] px-4 py-1.5 text-center">
@@ -123,9 +130,6 @@ export default function LandingPage() {
 
         <div className="relative z-10 mx-auto w-full max-w-5xl px-5 pt-4 pb-10 text-center sm:pt-6 sm:pb-12 md:pt-8 md:pb-14">
           <h1 className="mx-auto max-w-4xl px-3 sm:px-6 text-4xl font-extrabold tracking-tight leading-[1.12] sm:text-5xl md:text-6xl">
-            <span className="mb-3 block text-sm font-semibold uppercase tracking-[0.18em] text-violet-300 sm:mb-3.5 sm:text-base md:mb-4 md:text-lg">
-              Seedance Pro 2.0 now available !
-            </span>
             <span className="block">
               Realistic AI UGC for{' '}
               <span className="whitespace-nowrap">

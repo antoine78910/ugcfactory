@@ -2867,10 +2867,6 @@ export default function AppBrandWizard() {
                         ) : null}
                         {appSection === "ad_clone" && translateToolMode === "voice_change" ? (
                           <div className="space-y-3">
-                            <p className="text-[10px] leading-snug text-white/40">
-                              <span className="font-medium text-white/55">{VOICE_CHANGE_CREDITS_FLAT} credits</span> per
-                              run — same price for any audio or video length.
-                            </p>
                             <input
                               ref={voiceChangeInputRef}
                               type="file"
@@ -3819,15 +3815,7 @@ export default function AppBrandWizard() {
                               : "Translate"
                             : "Generate"}
                           <Sparkles className="h-5 w-5" />
-                          {appSection === "ad_clone" && translateToolMode === "voice_change" ? (
-                            <>
-                              <span className="rounded-md bg-white/15 px-2 py-0.5 text-base tabular-nums">
-                                {VOICE_CHANGE_CREDITS_FLAT}
-                              </span>
-                              <span className="text-[10px] font-normal text-white/50">credits · any length</span>
-                              <span className="rounded-md bg-white/15 px-2 py-0.5 text-sm">Beta</span>
-                            </>
-                          ) : (
+                          {appSection === "ad_clone" && translateToolMode === "voice_change" ? null : (
                             <>
                               <span className="rounded-md bg-white/15 px-2 py-0.5 text-base tabular-nums">
                                 {motionCredits}

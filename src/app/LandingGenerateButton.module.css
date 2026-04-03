@@ -14,7 +14,9 @@
   --padding: 4px;
   --transition: 0.4s;
   --button-color: #101010;
-  --highlight-color-hue: 270deg;
+  /* Brand violet (no blue-tinted hsl for glows) */
+  --violet-glow: rgba(167, 139, 250, 0.55);
+  --violet-glow-soft: rgba(139, 92, 246, 0.4);
 
   position: relative;
   user-select: none;
@@ -85,10 +87,10 @@
   pointer-events: none;
   background-image: linear-gradient(
     0deg,
-    #fff,
-    hsl(var(--highlight-color-hue), 100%, 70%),
-    hsla(var(--highlight-color-hue), 100%, 70%, 50%),
-    8%,
+    rgba(255, 255, 255, 0.22),
+    rgba(167, 139, 250, 0.55),
+    rgba(124, 58, 237, 0.35),
+    10%,
     transparent
   );
   background-position: 0 0;
@@ -205,7 +207,7 @@
   50% {
     transform: scale(2);
     filter: blur(10px) brightness(150%)
-      drop-shadow(-36px 12px 12px hsl(var(--highlight-color-hue), 100%, 70%));
+      drop-shadow(-36px 12px 14px rgba(167, 139, 250, 0.85));
   }
 }
 
@@ -217,7 +219,7 @@
 .btn:focus-visible::before {
   box-shadow:
     0 -8px 12px -6px #fff3 inset,
-    0 -16px 16px -8px hsla(var(--highlight-color-hue), 100%, 70%, 20%) inset,
+    0 -16px 16px -8px rgba(167, 139, 250, 0.2) inset,
     1px 1px 1px #fff3,
     2px 2px 2px #fff1,
     -1px -1px 1px #0002,
@@ -284,14 +286,14 @@
 }
 
 .btn:active {
-  border: solid 1px hsla(var(--highlight-color-hue), 100%, 80%, 70%);
-  background-color: hsla(var(--highlight-color-hue), 50%, 20%, 0.5);
+  border: solid 1px rgba(196, 181, 253, 0.65);
+  background-color: rgba(76, 29, 149, 0.45);
 }
 
 .btn:active::before {
   box-shadow:
     0 -8px 12px -6px #fffa inset,
-    0 -16px 16px -8px hsla(var(--highlight-color-hue), 100%, 70%, 80%) inset,
+    0 -16px 16px -8px rgba(167, 139, 250, 0.35) inset,
     1px 1px 1px #fff4,
     2px 2px 2px #fff2,
     -1px -1px 1px #0002,
@@ -305,18 +307,32 @@
 }
 
 .btn:active .btnLetter {
-  text-shadow: 0 0 1px hsla(var(--highlight-color-hue), 100%, 90%, 90%);
+  text-shadow: 0 0 2px rgba(237, 233, 254, 0.95);
   animation: none;
 }
 
 .btn:hover {
-  border: solid 1px hsla(var(--highlight-color-hue), 100%, 80%, 40%);
+  border: solid 1px rgba(196, 181, 253, 0.45);
+  /* Violet glow below the button (brand) */
+  box-shadow:
+    inset 0px 1px 1px rgba(255, 255, 255, 0.2),
+    inset 0px 2px 2px rgba(255, 255, 255, 0.15),
+    inset 0px 4px 4px rgba(255, 255, 255, 0.1),
+    inset 0px 8px 8px rgba(255, 255, 255, 0.05),
+    inset 0px 16px 16px rgba(255, 255, 255, 0.05),
+    0px -1px 1px rgba(0, 0, 0, 0.02),
+    0px -2px 2px rgba(0, 0, 0, 0.03),
+    0px -4px 4px rgba(0, 0, 0, 0.05),
+    0px -8px 8px rgba(0, 0, 0, 0.06),
+    0px -16px 16px rgba(0, 0, 0, 0.08),
+    0 14px 40px -6px var(--violet-glow),
+    0 8px 24px -8px var(--violet-glow-soft);
 }
 
 .btn:hover::before {
   box-shadow:
     0 -8px 8px -6px #fffa inset,
-    0 -16px 16px -8px hsla(var(--highlight-color-hue), 100%, 70%, 30%) inset,
+    0 -16px 16px -8px rgba(167, 139, 250, 0.22) inset,
     1px 1px 1px #fff2,
     2px 2px 2px #fff1,
     -1px -1px 1px #0002,
@@ -326,11 +342,13 @@
 .btn:hover::after {
   opacity: 1;
   mask-image: linear-gradient(0deg, #fff, transparent);
+  filter: saturate(1.05);
 }
 
 .btn:hover .btnSvg {
-  fill: #fff;
-  filter: drop-shadow(0 0 3px hsl(var(--highlight-color-hue), 100%, 70%)) drop-shadow(0 -4px 6px #0009);
+  fill: #f5f3ff;
+  filter: drop-shadow(0 0 4px rgba(167, 139, 250, 0.9)) drop-shadow(0 6px 14px rgba(124, 58, 237, 0.45))
+    drop-shadow(0 -3px 6px rgba(0, 0, 0, 0.35));
   animation: none;
 }
 

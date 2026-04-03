@@ -371,8 +371,10 @@ export default function StudioUpscalePanel() {
       </div>
 
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4 lg:h-[calc(100dvh-4rem)] lg:min-h-0">
-        <div className="flex min-w-0 w-full flex-col gap-2 lg:basis-[30%] lg:max-w-[28rem] lg:flex-none lg:shrink-0 lg:min-h-0 lg:overflow-hidden">
-          <div className="studio-params-scroll flex min-w-0 flex-col gap-2 lg:h-full lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pb-10">
+        <div className="flex min-h-0 min-w-0 w-full flex-col gap-2 lg:basis-[30%] lg:max-w-[28rem] lg:flex-none lg:shrink-0 lg:overflow-hidden">
+          {/* Scroll the form; keep the CTA pinned at the bottom of this column so it never falls off-screen */}
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 lg:min-h-0 lg:h-full">
+          <div className="studio-params-scroll flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-y-auto pb-4 max-h-[min(86vh,calc(100dvh-5rem))] lg:max-h-none lg:flex-1 lg:pb-2">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Upscale model</p>
           <div className="rounded-2xl border border-white/10 bg-[#101014] p-3">
             <StudioModelPicker
@@ -412,7 +414,7 @@ export default function StudioUpscalePanel() {
                     <img
                       src={previewSrc}
                       alt="Source for upscale"
-                      className="max-h-[min(52vh,420px)] w-full bg-black object-contain"
+                      className="max-h-[min(40vh,320px)] w-full bg-black object-contain lg:max-h-[min(52vh,420px)]"
                     />
                   ) : (
                     /* eslint-disable-next-line jsx-a11y/media-has-caption */
@@ -470,6 +472,9 @@ export default function StudioUpscalePanel() {
             </div>
           </div>
 
+          </div>
+
+          <div className="shrink-0 border-t border-white/10 pt-3 lg:border-t-0 lg:pt-0">
           <Button
             type="button"
             disabled={
@@ -492,6 +497,7 @@ export default function StudioUpscalePanel() {
               ) : null}
             </span>
           </Button>
+          </div>
           </div>
         </div>
 
