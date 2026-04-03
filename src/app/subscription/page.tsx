@@ -409,8 +409,16 @@ export default function SubscriptionPage() {
                         <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-violet-500/20 text-violet-200">
                           <Coins className="h-3 w-3" aria-hidden />
                         </span>
-                        <span>
+                        <span className="min-w-0">
                           <span className="font-semibold text-white">{plan.credits.toLocaleString()} credits</span>
+                          <span className="text-white/45"> · </span>
+                          <span className="text-white/75">
+                            {plan.usage.images} AI images <span className="text-white/45">(Nanobanana)</span>
+                          </span>
+                          <span className="text-white/45"> · </span>
+                          <span className="text-white/75">
+                            {plan.usage.videos} AI videos <span className="text-white/45">(Sora 2)</span>
+                          </span>
                         </span>
                       </li>
                       <li className="pl-1 text-white/50">
