@@ -4757,23 +4757,21 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                   {nanoBananaPromptsRaw && !nanoHasThreeImages ? (
                     <div className="space-y-4">
                       <div>
-                        <h3 className="text-lg font-semibold tracking-tight text-white sm:text-xl">
+                        <h3 className="text-base font-semibold tracking-tight text-white sm:text-lg">
                           Reference image — creative brief
                         </h3>
-                        <p className="mt-2 text-sm leading-snug text-white/70">
-                          Only the main choices you may want to tweak: who is on camera, the setting, and how the product
-                          shows up. Lighting, camera, quality, and negatives stay out of sight and still apply when you
-                          generate.
+                        <p className="mt-1 text-xs leading-snug text-white/65 sm:text-sm sm:text-white/70">
+                          Tweak who is on camera, setting, and product. Technical details still apply on generate.
                         </p>
                       </div>
-                      <div className="space-y-2">
+                      <div className="grid min-w-0 grid-cols-3 gap-1.5 sm:gap-2">
                         {([0, 1, 2] as const).map((i) => {
                           const draft = nanoPromptDrafts[i] ?? "";
                           const parsed = parseNanoEditableSections(draft);
-                          const previewText = (value: string) => {
+                          const previewText = (value: string, max = 88) => {
                             const t = value.replace(/\s+/g, " ").trim();
                             if (!t) return "—";
-                            return t.length > 88 ? `${t.slice(0, 88).trim()}…` : t;
+                            return t.length > max ? `${t.slice(0, max).trim()}…` : t;
                           };
                           const patchStructured = (field: "person" | "scene" | "product", value: string) => {
                             const nextEditable = composeNanoEditableSections({
@@ -4793,77 +4791,79 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                           return (
                             <details
                               key={i}
-                              className="rounded-xl border border-white/10 bg-black/25 px-3 py-2.5 text-xs leading-relaxed text-white/85"
+                              className="min-w-0 rounded-lg border border-white/10 bg-black/25 px-2 py-1.5 text-[11px] leading-relaxed text-white/85 sm:rounded-xl sm:px-2.5 sm:py-2"
                             >
                               <summary className="cursor-pointer list-none">
-                                <div className="flex items-start justify-between gap-3">
-                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
-                                    Reference frame {i + 1}
+                                <div className="flex items-center justify-between gap-1">
+                                  <p className="text-[9px] font-semibold uppercase tracking-wide text-white/45">
+                                    Frame {i + 1}
                                   </p>
-                                  <span className="text-[10px] text-white/35">Edit</span>
+                                  <span className="shrink-0 text-[9px] text-white/35">Edit</span>
                                 </div>
                                 {parsed.isStructured ? (
-                                  <div className="mt-2 grid gap-1.5">
-                                    <div className="rounded-lg border border-white/8 bg-white/[0.03] px-2 py-1.5">
-                                      <p className="text-[10px] font-medium uppercase tracking-wide text-white/40">
+                                  <div className="mt-1.5 grid grid-cols-3 gap-1">
+                                    <div className="min-w-0 rounded border border-white/8 bg-white/[0.03] px-1 py-1">
+                                      <p className="text-[8px] font-medium uppercase tracking-wide text-white/40">
                                         Avatar
                                       </p>
-                                      <p className="mt-0.5 text-[11px] leading-snug text-white/75">
-                                        {previewText(parsed.person)}
+                                      <p className="mt-0.5 line-clamp-3 text-[9px] leading-snug text-white/75">
+                                        {previewText(parsed.person, 42)}
                                       </p>
                                     </div>
-                                    <div className="rounded-lg border border-white/8 bg-white/[0.03] px-2 py-1.5">
-                                      <p className="text-[10px] font-medium uppercase tracking-wide text-white/40">
+                                    <div className="min-w-0 rounded border border-white/8 bg-white/[0.03] px-1 py-1">
+                                      <p className="text-[8px] font-medium uppercase tracking-wide text-white/40">
                                         Scene
                                       </p>
-                                      <p className="mt-0.5 text-[11px] leading-snug text-white/75">
-                                        {previewText(parsed.scene)}
+                                      <p className="mt-0.5 line-clamp-3 text-[9px] leading-snug text-white/75">
+                                        {previewText(parsed.scene, 42)}
                                       </p>
                                     </div>
-                                    <div className="rounded-lg border border-white/8 bg-white/[0.03] px-2 py-1.5">
-                                      <p className="text-[10px] font-medium uppercase tracking-wide text-white/40">
+                                    <div className="min-w-0 rounded border border-white/8 bg-white/[0.03] px-1 py-1">
+                                      <p className="text-[8px] font-medium uppercase tracking-wide text-white/40">
                                         Product
                                       </p>
-                                      <p className="mt-0.5 text-[11px] leading-snug text-white/75">
-                                        {previewText(parsed.product)}
+                                      <p className="mt-0.5 line-clamp-3 text-[9px] leading-snug text-white/75">
+                                        {previewText(parsed.product, 42)}
                                       </p>
                                     </div>
                                   </div>
                                 ) : (
-                                  <p className="mt-2 text-[11px] leading-snug text-white/65">{previewText(draft)}</p>
+                                  <p className="mt-1.5 line-clamp-4 text-[10px] leading-snug text-white/65">
+                                    {previewText(draft, 120)}
+                                  </p>
                                 )}
                               </summary>
-                              <div className="mt-3 border-t border-white/10 pt-3">
+                              <div className="mt-2 border-t border-white/10 pt-2">
                                 {parsed.isStructured ? (
-                                  <div className="space-y-2">
+                                  <div className="grid gap-1.5">
                                     <div>
-                                      <Label className="mb-1 block text-[10px] font-medium text-white/45">
+                                      <Label className="mb-0.5 block text-[9px] font-medium text-white/45">
                                         Person / avatar
                                       </Label>
                                       <Textarea
                                         value={parsed.person}
                                         onChange={(e) => patchStructured("person", e.target.value)}
-                                        className="min-h-[64px] border-white/10 bg-black/25 text-xs leading-relaxed text-white/85"
+                                        className="min-h-[52px] border-white/10 bg-black/25 text-[11px] leading-relaxed text-white/85"
                                         spellCheck
                                       />
                                     </div>
                                     <div>
-                                      <Label className="mb-1 block text-[10px] font-medium text-white/45">Scene</Label>
+                                      <Label className="mb-0.5 block text-[9px] font-medium text-white/45">Scene</Label>
                                       <Textarea
                                         value={parsed.scene}
                                         onChange={(e) => patchStructured("scene", e.target.value)}
-                                        className="min-h-[64px] border-white/10 bg-black/25 text-xs leading-relaxed text-white/85"
+                                        className="min-h-[52px] border-white/10 bg-black/25 text-[11px] leading-relaxed text-white/85"
                                         spellCheck
                                       />
                                     </div>
                                     <div>
-                                      <Label className="mb-1 block text-[10px] font-medium text-white/45">
+                                      <Label className="mb-0.5 block text-[9px] font-medium text-white/45">
                                         Product &amp; action
                                       </Label>
                                       <Textarea
                                         value={parsed.product}
                                         onChange={(e) => patchStructured("product", e.target.value)}
-                                        className="min-h-[64px] border-white/10 bg-black/25 text-xs leading-relaxed text-white/85"
+                                        className="min-h-[52px] border-white/10 bg-black/25 text-[11px] leading-relaxed text-white/85"
                                         spellCheck
                                       />
                                     </div>
@@ -4919,9 +4919,6 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
                         >
                           <span className="text-sm font-semibold leading-tight">Generate 3 images</span>
                         </Button>
-                        <p className="text-xs text-white/45">
-                          You can cancel while it runs. Images will appear here as soon as they’re ready.
-                        </p>
                       </div>
                     </div>
                   ) : null}
