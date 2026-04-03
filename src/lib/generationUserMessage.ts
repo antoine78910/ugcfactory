@@ -50,6 +50,9 @@ export function userFacingProviderError(raw: string | null | undefined): string 
   if (/invalid|bad request|\b400\b|malformed|parameter error|validation failed/.test(lower)) {
     return "Invalid parameters or inputs. Adjust settings and retry.";
   }
+  if (/fetch failed|failed to fetch|networkerror|load failed|econnreset|socket/i.test(lower)) {
+    return "Network error while contacting the image provider. Wait a few seconds and try again.";
+  }
 
   let cleaned = redactSensitiveFragments(s);
   cleaned = cleaned.replace(/\s+/g, " ").trim();

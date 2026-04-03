@@ -306,6 +306,37 @@ function NanoThreeImageGenerationGrid({
   );
 }
 
+/** Retries transient failures during long NanoBanana runs (browser often surfaces these as "fetch failed"). */
+async function fetchWithRetry(
+  input: string,
+  init: RequestInit | undefined,
+  opts?: { retries?: number; baseDelayMs?: number },
+): Promise<Response> {
+  const retries = opts?.retries ?? 4;
+  const base = opts?.baseDelayMs ?? 650;
+  let lastErr: unknown;
+  for (let a = 0; a < retries; a++) {
+    try {
+      const res = await fetch(input, init);
+      const retryStatus =
+        res.status === 429 || res.status === 502 || res.status === 503 || res.status === 504;
+      if (retryStatus && a < retries - 1) {
+        await new Promise((r) => setTimeout(r, base * (a + 1)));
+        continue;
+      }
+      return res;
+    } catch (e) {
+      lastErr = e;
+      if (a < retries - 1) {
+        await new Promise((r) => setTimeout(r, base * (a + 1)));
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw lastErr;
+}
+
 export type LinkToAdUniverseProps = {
   /** When set, load this run once (e.g. from Projects). */
   resumeRunId?: string | null;
@@ -2523,7 +2554,7 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       nanoImageAbortRef.current?.abort();
       const controller = new AbortController();
       nanoImageAbortRef.current = controller;
-      const res = await fetch("/api/nanobanana/generate", {
+      const res = await fetchWithRetry("/api/nanobanana/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
@@ -2583,11 +2614,14 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
       if (signal?.aborted) {
         throw new DOMException("Aborted", "AbortError");
       }
-      const res = await fetch(`/api/nanobanana/task?taskId=${encodeURIComponent(taskId)}${keyParam}`, {
-        method: "GET",
-        cache: "no-store",
-        signal,
-      });
+      const res = await fetchWithRetry(
+        `/api/nanobanana/task?taskId=${encodeURIComponent(taskId)}${keyParam}`,
+        {
+          method: "GET",
+          cache: "no-store",
+          signal,
+        },
+      );
       const json = (await res.json()) as any;
       if (!res.ok || !json.data) throw new Error(json.error || "Generation status check failed");
       const s = json.data.successFlag ?? 0;
@@ -2632,23 +2666,29 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
     let lastTaskId: string | null = null;
     const taskIds: string[] = [];
     for (let i = 0; i < 3; i++) {
+      if (i > 0) {
+        await new Promise((r) => setTimeout(r, 750));
+      }
       const prompt = prompts[i];
       lastNanoImagePromptRef.current = prompt;
       lastNanoImagePromptIndexRef.current = i as 0 | 1 | 2;
-      const res = await fetch("/api/nanobanana/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal,
-        body: JSON.stringify({
-          accountPlan: planId,
-          model: "pro",
-          prompt,
-          imageUrls: [img],
-          resolution: "4K",
-          aspectRatio: "9:16",
-          personalApiKey: getPersonalApiKey(),
-        }),
-      });
+      const res = await fetchWithRetry(
+        "/api/nanobanana/generate",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal,
+          body: JSON.stringify({
+            accountPlan: planId,
+            model: "pro",
+            prompt,
+            imageUrls: [img],
+            resolution: "4K",
+            aspectRatio: "9:16",
+            personalApiKey: getPersonalApiKey(),
+          }),
+        },
+      );
       const json = (await res.json()) as { taskId?: string; error?: string };
       if (!res.ok || !json.taskId) throw new Error(json.error || "Image generation failed");
       lastTaskId = json.taskId;
@@ -2881,7 +2921,9 @@ export default function LinkToAdUniverse({ resumeRunId, onResumeConsumed, onRuns
         const nKey = getPersonalApiKey();
         const nPiKey = getPersonalPiapiApiKey();
         const nParam = `${nKey ? `&personalApiKey=${encodeURIComponent(nKey)}` : ""}${nPiKey ? `&piapiApiKey=${encodeURIComponent(nPiKey)}` : ""}`;
-        const res = await fetch(`/api/nanobanana/task?taskId=${encodeURIComponent(taskId)}${nParam}`, { cache: "no-store" });
+        const res = await fetchWithRetry(`/api/nanobanana/task?taskId=${encodeURIComponent(taskId)}${nParam}`, {
+          cache: "no-store",
+        });
         const json = (await res.json()) as {
           data?: { successFlag?: number; response?: Record<string, unknown>; errorMessage?: string };
           error?: string;

@@ -128,25 +128,67 @@ export async function kieMarketRecordInfo(taskId: string, overrideApiKey?: strin
   const url = new URL(`${API_BASE}/api/v1/jobs/recordInfo`);
   url.searchParams.set("taskId", taskId);
 
-  const res = await fetch(url, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-    },
-    cache: "no-store",
-  });
+  /** Polling hits recordInfo often; transient network / gateway failures must not abort the whole run. */
+  const maxAttempts = 5;
+  const backoffBeforeAttemptMs = [0, 250, 600, 1200, 2200];
+  let lastError: Error | null = null;
 
-  const json = (await res.json()) as KieMarketRecordInfoResponse;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    if (backoffBeforeAttemptMs[attempt]! > 0) {
+      await new Promise((r) => setTimeout(r, backoffBeforeAttemptMs[attempt]));
+    }
 
-  if (!res.ok || json.code !== 200 || !(json as any).data) {
-    const msg = (json as any).message ?? `HTTP ${res.status}`;
-    throw new Error(`KIE recordInfo failed: ${String(msg)}`);
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+        },
+        cache: "no-store",
+      });
+    } catch (e) {
+      lastError = e instanceof Error ? e : new Error(String(e));
+      if (attempt < maxAttempts - 1) continue;
+      throw lastError;
+    }
+
+    let json: KieMarketRecordInfoResponse;
+    try {
+      json = (await res.json()) as KieMarketRecordInfoResponse;
+    } catch {
+      lastError = new Error(`KIE recordInfo: response was not JSON (HTTP ${res.status})`);
+      if (attempt < maxAttempts - 1) continue;
+      throw lastError;
+    }
+
+    const msg = String((json as { message?: unknown }).message ?? "");
+    const code = (json as { code?: unknown }).code;
+    const okData = res.ok && code === 200 && (json as { data?: unknown }).data;
+
+    if (okData) {
+      const raw = (json as Extract<KieMarketRecordInfoResponse, { code: 200 }>).data;
+      const d = raw as Record<string, unknown>;
+      const mergedState = String(d.state ?? d.status ?? "").trim() || "unknown";
+      return { ...(raw as object), state: mergedState } as KieMarketRecordInfo;
+    }
+
+    const retryableHttp = !res.ok && (res.status === 429 || res.status === 502 || res.status === 503 || res.status === 504);
+    const retryableCode = code === 502 || code === 503 || code === 504 || code === 500;
+    const retryableMsg = /timeout|temporar|try again|gateway|rate|busy|overload|fetch failed|network|econnreset/i.test(
+      msg,
+    );
+
+    lastError = new Error(`KIE recordInfo failed: ${msg || `HTTP ${res.status}`}`);
+
+    if ((retryableHttp || retryableCode || retryableMsg) && attempt < maxAttempts - 1) {
+      continue;
+    }
+
+    throw lastError;
   }
 
-  const raw = (json as Extract<KieMarketRecordInfoResponse, { code: 200 }>).data;
-  const d = raw as Record<string, unknown>;
-  const mergedState = String(d.state ?? d.status ?? "").trim() || "unknown";
-  return { ...(raw as object), state: mergedState } as KieMarketRecordInfo;
+  throw lastError ?? new Error("KIE recordInfo failed after retries.");
 }
 
 export function parseResultUrls(resultJson: string | undefined): string[] {
