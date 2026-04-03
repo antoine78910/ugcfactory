@@ -31,7 +31,11 @@ import {
 } from "@/app/_components/CreditsPlanContext";
 import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
 import { calculateVideoCredits } from "@/lib/linkToAd/generationCredits";
-import { calculateStudioVideoEditCredits } from "@/lib/pricing";
+import {
+  calculateStudioVideoEditCredits,
+  VEO_3_1_FAST,
+  VEO_3_1_QUALITY,
+} from "@/lib/pricing";
 import {
   canUseStudioVideoEditPicker,
   canUseStudioVideoModel,
@@ -59,7 +63,6 @@ type VideoModelId =
   | "kling-2.6/video"
   | "openai/sora-2"
   | "openai/sora-2-pro"
-  | "bytedance/seedance-1.5-pro"
   | "bytedance/seedance-2.0-pro"
   | "veo3_fast"
   | "veo3";
@@ -71,7 +74,6 @@ const MODEL_OPTIONS: { id: VideoModelId; label: string; family: VideoFamily }[] 
   { id: "kling-2.6/video", label: "Kling 2.6", family: "kie" },
   { id: "openai/sora-2", label: "Sora 2", family: "sora" },
   { id: "openai/sora-2-pro", label: "Sora 2 Pro", family: "sora" },
-  { id: "bytedance/seedance-1.5-pro", label: "Seedance 1.5 Pro", family: "kie" },
   { id: "bytedance/seedance-2.0-pro", label: "Seedance 2.0 Pro", family: "kie" },
   { id: "veo3_fast", label: "Veo 3.1 Fast", family: "veo" },
   { id: "veo3", label: "Veo 3.1", family: "veo" },
@@ -159,14 +161,6 @@ const VIDEO_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
     durationRange: "10–15s",
   },
   {
-    id: "bytedance/seedance-1.5-pro",
-    label: "Seedance 1.5 Pro",
-    icon: "seedance",
-    resolution: "720p",
-    durationRange: "5–15s",
-    searchText: "seedance 1.5 pro bytedance image to video",
-  },
-  {
     id: "bytedance/seedance-2.0-pro",
     label: "Seedance 2.0 Pro",
     icon: "seedance",
@@ -177,6 +171,7 @@ const VIDEO_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
   {
     id: "veo3_fast",
     label: "Veo 3.1 Fast",
+    subtitle: `Google · Fal Fast tier · ${VEO_3_1_FAST.credits} credits / video`,
     icon: "veo",
     resolution: "1080p",
     durationRange: "5–10s",
@@ -184,6 +179,7 @@ const VIDEO_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
   {
     id: "veo3",
     label: "Veo 3.1",
+    subtitle: `Google · Fal Quality tier · ${VEO_3_1_QUALITY.credits} credits / video`,
     icon: "veo",
     resolution: "1080p",
     durationRange: "5–10s",
@@ -195,7 +191,6 @@ const VIDEO_EDIT_PICKER_ACCESS_ORDER = [...STUDIO_VIDEO_EDIT_PICKER_IDS];
 
 /** Cheapest first; used to pick a valid model after plan change. */
 const VIDEO_MODEL_ACCESS_ORDER: VideoModelId[] = [
-  "bytedance/seedance-1.5-pro",
   "kling-2.6/video",
   "bytedance/seedance-2.0-pro",
   "veo3_fast",
@@ -215,8 +210,6 @@ function getDurationChoices(modelId: VideoModelId): string[] {
       return ["10", "15"];
     case "openai/sora-2-pro":
       return ["10", "15"];
-    case "bytedance/seedance-1.5-pro":
-      return ["5", "10", "15"];
     case "bytedance/seedance-2.0-pro":
       return ["5", "10", "15"];
     default:
@@ -1795,7 +1788,7 @@ export default function StudioVideoPanel({
                 <div>
                   <Label className="text-xs text-white/45">Quality</Label>
                   <p className="mt-0.5 text-[10px] leading-snug text-white/35">
-                    720p (Std) or 1080p (Pro). Motion Control uses the same quality modes.
+                    Select the mode you want — credits update accordingly.
                   </p>
                   <Select
                     value={editKlingMode}
@@ -2040,8 +2033,8 @@ export default function StudioVideoPanel({
                           : modelId === "openai/sora-2-pro"
                             ? "Standard or High (Pro). Credits match the Sora 2 Pro sheet."
                             : modelId === "kling-2.6/video"
-                              ? "720p (Std) or 1080p (Pro). Pro works best with audio on."
-                              : "720p (Std) or 1080p (Pro) for Kling 3.0."}
+                              ? "Pick a mode — credits update accordingly."
+                              : "Pick a mode — credits update accordingly."}
                       </p>
                       <Select value={klingMode} onValueChange={(v) => setKlingMode(v as "std" | "pro")}>
                         <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">

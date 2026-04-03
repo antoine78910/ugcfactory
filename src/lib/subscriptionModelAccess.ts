@@ -41,7 +41,6 @@ const IMAGE_MIN_RANK: Record<"nano" | "pro", number> = {
 
 /** KIE / OpenAI ids used by Studio video panel + Veo API. */
 const VIDEO_MIN_RANK: Record<string, number> = {
-  "bytedance/seedance-1.5-pro": 0,
   "kling-2.6/video": 1, // Starter+
   // Starter should not include Seedance 2.0; unlock on Growth+
   "bytedance/seedance-2.0-pro": 2,
@@ -77,7 +76,7 @@ export function canUseStudioImagePickerModel(planId: AccountPlanId, pickerId: st
   const id = pickerId.trim();
   if (id === "nano" || id === "pro") return canUseStudioImageModel(planId, id);
   if (isStudioSeedreamImagePickerId(id)) return planRank(planId) >= IMAGE_MIN_RANK.pro;
-  if (isStudioGoogleNanoBananaPickerId(id) || id === "recraft_remove_background") {
+  if (isStudioGoogleNanoBananaPickerId(id)) {
     return planRank(planId) >= IMAGE_MIN_RANK.pro;
   }
   return false;
@@ -121,7 +120,7 @@ export function minPlanForStudioImagePicker(pickerId: string): AccountPlanId {
   const id = pickerId.trim();
   if (id === "nano" || id === "pro") return minPlanForStudioImage(id);
   if (isStudioSeedreamImagePickerId(id)) return planIdAtMinRank(IMAGE_MIN_RANK.pro);
-  if (isStudioGoogleNanoBananaPickerId(id) || id === "recraft_remove_background") {
+  if (isStudioGoogleNanoBananaPickerId(id)) {
     return planIdAtMinRank(IMAGE_MIN_RANK.pro);
   }
   return "scale";
@@ -169,7 +168,6 @@ const STUDIO_VIDEO_LABELS: Record<string, string> = {
   "kling-2.6/video": "Kling 2.6",
   "openai/sora-2": "Sora 2",
   "openai/sora-2-pro": "Sora 2 Pro",
-  "bytedance/seedance-1.5-pro": "Seedance 1.5 Pro",
   "bytedance/seedance-2.0-pro": "Seedance 2.0 Pro",
   veo3_fast: "Veo 3.1 Fast",
   veo3: "Veo 3.1",
@@ -185,7 +183,6 @@ const STUDIO_VIDEO_EDIT_PICKER_LABELS: Record<string, string> = {
 
 /** Order used in “included with your plan” lists (cheapest → premium). */
 export const STUDIO_VIDEO_IDS_ORDERED: readonly string[] = [
-  "bytedance/seedance-1.5-pro",
   "kling-2.6/video",
   "bytedance/seedance-2.0-pro",
   "veo3_fast",
@@ -217,7 +214,6 @@ const STUDIO_IMAGE_PICKER_LABELS: Record<string, string> = {
   google_nano_banana: "Google Nano Banana",
   nanobanana_standard: "Google Nano Banana",
   google_nano_banana_edit: "Google Nano Banana",
-  recraft_remove_background: "Recraft Remove Background",
 };
 
 export function studioImagePickerDisplayLabel(pickerId: string): string {
@@ -327,10 +323,6 @@ export const SUBSCRIPTION_MODEL_MATRIX_ROWS: SubscriptionModelMatrixRow[] = [
   {
     label: "Seedream 5.0",
     tiers: tierBools(IMAGE_MIN_RANK.pro),
-  },
-  {
-    label: "Seedance 1.5",
-    tiers: tierBools(VIDEO_MIN_RANK["bytedance/seedance-1.5-pro"]),
   },
   { label: "Kling 2.6", tiers: tierBools(VIDEO_MIN_RANK["kling-2.6/video"]) },
   { label: "Seedance 2.0", tiers: tierBools(VIDEO_MIN_RANK["bytedance/seedance-2.0-pro"]) },

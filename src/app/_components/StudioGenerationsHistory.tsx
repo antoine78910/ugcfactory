@@ -11,6 +11,8 @@ import { toast } from "sonner";
 import VideoCard from "@/app/_components/VideoCard";
 import { isStudioGenerationRowId } from "@/lib/studioGenerationRowId";
 import { proxiedMediaSrc } from "@/lib/mediaProxyUrl";
+import { isStudioSeedreamImagePickerId, studioImageModelSupportsResolutionPicker } from "@/lib/studioImageModels";
+import { studioImageCreditsChargedTotal } from "@/lib/pricing";
 
 export type StudioHistoryMediaKind = "image" | "video" | "motion" | "audio";
 
@@ -89,13 +91,14 @@ export type StudioImageLightboxEditModelOption = { value: string; label: string 
 export type StudioImageLightboxEditConfig = {
   nanoAspectOptions: readonly string[];
   proAspectOptions: readonly string[];
+  /** Seedream unified pickers — same list as Studio main panel (no `auto`). */
+  seedreamAspectOptions: readonly string[];
   resolutionOptions: readonly ("1K" | "2K" | "4K")[];
   seedModel: string;
   /** Models shown in the lightbox edit dropdown (e.g. nano, pro, Seedream I2I). */
   editModelOptions: StudioImageLightboxEditModelOption[];
   seedAspect: string;
   seedResolution: "1K" | "2K" | "4K";
-  creditsFor: (model: string, resolution: "1K" | "2K" | "4K") => number;
   onSubmitEdit: (payload: {
     sourceUrl: string;
     prompt: string;
@@ -179,16 +182,24 @@ export function StudioGenerationsHistory({
     setUpscaleFactor(seed);
   }, [lightboxItem?.url, imageLightboxUpscale]);
 
-  const editAspectOptions = useMemo(
-    () => (editModel === "nano" ? imageLightboxEdit?.nanoAspectOptions ?? [] : imageLightboxEdit?.proAspectOptions ?? []),
-    [editModel, imageLightboxEdit],
-  );
+  const editAspectOptions = useMemo(() => {
+    if (!imageLightboxEdit) return [];
+    if (editModel === "nano") return [...imageLightboxEdit.nanoAspectOptions];
+    if (editModel === "pro") return [...imageLightboxEdit.proAspectOptions];
+    if (isStudioSeedreamImagePickerId(editModel)) return [...imageLightboxEdit.seedreamAspectOptions];
+    if (editModel === "google_nano_banana") return [...imageLightboxEdit.nanoAspectOptions];
+    return [...imageLightboxEdit.nanoAspectOptions];
+  }, [editModel, imageLightboxEdit]);
 
   useEffect(() => {
     if (!lightboxItem?.url || !imageLightboxEdit) return;
     const allowed = new Set(editAspectOptions as readonly string[]);
     if (allowed.size > 0 && !allowed.has(editAspect)) {
-      setEditAspect(editModel === "nano" ? "auto" : "3:4");
+      setEditAspect(
+        editModel === "nano" || editModel === "google_nano_banana"
+          ? "auto"
+          : "3:4",
+      );
     }
   }, [editModel, editAspect, editAspectOptions, lightboxItem?.url, imageLightboxEdit]);
 
@@ -864,7 +875,8 @@ export function StudioGenerationsHistory({
                       Edit image (image → image)
                     </div>
                     <p className="mb-3 text-[11px] leading-snug text-white/45">
-                      Same options as Studio: prompt, aspect ratio, resolution; the open image is used as the reference.
+                      Prompt and aspect ratio match Studio; quality (resolution) only appears for models that expose
+                      it. The open image is the reference.
                     </p>
                     <div className="space-y-3">
                       <div>
@@ -908,24 +920,26 @@ export function StudioGenerationsHistory({
                             </SelectContent>
                           </Select>
                         </div>
-                        <div>
-                          <Label className="text-[10px] uppercase tracking-wide text-white/40">Resolution</Label>
-                          <Select
-                            value={editResolution}
-                            onValueChange={(v) => setEditResolution(v as "1K" | "2K" | "4K")}
-                          >
-                            <SelectTrigger className="mt-1.5 h-10 border-white/15 bg-black/40 text-white">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {(imageLightboxEdit.resolutionOptions ?? ["1K", "2K", "4K"]).map((r) => (
-                                <SelectItem key={r} value={r}>
-                                  {r}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
+                        {studioImageModelSupportsResolutionPicker(editModel) ? (
+                          <div>
+                            <Label className="text-[10px] uppercase tracking-wide text-white/40">Resolution</Label>
+                            <Select
+                              value={editResolution}
+                              onValueChange={(v) => setEditResolution(v as "1K" | "2K" | "4K")}
+                            >
+                              <SelectTrigger className="mt-1.5 h-10 border-white/15 bg-black/40 text-white">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {(imageLightboxEdit.resolutionOptions ?? ["1K", "2K", "4K"]).map((r) => (
+                                  <SelectItem key={r} value={r}>
+                                    {r}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        ) : null}
                       </div>
                       <Button
                         type="button"
@@ -942,12 +956,22 @@ export function StudioGenerationsHistory({
                             prompt: p,
                             model: editModel,
                             aspectRatio: editAspect,
-                            resolution: editResolution,
+                            resolution: studioImageModelSupportsResolutionPicker(editModel)
+                              ? editResolution
+                              : "2K",
                           });
                           setLightboxItem(null);
                         }}
                       >
-                        Run edit · {imageLightboxEdit.creditsFor(editModel, editResolution)} credits
+                        Run edit ·{" "}
+                        {studioImageCreditsChargedTotal({
+                          studioModel: editModel,
+                          resolution: studioImageModelSupportsResolutionPicker(editModel)
+                            ? editResolution
+                            : "2K",
+                          numImages: 1,
+                        })}{" "}
+                        credits
                       </Button>
                     </div>
                   </div>

@@ -12,7 +12,7 @@ import { createStudioKieImageTasks } from "@/lib/studioKieImageTask";
 import type { StudioGenerationRow } from "@/lib/studioGenerationsMap";
 import type { NanoBananaProAspectRatio } from "@/lib/nanobanana";
 import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
-import { studioImageCreditsPerOutput } from "@/lib/pricing";
+import { studioImageCreditsChargedTotal } from "@/lib/pricing";
 import { isStudioImageKiePickerModelId } from "@/lib/studioImageModels";
 import { getUserPlan } from "@/lib/supabase/getUserPlan";
 
@@ -20,8 +20,11 @@ import { getUserPlan } from "@/lib/supabase/getUserPlan";
 function computeImageCredits(model: string, resolution: string, numImages: number): number {
   const res =
     resolution === "4K" || resolution === "2K" || resolution === "1K" ? resolution : "1K";
-  const perImage = studioImageCreditsPerOutput({ studioModel: model, resolution: res });
-  return perImage * Math.max(1, numImages);
+  return studioImageCreditsChargedTotal({
+    studioModel: model,
+    resolution: res,
+    numImages,
+  });
 }
 
 type Body = {

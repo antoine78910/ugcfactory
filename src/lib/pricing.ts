@@ -100,9 +100,6 @@ export const SEEDREAM_45_COST_USD = 0.0325;
 export const SEEDREAM_50_LITE_FAL_LIST_USD = 0.035;
 export const SEEDREAM_50_LITE_COST_USD = 0.0275;
 
-const SEEDREAM_45_BASE = computeImageModelFromCostUsd(SEEDREAM_45_COST_USD);
-const SEEDREAM_50_LITE_BASE = computeImageModelFromCostUsd(SEEDREAM_50_LITE_COST_USD);
-
 /** Google Nano Banana 2 / Pro on Kie — credits & COGS from provider sheet (Fal list + negotiated COGS). */
 function googleImageTier(p: {
   model: string;
@@ -124,30 +121,48 @@ function googleImageTier(p: {
   };
 }
 
-const GOOGLE_NANO_2_1K = googleImageTier({
+/** Product-fixed credits (Studio Nano 2 / Pro tiers). */
+function fixedImageModelCredits(p: {
+  model: string;
+  credits: number;
+  fal_list_price_usd: number | null;
+}) {
+  return {
+    model: p.model,
+    cost_usd: 0,
+    cost_with_buffer: 0,
+    target_margin: PRICING_BASE.target_margins.image,
+    price_usd: p.credits * 0.07,
+    credits: p.credits,
+    fal_list_price_usd: p.fal_list_price_usd,
+  };
+}
+
+/** NanoBanana 2 — 1K / 2K / 4K (studio `nano`). */
+const GOOGLE_NANO_2_1K = fixedImageModelCredits({
   model: "google_nano_banana_2_1k",
-  cost_usd: 0.04,
+  credits: 1,
   fal_list_price_usd: 0.08,
 });
-const GOOGLE_NANO_2_2K = googleImageTier({
+const GOOGLE_NANO_2_2K = fixedImageModelCredits({
   model: "google_nano_banana_2_2k",
-  cost_usd: 0.06,
+  credits: 2,
   fal_list_price_usd: 0.12,
 });
-const GOOGLE_NANO_2_4K = googleImageTier({
+const GOOGLE_NANO_2_4K = fixedImageModelCredits({
   model: "google_nano_banana_2_4k",
-  /** COGS tuned so billed credits = 3 at current STARTER_CREDIT_VALUE_USD (1K=1, 2K=2, 4K=3). */
-  cost_usd: 0.11,
+  credits: 3,
   fal_list_price_usd: 0.16,
 });
-const GOOGLE_NANO_PRO_12K = googleImageTier({
+/** NanoBanana Pro — 1K/2K = 3 cr; 4K = 4 cr (studio `pro`). */
+const GOOGLE_NANO_PRO_12K = fixedImageModelCredits({
   model: "google_nano_banana_pro_1k_2k",
-  cost_usd: 0.09,
+  credits: 3,
   fal_list_price_usd: 0.15,
 });
-const GOOGLE_NANO_PRO_4K = googleImageTier({
+const GOOGLE_NANO_PRO_4K = fixedImageModelCredits({
   model: "google_nano_banana_pro_4k",
-  cost_usd: 0.12,
+  credits: 4,
   fal_list_price_usd: 0.3,
 });
 
@@ -157,113 +172,61 @@ export const IMAGE_MODEL = {
   google_nano_banana_2_4k: GOOGLE_NANO_2_4K,
   google_nano_banana_pro_1k_2k: GOOGLE_NANO_PRO_12K,
   google_nano_banana_pro_4k: GOOGLE_NANO_PRO_4K,
-  /** Legacy key — Google nano banana text-to-image (1 price). */
-  nanobanana_standard: googleImageTier({
+  /** Legacy — “nano normal” (0.5 cr / image; total jobs use integer credits via ceil). */
+  nanobanana_standard: fixedImageModelCredits({
     model: "nanobanana_standard",
-    cost_usd: 0.02,
+    credits: 0.5,
     fal_list_price_usd: 0.039,
   }),
   /**
-   * Legacy key used by Link to Ad for 3 reference images.
-   * Requested billing: 2 credits per NanoBanana Pro image.
+   * Legacy key used by Link to Ad for 3 reference images (Pro tier 1K/2K).
    */
-  nanobanana_pro: googleImageTier({
+  nanobanana_pro: fixedImageModelCredits({
     model: "nanobanana_pro",
-    cost_usd: 0.09,
+    credits: 3,
     fal_list_price_usd: 0.15,
   }),
-  google_nano_banana_edit: googleImageTier({
+  google_nano_banana_edit: fixedImageModelCredits({
     model: "google_nano_banana_edit",
-    cost_usd: 0.02,
+    credits: 0.5,
     fal_list_price_usd: 0.039,
   }),
-  recraft_remove_background: {
-    model: "recraft_remove_background",
-    cost_usd: 0,
-    cost_with_buffer: 0,
-    target_margin: PRICING_BASE.target_margins.image,
-    price_usd: 0,
-    credits: 1,
-    fal_list_price_usd: null as number | null,
-  },
-  seedream_45_text_to_image: {
+  seedream_45_text_to_image: fixedImageModelCredits({
     model: "seedream_45_text_to_image",
-    cost_usd: SEEDREAM_45_BASE.cost_usd,
-    cost_with_buffer: SEEDREAM_45_BASE.cost_with_buffer,
-    target_margin: SEEDREAM_45_BASE.target_margin,
-    price_usd: SEEDREAM_45_COST_USD / (1 - PRICING_BASE.target_margins.image),
-    credits: Math.max(
-      1,
-      Math.ceil((SEEDREAM_45_COST_USD / (1 - PRICING_BASE.target_margins.image)) / STARTER_CREDIT_VALUE_USD),
-    ),
+    credits: 1,
     fal_list_price_usd: SEEDREAM_45_FAL_LIST_USD,
-  },
-  seedream_45_image_to_image: {
+  }),
+  seedream_45_image_to_image: fixedImageModelCredits({
     model: "seedream_45_image_to_image",
-    cost_usd: SEEDREAM_45_BASE.cost_usd,
-    cost_with_buffer: SEEDREAM_45_BASE.cost_with_buffer,
-    target_margin: SEEDREAM_45_BASE.target_margin,
-    price_usd: SEEDREAM_45_COST_USD / (1 - PRICING_BASE.target_margins.image),
-    credits: Math.max(
-      1,
-      Math.ceil((SEEDREAM_45_COST_USD / (1 - PRICING_BASE.target_margins.image)) / STARTER_CREDIT_VALUE_USD),
-    ),
+    credits: 1,
     fal_list_price_usd: SEEDREAM_45_FAL_LIST_USD,
-  },
-  seedream_50_lite_text_to_image: {
+  }),
+  seedream_50_lite_text_to_image: fixedImageModelCredits({
     model: "seedream_50_lite_text_to_image",
-    cost_usd: SEEDREAM_50_LITE_BASE.cost_usd,
-    cost_with_buffer: SEEDREAM_50_LITE_BASE.cost_with_buffer,
-    target_margin: SEEDREAM_50_LITE_BASE.target_margin,
-    price_usd: SEEDREAM_50_LITE_COST_USD / (1 - PRICING_BASE.target_margins.image),
-    credits: Math.max(
-      1,
-      Math.ceil((SEEDREAM_50_LITE_COST_USD / (1 - PRICING_BASE.target_margins.image)) / STARTER_CREDIT_VALUE_USD),
-    ),
+    credits: 1,
     fal_list_price_usd: SEEDREAM_50_LITE_FAL_LIST_USD,
-  },
-  seedream_50_lite_image_to_image: {
+  }),
+  seedream_50_lite_image_to_image: fixedImageModelCredits({
     model: "seedream_50_lite_image_to_image",
-    cost_usd: SEEDREAM_50_LITE_BASE.cost_usd,
-    cost_with_buffer: SEEDREAM_50_LITE_BASE.cost_with_buffer,
-    target_margin: SEEDREAM_50_LITE_BASE.target_margin,
-    price_usd: SEEDREAM_50_LITE_COST_USD / (1 - PRICING_BASE.target_margins.image),
-    credits: Math.max(
-      1,
-      Math.ceil((SEEDREAM_50_LITE_COST_USD / (1 - PRICING_BASE.target_margins.image)) / STARTER_CREDIT_VALUE_USD),
-    ),
+    credits: 1,
     fal_list_price_usd: SEEDREAM_50_LITE_FAL_LIST_USD,
-  },
-  seedream_45: {
+  }),
+  seedream_45: fixedImageModelCredits({
     model: "seedream_45",
-    cost_usd: SEEDREAM_45_BASE.cost_usd,
-    cost_with_buffer: SEEDREAM_45_BASE.cost_with_buffer,
-    target_margin: SEEDREAM_45_BASE.target_margin,
-    price_usd: SEEDREAM_45_COST_USD / (1 - PRICING_BASE.target_margins.image),
-    credits: Math.max(
-      1,
-      Math.ceil((SEEDREAM_45_COST_USD / (1 - PRICING_BASE.target_margins.image)) / STARTER_CREDIT_VALUE_USD),
-    ),
+    credits: 1,
     fal_list_price_usd: SEEDREAM_45_FAL_LIST_USD,
-  },
-  seedream_50_lite: {
+  }),
+  seedream_50_lite: fixedImageModelCredits({
     model: "seedream_50_lite",
-    cost_usd: SEEDREAM_50_LITE_BASE.cost_usd,
-    cost_with_buffer: SEEDREAM_50_LITE_BASE.cost_with_buffer,
-    target_margin: SEEDREAM_50_LITE_BASE.target_margin,
-    price_usd: SEEDREAM_50_LITE_COST_USD / (1 - PRICING_BASE.target_margins.image),
-    credits: Math.max(
-      1,
-      Math.ceil((SEEDREAM_50_LITE_COST_USD / (1 - PRICING_BASE.target_margins.image)) / STARTER_CREDIT_VALUE_USD),
-    ),
+    credits: 1,
     fal_list_price_usd: SEEDREAM_50_LITE_FAL_LIST_USD,
-  },
-  google_nano_banana: googleImageTier({
+  }),
+  google_nano_banana: fixedImageModelCredits({
     model: "google_nano_banana",
-    cost_usd: 0.02,
+    credits: 0.5,
     fal_list_price_usd: 0.039,
   }),
-} as const;
+};
 
 /** Kie Market model id — Topaz Video Upscale (1× / 2× / 4×). */
 export const KIE_TOPAZ_VIDEO_UPSCALE_MODEL = "topaz/video-upscale" as const;
@@ -500,22 +463,6 @@ export const STUDIO_IMAGE_SEEDREAM_50_LITE_ECONOMICS_ROWS = [
   };
 });
 
-/** Recraft remove background row. */
-export const STUDIO_IMAGE_RECRAFT_REMOVE_BG_ROWS: StudioImageEconomicsRow[] = [
-  {
-    key: "recraft_remove_background",
-    modelAndModality: "Recraft Remove Background, image-to-image",
-    modality: "image",
-    provider: "Recraft",
-    creditsPerGen: IMAGE_MODEL.recraft_remove_background.credits,
-    creditsUnit: "per image",
-    ourRetailUsd: 0,
-    falListUsd: null,
-    discountVsFalListPct: null,
-    cogsUsd: IMAGE_MODEL.recraft_remove_background.cost_usd,
-  },
-];
-
 export type StudioGrokImagineEconomicsRow = {
   modelAndModality: string;
   modality: string;
@@ -622,8 +569,8 @@ export function creditsForImageModel(key: ImageModelKey): number {
 export type StudioImageOutputResolution = "1K" | "2K" | "4K";
 
 /**
- * Credits per generated image in Studio (Kie Google Nano Banana 2 / Pro, Seedream).
- * Seedream KIE billing uses a flat credit per image from `IMAGE_MODEL`; resolution maps to provider quality only.
+ * Credits per generated image in Studio (Google Nano 2 / Pro tiers, flat per-model rows elsewhere).
+ * Seedream 4.5 / 5.0 Lite: flat 1 credit; `resolution` is ignored for billing (KIE still uses a default quality server-side).
  */
 export function studioImageCreditsPerOutput(opts: {
   studioModel: string;
@@ -633,10 +580,8 @@ export function studioImageCreditsPerOutput(opts: {
     return IMAGE_MODEL[opts.studioModel].credits;
   }
   if (isStudioGoogleNanoBananaPickerId(opts.studioModel)) {
-    return IMAGE_MODEL.google_nano_banana.credits;
-  }
-  if (opts.studioModel === "recraft_remove_background") {
-    return IMAGE_MODEL.recraft_remove_background.credits;
+    const k = opts.studioModel as "google_nano_banana" | "nanobanana_standard" | "google_nano_banana_edit";
+    return IMAGE_MODEL[k].credits;
   }
   const m = opts.studioModel as "nano" | "pro";
   if (m === "pro") {
@@ -646,6 +591,23 @@ export function studioImageCreditsPerOutput(opts: {
   if (opts.resolution === "4K") return IMAGE_MODEL.google_nano_banana_2_4k.credits;
   if (opts.resolution === "2K") return IMAGE_MODEL.google_nano_banana_2_2k.credits;
   return IMAGE_MODEL.google_nano_banana_2_1k.credits;
+}
+
+/**
+ * Integer credits charged for a Studio image job (`credits_charged` is int in DB).
+ * Half-credit models: ceil(perImage × numImages).
+ */
+export function studioImageCreditsChargedTotal(opts: {
+  studioModel: string;
+  resolution: StudioImageOutputResolution;
+  numImages: number;
+}): number {
+  const n = Math.max(1, Math.min(10, Math.floor(Number(opts.numImages) || 1)));
+  const per = studioImageCreditsPerOutput({
+    studioModel: opts.studioModel,
+    resolution: opts.resolution,
+  });
+  return Math.max(1, Math.ceil(per * n));
 }
 
 // ---------------------------------------------------------------------------
@@ -861,21 +823,30 @@ export function calculateSoraCredits(durationSec: number): number {
 // ---------------------------------------------------------------------------
 
 /**
- * Google Veo 3.1 pricing (Fal sheet):
- * - Fast: $0.30 / video
- * - Quality: $1.25 / video
- * We bill: retail = our_price × 2, credits = round(retail / $0.07).
+ * Google Veo 3.1 (Fal) — **Fast** vs **Quality** are separate products (different Credits/Gen on sheet).
+ * We use Fal’s **Credits / Gen** column per tier (not the generic Sora retail÷$0.07 formula).
+ * - Fast (e.g. text/image-to-video Fast): 60 cr · $0.30 our price
+ * - Quality (e.g. text/image-to-video Quality): 250 cr · $1.25 our price
  */
-export const VEO_3_1_FAST = makeSora2ProTier({
+const _VEO_3_1_FAST_BASE = makeSora2ProTier({
   model: "veo_3_1_fast",
   our_price_usd: 0.3,
   fal_list_price_usd: 1.2,
 });
-export const VEO_3_1_QUALITY = makeSora2ProTier({
+export const VEO_3_1_FAST: VideoTierPricing = {
+  ..._VEO_3_1_FAST_BASE,
+  credits: 60,
+};
+
+const _VEO_3_1_QUALITY_BASE = makeSora2ProTier({
   model: "veo_3_1_quality",
   our_price_usd: 1.25,
   fal_list_price_usd: 3.2,
 });
+export const VEO_3_1_QUALITY: VideoTierPricing = {
+  ..._VEO_3_1_QUALITY_BASE,
+  credits: 250,
+};
 
 /** Sora 2 Pro: quality controlled by kling `mode` (std => Standard, pro => High). */
 export function calculateSora2ProCredits(durationSec: number, quality: string | undefined): number {

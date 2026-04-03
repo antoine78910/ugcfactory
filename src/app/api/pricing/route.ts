@@ -62,7 +62,7 @@ export async function GET() {
         },
       },
       veo_3_1: {
-        formula: "per video: round(Fal our_usd * 2 / 0.07)",
+        formula: "per video: Fal Credits/Gen column (Fast vs Quality differ; see credits on each tier)",
         fast: VEO_3_1_FAST,
         quality: VEO_3_1_QUALITY,
       },

@@ -26,6 +26,7 @@ import { StudioGenerationsHistory } from "@/app/_components/StudioGenerationsHis
 import type { StudioHistoryItem, StudioImageLightboxEditModelOption } from "@/app/_components/StudioGenerationsHistory";
 import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
 import {
+  studioImageCreditsChargedTotal,
   studioImageCreditsPerOutput,
   topazImageUpscaleCredits,
   topazImageUpscaleKieFactorToTierLabel,
@@ -42,6 +43,7 @@ import {
 import {
   isStudioImageKiePickerModelId,
   isStudioSeedreamImagePickerId,
+  studioImageModelSupportsResolutionPicker,
   type StudioImageKiePickerModelId,
 } from "@/lib/studioImageModels";
 import { STUDIO_IMAGE_TAB_KINDS } from "@/lib/studioGenerationKinds";
@@ -73,7 +75,7 @@ const IMAGE_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
     label: "NanoBanana Pro",
     icon: "google",
     exclusive: true,
-    resolution: "Up to 4K",
+    resolution: "3 cr (1K/2K) · 4 cr (4K)",
     durationRange: "Max 4 images",
     searchText: "nanobanana pro nano banana pro google",
   },
@@ -81,7 +83,7 @@ const IMAGE_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
     id: "nano",
     label: "NanoBanana 2",
     icon: "google",
-    resolution: "1K–4K",
+    resolution: "1 / 2 / 3 cr (1K / 2K / 4K)",
     durationRange: "Max 4 images",
     searchText: "nanobanana 2 standard google",
   },
@@ -108,18 +110,9 @@ const IMAGE_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
     label: "Google Nano Banana",
     icon: "google",
     subtitle: "Auto text-to-image / image-to-image",
-    resolution: "1 crédit / image",
+    resolution: "0.5 crédit / image",
     durationRange: "Auto",
     searchText: "google nano banana text to image image to image",
-  },
-  {
-    id: "recraft_remove_background",
-    label: "Recraft Remove Background",
-    icon: "google",
-    subtitle: "1 credit per image",
-    resolution: "Image",
-    durationRange: "Edit",
-    searchText: "recraft remove background",
   },
 ];
 
@@ -437,7 +430,15 @@ export default function StudioImagePanel() {
       }),
     [model, resolution],
   );
-  const totalCredits = numImages * perImageCredits;
+  const totalCredits = useMemo(
+    () =>
+      studioImageCreditsChargedTotal({
+        studioModel: model,
+        resolution,
+        numImages,
+      }),
+    [model, resolution, numImages],
+  );
 
   const displayHistoryItems = useMemo(() => dedupeStudioImageHistoryByMediaUrl(historyItems), [historyItems]);
 
@@ -483,11 +484,11 @@ export default function StudioImagePanel() {
     }
     const creditBypass = isPlatformCreditBypassActive();
     const n = Math.min(4, Math.max(1, opts.numImages));
-    const perOut = studioImageCreditsPerOutput({
+    const chargeTotal = studioImageCreditsChargedTotal({
       studioModel: opts.model,
       resolution: opts.resolution,
+      numImages: n,
     });
-    const chargeTotal = n * perOut;
     if (!creditBypass && creditsRef.current < chargeTotal) {
       setBilling({ open: true, reason: "credits", required: chargeTotal });
       return;
@@ -508,12 +509,11 @@ export default function StudioImagePanel() {
             kind: "studio_image",
             label: summary,
             accountPlan: planId,
-            creditsCharged: platformCharge,
             prompt: p,
             model: opts.model,
             imageUrls: opts.refUrls.length ? opts.refUrls : undefined,
             aspectRatio: opts.aspect,
-            resolution: opts.resolution,
+            resolution: studioImageModelSupportsResolutionPicker(opts.model) ? opts.resolution : "2K",
             numImages: n,
             personalApiKey: getPersonalApiKey() ?? undefined,
           }),
@@ -770,33 +770,34 @@ export default function StudioImagePanel() {
             </Select>
           </div>
 
-          <div>
-            <Label className="text-xs text-white/45">Quality (resolution)</Label>
-            <p className="mt-0.5 text-[10px] leading-snug text-white/35">
-              {isStudioSeedreamImagePickerId(model) ? (
-                <>
-                  Seedream: 1K/2K → basic quality (~2K output), 4K → high (~4K output). {perImageCredits} credits per
-                  image.
-                </>
-              ) : (
-                <>
-                  1K = faster / lower cost · 4K = more detail · {perImageCredits} credits per image at this quality
-                </>
-              )}
-            </p>
-            <Select value={resolution} onValueChange={(v) => setResolution(v as (typeof PRO_RESOLUTIONS)[number])}>
-              <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent position="popper" className={studioSelectContentClass}>
-                {PRO_RESOLUTIONS.map((r) => (
-                  <SelectItem key={r} value={r} className={studioSelectItemClass}>
-                    {r}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {studioImageModelSupportsResolutionPicker(model) ? (
+            <div>
+              <Label className="text-xs text-white/45">Quality (resolution)</Label>
+              <p className="mt-0.5 text-[10px] leading-snug text-white/35">
+                {model === "pro" ? (
+                  <>
+                    1K/2K: 3 credits · 4K: 4 credits ({perImageCredits} credits per image at this quality).
+                  </>
+                ) : (
+                  <>
+                    1K: 1 cr · 2K: 2 cr · 4K: 3 cr ({perImageCredits} credits per image).
+                  </>
+                )}
+              </p>
+              <Select value={resolution} onValueChange={(v) => setResolution(v as (typeof PRO_RESOLUTIONS)[number])}>
+                <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent position="popper" className={studioSelectContentClass}>
+                  {PRO_RESOLUTIONS.map((r) => (
+                    <SelectItem key={r} value={r} className={studioSelectItemClass}>
+                      {r}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
 
           <div>
             <Label className="text-xs text-white/45">Images (same prompt)</Label>
@@ -853,12 +854,12 @@ export default function StudioImagePanel() {
               imageLightboxEdit={{
                 nanoAspectOptions: NANO_BANANA_2_ASPECT_RATIOS,
                 proAspectOptions: proAspectOptionsFull,
+                seedreamAspectOptions: ASPECT_RATIOS_PRO,
                 resolutionOptions: PRO_RESOLUTIONS,
                 seedModel: model,
                 editModelOptions: STUDIO_LIGHTBOX_EDIT_MODEL_OPTIONS,
                 seedAspect: aspect,
                 seedResolution: resolution,
-                creditsFor: (m, r) => studioImageCreditsPerOutput({ studioModel: m, resolution: r }),
                 onSubmitEdit: ({ sourceUrl, prompt: editP, model: m, aspectRatio, resolution: res }) => {
                   if (!isStudioImageKiePickerModelId(m)) {
                     toast.error("Invalid model selected.");

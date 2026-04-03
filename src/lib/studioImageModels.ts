@@ -1,11 +1,6 @@
 /** Studio Image tab picker ids sent to `/api/studio/generations/start` and KIE helpers. */
 
-export const STUDIO_UNIFIED_IMAGE_PICKER_IDS = [
-  "seedream_45",
-  "seedream_50_lite",
-  "google_nano_banana",
-  "recraft_remove_background",
-] as const;
+export const STUDIO_UNIFIED_IMAGE_PICKER_IDS = ["seedream_45", "seedream_50_lite", "google_nano_banana"] as const;
 
 export const STUDIO_LEGACY_IMAGE_PICKER_IDS = [
   "seedream_45_text_to_image",
@@ -33,7 +28,6 @@ export type StudioImageKiePickerModelId = "nano" | "pro" | StudioUnifiedImagePic
 export type ResolvedStudioImageKiePickerModelId =
   | "nano"
   | "pro"
-  | "recraft_remove_background"
   | Extract<StudioLegacyImagePickerId, StudioSeedreamImagePickerId | "nanobanana_standard" | "google_nano_banana_edit">;
 
 export function isStudioSeedreamImagePickerId(id: string): id is StudioSeedreamImagePickerId {
@@ -50,6 +44,11 @@ export function isStudioGoogleNanoBananaPickerId(
   id: string,
 ): id is Extract<StudioUnifiedImagePickerId | StudioLegacyImagePickerId, "google_nano_banana" | "nanobanana_standard" | "google_nano_banana_edit"> {
   return id === "google_nano_banana" || id === "nanobanana_standard" || id === "google_nano_banana_edit";
+}
+
+/** Quality/resolution row — only NanoBanana 2 and Pro expose 1K / 2K / 4K in Studio. */
+export function studioImageModelSupportsResolutionPicker(id: string): boolean {
+  return id === "nano" || id === "pro";
 }
 
 export function isStudioImageKiePickerModelId(id: string): id is StudioImageKiePickerModelId {

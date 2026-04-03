@@ -100,10 +100,6 @@ export async function createStudioKieImageTasks(input: StudioKieImageTaskInput):
     return { taskIds, model, kieModel };
   }
 
-  if (model === "recraft_remove_background") {
-    throw new Error("Recraft Remove Background is not wired to the Studio image backend yet.");
-  }
-
   const imageUrls = await normalizeKieNanoBananaImageInputUrls(imageUrlsRaw);
   const resolutionNano = resolution as KieGoogleImageResolution;
   const googleModel = model === "pro" ? "pro" : "nano";
