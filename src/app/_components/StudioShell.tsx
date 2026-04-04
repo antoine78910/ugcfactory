@@ -8,9 +8,9 @@ import type { LucideIcon } from "lucide-react";
 import {
   ChevronLeft,
   ChevronRight,
-  Copy,
   FolderOpen,
   Image as ImageIcon,
+  Languages,
   Link2,
   Maximize2,
   Mic,
@@ -69,7 +69,7 @@ type CreateNavEntry =
 const CREATE_NAV: CreateNavEntry[] = [
   { kind: "route", id: "link_to_ad", label: "Link to Ad", icon: Link2 },
   { kind: "route", id: "avatar", label: "Avatar", icon: UserRound },
-  { kind: "route", id: "ad_clone", label: "Translate", icon: Copy },
+  { kind: "route", id: "ad_clone", label: "Translate", icon: Languages },
   { kind: "route", id: "voice", label: "Voice", icon: Mic },
   { kind: "route", id: "motion_control", label: "Motion Control", icon: Joystick },
   { kind: "route", id: "image", label: "Image", icon: ImageIcon },
