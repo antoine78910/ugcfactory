@@ -4,10 +4,57 @@ import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { SUBSCRIPTIONS } from "@/lib/pricing";
 import { parseAccountPlan, type AccountPlanId } from "@/lib/subscriptionModelAccess";
-import { getPlanFromPriceId } from "@/lib/stripe/subscriptionPrices";
+import {
+  getPlanFromPriceId,
+  isSubscriptionPlanId,
+  subscriptionPlanSortIndex,
+  type SubscriptionPlanId,
+} from "@/lib/stripe/subscriptionPrices";
 import { isAllowedUser } from "@/lib/allowedUsers";
-import { getUserCreditBalance } from "@/lib/creditGrants";
+import { getUserCreditBalance, resetSubscriptionCredits } from "@/lib/creditGrants";
+
+/** Monthly credits for a paid tier (aligned with Stripe webhook). */
+function subscriptionCreditsForPlan(planId: SubscriptionPlanId): number {
+  const i = subscriptionPlanSortIndex(planId);
+  return i >= 0 ? SUBSCRIPTIONS[i].credits_per_month : 0;
+}
+
+/**
+ * If Stripe shows an active sub but the webhook never created grants for this
+ * billing period, insert them. Skips when a subscription grant already exists
+ * for this period end (even if remaining=0 — user spent credits).
+ */
+async function healMissingSubscriptionCredits(
+  admin: SupabaseClient,
+  userId: string,
+  planId: SubscriptionPlanId,
+  periodEnd: Date,
+): Promise<void> {
+  if (!Number.isFinite(periodEnd.getTime())) return;
+  const amount = subscriptionCreditsForPlan(planId);
+  if (amount <= 0) return;
+
+  const tolMs = 120_000;
+  const low = new Date(periodEnd.getTime() - tolMs).toISOString();
+  const high = new Date(periodEnd.getTime() + tolMs).toISOString();
+
+  const { data: existing } = await admin
+    .from("user_credit_grants")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("source", "subscription")
+    .gte("expires_at", low)
+    .lte("expires_at", high)
+    .limit(1)
+    .maybeSingle();
+
+  if (existing) return;
+
+  await resetSubscriptionCredits(admin, userId, amount, periodEnd);
+}
 
 export type MeSubscriptionResponse = {
   planId: AccountPlanId;
@@ -119,6 +166,10 @@ export async function GET() {
                   },
                   { onConflict: "user_id" },
                 );
+
+                if (Number.isFinite(endMs) && isSubscriptionPlanId(planId)) {
+                  await healMissingSubscriptionCredits(admin, userId, planId, new Date(endMs));
+                }
               }
             } catch (dbErr) {
               console.error("[me/subscription] DB sync error:", dbErr);
@@ -172,7 +223,7 @@ export async function GET() {
 
     const { data, error } = await admin
       .from("user_subscriptions")
-      .select("plan_id, billing, status")
+      .select("plan_id, billing, status, current_period_end")
       .eq("user_id", auth.user.id)
       .maybeSingle();
 
@@ -184,6 +235,17 @@ export async function GET() {
     const planId = parseAccountPlan(data.plan_id);
     const raw = data.billing;
     const billing = raw === "yearly" ? "yearly" : raw === "monthly" ? "monthly" : null;
+
+    if (planId !== "free" && isSubscriptionPlanId(planId) && data.current_period_end) {
+      try {
+        const pe = new Date(String(data.current_period_end));
+        if (Number.isFinite(pe.getTime())) {
+          await healMissingSubscriptionCredits(admin, auth.user.id, planId, pe);
+        }
+      } catch {
+        /* non-critical */
+      }
+    }
 
     return NextResponse.json(await withCreditBalance({
       planId,
