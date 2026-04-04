@@ -66,6 +66,17 @@ import { proxiedMediaSrc } from "@/lib/mediaProxyUrl";
 import { cn } from "@/lib/utils";
 import { WAVESPEED_PROVIDER } from "@/lib/wavespeedChain";
 import {
+  type AppSection,
+  type TranslateToolMode,
+  type VoiceToolMode,
+  isStudioShellPath,
+  projectBrandFromPathname,
+  sectionFromPathname,
+  sectionToPath,
+  translateModeFromPathname,
+  voiceModeFromPathname,
+} from "@/lib/studioPaths";
+import {
   calculateWaveSpeedVideoTranslateCredits,
   VOICE_CHANGE_CREDITS_FLAT,
 } from "@/lib/pricing";
@@ -79,16 +90,6 @@ import {
 } from "@/lib/studioGenerationKinds";
 
 type WizardStep = "url" | "analysis" | "quiz" | "image" | "video";
-type AppSection =
-  | "link_to_ad"
-  | "avatar"
-  | "ad_clone"
-  | "voice"
-  | "motion_control"
-  | "image"
-  | "video"
-  | "upscale"
-  | "projects";
 
 type Extracted = {
   url: string;
@@ -116,8 +117,6 @@ type Quiz = {
 };
 
 type NanoModel = "nano" | "pro";
-type TranslateToolMode = "video_translate" | "voice_change";
-type VoiceToolMode = "voice_change" | "create_voice";
 type VoiceChangeUploadKind = "audio" | "video";
 type ElevenVoiceOption = {
   voiceId: string;
@@ -158,23 +157,6 @@ const APP_VALID_SECTIONS: AppSection[] = [
   "projects",
 ];
 
-/** URL slug ↔ internal section id. Exported so StudioShell can share the mapping. */
-export const SECTION_TO_SLUG: Record<AppSection, string> = {
-  link_to_ad: "link-to-ad",
-  avatar: "avatar",
-  ad_clone: "translate",
-  voice: "voice",
-  motion_control: "motion-control",
-  image: "image",
-  video: "video",
-  upscale: "upscale",
-  projects: "my-projects",
-};
-
-const SLUG_TO_SECTION: Record<string, AppSection> = Object.fromEntries(
-  Object.entries(SECTION_TO_SLUG).map(([k, v]) => [v, k]),
-) as Record<string, AppSection>;
-
 const ELEVENLABS_OUTPUT_FORMAT_OPTIONS = [
   "mp3_22050_32",
   "mp3_24000_48",
@@ -213,39 +195,6 @@ const VOICE_CHANGE_UPLOAD_ACCEPT = [
   ".aac",
   STUDIO_VIDEO_FILE_ACCEPT,
 ].join(",");
-
-/** Derive the active section from the browser pathname (e.g. "/app/link-to-ad"). */
-export function sectionFromPathname(pathname: string): AppSection {
-  const stripped = pathname.replace(/^\/app\/?/, "");
-  const first = stripped.split("/").filter(Boolean)[0] ?? "";
-  if (first === "watermark") return "video";
-  return SLUG_TO_SECTION[first] ?? "link_to_ad";
-}
-
-/** Derive the translate sub-mode from the pathname (e.g. "/app/translate/voice-change"). */
-function translateModeFromPathname(pathname: string): TranslateToolMode | null {
-  const stripped = pathname.replace(/^\/app\/?/, "");
-  const segs = stripped.split("/").filter(Boolean);
-  if (segs[0] !== "translate") return null;
-  return "video_translate";
-}
-
-/** Derive the voice sub-mode from the pathname (e.g. "/app/voice/create"). */
-function voiceModeFromPathname(pathname: string): VoiceToolMode | null {
-  const stripped = pathname.replace(/^\/app\/?/, "");
-  const segs = stripped.split("/").filter(Boolean);
-  if (segs[0] !== "voice") return null;
-  if (segs[1] === "create") return "create_voice";
-  return "voice_change";
-}
-
-/** Build a path-based URL for a section. Optional `extra` sub-path (e.g. voice/create). No ?project= — run stays in state + localStorage. */
-function sectionToPath(section: AppSection, _projectId?: string | null, extra?: string): string {
-  const slug = SECTION_TO_SLUG[section] ?? "link-to-ad";
-  let path = `/app/${slug}`;
-  if (extra) path += `/${extra}`;
-  return path;
-}
 
 function normalizeUrl(url: string): string {
   try {
@@ -468,7 +417,9 @@ export default function AppBrandWizard() {
   const searchParams = useSearchParams();
 
   const [step, setStep] = useState<WizardStep>("url");
-  const [appSection, setAppSection] = useState<AppSection>(() => sectionFromPathname(typeof window !== "undefined" ? window.location.pathname : "/app/link-to-ad"));
+  const [appSection, setAppSection] = useState<AppSection>(() =>
+    sectionFromPathname(typeof window !== "undefined" ? window.location.pathname : "/link-to-ad"),
+  );
 
   const [savedRuns, setSavedRuns] = useState<
     Array<{
@@ -1568,17 +1519,15 @@ export default function AppBrandWizard() {
     else if (typeof localStorage !== "undefined") localStorage.removeItem(UGC_CURRENT_RUN_KEY);
   }, [runId]);
 
-  const setAppSectionNav = useCallback(
-    (s: AppSection, extra?: string) => {
-      pendingSectionNavRef.current = s;
-      setAppSection(s);
-      const newPath = sectionToPath(s, null, extra);
-      if (typeof window !== "undefined" && window.location.pathname + window.location.search !== newPath) {
-        window.history.pushState(null, "", newPath);
-      }
-    },
-    [],
-  );
+  const setAppSectionNav = useCallback((s: AppSection, extra?: string) => {
+    pendingSectionNavRef.current = s;
+    setAppSection(s);
+    setSelectedProjectNormalizedUrl(null);
+    const newPath = sectionToPath(s, null, extra);
+    if (typeof window !== "undefined" && window.location.pathname + window.location.search !== newPath) {
+      window.history.pushState(null, "", newPath);
+    }
+  }, []);
 
   /**
    * Called when the user clicks "Change Voice" on a video in ANY history panel.
@@ -1604,7 +1553,8 @@ export default function AppBrandWizard() {
 
   /** Sync section state from pathname (handles browser back/forward & direct URL access). */
   useLayoutEffect(() => {
-    const sec = sectionFromPathname(pathname);
+    const path = typeof window !== "undefined" ? window.location.pathname : pathname;
+    const sec = sectionFromPathname(path);
     const pending = pendingSectionNavRef.current;
     if (pending !== null) {
       if (sec === pending) pendingSectionNavRef.current = null;
@@ -1612,21 +1562,35 @@ export default function AppBrandWizard() {
     }
     setAppSection((prev) => (prev === sec ? prev : sec));
 
-    const tm = translateModeFromPathname(pathname);
+    const tm = translateModeFromPathname(path);
     if (tm) setTranslateToolMode(tm);
-    const vm = voiceModeFromPathname(pathname);
+    const vm = voiceModeFromPathname(path);
     if (vm) setVoiceToolMode(vm);
+
+    const brand = projectBrandFromPathname(path);
+    if (sec === "projects") {
+      setSelectedProjectNormalizedUrl(brand);
+    } else {
+      setSelectedProjectNormalizedUrl(null);
+    }
   }, [pathname]);
 
   /** Browser back/forward: re-derive section from the new URL. */
   useEffect(() => {
     const onPop = () => {
-      const sec = sectionFromPathname(window.location.pathname);
+      const path = window.location.pathname;
+      const sec = sectionFromPathname(path);
       setAppSection((prev) => (prev === sec ? prev : sec));
-      const tm = translateModeFromPathname(window.location.pathname);
+      const tm = translateModeFromPathname(path);
       if (tm) setTranslateToolMode(tm);
-      const vm = voiceModeFromPathname(window.location.pathname);
+      const vm = voiceModeFromPathname(path);
       if (vm) setVoiceToolMode(vm);
+      const brand = projectBrandFromPathname(path);
+      if (sec === "projects") {
+        setSelectedProjectNormalizedUrl(brand);
+      } else {
+        setSelectedProjectNormalizedUrl(null);
+      }
     };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
@@ -1690,19 +1654,23 @@ export default function AppBrandWizard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only when opening Projects
   }, [appSection]);
 
-  /** Keep the browser URL in sync with appSection + runId (path-based). */
+  /** Keep the browser URL in sync with appSection + projects brand + voice sub-path. */
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (!pathname.startsWith("/app")) return;
+    if (!isStudioShellPath(window.location.pathname)) return;
 
     const voiceExtra =
       appSection === "voice" && voiceToolMode === "create_voice" ? "create" : undefined;
-    const wantPath = sectionToPath(appSection, null, voiceExtra);
+    const wantPath = sectionToPath(
+      appSection,
+      appSection === "projects" ? selectedProjectNormalizedUrl : null,
+      voiceExtra,
+    );
     const cur = window.location.pathname + window.location.search;
     if (cur !== wantPath) {
       window.history.replaceState(null, "", wantPath);
     }
-  }, [appSection, pathname, voiceToolMode, searchParams]);
+  }, [appSection, pathname, voiceToolMode, searchParams, selectedProjectNormalizedUrl]);
 
   async function onExtract() {
     const url = storeUrl.trim();
@@ -2393,7 +2361,14 @@ export default function AppBrandWizard() {
                             <button
                               key={proj.normalizedUrl}
                               type="button"
-                              onClick={() => setSelectedProjectNormalizedUrl(proj.normalizedUrl)}
+                              onClick={() => {
+                                setSelectedProjectNormalizedUrl(proj.normalizedUrl);
+                                setAppSection("projects");
+                                const path = sectionToPath("projects", proj.normalizedUrl);
+                                if (typeof window !== "undefined") {
+                                  window.history.pushState(null, "", path);
+                                }
+                              }}
                               className={cn(
                                 "group relative flex flex-col overflow-hidden rounded-2xl border text-left transition-all duration-200",
                                 isActive
@@ -2504,7 +2479,14 @@ export default function AppBrandWizard() {
                                   size="sm"
                                   variant="secondary"
                                   className="border border-white/20 bg-black/50 text-white/85 hover:bg-black/70"
-                                  onClick={() => setSelectedProjectNormalizedUrl(null)}
+                                  onClick={() => {
+                                    setSelectedProjectNormalizedUrl(null);
+                                    setAppSection("projects");
+                                    const path = sectionToPath("projects", null);
+                                    if (typeof window !== "undefined") {
+                                      window.history.pushState(null, "", path);
+                                    }
+                                  }}
                                 >
                                   Back to brands
                                 </Button>

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Download, FolderOpen, Info, LayoutGrid, List, Loader2, Mic, Sparkles, Trash2, Volume2, Wand2, X } from "lucide-react";
+import { CreditCostBadge } from "@/app/_components/CreditCostBadge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -717,9 +718,10 @@ export function StudioGenerationsHistory({
                   >
                     <Mic className="h-4 w-4 shrink-0 text-violet-300 transition-transform duration-200 group-hover/cv:scale-110" aria-hidden />
                     Change Voice
-                    <span className="ml-auto rounded-md bg-violet-500/20 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-violet-200/90">
-                      {VOICE_CHANGE_CREDITS_FLAT} cr
-                    </span>
+                    <CreditCostBadge
+                      amount={VOICE_CHANGE_CREDITS_FLAT}
+                      className="ml-auto bg-violet-500/20 text-violet-200/90"
+                    />
                   </button>
                 ) : null}
 

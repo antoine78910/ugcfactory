@@ -5,6 +5,28 @@ import { NextResponse } from "next/server";
 const APP_HOST = "app.youry.io";
 const MAIN_HOSTS = new Set(["youry.io", "www.youry.io"]);
 
+function isStudioHost(hostHeader: string): boolean {
+  const host = hostHeader.split(":")[0].toLowerCase();
+  return host === APP_HOST || host === "localhost" || host.startsWith("127.0.0.1");
+}
+
+/** Routes that have their own `src/app/<name>` pages — do not rewrite to `/app/*`. */
+function isExcludedFromStudioRewrite(pathname: string): boolean {
+  if (pathname.startsWith("/auth")) return true;
+  const first = pathname.split("/").filter(Boolean)[0] ?? "";
+  return new Set([
+    "subscription",
+    "credits",
+    "signin",
+    "signup",
+    "support",
+    "subscriptions",
+    "dashboard",
+    "admin",
+    "apitest",
+  ]).has(first);
+}
+
 export async function middleware(req: NextRequest) {
   const url = req.nextUrl.clone();
   const host = (req.headers.get("host") ?? "").split(":")[0].toLowerCase();
@@ -17,14 +39,30 @@ export async function middleware(req: NextRequest) {
     url.searchParams.has("token_hash") ||
     url.searchParams.has("type");
 
-  // On app.youry.io, serve the app from "/" (rewrite -> /app).
-  if (host === APP_HOST) {
+  // App subdomain (and local dev): browser URLs have no `/app` prefix; rewrite into `/app/*` catch-all.
+  if (isStudioHost(host)) {
     if (pathname === "/" && hasAuthParams) {
       url.pathname = "/auth/callback";
       return NextResponse.redirect(url, 307);
     }
+
+    // Canonicalize legacy `/app/...` URLs to `/...` (subdomain already says "app").
+    if (pathname === "/app" || pathname === "/app/") {
+      url.pathname = "/";
+      return NextResponse.redirect(url, 308);
+    }
+    if (pathname.startsWith("/app/")) {
+      url.pathname = pathname.slice(4) || "/";
+      return NextResponse.redirect(url, 308);
+    }
+
     if (pathname === "/") {
       url.pathname = "/app";
+      return NextResponse.rewrite(url);
+    }
+
+    if (!isExcludedFromStudioRewrite(pathname)) {
+      url.pathname = "/app" + pathname;
       return NextResponse.rewrite(url);
     }
   }

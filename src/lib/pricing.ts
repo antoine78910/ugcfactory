@@ -914,6 +914,24 @@ export const SUBSCRIPTIONS = [
 ] as const;
 
 // ---------------------------------------------------------------------------
+// Marketing — approximate generation counts from a credit balance (UI copy only)
+// Nanobanana-class images: 0.5 cr each → count ≈ credits × 2.
+// Sora 2–class videos: 5 cr each → count ≈ credits / 5.
+// ---------------------------------------------------------------------------
+
+export function upToAiImagesCountFromCredits(credits: number): number {
+  const n = Number(credits);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.max(1, Math.floor(n * 2));
+}
+
+export function upToAiVideosCountFromCredits(credits: number): number {
+  const n = Number(credits);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.max(1, Math.floor(n / 5));
+}
+
+// ---------------------------------------------------------------------------
 // Margin & P&L helpers (credits already consumed)
 // ---------------------------------------------------------------------------
 

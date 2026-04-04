@@ -682,6 +682,28 @@ export type NanoEditableSections = {
   product: string;
 };
 
+/**
+ * Cuts leaked TECHNICAL / NEGATIVE blocks from a single EDIT section body (model sometimes
+ * inlines them before the next EDIT header).
+ */
+export function stripInlineTechnicalNoiseFromNanoSection(field: string): string {
+  const t = field.replace(/\r\n/g, "\n");
+  if (!t.trim()) return "";
+  const patterns: RegExp[] = [
+    /\n\s*NEGATIVE\s+PROMPT\b/i,
+    /(?:^|\n)\s*TECHNICAL\s*[—:\s]/im,
+    /\n\s*---+\s*NEGATIVE/i,
+    /\n\s*PRESERVATION\s+INSTRUCTIONS\b/i,
+    /\n\s*Standard\s+negative\s+prompt\b/i,
+  ];
+  let cut = t.length;
+  for (const re of patterns) {
+    const m = re.exec(t);
+    if (m && m.index !== undefined && m.index < cut) cut = m.index;
+  }
+  return t.slice(0, cut).trim();
+}
+
 /** True when prompts use EDIT — / TECHNICAL: blocks from the image prompt API. */
 export function parseNanoEditableSections(editable: string): NanoEditableSections & { isStructured: boolean } {
   const raw = editable.replace(/\r\n/g, "\n");
@@ -689,17 +711,26 @@ export function parseNanoEditableSections(editable: string): NanoEditableSection
     return { person: "", scene: "", product: "", isStructured: false };
   }
   if (!/EDIT\s*[—:-]\s*Person/im.test(raw)) {
-    return { person: raw.trim(), scene: "", product: "", isStructured: false };
+    return {
+      person: stripInlineTechnicalNoiseFromNanoSection(raw.trim()),
+      scene: "",
+      product: "",
+      isStructured: false,
+    };
   }
-  const personM = raw.match(/EDIT\s*[—:-]\s*Person\s*[:\n]\s*([\s\S]*?)(?=\n\s*EDIT\s*[—:-]\s*Scene\b|$)/i);
-  const sceneM = raw.match(/EDIT\s*[—:-]\s*Scene\s*[:\n]\s*([\s\S]*?)(?=\n\s*EDIT\s*[—:-]\s*Product\b|$)/i);
+  const personM = raw.match(
+    /EDIT\s*[—:-]\s*Person\s*[:\n]\s*([\s\S]*?)(?=\n\s*EDIT\s*[—:-]\s*Scene\b|\n\s*TECHNICAL\s*[—:\s]|\n\s*NEGATIVE\s+PROMPT\b|$)/i,
+  );
+  const sceneM = raw.match(
+    /EDIT\s*[—:-]\s*Scene\s*[:\n]\s*([\s\S]*?)(?=\n\s*EDIT\s*[—:-]\s*Product\b|\n\s*TECHNICAL\s*[—:\s]|\n\s*NEGATIVE\s+PROMPT\b|$)/i,
+  );
   const productM = raw.match(
     /EDIT\s*[—:-]\s*Product\s*(?:&|and)?\s*action\s*[:\n]\s*([\s\S]*?)(?=\n\s*TECHNICAL\s*[—:\s]|\n\s*NEGATIVE\s+PROMPT\b|$)/i,
   );
   return {
-    person: personM?.[1]?.trim() ?? "",
-    scene: sceneM?.[1]?.trim() ?? "",
-    product: productM?.[1]?.trim() ?? "",
+    person: stripInlineTechnicalNoiseFromNanoSection(personM?.[1]?.trim() ?? ""),
+    scene: stripInlineTechnicalNoiseFromNanoSection(sceneM?.[1]?.trim() ?? ""),
+    product: stripInlineTechnicalNoiseFromNanoSection(productM?.[1]?.trim() ?? ""),
     isStructured: true,
   };
 }

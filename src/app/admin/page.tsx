@@ -251,7 +251,7 @@ export default function AdminPage() {
         <div className="text-center">
           <p className="text-lg font-semibold text-red-400">Access Denied</p>
           <p className="mt-2 text-sm text-white/50">Your account is not authorized for admin access.</p>
-          <Link href="/app" className="mt-4 inline-block text-sm text-violet-400 underline underline-offset-2">
+          <Link href="/link-to-ad" className="mt-4 inline-block text-sm text-violet-400 underline underline-offset-2">
             Back to app
           </Link>
         </div>
@@ -266,7 +266,7 @@ export default function AdminPage() {
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <Link
-              href="/app"
+              href="/link-to-ad"
               className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-white/60 transition hover:bg-white/10 hover:text-white"
             >
               <ArrowLeft className="h-4 w-4" />

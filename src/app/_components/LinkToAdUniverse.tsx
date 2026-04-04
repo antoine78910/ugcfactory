@@ -28,6 +28,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { CreditCostBadge } from "@/app/_components/CreditCostBadge";
 import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
 import { absolutizeImageUrl } from "@/lib/imageUrl";
 import {
@@ -4689,7 +4690,7 @@ export default function LinkToAdUniverse({
                   >
                     <RefreshCw className="h-3 w-3 transition-transform group-hover/regen:rotate-90" aria-hidden />
                     Regenerate
-                    <span className="rounded-full bg-violet-400/20 px-1.5 py-px text-[10px] font-bold text-violet-300/90">2 cr</span>
+                    <CreditCostBadge amount={2} />
                   </button>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-3">
@@ -5120,7 +5121,7 @@ export default function LinkToAdUniverse({
                         >
                           <RefreshCw className="h-2.5 w-2.5 transition-transform group-hover/ri:rotate-90" aria-hidden />
                           Regen 3 images
-                          <span className="rounded-full bg-violet-400/20 px-1.5 py-px text-[9px] font-bold text-violet-300/90">10 cr</span>
+                          <CreditCostBadge amount={10} className="text-[9px]" />
                         </button>
                       ) : null}
                     </div>
@@ -5182,9 +5183,7 @@ export default function LinkToAdUniverse({
                       >
                         <RefreshCw className="h-2.5 w-2.5 transition-transform group-hover/regen-sa:rotate-90" aria-hidden />
                         Regenerate
-                        <span className="rounded-full bg-violet-400/20 px-1 py-px text-[9px] font-bold text-violet-300/90">
-                          2 cr
-                        </span>
+                        <CreditCostBadge amount={2} className="px-1 py-px text-[9px]" />
                       </button>
                     </div>
                     <div className="grid grid-cols-1 gap-2">
@@ -5344,7 +5343,7 @@ export default function LinkToAdUniverse({
                             </button>
                             {panelOpen ? (
                               parsed.isStructured ? (
-                                <div className="mt-1 space-y-0.5 pb-0.5">
+                                <div className="mt-1.5 space-y-2.5 pb-0.5">
                                   {(
                                     [
                                       { key: "person" as const, label: "Person", value: parsed.person },
@@ -5354,38 +5353,30 @@ export default function LinkToAdUniverse({
                                   ).map(({ key, label, value }) => {
                                     const rowKey = `p${i}-${key}`;
                                     const expanded = nanoImagePromptExpandedKey === rowKey;
+                                    const display = value.trim();
                                     return (
-                                      <div
-                                        key={rowKey}
-                                        className="overflow-hidden rounded-lg border border-white/8 bg-black/25"
-                                      >
+                                      <div key={rowKey} className="flex min-w-0 items-start gap-2">
                                         <button
                                           type="button"
                                           onClick={() =>
                                             setNanoImagePromptExpandedKey((k) => (k === rowKey ? null : rowKey))
                                           }
-                                          className="flex w-full flex-col gap-0.5 rounded-lg px-2 py-1.5 text-left transition hover:bg-white/[0.03]"
+                                          className="w-[4.75rem] shrink-0 pt-0.5 text-left text-[10px] font-semibold uppercase tracking-wide text-white/40 transition hover:text-white/60"
                                         >
-                                          <div className="flex items-center justify-between gap-2">
-                                            <span className="text-[10px] font-semibold uppercase tracking-wide text-white/50">
-                                              {label}
-                                            </span>
-                                            {expanded ? (
-                                              <ChevronUp className="h-3 w-3 shrink-0 text-white/30" aria-hidden />
-                                            ) : (
-                                              <ChevronDown className="h-3 w-3 shrink-0 text-white/30" aria-hidden />
-                                            )}
-                                          </div>
-                                          {!expanded ? (
-                                            <p className="line-clamp-2 text-left text-[11px] leading-snug text-white/55">
-                                              {value.trim()
-                                                ? nanoPromptPreviewOneLine(value, 140)
-                                                : "Tap to edit…"}
-                                            </p>
-                                          ) : null}
+                                          {label}
                                         </button>
-                                        {expanded ? (
-                                          <div className="border-t border-white/8 px-2 pb-2 pt-1">
+                                        <div className="min-w-0 flex-1">
+                                          {!expanded ? (
+                                            <button
+                                              type="button"
+                                              onClick={() => setNanoImagePromptExpandedKey(rowKey)}
+                                              className="w-full rounded-md px-1 py-0.5 text-left transition hover:bg-white/[0.03]"
+                                            >
+                                              <p className="line-clamp-3 whitespace-pre-wrap text-[11px] leading-snug text-white/60">
+                                                {display || "Tap to edit…"}
+                                              </p>
+                                            </button>
+                                          ) : (
                                             <Textarea
                                               value={value}
                                               onChange={(e) => {
@@ -5416,18 +5407,24 @@ export default function LinkToAdUniverse({
                                                   return next;
                                                 });
                                               }}
-                                              rows={4}
+                                              rows={Math.max(3, Math.min(12, value.split("\n").length + 2))}
                                               spellCheck
-                                              className="max-h-[7rem] min-h-[4.25rem] resize-none overflow-y-auto border-white/10 bg-black/35 text-[11px] leading-relaxed text-white/90"
+                                              onKeyDown={(e) => {
+                                                if (e.key === "Escape") {
+                                                  e.preventDefault();
+                                                  setNanoImagePromptExpandedKey(null);
+                                                }
+                                              }}
+                                              className="min-h-[4.5rem] w-full resize-y border-0 border-b border-white/[0.07] bg-transparent px-1 py-0.5 text-[11px] leading-snug text-white/80 shadow-none outline-none ring-0 focus-visible:border-violet-400/30 focus-visible:ring-0"
                                             />
-                                          </div>
-                                        ) : null}
+                                          )}
+                                        </div>
                                       </div>
                                     );
                                   })}
                                 </div>
                               ) : (
-                                <div className="mt-1 border-t border-white/8 pt-1">
+                                <div className="mt-1.5">
                                   <Textarea
                                     value={draft}
                                     onChange={(e) => {
@@ -5445,9 +5442,9 @@ export default function LinkToAdUniverse({
                                         return next;
                                       });
                                     }}
-                                    rows={4}
+                                    rows={5}
                                     spellCheck
-                                    className="max-h-[7rem] min-h-[4.25rem] resize-none overflow-y-auto border-white/10 bg-black/30 text-[11px] leading-relaxed text-white/85"
+                                    className="min-h-[5rem] w-full resize-y border-0 border-b border-white/[0.07] bg-transparent px-1 py-0.5 text-[11px] leading-snug text-white/80 shadow-none outline-none ring-0 focus-visible:border-violet-400/30 focus-visible:ring-0"
                                   />
                                 </div>
                               )
@@ -5498,7 +5495,7 @@ export default function LinkToAdUniverse({
                           >
                             <RefreshCw className="h-3 w-3 transition-transform group-hover/ri:rotate-90" aria-hidden />
                             Regenerate 3 images
-                            <span className="rounded-full bg-violet-400/20 px-1.5 py-px text-[10px] font-bold text-violet-300/90">10 cr</span>
+                            <CreditCostBadge amount={10} />
                           </button>
                         ) : null}
                       </div>
@@ -6292,7 +6289,7 @@ export default function LinkToAdUniverse({
               className="flex h-10 items-center justify-center gap-2 rounded-xl border border-violet-400/25 bg-violet-500/15 text-[13px] font-medium text-white/90 transition-all hover:border-violet-400/40 hover:bg-violet-500/25"
             >
               Regenerate images too
-              <span className="rounded-full bg-violet-400/20 px-2 py-px text-[10px] font-bold text-violet-300">10 cr</span>
+              <CreditCostBadge amount={10} className="px-2" iconClassName="h-3 w-3" />
             </button>
             <button
               type="button"

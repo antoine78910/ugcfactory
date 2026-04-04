@@ -82,11 +82,11 @@ function UpgradeModal({
                   </li>
                   <li className="flex items-center gap-1.5">
                     <Check className="h-3.5 w-3.5 shrink-0 text-emerald-400" strokeWidth={2.5} />
-                    {plan.usage.images} images
+                    {Number(plan.usage.images).toLocaleString()} images
                   </li>
                   <li className="flex items-center gap-1.5">
                     <Check className="h-3.5 w-3.5 shrink-0 text-emerald-400" strokeWidth={2.5} />
-                    {plan.usage.videos} videos
+                    {Number(plan.usage.videos).toLocaleString()} videos
                   </li>
                 </ul>
 

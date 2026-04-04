@@ -25,35 +25,16 @@ import StudioGenerationsBackgroundPoll from "@/app/_components/StudioGenerations
 import { useCreditsPlan } from "@/app/_components/CreditsPlanContext";
 import SidebarCreditsBar from "@/app/_components/SidebarCreditsBar";
 import { cn } from "@/lib/utils";
+import {
+  type AppSection as StudioNavSection,
+  isStudioShellPath,
+  sectionFromPathname,
+  sectionToPath,
+} from "@/lib/studioPaths";
 
 const SIDEBAR_COLLAPSED_LS = "youry-studio-sidebar-collapsed";
 
-export type StudioNavSection =
-  | "link_to_ad"
-  | "avatar"
-  | "ad_clone"
-  | "voice"
-  | "motion_control"
-  | "image"
-  | "video"
-  | "upscale"
-  | "projects";
-
-const SECTION_TO_SLUG: Record<StudioNavSection, string> = {
-  link_to_ad: "link-to-ad",
-  avatar: "avatar",
-  ad_clone: "translate",
-  voice: "voice",
-  motion_control: "motion-control",
-  image: "image",
-  video: "video",
-  upscale: "upscale",
-  projects: "my-projects",
-};
-
-const SLUG_TO_SECTION: Record<string, StudioNavSection> = Object.fromEntries(
-  Object.entries(SECTION_TO_SLUG).map(([k, v]) => [v, k]),
-) as Record<string, StudioNavSection>;
+export type { StudioNavSection };
 
 type Props = {
   children: React.ReactNode;
@@ -88,17 +69,6 @@ const PROJECTS_NAV: { id: StudioNavSection; label: string; icon: LucideIcon } = 
   label: "My Projects",
   icon: FolderOpen,
 };
-
-function sectionHref(section: StudioNavSection): string {
-  const slug = SECTION_TO_SLUG[section] ?? "link-to-ad";
-  return `/app/${slug}`;
-}
-
-function sectionFromPathname(pathname: string): StudioNavSection {
-  const stripped = pathname.replace(/^\/app\/?/, "");
-  const first = stripped.split("/").filter(Boolean)[0] ?? "";
-  return SLUG_TO_SECTION[first] ?? "link_to_ad";
-}
 
 function navRowIconClass(active: boolean): string {
   return active ? "text-black/80" : "text-violet-300/90";
@@ -139,7 +109,7 @@ function StudioShellInner({
     }
   }, [navCollapsed]);
 
-  const isApp = pathname.startsWith("/app");
+  const isApp = isStudioShellPath(pathname);
 
   const controlled = Boolean(isApp && onStudioSectionChange && studioSection !== undefined);
 
@@ -198,7 +168,7 @@ function StudioShellInner({
                 title="Hover logo to expand menu"
               >
                 <Link
-                  href="/app/link-to-ad"
+                  href={sectionToPath("link_to_ad")}
                   className="relative z-0 block h-8 w-8"
                   title="Youry home"
                 >
@@ -231,7 +201,7 @@ function StudioShellInner({
             ) : (
               <div className="flex w-full min-w-0 items-center justify-between gap-2">
                 <Link
-                  href="/app/link-to-ad"
+                  href={sectionToPath("link_to_ad")}
                   className="inline-block min-w-0 shrink"
                   title="Youry home"
                 >
@@ -343,7 +313,7 @@ function StudioShellInner({
                   return (
                     <Link
                       key={id}
-                      href={sectionHref(id)}
+                      href={sectionToPath(id)}
                       className={cn(navButtonClass(active), navCollapsed && "px-2.5 py-3.5")}
                       title={label}
                     >
@@ -387,7 +357,7 @@ function StudioShellInner({
                   </button>
                 ) : (
                   <Link
-                    href={sectionHref(PROJECTS_NAV.id)}
+                    href={sectionToPath(PROJECTS_NAV.id)}
                     className={cn(
                       navButtonClass(activeSection === PROJECTS_NAV.id),
                       navCollapsed && "px-2.5 py-3.5",

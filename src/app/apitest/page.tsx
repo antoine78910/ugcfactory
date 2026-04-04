@@ -91,7 +91,7 @@ export default function ApiTestPage() {
         <div className="relative mx-auto max-w-3xl space-y-10 px-5 py-10 md:px-8 md:py-12">
           <div className="flex flex-wrap items-center gap-3">
             <Button variant="ghost" size="sm" asChild className="gap-2 text-white/60 hover:text-white">
-              <Link href="/app">
+              <Link href="/link-to-ad">
                 <ArrowLeft className="h-4 w-4" aria-hidden />
                 Studio
               </Link>

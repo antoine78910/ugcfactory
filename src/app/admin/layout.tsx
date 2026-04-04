@@ -15,7 +15,7 @@ export default async function AdminLayout({
 
   const email = user?.email?.toLowerCase().trim() ?? "";
   if (!user) redirect("/auth");
-  if (email !== PRIMARY_ADMIN_EMAIL) redirect("/app");
+  if (email !== PRIMARY_ADMIN_EMAIL) redirect("/link-to-ad");
 
   return children;
 }

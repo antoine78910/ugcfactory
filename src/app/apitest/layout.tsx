@@ -9,7 +9,7 @@ export default async function ApiTestLayout({ children }: { children: React.Reac
   } = await supabase.auth.getUser();
 
   if (!user) redirect("/auth");
-  if (!isEmailAllowedForApiTest(user.email)) redirect("/app");
+  if (!isEmailAllowedForApiTest(user.email)) redirect("/link-to-ad");
 
   return children;
 }

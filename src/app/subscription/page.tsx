@@ -1,14 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Check, Coins, CreditCard, Sparkles, X } from "lucide-react";
+import { ArrowRight, Check, Coins, CreditCard, X } from "lucide-react";
 import { toast } from "sonner";
 import StudioShell from "@/app/_components/StudioShell";
 import { consumeCheckoutQueryParams, useCreditsPlan } from "@/app/_components/CreditsPlanContext";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { SUBSCRIPTIONS } from "@/lib/pricing";
+import {
+  SUBSCRIPTIONS,
+  upToAiImagesCountFromCredits,
+  upToAiVideosCountFromCredits,
+} from "@/lib/pricing";
 import {
   planRank,
   SUBSCRIPTION_MODEL_MATRIX_ROWS,
@@ -36,66 +40,55 @@ type PlanDef = {
   highlight?: boolean;
 };
 
-const CREDITS_PER_NANOBANANA_IMAGE = 0.5;
-const CREDITS_PER_SORA2_VIDEO = 5;
-
-function upToAiImagesFromMonthlyCredits(creditsPerMonth: number): string {
-  return String(Math.max(1, Math.floor(creditsPerMonth / CREDITS_PER_NANOBANANA_IMAGE)));
-}
-
-function upToAiVideosFromMonthlyCredits(creditsPerMonth: number): string {
-  return String(Math.max(1, Math.floor(creditsPerMonth / CREDITS_PER_SORA2_VIDEO)));
-}
-
 const PLANS: PlanDef[] = [
   {
     id: "starter",
     name: "Starter",
-    description: "Learn the workflow and launch your first campaigns.",
+    description: "First campaigns and core workflow.",
     monthly: SUBSCRIPTIONS[0].price_usd,
     credits: SUBSCRIPTIONS[0].credits_per_month,
     usage: {
       linkToAd: "4",
-      images: upToAiImagesFromMonthlyCredits(SUBSCRIPTIONS[0].credits_per_month),
-      videos: upToAiVideosFromMonthlyCredits(SUBSCRIPTIONS[0].credits_per_month),
+      images: String(upToAiImagesCountFromCredits(SUBSCRIPTIONS[0].credits_per_month)),
+      videos: String(upToAiVideosCountFromCredits(SUBSCRIPTIONS[0].credits_per_month)),
     },
   },
   {
     id: "growth",
     name: "Growth",
     badge: "Popular",
-    description: "The plan most teams pick once content is weekly.",
+    description: "Weekly content — most teams start here.",
     monthly: SUBSCRIPTIONS[1].price_usd,
     credits: SUBSCRIPTIONS[1].credits_per_month,
     usage: {
       linkToAd: "10",
-      images: upToAiImagesFromMonthlyCredits(SUBSCRIPTIONS[1].credits_per_month),
-      videos: upToAiVideosFromMonthlyCredits(SUBSCRIPTIONS[1].credits_per_month),
+      images: String(upToAiImagesCountFromCredits(SUBSCRIPTIONS[1].credits_per_month)),
+      videos: String(upToAiVideosCountFromCredits(SUBSCRIPTIONS[1].credits_per_month)),
     },
     highlight: true,
   },
   {
     id: "pro",
     name: "Pro",
-    description: "Scale creatives without hitting limits every few days.",
+    description: "Higher volume without constant limits.",
     monthly: SUBSCRIPTIONS[2].price_usd,
     credits: SUBSCRIPTIONS[2].credits_per_month,
     usage: {
       linkToAd: "24",
-      images: upToAiImagesFromMonthlyCredits(SUBSCRIPTIONS[2].credits_per_month),
-      videos: upToAiVideosFromMonthlyCredits(SUBSCRIPTIONS[2].credits_per_month),
+      images: String(upToAiImagesCountFromCredits(SUBSCRIPTIONS[2].credits_per_month)),
+      videos: String(upToAiVideosCountFromCredits(SUBSCRIPTIONS[2].credits_per_month)),
     },
   },
   {
     id: "scale",
     name: "Scale",
-    description: "Agencies and brands running multiple products at once.",
+    description: "Agencies & brands with many products.",
     monthly: SUBSCRIPTIONS[3].price_usd,
     credits: SUBSCRIPTIONS[3].credits_per_month,
     usage: {
       linkToAd: "55",
-      images: upToAiImagesFromMonthlyCredits(SUBSCRIPTIONS[3].credits_per_month),
-      videos: upToAiVideosFromMonthlyCredits(SUBSCRIPTIONS[3].credits_per_month),
+      images: String(upToAiImagesCountFromCredits(SUBSCRIPTIONS[3].credits_per_month)),
+      videos: String(upToAiVideosCountFromCredits(SUBSCRIPTIONS[3].credits_per_month)),
     },
   },
 ];
@@ -201,7 +194,8 @@ export default function SubscriptionPage() {
 
   const isSubscribed = planId !== "free";
 
-  const planGridClass = "grid-cols-1 sm:grid-cols-2 xl:grid-cols-4";
+  const planGridClass =
+    "grid-cols-1 items-stretch sm:grid-cols-2 xl:grid-cols-4 xl:items-stretch";
 
   return (
     <StudioShell>
@@ -265,16 +259,7 @@ export default function SubscriptionPage() {
           </header>
 
           <section>
-            <div className="mb-8 flex flex-col items-center gap-2 text-center">
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1">
-                <Sparkles className="h-3.5 w-3.5 text-violet-300" aria-hidden />
-                <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/50">
-                  Compare plans
-                </span>
-              </div>
-            </div>
-
-            <div className={cn("mx-auto grid max-w-6xl gap-5 pt-3", planGridClass)}>
+            <div className={cn("mx-auto grid max-w-6xl gap-5", planGridClass)}>
               {PLANS.map((plan) => {
                 const { mainLabel, sub } = priceFor(plan);
                 const planIdx = subscriptionPlanSortIndex(plan.id as SubscriptionPlanId);
@@ -306,7 +291,7 @@ export default function SubscriptionPage() {
                   <div
                     key={plan.id}
                     className={cn(
-                      "relative flex flex-col rounded-2xl border p-6 transition-all duration-300",
+                      "relative flex h-full flex-col rounded-2xl border p-6 transition-all duration-300",
                       isCurrentPlanCard
                         ? "border-emerald-400/45 bg-gradient-to-b from-emerald-600/[0.14] via-[#0b0914] to-[#06070d] shadow-[0_0_40px_rgba(16,185,129,0.12)]"
                         : plan.highlight
@@ -314,7 +299,8 @@ export default function SubscriptionPage() {
                           : "border-white/10 bg-white/[0.03] hover:border-violet-500/20 hover:bg-white/[0.045]",
                     )}
                   >
-                    <div className="mb-3 flex flex-wrap items-center gap-1.5">
+                    {/* Fixed row height so badges line up across plans */}
+                    <div className="mb-3 flex min-h-[2rem] flex-wrap content-start items-center gap-1.5">
                       {isCurrentPlanCard ? (
                         <span className="rounded-full border border-emerald-400/50 bg-emerald-500/20 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-100">
                           Current plan
@@ -332,24 +318,29 @@ export default function SubscriptionPage() {
                       ) : null}
                     </div>
 
-                    <div>
-                      <h2 className="text-xl font-bold text-white">{plan.name}</h2>
-                      <p className="mt-2 min-h-[2.75rem] text-sm leading-relaxed text-white/48">{plan.description}</p>
+                    <div className="shrink-0">
+                      <h2 className="text-xl font-bold leading-tight text-white">{plan.name}</h2>
+                      <p className="mt-2 line-clamp-2 min-h-[2.75rem] text-sm leading-snug text-white/48">
+                        {plan.description}
+                      </p>
                     </div>
 
-                    <div className="mt-6">
+                    {/* Same vertical space for price + billing note + yearly pill slot */}
+                    <div className="mt-6 flex min-h-[7.25rem] shrink-0 flex-col">
                       <div className="flex flex-wrap items-baseline gap-1">
                         <span className="text-4xl font-extrabold tabular-nums leading-none text-white md:text-5xl">
                           ${mainLabel}
                         </span>
                         <span className="text-sm font-semibold text-white/55 md:text-base">/mo</span>
                       </div>
-                      <p className="mt-2 text-xs leading-snug text-white/38">{sub}</p>
-                      {billing === "yearly" ? (
-                        <p className="mt-2 inline-flex items-center rounded-md border border-emerald-400/35 bg-emerald-500/15 px-2 py-1 text-[11px] font-semibold text-emerald-200">
-                          Save 30% on yearly billing
-                        </p>
-                      ) : null}
+                      <p className="mt-2 line-clamp-2 min-h-[2.25rem] text-xs leading-snug text-white/38">{sub}</p>
+                      <div className="mt-2 min-h-[1.75rem]">
+                        {billing === "yearly" ? (
+                          <p className="inline-flex items-center rounded-md border border-emerald-400/35 bg-emerald-500/15 px-2 py-1 text-[11px] font-semibold text-emerald-200">
+                            Save 30% on yearly billing
+                          </p>
+                        ) : null}
+                      </div>
                     </div>
 
                     <Button
@@ -396,17 +387,23 @@ export default function SubscriptionPage() {
                       )}
                     </Button>
 
-                    <ul className="mt-6 space-y-2 border-t border-white/10 pt-6 text-left text-xs text-white/72">
+                    <ul className="mt-6 flex flex-1 flex-col space-y-2 border-t border-white/10 pt-6 text-left text-xs text-white/72">
                       <li className="flex items-start gap-2.5">
                         <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-violet-500/20 text-violet-200">
                           <Coins className="h-3 w-3" aria-hidden />
                         </span>
                         <span className="min-w-0">
-                          <span className="font-semibold text-white">{plan.credits.toLocaleString()} credits</span>
+                          <span className="font-semibold tabular-nums text-white">
+                            {plan.credits.toLocaleString()} credits
+                          </span>
                         </span>
                       </li>
-                      <li className="pl-1 text-white/50">Up to 1200 AI images (Nanobanana)</li>
-                      <li className="pl-1 text-white/50">Up to 120 AI videos (Sora 2)</li>
+                      <li className="pl-1 text-white/50">
+                        Up to {Number(plan.usage.images).toLocaleString()} AI images (Nanobanana)
+                      </li>
+                      <li className="pl-1 text-white/50">
+                        Up to {Number(plan.usage.videos).toLocaleString()} AI videos (Sora 2)
+                      </li>
                       <li className="pt-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-white/45">
                         Included models
                       </li>
