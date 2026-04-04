@@ -379,12 +379,11 @@ function voiceModeFromPathname(pathname: string): VoiceToolMode | null {
   return "voice_change";
 }
 
-/** Build a path-based URL for a section, preserving ?project= if provided. */
-function sectionToPath(section: AppSection, projectId?: string | null, extra?: string): string {
+/** Build a path-based URL for a section. Optional `extra` sub-path (e.g. voice/create). No ?project= — run stays in state + localStorage. */
+function sectionToPath(section: AppSection, _projectId?: string | null, extra?: string): string {
   const slug = SECTION_TO_SLUG[section] ?? "link-to-ad";
   let path = `/app/${slug}`;
   if (extra) path += `/${extra}`;
-  if (projectId) path += `?project=${encodeURIComponent(projectId)}`;
   return path;
 }
 
@@ -1768,8 +1767,7 @@ export default function AppBrandWizard() {
     (s: AppSection, extra?: string) => {
       pendingSectionNavRef.current = s;
       setAppSection(s);
-      const projectId = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("project") : null;
-      const newPath = sectionToPath(s, projectId, extra);
+      const newPath = sectionToPath(s, null, extra);
       if (typeof window !== "undefined" && window.location.pathname + window.location.search !== newPath) {
         window.history.pushState(null, "", newPath);
       }
@@ -1894,13 +1892,12 @@ export default function AppBrandWizard() {
 
     const voiceExtra =
       appSection === "voice" && voiceToolMode === "create_voice" ? "create" : undefined;
-    const projectId = runId || searchParams.get("project") || null;
-    const wantPath = sectionToPath(appSection, projectId, voiceExtra);
+    const wantPath = sectionToPath(appSection, null, voiceExtra);
     const cur = window.location.pathname + window.location.search;
     if (cur !== wantPath) {
       window.history.replaceState(null, "", wantPath);
     }
-  }, [runId, appSection, pathname, voiceToolMode, searchParams]);
+  }, [appSection, pathname, voiceToolMode, searchParams]);
 
   async function onExtract() {
     const url = storeUrl.trim();
@@ -2522,7 +2519,6 @@ export default function AppBrandWizard() {
       <StudioShell
         studioSection={appSection}
         onStudioSectionChange={setAppSectionNav}
-        studioProjectId={runId}
       >
         <section className="space-y-6 px-6 py-6 md:px-8">
           <div className="space-y-6">

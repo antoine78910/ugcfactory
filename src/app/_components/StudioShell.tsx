@@ -59,7 +59,6 @@ type Props = {
   children: React.ReactNode;
   studioSection?: StudioNavSection;
   onStudioSectionChange?: (s: StudioNavSection) => void;
-  studioProjectId?: string | null;
 };
 
 type CreateNavEntry =
@@ -90,11 +89,9 @@ const PROJECTS_NAV: { id: StudioNavSection; label: string; icon: LucideIcon } = 
   icon: FolderOpen,
 };
 
-function sectionHref(section: StudioNavSection, projectId: string | null | undefined): string {
+function sectionHref(section: StudioNavSection): string {
   const slug = SECTION_TO_SLUG[section] ?? "link-to-ad";
-  let href = `/app/${slug}`;
-  if (projectId) href += `?project=${encodeURIComponent(projectId)}`;
-  return href;
+  return `/app/${slug}`;
 }
 
 function sectionFromPathname(pathname: string): StudioNavSection {
@@ -120,7 +117,6 @@ function StudioShellInner({
   children,
   studioSection,
   onStudioSectionChange,
-  studioProjectId,
 }: Props) {
   const pathname = usePathname();
   const [email, setEmail] = useState("");
@@ -347,7 +343,7 @@ function StudioShellInner({
                   return (
                     <Link
                       key={id}
-                      href={sectionHref(id, studioProjectId ?? null)}
+                      href={sectionHref(id)}
                       className={cn(navButtonClass(active), navCollapsed && "px-2.5 py-3.5")}
                       title={label}
                     >
@@ -391,7 +387,7 @@ function StudioShellInner({
                   </button>
                 ) : (
                   <Link
-                    href={sectionHref(PROJECTS_NAV.id, studioProjectId ?? null)}
+                    href={sectionHref(PROJECTS_NAV.id)}
                     className={cn(
                       navButtonClass(activeSection === PROJECTS_NAV.id),
                       navCollapsed && "px-2.5 py-3.5",
