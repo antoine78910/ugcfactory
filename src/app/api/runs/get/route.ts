@@ -1,6 +1,7 @@
 export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
+import { isPostgrestNoRows, supabaseErrMessage } from "@/lib/supabaseErrMessage";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 
 export async function GET(req: Request) {
@@ -18,10 +19,15 @@ export async function GET(req: Request) {
       .eq("id", runId)
       .eq("user_id", user.id)
       .single();
-    if (error) throw error;
+    if (error) {
+      if (isPostgrestNoRows(error)) {
+        return NextResponse.json({ error: "Run not found or access denied." }, { status: 404 });
+      }
+      throw error;
+    }
     return NextResponse.json({ data });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error.";
+    const message = supabaseErrMessage(err);
     return NextResponse.json({ error: message }, { status: 502 });
   }
 }

@@ -1,6 +1,7 @@
 export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
+import { supabaseErrMessage } from "@/lib/supabaseErrMessage";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 
 export async function GET() {
@@ -17,7 +18,7 @@ export async function GET() {
     if (error) throw error;
     return NextResponse.json({ data: data ?? [] });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error.";
+    const message = supabaseErrMessage(err);
     return NextResponse.json({ error: message }, { status: 502 });
   }
 }

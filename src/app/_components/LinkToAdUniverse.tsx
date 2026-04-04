@@ -1754,6 +1754,7 @@ export default function LinkToAdUniverse({
       try {
         const res = await fetch(`/api/runs/get?runId=${encodeURIComponent(resumeRunId)}`, { cache: "no-store" });
         const json = (await res.json()) as { data?: { id: string; store_url?: string; title?: string | null; extracted?: unknown }; error?: string };
+        if (res.status === 404) return;
         if (!res.ok || !json.data) throw new Error(json.error || "Load failed");
         if (!cancelled) hydrateFromRun(json.data);
       } catch (e) {

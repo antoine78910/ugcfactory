@@ -1394,6 +1394,11 @@ export default function AppBrandWizard() {
     try {
       const res = await fetch(`/api/runs/get?runId=${encodeURIComponent(id)}`, { cache: "no-store" });
       const json = (await res.json()) as { data?: any; error?: string };
+      // Stale localStorage / ?project= from another account or deleted run — no error toast.
+      if (res.status === 404) {
+        localStorage.removeItem(UGC_CURRENT_RUN_KEY);
+        return;
+      }
       if (!res.ok || !json.data) throw new Error(json.error || "Load run failed");
       const r = json.data;
       setRunId(r.id);
