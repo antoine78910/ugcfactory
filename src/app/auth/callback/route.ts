@@ -57,6 +57,7 @@ export async function GET(req: NextRequest) {
       setAll(cookiesToSet) {
         try {
           for (const { name, value, options } of cookiesToSet) {
+            req.cookies.set(name, value);
             redirectResponse.cookies.set(name, value, options);
           }
         } catch (e) {
