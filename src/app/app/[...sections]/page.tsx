@@ -10,7 +10,6 @@ import {
   Plus,
   Search,
   Sparkles,
-  Star,
   Trash2,
   X,
 } from "lucide-react";
@@ -623,8 +622,6 @@ export default function AppBrandWizard() {
   const [elevenVoiceSearchDebounced, setElevenVoiceSearchDebounced] = useState("");
   const [elevenVoiceLanguageFilter, setElevenVoiceLanguageFilter] = useState("");
   const [elevenVoiceGenderFilter, setElevenVoiceGenderFilter] = useState("");
-  const [elevenVoiceFavoriteIds, setElevenVoiceFavoriteIds] = useState<string[]>([]);
-  const [elevenVoiceFavoritesOnly, setElevenVoiceFavoritesOnly] = useState(false);
   const [voiceChangeUploadKind, setVoiceChangeUploadKind] = useState<VoiceChangeUploadKind>("audio");
   const [voiceChangeUploadFile, setVoiceChangeUploadFile] = useState<File | null>(null);
   const [voiceChangeUploadPreviewUrl, setVoiceChangeUploadPreviewUrl] = useState<string | null>(null);
@@ -715,13 +712,8 @@ export default function AppBrandWizard() {
   );
 
   const filteredElevenVoices = useMemo(() => {
-    let list = [...elevenVoices].sort((a, b) => a.name.localeCompare(b.name));
-    if (elevenVoiceFavoritesOnly) {
-      const fav = new Set(elevenVoiceFavoriteIds);
-      list = list.filter((v) => fav.has(v.voiceId));
-    }
-    return list;
-  }, [elevenVoices, elevenVoiceFavoritesOnly, elevenVoiceFavoriteIds]);
+    return [...elevenVoices].sort((a, b) => a.name.localeCompare(b.name));
+  }, [elevenVoices]);
 
   const elevenVoiceLangHasMore = elevenSharedVoicesHasMoreByLang.__all__ ?? true;
 
@@ -729,12 +721,6 @@ export default function AppBrandWizard() {
     const t = window.setTimeout(() => setElevenVoiceSearchDebounced(elevenVoiceSearchInput.trim()), 380);
     return () => window.clearTimeout(t);
   }, [elevenVoiceSearchInput]);
-
-  useEffect(() => {
-    if (!elevenVoiceFavoritesOnly || filteredElevenVoices.length === 0) return;
-    if (filteredElevenVoices.some((v) => v.voiceId === elevenVoiceId)) return;
-    setElevenVoiceId(filteredElevenVoices[0]!.voiceId);
-  }, [elevenVoiceFavoritesOnly, filteredElevenVoices, elevenVoiceId]);
 
   const translateLanguagesFiltered = useMemo(() => {
     const base = [...(WAVESPEED_HEYGEN_TRANSLATE_LANGUAGES as readonly string[])];
@@ -850,42 +836,6 @@ export default function AppBrandWizard() {
       if (voiceChangeUploadPreviewUrl?.startsWith("blob:")) URL.revokeObjectURL(voiceChangeUploadPreviewUrl);
     };
   }, [voiceChangeUploadPreviewUrl]);
-
-  useEffect(() => {
-    if (appSection !== "ad_clone" && appSection !== "voice") return;
-    void (async () => {
-      try {
-        const res = await fetch("/api/elevenlabs/favorite-voices", { credentials: "include", cache: "no-store" });
-        if (!res.ok) return;
-        const json = (await res.json().catch(() => ({}))) as { favorites?: unknown };
-        const fav = Array.isArray(json.favorites)
-          ? json.favorites.map((x) => String(x ?? "").trim()).filter(Boolean)
-          : [];
-        setElevenVoiceFavoriteIds(fav);
-      } catch {
-        /* ignore */
-      }
-    })();
-  }, [appSection]);
-
-  const toggleElevenVoiceFavorite = useCallback(async (voiceId: string) => {
-    if (!voiceId) return;
-    const prev = elevenVoiceFavoriteIds;
-    const next = prev.includes(voiceId) ? prev.filter((id) => id !== voiceId) : [...prev, voiceId];
-    setElevenVoiceFavoriteIds(next);
-    try {
-      const res = await fetch("/api/elevenlabs/favorite-voices", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ favorites: next }),
-      });
-      if (!res.ok) throw new Error("save failed");
-    } catch {
-      setElevenVoiceFavoriteIds(prev);
-      toast.error("Could not update voice favorites.");
-    }
-  }, [elevenVoiceFavoriteIds]);
 
   useEffect(() => {
     if (appSection !== "ad_clone" && appSection !== "voice") return;
@@ -3310,7 +3260,7 @@ export default function AppBrandWizard() {
                                 <div className="rounded-xl border border-white/10 bg-black/20 p-2.5 space-y-2">
                                   <Label className="text-xs text-white/45">Target voice</Label>
                                   <p className="text-[10px] leading-snug text-white/35">
-                                    Search, filter by language, star favorites, and preview before generating.
+                                    Search, filter by language, and preview the voice before generating.
                                   </p>
 
                                   <div className="relative">
@@ -3373,17 +3323,6 @@ export default function AppBrandWizard() {
                                     </div>
                                   </div>
 
-                                  <label className="flex cursor-pointer items-center gap-2 text-[11px] text-white/55">
-                                    <input
-                                      type="checkbox"
-                                      checked={elevenVoiceFavoritesOnly}
-                                      onChange={(e) => setElevenVoiceFavoritesOnly(e.target.checked)}
-                                      className="h-3.5 w-3.5 rounded border-white/25 bg-[#0a0a0d] text-violet-500 focus:ring-violet-500/40"
-                                    />
-                                    Favorites only
-                                    <span className="text-white/35">({elevenVoiceFavoriteIds.length} saved)</span>
-                                  </label>
-
                                   <Select value={elevenVoiceId} onValueChange={setElevenVoiceId}>
                                     <SelectTrigger className="h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
                                       <SelectValue
@@ -3400,11 +3339,6 @@ export default function AppBrandWizard() {
                                       {filteredElevenVoices.map((voice) => (
                                         <SelectItem key={voice.voiceId} value={voice.voiceId} className={studioSelectItemClass}>
                                           <span className="flex min-w-0 items-center gap-2">
-                                            {elevenVoiceFavoriteIds.includes(voice.voiceId) ? (
-                                              <Star className="h-3 w-3 shrink-0 fill-amber-400/90 text-amber-400/90" aria-hidden />
-                                            ) : (
-                                              <span className="inline-block w-3 shrink-0" aria-hidden />
-                                            )}
                                             <span className="min-w-0 truncate">{voice.name}</span>
                                             {voice.language ? (
                                               <span className="shrink-0 text-[10px] text-white/35">{voice.language}</span>
@@ -3431,55 +3365,19 @@ export default function AppBrandWizard() {
                                     </SelectContent>
                                   </Select>
 
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <Button
-                                      type="button"
-                                      variant="secondary"
-                                      size="sm"
-                                      disabled={!elevenVoiceId || !selectedElevenVoice?.previewUrl}
-                                      className="h-9 rounded-lg border border-white/15 bg-white/5 text-xs text-white/85 hover:bg-white/10 disabled:opacity-40"
-                                      onClick={() => {
-                                        const url = proxiedMediaSrc(selectedElevenVoice?.previewUrl);
-                                        if (!url) return;
-                                        const a = new Audio(url);
-                                        void a.play().catch(() => toast.error("Could not play preview."));
-                                      }}
-                                    >
-                                      <Play className="mr-1.5 h-3.5 w-3.5" aria-hidden />
-                                      Play sample
-                                    </Button>
-                                    <Button
-                                      type="button"
-                                      variant="secondary"
-                                      size="sm"
-                                      disabled={!elevenVoiceId}
-                                      className={cn(
-                                        "h-9 rounded-lg border text-xs",
-                                        elevenVoiceFavoriteIds.includes(elevenVoiceId)
-                                          ? "border-amber-400/40 bg-amber-500/15 text-amber-100 hover:bg-amber-500/25"
-                                          : "border-white/15 bg-white/5 text-white/85 hover:bg-white/10",
-                                      )}
-                                      onClick={() => void toggleElevenVoiceFavorite(elevenVoiceId)}
-                                    >
-                                      <Star
-                                        className={cn(
-                                          "mr-1.5 h-3.5 w-3.5",
-                                          elevenVoiceFavoriteIds.includes(elevenVoiceId) && "fill-amber-400/90 text-amber-400/90",
-                                        )}
-                                        aria-hidden
-                                      />
-                                      {elevenVoiceFavoriteIds.includes(elevenVoiceId) ? "Favorited" : "Add to favorites"}
-                                    </Button>
-                                  </div>
-
                                   {selectedElevenVoice?.previewUrl ? (
-                                    // eslint-disable-next-line jsx-a11y/media-has-caption
-                                    <audio
-                                      controls
-                                      preload="none"
-                                      className="h-9 w-full max-w-full rounded-lg"
-                                      src={proxiedMediaSrc(selectedElevenVoice.previewUrl)}
-                                    />
+                                    <div className="space-y-1.5 rounded-xl border border-violet-500/25 bg-[#06060a] p-2.5 shadow-[inset_0_1px_0_rgba(139,92,246,0.1)]">
+                                      <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-300/75">
+                                        Voice preview
+                                      </p>
+                                      {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                                      <audio
+                                        controls
+                                        preload="none"
+                                        className="studio-voice-preview-audio w-full max-w-full"
+                                        src={proxiedMediaSrc(selectedElevenVoice.previewUrl)}
+                                      />
+                                    </div>
                                   ) : (
                                     <p className="text-[10px] text-white/30">No preview URL for this voice.</p>
                                   )}
