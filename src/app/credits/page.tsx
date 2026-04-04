@@ -100,6 +100,12 @@ export default function CreditsPage() {
 
   async function buyPack(packKey: string) {
     setCheckoutLoading(packKey);
+    const pack = creditPacks.find((p) => p.key === packKey);
+    window.datafast?.("initiate_checkout", {
+      type: "credits",
+      pack: packKey,
+      price: String(pack?.priceUsd ?? ""),
+    });
     try {
       const res = await fetch("/api/stripe/checkout/credits", {
         method: "POST",

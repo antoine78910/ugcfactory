@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -37,6 +37,10 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
+  useEffect(() => {
+    window.datafast?.(mode === "signup" ? "view_signup" : "view_signin");
+  }, [mode]);
+
   if (!HAS_SUPABASE_ENV) {
     return (
       <div className="min-h-[100dvh] min-h-screen overflow-x-hidden bg-[#050507] text-white">
@@ -64,6 +68,7 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
         password,
       });
       if (error) throw error;
+      window.datafast?.("signin");
       toast.success("Signed in");
       router.push("/");
       router.refresh();
@@ -86,6 +91,7 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
         options: { emailRedirectTo: getAuthCallbackUrl() },
       });
       if (error) throw error;
+      window.datafast?.("signup", { email: cleanEmail });
       toast.success("Account created", { description: "Check your inbox to confirm your email." });
       router.push(`/auth/check-email?email=${encodeURIComponent(cleanEmail)}`);
       router.refresh();

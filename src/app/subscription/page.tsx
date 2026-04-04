@@ -147,6 +147,13 @@ export default function SubscriptionPage() {
 
   async function startSubscriptionCheckout(planIdCheckout: string) {
     setCheckoutLoading(planIdCheckout);
+    const plan = PLANS.find((p) => p.id === planIdCheckout);
+    window.datafast?.("initiate_checkout", {
+      type: "subscription",
+      plan: planIdCheckout,
+      billing,
+      price: String(plan?.monthly ?? ""),
+    });
     try {
       const res = await fetch("/api/stripe/checkout/subscription", {
         method: "POST",

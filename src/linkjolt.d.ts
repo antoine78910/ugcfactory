@@ -6,4 +6,5 @@ interface LinkJolt {
 
 interface Window {
   linkjolt?: LinkJolt;
+  datafast?: (goal: string, params?: Record<string, string>) => void;
 }

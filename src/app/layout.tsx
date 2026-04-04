@@ -49,8 +49,14 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {/* Scripts must live inside <body> — direct children of <html> are invalid and cause React hydration #418 */}
-        {/* afterInteractive: avoids blocking first paint / main thread vs beforeInteractive */}
+        {/* DataFast: queue guarantees events fire even before the main script loads */}
+        <Script
+          id="datafast-queue"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `window.datafast=window.datafast||function(){window.datafast.q=window.datafast.q||[];window.datafast.q.push(arguments);};`,
+          }}
+        />
         <Script
           id="datafast"
           src="https://datafa.st/js/script.js"
