@@ -51,7 +51,7 @@ const CREATE_NAV: CreateNavEntry[] = [
   { kind: "route", id: "avatar", label: "Avatar", icon: UserRound },
   { kind: "route", id: "ad_clone", label: "Translate", icon: Languages },
   { kind: "route", id: "voice", label: "Voice", icon: Mic },
-  { kind: "route", id: "motion_control", label: "Kling 3.0 Motion Control", icon: Joystick },
+  { kind: "route", id: "motion_control", label: "Motion Control", icon: Joystick },
   { kind: "route", id: "image", label: "Image", icon: ImageIcon },
   { kind: "route", id: "video", label: "Video", icon: Video },
   { kind: "route", id: "upscale", label: "Upscale", icon: Maximize2 },

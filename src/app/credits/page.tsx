@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ArrowRight, CheckCircle2, Coins } from "lucide-react";
 import { toast } from "sonner";
 import StudioShell from "@/app/_components/StudioShell";
-import { consumeCheckoutQueryParams, useCreditsPlan } from "@/app/_components/CreditsPlanContext";
+import { consumeCheckoutQueryParams } from "@/app/_components/CreditsPlanContext";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -73,8 +73,6 @@ const creditPacks: CreditPack[] = PACK_UI.map((meta, i) => {
 
 export default function CreditsPage() {
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
-  const { planDisplayName } = useCreditsPlan();
-
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const c = params.get("checkout");
@@ -192,13 +190,18 @@ export default function CreditsPage() {
                     ) : null}
 
                     <div className="mt-1 flex flex-col gap-3">
-                      <div className="flex flex-col gap-1.5 sm:items-start">
-                        <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/45">
-                          <Coins className="h-3.5 w-3.5 shrink-0 text-violet-400/90" aria-hidden />
-                          Credits
+                      <div className="flex items-center gap-3">
+                        <span
+                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.04] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
+                          aria-hidden
+                        >
+                          <Coins className="h-5 w-5 text-violet-300/90" strokeWidth={1.75} />
                         </span>
-                        <p className="font-mono text-[1.625rem] font-medium tabular-nums tracking-tight text-violet-200/95 sm:text-[1.75rem]">
-                          {p.credits.toLocaleString()}
+                        <p className="flex min-w-0 flex-wrap items-baseline gap-2 leading-none">
+                          <span className="font-mono text-[1.625rem] font-medium tabular-nums tracking-tight text-violet-200/95 sm:text-[1.75rem]">
+                            {p.credits.toLocaleString()}
+                          </span>
+                          <span className="text-[15px] font-medium text-white/50 sm:text-base">credits</span>
                         </p>
                       </div>
 
