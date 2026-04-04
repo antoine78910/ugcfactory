@@ -28,8 +28,18 @@ export async function GET(req: NextRequest) {
     );
   };
 
-  // Build a mutable response to capture auth cookies set by Supabase.
-  const cookieCaptureResponse = NextResponse.next();
+  const homeUrl = new URL("/", url.origin);
+  const signinUrl = new URL("/signin", url.origin);
+
+  /**
+   * Session cookies from `exchangeCodeForSession` MUST be set on the same
+   * NextResponse that we return. Copying via `getAll()` from another response
+   * fails in Next.js 15+: programmatic cookies are not reliably readable back,
+   * and `set(cookie)` drops path/httpOnly/sameSite — so the browser never
+   * stores the session and the next request hits `/` unauthenticated → /signin.
+   */
+  let redirectResponse = NextResponse.redirect(homeUrl, 302);
+
   console.log("[auth/callback] incoming", {
     host: req.headers.get("host"),
     path: url.pathname,
@@ -45,18 +55,9 @@ export async function GET(req: NextRequest) {
         return req.cookies.getAll();
       },
       setAll(cookiesToSet) {
-        // Supabase sends cookiesToSet in the shape: { name, value, options }.
-        // Next.js cookie API has changed across versions, so keep this robust.
         try {
-          for (const cookie of cookiesToSet as Array<any>) {
-            const name = cookie?.name;
-            const value = cookie?.value;
-            const options = cookie?.options;
-            if (typeof name === "string" && typeof value === "string") {
-              cookieCaptureResponse.cookies.set(name, value, options as any);
-            } else {
-              cookieCaptureResponse.cookies.set(cookie as any);
-            }
+          for (const { name, value, options } of cookiesToSet) {
+            redirectResponse.cookies.set(name, value, options);
           }
         } catch (e) {
           console.error("[auth/callback] cookies.setAll failed", e);
@@ -65,85 +66,64 @@ export async function GET(req: NextRequest) {
     },
   });
 
-  async function redirectToAppWithCapturedCookies() {
-    const target = new URL("/", url.origin);
-    const redirectResponse = NextResponse.redirect(target, 302);
-    for (const cookie of cookieCaptureResponse.cookies.getAll()) {
-      redirectResponse.cookies.set(cookie);
+  function redirectSignin() {
+    if (errorDescription) {
+      signinUrl.searchParams.set("error_description", errorDescription);
     }
-
-    console.log("[auth/callback] redirectToApp", {
-      target: target.toString(),
-      capturedCookieNames: redactedCookieNames(cookieCaptureResponse.cookies.getAll() as any),
-    });
-
-    return redirectResponse;
+    console.log("[auth/callback] redirectToSignin", { target: signinUrl.toString() });
+    return NextResponse.redirect(signinUrl, 302);
   }
 
-  async function userExists() {
-    const { data } = await supabase.auth.getUser();
-    console.log("[auth/callback] userExists()", { exists: Boolean(data?.user) });
-    return Boolean(data?.user);
-  }
-
-  // If OAuth returned an error but the user session already exists,
-  // we shouldn't force them back to /signin.
+  // OAuth returned an error in the query string
   if (error) {
     try {
-      if (await userExists()) {
-        return await redirectToAppWithCapturedCookies();
+      const { data } = await supabase.auth.getUser();
+      if (data?.user) {
+        console.log("[auth/callback] oauth error but session present; redirect home");
+        return redirectResponse;
       }
     } catch {
-      // ignore and fall back to /signin
+      // fall through
     }
 
-    // Some OAuth flows return "already connected / already authenticated"
-    // even though the session is effectively usable. In that case, do not
-    // bounce the user to /signin with an error message.
     if (isAlreadyConnectedLike(error) || isAlreadyConnectedLike(errorDescription)) {
-      console.log("[auth/callback] already-connected-like error; redirecting to app", {
+      console.log("[auth/callback] already-connected-like error; redirect home", {
         error,
         errorDescription: errorDescription ? String(errorDescription).slice(0, 120) : undefined,
       });
-      return await redirectToAppWithCapturedCookies();
+      return redirectResponse;
     }
 
-    const target = new URL("/signin", url.origin);
-    if (errorDescription) {
-      target.searchParams.set("error_description", errorDescription);
-    }
-    console.log("[auth/callback] redirectToSignin (oauth error)", {
-      target: target.toString(),
-    });
-    return NextResponse.redirect(target, 302);
+    return redirectSignin();
   }
 
   if (code) {
     const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
     if (!exchangeError) {
-      console.log("[auth/callback] exchangeCodeForSession success; redirecting to app");
-      return await redirectToAppWithCapturedCookies();
+      console.log("[auth/callback] exchangeCodeForSession success; redirect home", {
+        setCookieNames: redactedCookieNames(redirectResponse.cookies.getAll() as any),
+      });
+      return redirectResponse;
     }
 
-    // Some OAuth errors (ex: already authenticated) shouldn't block the redirect.
     try {
-      if (await userExists()) {
-        console.log("[auth/callback] exchangeError but user exists; redirecting to app", {
+      const { data } = await supabase.auth.getUser();
+      if (data?.user) {
+        console.log("[auth/callback] exchangeError but user present; redirect home", {
           exchangeError: String(exchangeError).slice(0, 120),
         });
-        return await redirectToAppWithCapturedCookies();
+        return redirectResponse;
       }
     } catch {
-      // ignore
+      // fall through
     }
 
-    console.log("[auth/callback] redirectToSignin (exchange failed)", {
+    console.log("[auth/callback] exchange failed → signin", {
       exchangeError: exchangeError ? String(exchangeError).slice(0, 120) : undefined,
-      cookieNamesAfterExchange: redactedCookieNames(cookieCaptureResponse.cookies.getAll() as any),
     });
+    return redirectSignin();
   }
 
-  console.log("[auth/callback] final redirectToSignin (no code or cannot auth)");
-  return NextResponse.redirect(new URL("/signin", url.origin), 302);
+  console.log("[auth/callback] no code and no usable error handler → signin");
+  return redirectSignin();
 }
-
