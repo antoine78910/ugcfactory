@@ -2,9 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, CheckCircle2, Sparkles } from "lucide-react";
+import { ArrowRight, CheckCircle2, Coins } from "lucide-react";
 import { toast } from "sonner";
-import { CreditPackCoin } from "@/app/_components/CreditPackCoin";
 import StudioShell from "@/app/_components/StudioShell";
 import { consumeCheckoutQueryParams, useCreditsPlan } from "@/app/_components/CreditsPlanContext";
 import { Button } from "@/components/ui/button";
@@ -187,11 +186,14 @@ export default function CreditsPage() {
                     ) : null}
 
                     <div className="mt-1 flex flex-col gap-3">
-                      <div className="flex flex-col items-center gap-2 sm:items-start">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/40">
+                      <div className="flex flex-col gap-1.5 sm:items-start">
+                        <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/45">
+                          <Coins className="h-3.5 w-3.5 shrink-0 text-violet-400/90" aria-hidden />
                           Credits
+                        </span>
+                        <p className="font-mono text-[1.625rem] font-medium tabular-nums tracking-tight text-violet-200/95 sm:text-[1.75rem]">
+                          {p.credits.toLocaleString()}
                         </p>
-                        <CreditPackCoin amount={p.credits} />
                       </div>
 
                       <div className="space-y-1">
