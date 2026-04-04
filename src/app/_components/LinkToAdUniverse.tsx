@@ -776,6 +776,8 @@ export default function LinkToAdUniverse({
   const scriptProvider = "claude" as const;
 
   const [videoDuration, setVideoDuration] = useState<number>(LINK_TO_AD_DEFAULT_VIDEO_DURATION_SEC);
+  /** After Generate from URL (or when a saved run is loaded), duration is fixed for this session. */
+  const [ltaVideoDurationLocked, setLtaVideoDurationLocked] = useState(false);
   const [customUgcTopic, setCustomUgcTopic] = useState("");
   const [customUgcOffer, setCustomUgcOffer] = useState("");
   const [customUgcCta, setCustomUgcCta] = useState("");
@@ -1074,6 +1076,7 @@ export default function LinkToAdUniverse({
     setCustomUgcOffer("");
     setCustomUgcCta("");
     setLtaFrozenCredits(null);
+    setLtaVideoDurationLocked(false);
     latestSnapRef.current = null;
     prevAngleRef.current = null;
     nanoBananaPromptsSignatureRef.current = null;
@@ -2282,6 +2285,7 @@ export default function LinkToAdUniverse({
       return;
     }
 
+    setLtaVideoDurationLocked(true);
     setIsWorking(true);
     setStage("writing_scripts");
     try {
@@ -2499,6 +2503,7 @@ export default function LinkToAdUniverse({
             hydrateFromRun(findJson.data);
             if (linkToAdFlowEpochRef.current !== epochAtStart) {
               setIsWorking(false);
+              setLtaVideoDurationLocked(false);
               return;
             }
             setStage("ready");
@@ -2511,10 +2516,14 @@ export default function LinkToAdUniverse({
       }
     }
 
+    // New scan / fresh pipeline: duration is fixed after this point (wallet failure unlocks below).
+    setLtaVideoDurationLocked(true);
+
     const walletNow = creditsBalanceRef.current;
     if (walletNow < ltaGenerateCredits) {
       setIsWorking(false);
       setStage("idle");
+      setLtaVideoDurationLocked(false);
       setLtaCreditModal({
         current: walletNow,
         required: ltaGenerateCredits,
@@ -2527,6 +2536,7 @@ export default function LinkToAdUniverse({
       setIsWorking(false);
       setStage("idle");
       setLtaFrozenCredits(null);
+      setLtaVideoDurationLocked(false);
       return;
     }
     chargedFullBundle = true;
@@ -2600,6 +2610,7 @@ export default function LinkToAdUniverse({
             hydrateFromRun(getJson.data, { silent: true });
             if (linkToAdFlowEpochRef.current !== epochAtStart) {
               setIsWorking(false);
+              setLtaVideoDurationLocked(false);
               return;
             }
             toast.message("Pipeline stopped early", {
@@ -2623,6 +2634,7 @@ export default function LinkToAdUniverse({
       }
       hydrateFromRun(getJson.data, { silent: true });
       if (linkToAdFlowEpochRef.current !== epochAtStart) {
+        setLtaVideoDurationLocked(false);
         return;
       }
       setStage("ready");
@@ -2636,6 +2648,7 @@ export default function LinkToAdUniverse({
     } catch (err) {
       if (linkToAdFlowEpochRef.current !== epochAtStart) {
         setLtaFrozenCredits(null);
+        setLtaVideoDurationLocked(false);
         return;
       }
       if (chargedFullBundle) {
@@ -4065,28 +4078,34 @@ export default function LinkToAdUniverse({
             )}
           </div>
         ) : null}
-        {/* Duration */}
+        {/* Duration — hidden once generation has started (new pipeline or continue scripts). */}
         <div className="flex flex-wrap items-center gap-4">
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Duration</p>
-            <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] p-1">
-              {[5, 10, 15].map((d) => (
-                <button
-                  key={d}
-                  type="button"
-                  onClick={() => setVideoDuration(d)}
-                  disabled={isWorking}
-                  className={cn(
-                    "rounded-md px-3 py-1.5 text-xs font-semibold transition",
-                    videoDuration === d
-                      ? "bg-violet-500/15 text-white border border-violet-400/60"
-                      : "bg-black/20 text-white/65 hover:border-white/20 border border-white/10",
-                  )}
-                >
-                  {d}s
-                </button>
-              ))}
-            </div>
+            {ltaVideoDurationLocked ? (
+              <p className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/80">
+                {videoDuration}s <span className="font-normal text-white/45">(locked for this run)</span>
+              </p>
+            ) : (
+              <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] p-1">
+                {[5, 10, 15].map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => setVideoDuration(d)}
+                    disabled={isWorking}
+                    className={cn(
+                      "rounded-md px-3 py-1.5 text-xs font-semibold transition",
+                      videoDuration === d
+                        ? "bg-violet-500/15 text-white border border-violet-400/60"
+                        : "bg-black/20 text-white/65 hover:border-white/20 border border-white/10",
+                    )}
+                  >
+                    {d}s
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 

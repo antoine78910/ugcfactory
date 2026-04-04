@@ -50,13 +50,13 @@ const HERO_STUDIO_VIDEOS = [
 ] as const;
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-[#050507] text-white selection:bg-violet-500/30">
+    <div className="min-h-screen overflow-x-clip bg-[#050507] text-white selection:bg-violet-500/30">
       {/*
         Sticky nav must be a direct child of the full-page column so it stays pinned for the whole
         scroll (not only the hero). Hero art stays in a sibling wrapper; overflow-x clip stays on the art layer.
       */}
-      <header className="sticky top-0 z-50 border-b border-white/[0.08] bg-[#050507]/20 backdrop-blur-md">
-        <div className="mx-auto flex max-w-6xl items-center px-5 py-5 sm:px-6 sm:py-6">
+      <header className="sticky top-0 z-50 overflow-hidden border-b border-white/[0.08] bg-[#050507]/85 backdrop-blur-md supports-[backdrop-filter]:bg-[#050507]/20">
+        <div className="mx-auto flex min-w-0 max-w-6xl items-center gap-3 px-5 py-5 sm:gap-4 sm:px-6 sm:py-6">
           <Link href="/" className="flex flex-shrink-0 items-center">
             <Image
               src="/youry-logo.png"
