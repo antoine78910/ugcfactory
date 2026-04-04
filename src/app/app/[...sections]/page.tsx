@@ -15,7 +15,7 @@ import { ProjectRunBrandBriefEditor } from "@/app/_components/ProjectRunBrandBri
 import { ProjectRunScriptsEditor } from "@/app/_components/ProjectRunScriptsEditor";
 import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
 import { StudioEmptyExamples, StudioOutputPane } from "@/app/_components/StudioEmptyExamples";
-import { isProbablyVideoUrl, StudioGenerationsHistory } from "@/app/_components/StudioGenerationsHistory";
+import { StudioGenerationsHistory } from "@/app/_components/StudioGenerationsHistory";
 import type { StudioHistoryItem } from "@/app/_components/StudioGenerationsHistory";
 import { calculateMotionControlCredits } from "@/lib/linkToAd/generationCredits";
 import StudioAvatarPanel from "@/app/_components/StudioAvatarPanel";
@@ -908,18 +908,6 @@ export default function AppBrandWizard() {
     () => elevenVoices.find((voice) => voice.voiceId === elevenVoiceId) ?? null,
     [elevenVoiceId, elevenVoices],
   );
-  const readyTranslateVideos = useMemo(
-    () =>
-      [...motionHistoryItems, ...voiceHistoryItems].filter(
-        (item) =>
-          item.status === "ready" &&
-          Boolean(item.mediaUrl?.trim()) &&
-          item.kind !== "audio" &&
-          (item.kind === "video" || item.kind === "motion" || isProbablyVideoUrl(item.mediaUrl)),
-      ),
-    [motionHistoryItems, voiceHistoryItems],
-  );
-
   const isVoiceFrenchish = useCallback((voice: ElevenVoiceOption): boolean => {
     const lang = (voice.labels?.language || voice.language || "").trim().toLowerCase();
     const accent = (voice.labels?.accent || "").trim().toLowerCase();
@@ -1394,19 +1382,15 @@ export default function AppBrandWizard() {
       return voiceChangeUploadFile;
     }
 
-    const selected = readyTranslateVideos.find((item) => item.mediaUrl === voiceChangeHistoryUrl);
-    if (!selected?.mediaUrl) {
-      throw new Error("Add an audio/video file or choose a generated video.");
+    const url = voiceChangeHistoryUrl?.trim();
+    if (!url) {
+      throw new Error("Add an audio or video file.");
     }
-    const res = await fetch(proxiedMediaSrc(selected.mediaUrl));
-    if (!res.ok) throw new Error("Could not download the selected video.");
+    const res = await fetch(proxiedMediaSrc(url));
+    if (!res.ok) throw new Error("Could not download the source media.");
     const blob = await res.blob();
-    return new File([blob], "history-source.mp4", { type: blob.type || "video/mp4" });
-  }, [
-    readyTranslateVideos,
-    voiceChangeHistoryUrl,
-    voiceChangeUploadFile,
-  ]);
+    return new File([blob], "source-media.mp4", { type: blob.type || "video/mp4" });
+  }, [voiceChangeHistoryUrl, voiceChangeUploadFile]);
 
   const currentProductName = useMemo(() => {
     const fromAnalysis = safeString(analysis?.step1_rawSheet ?? "");
@@ -3114,9 +3098,7 @@ export default function AppBrandWizard() {
                               <div className="flex items-center justify-between gap-2">
                                 <p className="truncate text-[11px] text-white/45">
                                   {voiceChangeUploadFile?.name
-                                    || (voiceChangeHistoryUrl
-                                      ? readyTranslateVideos.find((i) => i.mediaUrl === voiceChangeHistoryUrl)?.label ?? "History video"
-                                      : "No uploaded source")}
+                                    || (voiceChangeHistoryUrl ? "Loaded video" : "No file selected")}
                                 </p>
                                 {voiceChangeUploadPreviewUrl ? (
                                   <button
@@ -3129,32 +3111,6 @@ export default function AppBrandWizard() {
                                 ) : null}
                               </div>
                             </div>
-                            {!voiceChangeUploadPreviewUrl ? (
-                              <div className="rounded-xl border border-white/10 bg-black/20 p-2.5">
-                                <Select
-                                  value={voiceChangeHistoryUrl}
-                                  onValueChange={(v) => {
-                                    setVoiceChangeUploadFile(null);
-                                    setVoiceChangeHistoryUrl(v);
-                                    setVoiceChangeUploadKind("video");
-                                    setVoiceChangeUploadPreviewUrl(proxiedMediaSrc(v));
-                                  }}
-                                >
-                                  <SelectTrigger className="h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
-                                    <SelectValue
-                                      placeholder="Pick from your Translate history"
-                                    />
-                                  </SelectTrigger>
-                                  <SelectContent position="popper" className={studioSelectContentClass}>
-                                    {readyTranslateVideos.map((item) => (
-                                      <SelectItem key={item.id} value={item.mediaUrl!} className={studioSelectItemClass}>
-                                        {item.label}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                            ) : null}
                             </>
                             ) : null}
                           </div>
