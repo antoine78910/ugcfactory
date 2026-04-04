@@ -3,8 +3,12 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import { getAppUrl, getEnv } from "@/lib/env";
 import { kieMarketCreateTask } from "@/lib/kieMarket";
-import { KIE_TOPAZ_IMAGE_UPSCALE_MODEL } from "@/lib/pricing";
 import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
+import { hasPersonalApiKey } from "@/lib/personalApiBypass";
+import { KIE_TOPAZ_IMAGE_UPSCALE_MODEL } from "@/lib/pricing";
+import { canAccessStudioSection, upgradePlanMessage } from "@/lib/subscriptionModelAccess";
+import { getUserPlan } from "@/lib/supabase/getUserPlan";
+import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 
 type Body = {
   imageUrl: string;
@@ -14,11 +18,28 @@ type Body = {
 };
 
 export async function POST(req: Request) {
+  const { user, response } = await requireSupabaseUser();
+  if (response) return response;
+
   let body: Body;
   try {
     body = (await req.json()) as Body;
   } catch {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+  }
+
+  const personalKey = hasPersonalApiKey(body.personalApiKey) ? body.personalApiKey.trim() : undefined;
+  if (!personalKey) {
+    const plan = await getUserPlan(user.id);
+    if (!canAccessStudioSection(plan, "upscale")) {
+      return NextResponse.json(
+        {
+          error: upgradePlanMessage("growth", "Upscale"),
+          code: "PLAN_UPGRADE_REQUIRED",
+        },
+        { status: 403 },
+      );
+    }
   }
 
   const imageUrl = (body.imageUrl ?? "").trim();
@@ -36,11 +57,6 @@ export async function POST(req: Request) {
 
   const callBackUrl =
     getEnv("NANOBANANA_CALLBACK_URL") ?? `${getAppUrl()}/api/nanobanana/callback`;
-
-  const personalKey =
-    typeof body.personalApiKey === "string" && body.personalApiKey.trim().length > 0
-      ? body.personalApiKey.trim()
-      : undefined;
 
   try {
     const taskId = await kieMarketCreateTask(

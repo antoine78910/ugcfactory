@@ -396,11 +396,11 @@ export default function SubscriptionPage() {
                     </Button>
 
                     <ul className="mt-3 flex flex-1 flex-col space-y-1.5 border-t border-white/10 pt-3 text-left text-[11px] text-white/72 sm:text-xs">
-                      <li className="flex items-start gap-2">
-                        <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-md bg-violet-500/20 text-violet-200 sm:h-5 sm:w-5">
+                      <li className="flex items-center gap-2">
+                        <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-md bg-violet-500/20 text-violet-200 sm:h-5 sm:w-5">
                           <Coins className="h-2.5 w-2.5 sm:h-3 sm:w-3" aria-hidden />
                         </span>
-                        <span className="min-w-0">
+                        <span className="min-w-0 leading-none">
                           <span className="font-semibold tabular-nums text-white">
                             {plan.credits.toLocaleString()} credits
                           </span>
