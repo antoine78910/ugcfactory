@@ -409,10 +409,21 @@ export function CreditsPlanProvider({
         // Server confirms a paid plan — apply it with the authoritative ledger balance.
         const alloc = subscriptionCredits(serverPlan);
         lsSet(LS_PLAN, serverPlan);
-        if (serverBalance !== null) {
+
+        // Grace period: right after checkout the webhook may not have created
+        // the credit grants yet, so serverBalance is 0. During the grace window
+        // keep the optimistic credits written by consumeCheckoutQueryParams.
+        const checkoutTs = Number(lsGet(LS_CHECKOUT_TS));
+        const inCheckoutGrace = Number.isFinite(checkoutTs) && Date.now() - checkoutTs < 5 * 60 * 1000;
+        const localCredits = Number(lsGet(LS_CREDITS));
+
+        if (serverBalance !== null && serverBalance > 0) {
+          lsSet(LS_CREDITS, String(serverBalance));
+        } else if (inCheckoutGrace && Number.isFinite(localCredits) && localCredits > 0) {
+          // Keep local credits during grace window — don't overwrite with 0.
+        } else if (serverBalance !== null) {
           lsSet(LS_CREDITS, String(serverBalance));
         } else {
-          const localCredits = Number(lsGet(LS_CREDITS));
           if (!Number.isFinite(localCredits) || localCredits > alloc * 2) {
             lsSet(LS_CREDITS, String(alloc));
           }

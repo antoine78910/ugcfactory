@@ -101,6 +101,12 @@ export async function GET() {
             try {
               const admin = createSupabaseServiceClient();
               if (admin) {
+                const rawEnd = (sub as any).current_period_end;
+                const endMs = typeof rawEnd === "number" && rawEnd > 0 ? rawEnd * 1000 : NaN;
+                const periodEndIso = Number.isFinite(endMs)
+                  ? new Date(endMs).toISOString()
+                  : null;
+
                 await admin.from("user_subscriptions").upsert(
                   {
                     user_id: auth.user.id,
@@ -109,9 +115,7 @@ export async function GET() {
                     plan_id: planId,
                     billing,
                     status: sub.status,
-                    current_period_end: new Date(
-                      (sub as any).current_period_end * 1000,
-                    ).toISOString(),
+                    ...(periodEndIso ? { current_period_end: periodEndIso } : {}),
                   },
                   { onConflict: "user_id" },
                 );

@@ -31,6 +31,22 @@ import {
   addPackCredits as addPackCreditsLedger,
 } from "@/lib/creditGrants";
 
+/** Safely convert a Stripe Unix-second timestamp to an ISO string; returns null on invalid input. */
+function safePeriodEndIso(raw: unknown): string | null {
+  if (typeof raw !== "number" || raw <= 0 || !Number.isFinite(raw)) return null;
+  const d = new Date(raw * 1000);
+  return Number.isFinite(d.getTime()) ? d.toISOString() : null;
+}
+
+/** Same as safePeriodEndIso but returns a Date (fallback: 30 days from now). */
+function safePeriodEndDate(raw: unknown): Date {
+  if (typeof raw === "number" && raw > 0 && Number.isFinite(raw)) {
+    const d = new Date(raw * 1000);
+    if (Number.isFinite(d.getTime())) return d;
+  }
+  return new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+}
+
 // Credit pack key → credits amount (must stay in sync with pricing.ts CREDIT_PACKS)
 const CREDIT_PACK_CREDITS: Record<string, number> = {
   starter: 200,
@@ -97,7 +113,8 @@ export async function POST(req: Request) {
           const billing = (session.metadata?.subscription_billing === "yearly" ? "yearly" : "monthly") as "monthly" | "yearly";
 
           if (isSubscriptionPlanId(planId)) {
-            const periodEnd = new Date((sub as any).current_period_end * 1000);
+            const periodEnd = safePeriodEndDate((sub as any).current_period_end);
+            const periodEndIso = periodEnd.toISOString();
             await admin.from("user_subscriptions").upsert({
               user_id: userId,
               stripe_subscription_id: sub.id,
@@ -105,7 +122,7 @@ export async function POST(req: Request) {
               plan_id: planId,
               billing,
               status: sub.status,
-              current_period_end: periodEnd.toISOString(),
+              current_period_end: periodEndIso,
             }, { onConflict: "user_id" });
 
             // Reset subscription credits (non-cumulative): invalidate old, create fresh grant expiring at period end
@@ -140,16 +157,14 @@ export async function POST(req: Request) {
 
         // Fetch the live subscription to get the new current_period_end
         const stripe = new Stripe(secret, { apiVersion: "2026-02-25.clover" });
-        let renewalPeriodEnd: Date | null = null;
+        let renewalPeriodEnd: Date;
         try {
           const liveSub = await stripe.subscriptions.retrieve(subId);
-          renewalPeriodEnd = new Date((liveSub as any).current_period_end * 1000);
-          // Update the DB row with the new period end
+          renewalPeriodEnd = safePeriodEndDate((liveSub as any).current_period_end);
           await admin.from("user_subscriptions").update({
             current_period_end: renewalPeriodEnd.toISOString(),
           }).eq("stripe_subscription_id", subId);
         } catch {
-          // Fallback: assume 1 month from now
           renewalPeriodEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
         }
 
@@ -184,9 +199,10 @@ export async function POST(req: Request) {
           .maybeSingle();
 
         if (existing) {
+          const updatedEndIso = safePeriodEndIso((session as any).current_period_end);
           await admin.from("user_subscriptions").update({
             status: session.status,
-            current_period_end: new Date((session as any).current_period_end * 1000).toISOString(),
+            ...(updatedEndIso ? { current_period_end: updatedEndIso } : {}),
           }).eq("stripe_subscription_id", sub.id);
 
           serverLog("stripe_webhook_subscription_updated", { userId: existing.user_id, status: session.status });
