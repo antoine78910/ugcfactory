@@ -101,7 +101,7 @@ const VIDEO_EDIT_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
   },
   {
     id: "studio-edit/motion",
-    label: "Kling Motion Control",
+    label: "Kling 3.0 Motion Control",
     subtitle: "Control motion with video references",
     icon: "kling",
     resolution: "720p / 1080p",

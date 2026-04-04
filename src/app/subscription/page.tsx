@@ -16,6 +16,7 @@ import {
 import {
   planRank,
   SUBSCRIPTION_MODEL_MATRIX_ROWS,
+  SUBSCRIPTION_STUDIO_ACCESS_ROWS,
   type AccountPlanId,
 } from "@/lib/subscriptionModelAccess";
 import {
@@ -406,10 +407,44 @@ export default function SubscriptionPage() {
                         </span>
                       </li>
                       <li className="pl-1 text-white/50">
-                        Up to {Number(plan.usage.images).toLocaleString()} AI images (Nanobanana)
+                        Up to {Number(plan.usage.images).toLocaleString()} AI images (NanoBanana 2)
                       </li>
                       <li className="pl-1 text-white/50">
                         Up to {Number(plan.usage.videos).toLocaleString()} AI videos (Sora 2)
+                      </li>
+                      <li className="pt-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-white/45">
+                        Studio & tools
+                      </li>
+                      <li className="pl-1 text-white/55">
+                        <div className="space-y-1">
+                          {SUBSCRIPTION_STUDIO_ACCESS_ROWS.map((row) => {
+                            const included = isModelIncluded(plan.id, row);
+                            return (
+                              <div key={row.label} className="flex items-center gap-2.5">
+                                <div className="flex min-w-0 flex-1 items-center gap-2">
+                                  <span
+                                    className={cn(
+                                      "flex h-5 w-5 flex-none shrink-0 items-center justify-center rounded-md border text-[10px] font-semibold",
+                                      included
+                                        ? "border-emerald-400/40 bg-emerald-500/15 text-emerald-200"
+                                        : "border-red-400/30 bg-red-500/10 text-red-200/90",
+                                    )}
+                                    aria-label={included ? "Included" : "Not included"}
+                                  >
+                                    {included ? (
+                                      <Check className="h-3.5 w-3.5" />
+                                    ) : (
+                                      <X className="h-3.5 w-3.5" />
+                                    )}
+                                  </span>
+                                  <span className="min-w-0 truncate text-xs text-white/70" title={row.label}>
+                                    {row.label}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </li>
                       <li className="pt-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-white/45">
                         Included models

@@ -31,6 +31,7 @@ import {
   sectionFromPathname,
   sectionToPath,
 } from "@/lib/studioPaths";
+import { canAccessStudioSection } from "@/lib/subscriptionModelAccess";
 
 const SIDEBAR_COLLAPSED_LS = "youry-studio-sidebar-collapsed";
 
@@ -51,7 +52,7 @@ const CREATE_NAV: CreateNavEntry[] = [
   { kind: "route", id: "avatar", label: "Avatar", icon: UserRound },
   { kind: "route", id: "ad_clone", label: "Translate", icon: Languages },
   { kind: "route", id: "voice", label: "Voice", icon: Mic },
-  { kind: "route", id: "motion_control", label: "Motion Control", icon: Joystick },
+  { kind: "route", id: "motion_control", label: "Kling 3.0 Motion Control", icon: Joystick },
   { kind: "route", id: "image", label: "Image", icon: ImageIcon },
   { kind: "route", id: "video", label: "Video", icon: Video },
   { kind: "route", id: "upscale", label: "Upscale", icon: Maximize2 },
@@ -90,7 +91,7 @@ function StudioShellInner({
 }: Props) {
   const pathname = usePathname();
   const [email, setEmail] = useState("");
-  const { planDisplayName } = useCreditsPlan();
+  const { planDisplayName, planId } = useCreditsPlan();
   const [navCollapsed, setNavCollapsed] = useState(false);
 
   useEffect(() => {
@@ -289,6 +290,41 @@ function StudioShellInner({
                   }
                   const { id, label } = entry;
                   const active = activeSection === id;
+                  const growthLocked =
+                    entry.kind === "route" &&
+                    !canAccessStudioSection(planId, id) &&
+                    (id === "ad_clone" || id === "upscale");
+                  if (growthLocked) {
+                    const lockedClass = cn(
+                      "block w-full min-w-0 rounded-lg border border-amber-400/30 bg-amber-500/[0.08] px-4 py-3 text-left text-[14px] font-semibold leading-snug text-white/85 transition-colors hover:bg-amber-500/14",
+                      navCollapsed && "px-2.5 py-3.5",
+                    );
+                    return (
+                      <Link
+                        key={id}
+                        href="/subscription"
+                        className={lockedClass}
+                        title="Growth plan — Translate & Upscale"
+                      >
+                        <span
+                          className={cn(
+                            "flex min-w-0 items-center justify-between gap-2",
+                            navCollapsed && "justify-center",
+                          )}
+                        >
+                          <span className={cn("flex min-w-0 items-center gap-2.5", navCollapsed && "justify-center")}>
+                            <NavIcon className="h-5 w-5 shrink-0 text-amber-200/85" aria-hidden />
+                            <span className={cn("min-w-0 truncate", navCollapsed && "sr-only")}>{label}</span>
+                          </span>
+                          {!navCollapsed ? (
+                            <span className="shrink-0 rounded border border-amber-400/40 bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase text-amber-100">
+                              Growth
+                            </span>
+                          ) : null}
+                        </span>
+                      </Link>
+                    );
+                  }
                   if (controlled) {
                     return (
                       <button

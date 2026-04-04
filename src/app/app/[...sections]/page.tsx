@@ -52,7 +52,7 @@ import {
   splitNanoPromptBodyForEditing,
   universeHasPendingKlingTask,
 } from "@/lib/linkToAdUniverse";
-import { motionControlUpgradeMessage } from "@/lib/subscriptionModelAccess";
+import { canAccessStudioSection, motionControlUpgradeMessage } from "@/lib/subscriptionModelAccess";
 import { clipboardImageFiles } from "@/lib/clipboardImage";
 import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
 import { userMessageFromCaughtError } from "@/lib/generationUserMessage";
@@ -604,6 +604,18 @@ export default function AppBrandWizard() {
   const { planId, current: creditsBalance, spendCredits, grantCredits } = useCreditsPlan();
   const creditsRef = useRef(creditsBalance);
   creditsRef.current = creditsBalance;
+
+  useEffect(() => {
+    if (canAccessStudioSection(planId, appSection)) return;
+    toast.message("Growth plan required", {
+      description: "Translate, Upscale, and the full model library unlock on Growth and above.",
+    });
+    setAppSection("link_to_ad");
+    if (typeof window !== "undefined") {
+      const next = sectionToPath("link_to_ad");
+      if (window.location.pathname !== next) window.history.replaceState(null, "", next);
+    }
+  }, [planId, appSection]);
   const grantCreditsRef = useRef(grantCredits);
   grantCreditsRef.current = grantCredits;
 
@@ -2723,7 +2735,11 @@ export default function AppBrandWizard() {
                     <div className="flex min-w-0 w-full flex-col lg:basis-1/4 lg:max-w-[24rem] lg:flex-none lg:shrink-0 lg:min-h-0 lg:overflow-hidden">
                       <div className="studio-params-scroll flex min-w-0 flex-col gap-2 lg:h-full lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pb-10">
                       <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
-                        {appSection === "voice" ? "Voice" : appSection === "ad_clone" ? "Translate" : "Motion control"}
+                        {appSection === "voice"
+                          ? "Voice"
+                          : appSection === "ad_clone"
+                            ? "Translate"
+                            : "Kling 3.0 Motion Control"}
                       </p>
                       <div className="rounded-2xl border border-white/10 bg-[#101014] p-3 space-y-3">
                         {appSection === "voice" ? (

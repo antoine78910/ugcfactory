@@ -3,6 +3,7 @@
  * Policy: Starter includes paid-model access unless a model is explicitly gated higher.
  */
 
+import type { AppSection } from "@/lib/studioPaths";
 import { isSubscriptionPlanId, type SubscriptionPlanId } from "@/lib/stripe/subscriptionPrices";
 import {
   STUDIO_UNIFIED_IMAGE_PICKER_IDS,
@@ -57,8 +58,9 @@ const VIDEO_EDIT_PICKER_MIN_RANK: Record<string, number> = {
   "studio-edit/grok": 2,
   "studio-edit/kling-omni": 2,
   "studio-edit/kling-o1": 2,
-  "studio-edit/motion": 2,
-  "studio-edit/motion-v3": 2,
+  /** Kling 3.0 Motion Control — Starter+ (same as core studio bundle). */
+  "studio-edit/motion": 1,
+  "studio-edit/motion-v3": 1,
 };
 
 /** Veo checkout body uses these keys; map to same gates as studio ids. */
@@ -103,9 +105,9 @@ export function canUseVeoApiModel(planId: AccountPlanId, veoModel: string | unde
   return planRank(planId) >= min;
 }
 
-/** Motion Control = Kling 3.0 class; align with Kling 3.0 tier. */
+/** Motion Control tab uses Edit pickers `motion` / `motion-v3` (Starter+). */
 export function canUseMotionControl(planId: AccountPlanId): boolean {
-  return canUseStudioVideoModel(planId, "kling-3.0/video");
+  return canUseStudioVideoEditPicker(planId, "studio-edit/motion-v3");
 }
 
 function planIdAtMinRank(rank: number): AccountPlanId {
@@ -177,7 +179,7 @@ const STUDIO_VIDEO_EDIT_PICKER_LABELS: Record<string, string> = {
   "studio-edit/kling-omni": "Kling 3.0 Omni Edit",
   "studio-edit/kling-o1": "Kling O1 Video Edit",
   "studio-edit/grok": "Grok Imagine Edit",
-  "studio-edit/motion": "Kling Motion Control",
+  "studio-edit/motion": "Kling 3.0 Motion Control",
   "studio-edit/motion-v3": "Kling 3.0 Motion Control",
 };
 
@@ -201,7 +203,7 @@ export function studioVideoEditPickerDisplayLabel(pickerId: string): string {
 }
 
 export function studioImageDisplayLabel(model: "nano" | "pro"): string {
-  return model === "pro" ? "NanoBanana Pro" : "NanoBanana";
+  return model === "pro" ? "NanoBanana Pro" : "NanoBanana 2";
 }
 
 const STUDIO_IMAGE_PICKER_LABELS: Record<string, string> = {
@@ -211,9 +213,9 @@ const STUDIO_IMAGE_PICKER_LABELS: Record<string, string> = {
   seedream_50_lite: "Seedream 5.0 Lite",
   seedream_50_lite_text_to_image: "Seedream 5.0 Lite",
   seedream_50_lite_image_to_image: "Seedream 5.0 Lite",
-  google_nano_banana: "Google Nano Banana",
-  nanobanana_standard: "Google Nano Banana",
-  google_nano_banana_edit: "Google Nano Banana",
+  google_nano_banana: "NanoBanana 2",
+  nanobanana_standard: "NanoBanana 2",
+  google_nano_banana_edit: "NanoBanana 2",
 };
 
 export function studioImagePickerDisplayLabel(pickerId: string): string {
@@ -287,7 +289,19 @@ export function veoUpgradeMessage(planId: AccountPlanId, veoModel: string | unde
 
 export function motionControlUpgradeMessage(planId: AccountPlanId): string | null {
   if (canUseMotionControl(planId)) return null;
-  return upgradePlanMessage(minPlanForStudioVideo("kling-3.0/video"), "Motion Control (Kling 3.0)");
+  return upgradePlanMessage(minPlanForStudioVideoEditPicker("studio-edit/motion-v3"), "Kling 3.0 Motion Control");
+}
+
+/** Translate + Upscale + full premium library — Growth plan and above. */
+const STUDIO_SECTION_MIN_RANK: Partial<Record<AppSection, number>> = {
+  ad_clone: 2,
+  upscale: 2,
+};
+
+export function canAccessStudioSection(planId: AccountPlanId, section: AppSection): boolean {
+  const min = STUDIO_SECTION_MIN_RANK[section];
+  if (min === undefined) return true;
+  return planRank(planId) >= min;
 }
 
 // ---------------------------------------------------------------------------
@@ -306,10 +320,25 @@ function tierBools(minRank: number): [boolean, boolean, boolean, boolean] {
   return [1, 2, 3, 4].map((r) => r >= minRank) as [boolean, boolean, boolean, boolean];
 }
 
+/** High-level studio areas on /subscription (Starter vs Growth+). */
+export const SUBSCRIPTION_STUDIO_ACCESS_ROWS: SubscriptionModelMatrixRow[] = [
+  { label: "Link to Ad", tiers: tierBools(1) },
+  { label: "Avatar", tiers: tierBools(1) },
+  { label: "Voice", tiers: tierBools(1) },
+  { label: "Kling 3.0 Motion Control", tiers: tierBools(1) },
+  { label: "Images", tiers: tierBools(1) },
+  { label: "Videos", tiers: tierBools(1) },
+  { label: "Projects", tiers: tierBools(1) },
+  {
+    label: "Tools (Translate, Upscale & full library)",
+    tiers: tierBools(2),
+  },
+];
+
 /** Rows shown under “Model access” on /subscription; synced with gates above. */
 export const SUBSCRIPTION_MODEL_MATRIX_ROWS: SubscriptionModelMatrixRow[] = [
   {
-    label: "NanoBanana",
+    label: "NanoBanana 2",
     tiers: tierBools(IMAGE_MIN_RANK.nano),
   },
   {
@@ -342,9 +371,5 @@ export const SUBSCRIPTION_MODEL_MATRIX_ROWS: SubscriptionModelMatrixRow[] = [
   {
     label: "Sora 2 Pro",
     tiers: tierBools(VIDEO_MIN_RANK["openai/sora-2-pro"]),
-  },
-  {
-    label: "Motion Control",
-    tiers: tierBools(VIDEO_MIN_RANK["kling-3.0/video"]),
   },
 ];
