@@ -1085,16 +1085,11 @@ export default function LinkToAdUniverse({
   }, [cancelCurrentGeneration, onRunsChanged]);
 
   const handleReturnToFreshLinkToAd = useCallback(() => {
-    if (
-      typeof window !== "undefined" &&
-      !window.confirm(
-        "Start a new Link to Ad? Unsaved work on this screen will be cleared. Saved generations stay in Projects.",
-      )
-    ) {
-      return;
-    }
     cancelCurrentGeneration({ silent: true });
     onStartFreshLinkToAdSession?.();
+    toast.message("New Link to Ad session", {
+      description: "Runs already saved in Projects are unchanged.",
+    });
   }, [cancelCurrentGeneration, onStartFreshLinkToAdSession]);
 
   const handleSwitchRecentRun = useCallback(
@@ -2923,6 +2918,28 @@ export default function LinkToAdUniverse({
     return { urlsByPrompt, lastTaskId, taskIds };
   }
 
+  /** Copy external image URLs to Supabase storage for fast loading. Silently falls back to originals. */
+  async function reuploadToStorage(urls: string[]): Promise<string[]> {
+    const result = [...urls];
+    await Promise.all(
+      urls.map(async (u, i) => {
+        if (!u || !/^https?:\/\//i.test(u)) return;
+        try {
+          const res = await fetch("/api/uploads/from-url", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url: u }),
+          });
+          const json = (await res.json()) as { url?: string };
+          if (res.ok && json.url) result[i] = json.url;
+        } catch {
+          /* keep original */
+        }
+      }),
+    );
+    return result;
+  }
+
   async function persistNanoThreeGeneratedImages(
     url: string,
     prompts: [string, string, string],
@@ -3053,7 +3070,10 @@ export default function LinkToAdUniverse({
         throw new Error("Image generation did not produce 3 images.");
       }
 
-      await persistNanoThreeGeneratedImages(url, prompts as [string, string, string], urlsByPrompt, lastTaskId);
+      const storedUrls = await reuploadToStorage(urlsByPrompt);
+      setNanoBananaImageUrls([...storedUrls]);
+
+      await persistNanoThreeGeneratedImages(url, prompts as [string, string, string], storedUrls, lastTaskId);
 
       toast.success("3 images generated");
       if (shouldCharge || usingPrepaid) setLtaPrepaidThreeImagesRegen(false);
@@ -3186,9 +3206,13 @@ export default function LinkToAdUniverse({
             return [];
           });
           if (!urls.length) throw new Error("Image ready but URL missing.");
-          const first = urls[0];
+          let first = urls[0];
           const rawSlot = lastNanoImagePromptIndexRef.current;
           const pIdx: 0 | 1 | 2 = rawSlot === 0 || rawSlot === 1 || rawSlot === 2 ? rawSlot : 0;
+
+          const stored = await reuploadToStorage([first]);
+          if (stored[0]) first = stored[0];
+
           let merged: string[] = [];
           setNanoBananaImageUrls((prev) => {
             merged = mergeNanoUrlIntoThreeSlots(prev, pIdx, first);
@@ -4624,21 +4648,20 @@ export default function LinkToAdUniverse({
                     />
                   </div>
                 </div>
-                <p className="text-sm font-semibold tracking-tight text-white/90">
-                  Choose your AI UGC angle
-                </p>
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-xs text-white/45">You can regenerate a fresh set anytime.</p>
-                  <Button
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold tracking-tight text-white/90">
+                    Choose your AI UGC angle
+                  </p>
+                  <button
                     type="button"
-                    size="sm"
                     disabled={isWorking || stage === "writing_scripts"}
                     onClick={() => requestRegenerateMarketingAngles()}
-                    className={`${primaryBtnClass} h-auto min-h-12 shrink-0 px-4 py-2 text-sm inline-flex flex-col items-center justify-center gap-0.5`}
+                    className="group/regen inline-flex shrink-0 items-center gap-1.5 rounded-full border border-violet-400/25 bg-violet-500/10 px-3 py-1.5 text-[11px] font-semibold text-violet-300 transition-all hover:border-violet-400/50 hover:bg-violet-500/20 hover:text-violet-200 disabled:pointer-events-none disabled:opacity-40"
                   >
-                    <span className="font-semibold leading-tight">Regenerate 3 new angles</span>
-                    <span className="text-[11px] font-semibold text-black/70">2 credits</span>
-                  </Button>
+                    <RefreshCw className="h-3 w-3 transition-transform group-hover/regen:rotate-90" aria-hidden />
+                    Regenerate
+                    <span className="rounded-full bg-violet-400/20 px-1.5 py-px text-[10px] font-bold text-violet-300/90">2 cr</span>
+                  </button>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-3">
                 {angleOptionCards.map((card) => (
@@ -4646,19 +4669,41 @@ export default function LinkToAdUniverse({
                     key={card.index}
                     type="button"
                     onClick={() => void onSelectAngle(card.index)}
-                    className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-4 text-left transition-all hover:border-violet-400/40 hover:bg-white/[0.07]"
+                    className={cn(
+                      "group/angle relative rounded-2xl border px-4 py-4 text-left transition-all duration-200",
+                      selectedAngleIndex === card.index
+                        ? "border-violet-400/60 bg-violet-500/[0.12] shadow-[0_0_20px_rgba(139,92,246,0.15)]"
+                        : "border-white/8 bg-white/[0.03] hover:border-violet-400/30 hover:bg-white/[0.06]",
+                    )}
                   >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-bold uppercase tracking-wide text-violet-300">Angle {card.index + 1}</span>
+                    <div className="flex items-center gap-2">
+                      <span className={cn(
+                        "inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold transition-colors",
+                        selectedAngleIndex === card.index
+                          ? "bg-violet-400 text-black"
+                          : "bg-white/10 text-white/50 group-hover/angle:bg-violet-400/20 group-hover/angle:text-violet-300",
+                      )}>
+                        {card.index + 1}
+                      </span>
+                      <span className={cn(
+                        "text-[10px] font-bold uppercase tracking-wider transition-colors",
+                        selectedAngleIndex === card.index ? "text-violet-300" : "text-white/40 group-hover/angle:text-white/60",
+                      )}>
+                        Angle {card.index + 1}
+                      </span>
                     </div>
-                    <p className={cn("mt-2 text-sm leading-snug text-white/85", !expandedAngleBriefs[card.index] && card.canExpand && "line-clamp-3")}>
+                    <p className={cn(
+                      "mt-2.5 text-[13px] leading-snug transition-colors",
+                      selectedAngleIndex === card.index ? "text-white/90" : "text-white/65 group-hover/angle:text-white/80",
+                      !expandedAngleBriefs[card.index] && card.canExpand && "line-clamp-3",
+                    )}>
                       {expandedAngleBriefs[card.index] ? card.fullLabel : card.label}
                     </p>
                     {card.canExpand ? (
                       <span
                         role="button"
                         tabIndex={0}
-                        className="mt-2 inline-flex text-[11px] font-medium text-violet-300/80 hover:text-violet-200"
+                        className="mt-2 inline-flex text-[11px] font-medium text-violet-300/70 transition hover:text-violet-200"
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
@@ -5042,9 +5087,11 @@ export default function LinkToAdUniverse({
                             !nanoBananaPromptsRaw.trim()
                           }
                           onClick={() => void onGenerateNanoBananaImagesFromAllPrompts({ forceRegenerateCharge: true })}
-                          className="mt-1 text-[10px] font-medium text-violet-300/85 underline-offset-2 transition hover:text-violet-200 hover:underline disabled:cursor-not-allowed disabled:no-underline disabled:opacity-40"
+                          className="group/ri mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-full border border-violet-400/20 bg-violet-500/10 px-3 py-1.5 text-[10px] font-semibold text-violet-300 transition-all hover:border-violet-400/40 hover:bg-violet-500/20 hover:text-violet-200 disabled:pointer-events-none disabled:opacity-40"
                         >
-                          Regenerate 3 images · 10 credits
+                          <RefreshCw className="h-2.5 w-2.5 transition-transform group-hover/ri:rotate-90" aria-hidden />
+                          Regen 3 images
+                          <span className="rounded-full bg-violet-400/20 px-1.5 py-px text-[9px] font-bold text-violet-300/90">10 cr</span>
                         </button>
                       ) : null}
                     </div>
@@ -5274,9 +5321,11 @@ export default function LinkToAdUniverse({
                               !nanoBananaPromptsRaw.trim()
                             }
                             onClick={() => void onGenerateNanoBananaImagesFromAllPrompts({ forceRegenerateCharge: true })}
-                            className="mt-2 w-fit text-[10px] font-medium text-violet-300/85 underline-offset-2 transition hover:text-violet-200 hover:underline disabled:cursor-not-allowed disabled:no-underline disabled:opacity-40"
+                            className="group/ri mt-3 inline-flex items-center gap-1.5 rounded-full border border-violet-400/20 bg-violet-500/10 px-3.5 py-1.5 text-[11px] font-semibold text-violet-300 transition-all hover:border-violet-400/40 hover:bg-violet-500/20 hover:text-violet-200 disabled:pointer-events-none disabled:opacity-40"
                           >
-                            Regenerate 3 images · 10 credits
+                            <RefreshCw className="h-3 w-3 transition-transform group-hover/ri:rotate-90" aria-hidden />
+                            Regenerate 3 images
+                            <span className="rounded-full bg-violet-400/20 px-1.5 py-px text-[10px] font-bold text-violet-300/90">10 cr</span>
                           </button>
                         ) : null}
                       </div>
@@ -6030,50 +6079,55 @@ export default function LinkToAdUniverse({
 
     {regenerateAnglesChoiceOpen ? (
       <div
-        className="fixed inset-0 z-[210] flex items-center justify-center bg-black/70 p-4 backdrop-blur-[2px]"
+        className="fixed inset-0 z-[210] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm animate-in fade-in duration-200"
         role="dialog"
         aria-modal="true"
         aria-label="Regenerate angles"
         onClick={() => setRegenerateAnglesChoiceOpen(false)}
       >
         <div
-          className="w-full max-w-md rounded-2xl border border-white/12 bg-[#101014] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.75)]"
+          className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#0e0e12] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.8)] animate-in fade-in slide-in-from-bottom-3 duration-300"
           onClick={(e) => e.stopPropagation()}
         >
-          <p className="text-sm font-semibold text-white">Regenerate 3 angles</p>
-          <p className="mt-1 text-xs leading-relaxed text-white/55">
-            You already have generated images. Do you want to keep them as references, or recreate new ones?
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-violet-500/15">
+              <RefreshCw className="h-4 w-4 text-violet-300" aria-hidden />
+            </div>
+            <p className="text-sm font-semibold text-white">Regenerate 3 angles</p>
+          </div>
+          <p className="mt-2 text-xs leading-relaxed text-white/50">
+            You already have generated images. Keep them or recreate everything?
           </p>
           <div className="mt-4 grid gap-2">
-            <Button
+            <button
               type="button"
               onClick={() => {
                 setRegenerateAnglesChoiceOpen(false);
                 void onRegenerateMarketingAngles({ keepExistingImages: true, regenImagesAlso: false });
               }}
-              className="h-11 rounded-xl border border-white/10 bg-white/5 text-white hover:bg-white/10"
-              variant="secondary"
+              className="flex h-10 items-center justify-center gap-2 rounded-xl border border-white/8 bg-white/5 text-[13px] font-medium text-white/85 transition-all hover:border-white/15 hover:bg-white/10"
             >
-              Keep existing images (no extra charge)
-            </Button>
-            <Button
+              Keep images
+              <span className="rounded-full bg-emerald-500/15 px-2 py-px text-[10px] font-bold text-emerald-300">free</span>
+            </button>
+            <button
               type="button"
               onClick={() => {
                 setRegenerateAnglesChoiceOpen(false);
                 void onRegenerateMarketingAngles({ keepExistingImages: false, regenImagesAlso: true });
               }}
-              className="h-11 rounded-xl border border-violet-400/40 bg-violet-500/30 text-white hover:bg-violet-500/40"
+              className="flex h-10 items-center justify-center gap-2 rounded-xl border border-violet-400/25 bg-violet-500/15 text-[13px] font-medium text-white/90 transition-all hover:border-violet-400/40 hover:bg-violet-500/25"
             >
-              Recreate images too (+10 credits)
-            </Button>
-            <Button
+              Regenerate images too
+              <span className="rounded-full bg-violet-400/20 px-2 py-px text-[10px] font-bold text-violet-300">10 cr</span>
+            </button>
+            <button
               type="button"
-              variant="ghost"
-              className="h-10 text-white/70 hover:text-white hover:bg-white/10"
+              className="mt-1 h-9 text-[12px] font-medium text-white/40 transition hover:text-white/70"
               onClick={() => setRegenerateAnglesChoiceOpen(false)}
             >
               Cancel
-            </Button>
+            </button>
           </div>
         </div>
       </div>
