@@ -125,7 +125,7 @@ export default function LandingPage() {
 
           <div className="mx-auto mt-7 max-w-xl sm:mt-9">
             <p className="mb-2 text-sm text-white/55 sm:text-base">
-              Discover winning angles and generate authentic videos at scale.
+              Stop guessing what works. Paste your URL and get UGC that actually sells.
             </p>
             <div className="relative">
               <div className="pointer-events-none absolute -inset-6 rounded-full bg-violet-600/20 blur-2xl" />

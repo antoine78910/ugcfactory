@@ -48,6 +48,125 @@ export function durationRulesForUgcApi(seconds: UgcScriptVideoDurationSec): stri
   ].join(" ");
 }
 
+/** One editable field in Link to Ad script factor UI (spoken lines). */
+export type UgcFactorWordFieldRule = {
+  min: number;
+  max: number;
+  label: string;
+  hint: string;
+};
+
+/**
+ * Spoken-word bands per duration tier — aligned with LENGTH RULES + `durationRulesForUgcApi`.
+ * Use with `normalizeUgcScriptVideoDurationSec(videoDuration)` from app state.
+ */
+export type UgcFactorWordRules = {
+  includeProblem: boolean;
+  /** Hard cap on HOOK + PROBLEM? + SOLUTION + CTA (spoken words only). */
+  maxTotalSpoken: number;
+  hook: UgcFactorWordFieldRule;
+  /** Null for 5s — PROBLEM must be omitted and stay empty in UI. */
+  problem: UgcFactorWordFieldRule | null;
+  benefits: UgcFactorWordFieldRule;
+  cta: UgcFactorWordFieldRule;
+};
+
+/**
+ * Per-field min/max for the factor editor so UI matches API tiers (5 / 10 / 15 / 30 s).
+ * Sums of maxima equal `maxTotalSpoken` per tier (except 30s rounded to 90).
+ */
+export function factorWordRulesForUgcDuration(rawSeconds: unknown): UgcFactorWordRules {
+  const s = normalizeUgcScriptVideoDurationSec(rawSeconds);
+
+  if (s === 5) {
+    return {
+      includeProblem: false,
+      maxTotalSpoken: 15,
+      hook: {
+        min: 2,
+        max: 3,
+        label: "Hook",
+        hint: "2–3 words (5s: no Problem section)",
+      },
+      problem: null,
+      benefits: {
+        min: 7,
+        max: 9,
+        label: "Solution",
+        hint: "7–9 words (product + main benefit)",
+      },
+      cta: {
+        min: 2,
+        max: 3,
+        label: "CTA",
+        hint: "2–3 words",
+      },
+    };
+  }
+
+  if (s === 10) {
+    return {
+      includeProblem: true,
+      maxTotalSpoken: 30,
+      hook: { min: 3, max: 5, label: "Hook", hint: "3–5 words" },
+      problem: { min: 5, max: 7, label: "Problem", hint: "5–7 words" },
+      benefits: {
+        min: 10,
+        max: 14,
+        label: "Solution",
+        hint: "10–14 words (product + main benefit)",
+      },
+      cta: { min: 3, max: 4, label: "CTA", hint: "3–4 words" },
+    };
+  }
+
+  if (s === 30) {
+    return {
+      includeProblem: true,
+      maxTotalSpoken: 90,
+      hook: {
+        min: 12,
+        max: 14,
+        label: "Hook",
+        hint: "12–14 words (~15% of 90)",
+      },
+      problem: {
+        min: 21,
+        max: 23,
+        label: "Problem",
+        hint: "21–23 words (~25% of 90)",
+      },
+      benefits: {
+        min: 36,
+        max: 39,
+        label: "Solution",
+        hint: "36–39 words (longest block)",
+      },
+      cta: {
+        min: 12,
+        max: 14,
+        label: "CTA",
+        hint: "12–14 words",
+      },
+    };
+  }
+
+  /* 15s (default tier for unknown seconds) */
+  return {
+    includeProblem: true,
+    maxTotalSpoken: 46,
+    hook: { min: 5, max: 7, label: "Hook", hint: "5–7 words (~15s tier)" },
+    problem: { min: 9, max: 11, label: "Problem", hint: "9–11 words" },
+    benefits: {
+      min: 18,
+      max: 21,
+      label: "Solution",
+      hint: "18–21 words (longest block)",
+    },
+    cta: { min: 5, max: 7, label: "CTA", hint: "5–7 words" },
+  };
+}
+
 export const UGC_SCRIPT_INSTRUCTIONS = `
 You are an expert UGC script writer specialized in AI video generation.
 Your mission is to generate 3 different UGC scripts testing 3 different

@@ -1,13 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { toast } from "sonner";
 import {
   ArrowLeft,
   Check,
   ChevronDown,
   ChevronUp,
+  Eye,
+  EyeOff,
   ImagePlus,
   Loader2,
   Maximize2,
@@ -79,6 +81,10 @@ import {
   composeScriptFromFactors,
 } from "@/lib/linkToAdScriptFactors";
 import ShapeGrid from "@/app/ShapeGrid";
+import {
+  factorWordRulesForUgcDuration,
+  normalizeUgcScriptVideoDurationSec,
+} from "@/lib/ugcAiScriptBrief";
 import { LINK_TO_AD_LOADING_MESSAGES } from "@/lib/linkToAd/loadingMessageLoops";
 import { assertStudioImageUpload, STUDIO_IMAGE_FILE_ACCEPT } from "@/lib/studioUploadValidation";
 import {
@@ -677,6 +683,7 @@ export default function LinkToAdUniverse({
   onStartFreshLinkToAdSession,
   onSwitchLinkToAdRun,
 }: LinkToAdUniverseProps) {
+  const reduceMotion = useReducedMotion();
   const { planId, current: creditsBalance, spendCredits, grantCredits } = useCreditsPlan();
   /** After a fresh store scan starts, gate later steps against this snapshot so the wallet UI does not “jump” each step. Resync on image/video redo actions only. */
   const [ltaFrozenCredits, setLtaFrozenCredits] = useState<number | null>(null);
@@ -1414,18 +1421,8 @@ export default function LinkToAdUniverse({
   }, [nanoBananaPromptsRaw]);
 
   const factorWordRules = useMemo(
-    () => ({
-      hook: { min: 3, max: 5, label: "Hook", hint: "3–5 words" },
-      problem: { min: 5, max: 7, label: "Problem", hint: "5–7 words" },
-      benefits: {
-        min: 10,
-        max: 14,
-        label: "Solution",
-        hint: "10–14 words (must include product + main benefit)",
-      },
-      cta: { min: 3, max: 4, label: "CTA", hint: "3–4 words" },
-    }),
-    [],
+    () => factorWordRulesForUgcDuration(videoDuration),
+    [videoDuration],
   );
 
   const factorWordCounts = useMemo(() => {
@@ -1437,20 +1434,46 @@ export default function LinkToAdUniverse({
     };
   }, [scriptFactors.benefits, scriptFactors.cta, scriptFactors.hook, scriptFactors.problem]);
 
+  const spokenWordTotal = useMemo(() => {
+    return (
+      factorWordCounts.hook +
+      (factorWordRules.problem ? factorWordCounts.problem : 0) +
+      factorWordCounts.benefits +
+      factorWordCounts.cta
+    );
+  }, [factorWordCounts, factorWordRules.problem]);
+
   const factorWordsValid = useMemo(() => {
-    const check = (k: keyof typeof factorWordRules) => {
-      const c = factorWordCounts[k];
-      const r = factorWordRules[k];
-      return c >= r.min && c <= r.max;
-    };
+    const c = factorWordCounts;
+    const r = factorWordRules;
+    const inRange = (n: number, min: number, max: number) => n >= min && n <= max;
+    const hookOk = inRange(c.hook, r.hook.min, r.hook.max);
+    const problemOk =
+      r.problem === null ? c.problem === 0 : inRange(c.problem, r.problem.min, r.problem.max);
+    const benefitsOk = inRange(c.benefits, r.benefits.min, r.benefits.max);
+    const ctaOk = inRange(c.cta, r.cta.min, r.cta.max);
+    const totalOk = spokenWordTotal <= r.maxTotalSpoken;
     return {
-      hook: check("hook"),
-      problem: check("problem"),
-      benefits: check("benefits"),
-      cta: check("cta"),
-      all: check("hook") && check("problem") && check("benefits") && check("cta"),
+      hook: hookOk,
+      problem: problemOk,
+      benefits: benefitsOk,
+      cta: ctaOk,
+      total: totalOk,
+      all: hookOk && problemOk && benefitsOk && ctaOk && totalOk,
     };
-  }, [factorWordCounts, factorWordRules]);
+  }, [factorWordCounts, factorWordRules, spokenWordTotal]);
+
+  /** 5s tier omits PROBLEM — clear leftover text when user selects 5s. */
+  useEffect(() => {
+    if (normalizeUgcScriptVideoDurationSec(videoDuration) !== 5) return;
+    setScriptFactors((prev) => {
+      if (!prev.problem.trim()) return prev;
+      const next = { ...prev, problem: "" };
+      setEditableScript(composeScriptFromFactors(next));
+      setScriptHasEdits(true);
+      return next;
+    });
+  }, [videoDuration]);
   const composeScriptsFromOptions = useCallback((options: string[]) => {
     return options
       .map((opt, idx) => {
@@ -3812,15 +3835,59 @@ export default function LinkToAdUniverse({
             <CardTitle className="text-base">Link to Ad</CardTitle>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
-            <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-white/10 bg-black/20 px-2 py-1.5 text-[10px] font-medium text-white/55 transition hover:border-white/15 hover:text-white/75">
-              <input
-                type="checkbox"
-                className="h-3.5 w-3.5 rounded border-white/25 bg-black/40 text-violet-500 focus:ring-violet-500/40"
-                checked={hidePreviousLtaGenerations}
-                onChange={toggleHidePreviousLtaGenerations}
-              />
-              Hide previous generations
-            </label>
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={hidePreviousLtaGenerations}
+                aria-label={
+                  hidePreviousLtaGenerations
+                    ? "Show previous Link to Ad generations"
+                    : "Hide previous Link to Ad generations"
+                }
+                onClick={toggleHidePreviousLtaGenerations}
+                className={cn(
+                  "group relative flex h-8 shrink-0 items-center rounded-full border px-1 transition-[border-color,background-color,box-shadow] duration-300",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0912]",
+                  hidePreviousLtaGenerations
+                    ? "w-[3.25rem] border-violet-400/40 bg-gradient-to-r from-violet-500/30 to-violet-600/20 shadow-[0_0_20px_rgba(139,92,246,0.15)]"
+                    : "w-[3.25rem] border-white/12 bg-black/40 hover:border-white/18 hover:bg-white/[0.05]",
+                )}
+              >
+                <motion.span
+                  className="pointer-events-none flex h-6 w-6 items-center justify-center rounded-full bg-white text-[#1a1025] shadow-md"
+                  initial={false}
+                  animate={{
+                    x: hidePreviousLtaGenerations ? 20 : 0,
+                    scale: hidePreviousLtaGenerations ? 0.92 : 1,
+                  }}
+                  transition={
+                    reduceMotion
+                      ? { duration: 0.12 }
+                      : { type: "spring", stiffness: 520, damping: 34, mass: 0.65 }
+                  }
+                >
+                  {hidePreviousLtaGenerations ? (
+                    <EyeOff className="h-3.5 w-3.5 opacity-80" aria-hidden />
+                  ) : (
+                    <Eye className="h-3.5 w-3.5 opacity-90" aria-hidden />
+                  )}
+                </motion.span>
+              </button>
+              <div className="flex min-w-0 flex-col items-start leading-tight">
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-white/50">
+                  Previous runs
+                </span>
+                <span
+                  className={cn(
+                    "text-[11px] font-medium transition-colors duration-300",
+                    hidePreviousLtaGenerations ? "text-white/35" : "text-violet-200/85",
+                  )}
+                >
+                  {hidePreviousLtaGenerations ? "Hidden" : "Visible"}
+                </span>
+              </div>
+            </div>
             {hasStartedLinkToAdFlow ? (
               <Button
                 type="button"
@@ -3839,64 +3906,95 @@ export default function LinkToAdUniverse({
             ) : null}
           </div>
         </div>
-        {!hidePreviousLtaGenerations && recentLinkToAdRuns.length > 0 ? (
-          <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2.5">
-            <p className="text-[10px] leading-snug text-white/45">
-              All your Link to Ad generations are stored in your projects — switch between your last three here, or open
-              Projects for the full list.
-            </p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {recentLinkToAdRuns.map((r) => {
-                const active = (activeRunIdProp ?? universeRunId) === r.id;
-                const label =
-                  (r.title && r.title.trim()) ||
-                  (() => {
-                    try {
-                      return new URL(r.storeUrl).hostname.replace(/^www\./, "");
-                    } catch {
-                      return r.storeUrl.slice(0, 28);
-                    }
-                  })();
-                const dateShort = (() => {
-                  try {
-                    return new Date(r.createdAt).toLocaleDateString(undefined, {
-                      month: "short",
-                      day: "numeric",
-                    });
-                  } catch {
-                    return "";
-                  }
-                })();
-                return (
-                  <button
-                    key={r.id}
-                    type="button"
-                    onClick={() => handleSwitchRecentRun(r.id)}
-                    className={cn(
-                      "flex min-w-0 max-w-[11rem] items-center gap-2 rounded-lg border px-2 py-1.5 text-left transition",
-                      active
-                        ? "border-violet-400/50 bg-violet-500/15 text-white"
-                        : "border-white/10 bg-white/[0.03] text-white/75 hover:border-violet-400/35 hover:bg-white/[0.05]",
-                    )}
-                  >
-                    <span className="relative h-9 w-9 shrink-0 overflow-hidden rounded-md border border-white/10 bg-black/40">
-                      {r.thumbUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={r.thumbUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
-                      ) : (
-                        <span className="flex h-full w-full items-center justify-center text-[9px] text-white/30">—</span>
-                      )}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[11px] font-semibold leading-tight">{label}</span>
-                      <span className="text-[9px] text-white/40">{dateShort}</span>
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        ) : null}
+        <AnimatePresence initial={false}>
+          {!hidePreviousLtaGenerations && recentLinkToAdRuns.length > 0 ? (
+            <motion.div
+              key="lta-recent-runs"
+              initial={
+                reduceMotion
+                  ? { opacity: 0 }
+                  : { opacity: 0, y: -10, scale: 0.985 }
+              }
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={
+                reduceMotion
+                  ? { opacity: 0 }
+                  : { opacity: 0, y: -8, scale: 0.98, filter: "blur(4px)" }
+              }
+              transition={
+                reduceMotion
+                  ? { duration: 0.15 }
+                  : { duration: 0.32, ease: [0.22, 1, 0.36, 1] }
+              }
+              className="origin-top overflow-hidden"
+            >
+              <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2.5">
+                <p className="text-[10px] leading-snug text-white/45">
+                  All your Link to Ad generations are stored in your projects — switch between your last three here, or
+                  open Projects for the full list.
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {recentLinkToAdRuns.map((r, i) => {
+                    const active = (activeRunIdProp ?? universeRunId) === r.id;
+                    const label =
+                      (r.title && r.title.trim()) ||
+                      (() => {
+                        try {
+                          return new URL(r.storeUrl).hostname.replace(/^www\./, "");
+                        } catch {
+                          return r.storeUrl.slice(0, 28);
+                        }
+                      })();
+                    const dateShort = (() => {
+                      try {
+                        return new Date(r.createdAt).toLocaleDateString(undefined, {
+                          month: "short",
+                          day: "numeric",
+                        });
+                      } catch {
+                        return "";
+                      }
+                    })();
+                    return (
+                      <motion.button
+                        key={r.id}
+                        type="button"
+                        layout={!reduceMotion}
+                        initial={reduceMotion ? false : { opacity: 0, y: 6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={
+                          reduceMotion
+                            ? { duration: 0.12 }
+                            : { delay: i * 0.035, duration: 0.28, ease: [0.22, 1, 0.36, 1] }
+                        }
+                        onClick={() => handleSwitchRecentRun(r.id)}
+                        className={cn(
+                          "flex min-w-0 max-w-[11rem] items-center gap-2 rounded-lg border px-2 py-1.5 text-left transition-colors",
+                          active
+                            ? "border-violet-400/50 bg-violet-500/15 text-white"
+                            : "border-white/10 bg-white/[0.03] text-white/75 hover:border-violet-400/35 hover:bg-white/[0.05]",
+                        )}
+                      >
+                        <span className="relative h-9 w-9 shrink-0 overflow-hidden rounded-md border border-white/10 bg-black/40">
+                          {r.thumbUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={r.thumbUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
+                          ) : (
+                            <span className="flex h-full w-full items-center justify-center text-[9px] text-white/30">—</span>
+                          )}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-[11px] font-semibold leading-tight">{label}</span>
+                          <span className="text-[9px] text-white/40">{dateShort}</span>
+                        </span>
+                      </motion.button>
+                    );
+                  })}
+                </div>
+              </div>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
       </CardHeader>
 
       <CardContent className="space-y-6">
@@ -5294,6 +5392,19 @@ export default function LinkToAdUniverse({
                               </div>
                               {scriptEditVisible ? (
                                 <>
+                                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2">
+                                    <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
+                                      Spoken budget (Hook + Problem + Solution + CTA)
+                                    </p>
+                                    <span
+                                      className={cn(
+                                        "text-[10px] tabular-nums",
+                                        factorWordsValid.total ? "text-white/55" : "text-amber-400/90",
+                                      )}
+                                    >
+                                      {spokenWordTotal}/{factorWordRules.maxTotalSpoken}
+                                    </span>
+                                  </div>
                                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                                   <div className="space-y-1">
                                     <div className="flex items-center justify-between gap-2">
@@ -5306,6 +5417,7 @@ export default function LinkToAdUniverse({
                                     </div>
                                     <Textarea
                                       value={scriptFactors.hook}
+                                      title={factorWordRules.hook.hint}
                                       onChange={(e) => {
                                         const v = clampToMaxWords(e.target.value, factorWordRules.hook.max);
                                         const next = { ...scriptFactors, hook: v };
@@ -5316,6 +5428,7 @@ export default function LinkToAdUniverse({
                                       className="min-h-[74px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/80"
                                     />
                                   </div>
+                                  {factorWordRules.problem ? (
                                   <div className="space-y-1">
                                     <div className="flex items-center justify-between gap-2">
                                       <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
@@ -5327,6 +5440,7 @@ export default function LinkToAdUniverse({
                                     </div>
                                     <Textarea
                                       value={scriptFactors.problem}
+                                      title={factorWordRules.problem.hint}
                                       onChange={(e) => {
                                         const v = clampToMaxWords(e.target.value, factorWordRules.problem.max);
                                         const next = { ...scriptFactors, problem: v };
@@ -5337,6 +5451,17 @@ export default function LinkToAdUniverse({
                                       className="min-h-[74px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/80"
                                     />
                                   </div>
+                                  ) : (
+                                    <div className="space-y-1 sm:col-span-2">
+                                      <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
+                                        Problem
+                                      </p>
+                                      <p className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-[11px] leading-relaxed text-white/45">
+                                        Omitted for 5-second videos (15-word spoken budget). Use 10s or 15s to add a
+                                        Problem block.
+                                      </p>
+                                    </div>
+                                  )}
                                   <div className="space-y-1">
                                     <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Avatar / Persona</p>
                                     {hasPersonaPhoto ? (
@@ -5366,6 +5491,7 @@ export default function LinkToAdUniverse({
                                     </div>
                                     <Textarea
                                       value={scriptFactors.benefits}
+                                      title={factorWordRules.benefits.hint}
                                       onChange={(e) => {
                                         const v = clampToMaxWords(e.target.value, factorWordRules.benefits.max);
                                         const next = { ...scriptFactors, benefits: v };
@@ -5395,6 +5521,7 @@ export default function LinkToAdUniverse({
                                     </div>
                                     <Textarea
                                       value={scriptFactors.cta}
+                                      title={factorWordRules.cta.hint}
                                       onChange={(e) => {
                                         const v = clampToMaxWords(e.target.value, factorWordRules.cta.max);
                                         const next = { ...scriptFactors, cta: v };
@@ -5425,7 +5552,9 @@ export default function LinkToAdUniverse({
                               className={`h-auto min-h-11 w-full max-w-md py-2.5 ${primaryBtnClass}`}
                               onClick={() => {
                                 if (scriptEditVisible && !factorWordsValid.all) {
-                                  toast.error("Please match the required word limits before generating.");
+                                  toast.error(
+                                    "Match each block’s word range and the total spoken budget for this duration before generating.",
+                                  );
                                   return;
                                 }
                                 if (selectedAngleIndex === null || selectedAngleIndex === undefined) {
