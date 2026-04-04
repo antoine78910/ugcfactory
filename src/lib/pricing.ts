@@ -34,13 +34,22 @@ export const PRICING_BASE = {
 export const STARTER_CREDIT_VALUE_USD = 29.99 / 250;
 
 // ---------------------------------------------------------------------------
-// Link to Ad — video model pricing (fixed reference: 15s)
+// Link to Ad — video model pricing (Seedance tiers; full Generate = 33 / 49 / 69 cr)
 // ---------------------------------------------------------------------------
+
+/**
+ * Video + Claude prompt step only. With scan (8) + 3× Nano Pro (9), full pipeline totals:
+ * 5s → 33, 10s → 49, 15s → 69 credits.
+ */
+export const LINK_TO_AD_SEEDANCE_VIDEO_CREDITS_BY_DURATION_SEC: Record<5 | 10 | 15, number> = {
+  5: 16,
+  10: 32,
+  15: 52,
+};
 
 /** Link to Ad video: Seedance only (Kling 3.0 disabled for this flow). */
 export const LINK_TO_AD_VIDEO_MODELS = {
   seedance: {
-    creditsFor15s: 60,
     marketModel: "bytedance/seedance-2.0-pro" as const,
   },
 } as const;
@@ -53,9 +62,13 @@ export const LINK_TO_AD_VIDEO_MARKET_MODEL = LINK_TO_AD_VIDEO_MODELS.seedance.ma
 export const CLAUDE_AI_CREDITS = 5;
 
 export function linkToAdVideoCredits(model: LinkToAdVideoModelId, durationSec: number): number {
-  const base = LINK_TO_AD_VIDEO_MODELS[model].creditsFor15s;
-  const perSecond = base / 15;
-  return Math.max(1, Math.ceil(durationSec * perSecond)) + CLAUDE_AI_CREDITS;
+  void LINK_TO_AD_VIDEO_MODELS[model];
+  const d = Math.round(Number(durationSec)) || 10;
+  if (d === 5 || d === 10 || d === 15) {
+    return LINK_TO_AD_SEEDANCE_VIDEO_CREDITS_BY_DURATION_SEC[d];
+  }
+  const ref15 = LINK_TO_AD_SEEDANCE_VIDEO_CREDITS_BY_DURATION_SEC[15];
+  return Math.max(1, Math.ceil((d / 15) * ref15));
 }
 
 // ---------------------------------------------------------------------------

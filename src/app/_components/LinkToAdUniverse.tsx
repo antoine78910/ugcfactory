@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   Check,
   ChevronDown,
+  ChevronRight,
   ChevronUp,
   Eye,
   EyeOff,
@@ -44,6 +45,7 @@ import {
   normalizeKlingByReference,
   normalizePipelineByAngle,
   mergeNanoPromptForApi,
+  composeNanoEditableSections,
   composeThreeLabeledPrompts,
   composeVideoPromptEditableSections,
   parseNanoEditableSections,
@@ -131,6 +133,29 @@ function clampToMaxWords(text: string, maxWords: number): string {
   const parts = raw.split(" ").filter(Boolean);
   if (parts.length <= maxWords) return raw;
   return parts.slice(0, maxWords).join(" ");
+}
+
+/** Single-line preview for collapsed Nano image prompt rows (technical / negative tails are stored separately). */
+function nanoPromptPreviewOneLine(text: string, maxChars = 72): string {
+  const t = String(text ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!t) return "Empty";
+  return t.length > maxChars ? `${t.slice(0, maxChars)}…` : t;
+}
+
+function patchNanoEditableSection(
+  draft: string,
+  section: "person" | "avatar" | "scene",
+  value: string,
+): string {
+  const parsed = parseNanoEditableSections(draft);
+  if (!parsed.isStructured) return value;
+  return composeNanoEditableSections({
+    person: section === "person" ? value : parsed.person,
+    scene: section === "scene" ? value : parsed.scene,
+    product: section === "avatar" ? value : parsed.product,
+  });
 }
 
 function fnv1aHash(input: string): string {
@@ -845,6 +870,10 @@ export default function LinkToAdUniverse({
     "",
     "",
   ]);
+  /** Image prompt panels (0–2): collapsed by default to save vertical space. */
+  const [nanoImagePromptOpen, setNanoImagePromptOpen] = useState<[boolean, boolean, boolean]>([false, false, false]);
+  /** Which sub-editor is open: `p0-person`, `p1-avatar`, `p2-full`, etc. Only one expanded field at a time. */
+  const [nanoImagePromptExpandedKey, setNanoImagePromptExpandedKey] = useState<string | null>(null);
   /** Per reference image (0–2): Kling video URL, task id, history, saved motion prompt. */
   const [klingByRef, setKlingByRef] = useState<KlingReferenceSlotV1[]>(() => createEmptyKlingByReference());
   /** Which reference index the active Kling poll belongs to (single global poll). */
@@ -5141,9 +5170,23 @@ export default function LinkToAdUniverse({
 
                 {scriptsText.trim() ? (
                   <div className="mt-3 border-t border-white/10 pt-3">
-                    <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-white/45">
-                      Script angles
-                    </p>
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
+                        Script angles
+                      </p>
+                      <button
+                        type="button"
+                        disabled={isWorking || stage === "writing_scripts"}
+                        onClick={() => requestRegenerateMarketingAngles()}
+                        className="group/regen-sa inline-flex shrink-0 items-center gap-1 rounded-full border border-violet-400/25 bg-violet-500/10 px-2.5 py-1 text-[10px] font-semibold text-violet-300 transition-all hover:border-violet-400/50 hover:bg-violet-500/20 hover:text-violet-200 disabled:pointer-events-none disabled:opacity-40"
+                      >
+                        <RefreshCw className="h-2.5 w-2.5 transition-transform group-hover/regen-sa:rotate-90" aria-hidden />
+                        Regenerate
+                        <span className="rounded-full bg-violet-400/20 px-1 py-px text-[9px] font-bold text-violet-300/90">
+                          2 cr
+                        </span>
+                      </button>
+                    </div>
                     <div className="grid grid-cols-1 gap-2">
                       {angleOptionCards.map((card) => {
                         const i = card.index;
@@ -5246,42 +5289,172 @@ export default function LinkToAdUniverse({
                       </Button>
                     </div>
                   ) : null}
-                  {nanoBananaPromptsRaw.trim() ? (
-                    <div className="rounded-xl border border-white/10 bg-black/25 px-4 pb-3 pt-2">
-                      <p className="text-xs font-semibold text-white/90">Image prompts (3)</p>
-                      <p className="mt-0.5 text-[10px] leading-snug text-white/40">
-                        Ajuste le texte éditable de chaque prompt avant de lancer la génération d’images. Les blocs
-                        techniques (lumière, caméra, etc.) restent fusionnés automatiquement.
-                      </p>
-                      <div className="mt-3 grid grid-cols-1 gap-3">
-                        {([0, 1, 2] as const).map((i) => (
-                          <div key={i} className="space-y-1">
-                            <Label className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
-                              Prompt {i + 1}
-                            </Label>
-                            <Textarea
-                              value={nanoPromptDrafts[i]}
-                              onChange={(e) => {
-                                const v = e.target.value;
-                                setNanoPromptDrafts((prev) => {
-                                  const next: [string, string, string] = [prev[0], prev[1], prev[2]];
-                                  next[i] = v;
-                                  setNanoBananaPromptsRaw(
-                                    composeThreeLabeledPrompts([
-                                      mergeNanoPromptForApi(next[0], nanoPromptTechnicalTails[0]),
-                                      mergeNanoPromptForApi(next[1], nanoPromptTechnicalTails[1]),
-                                      mergeNanoPromptForApi(next[2], nanoPromptTechnicalTails[2]),
-                                    ]),
-                                  );
+                  {nanoBananaPromptsRaw.trim() &&
+                  !isNanoAllImagesSubmitting &&
+                  !isNanoPromptsLoading &&
+                  !nanoPollTaskId ? (
+                    <div className="rounded-xl border border-white/10 bg-black/20 px-2.5 pb-2 pt-1">
+                      {([0, 1, 2] as const).map((i) => {
+                        const draft = nanoPromptDrafts[i];
+                        const parsed = parseNanoEditableSections(draft);
+                        const panelOpen = nanoImagePromptOpen[i];
+                        const summaryPreview = parsed.isStructured
+                          ? nanoPromptPreviewOneLine(
+                              [parsed.person, parsed.scene, parsed.product].filter((x) => x.trim()).join(" · "),
+                              68,
+                            )
+                          : nanoPromptPreviewOneLine(draft, 68);
+                        return (
+                          <div
+                            key={i}
+                            className={cn(
+                              "border-t border-white/[0.06] first:border-t-0 first:pt-0",
+                              panelOpen ? "pt-1.5" : "py-0.5",
+                            )}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setNanoImagePromptOpen((prev) => {
+                                  const next: [boolean, boolean, boolean] = [prev[0], prev[1], prev[2]];
+                                  next[i] = !next[i];
+                                  if (!next[i]) {
+                                    setNanoImagePromptExpandedKey((k) =>
+                                      k?.startsWith(`p${i}-`) ? null : k,
+                                    );
+                                  }
                                   return next;
                                 });
                               }}
-                              className="min-h-[100px] border-white/10 bg-black/30 text-xs leading-relaxed text-white/85"
-                              spellCheck
-                            />
+                              className="flex w-full items-center gap-1.5 rounded-lg px-1 py-1 text-left transition hover:bg-white/[0.04]"
+                            >
+                              {panelOpen ? (
+                                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-white/35" aria-hidden />
+                              ) : (
+                                <ChevronRight className="h-3.5 w-3.5 shrink-0 text-white/35" aria-hidden />
+                              )}
+                              <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-violet-300/90">
+                                Image {i + 1}
+                              </span>
+                              {!panelOpen ? (
+                                <span className="min-w-0 flex-1 truncate text-[11px] leading-snug text-white/45">
+                                  {summaryPreview}
+                                </span>
+                              ) : null}
+                            </button>
+                            {panelOpen ? (
+                              parsed.isStructured ? (
+                                <div className="mt-1 space-y-0.5 pb-0.5">
+                                  {(
+                                    [
+                                      { key: "person" as const, label: "Person", value: parsed.person },
+                                      { key: "avatar" as const, label: "Avatar", value: parsed.product },
+                                      { key: "scene" as const, label: "Scene", value: parsed.scene },
+                                    ] as const
+                                  ).map(({ key, label, value }) => {
+                                    const rowKey = `p${i}-${key}`;
+                                    const expanded = nanoImagePromptExpandedKey === rowKey;
+                                    return (
+                                      <div
+                                        key={rowKey}
+                                        className="overflow-hidden rounded-lg border border-white/8 bg-black/25"
+                                      >
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            setNanoImagePromptExpandedKey((k) => (k === rowKey ? null : rowKey))
+                                          }
+                                          className="flex w-full flex-col gap-0.5 rounded-lg px-2 py-1.5 text-left transition hover:bg-white/[0.03]"
+                                        >
+                                          <div className="flex items-center justify-between gap-2">
+                                            <span className="text-[10px] font-semibold uppercase tracking-wide text-white/50">
+                                              {label}
+                                            </span>
+                                            {expanded ? (
+                                              <ChevronUp className="h-3 w-3 shrink-0 text-white/30" aria-hidden />
+                                            ) : (
+                                              <ChevronDown className="h-3 w-3 shrink-0 text-white/30" aria-hidden />
+                                            )}
+                                          </div>
+                                          {!expanded ? (
+                                            <p className="line-clamp-2 text-left text-[11px] leading-snug text-white/55">
+                                              {value.trim()
+                                                ? nanoPromptPreviewOneLine(value, 140)
+                                                : "Tap to edit…"}
+                                            </p>
+                                          ) : null}
+                                        </button>
+                                        {expanded ? (
+                                          <div className="border-t border-white/8 px-2 pb-2 pt-1">
+                                            <Textarea
+                                              value={value}
+                                              onChange={(e) => {
+                                                const v = e.target.value;
+                                                setNanoPromptDrafts((prev) => {
+                                                  const next: [string, string, string] = [
+                                                    prev[0],
+                                                    prev[1],
+                                                    prev[2],
+                                                  ];
+                                                  next[i] = patchNanoEditableSection(prev[i], key, v);
+                                                  setNanoBananaPromptsRaw(
+                                                    composeThreeLabeledPrompts([
+                                                      mergeNanoPromptForApi(
+                                                        next[0],
+                                                        nanoPromptTechnicalTails[0],
+                                                      ),
+                                                      mergeNanoPromptForApi(
+                                                        next[1],
+                                                        nanoPromptTechnicalTails[1],
+                                                      ),
+                                                      mergeNanoPromptForApi(
+                                                        next[2],
+                                                        nanoPromptTechnicalTails[2],
+                                                      ),
+                                                    ]),
+                                                  );
+                                                  return next;
+                                                });
+                                              }}
+                                              rows={4}
+                                              spellCheck
+                                              className="max-h-[7rem] min-h-[4.25rem] resize-none overflow-y-auto border-white/10 bg-black/35 text-[11px] leading-relaxed text-white/90"
+                                            />
+                                          </div>
+                                        ) : null}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <div className="mt-1 border-t border-white/8 pt-1">
+                                  <Textarea
+                                    value={draft}
+                                    onChange={(e) => {
+                                      const v = e.target.value;
+                                      setNanoPromptDrafts((prev) => {
+                                        const next: [string, string, string] = [prev[0], prev[1], prev[2]];
+                                        next[i] = v;
+                                        setNanoBananaPromptsRaw(
+                                          composeThreeLabeledPrompts([
+                                            mergeNanoPromptForApi(next[0], nanoPromptTechnicalTails[0]),
+                                            mergeNanoPromptForApi(next[1], nanoPromptTechnicalTails[1]),
+                                            mergeNanoPromptForApi(next[2], nanoPromptTechnicalTails[2]),
+                                          ]),
+                                        );
+                                        return next;
+                                      });
+                                    }}
+                                    rows={4}
+                                    spellCheck
+                                    className="max-h-[7rem] min-h-[4.25rem] resize-none overflow-y-auto border-white/10 bg-black/30 text-[11px] leading-relaxed text-white/85"
+                                  />
+                                </div>
+                              )
+                            ) : null}
                           </div>
-                        ))}
-                      </div>
+                        );
+                      })}
                     </div>
                   ) : null}
                   {nanoBananaPromptsRaw &&

@@ -130,146 +130,6 @@ type ElevenVoiceOption = {
   isShared?: boolean;
 };
 
-function formatClockTime(totalSeconds: number): string {
-  if (!Number.isFinite(totalSeconds) || totalSeconds < 0) return "0:00";
-  const s = Math.floor(totalSeconds);
-  const m = Math.floor(s / 60);
-  const rs = s % 60;
-  return `${m}:${String(rs).padStart(2, "0")}`;
-}
-
-function SampleAudioPlayer({ src }: { src: string }) {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const rafRef = useRef<number | null>(null);
-  const [playing, setPlaying] = useState(false);
-  const [duration, setDuration] = useState(0);
-  const [currentTime, setCurrentTime] = useState(0);
-
-  const stopRaf = () => {
-    if (rafRef.current != null) {
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
-    }
-  };
-
-  const tick = () => {
-    const a = audioRef.current;
-    if (a) {
-      setCurrentTime(a.currentTime || 0);
-      if (!a.paused) {
-        rafRef.current = requestAnimationFrame(tick);
-      } else {
-        stopRaf();
-      }
-    }
-  };
-
-  useEffect(() => {
-    // Force a hard reload when src changes; fixes “old sample keeps playing”.
-    const a = audioRef.current;
-    if (!a) return;
-    stopRaf();
-    setPlaying(false);
-    setDuration(0);
-    setCurrentTime(0);
-    a.pause();
-    a.currentTime = 0;
-    a.load();
-  }, [src]);
-
-  useEffect(() => {
-    return () => stopRaf();
-  }, []);
-
-  const onTogglePlay = async () => {
-    const a = audioRef.current;
-    if (!a) return;
-    try {
-      if (a.paused) {
-        await a.play();
-        setPlaying(true);
-        rafRef.current = requestAnimationFrame(tick);
-      } else {
-        a.pause();
-        setPlaying(false);
-        stopRaf();
-      }
-    } catch {
-      // ignore autoplay/play errors
-    }
-  };
-
-  const pct = duration > 0 ? Math.min(1, Math.max(0, currentTime / duration)) : 0;
-
-  return (
-    <div className="w-full max-w-[26rem]">
-      {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-      <audio
-        ref={audioRef}
-        key={src}
-        preload="none"
-        onLoadedMetadata={(e) => {
-          const d = (e.currentTarget.duration || 0) as number;
-          setDuration(Number.isFinite(d) ? d : 0);
-        }}
-        onEnded={() => {
-          setPlaying(false);
-          stopRaf();
-          setCurrentTime(0);
-        }}
-      >
-        <source src={src} />
-      </audio>
-
-      <div className="flex items-center gap-3 rounded-full border border-white/10 bg-[#0a0a0d] px-3 py-2 shadow-sm">
-        <button
-          type="button"
-          onClick={onTogglePlay}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-white/80 transition hover:bg-white/[0.07]"
-          aria-label={playing ? "Pause sample" : "Play sample"}
-          title={playing ? "Pause" : "Play"}
-        >
-          {playing ? (
-            <span className="block h-3 w-3 rounded-[2px] bg-white/80" />
-          ) : (
-            <span
-              className="ml-0.5 block h-0 w-0 border-y-[7px] border-y-transparent border-l-[10px] border-l-white/80"
-              aria-hidden
-            />
-          )}
-        </button>
-
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          <div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
-            <div className="absolute inset-y-0 left-0 rounded-full bg-violet-400" style={{ width: `${pct * 100}%` }} />
-            <input
-              type="range"
-              min={0}
-              max={Math.max(0.001, duration)}
-              step={0.01}
-              value={Math.min(duration, currentTime)}
-              onChange={(e) => {
-                const a = audioRef.current;
-                if (!a) return;
-                const v = Number(e.currentTarget.value);
-                if (Number.isFinite(v)) {
-                  a.currentTime = v;
-                  setCurrentTime(v);
-                }
-              }}
-              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-              aria-label="Seek"
-            />
-          </div>
-          <div className="shrink-0 tabular-nums text-[10px] font-semibold text-white/55">
-            {formatClockTime(currentTime)} / {formatClockTime(duration)}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 type ImageGenState =
   | { kind: "idle" }
   | { kind: "submitting" }
@@ -772,8 +632,6 @@ export default function AppBrandWizard() {
   const [voiceChangeSeed, setVoiceChangeSeed] = useState<string>("");
   const [voiceChangeRemoveBackgroundNoise, setVoiceChangeRemoveBackgroundNoise] = useState(false);
   const [voiceChangeVoiceSettingsJson, setVoiceChangeVoiceSettingsJson] = useState<string>("");
-  /** Language filter for the ElevenLabs voice picker (e.g. "en", "fr", "es"). Empty = all. */
-  const [voiceChangeLangFilter, setVoiceChangeLangFilter] = useState<string>("");
   const [voiceChangeVoiceTab, setVoiceChangeVoiceTab] = useState<"all" | "favorites">("all");
   const [motionHistoryItems, setMotionHistoryItems] = useState<StudioHistoryItem[]>([]);
   const [motionServerHistory, setMotionServerHistory] = useState<boolean | null>(null);
@@ -907,55 +765,9 @@ export default function AppBrandWizard() {
     () => elevenVoices.find((voice) => voice.voiceId === elevenVoiceId) ?? null,
     [elevenVoiceId, elevenVoices],
   );
-  const isVoiceFrenchish = useCallback((voice: ElevenVoiceOption): boolean => {
-    const lang = (voice.labels?.language || voice.language || "").trim().toLowerCase();
-    const accent = (voice.labels?.accent || "").trim().toLowerCase();
-    const name = (voice.name || "").trim().toLowerCase();
-    return (
-      lang === "fr" ||
-      lang.startsWith("fr-") ||
-      accent.includes("french") ||
-      accent.includes("france") ||
-      accent === "fr" ||
-      name.includes("french") ||
-      name.includes("français") ||
-      name.includes("francais")
-    );
-  }, []);
-
-  const voiceMatchesLangFilter = useCallback(
-    (voice: ElevenVoiceOption, langFilter: string): boolean => {
-      const f = (langFilter || "").trim().toLowerCase();
-      if (!f) return true;
-      if (f === "fr") return isVoiceFrenchish(voice);
-      const lang = (voice.labels?.language || voice.language || "").trim().toLowerCase();
-      return lang === f || lang.startsWith(`${f}-`);
-    },
-    [isVoiceFrenchish],
-  );
-
-  /** All unique language codes present in the loaded ElevenLabs voice library. */
-  const elevenVoiceLanguages = useMemo(
-    () =>
-      [
-        ...new Set(
-          elevenVoices
-            .map((v) => (v.labels?.language || v.language || "").trim().toLowerCase())
-            .filter((l): l is string => Boolean(l)),
-        ),
-        ...(elevenVoices.some((v) => isVoiceFrenchish(v)) ? ["fr"] : []),
-      ].sort(),
-    [elevenVoices, isVoiceFrenchish],
-  );
-
-  /** Voice list filtered by the selected language (or all voices when filter is empty). */
-  const filteredElevenVoicesBase = useMemo(
-    () => (voiceChangeLangFilter ? elevenVoices.filter((v) => voiceMatchesLangFilter(v, voiceChangeLangFilter)) : elevenVoices),
-    [elevenVoices, voiceChangeLangFilter, voiceMatchesLangFilter],
-  );
 
   const filteredElevenVoices = useMemo(() => {
-    const base = filteredElevenVoicesBase;
+    const base = elevenVoices;
     const favoritesSet = new Set(favoriteElevenVoiceIds);
     const byTab =
       voiceChangeVoiceTab === "favorites" ? base.filter((v) => favoritesSet.has(v.voiceId)) : base;
@@ -965,10 +777,9 @@ export default function AppBrandWizard() {
       if (af !== bf) return bf - af;
       return a.name.localeCompare(b.name);
     });
-  }, [favoriteElevenVoiceIds, filteredElevenVoicesBase, voiceChangeVoiceTab]);
+  }, [favoriteElevenVoiceIds, elevenVoices, voiceChangeVoiceTab]);
 
-  const elevenVoiceLangFilterKey = (voiceChangeLangFilter || "__all__").toLowerCase();
-  const elevenVoiceLangHasMore = elevenSharedVoicesHasMoreByLang[elevenVoiceLangFilterKey] ?? true;
+  const elevenVoiceLangHasMore = elevenSharedVoicesHasMoreByLang.__all__ ?? true;
 
   const translateLanguagesFiltered = useMemo(() => {
     const base = [...(WAVESPEED_HEYGEN_TRANSLATE_LANGUAGES as readonly string[])];
@@ -1111,7 +922,7 @@ export default function AppBrandWizard() {
 
   const loadMoreElevenVoices = useCallback(async () => {
     if (elevenVoicesLoadMorePending) return;
-    const langKey = (voiceChangeLangFilter || "__all__").toLowerCase();
+    const langKey = "__all__";
     const hasMoreForFilter = elevenSharedVoicesHasMoreByLang[langKey] ?? true;
     if (!hasMoreForFilter) return;
     const currentPageForFilter = elevenSharedVoicesPageByLang[langKey] ?? -1;
@@ -1123,7 +934,6 @@ export default function AppBrandWizard() {
         sharedPageSize: "10",
         includeAccount: "false",
       });
-      if (langKey !== "__all__") params.set("language", voiceChangeLangFilter.trim().toLowerCase());
       const res = await fetch(`/api/elevenlabs/voices?${params.toString()}`, { cache: "no-store" });
       const json = (await res.json().catch(() => ({}))) as {
         voices?: ElevenVoiceOption[];
@@ -1153,12 +963,7 @@ export default function AppBrandWizard() {
     } finally {
       setElevenVoicesLoadMorePending(false);
     }
-  }, [
-    elevenSharedVoicesHasMoreByLang,
-    elevenSharedVoicesPageByLang,
-    elevenVoicesLoadMorePending,
-    voiceChangeLangFilter,
-  ]);
+  }, [elevenSharedVoicesHasMoreByLang, elevenSharedVoicesPageByLang, elevenVoicesLoadMorePending]);
 
   const applyMotionCharacterFile = useCallback((file: File) => {
     try {
@@ -3364,9 +3169,6 @@ export default function AppBrandWizard() {
                             <div className="space-y-3">
                               <div className="rounded-xl border border-white/10 bg-black/20 p-2.5 space-y-2">
                                 <Label className="text-xs text-white/45">Voice</Label>
-                                <p className="text-[10px] leading-snug text-white/35">
-                                  ElevenLabs voice library — filter by language and listen to the sample.
-                                </p>
 
                                 <div className="flex items-center gap-2">
                                   <button
@@ -3395,28 +3197,6 @@ export default function AppBrandWizard() {
                                   </button>
                                 </div>
 
-                                {/* Language filter */}
-                                <Select value={voiceChangeLangFilter || "__all__"} onValueChange={(v) => {
-                                  setVoiceChangeLangFilter(v === "__all__" ? "" : v);
-                                  setElevenVoiceId("");
-                                }}>
-                                  <SelectTrigger className="h-10 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
-                                    <SelectValue placeholder="All languages" />
-                                  </SelectTrigger>
-                                  <SelectContent position="popper" className={studioSelectContentClass}>
-                                    <SelectItem value="__all__" className={studioSelectItemClass}>
-                                      🌐 All languages
-                                    </SelectItem>
-                                    {elevenVoiceLanguages.map((lang) => (
-                                      <SelectItem key={lang} value={lang} className={studioSelectItemClass}>
-                                        {formatLanguageCodeLabel(lang)}{" "}
-                                        <span className="ml-1 text-[10px] text-white/25">({lang.toUpperCase()})</span>
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-
-                                {/* Voice picker */}
                                 <Select value={elevenVoiceId} onValueChange={setElevenVoiceId}>
                                   <SelectTrigger className="h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
                                     <SelectValue
@@ -3499,14 +3279,6 @@ export default function AppBrandWizard() {
                                     ) : null}
                                   </SelectContent>
                                 </Select>
-
-                                {/* Sample audio preview */}
-                                {selectedElevenVoice?.previewUrl ? (
-                                  <div className="rounded-lg border border-white/10 bg-black/30 p-2">
-                                    <p className="mb-1 text-[9px] uppercase tracking-wide text-white/35">Sample — {selectedElevenVoice.name}</p>
-                                    <SampleAudioPlayer src={selectedElevenVoice.previewUrl} />
-                                  </div>
-                                ) : null}
 
                               </div>
 
