@@ -39,6 +39,40 @@ function uniqKeepOrder(items: string[]) {
   return out;
 }
 
+type ImageMeta = { url: string; alt?: string; w?: number; h?: number; source: string };
+
+function uniqMetaKeepOrder(items: ImageMeta[]): ImageMeta[] {
+  const seen = new Set<string>();
+  const out: ImageMeta[] = [];
+  for (const x of items) {
+    const v = x.url.trim();
+    if (!v) continue;
+    if (seen.has(v)) continue;
+    seen.add(v);
+    out.push(x);
+  }
+  return out;
+}
+
+const JUNK_URL_RE =
+  /(?:tracking|pixel|beacon|spacer|blank|transparent|spinner|loader|placeholder)\b/i;
+const JUNK_EXT_RE = /\.(gif|svg|ico)(?:\?|$)/i;
+
+function looksLikeJunkImage(u: string, w?: number, h?: number): boolean {
+  if (w != null && h != null && w <= 3 && h <= 3) return true;
+  if (w != null && w <= 1) return true;
+  if (h != null && h <= 1) return true;
+  if (JUNK_URL_RE.test(u)) return true;
+  if (/base64/i.test(u)) return true;
+  return false;
+}
+
+function parseIntMaybe(val: string | undefined): number | undefined {
+  if (!val) return undefined;
+  const n = parseInt(val, 10);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
 function parseSrcsetUrls(srcset: string | undefined, baseUrl: string): string[] {
   if (!srcset) return [];
   const parts = srcset
@@ -154,86 +188,115 @@ export async function POST(req: Request) {
   const ogDesc = cleanText($('meta[property="og:description"]').attr("content") || "");
   const canonical = $('link[rel="canonical"]').attr("href") || "";
 
-  const images: string[] = [];
-  const ogImage = $('meta[property="og:image"]').attr("content");
-  if (ogImage && !ogImage.startsWith("data:")) {
-    try {
-      images.push(new URL(ogImage.trim(), url).toString());
-    } catch {
-      images.push(ogImage);
-    }
+  // ── Collect images with metadata ─────────────────────────────────────
+  // Priority buckets: JSON-LD product images → OG/Twitter → gallery/product-context → all other <img>
+  const jsonLdBucket: ImageMeta[] = [];
+  const ogBucket: ImageMeta[] = [];
+  const productContextBucket: ImageMeta[] = [];
+  const generalBucket: ImageMeta[] = [];
+
+  function resolve(raw: string): string | null {
+    if (!raw || raw.startsWith("data:")) return null;
+    try { return new URL(raw.trim(), url).toString(); } catch { return null; }
   }
-  const twitterImage = $('meta[name="twitter:image"]').attr("content");
-  if (twitterImage && !twitterImage.startsWith("data:")) {
-    try {
-      images.push(new URL(twitterImage.trim(), url).toString());
-    } catch {
-      images.push(twitterImage);
+
+  // JSON-LD Product images (best packshots)
+  const ldProducts = tryParseJsonLdProducts($);
+  for (const p of ldProducts) {
+    const img = (p as any)?.image;
+    const imgs = typeof img === "string" ? [img] : Array.isArray(img) ? img : [];
+    for (const i of imgs) {
+      if (typeof i !== "string") continue;
+      const u = resolve(i);
+      if (u) jsonLdBucket.push({ url: u, alt: (p as any)?.name, source: "json-ld" });
     }
   }
 
-  // preload images
+  // OG / Twitter meta images
+  const ogImage = $('meta[property="og:image"]').attr("content");
+  const ogResolved = ogImage ? resolve(ogImage) : null;
+  if (ogResolved) ogBucket.push({ url: ogResolved, source: "og" });
+
+  const twitterImage = $('meta[name="twitter:image"]').attr("content");
+  const twResolved = twitterImage ? resolve(twitterImage) : null;
+  if (twResolved) ogBucket.push({ url: twResolved, source: "twitter" });
+
+  // Preload images
   $('link[rel="preload"][as="image"]').each((_, el) => {
-    const href = $(el).attr("href");
-    if (!href) return;
-    try {
-      images.push(new URL(href, url).toString());
-    } catch {
-      // ignore
-    }
+    const u = resolve($(el).attr("href") ?? "");
+    if (u) ogBucket.push({ url: u, source: "preload" });
   });
 
   // picture/source srcset
   $("source").each((_, el) => {
     const ss = $(el).attr("srcset") || $(el).attr("data-srcset");
-    images.push(...parseSrcsetUrls(ss, url));
+    for (const u of parseSrcsetUrls(ss, url)) {
+      generalBucket.push({ url: u, source: "source" });
+    }
   });
+
+  // <img> elements with metadata
+  const PRODUCT_CONTAINER_RE =
+    /product|gallery|carousel|slider|main-image|hero-image|featured|swiper|pdp|detail/i;
 
   $("img").each((_, el) => {
+    const $el = $(el);
     const src =
-      $(el).attr("src") ||
-      $(el).attr("data-src") ||
-      $(el).attr("data-original") ||
-      $(el).attr("data-lazy-src");
+      $el.attr("src") || $el.attr("data-src") || $el.attr("data-original") || $el.attr("data-lazy-src");
     if (!src) return;
-    if (src.startsWith("data:")) return;
-    try {
-      images.push(new URL(src, url).toString());
-    } catch {
-      // ignore
+    const u = resolve(src);
+    if (!u) return;
+
+    const alt = cleanText($el.attr("alt") ?? "");
+    const w = parseIntMaybe($el.attr("width"));
+    const h = parseIntMaybe($el.attr("height"));
+
+    if (looksLikeJunkImage(u, w, h)) return;
+
+    const meta: ImageMeta = { url: u, alt: alt || undefined, w, h, source: "img" };
+
+    // Check if inside a product-context container
+    const parentChain = $el.parents().toArray().slice(0, 6);
+    const inProductContext = parentChain.some((p) => {
+      const cls = $(p).attr("class") ?? "";
+      const id = $(p).attr("id") ?? "";
+      const role = $(p).attr("role") ?? "";
+      return PRODUCT_CONTAINER_RE.test(cls) || PRODUCT_CONTAINER_RE.test(id) || role === "img";
+    });
+
+    if (inProductContext) {
+      meta.source = "product-context";
+      productContextBucket.push(meta);
+    } else {
+      generalBucket.push(meta);
     }
 
-    const srcset = $(el).attr("srcset") || $(el).attr("data-srcset");
-    images.push(...parseSrcsetUrls(srcset, url));
+    // Also collect srcset variants
+    const srcset = $el.attr("srcset") || $el.attr("data-srcset");
+    for (const ssUrl of parseSrcsetUrls(srcset, url)) {
+      if (!looksLikeJunkImage(ssUrl, w, h)) {
+        generalBucket.push({ url: ssUrl, alt: alt || undefined, w, h, source: "srcset" });
+      }
+    }
   });
 
-  // inline styles background-image
+  // Inline styles background-image
   $("[style]").each((_, el) => {
     const style = $(el).attr("style");
-    images.push(...extractStyleUrls(style, url));
+    for (const u of extractStyleUrls(style, url)) {
+      if (!looksLikeJunkImage(u)) generalBucket.push({ url: u, source: "bg" });
+    }
   });
 
-  // JSON-LD Product images (often best packshots)
-  const ldProducts = tryParseJsonLdProducts($);
-  for (const p of ldProducts) {
-    const img = (p as any)?.image;
-    if (typeof img === "string") {
-      try {
-        images.push(new URL(img, url).toString());
-      } catch {
-        images.push(img);
-      }
-    } else if (Array.isArray(img)) {
-      for (const i of img) {
-        if (typeof i !== "string") continue;
-        try {
-          images.push(new URL(i, url).toString());
-        } catch {
-          images.push(i);
-        }
-      }
-    }
-  }
+  // Merge in priority order: JSON-LD → OG → product-context → general
+  const allMeta = uniqMetaKeepOrder([
+    ...jsonLdBucket,
+    ...ogBucket,
+    ...productContextBucket,
+    ...generalBucket,
+  ]).slice(0, 80);
+
+  const images = allMeta.map((m) => m.url);
 
   const bodyText = cleanText($("body").text());
   const excerpt = bodyText.slice(0, 9000);
@@ -271,7 +334,14 @@ export async function POST(req: Request) {
     canonical: canonical ? (() => { try { return new URL(canonical, url).toString(); } catch { return canonical; } })() : null,
     title: ogTitle || title || null,
     description: ogDesc || metaDesc || null,
-    images: uniqKeepOrder(images).slice(0, 80),
+    images,
+    imagesMeta: allMeta.map((m) => ({
+      url: m.url,
+      ...(m.alt ? { alt: m.alt } : {}),
+      ...(m.w ? { w: m.w } : {}),
+      ...(m.h ? { h: m.h } : {}),
+      source: m.source,
+    })),
     excerpt,
     snippets,
     signals: {

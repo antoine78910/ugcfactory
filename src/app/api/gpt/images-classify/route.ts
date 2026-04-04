@@ -7,22 +7,74 @@ import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { makeCacheKey } from "@/lib/gptCache";
 import { matchUrlToCandidates } from "@/lib/imageUrl";
 
+type ImageMetaEntry = { url: string; alt?: string; w?: number; h?: number; source?: string };
+
 type Body = {
   pageUrl: string;
   imageUrls: string[];
+  imagesMeta?: ImageMetaEntry[];
   provider?: "gpt" | "claude";
 };
 
-function scoreUrl(u: string) {
+function scoreUrl(u: string, meta?: ImageMetaEntry) {
   const s = u.toLowerCase();
   let score = 0;
+
+  // ── Format signals ──
   if (/\.(png|jpg|jpeg|webp)(\?|$)/.test(s)) score += 2;
-  if (s.includes("product") || s.includes("products")) score += 3;
-  if (s.includes("featured") || s.includes("main") || s.includes("hero")) score += 2;
-  if (s.includes("pack") || s.includes("packshot")) score += 2;
-  if (s.includes("cdn.shopify.com")) score += 2;
-  if (s.includes("icon") || s.includes("logo") || s.includes("sprite") || s.includes("favicon")) score -= 4;
-  if (s.endsWith(".svg")) score -= 4;
+  if (s.endsWith(".svg")) score -= 5;
+  if (/\.(gif|ico)(\?|$)/.test(s)) score -= 3;
+
+  // ── Positive URL patterns (product imagery) ──
+  if (s.includes("product") || s.includes("products")) score += 4;
+  if (s.includes("featured") || s.includes("main") || s.includes("hero")) score += 3;
+  if (s.includes("pack") || s.includes("packshot")) score += 3;
+  if (s.includes("gallery") || s.includes("carousel") || s.includes("slider")) score += 3;
+  if (s.includes("zoom") || s.includes("large") || s.includes("full")) score += 2;
+  if (s.includes("detail") || s.includes("pdp")) score += 2;
+  if (s.includes("swatch") || s.includes("variant")) score += 1;
+
+  // ── CDN hints ──
+  if (s.includes("cdn.shopify.com")) score += 3;
+  if (s.includes("shopifycdn") || s.includes("bigcommerce") || s.includes("woocommerce")) score += 2;
+
+  // ── Negative URL patterns (non-product) ──
+  if (s.includes("icon") || s.includes("logo") || s.includes("sprite") || s.includes("favicon")) score -= 5;
+  if (s.includes("banner") || s.includes("promo") || s.includes("announcement")) score -= 3;
+  if (s.includes("social") || s.includes("facebook") || s.includes("instagram") || s.includes("twitter") || s.includes("pinterest") || s.includes("tiktok") || s.includes("youtube")) score -= 4;
+  if (s.includes("payment") || s.includes("visa") || s.includes("mastercard") || s.includes("paypal") || s.includes("stripe") || s.includes("klarna") || s.includes("afterpay")) score -= 5;
+  if (s.includes("trustpilot") || s.includes("review") || s.includes("rating") || s.includes("star")) score -= 3;
+  if (s.includes("badge") || s.includes("seal") || s.includes("certificate") || s.includes("guarantee")) score -= 2;
+  if (s.includes("arrow") || s.includes("caret") || s.includes("chevron") || s.includes("close") || s.includes("hamburger") || s.includes("menu")) score -= 4;
+  if (s.includes("avatar") || s.includes("profile") || s.includes("team") || s.includes("author") || s.includes("founder")) score -= 2;
+  if (s.includes("blog") || s.includes("article") || s.includes("post")) score -= 2;
+  if (s.includes("footer") || s.includes("header") || s.includes("nav")) score -= 2;
+  if (s.includes("placeholder") || s.includes("loading") || s.includes("spinner") || s.includes("skeleton")) score -= 4;
+  if (s.includes("pixel") || s.includes("tracking") || s.includes("analytics") || s.includes("beacon")) score -= 6;
+  if (s.includes("flag") || s.includes("country") || s.includes("lang")) score -= 3;
+  if (s.includes("cart") || s.includes("checkout") || s.includes("shipping")) score -= 2;
+
+  // ── Metadata signals ──
+  if (meta) {
+    const alt = (meta.alt ?? "").toLowerCase();
+    if (alt) {
+      if (/product|item|bottle|box|package|tube|jar|serum|cream|shoe|sneaker|dress|shirt|watch|bag/.test(alt)) score += 3;
+      if (/logo|icon|badge|arrow|close|menu|avatar|profile|flag|payment|social/.test(alt)) score -= 4;
+    }
+
+    if (meta.w && meta.h) {
+      const area = meta.w * meta.h;
+      if (area >= 90_000) score += 2;       // >= ~300x300
+      if (area >= 250_000) score += 1;      // >= ~500x500
+      if (area <= 3_600) score -= 3;        // <= ~60x60
+      if (meta.w <= 50 || meta.h <= 50) score -= 3;
+    }
+
+    if (meta.source === "json-ld") score += 5;
+    if (meta.source === "product-context") score += 4;
+    if (meta.source === "og") score += 2;
+  }
+
   return score;
 }
 
@@ -36,11 +88,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Missing `pageUrl` or `imageUrls`." }, { status: 400 });
   }
 
+  // Build a lookup from URL → metadata (if provided by extract)
+  const metaMap = new Map<string, ImageMetaEntry>();
+  if (Array.isArray(body.imagesMeta)) {
+    for (const m of body.imagesMeta) {
+      if (typeof m?.url === "string") metaMap.set(m.url, m);
+    }
+  }
+
   const ranked = [...urls]
-    .map((u) => ({ u, s: scoreUrl(u) }))
+    .map((u) => ({ u, s: scoreUrl(u, metaMap.get(u)) }))
     .sort((a, b) => b.s - a.s)
     .map((x) => x.u)
-    .slice(0, 10);
+    .slice(0, 16);
 
   const developer = [
     "You are classifying e-commerce images.",
@@ -52,7 +112,7 @@ export async function POST(req: Request) {
   const userText = [
     `Page URL: ${body.pageUrl}`,
     "",
-    "You will be shown up to 10 images from the page.",
+    "You will be shown up to 16 images from the page.",
     "Return JSON: { productOnlyUrls: [{ url, reason }], otherUrls: [url], confidence: \"low\"|\"medium\"|\"high\" }",
     "If none are packshots, return empty productOnlyUrls.",
     "CRITICAL: Every `url` you return MUST be copied EXACTLY from the image URLs listed in the user message (character-for-character). Do not invent, shorten, or paraphrase URLs.",
@@ -61,7 +121,7 @@ export async function POST(req: Request) {
   const provider: "gpt" | "claude" = body?.provider === "gpt" ? "gpt" : "claude";
 
   try {
-    const cacheKey = makeCacheKey({ v: 2, pageUrl: body.pageUrl, ranked, provider });
+    const cacheKey = makeCacheKey({ v: 3, pageUrl: body.pageUrl, ranked, provider });
     try {
       const { data: hit } = await supabase
         .from("gpt_cache")

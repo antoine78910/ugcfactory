@@ -1790,6 +1790,7 @@ export default function AppBrandWizard() {
         body: JSON.stringify({
           pageUrl: extracted.url,
           imageUrls: extracted.images,
+          imagesMeta: (extracted as any).imagesMeta,
         }),
       });
       const json = (await res.json()) as { error?: string; data?: any };

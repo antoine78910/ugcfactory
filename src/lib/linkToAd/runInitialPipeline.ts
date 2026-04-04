@@ -125,10 +125,12 @@ export async function runInitialPipeline(
       return { ok: false, error: "No images found on that page." };
     }
 
+    const imagesMeta = Array.isArray((extractedObj as any).imagesMeta) ? (extractedObj as any).imagesMeta : undefined;
+
     report(1);
     const classifyRes = await f("/api/gpt/images-classify", {
       method: "POST",
-      body: JSON.stringify({ pageUrl: url, imageUrls: images, provider: aiProvider }),
+      body: JSON.stringify({ pageUrl: url, imageUrls: images, imagesMeta, provider: aiProvider }),
     });
     if (!classifyRes.ok) {
       const raw = await classifyRes.text().catch(() => "");
