@@ -5442,7 +5442,9 @@ export default function LinkToAdUniverse({
                                       value={scriptFactors.problem}
                                       title={factorWordRules.problem.hint}
                                       onChange={(e) => {
-                                        const v = clampToMaxWords(e.target.value, factorWordRules.problem.max);
+                                        const pr = factorWordRules.problem;
+                                        if (!pr) return;
+                                        const v = clampToMaxWords(e.target.value, pr.max);
                                         const next = { ...scriptFactors, problem: v };
                                         setScriptFactors(next);
                                         setEditableScript(composeScriptFromFactors(next));
