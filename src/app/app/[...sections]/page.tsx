@@ -19,6 +19,7 @@ import { StudioGenerationsHistory } from "@/app/_components/StudioGenerationsHis
 import type { StudioHistoryItem } from "@/app/_components/StudioGenerationsHistory";
 import { calculateMotionControlCredits } from "@/lib/linkToAd/generationCredits";
 import StudioAvatarPanel from "@/app/_components/StudioAvatarPanel";
+import { StudioVoiceClonePanel } from "@/app/_components/StudioVoiceClonePanel";
 import StudioImagePanel from "@/app/_components/StudioImagePanel";
 import StudioUpscalePanel from "@/app/_components/StudioUpscalePanel";
 import StudioShell from "@/app/_components/StudioShell";
@@ -2816,13 +2817,7 @@ export default function AppBrandWizard() {
                               </button>
                             </div>
                             {voiceToolMode === "create_voice" ? (
-                              <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-white/15 bg-white/[0.02] px-4 py-10 text-center">
-                                <Sparkles className="h-8 w-8 text-violet-400/60" />
-                                <p className="text-sm font-semibold text-white/80">Create Voice</p>
-                                <p className="max-w-xs text-xs leading-relaxed text-white/45">
-                                  Clone your own voice or create a custom AI voice from a sample recording. Coming soon.
-                                </p>
-                              </div>
+                              <StudioVoiceClonePanel />
                             ) : null}
                             {voiceToolMode === "voice_change" ? (
                             <>

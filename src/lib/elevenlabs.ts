@@ -196,6 +196,56 @@ export async function listElevenLabsSharedVoices(maxPages = 2): Promise<ElevenLa
   return out;
 }
 
+// ---------------------------------------------------------------------------
+// Instant Voice Cloning (IVC)
+// ---------------------------------------------------------------------------
+
+export type ElevenLabsVoiceCloneInput = {
+  name: string;
+  files: File[];
+  description?: string;
+  labels?: Record<string, string>;
+  /** When provided, use this key instead of the platform ELEVENLABS_API_KEY. */
+  apiKeyOverride?: string;
+};
+
+/**
+ * Creates an Instant Voice Clone via POST /v1/voices/add.
+ * Returns the voice_id of the new clone.
+ */
+export async function createElevenLabsVoiceClone(
+  input: ElevenLabsVoiceCloneInput,
+): Promise<{ voiceId: string; name: string }> {
+  const name = input.name.trim();
+  if (!name) throw new Error("Voice name is required.");
+  if (!input.files.length) throw new Error("At least one audio file is required.");
+
+  const apiKey = input.apiKeyOverride?.trim() || getElevenLabsApiKey();
+
+  const form = new FormData();
+  form.set("name", name);
+  for (const file of input.files) {
+    form.append("files", file);
+  }
+  if (input.description?.trim()) form.set("description", input.description.trim());
+  if (input.labels && Object.keys(input.labels).length) {
+    form.set("labels", JSON.stringify(input.labels));
+  }
+
+  const res = await fetch(`${ELEVENLABS_API_BASE}/voices/add`, {
+    method: "POST",
+    headers: { "xi-api-key": apiKey },
+    body: form,
+    cache: "no-store",
+  });
+
+  if (!res.ok) await readElevenLabsError(res, "ElevenLabs voice clone creation failed.");
+  const json = (await res.json()) as { voice_id?: string };
+  const voiceId = json.voice_id?.trim() ?? "";
+  if (!voiceId) throw new Error("ElevenLabs returned no voice_id for the clone.");
+  return { voiceId, name };
+}
+
 export async function convertSpeechToSpeechWithElevenLabs(
   input: ElevenLabsSpeechToSpeechInput,
 ): Promise<{ buffer: Buffer; contentType: string }> {

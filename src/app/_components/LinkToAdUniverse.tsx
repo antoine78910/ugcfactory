@@ -1250,6 +1250,12 @@ export default function LinkToAdUniverse({
             )),
       ),
     );
+    // Restore the three-image generation loading state so the spinner shows on return.
+    if (p.nanoThreeGenerating) {
+      setIsNanoAllImagesSubmitting(true);
+      nanoThreeGeneratingFromDb.current = true;
+      nanoThreeResumeAttemptedRef.current = false;
+    }
   }
 
   /** Clone triple from state + merge current flat UI into the active angle (for saves). */
@@ -1309,6 +1315,13 @@ export default function LinkToAdUniverse({
   const nanoResumeAttemptedRef = useRef(false);
   /** Guard for auto-resuming scripts generation when user returns to a run that has summary but no scripts. */
   const scriptsResumeAttemptedRef = useRef(false);
+  /**
+   * Set to true by `applyPipelineFromSnapshot` when it detects `nanoThreeGenerating: true` in the persisted
+   * pipeline. This signals the resume effect to kick off `resumeNanoThreeGeneration`.
+   */
+  const nanoThreeGeneratingFromDb = useRef(false);
+  /** Prevents the resume effect from firing more than once per hydration. */
+  const nanoThreeResumeAttemptedRef = useRef(false);
 
   useEffect(() => {
     const idx = nanoBananaSelectedImageIndex;
@@ -2899,7 +2912,11 @@ export default function LinkToAdUniverse({
   async function runNanoBananaProThreeSequential(
     imageUrls: string[],
     prompts: [string, string, string],
-    opts?: { labelPrefix?: string },
+    opts?: {
+      labelPrefix?: string;
+      /** Called right after a task is submitted, before polling starts. Use to persist the taskId to DB. */
+      onSlotSubmitted?: (taskId: string, slotIdx: number, partialUrls: string[]) => void;
+    },
     signal?: AbortSignal,
   ): Promise<{ urlsByPrompt: string[]; lastTaskId: string | null; taskIds: string[] }> {
     if (!imageUrls.length) {
@@ -2940,6 +2957,8 @@ export default function LinkToAdUniverse({
         json.taskId,
         opts?.labelPrefix ? `${opts.labelPrefix} · ${i + 1}/3` : `Link to Ad · Nano ${i + 1}/3`,
       );
+      // Notify caller so it can persist the taskId before we start the long poll.
+      opts?.onSlotSubmitted?.(json.taskId, i, [...urlsByPrompt]);
       const urls = await pollNanoBananaTaskForUrls(json.taskId, signal);
       urlsByPrompt[i] = urls[0] ?? "";
       setNanoBananaImageUrls([...urlsByPrompt]);
@@ -2999,6 +3018,7 @@ export default function LinkToAdUniverse({
         ugcVideoPromptGpt: "",
         klingByReferenceIndex: createEmptyKlingByReference(),
         videoStageMode: false,
+        nanoThreeGenerating: false,
       });
       setPipelineByAngle(triple);
       const snap = snapshotWithPersistTriple(base, triple);
@@ -3008,6 +3028,115 @@ export default function LinkToAdUniverse({
         videoPrompt: "",
         videoUrl: null,
       });
+    }
+  }
+
+  /**
+   * Resumes the 3-image sequential generation after the user returns to the page.
+   * Called automatically by the resume effect when `nanoThreeGeneratingFromDb` is true.
+   */
+  async function resumeNanoThreeGeneration() {
+    const url = storeUrl.trim();
+    if (!url || !lastExtractedJson) {
+      setIsNanoAllImagesSubmitting(false);
+      return;
+    }
+
+    // Extend partial URLs to 3 slots (they may be empty or partially filled).
+    const partialUrls: string[] = [...nanoBananaImageUrls];
+    while (partialUrls.length < 3) partialUrls.push("");
+
+    const clearGeneratingFlag = async () => {
+      const base = latestSnapRef.current;
+      if (!base || !lastExtractedJson) return;
+      const triple = buildPersistTriplePatchingActive({ nanoThreeGenerating: false });
+      setPipelineByAngle(triple);
+      void persistUniverse(universeRunId, url, extractedTitle, lastExtractedJson, snapshotWithPersistTriple(base, triple), packshotsForSave());
+    };
+
+    try {
+      // If all 3 slots already have URLs (race: completed between navigations), just clear the flag.
+      if (partialUrls.every((u) => u?.trim())) {
+        await clearGeneratingFlag();
+        setIsNanoAllImagesSubmitting(false);
+        return;
+      }
+
+      const nanoRefs = resolveNanoProductImageUrls();
+      const img = nanoRefs[0];
+      if (!img || !/^https?:\/\//i.test(img)) {
+        throw new Error("Product image not available. Please regenerate.");
+      }
+
+      // Find first empty slot; try to poll the saved taskId for it.
+      const firstEmptySlot = partialUrls.findIndex((u) => !u?.trim());
+      const savedTaskId = nanoBananaTaskId?.trim();
+
+      if (savedTaskId && firstEmptySlot !== -1) {
+        try {
+          toast.message("Reprise de la génération…", { duration: 4000 });
+          const urls = await pollNanoBananaTaskForUrls(savedTaskId);
+          partialUrls[firstEmptySlot] = urls[0] ?? "";
+          setNanoBananaImageUrls([...partialUrls]);
+        } catch {
+          // Task expired or failed — will re-generate this slot below.
+          partialUrls[firstEmptySlot] = "";
+        }
+      }
+
+      // Re-generate any still-missing slots (no extra credit charge — original payment already done).
+      for (let i = 0; i < 3; i++) {
+        if (partialUrls[i]?.trim()) continue;
+
+        const prompt = fullNanoPromptsTriple[i] ?? "";
+        if (!prompt.trim()) throw new Error(`Image prompt missing for slot ${i + 1}`);
+
+        const res = await fetchWithRetry("/api/nanobanana/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            accountPlan: planId,
+            model: "pro",
+            prompt,
+            imageUrls: nanoRefs.length ? nanoRefs : [img],
+            resolution: "4K",
+            aspectRatio: "9:16",
+            personalApiKey: getPersonalApiKey(),
+          }),
+        });
+        const json = (await res.json()) as { taskId?: string; error?: string };
+        if (!res.ok || !json.taskId) throw new Error(json.error ?? "Image generation failed");
+
+        setNanoBananaTaskId(json.taskId);
+        const base = latestSnapRef.current;
+        if (base && lastExtractedJson) {
+          const triple = buildPersistTriplePatchingActive({
+            nanoBananaTaskId: json.taskId,
+            nanoBananaImageUrls: [...partialUrls],
+            nanoThreeGenerating: true,
+          });
+          void persistUniverse(universeRunId, url, extractedTitle, lastExtractedJson, snapshotWithPersistTriple(base, triple), packshotsForSave());
+        }
+
+        const generatedUrls = await pollNanoBananaTaskForUrls(json.taskId);
+        partialUrls[i] = generatedUrls[0] ?? "";
+        setNanoBananaImageUrls([...partialUrls]);
+      }
+
+      if (!partialUrls[0] || !partialUrls[1] || !partialUrls[2]) {
+        throw new Error("Could not recover all 3 images.");
+      }
+
+      const storedUrls = await reuploadToStorage(partialUrls);
+      await persistNanoThreeGeneratedImages(url, fullNanoPromptsTriple as [string, string, string], storedUrls, nanoBananaTaskId);
+      toast.success("Génération d'images reprise avec succès");
+    } catch (e) {
+      toast.error("Reprise échouée", {
+        description: e instanceof Error ? e.message : "Veuillez régénérer les images.",
+      });
+      await clearGeneratingFlag();
+    } finally {
+      setIsNanoAllImagesSubmitting(false);
     }
   }
 
@@ -3085,6 +3214,48 @@ export default function LinkToAdUniverse({
     setVideoStageMode(false);
 
     setIsNanoAllImagesSubmitting(true);
+
+    // Persist "generation started" to DB so the loading state survives navigation.
+    {
+      const base = latestSnapRef.current;
+      if (base && lastExtractedJson) {
+        const angleIdx = idx === 0 || idx === 1 || idx === 2 ? idx : 0;
+        const markedTriple = pipelineByAngle.map((p, i) =>
+          i === angleIdx
+            ? {
+                ...cloneAnglePipeline(p),
+                nanoBananaTaskId: null,
+                nanoBananaImageUrl: null,
+                nanoBananaImageUrls: [],
+                nanoBananaSelectedImageIndex: null as 0 | 1 | 2 | null,
+                klingByReferenceIndex: createEmptyKlingByReference(),
+                ugcVideoPromptGpt: "",
+                videoStageMode: false,
+                nanoThreeGenerating: true,
+              }
+            : cloneAnglePipeline(p),
+        ) as [LinkToAdAnglePipelineV1, LinkToAdAnglePipelineV1, LinkToAdAnglePipelineV1];
+        setPipelineByAngle(markedTriple);
+        const snap = snapshotWithPersistTriple(base, markedTriple);
+        void persistUniverse(universeRunId, url, extractedTitle, lastExtractedJson, snap, packshotsForSave());
+      }
+    }
+
+    // Callback that fires right after each task is submitted (before polling).
+    // Persists the in-flight taskId to DB so navigation doesn't lose it.
+    const onSlotSubmitted = (taskId: string, _slotIdx: number, partialUrls: string[]) => {
+      setNanoBananaTaskId(taskId);
+      setNanoBananaImageUrls([...partialUrls]);
+      const base = latestSnapRef.current;
+      if (!base || !lastExtractedJson) return;
+      const triple = buildPersistTriplePatchingActive({
+        nanoBananaTaskId: taskId,
+        nanoBananaImageUrls: [...partialUrls],
+        nanoThreeGenerating: true,
+      });
+      void persistUniverse(universeRunId, url, extractedTitle, lastExtractedJson, snapshotWithPersistTriple(base, triple), packshotsForSave());
+    };
+
     try {
       nanoThreeAbortRef.current?.abort();
       const controller = new AbortController();
@@ -3092,7 +3263,7 @@ export default function LinkToAdUniverse({
       const { urlsByPrompt, lastTaskId } = await runNanoBananaProThreeSequential(
         nanoRefs,
         prompts as [string, string, string],
-        { labelPrefix: `Link to Ad · Angle ${idx + 1}` },
+        { labelPrefix: `Link to Ad · Angle ${idx + 1}`, onSlotSubmitted },
         controller.signal,
       );
 
@@ -3119,6 +3290,13 @@ export default function LinkToAdUniverse({
       toast.error("Image generation", {
         description: e instanceof Error ? e.message : "Unknown error",
       });
+      // Clear the generating flag so the user can retry cleanly.
+      const base = latestSnapRef.current;
+      if (base && lastExtractedJson) {
+        const triple = buildPersistTriplePatchingActive({ nanoThreeGenerating: false });
+        setPipelineByAngle(triple);
+        void persistUniverse(universeRunId, url, extractedTitle, lastExtractedJson, snapshotWithPersistTriple(base, triple), packshotsForSave());
+      }
     } finally {
       setIsNanoAllImagesSubmitting(false);
     }
@@ -3510,6 +3688,30 @@ export default function LinkToAdUniverse({
   useEffect(() => {
     klingResumeAttemptedRef.current = false;
   }, [klingSlotSignature]);
+
+  /**
+   * Auto-resume 3-image NanoBanana generation when the user returns to the page mid-generation.
+   * `nanoThreeGeneratingFromDb` is set by `applyPipelineFromSnapshot` when it reads `nanoThreeGenerating: true`
+   * from the persisted pipeline. We wait until prompts are available before kicking off the resume.
+   */
+  useEffect(() => {
+    if (!nanoThreeGeneratingFromDb.current) return;
+    if (nanoThreeResumeAttemptedRef.current) return;
+    if (!isNanoAllImagesSubmitting) return;
+    // Wait until the prompts derived state is ready (set via a downstream effect from nanoBananaPromptsRaw).
+    if (!fullNanoPromptsTriple.every((p) => p.trim())) return;
+    if (selectedAngleIndex === null) return;
+
+    nanoThreeResumeAttemptedRef.current = true;
+    nanoThreeGeneratingFromDb.current = false;
+    void resumeNanoThreeGeneration();
+  }, [isNanoAllImagesSubmitting, fullNanoPromptsTriple, selectedAngleIndex]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reset the three-image resume guard when the angle or run changes.
+  useEffect(() => {
+    nanoThreeResumeAttemptedRef.current = false;
+    nanoThreeGeneratingFromDb.current = false;
+  }, [selectedAngleIndex, universeRunId]);
 
   /** Resume KIE polling if the user left during generation (task saved, poll was cancelled on unmount). */
   useEffect(() => {

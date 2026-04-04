@@ -62,6 +62,11 @@ export type LinkToAdAnglePipelineV1 = {
   ugcVideoPromptGpt?: string;
   klingByReferenceIndex?: KlingReferenceSlotV1[] | null;
   videoStageMode?: boolean;
+  /**
+   * True while the 3-image sequential NanoBanana generation is running for this angle.
+   * Persisted to DB so the loading state can be restored after navigation.
+   */
+  nanoThreeGenerating?: boolean;
 };
 
 /** One NanoBanana reference frame’s video state (index-aligned with nanoBananaImageUrls). */
@@ -167,6 +172,7 @@ function parseAnglePipelineNode(x: unknown): LinkToAdAnglePipelineV1 | null {
     ugcVideoPromptGpt: typeof o.ugcVideoPromptGpt === "string" ? o.ugcVideoPromptGpt : "",
     klingByReferenceIndex: kParsed ?? createEmptyKlingByReference(),
     videoStageMode: typeof o.videoStageMode === "boolean" ? o.videoStageMode : false,
+    nanoThreeGenerating: o.nanoThreeGenerating === true,
   };
 }
 
@@ -635,7 +641,8 @@ export function parseThreeLabeledPrompts(text: string): [string, string, string]
   const t = text.replace(/\r\n/g, "\n").trim();
   if (!t) return ["", "", ""];
 
-  const headerRe = /^\s*PROMPT\s*([123])\s*$/gim;
+  // Matches "PROMPT 1", "# PROMPT 2", "## PROMPT 3", "**PROMPT 1**" etc.
+  const headerRe = /^\s*(?:[#*]+\s*)?PROMPT\s*([123])(?:\s*[*#]+)?\s*$/gim;
   const markers: { num: 1 | 2 | 3; bodyStart: number }[] = [];
   let m: RegExpExecArray | null;
   while ((m = headerRe.exec(t)) !== null) {
@@ -658,7 +665,8 @@ export function parseThreeLabeledPrompts(text: string): [string, string, string]
       i + 1 < markers.length
         ? (() => {
             const sub = t.slice(start);
-            const j = sub.search(/\n\s*PROMPT\s*[123]\s*\n/i);
+            // Also match markdown-prefixed PROMPT headers like "# PROMPT 2"
+            const j = sub.search(/\n\s*(?:[#*]+\s*)?PROMPT\s*[123](?:\s*[*#]+)?\s*\n/i);
             return j === -1 ? t.length : start + j;
           })()
         : t.length;
@@ -684,17 +692,21 @@ export type NanoEditableSections = {
 
 /**
  * Cuts leaked TECHNICAL / NEGATIVE blocks from a single EDIT section body (model sometimes
- * inlines them before the next EDIT header).
+ * inlines them before the next EDIT header). Handles plain and **markdown-bold** formats.
  */
 export function stripInlineTechnicalNoiseFromNanoSection(field: string): string {
   const t = field.replace(/\r\n/g, "\n");
   if (!t.trim()) return "";
   const patterns: RegExp[] = [
-    /\n\s*NEGATIVE\s+PROMPT\b/i,
-    /(?:^|\n)\s*TECHNICAL\s*[—:\s]/im,
+    // **NEGATIVE PROMPT:** or plain NEGATIVE PROMPT
+    /\n\s*\*{0,2}NEGATIVE\s+PROMPT\*{0,2}\b/i,
+    // **TECHNICAL:** or TECHNICAL —
+    /(?:^|\n)\s*\*{0,2}TECHNICAL\*{0,2}\s*[—:*\s]/im,
     /\n\s*---+\s*NEGATIVE/i,
     /\n\s*PRESERVATION\s+INSTRUCTIONS\b/i,
     /\n\s*Standard\s+negative\s+prompt\b/i,
+    // A "---" horizontal rule used as prompt separator (e.g. between prompts)
+    /\n\s*---+\s*\n/,
   ];
   let cut = t.length;
   for (const re of patterns) {
@@ -703,6 +715,25 @@ export function stripInlineTechnicalNoiseFromNanoSection(field: string): string 
   }
   return t.slice(0, cut).trim();
 }
+
+/**
+ * Shared lookahead that terminates an EDIT section body. Handles both plain and **markdown** formats,
+ * as well as "---" separators and "# PROMPT N" headers used in multi-prompt raw text.
+ */
+const NANO_SECTION_END_LA =
+  // Next EDIT — <any> header (plain or **bold**)
+  "(?=" +
+  "\\n\\s*\\*{0,2}EDIT\\s*[—:-]|" +
+  // TECHNICAL block
+  "\\n\\s*\\*{0,2}TECHNICAL\\*{0,2}\\s*[—:*\\s]|" +
+  // NEGATIVE PROMPT block
+  "\\n\\s*\\*{0,2}NEGATIVE\\s+PROMPT\\b|" +
+  // Horizontal rule separator (e.g. "---") used between prompts
+  "\\n\\s*---+\\s*\\n|" +
+  // Markdown PROMPT N header (e.g. "# PROMPT 2")
+  "\\n\\s*(?:[#*]+\\s*)?PROMPT\\s*[123]|" +
+  // End of string
+  "$)";
 
 /** True when prompts use EDIT — / TECHNICAL: blocks from the image prompt API. */
 export function parseNanoEditableSections(editable: string): NanoEditableSections & { isStructured: boolean } {
@@ -718,14 +749,18 @@ export function parseNanoEditableSections(editable: string): NanoEditableSection
       isStructured: false,
     };
   }
+  // Pattern for any EDIT header (handles "EDIT — X:", "**EDIT — X:**", newlines after colon, etc.)
+  const editHdr = (label: string) =>
+    `\\*{0,2}EDIT\\s*[—:-]\\s*${label}\\*{0,2}\\s*:?\\*{0,2}\\s*\\n?\\s*`;
+
   const personM = raw.match(
-    /EDIT\s*[—:-]\s*Person\s*[:\n]\s*([\s\S]*?)(?=\n\s*EDIT\s*[—:-]\s*Scene\b|\n\s*TECHNICAL\s*[—:\s]|\n\s*NEGATIVE\s+PROMPT\b|$)/i,
+    new RegExp(editHdr("Person") + `([\\s\\S]*?)${NANO_SECTION_END_LA}`, "i"),
   );
   const sceneM = raw.match(
-    /EDIT\s*[—:-]\s*Scene\s*[:\n]\s*([\s\S]*?)(?=\n\s*EDIT\s*[—:-]\s*Product\b|\n\s*TECHNICAL\s*[—:\s]|\n\s*NEGATIVE\s+PROMPT\b|$)/i,
+    new RegExp(editHdr("Scene") + `([\\s\\S]*?)${NANO_SECTION_END_LA}`, "i"),
   );
   const productM = raw.match(
-    /EDIT\s*[—:-]\s*Product\s*(?:&|and)?\s*action\s*[:\n]\s*([\s\S]*?)(?=\n\s*TECHNICAL\s*[—:\s]|\n\s*NEGATIVE\s+PROMPT\b|$)/i,
+    new RegExp(editHdr("Product(?:\\s*(?:&|and)\\s*action)?") + `([\\s\\S]*?)${NANO_SECTION_END_LA}`, "i"),
   );
   return {
     person: stripInlineTechnicalNoiseFromNanoSection(personM?.[1]?.trim() ?? ""),
@@ -755,12 +790,16 @@ export function splitNanoPromptBodyForEditing(body: string): { editable: string;
   if (!t.trim()) return { editable: "", technicalTail: "" };
 
   const patterns: RegExp[] = [
-    /(?:^|\n)\s*TECHNICAL\s*[—:\s]/im,
-    /^\s*NEGATIVE\s+PROMPT\b/im,
-    /\n\s*NEGATIVE\s+PROMPT\b/i,
+    // **TECHNICAL:** or TECHNICAL — (plain or bold markdown)
+    /(?:^|\n)\s*\*{0,2}TECHNICAL\*{0,2}\s*[—:*\s]/im,
+    // **NEGATIVE PROMPT:** or plain, at start or after newline
+    /^\s*\*{0,2}NEGATIVE\s+PROMPT\*{0,2}\b/im,
+    /\n\s*\*{0,2}NEGATIVE\s+PROMPT\*{0,2}\b/i,
     /\n\s*---+\s*NEGATIVE/i,
     /\n\s*PRESERVATION\s+INSTRUCTIONS\b/i,
     /\n\s*Standard\s+negative\s+prompt\b/i,
+    // "---" horizontal rule used as prompt separator (so only EDIT sections appear in editable)
+    /\n\s*---+\s*\n/,
   ];
 
   let cut = t.length;
