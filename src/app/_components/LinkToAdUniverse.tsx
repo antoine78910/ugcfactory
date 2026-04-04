@@ -1044,7 +1044,10 @@ export default function LinkToAdUniverse({
   /** Older one-blob prompts without EDIT — sections.motion holds the full creative text. */
   const [videoPromptIsLegacyBlob, setVideoPromptIsLegacyBlob] = useState(false);
   /** Native <details> open state — hide summary preview while editing to avoid duplicating Motion/Dialogue/Ambience. */
-  const [videoBriefDetailsOpen, setVideoBriefDetailsOpen] = useState(false);
+  /** Which video prompt subsection is expanded for editing (nano-style; one at a time). */
+  const [videoPromptExpandedKey, setVideoPromptExpandedKey] = useState<
+    "motion" | "dialogue" | "ambience" | "legacy" | null
+  >(null);
   /** Saved Nano + Kling pipeline per script angle (inactive slots + hydrate); active angle also in flat state below. */
   const [pipelineByAngle, setPipelineByAngle] = useState<
     [LinkToAdAnglePipelineV1, LinkToAdAnglePipelineV1, LinkToAdAnglePipelineV1]
@@ -1141,6 +1144,20 @@ export default function LinkToAdUniverse({
       : composeVideoPromptEditableSections(videoPromptSections).trim();
     return mergeNanoPromptForApi(editable, videoPromptTechnicalTail).trim();
   }, [videoPromptSections, videoPromptTechnicalTail, videoPromptIsLegacyBlob]);
+
+  const patchVideoPromptSection = useCallback(
+    (patch: Partial<VideoPromptEditableSections>) => {
+      setVideoPromptSections((prev) => {
+        const next = { ...prev, ...patch };
+        const editable = videoPromptIsLegacyBlob
+          ? next.motion.trim()
+          : composeVideoPromptEditableSections(next).trim();
+        setUgcVideoPromptGpt(mergeNanoPromptForApi(editable, videoPromptTechnicalTail).trim());
+        return next;
+      });
+    },
+    [videoPromptIsLegacyBlob, videoPromptTechnicalTail],
+  );
 
   const cancelCurrentGeneration = useCallback((opts?: { silent?: boolean }) => {
     nanoPromptsAbortRef.current?.abort();
@@ -3764,7 +3781,7 @@ export default function LinkToAdUniverse({
   async function onGenerateKlingVideo(overrideVideoPrompt?: string) {
     const url = storeUrl.trim();
     const img = nanoBananaImageUrl;
-    const prompt = (overrideVideoPrompt ?? ugcVideoPromptGpt).trim();
+    const prompt = (overrideVideoPrompt ?? mergedVideoPromptDraft).trim() || ugcVideoPromptGpt.trim();
     const idx = nanoBananaSelectedImageIndex;
     if (!url || !lastExtractedJson || !img || !prompt || idx === null) {
       toast.error("Reference image and video prompt are required.");
@@ -6155,129 +6172,136 @@ export default function LinkToAdUniverse({
                   <div className="flex min-w-0 flex-1 flex-col gap-6">
                     {showVideoWorkPanel ? (
                     <>
-                      {mergedVideoPromptDraft && ugcVideoPromptGpt.trim() ? (
-                        <details
-                          className="rounded-xl border border-violet-500/25 bg-violet-500/[0.06] p-3"
-                          onToggle={(e) => setVideoBriefDetailsOpen(e.currentTarget.open)}
-                        >
-                          <summary className="cursor-pointer list-none">
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <p className="text-xs font-semibold text-white/90">Video brief</p>
-                                <p className="mt-0.5 text-[10px] leading-snug text-white/45">
-                                  Ajuste le mouvement, ce qui est dit, et l’ambiance sonore.
-                                </p>
-                              </div>
-                              <span className="text-[10px] font-medium text-violet-200/80">
-                                {videoBriefDetailsOpen ? "Close" : "Edit"}
-                              </span>
-                            </div>
-                            {!videoBriefDetailsOpen &&
-                              (videoPromptIsLegacyBlob ? (
-                                <div className="mt-2 rounded-lg border border-white/10 bg-black/30 px-2 py-1.5">
-                                  <p className="text-[9px] font-semibold uppercase tracking-wide text-white/45">Brief</p>
-                                  <p className="mt-0.5 text-[11px] leading-snug text-white/75 line-clamp-6">
-                                    {videoPromptSections.motion.trim() || "—"}
-                                  </p>
-                                </div>
-                              ) : (
-                                <div className="mt-2 grid gap-1.5">
-                                  {(
-                                    [
-                                      ["Motion", videoPromptSections.motion],
-                                      ["Dialogue", videoPromptSections.dialogue],
-                                      ["Ambience", videoPromptSections.ambience],
-                                    ] as const
-                                  ).map(([label, value]) => (
-                                    <div
-                                      key={label}
-                                      className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5"
-                                    >
-                                      <p className="text-[9px] font-semibold uppercase tracking-wide text-white/45">
-                                        {label}
-                                      </p>
-                                      <p className="mt-0.5 text-[11px] leading-snug text-white/75 line-clamp-5">
-                                        {value.trim() || "—"}
-                                      </p>
-                                    </div>
-                                  ))}
-                                </div>
-                              ))}
-                          </summary>
-                          <div className="mt-3 space-y-2 border-t border-white/10 pt-3">
-                            {videoPromptIsLegacyBlob ? (
-                              <div className="space-y-1">
-                                <p className="text-[9px] font-semibold uppercase tracking-wide text-amber-200/75">
-                                  Older prompt — regenerate the video prompt for the short fields
-                                </p>
-                                <Textarea
-                                  value={videoPromptSections.motion}
-                                  onChange={(e) =>
-                                    setVideoPromptSections((prev) => ({ ...prev, motion: e.target.value }))
+                      {mergedVideoPromptDraft &&
+                      ugcVideoPromptGpt.trim() &&
+                      !showKlingVideoGeneratingUi ? (
+                        <div className="rounded-xl border border-violet-500/25 bg-violet-500/[0.06] px-2.5 pb-2 pt-1">
+                          <p className="px-1 pb-1 text-[10px] font-bold uppercase tracking-wide text-violet-300/90">
+                            Video prompt
+                          </p>
+                          {videoPromptIsLegacyBlob ? (
+                            <div className="space-y-2">
+                              <p className="px-1 text-[9px] font-semibold uppercase tracking-wide text-amber-200/75">
+                                Older prompt — regenerate the video prompt for Motion / Dialogue / Ambience
+                              </p>
+                              <div className="flex min-w-0 items-start gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setVideoPromptExpandedKey((k) => (k === "legacy" ? null : "legacy"))
                                   }
-                                  className="min-h-[120px] border-white/10 bg-black/30 text-[11px] leading-snug text-white/80"
-                                  spellCheck
-                                />
+                                  className="w-[4.75rem] shrink-0 pt-0.5 text-left text-[10px] font-semibold uppercase tracking-wide text-white/40 transition hover:text-white/60"
+                                >
+                                  Prompt
+                                </button>
+                                <div className="min-w-0 flex-1">
+                                  {videoPromptExpandedKey !== "legacy" ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => setVideoPromptExpandedKey("legacy")}
+                                      className="w-full rounded-md px-1 py-0.5 text-left transition hover:bg-white/[0.03]"
+                                    >
+                                      <p className="line-clamp-3 whitespace-pre-wrap text-[11px] leading-snug text-white/60">
+                                        {videoPromptSections.motion.trim() || "Tap to edit…"}
+                                      </p>
+                                    </button>
+                                  ) : (
+                                    <Textarea
+                                      value={videoPromptSections.motion}
+                                      onChange={(e) => patchVideoPromptSection({ motion: e.target.value })}
+                                      rows={Math.max(
+                                        3,
+                                        Math.min(12, videoPromptSections.motion.split("\n").length + 2),
+                                      )}
+                                      spellCheck
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Escape") {
+                                          e.preventDefault();
+                                          setVideoPromptExpandedKey(null);
+                                        }
+                                      }}
+                                      className="min-h-[4.5rem] w-full resize-y border-0 border-b border-white/[0.07] bg-transparent px-1 py-0.5 text-[11px] leading-snug text-white/80 shadow-none outline-none ring-0 focus-visible:border-violet-400/30 focus-visible:ring-0"
+                                    />
+                                  )}
+                                </div>
                               </div>
+                            </div>
+                          ) : (
+                            <div className="mt-1.5 space-y-2.5 pb-0.5">
+                              {(
+                                [
+                                  { key: "motion" as const, label: "Motion" },
+                                  { key: "dialogue" as const, label: "Dialogue" },
+                                  { key: "ambience" as const, label: "Ambience" },
+                                ] as const
+                              ).map(({ key, label }) => {
+                                const value = videoPromptSections[key];
+                                const expanded = videoPromptExpandedKey === key;
+                                const display = value.trim();
+                                return (
+                                  <div key={key} className="flex min-w-0 items-start gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setVideoPromptExpandedKey((k) => (k === key ? null : key))
+                                      }
+                                      className="w-[4.75rem] shrink-0 pt-0.5 text-left text-[10px] font-semibold uppercase tracking-wide text-white/40 transition hover:text-white/60"
+                                    >
+                                      {label}
+                                    </button>
+                                    <div className="min-w-0 flex-1">
+                                      {!expanded ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => setVideoPromptExpandedKey(key)}
+                                          className="w-full rounded-md px-1 py-0.5 text-left transition hover:bg-white/[0.03]"
+                                        >
+                                          <p className="line-clamp-3 whitespace-pre-wrap text-[11px] leading-snug text-white/60">
+                                            {display || "Tap to edit…"}
+                                          </p>
+                                        </button>
+                                      ) : (
+                                        <Textarea
+                                          value={value}
+                                          onChange={(e) => patchVideoPromptSection({ [key]: e.target.value })}
+                                          rows={Math.max(3, Math.min(12, value.split("\n").length + 2))}
+                                          spellCheck
+                                          onKeyDown={(e) => {
+                                            if (e.key === "Escape") {
+                                              e.preventDefault();
+                                              setVideoPromptExpandedKey(null);
+                                            }
+                                          }}
+                                          className="min-h-[4.5rem] w-full resize-y border-0 border-b border-white/[0.07] bg-transparent px-1 py-0.5 text-[11px] leading-snug text-white/80 shadow-none outline-none ring-0 focus-visible:border-violet-400/30 focus-visible:ring-0"
+                                        />
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                          <Button
+                            type="button"
+                            disabled={isKlingSubmitting || Boolean(klingPollTaskId) || !mergedVideoPromptDraft}
+                            onClick={() => void handleConfirmVideoGeneration()}
+                            className={`mt-3 h-9 w-full max-w-sm text-sm ${primaryBtnClass}`}
+                          >
+                            {isKlingSubmitting || klingPollTaskId ? (
+                              <span className="inline-flex items-center gap-2 text-sm font-semibold">
+                                <Loader2 className="h-4 w-4 animate-spin" /> Working…
+                              </span>
+                            ) : klingVideoUrl ? (
+                              <span className="inline-flex items-center gap-2 text-sm font-semibold">
+                                <RefreshCw className="h-4 w-4" /> Regenerate video
+                              </span>
                             ) : (
-                              <div className="space-y-2">
-                                <div className="space-y-0.5">
-                                  <Label className="text-[9px] font-medium text-white/40">Motion</Label>
-                                  <Textarea
-                                    value={videoPromptSections.motion}
-                                    onChange={(e) =>
-                                      setVideoPromptSections((prev) => ({ ...prev, motion: e.target.value }))
-                                    }
-                                    className="min-h-[100px] border-white/10 bg-black/30 text-[11px] leading-snug text-white/80"
-                                    spellCheck
-                                  />
-                                </div>
-                                <div className="space-y-0.5">
-                                  <Label className="text-[9px] font-medium text-white/40">Dialogue</Label>
-                                  <Textarea
-                                    value={videoPromptSections.dialogue}
-                                    onChange={(e) =>
-                                      setVideoPromptSections((prev) => ({ ...prev, dialogue: e.target.value }))
-                                    }
-                                    className="min-h-[100px] border-white/10 bg-black/30 text-[11px] leading-snug text-white/80"
-                                    spellCheck
-                                  />
-                                </div>
-                                <div className="space-y-0.5">
-                                  <Label className="text-[9px] font-medium text-white/40">Ambience</Label>
-                                  <Textarea
-                                    value={videoPromptSections.ambience}
-                                    onChange={(e) =>
-                                      setVideoPromptSections((prev) => ({ ...prev, ambience: e.target.value }))
-                                    }
-                                    className="min-h-[72px] border-white/10 bg-black/30 text-[11px] leading-snug text-white/80"
-                                    spellCheck
-                                  />
-                                </div>
-                              </div>
+                              <span className="inline-flex items-center gap-2 text-sm font-semibold">
+                                <Video className="h-4 w-4" /> Generate video
+                              </span>
                             )}
-                            <Button
-                              type="button"
-                              disabled={isKlingSubmitting || Boolean(klingPollTaskId) || !mergedVideoPromptDraft}
-                              onClick={() => void handleConfirmVideoGeneration()}
-                              className={`h-9 w-full max-w-sm text-sm ${primaryBtnClass}`}
-                            >
-                              {isKlingSubmitting || klingPollTaskId ? (
-                                <span className="inline-flex items-center gap-2 text-sm font-semibold">
-                                  <Loader2 className="h-4 w-4 animate-spin" /> Working…
-                                </span>
-                              ) : klingVideoUrl ? (
-                                <span className="inline-flex items-center gap-2 text-sm font-semibold">
-                                  <RefreshCw className="h-4 w-4" /> Regenerate video
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-2 text-sm font-semibold">
-                                  <Video className="h-4 w-4" /> Generate video
-                                </span>
-                              )}
-                            </Button>
-                          </div>
-                        </details>
+                          </Button>
+                        </div>
                       ) : null}
                       <div className="rounded-xl border border-white/10 bg-black/20 p-4">
                         {isVideoPromptLoading ? (
