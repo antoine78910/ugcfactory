@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { toast } from "sonner";
 import { Check, X, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -9,6 +10,7 @@ import {
   useCreditsPlan,
 } from "@/app/_components/CreditsPlanContext";
 import type { SubscriptionPlanId } from "@/lib/stripe/subscriptionPrices";
+import { openStripeBillingPortal } from "@/lib/stripe/openBillingPortalClient";
 
 function UpgradeModal({
   currentPlanId,
@@ -17,7 +19,7 @@ function UpgradeModal({
 }: {
   currentPlanId: AccountPlanId;
   onClose: () => void;
-  onSelectPlan: (id: SubscriptionPlanId) => void;
+  onSelectPlan: (id: SubscriptionPlanId) => void | Promise<void>;
 }) {
   const { subscriptionTiers: PLANS } = useCreditsPlan();
   const currentIdx =
@@ -167,7 +169,17 @@ export default function CreditLowBanner() {
         <UpgradeModal
           currentPlanId={planId}
           onClose={() => setShowModal(false)}
-          onSelectPlan={(id) => {
+          onSelectPlan={async (id) => {
+            if (planId !== "free") {
+              try {
+                await openStripeBillingPortal();
+                setShowModal(false);
+                setDismissed(false);
+              } catch (e) {
+                toast.error(e instanceof Error ? e.message : "Could not open billing portal");
+              }
+              return;
+            }
             setSubscriptionPlan(id);
             setShowModal(false);
             setDismissed(false);

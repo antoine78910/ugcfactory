@@ -1,7 +1,9 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { useState } from "react";
 import Link from "next/link";
+import { toast } from "sonner";
 import { Dialog } from "radix-ui";
 import { Check, Coins, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -20,6 +22,7 @@ import {
   studioVideoEditPickerDisplayLabel,
   upgradePlanMessage,
 } from "@/lib/subscriptionModelAccess";
+import { openStripeBillingPortal } from "@/lib/stripe/openBillingPortalClient";
 
 function creditLabel(n: number): string {
   return n === 1 ? "credit" : "credits";
@@ -39,6 +42,20 @@ type Props = {
 };
 
 export function StudioBillingDialog({ open, onOpenChange, planId, studioMode, variant }: Props) {
+  const [portalLoading, setPortalLoading] = useState(false);
+  const isPaid = planId !== "free";
+
+  const goToBillingManagement = async () => {
+    setPortalLoading(true);
+    try {
+      await openStripeBillingPortal();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not open billing portal");
+    } finally {
+      setPortalLoading(false);
+    }
+  };
+
   const isPlan = variant.kind === "plan";
   const allowed =
     studioMode === "video"
@@ -132,18 +149,30 @@ export function StudioBillingDialog({ open, onOpenChange, planId, studioMode, va
                     Close
                   </Button>
                 </Dialog.Close>
-                <Dialog.Close asChild>
+                {isPaid ? (
                   <Button
                     type="button"
+                    disabled={portalLoading}
+                    onClick={() => void goToBillingManagement()}
                     className="h-10 gap-2 rounded-xl border border-violet-400/35 bg-violet-500 text-white shadow-[0_0_24px_rgba(139,92,246,0.2)] hover:bg-violet-400"
-                    asChild
                   >
-                    <Link href="/subscription">
-                      <Sparkles className="h-4 w-4 opacity-90" />
-                      View plans
-                    </Link>
+                    <Sparkles className="h-4 w-4 opacity-90" aria-hidden />
+                    {portalLoading ? "Opening…" : "Change plan"}
                   </Button>
-                </Dialog.Close>
+                ) : (
+                  <Dialog.Close asChild>
+                    <Button
+                      type="button"
+                      className="h-10 gap-2 rounded-xl border border-violet-400/35 bg-violet-500 text-white shadow-[0_0_24px_rgba(139,92,246,0.2)] hover:bg-violet-400"
+                      asChild
+                    >
+                      <Link href="/subscription">
+                        <Sparkles className="h-4 w-4 opacity-90" aria-hidden />
+                        View plans
+                      </Link>
+                    </Button>
+                  </Dialog.Close>
+                )}
               </div>
             </div>
           ) : (
@@ -195,15 +224,26 @@ export function StudioBillingDialog({ open, onOpenChange, planId, studioMode, va
                     </Link>
                   </Button>
                 </Dialog.Close>
-                <Dialog.Close asChild>
+                {isPaid ? (
                   <Button
                     type="button"
+                    disabled={portalLoading}
+                    onClick={() => void goToBillingManagement()}
                     className="h-10 w-full rounded-xl border border-white/[0.08] bg-transparent text-sm font-medium text-white/70 transition hover:bg-white/[0.05] hover:text-white"
-                    asChild
                   >
-                    <Link href="/subscription">View subscription plans</Link>
+                    {portalLoading ? "Opening…" : "Manage subscription"}
                   </Button>
-                </Dialog.Close>
+                ) : (
+                  <Dialog.Close asChild>
+                    <Button
+                      type="button"
+                      className="h-10 w-full rounded-xl border border-white/[0.08] bg-transparent text-sm font-medium text-white/70 transition hover:bg-white/[0.05] hover:text-white"
+                      asChild
+                    >
+                      <Link href="/subscription">View subscription plans</Link>
+                    </Button>
+                  </Dialog.Close>
+                )}
                 <Dialog.Close asChild>
                   <Button
                     type="button"

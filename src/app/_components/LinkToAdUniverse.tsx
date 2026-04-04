@@ -479,13 +479,16 @@ function LinkToAdRecentRunsToggle({
   hidePreviousLtaGenerations,
   onToggle,
   reduceMotion,
+  compact,
 }: {
   hidePreviousLtaGenerations: boolean;
   onToggle: () => void;
   reduceMotion: boolean;
+  compact?: boolean;
 }) {
+  const knob = compact ? 16 : 20;
   return (
-    <div className="flex items-center gap-2.5">
+    <div className={cn("flex items-center", compact ? "gap-1.5" : "gap-2.5")}>
       <button
         type="button"
         role="switch"
@@ -497,18 +500,22 @@ function LinkToAdRecentRunsToggle({
         }
         onClick={onToggle}
         className={cn(
-          "group relative flex h-8 shrink-0 items-center rounded-full border px-1 transition-[border-color,background-color,box-shadow] duration-300",
+          "group relative flex shrink-0 items-center rounded-full border px-1 transition-[border-color,background-color,box-shadow] duration-300",
+          compact ? "h-7 w-[2.75rem]" : "h-8 w-[3.25rem]",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0912]",
           hidePreviousLtaGenerations
-            ? "w-[3.25rem] border-violet-400/40 bg-gradient-to-r from-violet-500/30 to-violet-600/20 shadow-[0_0_20px_rgba(139,92,246,0.15)]"
-            : "w-[3.25rem] border-white/12 bg-black/40 hover:border-white/18 hover:bg-white/[0.05]",
+            ? "border-violet-400/40 bg-gradient-to-r from-violet-500/30 to-violet-600/20 shadow-[0_0_20px_rgba(139,92,246,0.15)]"
+            : "border-white/12 bg-black/40 hover:border-white/18 hover:bg-white/[0.05]",
         )}
       >
         <motion.span
-          className="pointer-events-none flex h-6 w-6 items-center justify-center rounded-full bg-white text-[#1a1025] shadow-md"
+          className={cn(
+            "pointer-events-none flex items-center justify-center rounded-full bg-white text-[#1a1025] shadow-md",
+            compact ? "h-5 w-5" : "h-6 w-6",
+          )}
           initial={false}
           animate={{
-            x: hidePreviousLtaGenerations ? 20 : 0,
+            x: hidePreviousLtaGenerations ? knob : 0,
             scale: hidePreviousLtaGenerations ? 0.92 : 1,
           }}
           transition={
@@ -516,17 +523,25 @@ function LinkToAdRecentRunsToggle({
           }
         >
           {hidePreviousLtaGenerations ? (
-            <EyeOff className="h-3.5 w-3.5 opacity-80" aria-hidden />
+            <EyeOff className={compact ? "h-3 w-3 opacity-80" : "h-3.5 w-3.5 opacity-80"} aria-hidden />
           ) : (
-            <Eye className="h-3.5 w-3.5 opacity-90" aria-hidden />
+            <Eye className={compact ? "h-3 w-3 opacity-90" : "h-3.5 w-3.5 opacity-90"} aria-hidden />
           )}
         </motion.span>
       </button>
       <div className="flex min-w-0 flex-col items-start leading-tight">
-        <span className="text-[10px] font-semibold uppercase tracking-wide text-white/50">Previous runs</span>
         <span
           className={cn(
-            "text-[11px] font-medium transition-colors duration-300",
+            "font-semibold uppercase tracking-wide text-white/50",
+            compact ? "text-[8px]" : "text-[10px]",
+          )}
+        >
+          Previous runs
+        </span>
+        <span
+          className={cn(
+            "font-medium transition-colors duration-300",
+            compact ? "text-[9px]" : "text-[11px]",
             hidePreviousLtaGenerations ? "text-white/35" : "text-violet-200/85",
           )}
         >
@@ -544,6 +559,7 @@ function LinkToAdRecentRunsChips({
   universeRunId,
   onSelectRun,
   reduceMotion,
+  compact,
 }: {
   recentLinkToAdRuns: LinkToAdRecentRunChip[];
   hidePreviousLtaGenerations: boolean;
@@ -551,6 +567,7 @@ function LinkToAdRecentRunsChips({
   universeRunId: string | null;
   onSelectRun: (id: string) => void;
   reduceMotion: boolean;
+  compact?: boolean;
 }) {
   return (
     <AnimatePresence initial={false}>
@@ -563,12 +580,19 @@ function LinkToAdRecentRunsChips({
           transition={reduceMotion ? { duration: 0.15 } : { duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
           className="origin-top overflow-hidden"
         >
-          <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2.5">
-            <p className="text-[10px] leading-snug text-white/45">
-              All your Link to Ad generations are stored in your projects — switch between your last three here, or open
-              Projects for the full list.
-            </p>
-            <div className="mt-2 flex flex-wrap gap-2">
+          <div
+            className={cn(
+              "border border-white/10 bg-black/20",
+              compact ? "rounded-lg px-2 py-1.5" : "rounded-xl px-3 py-2.5",
+            )}
+          >
+            {!compact ? (
+              <p className="text-[10px] leading-snug text-white/45">
+                All your Link to Ad generations are stored in your projects — switch between your last three here, or open
+                Projects for the full list.
+              </p>
+            ) : null}
+            <div className={cn("flex flex-wrap gap-2", !compact && "mt-2")}>
               {recentLinkToAdRuns.map((r, i) => {
                 const active = (activeRunIdProp ?? universeRunId) === r.id;
                 const label =
@@ -602,13 +626,19 @@ function LinkToAdRecentRunsChips({
                     }
                     onClick={() => onSelectRun(r.id)}
                     className={cn(
-                      "flex min-w-0 max-w-[11rem] items-center gap-2 rounded-lg border px-2 py-1.5 text-left transition-colors",
+                      "flex min-w-0 items-center gap-2 rounded-lg border text-left transition-colors",
+                      compact ? "max-w-[9.5rem] gap-1.5 px-1.5 py-1" : "max-w-[11rem] px-2 py-1.5 gap-2",
                       active
                         ? "border-violet-400/50 bg-violet-500/15 text-white"
                         : "border-white/10 bg-white/[0.03] text-white/75 hover:border-violet-400/35 hover:bg-white/[0.05]",
                     )}
                   >
-                    <span className="relative h-9 w-9 shrink-0 overflow-hidden rounded-md border border-white/10 bg-black/40">
+                    <span
+                      className={cn(
+                        "relative shrink-0 overflow-hidden rounded-md border border-white/10 bg-black/40",
+                        compact ? "h-7 w-7" : "h-9 w-9",
+                      )}
+                    >
                       {r.thumbUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={r.thumbUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
@@ -617,8 +647,15 @@ function LinkToAdRecentRunsChips({
                       )}
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[11px] font-semibold leading-tight">{label}</span>
-                      <span className="text-[9px] text-white/40">{dateShort}</span>
+                      <span
+                        className={cn(
+                          "block truncate font-semibold leading-tight",
+                          compact ? "text-[10px]" : "text-[11px]",
+                        )}
+                      >
+                        {label}
+                      </span>
+                      <span className={cn("text-white/40", compact ? "text-[8px]" : "text-[9px]")}>{dateShort}</span>
                     </span>
                   </motion.button>
                 );
@@ -1062,6 +1099,17 @@ export default function LinkToAdUniverse({
   const nanoThreeAbortRef = useRef<AbortController | null>(null);
   const videoPromptAbortRef = useRef<AbortController | null>(null);
   const klingAbortRef = useRef<AbortController | null>(null);
+  /** Debounced auto-save for angle summary edits (View full script). */
+  const angleSummarySaveTimersRef = useRef<Partial<Record<number, ReturnType<typeof setTimeout>>>>({});
+
+  useEffect(() => {
+    const ref = angleSummarySaveTimersRef;
+    return () => {
+      Object.values(ref.current).forEach((t) => {
+        if (t) clearTimeout(t);
+      });
+    };
+  }, []);
 
   const hydrateVideoPromptFromStored = useCallback((full: string) => {
     const raw = full.replace(/\r\n/g, "\n").trim();
@@ -2234,11 +2282,11 @@ export default function LinkToAdUniverse({
     };
   }
 
-  const saveAngleSummaryEdit = useCallback(
-    (index: number) => {
-      const draft = (angleSummaryDrafts[index] ?? "").trim();
+  const applyAngleSummaryEdit = useCallback(
+    (index: number, opts?: { silent?: boolean; draft?: string }) => {
+      const draft = (opts?.draft ?? angleSummaryDrafts[index] ?? "").trim();
       if (!draft) {
-        toast.error("Script cannot be empty.");
+        if (!opts?.silent) toast.error("Script cannot be empty.");
         return;
       }
 
@@ -2272,7 +2320,7 @@ export default function LinkToAdUniverse({
         setScriptHasEdits(true);
       }
 
-      toast.success(`Angle ${index + 1} updated.`);
+      if (!opts?.silent) toast.success(`Angle ${index + 1} updated.`);
     },
     [
       angleSummaryDrafts,
@@ -2284,6 +2332,18 @@ export default function LinkToAdUniverse({
       setScriptFactors,
       setScriptHasEdits,
     ],
+  );
+
+  const scheduleAngleSummaryPersist = useCallback(
+    (index: number, draft: string) => {
+      const prev = angleSummarySaveTimersRef.current[index];
+      if (prev) clearTimeout(prev);
+      angleSummarySaveTimersRef.current[index] = setTimeout(() => {
+        applyAngleSummaryEdit(index, { silent: true, draft });
+        delete angleSummarySaveTimersRef.current[index];
+      }, 550);
+    },
+    [applyAngleSummaryEdit],
   );
 
   function discardPendingCustomAngle() {
@@ -3326,6 +3386,8 @@ export default function LinkToAdUniverse({
       return;
     }
 
+    setIsNanoAllImagesSubmitting(true);
+
     // If the user changed product/persona reference images since we last generated prompts,
     // regenerate the 3 NanoBanana prompts so the “New 3 images” takes the latest refs into account.
     const selectedScript = selectedScriptOptionByIndex(scriptsText, idx);
@@ -3343,7 +3405,10 @@ export default function LinkToAdUniverse({
     let prompts: [string, string, string];
     if (!signatureMatches) {
       const nextPrompts = await onGenerateNanoBananaPrompts(idx);
-      if (!nextPrompts) return;
+      if (!nextPrompts) {
+        setIsNanoAllImagesSubmitting(false);
+        return;
+      }
       promptsText = nextPrompts;
       prompts = parseThreeLabeledPrompts(promptsText).map((p) => {
         const { editable, technicalTail } = splitNanoPromptBodyForEditing(p);
@@ -3355,6 +3420,7 @@ export default function LinkToAdUniverse({
 
     if (!prompts[0] || !prompts[1] || !prompts[2]) {
       toast.error("Some image prompts are missing.");
+      setIsNanoAllImagesSubmitting(false);
       return;
     }
 
@@ -3372,8 +3438,6 @@ export default function LinkToAdUniverse({
     hydrateVideoPromptFromStored("");
     setUserStartedVideoFromImage(false);
     setVideoStageMode(false);
-
-    setIsNanoAllImagesSubmitting(true);
 
     // Persist "generation started" to DB so the loading state survives navigation.
     {
@@ -4302,7 +4366,36 @@ export default function LinkToAdUniverse({
       </CardHeader>
 
       <CardContent className="space-y-6">
-        <LinkToAdUniverseStepper currentStep={universeCurrentStep} />
+        <div className="space-y-2">
+          {!showBrandHeaderInsteadOfUrl && recentLinkToAdRuns.length > 0 ? (
+            <div className="rounded-lg border border-violet-500/15 bg-violet-500/[0.05] px-2.5 py-2">
+              <p className="text-[9px] font-semibold uppercase tracking-wide text-violet-200/85">Recent projects</p>
+              <p className="mt-0.5 text-[9px] leading-snug text-white/40">
+                Tap a project to continue where you left off, or enter a new URL below.
+              </p>
+              <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-3">
+                <LinkToAdRecentRunsToggle
+                  compact
+                  hidePreviousLtaGenerations={hidePreviousLtaGenerations}
+                  onToggle={toggleHidePreviousLtaGenerations}
+                  reduceMotion={reduceMotion ?? false}
+                />
+                <div className="min-w-0 flex-1">
+                  <LinkToAdRecentRunsChips
+                    compact
+                    recentLinkToAdRuns={recentLinkToAdRuns}
+                    hidePreviousLtaGenerations={hidePreviousLtaGenerations}
+                    activeRunIdProp={activeRunIdProp}
+                    universeRunId={universeRunId}
+                    onSelectRun={handleSwitchRecentRun}
+                    reduceMotion={reduceMotion ?? false}
+                  />
+                </div>
+              </div>
+            </div>
+          ) : null}
+          <LinkToAdUniverseStepper currentStep={universeCurrentStep} />
+        </div>
         {showTopUniverseLoading ? (
           <div className="-mt-2 mb-2 flex min-h-[4.25rem] items-center gap-3 rounded-xl border border-violet-500/15 bg-violet-500/[0.06] px-3 py-3 sm:gap-4 sm:px-4 shadow-[0_0_24px_rgba(139,92,246,0.12)]">
             {isWorking &&
@@ -4472,29 +4565,6 @@ export default function LinkToAdUniverse({
                       </div>
                     </div>
                   ) : null}
-                </div>
-              ) : null}
-              {!showBrandHeaderInsteadOfUrl && recentLinkToAdRuns.length > 0 ? (
-                <div className="mt-3 space-y-2 rounded-xl border border-violet-500/20 bg-violet-500/[0.07] px-3 py-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-200/90">
-                    Recent projects
-                  </p>
-                  <p className="text-[10px] leading-snug text-white/45">
-                    Tap a project to continue where you left off, or enter a new URL below.
-                  </p>
-                  <LinkToAdRecentRunsToggle
-                    hidePreviousLtaGenerations={hidePreviousLtaGenerations}
-                    onToggle={toggleHidePreviousLtaGenerations}
-                    reduceMotion={reduceMotion ?? false}
-                  />
-                  <LinkToAdRecentRunsChips
-                    recentLinkToAdRuns={recentLinkToAdRuns}
-                    hidePreviousLtaGenerations={hidePreviousLtaGenerations}
-                    activeRunIdProp={activeRunIdProp}
-                    universeRunId={universeRunId}
-                    onSelectRun={handleSwitchRecentRun}
-                    reduceMotion={reduceMotion ?? false}
-                  />
                 </div>
               ) : null}
               <div className="relative mt-2 flex flex-col gap-3 sm:flex-row sm:items-stretch">
@@ -5474,7 +5544,16 @@ export default function LinkToAdUniverse({
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  if (!Boolean(expandedAngleScripts[i])) {
+                                  const wasExpanded = Boolean(expandedAngleScripts[i]);
+                                  if (wasExpanded) {
+                                    const t = angleSummarySaveTimersRef.current[i];
+                                    if (t) {
+                                      clearTimeout(t);
+                                      delete angleSummarySaveTimersRef.current[i];
+                                    }
+                                    const d = angleSummaryDrafts[i];
+                                    if (d !== undefined) applyAngleSummaryEdit(i, { silent: true, draft: d });
+                                  } else {
                                     setAngleSummaryDrafts((prev) => ({
                                       ...prev,
                                       [i]: angleFullSummaryFromScriptOption(fullScript),
@@ -5497,23 +5576,14 @@ export default function LinkToAdUniverse({
                               <div className="mt-2 space-y-2 border-t border-white/10 pt-2">
                                 <Textarea
                                   value={angleSummaryDrafts[i] ?? summary}
-                                  onChange={(e) => setAngleSummaryDrafts((prev) => ({ ...prev, [i]: e.target.value }))}
+                                  onChange={(e) => {
+                                    const v = e.target.value;
+                                    setAngleSummaryDrafts((prev) => ({ ...prev, [i]: v }));
+                                    scheduleAngleSummaryPersist(i, v);
+                                  }}
                                   className="min-h-[120px] border-white/10 bg-black/25 text-xs leading-relaxed text-white/85"
                                   spellCheck
                                 />
-                                <div className="flex justify-end">
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      saveAngleSummaryEdit(i);
-                                    }}
-                                    className="h-8 rounded-lg border border-emerald-400/35 bg-emerald-500/20 px-3 text-xs text-white hover:bg-emerald-500/35"
-                                  >
-                                    Save
-                                  </Button>
-                                </div>
                               </div>
                             ) : null}
                           </div>
@@ -5606,8 +5676,8 @@ export default function LinkToAdUniverse({
                                 <div className="mt-1.5 space-y-2.5 pb-0.5">
                                   {(
                                     [
-                                      { key: "person" as const, label: "Person", value: parsed.person },
-                                      { key: "avatar" as const, label: "Avatar", value: parsed.product },
+                                      { key: "person" as const, label: "Avatar", value: parsed.person },
+                                      { key: "avatar" as const, label: "Shot", value: parsed.product },
                                       { key: "scene" as const, label: "Scene", value: parsed.scene },
                                     ] as const
                                   ).map(({ key, label, value }) => {

@@ -741,7 +741,7 @@ export function parseNanoEditableSections(editable: string): NanoEditableSection
   if (!raw.trim()) {
     return { person: "", scene: "", product: "", isStructured: false };
   }
-  if (!/EDIT\s*[—:-]\s*Person/im.test(raw)) {
+  if (!/EDIT\s*[—:-]\s*(?:Person|Avatar)\b/im.test(raw)) {
     return {
       person: stripInlineTechnicalNoiseFromNanoSection(raw.trim()),
       scene: "",
@@ -753,15 +753,17 @@ export function parseNanoEditableSections(editable: string): NanoEditableSection
   const editHdr = (label: string) =>
     `\\*{0,2}EDIT\\s*[—:-]\\s*${label}\\*{0,2}\\s*:?\\*{0,2}\\s*\\n?\\s*`;
 
-  const personM = raw.match(
-    new RegExp(editHdr("Person") + `([\\s\\S]*?)${NANO_SECTION_END_LA}`, "i"),
-  );
+  const personM =
+    raw.match(new RegExp(editHdr("Avatar") + `([\\s\\S]*?)${NANO_SECTION_END_LA}`, "i")) ||
+    raw.match(new RegExp(editHdr("Person") + `([\\s\\S]*?)${NANO_SECTION_END_LA}`, "i"));
   const sceneM = raw.match(
     new RegExp(editHdr("Scene") + `([\\s\\S]*?)${NANO_SECTION_END_LA}`, "i"),
   );
-  const productM = raw.match(
-    new RegExp(editHdr("Product(?:\\s*(?:&|and)\\s*action)?") + `([\\s\\S]*?)${NANO_SECTION_END_LA}`, "i"),
-  );
+  const productM =
+    raw.match(new RegExp(editHdr("Shot") + `([\\s\\S]*?)${NANO_SECTION_END_LA}`, "i")) ||
+    raw.match(
+      new RegExp(editHdr("Product(?:\\s*(?:&|and)\\s*action)?") + `([\\s\\S]*?)${NANO_SECTION_END_LA}`, "i"),
+    );
   return {
     person: stripInlineTechnicalNoiseFromNanoSection(personM?.[1]?.trim() ?? ""),
     scene: stripInlineTechnicalNoiseFromNanoSection(sceneM?.[1]?.trim() ?? ""),
@@ -775,9 +777,9 @@ export function composeNanoEditableSections(parts: NanoEditableSections): string
   const s = parts.scene.replace(/\r\n/g, "\n").trim();
   const pr = parts.product.replace(/\r\n/g, "\n").trim();
   const lines: string[] = [];
-  if (p) lines.push(`EDIT — Person:\n${p}`);
+  if (p) lines.push(`EDIT — Avatar:\n${p}`);
   if (s) lines.push(`EDIT — Scene:\n${s}`);
-  if (pr) lines.push(`EDIT — Product & action:\n${pr}`);
+  if (pr) lines.push(`EDIT — Shot:\n${pr}`);
   return lines.join("\n\n");
 }
 

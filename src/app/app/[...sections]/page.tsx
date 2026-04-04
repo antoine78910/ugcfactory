@@ -4121,7 +4121,7 @@ export default function AppBrandWizard() {
                             {block.isStructured ? (
                               <div className="space-y-2">
                                 <div>
-                                  <div className="text-[11px] font-semibold text-white/70">Avatar / person</div>
+                                  <div className="text-[11px] font-semibold text-white/70">Avatar</div>
                                   <div className="whitespace-pre-wrap text-muted-foreground">{block.avatar || "—"}</div>
                                 </div>
                                 <div>
@@ -4129,7 +4129,7 @@ export default function AppBrandWizard() {
                                   <div className="whitespace-pre-wrap text-muted-foreground">{block.scene || "—"}</div>
                                 </div>
                                 <div>
-                                  <div className="text-[11px] font-semibold text-white/70">Product & action</div>
+                                  <div className="text-[11px] font-semibold text-white/70">Shot</div>
                                   <div className="whitespace-pre-wrap text-muted-foreground">{block.product || "—"}</div>
                                 </div>
                               </div>

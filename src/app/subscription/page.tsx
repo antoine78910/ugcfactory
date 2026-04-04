@@ -22,11 +22,9 @@ import {
   subscriptionPlanSortIndex,
   type SubscriptionPlanId,
 } from "@/lib/stripe/subscriptionPrices";
+import { openStripeBillingPortal } from "@/lib/stripe/openBillingPortalClient";
 
 type Billing = "monthly" | "yearly";
-const BILLING_PORTAL_URL =
-  process.env.NEXT_PUBLIC_STRIPE_BILLING_PORTAL_URL ??
-  "https://billing.stripe.com/p/login/14A00icKheIV9ws8ZNfUQ00";
 
 type PlanDef = {
   id: string;
@@ -96,6 +94,7 @@ const PLANS: PlanDef[] = [
 export default function SubscriptionPage() {
   const [billing, setBilling] = useState<Billing>("monthly");
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
+  const [portalLoading, setPortalLoading] = useState(false);
   /** Stripe subscription billing from DB; null = free, unknown, or not loaded yet. */
   const [serverSubBilling, setServerSubBilling] = useState<"monthly" | "yearly" | null | "pending">(
     "pending",
@@ -144,6 +143,17 @@ export default function SubscriptionPage() {
       if (!applied) window.history.replaceState({}, "", "/subscription");
     }
   }, []);
+
+  async function goToBillingManagement() {
+    setPortalLoading(true);
+    try {
+      await openStripeBillingPortal();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not open billing portal");
+    } finally {
+      setPortalLoading(false);
+    }
+  }
 
   async function startSubscriptionCheckout(planIdCheckout: string) {
     setCheckoutLoading(planIdCheckout);
@@ -354,11 +364,18 @@ export default function SubscriptionPage() {
                       type="button"
                       disabled={
                         Boolean(checkoutLoading) ||
+                        portalLoading ||
                         exactPlanAndBilling ||
                         isLowerTier ||
                         (isSameTier && serverSubBilling === "pending")
                       }
-                      onClick={() => void startSubscriptionCheckout(plan.id)}
+                      onClick={() => {
+                        if (isSubscribed) {
+                          void goToBillingManagement();
+                          return;
+                        }
+                        void startSubscriptionCheckout(plan.id);
+                      }}
                       className={cn(
                         "mt-3 h-10 w-full rounded-xl text-sm font-bold transition-all sm:h-11",
                         exactPlanAndBilling || isLowerTier
@@ -368,7 +385,9 @@ export default function SubscriptionPage() {
                             : "border border-white/15 bg-white/10 text-white hover:bg-white/15",
                       )}
                     >
-                      {checkoutLoading === plan.id ? (
+                      {portalLoading ? (
+                        "Opening billing…"
+                      ) : checkoutLoading === plan.id ? (
                         "Redirecting…"
                       ) : isSameTier && serverSubBilling === "pending" ? (
                         "Loading…"
@@ -480,12 +499,11 @@ export default function SubscriptionPage() {
                         <Button
                           type="button"
                           variant="secondary"
+                          disabled={portalLoading}
                           className="w-full rounded-xl border border-white/15 bg-white/5 text-white hover:bg-white/10 sm:w-auto"
-                          onClick={() =>
-                            window.open(BILLING_PORTAL_URL, "_blank", "noopener,noreferrer")
-                          }
+                          onClick={() => void goToBillingManagement()}
                         >
-                          Manage billing
+                          {portalLoading ? "Opening…" : "Manage billing"}
                         </Button>
                       </div>
                     ) : null}

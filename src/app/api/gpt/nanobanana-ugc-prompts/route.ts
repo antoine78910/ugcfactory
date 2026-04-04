@@ -477,7 +477,7 @@ PROMPT 3
 
 Inside EACH block, use EXACTLY these headings (use an em dash in EDIT lines as shown):
 
-EDIT — Person:
+EDIT — Avatar:
 → 2–5 short sentences only: face, skin texture, hair, one unique trait, clothing + accessories.
 → If avatar_source = REFERENCE IMAGE: match the reference; otherwise follow TEXT GENERATED rules.
 → Do NOT include lighting, camera, lens, resolution, quality, “smartphone”, “9:16”, ISO, HDR, or preservation here.
@@ -485,7 +485,7 @@ EDIT — Person:
 EDIT — Scene:
 → 1–3 sentences: location, time of day, mood, minimum three imperfect environment details.
 
-EDIT — Product & action:
+EDIT — Shot:
 → 1–4 sentences: how the product is held or used (match product_state + script), expression matching the script hook.
 
 TECHNICAL:
@@ -548,7 +548,7 @@ export async function POST(req: Request) {
   const developer = [
     "Follow the instructions in the user message exactly.",
     "Output only PROMPT 1, PROMPT 2, and PROMPT 3.",
-    "Each PROMPT block MUST use this exact structure: three EDIT sections (Person / Scene / Product & action), one TECHNICAL section, then NEGATIVE PROMPT. Labels must match exactly (EDIT — Person:, EDIT — Scene:, EDIT — Product & action:, TECHNICAL:, NEGATIVE PROMPT:). No preamble, no reasoning.",
+    "Each PROMPT block MUST use this exact structure: three EDIT sections (Avatar / Scene / Shot), one TECHNICAL section, then NEGATIVE PROMPT. Labels must match exactly (EDIT — Avatar:, EDIT — Scene:, EDIT — Shot:, TECHNICAL:, NEGATIVE PROMPT:). No preamble, no reasoning.",
   ].join("\n");
 
   const userText = [
