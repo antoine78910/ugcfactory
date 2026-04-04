@@ -14,6 +14,9 @@ export const STUDIO_GENERATION_KIND_LINK_TO_AD_VIDEO = "link_to_ad_video" as con
 /** Translate tab final videos (WaveSpeed) — kept separate from Motion Control history. */
 export const STUDIO_GENERATION_KIND_STUDIO_TRANSLATE_VIDEO = "studio_translate_video" as const;
 
+/** Voice change outputs (ElevenLabs) — separate from Translate history. */
+export const STUDIO_GENERATION_KIND_VOICE_CHANGE = "studio_voice_change" as const;
+
 /**
  * Max rows for Create tab list queries (`kind=avatar`, `studio_image,studio_upscale`, video kinds, etc.).
  * Single global ORDER+LIMIT was too small for heavy users.
@@ -40,6 +43,7 @@ export const STUDIO_LIBRARY_KINDS = [
   "studio_upscale",
   "motion_control",
   STUDIO_GENERATION_KIND_STUDIO_TRANSLATE_VIDEO,
+  STUDIO_GENERATION_KIND_VOICE_CHANGE,
   "studio_watermark",
 ] as const;
 

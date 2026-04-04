@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Download, FolderOpen, Info, LayoutGrid, List, Loader2, Maximize2, Mic, Sparkles, Trash2, Volume2, Wand2, X } from "lucide-react";
+import { Download, FolderOpen, Info, LayoutGrid, List, Loader2, Mic, Sparkles, Trash2, Volume2, Wand2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -320,26 +320,6 @@ export function StudioGenerationsHistory({
       !isProbablyAudioUrl(lightboxItem.url),
   );
 
-  const openLightboxVideoFullscreen = useCallback(() => {
-    const video = lightboxVideoRef.current;
-    if (!video) return;
-    const anyVideo = video as HTMLVideoElement & { webkitEnterFullscreen?: () => void };
-    void (async () => {
-      try {
-        if (document.fullscreenElement !== video && typeof video.requestFullscreen === "function") {
-          await video.requestFullscreen();
-          return;
-        }
-      } catch {
-        /* Safari iOS fallback below */
-      }
-      try {
-        anyVideo.webkitEnterFullscreen?.();
-      } catch {
-        /* no-op */
-      }
-    })();
-  }, []);
 
   const cardWidthClass =
     view === "grid"
@@ -649,34 +629,34 @@ export function StudioGenerationsHistory({
       </div>
       {lightboxItem ? (
         <div
-          className="fixed inset-0 z-[220] flex items-center justify-center bg-black/88 p-2 backdrop-blur-[2px] transition-opacity duration-300 ease-out sm:p-4"
+          className="fixed inset-0 z-[220] flex items-center justify-center bg-black/90 p-2 backdrop-blur-sm animate-in fade-in duration-200 sm:p-4"
           onClick={() => setLightboxItem(null)}
           role="dialog"
           aria-modal="true"
-          aria-label="Fullscreen image preview"
+          aria-label="Fullscreen preview"
         >
           <button
             type="button"
-            className="absolute right-2 top-2 z-[222] inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-black/65 text-white transition-colors duration-200 hover:bg-black/85 sm:right-4 sm:top-4"
+            className="absolute right-3 top-3 z-[222] inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white/70 backdrop-blur-md transition-all duration-200 hover:bg-white/20 hover:text-white sm:right-5 sm:top-5"
             onClick={(e) => {
               e.stopPropagation();
               setLightboxItem(null);
             }}
-            aria-label="Close fullscreen image"
+            aria-label="Close preview"
           >
-            <X className="h-5 w-5" aria-hidden />
+            <X className="h-4 w-4" aria-hidden />
           </button>
           <div
             className={cn(
-              "flex min-h-0 w-full flex-col gap-4 duration-300 ease-out lg:max-h-[min(92vh,920px)] lg:flex-row lg:items-stretch lg:gap-5",
+              "flex min-h-0 w-full flex-col gap-4 lg:max-h-[min(92vh,920px)] lg:flex-row lg:items-stretch lg:gap-5",
               isLightboxVideo
                 ? "max-w-[min(1820px,calc(100vw-0.5rem))]"
                 : "max-w-[min(1400px,calc(100vw-1rem))]",
-              "translate-y-0 opacity-100 transition-[opacity,transform] motion-reduce:transition-none",
+              "animate-in fade-in slide-in-from-bottom-3 duration-300 ease-out motion-reduce:animate-none",
             )}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center rounded-2xl border border-white/[0.12] bg-gradient-to-b from-[#16161f]/90 to-black/60 p-2 shadow-[0_24px_80px_rgba(0,0,0,0.55)] transition-shadow duration-300 ease-out sm:p-4 lg:min-h-[min(88vh,900px)]">
+            <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center rounded-2xl border border-white/[0.08] bg-gradient-to-b from-[#111118]/95 to-black/70 p-2 shadow-[0_32px_100px_rgba(0,0,0,0.6)] sm:p-4 lg:min-h-[min(88vh,900px)]">
               {lightboxItem.kind === "audio" || isProbablyAudioUrl(lightboxItem.url) ? (
                 <div className="flex w-full max-w-xl flex-col items-center justify-center gap-5 rounded-2xl border border-white/[0.12] bg-[#111119] p-8">
                   <div className="flex h-20 w-20 items-center justify-center rounded-full border border-white/10 bg-white/[0.06]">
@@ -711,78 +691,66 @@ export function StudioGenerationsHistory({
 
             <aside
               className={cn(
-                "studio-sidebar-scroll flex max-h-[min(52vh,480px)] w-full shrink-0 flex-col gap-4 overflow-y-auto rounded-2xl border border-white/[0.12] bg-[#121218]/96 p-4 shadow-xl transition-[opacity,transform,box-shadow] duration-300 ease-out motion-reduce:transition-none lg:max-h-none lg:w-[min(100%,22rem)] lg:max-w-[22rem]",
+                "studio-sidebar-scroll flex max-h-[min(52vh,480px)] w-full shrink-0 flex-col gap-3 overflow-y-auto rounded-2xl border border-white/[0.08] bg-[#0e0e16]/97 p-4 shadow-2xl lg:max-h-none lg:w-[min(100%,22rem)] lg:max-w-[22rem]",
               )}
             >
-              <div className="rounded-xl border border-white/10 bg-[#14141c]/80 p-3.5">
-                <div className="mb-2 text-sm font-semibold text-white/90">Prompt</div>
-                <p className="whitespace-pre-wrap break-words text-[12px] leading-snug text-white/60">
+              <div className="rounded-xl border border-white/[0.07] bg-white/[0.03] p-3.5">
+                <div className="mb-2 text-[13px] font-semibold text-white/85">Prompt</div>
+                <p className="whitespace-pre-wrap break-words text-[12px] leading-relaxed text-white/55">
                   {lightboxItem.prompt?.trim() ? lightboxItem.prompt.trim() : "—"}
                 </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {isLightboxVideo ? (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openLightboxVideoFullscreen();
-                      }}
-                      className="inline-flex min-w-[7rem] flex-1 items-center justify-center gap-1.5 rounded-md border border-white/15 bg-white/[0.06] px-3 py-2 text-center text-[11px] font-semibold text-white/80 transition hover:bg-white/[0.1]"
-                    >
-                      <Maximize2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                      Plein ecran
-                    </button>
-                  ) : null}
-                  {isLightboxVideo && onChangeVoice ? (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const foundItem = items.find((i) => i.id === lightboxItem.sourceId);
-                        if (foundItem) {
-                          onChangeVoice(foundItem);
-                          setLightboxItem(null);
-                        }
-                      }}
-                      className="inline-flex min-w-[7rem] flex-1 items-center justify-center gap-1.5 rounded-md border border-violet-500/35 bg-violet-950/40 px-3 py-2 text-center text-[11px] font-semibold text-violet-100/90 transition hover:bg-violet-900/50"
-                    >
-                      <Mic className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                      <span className="inline-flex flex-wrap items-center justify-center gap-x-1 gap-y-0.5">
-                        <span>Change Voice</span>
-                        <span className="rounded bg-white/10 px-1.5 py-0.5 tabular-nums text-[10px] text-white/90">
-                          {VOICE_CHANGE_CREDITS_FLAT}
-                        </span>
-                        <span className="text-[10px] font-normal text-white/60">credits</span>
-                      </span>
-                    </button>
-                  ) : null}
-                  <a
-                    href={`/api/download?url=${encodeURIComponent(lightboxItem.url)}`}
-                    onClick={(e) => e.stopPropagation()}
-                    className="min-w-0 flex-1 rounded-md border border-white/15 bg-white/[0.06] px-3 py-2 text-center text-[11px] font-semibold text-white/80 transition hover:bg-white/[0.1]"
+              </div>
+
+              <div className="flex flex-col gap-2">
+                {isLightboxVideo && onChangeVoice ? (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const foundItem = items.find((i) => i.id === lightboxItem.sourceId);
+                      if (foundItem) {
+                        onChangeVoice(foundItem);
+                        setLightboxItem(null);
+                      }
+                    }}
+                    className="group/cv inline-flex w-full items-center justify-center gap-2 rounded-xl border border-violet-400/30 bg-violet-500/15 px-4 py-2.5 text-[13px] font-semibold text-violet-100 transition-all duration-200 hover:border-violet-400/50 hover:bg-violet-500/25 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)]"
                   >
-                    Download
-                  </a>
-                  {onItemDeleted ? (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const rowKind = items.find((i) => i.id === lightboxItem.sourceId)?.studioGenerationKind;
-                        void deleteHistoryEntry(lightboxItem.sourceId, rowKind);
-                      }}
-                      disabled={deletingId === lightboxItem.sourceId}
-                      className="inline-flex flex-1 min-w-[7rem] items-center justify-center gap-1.5 rounded-md border border-red-500/35 bg-red-950/40 px-3 py-2 text-center text-[11px] font-semibold text-red-100/90 transition hover:bg-red-900/50 disabled:opacity-40"
-                    >
-                      {deletingId === lightboxItem.sourceId ? (
-                        <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden />
-                      ) : (
-                        <Trash2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                      )}
-                      Remove
-                    </button>
-                  ) : null}
-                </div>
+                    <Mic className="h-4 w-4 shrink-0 text-violet-300 transition-transform duration-200 group-hover/cv:scale-110" aria-hidden />
+                    Change Voice
+                    <span className="ml-auto rounded-md bg-violet-500/20 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-violet-200/90">
+                      {VOICE_CHANGE_CREDITS_FLAT} cr
+                    </span>
+                  </button>
+                ) : null}
+
+                <a
+                  href={`/api/download?url=${encodeURIComponent(lightboxItem.url)}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-white/[0.1] bg-white/[0.05] px-4 py-2.5 text-[13px] font-semibold text-white/80 transition-all duration-200 hover:border-white/20 hover:bg-white/[0.09] hover:text-white"
+                >
+                  <Download className="h-4 w-4 shrink-0" aria-hidden />
+                  Download
+                </a>
+
+                {onItemDeleted ? (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const rowKind = items.find((i) => i.id === lightboxItem.sourceId)?.studioGenerationKind;
+                      void deleteHistoryEntry(lightboxItem.sourceId, rowKind);
+                    }}
+                    disabled={deletingId === lightboxItem.sourceId}
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-red-500/20 bg-red-500/[0.06] px-4 py-2.5 text-[13px] font-semibold text-red-200/80 transition-all duration-200 hover:border-red-500/35 hover:bg-red-500/[0.12] hover:text-red-100 disabled:opacity-40"
+                  >
+                    {deletingId === lightboxItem.sourceId ? (
+                      <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                    ) : (
+                      <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
+                    )}
+                    Remove
+                  </button>
+                ) : null}
               </div>
 
               {lightboxItem.inputUrls && lightboxItem.inputUrls.length > 0 ? (

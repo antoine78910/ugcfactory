@@ -13,6 +13,7 @@ import {
   Image as ImageIcon,
   Link2,
   Maximize2,
+  Mic,
   UserRound,
   Video,
   Joystick,
@@ -31,18 +32,33 @@ export type StudioNavSection =
   | "link_to_ad"
   | "avatar"
   | "ad_clone"
+  | "voice"
   | "motion_control"
   | "image"
   | "video"
   | "upscale"
   | "projects";
 
+const SECTION_TO_SLUG: Record<StudioNavSection, string> = {
+  link_to_ad: "link-to-ad",
+  avatar: "avatar",
+  ad_clone: "translate",
+  voice: "voice",
+  motion_control: "motion-control",
+  image: "image",
+  video: "video",
+  upscale: "upscale",
+  projects: "my-projects",
+};
+
+const SLUG_TO_SECTION: Record<string, StudioNavSection> = Object.fromEntries(
+  Object.entries(SECTION_TO_SLUG).map(([k, v]) => [v, k]),
+) as Record<string, StudioNavSection>;
+
 type Props = {
   children: React.ReactNode;
-  /** On /app: active section and changes via buttons (keeps wizard state). */
   studioSection?: StudioNavSection;
   onStudioSectionChange?: (s: StudioNavSection) => void;
-  /** Preserve `?project=` in CREATE links from credits / subscription pages. */
   studioProjectId?: string | null;
 };
 
@@ -54,6 +70,7 @@ const CREATE_NAV: CreateNavEntry[] = [
   { kind: "route", id: "link_to_ad", label: "Link to Ad", icon: Link2 },
   { kind: "route", id: "avatar", label: "Avatar", icon: UserRound },
   { kind: "route", id: "ad_clone", label: "Translate", icon: Copy },
+  { kind: "route", id: "voice", label: "Voice", icon: Mic },
   { kind: "route", id: "motion_control", label: "Motion Control", icon: Joystick },
   { kind: "route", id: "image", label: "Image", icon: ImageIcon },
   { kind: "route", id: "video", label: "Video", icon: Video },
@@ -74,10 +91,16 @@ const PROJECTS_NAV: { id: StudioNavSection; label: string; icon: LucideIcon } = 
 };
 
 function sectionHref(section: StudioNavSection, projectId: string | null | undefined): string {
-  const p = new URLSearchParams();
-  p.set("section", section);
-  if (projectId) p.set("project", projectId);
-  return `/app?${p.toString()}`;
+  const slug = SECTION_TO_SLUG[section] ?? "link-to-ad";
+  let href = `/app/${slug}`;
+  if (projectId) href += `?project=${encodeURIComponent(projectId)}`;
+  return href;
+}
+
+function sectionFromPathname(pathname: string): StudioNavSection {
+  const stripped = pathname.replace(/^\/app\/?/, "");
+  const first = stripped.split("/").filter(Boolean)[0] ?? "";
+  return SLUG_TO_SECTION[first] ?? "link_to_ad";
 }
 
 function navRowIconClass(active: boolean): string {
@@ -120,14 +143,15 @@ function StudioShellInner({
     }
   }, [navCollapsed]);
 
-  const isApp = pathname === "/app";
+  const isApp = pathname.startsWith("/app");
 
   const controlled = Boolean(isApp && onStudioSectionChange && studioSection !== undefined);
 
   const activeSection: StudioNavSection = useMemo(() => {
     if (controlled && studioSection) return studioSection;
+    if (isApp) return sectionFromPathname(pathname);
     return "link_to_ad";
-  }, [controlled, studioSection]);
+  }, [controlled, studioSection, isApp, pathname]);
 
   useEffect(() => {
     void (async () => {
@@ -161,9 +185,7 @@ function StudioShellInner({
       >
         <aside
           className={cn(
-            /* z-20 + overflow-visible so account dropdown (collapsed) can extend over the main column */
             "sticky top-0 z-20 flex h-screen flex-col overflow-visible border-r border-white/10 bg-[#06070d] py-4",
-            /* Double-click: avoid selecting nav labels; cursors stay native (pointer on links/buttons, text in inputs) */
             "select-none",
             navCollapsed ? "px-1.5" : "px-3",
           )}
@@ -171,7 +193,6 @@ function StudioShellInner({
           <div
             className={cn(
               "shrink-0 pb-2",
-              /* Same horizontal inset as CREATE card (aside px only) so Credits lines up */
               navCollapsed ? "space-y-2 px-0" : "space-y-3",
             )}
           >
@@ -181,7 +202,7 @@ function StudioShellInner({
                 title="Hover logo to expand menu"
               >
                 <Link
-                  href="/app"
+                  href="/app/link-to-ad"
                   className="relative z-0 block h-8 w-8"
                   title="Youry home"
                 >
@@ -214,7 +235,7 @@ function StudioShellInner({
             ) : (
               <div className="flex w-full min-w-0 items-center justify-between gap-2">
                 <Link
-                  href="/app"
+                  href="/app/link-to-ad"
                   className="inline-block min-w-0 shrink"
                   title="Youry home"
                 >
@@ -301,7 +322,7 @@ function StudioShellInner({
                     );
                   }
                   const { id, label } = entry;
-                  const active = controlled && activeSection === id;
+                  const active = activeSection === id;
                   if (controlled) {
                     return (
                       <button
@@ -412,6 +433,5 @@ function StudioShellInner({
 }
 
 export default function StudioShell(props: Props) {
-  /** CreditsPlanProvider is in the root layout so /app hooks and shell share one state. */
   return <StudioShellInner {...props} />;
 }
