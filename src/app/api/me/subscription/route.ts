@@ -23,37 +23,48 @@ function subscriptionCreditsForPlan(planId: SubscriptionPlanId): number {
 }
 
 /**
- * If Stripe shows an active sub but the webhook never created grants for this
- * billing period, insert them. Skips when a subscription grant already exists
- * for this period end (even if remaining=0 — user spent credits).
+ * If the user has a paid plan but zero active subscription credits in the
+ * ledger, create the monthly grant. This covers webhook failures, Stripe
+ * timing issues, and Date-parse crashes.
+ *
+ * Only runs once per period: if there is ANY non-expired subscription grant
+ * with remaining > 0 we assume the user already has (or spent) their credits.
+ * If all subscription grants have remaining = 0, the user legitimately spent
+ * everything — we do NOT re-grant.
+ *
+ * To distinguish "never granted" from "fully spent" we check if there are
+ * ANY subscription grants at all (even with remaining=0) created in the last
+ * 35 days. If there are, skip. If there are none → webhook never fired.
  */
 async function healMissingSubscriptionCredits(
   admin: SupabaseClient,
   userId: string,
   planId: SubscriptionPlanId,
-  periodEnd: Date,
+  periodEndHint?: Date | null,
 ): Promise<void> {
-  if (!Number.isFinite(periodEnd.getTime())) return;
   const amount = subscriptionCreditsForPlan(planId);
   if (amount <= 0) return;
 
-  const tolMs = 120_000;
-  const low = new Date(periodEnd.getTime() - tolMs).toISOString();
-  const high = new Date(periodEnd.getTime() + tolMs).toISOString();
+  const thirtyFiveDaysAgo = new Date(Date.now() - 35 * 24 * 60 * 60 * 1000).toISOString();
 
-  const { data: existing } = await admin
+  const { data: recentGrants } = await admin
     .from("user_credit_grants")
     .select("id")
     .eq("user_id", userId)
     .eq("source", "subscription")
-    .gte("expires_at", low)
-    .lte("expires_at", high)
+    .gte("created_at", thirtyFiveDaysAgo)
     .limit(1)
     .maybeSingle();
 
-  if (existing) return;
+  if (recentGrants) return;
 
-  await resetSubscriptionCredits(admin, userId, amount, periodEnd);
+  const expiresAt =
+    periodEndHint && Number.isFinite(periodEndHint.getTime())
+      ? periodEndHint
+      : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+  console.log("[me/subscription] healing missing credits", { userId, planId, amount, expiresAt: expiresAt.toISOString() });
+  await resetSubscriptionCredits(admin, userId, amount, expiresAt);
 }
 
 export type MeSubscriptionResponse = {
@@ -167,8 +178,9 @@ export async function GET() {
                   { onConflict: "user_id" },
                 );
 
-                if (Number.isFinite(endMs) && isSubscriptionPlanId(planId)) {
-                  await healMissingSubscriptionCredits(admin, userId, planId, new Date(endMs));
+                if (isSubscriptionPlanId(planId)) {
+                  const periodEndHint = Number.isFinite(endMs) ? new Date(endMs) : null;
+                  await healMissingSubscriptionCredits(admin, userId, planId, periodEndHint);
                 }
               }
             } catch (dbErr) {
@@ -236,12 +248,14 @@ export async function GET() {
     const raw = data.billing;
     const billing = raw === "yearly" ? "yearly" : raw === "monthly" ? "monthly" : null;
 
-    if (planId !== "free" && isSubscriptionPlanId(planId) && data.current_period_end) {
+    if (planId !== "free" && isSubscriptionPlanId(planId)) {
       try {
-        const pe = new Date(String(data.current_period_end));
-        if (Number.isFinite(pe.getTime())) {
-          await healMissingSubscriptionCredits(admin, auth.user.id, planId, pe);
+        let pe: Date | null = null;
+        if (data.current_period_end) {
+          const d = new Date(String(data.current_period_end));
+          if (Number.isFinite(d.getTime())) pe = d;
         }
+        await healMissingSubscriptionCredits(admin, auth.user.id, planId, pe);
       } catch {
         /* non-critical */
       }
