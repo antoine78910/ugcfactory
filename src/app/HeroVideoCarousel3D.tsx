@@ -156,8 +156,11 @@ export function HeroVideoCarousel3D({ srcs = DEFAULT_SRCS }: Props) {
                 muted
                 loop
                 playsInline
+                autoPlay
+                controls={false}
                 preload="none"
                 disableRemotePlayback
+                disablePictureInPicture
                 onEnded={handleEnded}
                 onLoadedMetadata={handleLoadedMetadata}
                 onPlay={handlePlay}

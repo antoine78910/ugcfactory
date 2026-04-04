@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useRef, useState, type MutableRefObject } from "react";
+import styles from "./LandingRevealCarousel.module.css";
 
 const PRODUCTS = [
   { src: "/carousel/product-1.png", alt: "Roast & Ritual Coffee" },
@@ -69,14 +70,18 @@ function RevealSlide({
     video.muted = true;
     video.defaultMuted = true;
     video.playsInline = true;
+    video.setAttribute("playsinline", "");
+    video.setAttribute("webkit-playsinline", "");
     video.autoplay = true;
+    video.controls = false;
+    video.disablePictureInPicture = true;
     void video.play().catch(() => {});
   }, [videoSrc]);
 
   return (
     <div
       ref={cardRef}
-      className="relative z-10 isolate w-[70vw] max-w-[25rem] shrink-0 overflow-hidden rounded-3xl bg-[#0a0a0c] sm:w-[90vw]"
+      className="pointer-events-none relative z-10 isolate w-[70vw] max-w-[25rem] shrink-0 overflow-hidden rounded-3xl bg-[#0a0a0c] sm:w-[90vw]"
       style={{ aspectRatio: "0.64" }}
     >
       <Image
@@ -104,11 +109,15 @@ function RevealSlide({
             loop
             muted
             playsInline
-            preload="metadata"
+            controls={false}
+            preload="auto"
             disablePictureInPicture
+            disableRemotePlayback
             controlsList="nodownload noplaybackrate nofullscreen noremoteplayback"
             onCanPlay={(e) => {
-              void e.currentTarget.play().catch(() => {});
+              const v = e.currentTarget;
+              v.muted = true;
+              void v.play().catch(() => {});
             }}
             onLoadedData={(e) => {
               const video = e.currentTarget;
@@ -116,7 +125,7 @@ function RevealSlide({
               video.defaultMuted = true;
               void video.play().catch(() => {});
             }}
-            className="h-full w-full object-cover"
+            className={`h-full w-full object-cover ${styles.revealVideo}`}
           />
         ) : (
           <div className="h-full w-full bg-black/40" aria-hidden />

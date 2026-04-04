@@ -1,0 +1,24 @@
+/* Hide native video UI on mobile (esp. iOS) — carousel is decorative, muted autoplay only */
+.revealVideo {
+  pointer-events: none;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+
+.revealVideo::-webkit-media-controls {
+  display: none !important;
+}
+
+.revealVideo::-webkit-media-controls-enclosure {
+  display: none !important;
+}
+
+.revealVideo::-webkit-media-controls-start-playback-button {
+  display: none !important;
+}
+
+.revealVideo::-webkit-media-controls-panel,
+.revealVideo::-webkit-media-controls-play-button,
+.revealVideo::-webkit-media-controls-timeline {
+  display: none !important;
+}
