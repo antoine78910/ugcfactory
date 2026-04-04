@@ -72,6 +72,11 @@ const ASPECT_RATIOS_PRO = [
 
 const PRO_RESOLUTIONS = ["1K", "2K", "4K"] as const;
 
+type StudioImagePanelProps = {
+  /** From history / lightbox: open Voice Changer with this video loaded. */
+  onChangeVoice?: (item: StudioHistoryItem) => void;
+};
+
 const IMAGE_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
   {
     id: "pro",
@@ -218,7 +223,7 @@ function applyRefundHints(
   }
 }
 
-export default function StudioImagePanel() {
+export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProps) {
   const { planId, current: creditsBalance, spendCredits, grantCredits } = useCreditsPlan();
   const creditsRef = useRef(creditsBalance);
   creditsRef.current = creditsBalance;
@@ -853,6 +858,7 @@ export default function StudioImagePanel() {
               failedAutoDismiss
               onDismissFailed={dismissFailedHistoryItem}
               onItemDeleted={(id) => setHistoryItems((prev) => prev.filter((i) => i.id !== id))}
+              onChangeVoice={onChangeVoice}
               imageLightboxUpscale={{
                 seedFactor: "2",
                 creditsFor: (factor) => topazImageUpscaleCredits(factor),

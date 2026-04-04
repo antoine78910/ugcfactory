@@ -159,16 +159,20 @@ Never replace them with clean punctuation.
 Never remove filler words from the dialogue block.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-MOTION LAYERING STRUCTURE
+MOTION LAYERING STRUCTURE (VISUAL ONLY — NO SPOKEN LINES HERE)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+The EDIT — Motion block is ONLY visual choreography: camera, body, hands, face, product beats.
+Do NOT paste or quote any spoken script lines in Motion. Do NOT describe ambience or room sound in Motion.
+(Lip sync is implied; mention timing vs. lines only as brief cues, e.g. “during the first line”, never the words themselves.)
 
 Describe motion in this order:
 1. Camera movement (based on movement_context)
 2. Subject movement (body, posture)
 3. Product interaction (based on product_state)
-4. Facial expressions
-5. Speech delivery
-6. Micro movements (natural breathing, blinks, slight head shifts)
+4. Facial expressions and eye behavior
+5. Micro movements (natural breathing, blinks, slight head shifts)
+6. Optional: one-line cue tying a gesture to which part of the speech — without quoting dialogue
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 GESTURE RULES
@@ -266,20 +270,23 @@ RULE:
    it is simply present in the environment
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-OUTPUT FORMAT (CRITICAL — exact labels)
+OUTPUT FORMAT (CRITICAL — exact labels, no markdown)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Output plain text only, with EXACTLY these four labeled blocks in this order.
-Keep EDIT blocks concise (what the creator might want to tweak). No bullet points inside EDIT blocks.
+Do NOT use markdown: no **bold**, no *italic*, no # headings, no sub-headings like "**EDIT —**" inside a block.
+Do NOT repeat the same paragraph in more than one EDIT block. Each block has a single job.
 
 EDIT — Motion:
-2–4 short sentences only: camera/head movement (from movement_context), body posture, hands and product beats per product_state and hand_assignment, and micro-behaviors translated from the script. Do NOT redescribe the room, décor, lighting, or overall visual style — those are already in the reference image.
+One cohesive paragraph (roughly 5–12 short sentences): handheld/camera feel from movement_context; subject stays or moves as required; natural standing posture; eyes and head; hands and product per product_state and hand_assignment; micro-behaviors from the script translated into visible action; weight shifts; breathing and blinks. You may reference timing vs. speech with short cues only (e.g. “around the line about the straps”) — never quote or paste the full script here. Do NOT include dialogue text, delivery/voice notes, or ambience. Do NOT redescribe the whole room or décor — the reference image already shows the set.
 
 EDIT — Dialogue:
-The spoken lines exactly as in the script, including fillers and punctuation quirks (... — etc.). Optionally one short phrase on delivery (pace, warmth) if needed. Do NOT add lines not in the script.
+Two parts in plain text (no labels like "Delivery:" required unless you prefer one short line):
+(1) The full spoken lines exactly as in the script, including fillers and punctuation (... — etc.), in one block (quoted or unquoted).
+(2) Immediately after: how it should sound — conversational pace, pauses at "..." and "—", tone, relief/energy, voice profile (gender, age range, timbre, sales pressure). Do NOT restate camera or gesture directions here.
 
 EDIT — Ambience:
-One sentence: quiet environmental sound appropriate to VIDEO_METADATA scene_details (gym, bedroom, street, etc.). Keep it subtle; voice stays dominant.
+One short paragraph only: quiet environmental sound for VIDEO_METADATA scene_details (e.g. bedroom near-silence, faint street noise, subtle room tone). No gestures, no script lines, no voice description. Ambience stays under the voice.
 
 TECHNICAL:
 4–7 short lines, plain language, no brand or product names from the brief, no camera/phone model names, no codec/resolution/fps/HDR/Log claims. State: stay locked to reference (no new objects); respect two-hand limit and script-only gestures; voice + real room/product noise only unless location implies quiet background music; no added sound design; natural handheld UGC look; faithful lip sync to dialogue; ambient stays under voice.
@@ -300,6 +307,8 @@ export async function POST(req: Request) {
 
   const developer = [
     "You output one image-to-video prompt as plain text with four labeled sections: EDIT — Motion, EDIT — Dialogue, EDIT — Ambience, then TECHNICAL — exactly as in OUTPUT FORMAT in the user instructions.",
+    "Separation is mandatory: Motion = camera + body + gestures only (no quoted script, no voice/delivery essay, no ambience). Dialogue = script lines + how they are delivered. Ambience = environment sound only.",
+    "No markdown (no ** asterisk bolding). No duplicating the same content across EDIT blocks.",
     "Never output device names (phones, cameras), codecs, resolution, fps, HDR/Log, or chip names. Technical fidelity belongs only in TECHNICAL, in generic wording.",
     "Follow every rule in the user message instructions.",
   ].join("\n");

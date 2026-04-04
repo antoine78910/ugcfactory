@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Check, Coins, CreditCard, X } from "lucide-react";
+import { ArrowRight, Check, Coins, CreditCard, TrendingDown, X } from "lucide-react";
 import { toast } from "sonner";
 import StudioShell from "@/app/_components/StudioShell";
 import { consumeCheckoutQueryParams, useCreditsPlan } from "@/app/_components/CreditsPlanContext";
@@ -360,7 +360,6 @@ export default function SubscriptionPage() {
                         Boolean(checkoutLoading) ||
                         portalLoading ||
                         exactPlanAndBilling ||
-                        isLowerTier ||
                         (isSameTier && serverSubBilling === "pending")
                       }
                       onClick={() => {
@@ -372,11 +371,13 @@ export default function SubscriptionPage() {
                       }}
                       className={cn(
                         "mt-3 h-10 w-full rounded-xl text-sm font-bold transition-all sm:h-11",
-                        exactPlanAndBilling || isLowerTier
+                        exactPlanAndBilling
                           ? "cursor-not-allowed border border-white/10 bg-white/[0.06] text-white/40 shadow-none hover:bg-white/[0.06]"
-                          : plan.highlight
-                            ? "border border-violet-200/35 bg-violet-400 text-black shadow-[0_6px_0_0_rgba(76,29,149,0.9)] hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9)]"
-                            : "border border-white/15 bg-white/10 text-white hover:bg-white/15",
+                          : isLowerTier && isSubscribed
+                            ? "border border-amber-400/40 bg-amber-500/15 text-amber-50 shadow-[0_4px_0_0_rgba(180,83,9,0.35)] hover:bg-amber-500/25 hover:shadow-[0_6px_0_0_rgba(180,83,9,0.35)]"
+                            : plan.highlight
+                              ? "border border-violet-200/35 bg-violet-400 text-black shadow-[0_6px_0_0_rgba(76,29,149,0.9)] hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9)]"
+                              : "border border-white/15 bg-white/10 text-white hover:bg-white/15",
                       )}
                     >
                       {portalLoading ? (
@@ -387,8 +388,11 @@ export default function SubscriptionPage() {
                         "Loading…"
                       ) : exactPlanAndBilling ? (
                         "Current plan"
-                      ) : isLowerTier ? (
-                        "Below current plan"
+                      ) : isLowerTier && isSubscribed ? (
+                        <span className="inline-flex items-center justify-center gap-2">
+                          Downgrade
+                          <TrendingDown className="h-4 w-4" aria-hidden />
+                        </span>
                       ) : isSameTier && billing === "yearly" && serverSubBilling !== "yearly" ? (
                         <span className="inline-flex items-center justify-center gap-2">
                           Switch to yearly
@@ -489,7 +493,7 @@ export default function SubscriptionPage() {
                     <h3 className="mt-1.5 text-xl font-bold text-white sm:text-2xl">{planDisplayName}</h3>
 
                     {isSubscribed ? (
-                      <div className="mt-2">
+                      <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                         <Button
                           type="button"
                           variant="secondary"
@@ -499,12 +503,21 @@ export default function SubscriptionPage() {
                         >
                           {portalLoading ? "Opening…" : "Manage billing"}
                         </Button>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          disabled={portalLoading}
+                          className="w-full rounded-xl border border-amber-400/35 bg-amber-500/10 text-amber-50 hover:bg-amber-500/20 sm:w-auto"
+                          onClick={() => void goToBillingManagement()}
+                        >
+                          {portalLoading ? "Opening…" : "Downgrade plan"}
+                        </Button>
                       </div>
                     ) : null}
 
                     <p className="mt-1.5 max-w-md text-sm leading-snug text-white/48">
                       {isSubscribed
-                        ? "Your monthly credits refresh with your plan. Use them across Link to Ad, Image, and Video in the studio."
+                        ? "Your monthly credits refresh with your plan. Use Downgrade plan to switch to a lower tier or cancel; Stripe applies changes at renewal."
                         : "You’re on the free tier. Add a subscription for monthly credits or buy packs on the Credits page."}
                     </p>
 

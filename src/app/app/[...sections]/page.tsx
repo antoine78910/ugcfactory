@@ -54,6 +54,7 @@ import {
 } from "@/lib/linkToAdUniverse";
 import { motionControlUpgradeMessage } from "@/lib/subscriptionModelAccess";
 import { clipboardImageFiles } from "@/lib/clipboardImage";
+import { AvatarInputCornerBadge } from "@/app/_components/AvatarInputCornerBadge";
 import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
 import { userMessageFromCaughtError } from "@/lib/generationUserMessage";
 import {
@@ -1473,10 +1474,10 @@ export default function AppBrandWizard() {
 
   /**
    * Called when the user clicks "Change Voice" on a video in ANY history panel.
-   * Navigates to the voice changer and pre-loads the video.
+   * Navigates to Voice Changer and loads the clip like a picked file when possible.
    */
   const handleChangeVoiceFromHistory = useCallback(
-    (item: StudioHistoryItem) => {
+    async (item: StudioHistoryItem) => {
       if (!item.mediaUrl) return;
       setVoiceHistoryItems((prev) => {
         if (prev.some((i) => i.mediaUrl === item.mediaUrl)) return prev;
@@ -1484,13 +1485,59 @@ export default function AppBrandWizard() {
       });
       setAppSectionNav("voice");
       setVoiceToolMode("voice_change");
-      setVoiceChangeUploadFile(null);
-      setVoiceChangeHistoryUrl(item.mediaUrl);
-      setVoiceChangeUploadKind("video");
-      setVoiceChangeUploadPreviewUrl(proxiedMediaSrc(item.mediaUrl));
-      toast.message("Video loaded", { description: "Select a voice and generate." });
+      setVoiceChangePreparing(true);
+      try {
+        const res = await fetch(proxiedMediaSrc(item.mediaUrl));
+        if (!res.ok) throw new Error("Could not download the source media.");
+        const blob = await res.blob();
+        const maxBytes = 50 * 1024 * 1024;
+        if (blob.size > maxBytes) {
+          toast.error("Video is too large for voice change (max 50 MB).");
+          setVoiceChangeUploadFile(null);
+          setVoiceChangeHistoryUrl(item.mediaUrl);
+          setVoiceChangeUploadKind("video");
+          setVoiceChangeUploadPreviewUrl((prev) => {
+            if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
+            return proxiedMediaSrc(item.mediaUrl);
+          });
+          toast.message("Video linked", {
+            description: "Large file: loaded by URL. Pick a voice and generate.",
+          });
+          return;
+        }
+        let filename = "source-video.mp4";
+        try {
+          const u = new URL(item.mediaUrl, typeof window !== "undefined" ? window.location.origin : "https://localhost");
+          const seg = u.pathname.split("/").filter(Boolean).pop();
+          if (seg && /\.(mp4|webm|mov|m4v)$/i.test(seg)) filename = seg.slice(0, 120);
+        } catch {
+          /* ignore */
+        }
+        const lower = filename.toLowerCase();
+        const ext = lower.endsWith(".webm") ? "webm" : lower.endsWith(".mov") ? "mov" : "mp4";
+        const mime =
+          blob.type || (ext === "webm" ? "video/webm" : ext === "mov" ? "video/quicktime" : "video/mp4");
+        const safeName = filename.replace(/[^\w.\-]+/g, "_") || `source.${ext}`;
+        const file = new File([blob], safeName, { type: mime });
+        applyVoiceChangeUploadFile(file);
+        toast.message("Video loaded", { description: "Select a voice and generate." });
+      } catch (err) {
+        toast.error("Could not load the video.", {
+          description: userMessageFromCaughtError(err, "Using a link instead."),
+        });
+        setVoiceChangeUploadFile(null);
+        setVoiceChangeHistoryUrl(item.mediaUrl);
+        setVoiceChangeUploadKind("video");
+        setVoiceChangeUploadPreviewUrl((prev) => {
+          if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
+          return proxiedMediaSrc(item.mediaUrl);
+        });
+        toast.message("Video linked", { description: "Select a voice and generate." });
+      } finally {
+        setVoiceChangePreparing(false);
+      }
     },
-    [setAppSectionNav],
+    [setAppSectionNav, applyVoiceChangeUploadFile],
   );
 
   /** Sync section state from pathname (handles browser back/forward & direct URL access). */
@@ -3052,6 +3099,9 @@ export default function AppBrandWizard() {
                                   onClick={() => motionCharacterInputRef.current?.click()}
                                   className="relative flex aspect-[3/4] w-full cursor-pointer flex-col items-center justify-center gap-1.5 overflow-hidden rounded-xl border border-dashed border-white/20 bg-[#0c0c10] text-white/50 transition hover:border-violet-400/40 hover:bg-white/[0.03]"
                                 >
+                                  <AvatarInputCornerBadge
+                                    align={motionCharacterImageUrl ? "left" : "right"}
+                                  />
                                   {motionCharacterImageUrl ? (
                                     // eslint-disable-next-line @next/next/no-img-element
                                     <img
@@ -3686,7 +3736,7 @@ export default function AppBrandWizard() {
                   <CardTitle className="text-sm">Image</CardTitle>
                 </CardHeader>
                 <CardContent className="px-6 pb-3 pt-0">
-                  <StudioImagePanel />
+                  <StudioImagePanel onChangeVoice={handleChangeVoiceFromHistory} />
                 </CardContent>
               </Card>
             ) : null}

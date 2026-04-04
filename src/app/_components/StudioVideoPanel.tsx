@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { AvatarInputCornerBadge } from "@/app/_components/AvatarInputCornerBadge";
 import { StudioEmptyExamples, StudioOutputPane } from "@/app/_components/StudioEmptyExamples";
 import { StudioGenerationsHistory } from "@/app/_components/StudioGenerationsHistory";
 import { userMessageFromCaughtError } from "@/lib/generationUserMessage";
@@ -432,6 +433,7 @@ function FrameSlot({
   onPick,
   onClear,
   disabled,
+  avatarLibraryBadge,
 }: {
   label: string;
   optional?: boolean;
@@ -442,6 +444,8 @@ function FrameSlot({
   onPick: () => void;
   onClear: () => void;
   disabled?: boolean;
+  /** Small app icon hint: use “Upload my avatar” for published avatars */
+  avatarLibraryBadge?: boolean;
 }) {
   const display = url || previewUrl;
   return (
@@ -451,6 +455,9 @@ function FrameSlot({
       onClick={() => (display ? onClear() : onPick())}
       className="relative flex aspect-[5/4] w-full flex-col items-center justify-center overflow-hidden rounded-xl border border-dashed border-white/20 bg-[#0c0c10] text-white/50 transition hover:border-violet-400/40 hover:bg-white/[0.03] disabled:opacity-50"
     >
+      {avatarLibraryBadge ? (
+        <AvatarInputCornerBadge align={optional ? "left" : "right"} />
+      ) : null}
       {optional ? (
         <span className="absolute right-2 top-2 z-[1] rounded-md bg-white/10 px-2 py-0.5 text-[10px] font-medium text-white/60">
           Optional
@@ -1645,6 +1652,7 @@ export default function StudioVideoPanel({
                 <div className="grid grid-cols-1 gap-2">
                   <FrameSlot
                     label="Character image"
+                    avatarLibraryBadge
                     url={editMotionImageUrl}
                     previewUrl={motionCharPreviewBlob}
                     uploading={editUploadBusy && Boolean(motionCharPreviewBlob)}
@@ -1883,6 +1891,7 @@ export default function StudioVideoPanel({
                 <FrameSlot
                   label="Start frame"
                   optional={startFrameOptional}
+                  avatarLibraryBadge
                   url={startUrl}
                   previewUrl={startFramePreviewBlob}
                   uploading={frameUploadBusy && frameUploadSlot === "start"}
@@ -1899,6 +1908,7 @@ export default function StudioVideoPanel({
                 <FrameSlot
                   label="End frame"
                   optional
+                  avatarLibraryBadge
                   url={endUrl}
                   previewUrl={endFramePreviewBlob}
                   uploading={frameUploadBusy && frameUploadSlot === "end"}

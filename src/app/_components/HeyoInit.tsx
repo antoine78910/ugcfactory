@@ -1,14 +1,15 @@
 "use client";
 
 import { useEffect } from "react";
-import HEYO from "@heyo.so/js";
 
 export default function HeyoInit() {
   useEffect(() => {
     let canceled = false;
-    const run = () => {
+    const run = async () => {
       if (canceled) return;
       try {
+        const { default: HEYO } = await import("@heyo.so/js");
+        if (canceled) return;
         HEYO.init({ projectId: "69c150e9ace32ad739854923" });
       } catch {
         /* ignore */
