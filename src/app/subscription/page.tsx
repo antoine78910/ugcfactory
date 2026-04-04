@@ -203,13 +203,13 @@ export default function SubscriptionPage() {
         <div className="pointer-events-none absolute left-1/2 top-0 h-[480px] w-[960px] -translate-x-1/2 rounded-full bg-violet-600/14 blur-[130px]" />
         <div className="pointer-events-none absolute -left-24 top-1/4 h-64 w-64 rounded-full bg-indigo-600/10 blur-[90px]" />
 
-        <div className="relative mx-auto max-w-6xl space-y-14 px-5 py-10 md:px-8 md:py-12">
+        <div className="relative mx-auto max-w-6xl space-y-8 px-4 py-6 md:px-6 md:py-8">
           <header className="mx-auto max-w-2xl text-center">
             <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-violet-400/90">Subscription</p>
-            <h1 className="mt-3 bg-gradient-to-b from-white via-white to-white/55 bg-clip-text text-3xl font-bold tracking-tight text-transparent sm:text-4xl md:text-[2.75rem] md:leading-[1.08]">
+            <h1 className="mt-2 bg-gradient-to-b from-white via-white to-white/55 bg-clip-text text-3xl font-bold tracking-tight text-transparent sm:text-4xl md:text-[2.75rem] md:leading-[1.08]">
               Grow with a plan that keeps up
             </h1>
-            <p className="mt-4 text-xs text-white/38">
+            <p className="mt-3 text-xs text-white/38">
               Need a one-time boost instead?{" "}
               <Link
                 href="/credits"
@@ -219,7 +219,7 @@ export default function SubscriptionPage() {
               </Link>
             </p>
 
-            <div className="mt-10 flex justify-center">
+            <div className="mt-6 flex justify-center">
               <div
                 className="inline-flex rounded-full border border-white/10 bg-black/40 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
                 role="group"
@@ -259,7 +259,7 @@ export default function SubscriptionPage() {
           </header>
 
           <section>
-            <div className={cn("mx-auto grid max-w-6xl gap-5", planGridClass)}>
+            <div className={cn("mx-auto grid max-w-6xl gap-3 sm:gap-4", planGridClass)}>
               {PLANS.map((plan) => {
                 const { mainLabel, sub } = priceFor(plan);
                 const planIdx = subscriptionPlanSortIndex(plan.id as SubscriptionPlanId);
@@ -291,16 +291,16 @@ export default function SubscriptionPage() {
                   <div
                     key={plan.id}
                     className={cn(
-                      "relative flex h-full flex-col rounded-2xl border p-6 transition-all duration-300",
+                      "relative flex h-full flex-col rounded-2xl border p-4 transition-all duration-300 sm:p-5",
                       isCurrentPlanCard
                         ? "border-emerald-400/45 bg-gradient-to-b from-emerald-600/[0.14] via-[#0b0914] to-[#06070d] shadow-[0_0_40px_rgba(16,185,129,0.12)]"
                         : plan.highlight
-                          ? "border-violet-400/40 bg-gradient-to-b from-violet-600/[0.18] via-[#0b0914] to-[#06070d] shadow-[0_0_48px_rgba(139,92,246,0.14),0_8px_0_0_rgba(76,29,149,0.4)] xl:scale-[1.02]"
+                          ? "border-violet-400/40 bg-gradient-to-b from-violet-600/[0.18] via-[#0b0914] to-[#06070d] shadow-[0_0_48px_rgba(139,92,246,0.14),0_8px_0_0_rgba(76,29,149,0.4)]"
                           : "border-white/10 bg-white/[0.03] hover:border-violet-500/20 hover:bg-white/[0.045]",
                     )}
                   >
                     {/* Fixed row height so badges line up across plans */}
-                    <div className="mb-3 flex min-h-[2rem] flex-wrap content-start items-center gap-1.5">
+                    <div className="mb-2 flex min-h-[1.5rem] flex-wrap content-start items-center gap-1.5">
                       {isCurrentPlanCard ? (
                         <span className="rounded-full border border-emerald-400/50 bg-emerald-500/20 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-100">
                           Current plan
@@ -319,24 +319,24 @@ export default function SubscriptionPage() {
                     </div>
 
                     <div className="shrink-0">
-                      <h2 className="text-xl font-bold leading-tight text-white">{plan.name}</h2>
-                      <p className="mt-2 line-clamp-2 min-h-[2.75rem] text-sm leading-snug text-white/48">
+                      <h2 className="text-lg font-bold leading-tight text-white sm:text-xl">{plan.name}</h2>
+                      <p className="mt-1 line-clamp-2 min-h-[2.25rem] text-[13px] leading-snug text-white/48 sm:text-sm">
                         {plan.description}
                       </p>
                     </div>
 
                     {/* Same vertical space for price + billing note + yearly pill slot */}
-                    <div className="mt-6 flex min-h-[7.25rem] shrink-0 flex-col">
+                    <div className="mt-3 flex min-h-[5.5rem] shrink-0 flex-col">
                       <div className="flex flex-wrap items-baseline gap-1">
-                        <span className="text-4xl font-extrabold tabular-nums leading-none text-white md:text-5xl">
+                        <span className="text-3xl font-extrabold tabular-nums leading-none text-white md:text-4xl">
                           ${mainLabel}
                         </span>
-                        <span className="text-sm font-semibold text-white/55 md:text-base">/mo</span>
+                        <span className="text-sm font-semibold text-white/55">/mo</span>
                       </div>
-                      <p className="mt-2 line-clamp-2 min-h-[2.25rem] text-xs leading-snug text-white/38">{sub}</p>
-                      <div className="mt-2 min-h-[1.75rem]">
+                      <p className="mt-1.5 line-clamp-2 min-h-[1.75rem] text-[11px] leading-snug text-white/38">{sub}</p>
+                      <div className="mt-1.5 min-h-[1.35rem]">
                         {billing === "yearly" ? (
-                          <p className="inline-flex items-center rounded-md border border-emerald-400/35 bg-emerald-500/15 px-2 py-1 text-[11px] font-semibold text-emerald-200">
+                          <p className="inline-flex items-center rounded-md border border-emerald-400/35 bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-200">
                             Save 30% on yearly billing
                           </p>
                         ) : null}
@@ -353,7 +353,7 @@ export default function SubscriptionPage() {
                       }
                       onClick={() => void startSubscriptionCheckout(plan.id)}
                       className={cn(
-                        "mt-6 h-12 w-full rounded-xl text-sm font-bold transition-all",
+                        "mt-3 h-10 w-full rounded-xl text-sm font-bold transition-all sm:h-11",
                         exactPlanAndBilling || isLowerTier
                           ? "cursor-not-allowed border border-white/10 bg-white/[0.06] text-white/40 shadow-none hover:bg-white/[0.06]"
                           : plan.highlight
@@ -387,10 +387,10 @@ export default function SubscriptionPage() {
                       )}
                     </Button>
 
-                    <ul className="mt-6 flex flex-1 flex-col space-y-2 border-t border-white/10 pt-6 text-left text-xs text-white/72">
-                      <li className="flex items-start gap-2.5">
-                        <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-violet-500/20 text-violet-200">
-                          <Coins className="h-3 w-3" aria-hidden />
+                    <ul className="mt-3 flex flex-1 flex-col space-y-1.5 border-t border-white/10 pt-3 text-left text-[11px] text-white/72 sm:text-xs">
+                      <li className="flex items-start gap-2">
+                        <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-md bg-violet-500/20 text-violet-200 sm:h-5 sm:w-5">
+                          <Coins className="h-2.5 w-2.5 sm:h-3 sm:w-3" aria-hidden />
                         </span>
                         <span className="min-w-0">
                           <span className="font-semibold tabular-nums text-white">
@@ -404,11 +404,11 @@ export default function SubscriptionPage() {
                       <li className="pl-1 text-white/50">
                         Up to {Number(plan.usage.videos).toLocaleString()} AI videos (Sora 2)
                       </li>
-                      <li className="pt-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-white/45">
+                      <li className="pt-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-white/45">
                         Included models
                       </li>
                       <li className="pl-1 text-white/55">
-                        <div className="space-y-1.5">
+                        <div className="space-y-1">
                           {SUBSCRIPTION_MODEL_MATRIX_ROWS.map((row) => {
                             const included = isModelIncluded(plan.id, row);
                             return (
@@ -447,10 +447,10 @@ export default function SubscriptionPage() {
 
           <section className="mx-auto max-w-4xl">
             <h2 className="text-center text-xs font-bold uppercase tracking-[0.16em] text-white/40">Your account</h2>
-            <div className="mt-4 rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.05] to-transparent p-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] md:p-8">
-              <div className="flex flex-col gap-8 sm:flex-row sm:items-start sm:justify-between">
-                <div className="flex gap-4">
-                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-violet-500/25 bg-violet-500/10">
+            <div className="mt-3 rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.05] to-transparent p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] md:p-6">
+              <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex gap-3">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-violet-500/25 bg-violet-500/10 sm:h-14 sm:w-14 sm:rounded-2xl">
                     <CreditCard className="h-6 w-6 text-violet-200/90" strokeWidth={1.5} />
                   </div>
                   <div className="min-w-0">
@@ -466,10 +466,10 @@ export default function SubscriptionPage() {
                         {isSubscribed ? "Subscribed" : "Free"}
                       </span>
                     </div>
-                    <h3 className="mt-2 text-2xl font-bold text-white">{planDisplayName}</h3>
+                    <h3 className="mt-1.5 text-xl font-bold text-white sm:text-2xl">{planDisplayName}</h3>
 
                     {isSubscribed ? (
-                      <div className="mt-3">
+                      <div className="mt-2">
                         <Button
                           type="button"
                           variant="secondary"
@@ -483,14 +483,14 @@ export default function SubscriptionPage() {
                       </div>
                     ) : null}
 
-                    <p className="mt-2 max-w-md text-sm leading-relaxed text-white/48">
+                    <p className="mt-1.5 max-w-md text-sm leading-snug text-white/48">
                       {isSubscribed
                         ? "Your monthly credits refresh with your plan. Use them across Link to Ad, Image, and Video in the studio."
                         : "You’re on the free tier. Add a subscription for monthly credits or buy packs on the Credits page."}
                     </p>
 
                     {isSubscribed ? (
-                      <div className="mt-4 flex flex-col gap-3">
+                      <div className="mt-3 flex flex-col gap-2">
                         <p className="text-center text-[11px] text-white/28">
                           Checkout is powered by Stripe. Subscription credits reset each billing cycle and do not carry over.
                         </p>
