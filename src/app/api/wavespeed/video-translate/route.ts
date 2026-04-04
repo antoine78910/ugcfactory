@@ -4,8 +4,6 @@ export const maxDuration = 300;
 import { NextResponse } from "next/server";
 import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
 import { serverLog } from "@/lib/serverLog";
-import { canAccessStudioSection, upgradePlanMessage } from "@/lib/subscriptionModelAccess";
-import { getUserPlan } from "@/lib/supabase/getUserPlan";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { submitWaveSpeedHeygenVideoTranslate } from "@/lib/wavespeed";
 import { isWaveSpeedHeygenTranslateLanguage } from "@/lib/wavespeedTranslateLanguages";
@@ -16,19 +14,8 @@ type Body = {
 };
 
 export async function POST(req: Request) {
-  const { user, response } = await requireSupabaseUser();
+  const { response } = await requireSupabaseUser();
   if (response) return response;
-
-  const plan = await getUserPlan(user.id);
-  if (!canAccessStudioSection(plan, "ad_clone")) {
-    return NextResponse.json(
-      {
-        error: upgradePlanMessage("growth", "Translate"),
-        code: "PLAN_UPGRADE_REQUIRED",
-      },
-      { status: 403 },
-    );
-  }
 
   let body: Body;
   try {

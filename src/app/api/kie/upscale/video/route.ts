@@ -6,8 +6,6 @@ import { kieMarketCreateTask } from "@/lib/kieMarket";
 import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
 import { hasPersonalApiKey } from "@/lib/personalApiBypass";
 import { KIE_TOPAZ_VIDEO_UPSCALE_MODEL } from "@/lib/pricing";
-import { canAccessStudioSection, upgradePlanMessage } from "@/lib/subscriptionModelAccess";
-import { getUserPlan } from "@/lib/supabase/getUserPlan";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 
 type Body = {
@@ -18,7 +16,7 @@ type Body = {
 };
 
 export async function POST(req: Request) {
-  const { user, response } = await requireSupabaseUser();
+  const { response } = await requireSupabaseUser();
   if (response) return response;
 
   let body: Body;
@@ -29,18 +27,6 @@ export async function POST(req: Request) {
   }
 
   const personalKey = hasPersonalApiKey(body.personalApiKey) ? body.personalApiKey.trim() : undefined;
-  if (!personalKey) {
-    const plan = await getUserPlan(user.id);
-    if (!canAccessStudioSection(plan, "upscale")) {
-      return NextResponse.json(
-        {
-          error: upgradePlanMessage("growth", "Upscale"),
-          code: "PLAN_UPGRADE_REQUIRED",
-        },
-        { status: 403 },
-      );
-    }
-  }
 
   const videoUrl = (body.videoUrl ?? "").trim();
   if (!videoUrl || !/^https?:\/\//i.test(videoUrl)) {

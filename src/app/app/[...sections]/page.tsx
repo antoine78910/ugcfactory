@@ -52,7 +52,7 @@ import {
   splitNanoPromptBodyForEditing,
   universeHasPendingKlingTask,
 } from "@/lib/linkToAdUniverse";
-import { canAccessStudioSection, motionControlUpgradeMessage } from "@/lib/subscriptionModelAccess";
+import { motionControlUpgradeMessage } from "@/lib/subscriptionModelAccess";
 import { clipboardImageFiles } from "@/lib/clipboardImage";
 import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
 import { userMessageFromCaughtError } from "@/lib/generationUserMessage";
@@ -581,7 +581,6 @@ export default function AppBrandWizard() {
   const [voiceChangeOptimizeLatency, setVoiceChangeOptimizeLatency] = useState<string>("");
   const [voiceChangeFileFormat, setVoiceChangeFileFormat] = useState<"other" | "pcm_s16le_16">("other");
   const [voiceChangeSeed, setVoiceChangeSeed] = useState<string>("");
-  const [voiceChangeRemoveBackgroundNoise, setVoiceChangeRemoveBackgroundNoise] = useState(false);
   const [voiceChangeVoiceSettingsJson, setVoiceChangeVoiceSettingsJson] = useState<string>("");
   const [motionHistoryItems, setMotionHistoryItems] = useState<StudioHistoryItem[]>([]);
   const [motionServerHistory, setMotionServerHistory] = useState<boolean | null>(null);
@@ -605,17 +604,6 @@ export default function AppBrandWizard() {
   const creditsRef = useRef(creditsBalance);
   creditsRef.current = creditsBalance;
 
-  useEffect(() => {
-    if (canAccessStudioSection(planId, appSection)) return;
-    toast.message("Growth plan required", {
-      description: "Translate, Upscale, and the full model library unlock on Growth and above.",
-    });
-    setAppSection("link_to_ad");
-    if (typeof window !== "undefined") {
-      const next = sectionToPath("link_to_ad");
-      if (window.location.pathname !== next) window.history.replaceState(null, "", next);
-    }
-  }, [planId, appSection]);
   const grantCreditsRef = useRef(grantCredits);
   grantCreditsRef.current = grantCredits;
 
@@ -1040,7 +1028,6 @@ export default function AppBrandWizard() {
   const clearVoiceChangeUpload = useCallback(() => {
     setVoiceChangeUploadFile(null);
     setVoiceChangeUploadKind("audio");
-    setVoiceChangeRemoveBackgroundNoise(false);
     setVoiceChangeUploadPreviewUrl((prev) => {
       if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
       return null;
@@ -2842,25 +2829,6 @@ export default function AppBrandWizard() {
                                   </button>
                                 ) : null}
                               </div>
-                              {voiceChangeUploadPreviewUrl || voiceChangeHistoryUrl ? (
-                                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2.5 transition hover:bg-white/[0.04]">
-                                  <input
-                                    type="checkbox"
-                                    checked={voiceChangeRemoveBackgroundNoise}
-                                    onChange={(e) => setVoiceChangeRemoveBackgroundNoise(e.target.checked)}
-                                    className="mt-0.5 h-4 w-4 shrink-0 rounded border-white/25 bg-[#0a0a0d] text-violet-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-500/60"
-                                  />
-                                  <span className="min-w-0 flex-1">
-                                    <span className="block text-xs font-semibold text-white/85">
-                                      Remove background noise from audio recordings
-                                    </span>
-                                    <span className="mt-0.5 block text-[10px] leading-snug text-white/40">
-                                      ElevenLabs will clean the input before speech-to-speech (recommended for noisy
-                                      samples).
-                                    </span>
-                                  </span>
-                                </label>
-                              ) : null}
                             </div>
                             </>
                             ) : null}
@@ -3438,7 +3406,6 @@ export default function AppBrandWizard() {
                                     modelId: voiceChangeModelId.trim(),
                                     outputFormat: voiceChangeOutputFormat,
                                     enableLogging: voiceChangeEnableLogging,
-                                    removeBackgroundNoise: voiceChangeRemoveBackgroundNoise,
                                     fileFormat: voiceChangeFileFormat,
                                     optimizeStreamingLatency: voiceChangeOptimizeLatency.trim() || undefined,
                                     seed: voiceChangeSeed.trim() || undefined,

@@ -47,6 +47,9 @@ export async function POST(req: Request) {
   const description = String(formData.get("description") ?? "").trim();
   const labelsRaw = String(formData.get("labels") ?? "").trim();
   const personalApiKey = String(formData.get("personalApiKey") ?? "").trim() || undefined;
+  const removeNoiseRaw = String(formData.get("removeBackgroundNoise") ?? "").toLowerCase();
+  const removeBackgroundNoise =
+    removeNoiseRaw === "true" || removeNoiseRaw === "1" || removeNoiseRaw === "on";
 
   if (!name) {
     return NextResponse.json({ error: "Voice name is required." }, { status: 400 });
@@ -92,6 +95,7 @@ export async function POST(req: Request) {
       files,
       description: description || undefined,
       labels,
+      removeBackgroundNoise: removeBackgroundNoise || undefined,
       apiKeyOverride: personalApiKey,
     });
 

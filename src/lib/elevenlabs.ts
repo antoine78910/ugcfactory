@@ -205,6 +205,8 @@ export type ElevenLabsVoiceCloneInput = {
   files: File[];
   description?: string;
   labels?: Record<string, string>;
+  /** IVC: clean samples before cloning (ElevenLabs audio isolation). */
+  removeBackgroundNoise?: boolean;
   /** When provided, use this key instead of the platform ELEVENLABS_API_KEY. */
   apiKeyOverride?: string;
 };
@@ -230,6 +232,9 @@ export async function createElevenLabsVoiceClone(
   if (input.description?.trim()) form.set("description", input.description.trim());
   if (input.labels && Object.keys(input.labels).length) {
     form.set("labels", JSON.stringify(input.labels));
+  }
+  if (input.removeBackgroundNoise === true) {
+    form.set("remove_background_noise", "true");
   }
 
   const res = await fetch(`${ELEVENLABS_API_BASE}/voices/add`, {

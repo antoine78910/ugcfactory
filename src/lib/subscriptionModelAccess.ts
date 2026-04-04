@@ -292,16 +292,9 @@ export function motionControlUpgradeMessage(planId: AccountPlanId): string | nul
   return upgradePlanMessage(minPlanForStudioVideoEditPicker("studio-edit/motion-v3"), "Kling 3.0 Motion Control");
 }
 
-/** Translate + Upscale + full premium library — Growth plan and above. */
-const STUDIO_SECTION_MIN_RANK: Partial<Record<AppSection, number>> = {
-  ad_clone: 2,
-  upscale: 2,
-};
-
-export function canAccessStudioSection(planId: AccountPlanId, section: AppSection): boolean {
-  const min = STUDIO_SECTION_MIN_RANK[section];
-  if (min === undefined) return true;
-  return planRank(planId) >= min;
+/** All studio sections are available on every plan (credits still apply). */
+export function canAccessStudioSection(_planId: AccountPlanId, _section: AppSection): boolean {
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -320,22 +313,7 @@ function tierBools(minRank: number): [boolean, boolean, boolean, boolean] {
   return [1, 2, 3, 4].map((r) => r >= minRank) as [boolean, boolean, boolean, boolean];
 }
 
-/** High-level studio areas on /subscription (Starter vs Growth+). */
-export const SUBSCRIPTION_STUDIO_ACCESS_ROWS: SubscriptionModelMatrixRow[] = [
-  { label: "Link to Ad", tiers: tierBools(1) },
-  { label: "Avatar", tiers: tierBools(1) },
-  { label: "Voice", tiers: tierBools(1) },
-  { label: "Kling 3.0 Motion Control", tiers: tierBools(1) },
-  { label: "Images", tiers: tierBools(1) },
-  { label: "Videos", tiers: tierBools(1) },
-  { label: "Projects", tiers: tierBools(1) },
-  {
-    label: "Tools (Translate, Upscale & full library)",
-    tiers: tierBools(2),
-  },
-];
-
-/** Rows shown under “Model access” on /subscription; synced with gates above. */
+/** Rows shown under “Included models” on /subscription. */
 export const SUBSCRIPTION_MODEL_MATRIX_ROWS: SubscriptionModelMatrixRow[] = [
   {
     label: "NanoBanana 2",

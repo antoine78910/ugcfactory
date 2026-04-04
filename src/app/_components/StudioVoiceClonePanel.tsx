@@ -74,6 +74,8 @@ export function StudioVoiceClonePanel() {
   const [labelGender, setLabelGender] = useState<string>(ELEVENLABS_LABEL_SKIP);
   const [labelAge, setLabelAge] = useState<string>(ELEVENLABS_LABEL_SKIP);
   const [files, setFiles] = useState<File[]>([]);
+  /** IVC only: ElevenLabs cleans samples before cloning. */
+  const [removeBackgroundNoise, setRemoveBackgroundNoise] = useState(false);
   const [totalAudioSeconds, setTotalAudioSeconds] = useState<number | null>(null);
   const [durationLoading, setDurationLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -184,6 +186,7 @@ export function StudioVoiceClonePanel() {
 
       const personalKey = getPersonalElevenLabsApiKey();
       if (personalKey) form.set("personalApiKey", personalKey);
+      if (removeBackgroundNoise) form.set("removeBackgroundNoise", "true");
 
       for (const file of files) {
         form.append("files", file);
@@ -227,6 +230,7 @@ export function StudioVoiceClonePanel() {
     setLabelGender(ELEVENLABS_LABEL_SKIP);
     setLabelAge(ELEVENLABS_LABEL_SKIP);
     setFiles([]);
+    setRemoveBackgroundNoise(false);
   };
 
   // ---- render ----
@@ -383,6 +387,38 @@ export function StudioVoiceClonePanel() {
           </p>
         ) : null}
       </div>
+
+      {files.length > 0 ? (
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-white/[0.08] bg-white/[0.02] px-3.5 py-3 transition-colors duration-200 hover:border-white/[0.1] hover:bg-white/[0.035]">
+          <span className="min-w-0 text-xs font-medium leading-snug text-white/82">
+            Remove background noise from audio recordings
+          </span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={removeBackgroundNoise}
+            aria-label="Remove background noise from audio recordings"
+            onClick={() => setRemoveBackgroundNoise((v) => !v)}
+            disabled={isSubmitting}
+            className={cn(
+              "relative flex h-7 w-12 shrink-0 cursor-pointer items-center rounded-full border px-1 transition-[border-color,background-color,box-shadow] duration-300 ease-out",
+              "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-500/55",
+              "disabled:pointer-events-none disabled:opacity-50",
+              removeBackgroundNoise
+                ? "border-violet-400/45 bg-violet-500/[0.22] shadow-[0_0_20px_rgba(139,92,246,0.18)]"
+                : "border-white/12 bg-black/40",
+            )}
+          >
+            <span
+              aria-hidden
+              className={cn(
+                "block h-5 w-5 rounded-full bg-white shadow-md ring-1 ring-black/10 transition-transform duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] will-change-transform",
+                removeBackgroundNoise ? "translate-x-[1.25rem]" : "translate-x-0",
+              )}
+            />
+          </button>
+        </div>
+      ) : null}
 
       {/* Description */}
       <div className="space-y-1.5">
