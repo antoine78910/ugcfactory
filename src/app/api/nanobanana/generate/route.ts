@@ -18,6 +18,8 @@ import { getUserPlan } from "@/lib/supabase/getUserPlan";
 
 type Body = {
   accountPlan?: string;
+  /** Link to Ad image: do not gate by subscription tier (credits still apply in-app). */
+  linkToAd?: boolean;
   prompt: string;
   language?: "fr" | "en";
   model?: string;
@@ -62,7 +64,8 @@ export async function POST(req: Request) {
   if (!personalKey) {
     const dbPlan = await getUserPlan(user.id);
     const accountPlan = dbPlan !== "free" ? dbPlan : parseAccountPlan(body.accountPlan);
-    if (!canUseStudioImagePickerModel(accountPlan, model)) {
+    const skipTierGate = body.linkToAd === true;
+    if (!skipTierGate && !canUseStudioImagePickerModel(accountPlan, model)) {
       return NextResponse.json(
         {
           error:

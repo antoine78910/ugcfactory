@@ -475,6 +475,162 @@ export type LinkToAdUniverseProps = {
   onSwitchLinkToAdRun?: (runId: string) => void;
 };
 
+function LinkToAdRecentRunsToggle({
+  hidePreviousLtaGenerations,
+  onToggle,
+  reduceMotion,
+}: {
+  hidePreviousLtaGenerations: boolean;
+  onToggle: () => void;
+  reduceMotion: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <button
+        type="button"
+        role="switch"
+        aria-checked={hidePreviousLtaGenerations}
+        aria-label={
+          hidePreviousLtaGenerations
+            ? "Show previous Link to Ad generations"
+            : "Hide previous Link to Ad generations"
+        }
+        onClick={onToggle}
+        className={cn(
+          "group relative flex h-8 shrink-0 items-center rounded-full border px-1 transition-[border-color,background-color,box-shadow] duration-300",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0912]",
+          hidePreviousLtaGenerations
+            ? "w-[3.25rem] border-violet-400/40 bg-gradient-to-r from-violet-500/30 to-violet-600/20 shadow-[0_0_20px_rgba(139,92,246,0.15)]"
+            : "w-[3.25rem] border-white/12 bg-black/40 hover:border-white/18 hover:bg-white/[0.05]",
+        )}
+      >
+        <motion.span
+          className="pointer-events-none flex h-6 w-6 items-center justify-center rounded-full bg-white text-[#1a1025] shadow-md"
+          initial={false}
+          animate={{
+            x: hidePreviousLtaGenerations ? 20 : 0,
+            scale: hidePreviousLtaGenerations ? 0.92 : 1,
+          }}
+          transition={
+            reduceMotion ? { duration: 0.12 } : { type: "spring", stiffness: 520, damping: 34, mass: 0.65 }
+          }
+        >
+          {hidePreviousLtaGenerations ? (
+            <EyeOff className="h-3.5 w-3.5 opacity-80" aria-hidden />
+          ) : (
+            <Eye className="h-3.5 w-3.5 opacity-90" aria-hidden />
+          )}
+        </motion.span>
+      </button>
+      <div className="flex min-w-0 flex-col items-start leading-tight">
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-white/50">Previous runs</span>
+        <span
+          className={cn(
+            "text-[11px] font-medium transition-colors duration-300",
+            hidePreviousLtaGenerations ? "text-white/35" : "text-violet-200/85",
+          )}
+        >
+          {hidePreviousLtaGenerations ? "Hidden" : "Visible"}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function LinkToAdRecentRunsChips({
+  recentLinkToAdRuns,
+  hidePreviousLtaGenerations,
+  activeRunIdProp,
+  universeRunId,
+  onSelectRun,
+  reduceMotion,
+}: {
+  recentLinkToAdRuns: LinkToAdRecentRunChip[];
+  hidePreviousLtaGenerations: boolean;
+  activeRunIdProp: string | null;
+  universeRunId: string | null;
+  onSelectRun: (id: string) => void;
+  reduceMotion: boolean;
+}) {
+  return (
+    <AnimatePresence initial={false}>
+      {!hidePreviousLtaGenerations && recentLinkToAdRuns.length > 0 ? (
+        <motion.div
+          key="lta-recent-runs"
+          initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -10, scale: 0.985 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -8, scale: 0.98, filter: "blur(4px)" }}
+          transition={reduceMotion ? { duration: 0.15 } : { duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+          className="origin-top overflow-hidden"
+        >
+          <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2.5">
+            <p className="text-[10px] leading-snug text-white/45">
+              All your Link to Ad generations are stored in your projects — switch between your last three here, or open
+              Projects for the full list.
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {recentLinkToAdRuns.map((r, i) => {
+                const active = (activeRunIdProp ?? universeRunId) === r.id;
+                const label =
+                  (r.title && r.title.trim()) ||
+                  (() => {
+                    try {
+                      return new URL(r.storeUrl).hostname.replace(/^www\./, "");
+                    } catch {
+                      return r.storeUrl.slice(0, 28);
+                    }
+                  })();
+                const dateShort = (() => {
+                  try {
+                    return new Date(r.createdAt).toLocaleDateString(undefined, {
+                      month: "short",
+                      day: "numeric",
+                    });
+                  } catch {
+                    return "";
+                  }
+                })();
+                return (
+                  <motion.button
+                    key={r.id}
+                    type="button"
+                    layout={!reduceMotion}
+                    initial={reduceMotion ? false : { opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={
+                      reduceMotion ? { duration: 0.12 } : { delay: i * 0.035, duration: 0.28, ease: [0.22, 1, 0.36, 1] }
+                    }
+                    onClick={() => onSelectRun(r.id)}
+                    className={cn(
+                      "flex min-w-0 max-w-[11rem] items-center gap-2 rounded-lg border px-2 py-1.5 text-left transition-colors",
+                      active
+                        ? "border-violet-400/50 bg-violet-500/15 text-white"
+                        : "border-white/10 bg-white/[0.03] text-white/75 hover:border-violet-400/35 hover:bg-white/[0.05]",
+                    )}
+                  >
+                    <span className="relative h-9 w-9 shrink-0 overflow-hidden rounded-md border border-white/10 bg-black/40">
+                      {r.thumbUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={r.thumbUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
+                      ) : (
+                        <span className="flex h-full w-full items-center justify-center text-[9px] text-white/30">—</span>
+                      )}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[11px] font-semibold leading-tight">{label}</span>
+                      <span className="text-[9px] text-white/40">{dateShort}</span>
+                    </span>
+                  </motion.button>
+                );
+              })}
+            </div>
+          </div>
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
+  );
+}
+
 function confidenceToQuality(c: string | undefined) {
   const v = String(c ?? "").toLowerCase();
   if (v === "high") return { label: "good", color: "text-emerald-400", help: "Clean product image looks strong." };
@@ -2813,6 +2969,7 @@ export default function LinkToAdUniverse({
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
         body: JSON.stringify({
+          linkToAd: true,
           accountPlan: planId,
           model: "pro",
           prompt,
@@ -2940,6 +3097,7 @@ export default function LinkToAdUniverse({
           headers: { "Content-Type": "application/json" },
           signal,
           body: JSON.stringify({
+            linkToAd: true,
             accountPlan: planId,
             model: "pro",
             prompt,
@@ -3096,6 +3254,7 @@ export default function LinkToAdUniverse({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            linkToAd: true,
             accountPlan: planId,
             model: "pro",
             prompt,
@@ -4105,59 +4264,13 @@ export default function LinkToAdUniverse({
             <CardTitle className="text-base">Link to Ad</CardTitle>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
-            <div className="flex items-center gap-2.5">
-              <button
-                type="button"
-                role="switch"
-                aria-checked={hidePreviousLtaGenerations}
-                aria-label={
-                  hidePreviousLtaGenerations
-                    ? "Show previous Link to Ad generations"
-                    : "Hide previous Link to Ad generations"
-                }
-                onClick={toggleHidePreviousLtaGenerations}
-                className={cn(
-                  "group relative flex h-8 shrink-0 items-center rounded-full border px-1 transition-[border-color,background-color,box-shadow] duration-300",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0912]",
-                  hidePreviousLtaGenerations
-                    ? "w-[3.25rem] border-violet-400/40 bg-gradient-to-r from-violet-500/30 to-violet-600/20 shadow-[0_0_20px_rgba(139,92,246,0.15)]"
-                    : "w-[3.25rem] border-white/12 bg-black/40 hover:border-white/18 hover:bg-white/[0.05]",
-                )}
-              >
-                <motion.span
-                  className="pointer-events-none flex h-6 w-6 items-center justify-center rounded-full bg-white text-[#1a1025] shadow-md"
-                  initial={false}
-                  animate={{
-                    x: hidePreviousLtaGenerations ? 20 : 0,
-                    scale: hidePreviousLtaGenerations ? 0.92 : 1,
-                  }}
-                  transition={
-                    reduceMotion
-                      ? { duration: 0.12 }
-                      : { type: "spring", stiffness: 520, damping: 34, mass: 0.65 }
-                  }
-                >
-                  {hidePreviousLtaGenerations ? (
-                    <EyeOff className="h-3.5 w-3.5 opacity-80" aria-hidden />
-                  ) : (
-                    <Eye className="h-3.5 w-3.5 opacity-90" aria-hidden />
-                  )}
-                </motion.span>
-              </button>
-              <div className="flex min-w-0 flex-col items-start leading-tight">
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-white/50">
-                  Previous runs
-                </span>
-                <span
-                  className={cn(
-                    "text-[11px] font-medium transition-colors duration-300",
-                    hidePreviousLtaGenerations ? "text-white/35" : "text-violet-200/85",
-                  )}
-                >
-                  {hidePreviousLtaGenerations ? "Hidden" : "Visible"}
-                </span>
-              </div>
-            </div>
+            {showBrandHeaderInsteadOfUrl && recentLinkToAdRuns.length > 0 ? (
+              <LinkToAdRecentRunsToggle
+                hidePreviousLtaGenerations={hidePreviousLtaGenerations}
+                onToggle={toggleHidePreviousLtaGenerations}
+                reduceMotion={reduceMotion ?? false}
+              />
+            ) : null}
             {hasStartedLinkToAdFlow ? (
               <Button
                 type="button"
@@ -4176,95 +4289,16 @@ export default function LinkToAdUniverse({
             ) : null}
           </div>
         </div>
-        <AnimatePresence initial={false}>
-          {!hidePreviousLtaGenerations && recentLinkToAdRuns.length > 0 ? (
-            <motion.div
-              key="lta-recent-runs"
-              initial={
-                reduceMotion
-                  ? { opacity: 0 }
-                  : { opacity: 0, y: -10, scale: 0.985 }
-              }
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={
-                reduceMotion
-                  ? { opacity: 0 }
-                  : { opacity: 0, y: -8, scale: 0.98, filter: "blur(4px)" }
-              }
-              transition={
-                reduceMotion
-                  ? { duration: 0.15 }
-                  : { duration: 0.32, ease: [0.22, 1, 0.36, 1] }
-              }
-              className="origin-top overflow-hidden"
-            >
-              <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2.5">
-                <p className="text-[10px] leading-snug text-white/45">
-                  All your Link to Ad generations are stored in your projects — switch between your last three here, or
-                  open Projects for the full list.
-                </p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {recentLinkToAdRuns.map((r, i) => {
-                    const active = (activeRunIdProp ?? universeRunId) === r.id;
-                    const label =
-                      (r.title && r.title.trim()) ||
-                      (() => {
-                        try {
-                          return new URL(r.storeUrl).hostname.replace(/^www\./, "");
-                        } catch {
-                          return r.storeUrl.slice(0, 28);
-                        }
-                      })();
-                    const dateShort = (() => {
-                      try {
-                        return new Date(r.createdAt).toLocaleDateString(undefined, {
-                          month: "short",
-                          day: "numeric",
-                        });
-                      } catch {
-                        return "";
-                      }
-                    })();
-                    return (
-                      <motion.button
-                        key={r.id}
-                        type="button"
-                        layout={!reduceMotion}
-                        initial={reduceMotion ? false : { opacity: 0, y: 6 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={
-                          reduceMotion
-                            ? { duration: 0.12 }
-                            : { delay: i * 0.035, duration: 0.28, ease: [0.22, 1, 0.36, 1] }
-                        }
-                        onClick={() => handleSwitchRecentRun(r.id)}
-                        className={cn(
-                          "flex min-w-0 max-w-[11rem] items-center gap-2 rounded-lg border px-2 py-1.5 text-left transition-colors",
-                          active
-                            ? "border-violet-400/50 bg-violet-500/15 text-white"
-                            : "border-white/10 bg-white/[0.03] text-white/75 hover:border-violet-400/35 hover:bg-white/[0.05]",
-                        )}
-                      >
-                        <span className="relative h-9 w-9 shrink-0 overflow-hidden rounded-md border border-white/10 bg-black/40">
-                          {r.thumbUrl ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={r.thumbUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
-                          ) : (
-                            <span className="flex h-full w-full items-center justify-center text-[9px] text-white/30">—</span>
-                          )}
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-[11px] font-semibold leading-tight">{label}</span>
-                          <span className="text-[9px] text-white/40">{dateShort}</span>
-                        </span>
-                      </motion.button>
-                    );
-                  })}
-                </div>
-              </div>
-            </motion.div>
-          ) : null}
-        </AnimatePresence>
+        {showBrandHeaderInsteadOfUrl && recentLinkToAdRuns.length > 0 ? (
+          <LinkToAdRecentRunsChips
+            recentLinkToAdRuns={recentLinkToAdRuns}
+            hidePreviousLtaGenerations={hidePreviousLtaGenerations}
+            activeRunIdProp={activeRunIdProp}
+            universeRunId={universeRunId}
+            onSelectRun={handleSwitchRecentRun}
+            reduceMotion={reduceMotion ?? false}
+          />
+        ) : null}
       </CardHeader>
 
       <CardContent className="space-y-6">
@@ -4438,6 +4472,29 @@ export default function LinkToAdUniverse({
                       </div>
                     </div>
                   ) : null}
+                </div>
+              ) : null}
+              {!showBrandHeaderInsteadOfUrl && recentLinkToAdRuns.length > 0 ? (
+                <div className="mt-3 space-y-2 rounded-xl border border-violet-500/20 bg-violet-500/[0.07] px-3 py-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-200/90">
+                    Recent projects
+                  </p>
+                  <p className="text-[10px] leading-snug text-white/45">
+                    Tap a project to continue where you left off, or enter a new URL below.
+                  </p>
+                  <LinkToAdRecentRunsToggle
+                    hidePreviousLtaGenerations={hidePreviousLtaGenerations}
+                    onToggle={toggleHidePreviousLtaGenerations}
+                    reduceMotion={reduceMotion ?? false}
+                  />
+                  <LinkToAdRecentRunsChips
+                    recentLinkToAdRuns={recentLinkToAdRuns}
+                    hidePreviousLtaGenerations={hidePreviousLtaGenerations}
+                    activeRunIdProp={activeRunIdProp}
+                    universeRunId={universeRunId}
+                    onSelectRun={handleSwitchRecentRun}
+                    reduceMotion={reduceMotion ?? false}
+                  />
                 </div>
               ) : null}
               <div className="relative mt-2 flex flex-col gap-3 sm:flex-row sm:items-stretch">
