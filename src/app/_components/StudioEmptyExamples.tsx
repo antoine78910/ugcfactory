@@ -15,7 +15,7 @@ const VARIANTS: Record<
     subtitle: "Set your prompt and options on the left, then hit Generate.",
     examples: [
       { icon: ImageIcon, label: "Product shots", hint: "Clean backgrounds, brand-ready frames" },
-      { icon: Sparkles, label: "Creative scenes", hint: "NanoBanana 2 & Pro (Google)" },
+      { icon: Sparkles, label: "Creative scenes", hint: "NanoBanana 2 & Pro" },
       { icon: ImageIcon, label: "With references", hint: "Upload refs to match look & pose" },
     ],
   },
@@ -39,9 +39,9 @@ const VARIANTS: Record<
   },
   upscale: {
     title: "Upscaled videos appear here",
-    subtitle: "Use Topaz Video Upscale on the left (Kie). More Kie upscale tools will land in this module.",
+    subtitle: "Use Topaz Video Upscale on the left. More upscale options will land in this module.",
     examples: [
-      { icon: Video, label: "Topaz Video", hint: "1× / 2× / 4× via Kie market" },
+      { icon: Video, label: "Topaz Video", hint: "1× / 2× / 4× scaling" },
       { icon: Sparkles, label: "Credits / second", hint: "Billed from duration you confirm" },
       { icon: Clapperboard, label: "HTTPS source", hint: "Upload or paste a public video URL" },
     ],

@@ -12,7 +12,7 @@ export type WaveSpeedPrediction = {
 function getWaveSpeedApiKey(): string {
   const key = process.env.WAVESPEED_API_KEY?.trim();
   if (!key) {
-    throw new Error("WaveSpeed API key missing on server. Set WAVESPEED_API_KEY.");
+    throw new Error("Translation service is not configured on the server.");
   }
   return key;
 }
@@ -131,10 +131,10 @@ async function uploadSourceVideoToWaveSpeed(videoUrl: string): Promise<string> {
     signal: AbortSignal.timeout(180_000),
   });
 
-  const json = await readWaveSpeedJson(uploadRes, "WaveSpeed media upload failed.");
+  const json = await readWaveSpeedJson(uploadRes, "Media upload failed.");
   const hostedUrl = typeof json.download_url === "string" ? json.download_url.trim() : "";
   if (!hostedUrl) {
-    throw new Error("WaveSpeed media upload did not return a download URL.");
+    throw new Error("Media upload did not return a download URL.");
   }
   return hostedUrl;
 }
@@ -150,8 +150,8 @@ export async function submitWaveSpeedHeygenVideoTranslate(opts: {
 }): Promise<WaveSpeedPrediction> {
   const videoUrl = opts.videoUrl.trim();
   const outputLanguage = opts.outputLanguage.trim();
-  if (!videoUrl) throw new Error("Missing video URL for WaveSpeed translation.");
-  if (!outputLanguage) throw new Error("Missing target language for WaveSpeed translation.");
+  if (!videoUrl) throw new Error("Missing video URL for translation.");
+  if (!outputLanguage) throw new Error("Missing target language for translation.");
   const hostedVideoUrl = await ensureWaveSpeedVideoUrl(videoUrl);
 
   const res = await fetch(`${WAVESPEED_API_BASE}/${WAVESPEED_HEYGEN_VIDEO_TRANSLATE_MODEL}`, {
@@ -166,13 +166,13 @@ export async function submitWaveSpeedHeygenVideoTranslate(opts: {
     }),
   });
 
-  const json = await readWaveSpeedJson(res, "WaveSpeed translation request failed.");
+  const json = await readWaveSpeedJson(res, "Translation request failed.");
   return parsePrediction(json);
 }
 
 export async function getWaveSpeedPrediction(taskId: string): Promise<WaveSpeedPrediction> {
   const id = taskId.trim();
-  if (!id) throw new Error("Missing WaveSpeed task id.");
+  if (!id) throw new Error("Missing translation task id.");
 
   const encodedId = encodeURIComponent(id);
   const endpoints = [
@@ -183,7 +183,7 @@ export async function getWaveSpeedPrediction(taskId: string): Promise<WaveSpeedP
   let lastError: unknown = null;
   for (const endpoint of endpoints) {
     try {
-      const json = await fetchWaveSpeedJson(endpoint, "WaveSpeed prediction lookup failed.");
+      const json = await fetchWaveSpeedJson(endpoint, "Prediction lookup failed.");
       return parsePrediction(json);
     } catch (err) {
       lastError = err;
@@ -197,5 +197,5 @@ export async function getWaveSpeedPrediction(taskId: string): Promise<WaveSpeedP
     }
   }
 
-  throw (lastError instanceof Error ? lastError : new Error("WaveSpeed prediction lookup failed."));
+  throw (lastError instanceof Error ? lastError : new Error("Prediction lookup failed."));
 }

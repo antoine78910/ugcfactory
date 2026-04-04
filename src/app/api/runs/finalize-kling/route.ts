@@ -73,7 +73,7 @@ export async function POST(req: Request) {
 
   const pending = findPendingKlingInUniverse(snap);
   if (!pending) {
-    return NextResponse.json({ error: "No pending Kling/KIE task on this run." }, { status: 400 });
+    return NextResponse.json({ error: "No pending video task on this run." }, { status: 400 });
   }
   const { angleIndex, refIndex, taskId } = pending;
 

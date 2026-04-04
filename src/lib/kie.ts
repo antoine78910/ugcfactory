@@ -49,7 +49,7 @@ export async function kieVeoGenerate(req: KieVeoGenerateRequest, overrideApiKey?
 
   if (!res.ok || json.code !== 200 || typeof taskId !== "string") {
     throw new Error(
-      `KIE Veo generate failed: HTTP ${res.status} / code ${json.code} / ${json.msg}`,
+      `Video generation failed: HTTP ${res.status} / code ${json.code} / ${json.msg}`,
     );
   }
 
@@ -96,7 +96,7 @@ export async function kieVeoRecordInfo(taskId: string, overrideApiKey?: string) 
 
   if (!res.ok || json.code !== 200 || typeof data?.successFlag !== "number") {
     throw new Error(
-      `KIE Veo record-info failed: HTTP ${res.status} / code ${json.code} / ${json.msg}`,
+      `Video status check failed: HTTP ${res.status} / code ${json.code} / ${json.msg}`,
     );
   }
 

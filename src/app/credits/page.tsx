@@ -188,6 +188,14 @@ export default function CreditsPage() {
                         {p.badge}
                       </span>
                     ) : null}
+                    {savePercent ? (
+                      <span
+                        className="pointer-events-none absolute right-3 top-3 z-10 rounded-full border border-emerald-300/45 bg-emerald-400/20 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-100 shadow-[0_0_12px_rgba(16,185,129,0.22)]"
+                        aria-hidden
+                      >
+                        Save {savePercent}%
+                      </span>
+                    ) : null}
 
                     <div className="mt-1 flex flex-col gap-3">
                       <div className="flex items-center gap-3">

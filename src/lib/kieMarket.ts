@@ -51,7 +51,7 @@ export async function kieMarketCreateTask(req: KieMarketCreateTaskRequest, overr
     try {
       json = (await res.json()) as KieMarketCreateTaskResponse;
     } catch {
-      lastError = new Error(`KIE createTask: response was not JSON (HTTP ${res.status})`);
+      lastError = new Error(`Generation request returned invalid JSON (HTTP ${res.status})`);
       if (attempt < maxAttempts - 1) continue;
       throw lastError;
     }
@@ -72,7 +72,7 @@ export async function kieMarketCreateTask(req: KieMarketCreateTaskRequest, overr
         msgLc,
       );
 
-    lastError = new Error(`KIE createTask failed: HTTP ${res.status} / code ${code} / ${msg}`);
+    lastError = new Error(`Generation request failed: HTTP ${res.status} / code ${code} / ${msg}`);
 
     if (retryable && attempt < maxAttempts - 1) {
       continue;
@@ -81,7 +81,7 @@ export async function kieMarketCreateTask(req: KieMarketCreateTaskRequest, overr
     throw lastError;
   }
 
-  throw lastError ?? new Error("KIE createTask failed after retries.");
+  throw lastError ?? new Error("Generation request failed after retries.");
 }
 
 export type KieMarketRecordInfo = {
@@ -157,7 +157,7 @@ export async function kieMarketRecordInfo(taskId: string, overrideApiKey?: strin
     try {
       json = (await res.json()) as KieMarketRecordInfoResponse;
     } catch {
-      lastError = new Error(`KIE recordInfo: response was not JSON (HTTP ${res.status})`);
+      lastError = new Error(`Task status response was not JSON (HTTP ${res.status})`);
       if (attempt < maxAttempts - 1) continue;
       throw lastError;
     }
@@ -179,7 +179,7 @@ export async function kieMarketRecordInfo(taskId: string, overrideApiKey?: strin
       msg,
     );
 
-    lastError = new Error(`KIE recordInfo failed: ${msg || `HTTP ${res.status}`}`);
+    lastError = new Error(`Task status check failed: ${msg || `HTTP ${res.status}`}`);
 
     if ((retryableHttp || retryableCode || retryableMsg) && attempt < maxAttempts - 1) {
       continue;
@@ -188,7 +188,7 @@ export async function kieMarketRecordInfo(taskId: string, overrideApiKey?: strin
     throw lastError;
   }
 
-  throw lastError ?? new Error("KIE recordInfo failed after retries.");
+  throw lastError ?? new Error("Task status check failed after retries.");
 }
 
 export function parseResultUrls(resultJson: string | undefined): string[] {

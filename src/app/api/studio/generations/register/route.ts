@@ -8,6 +8,8 @@ import { serverLog } from "@/lib/serverLog";
 type Body = {
   kind?: string;
   label?: string;
+  /** Model / picker id stored on the row for history UI. */
+  model?: string;
   taskId?: string;
   taskIds?: string[];
   provider?: string;
@@ -30,6 +32,7 @@ export async function POST(req: Request) {
 
   const kind = String(body.kind ?? "").trim();
   const label = String(body.label ?? "").trim() || "Studio";
+  const model = String(body.model ?? "").trim();
   const provider = String(body.provider ?? "kie-market").trim() || "kie-market";
   const creditsDisplay = Math.max(0, Number(body.creditsCharged) || 0);
   const totalTicks = displayCreditsToLedgerTicks(creditsDisplay);
@@ -60,6 +63,7 @@ export async function POST(req: Request) {
     kind,
     status: "processing" as const,
     label,
+    ...(model ? { model } : {}),
     external_task_id: externalTaskId,
     provider,
     credits_charged: baseCharge + (i === 0 ? remainder : 0),

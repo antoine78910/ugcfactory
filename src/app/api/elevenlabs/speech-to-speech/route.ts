@@ -81,7 +81,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Missing storagePath." }, { status: 400 });
   }
   if (!voiceId) {
-    return NextResponse.json({ error: "Missing ElevenLabs voice id." }, { status: 400 });
+    return NextResponse.json({ error: "Missing voice id." }, { status: 400 });
   }
   if (typeof seed === "number" && (!Number.isInteger(seed) || seed < 0 || seed > 4294967295)) {
     return NextResponse.json(

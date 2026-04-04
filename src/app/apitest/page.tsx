@@ -115,7 +115,7 @@ export default function ApiTestPage() {
               <Link href="/credits" className="text-cyan-300/90 underline-offset-4 hover:underline">
                 /credits
               </Link>
-              . With KIE or PiAPI enabled and filled in, the studio no longer blocks on platform credit balance for those
+              . With personal keys enabled and filled in, the studio can bypass platform credit checks for the matching
               flows.
             </p>
           </header>
@@ -128,9 +128,10 @@ export default function ApiTestPage() {
                     <Key className="h-4.5 w-4.5" aria-hidden />
                   </div>
                   <div>
-                    <h2 className="text-sm font-bold text-white">KIE</h2>
+                    <h2 className="text-sm font-bold text-white">Primary video API</h2>
                     <p className="mt-1 text-xs leading-relaxed text-white/45">
-                      KIE API key: usage is billed to your KIE account; no platform credit charge when this mode is on.
+                      Personal key for default video/image generation: usage is billed to your own account; no platform
+                      credit charge when this mode is on.
                     </p>
                   </div>
                 </div>
@@ -155,11 +156,11 @@ export default function ApiTestPage() {
 
               {personalApiEnabled ? (
                 <div className="flex flex-col gap-2">
-                  <label className="text-[11px] font-semibold uppercase tracking-wide text-white/40">KIE API key</label>
+                  <label className="text-[11px] font-semibold uppercase tracking-wide text-white/40">API key</label>
                   <div className="relative">
                     <Input
                       type={showKey ? "text" : "password"}
-                      placeholder="Paste KIE key…"
+                      placeholder="Paste key…"
                       value={personalApiKey}
                       onChange={(e) => savePersonalApiKey(e.target.value)}
                       className="h-10 border-amber-500/20 bg-black/40 pr-10 font-mono text-sm text-white placeholder:text-white/25 focus-visible:ring-amber-500/40"
@@ -190,10 +191,10 @@ export default function ApiTestPage() {
                     <Key className="h-4.5 w-4.5" aria-hidden />
                   </div>
                   <div>
-                    <h2 className="text-sm font-bold text-white">PiAPI (Seedance)</h2>
+                    <h2 className="text-sm font-bold text-white">Alternate video API</h2>
                     <p className="mt-1 text-xs leading-relaxed text-white/45">
-                      PiAPI key for Seedance models: same idea—no platform credit charge on those flows when this mode is
-                      on.
+                      Optional second key for some video models: same idea—no platform credit charge on those flows when
+                      this mode is on.
                     </p>
                   </div>
                 </div>
@@ -218,11 +219,11 @@ export default function ApiTestPage() {
 
               {piapiEnabled ? (
                 <div className="flex flex-col gap-2">
-                  <label className="text-[11px] font-semibold uppercase tracking-wide text-white/40">PiAPI key</label>
+                  <label className="text-[11px] font-semibold uppercase tracking-wide text-white/40">API key</label>
                   <div className="relative">
                     <Input
                       type={showPiapiKey ? "text" : "password"}
-                      placeholder="Paste PiAPI key…"
+                      placeholder="Paste key…"
                       value={piapiKey}
                       onChange={(e) => savePiapiKey(e.target.value)}
                       className="h-10 border-violet-500/20 bg-black/40 pr-10 font-mono text-sm text-white placeholder:text-white/25 focus-visible:ring-violet-500/40"
@@ -253,9 +254,9 @@ export default function ApiTestPage() {
                     <Key className="h-4.5 w-4.5" aria-hidden />
                   </div>
                   <div>
-                    <h2 className="text-sm font-bold text-white">ElevenLabs (Voice Change)</h2>
+                    <h2 className="text-sm font-bold text-white">Voice change</h2>
                     <p className="mt-1 text-xs leading-relaxed text-white/45">
-                      ElevenLabs API key for speech-to-speech voice change: usage is billed to your ElevenLabs account.
+                      Personal key for speech-to-speech voice change: usage is billed to your own account.
                     </p>
                   </div>
                 </div>
@@ -280,11 +281,11 @@ export default function ApiTestPage() {
 
               {elevenEnabled ? (
                 <div className="flex flex-col gap-2">
-                  <label className="text-[11px] font-semibold uppercase tracking-wide text-white/40">ElevenLabs API key</label>
+                  <label className="text-[11px] font-semibold uppercase tracking-wide text-white/40">API key</label>
                   <div className="relative">
                     <Input
                       type={showElevenKey ? "text" : "password"}
-                      placeholder="Paste ElevenLabs key…"
+                      placeholder="Paste key…"
                       value={elevenKey}
                       onChange={(e) => saveElevenKey(e.target.value)}
                       className="h-10 border-emerald-500/20 bg-black/40 pr-10 font-mono text-sm text-white placeholder:text-white/25 focus-visible:ring-emerald-500/40"
@@ -300,7 +301,7 @@ export default function ApiTestPage() {
                   {elevenKey.trim() ? (
                     <p className="text-[11px] text-emerald-400/80">Saved locally.</p>
                   ) : (
-                    <p className="text-[11px] text-emerald-300/60">Enter a key to use your own ElevenLabs account for voice change.</p>
+                    <p className="text-[11px] text-emerald-300/60">Enter a key to use your own account for voice change.</p>
                   )}
                 </div>
               ) : null}

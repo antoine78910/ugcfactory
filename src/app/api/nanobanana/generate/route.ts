@@ -57,7 +57,10 @@ export async function POST(req: Request) {
   if (!personalKey && !getEnv("KIE_API_KEY")?.trim()) {
     serverLog("nanobanana_generate_config", { error: "missing_kie_key" });
     return NextResponse.json(
-      { error: "Image generation is not configured on the server (missing KIE_API_KEY). Add a personal API key in settings or configure the platform key." },
+      {
+        error:
+          "Image generation is not configured on the server. Add a personal API key in settings or ask your admin to configure the platform.",
+      },
       { status: 503 },
     );
   }

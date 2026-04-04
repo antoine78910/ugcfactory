@@ -68,7 +68,7 @@ export async function piapiCreateSeedanceTask(opts: {
       json?.error?.raw_message?.trim() ||
       json?.message?.trim() ||
       "Unknown error";
-    throw new Error(`PiAPI seedance create failed: HTTP ${res.status} / ${reason}`);
+    throw new Error(`Video generation could not be started (HTTP ${res.status} / ${reason})`);
   }
   return id;
 }
@@ -103,7 +103,7 @@ export async function piapiGetSeedanceTask(taskId: string, overrideApiKey?: stri
     data?: PiapiSeedanceTask;
   };
   if (!res.ok || json?.code !== 200 || !json?.data) {
-    throw new Error(`PiAPI seedance get-task failed: HTTP ${res.status} / ${json?.message ?? "Unknown error"}`);
+    throw new Error(`Could not read video task status (HTTP ${res.status} / ${json?.message ?? "Unknown error"})`);
   }
   return json.data;
 }
@@ -122,7 +122,7 @@ export async function piapiGetTask(taskId: string, overrideApiKey?: string): Pro
     data?: PiapiGenericTask;
   };
   if (!res.ok || json?.code !== 200 || !json?.data) {
-    throw new Error(`PiAPI get-task failed: HTTP ${res.status} / ${json?.message ?? "Unknown error"}`);
+    throw new Error(`Could not read task status (HTTP ${res.status} / ${json?.message ?? "Unknown error"})`);
   }
   return json.data;
 }
@@ -137,7 +137,7 @@ export function piapiTaskStatusToLegacy(
     return { status: "SUCCESS", response: [video], error_message: null };
   }
   if (st === "failed" || st === "fail") {
-    const message = task.error?.message?.trim() || task.error?.raw_message?.trim() || "PiAPI task failed.";
+    const message = task.error?.message?.trim() || task.error?.raw_message?.trim() || "Video generation failed.";
     return { status: "FAILED", response: [], error_message: message };
   }
   return { status: "IN_PROGRESS", response: [], error_message: null };
@@ -177,7 +177,7 @@ export function piapiGenericTaskStatusToLegacy(
     return { status: "SUCCESS", response: [video], error_message: null };
   }
   if (st === "failed" || st === "fail") {
-    const message = task.error?.message?.trim() || task.error?.raw_message?.trim() || "PiAPI task failed.";
+    const message = task.error?.message?.trim() || task.error?.raw_message?.trim() || "Video generation failed.";
     return { status: "FAILED", response: [], error_message: message };
   }
   return { status: "IN_PROGRESS", response: [], error_message: null };

@@ -24,7 +24,7 @@ export function userFacingProviderError(raw: string | null | undefined): string 
   const lower = s.toLowerCase();
 
   if (/nsfw|porn|sexual|nude|moderation|content policy|policy violation|safety system|unsafe content|blocked|not allowed|prohibited|violate/.test(lower)) {
-    return "Blocked by the provider’s content guidelines. Try a different prompt or reference image.";
+    return "Blocked by content guidelines. Try a different prompt or reference image.";
   }
   if (/rate ?limit|too many requests|\b429\b|throttl/.test(lower)) {
     return "Too many requests. Wait a moment and try again.";
@@ -33,13 +33,13 @@ export function userFacingProviderError(raw: string | null | undefined): string 
     return "The request timed out. Try again.";
   }
   if (/internal error|server exception|temporar(y)?\s+(error|failure)|try again later/i.test(lower)) {
-    return "The image provider had a temporary error. Wait a few seconds and try again.";
+    return "The service had a temporary error. Wait a few seconds and try again.";
   }
   if (/credit|balance|quota|insufficient|payment required|\b402\b/.test(lower)) {
-    return "Provider credits or quota issue. Check your API key or billing.";
+    return "Credits or quota issue. Check your API key or billing.";
   }
   if (/unauthor|\b401\b|forbidden|\b403\b|signature|invalid key|apikey|api key rejected/.test(lower)) {
-    return "The provider rejected the request (authentication or permissions). Check your API keys.";
+    return "The request was rejected (authentication or permissions). Check your API keys.";
   }
   if (/not found|\b404\b|expired|does not exist|task not found/.test(lower)) {
     return "A resource was missing or expired (for example the image link). Re-upload and try again.";
@@ -51,7 +51,7 @@ export function userFacingProviderError(raw: string | null | undefined): string 
     return "Invalid parameters or inputs. Adjust settings and retry.";
   }
   if (/fetch failed|failed to fetch|networkerror|load failed|econnreset|socket/i.test(lower)) {
-    return "Network error while contacting the image provider. Wait a few seconds and try again.";
+    return "Network error while contacting the service. Wait a few seconds and try again.";
   }
 
   let cleaned = redactSensitiveFragments(s);

@@ -582,6 +582,7 @@ export default function AppBrandWizard() {
   const [voiceChangeFileFormat, setVoiceChangeFileFormat] = useState<"other" | "pcm_s16le_16">("other");
   const [voiceChangeSeed, setVoiceChangeSeed] = useState<string>("");
   const [voiceChangeVoiceSettingsJson, setVoiceChangeVoiceSettingsJson] = useState<string>("");
+  const [translateHistoryItems, setTranslateHistoryItems] = useState<StudioHistoryItem[]>([]);
   const [motionHistoryItems, setMotionHistoryItems] = useState<StudioHistoryItem[]>([]);
   const [motionServerHistory, setMotionServerHistory] = useState<boolean | null>(null);
   type MotionBilling =
@@ -706,7 +707,11 @@ export default function AppBrandWizard() {
 
 
   const isVoiceSection = appSection === "voice";
-  const setActiveHistoryItems = isVoiceSection ? setVoiceHistoryItems : setMotionHistoryItems;
+  const setActiveHistoryItems = isVoiceSection
+    ? setVoiceHistoryItems
+    : appSection === "ad_clone"
+      ? setTranslateHistoryItems
+      : setMotionHistoryItems;
 
   useEffect(() => {
     void (async () => {
@@ -1064,7 +1069,7 @@ export default function AppBrandWizard() {
   const prepareVoiceChangeAudioFile = useCallback(async (): Promise<File> => {
     if (voiceChangeUploadFile) {
       if (voiceChangeUploadFile.size > 50 * 1024 * 1024) {
-        throw new Error("File too large for ElevenLabs voice change (max 50 MB).");
+        throw new Error("File too large for voice change (max 50 MB).");
       }
       return voiceChangeUploadFile;
     }
@@ -3089,7 +3094,7 @@ export default function AppBrandWizard() {
                                 <div className="rounded-xl border border-white/10 bg-black/20 p-2.5 space-y-2">
                                   <Label className="text-xs text-white/45">Target voice</Label>
                                   <p className="text-[10px] leading-snug text-white/35">
-                                    Pick the ElevenLabs voice to apply to your audio or video.
+                                    Pick the voice to apply to your audio or video.
                                   </p>
 
                                   <Select value={elevenVoiceId} onValueChange={setElevenVoiceId}>
@@ -3323,7 +3328,11 @@ export default function AppBrandWizard() {
                               : "Motion control";
                           const bgSource =
                             motionSceneBackground === "video" ? "input_video" : "input_image";
-                          const setHistoryTarget = isVoiceChange ? setVoiceHistoryItems : setMotionHistoryItems;
+                          const setHistoryTarget = isVoiceChange
+                            ? setVoiceHistoryItems
+                            : appSection === "ad_clone"
+                              ? setTranslateHistoryItems
+                              : setMotionHistoryItems;
                           setHistoryTarget((prev) => [
                             {
                               id: jobId,
@@ -3532,7 +3541,7 @@ export default function AppBrandWizard() {
                                 inputUrls: motionInputUrls.length > 0 ? motionInputUrls : undefined,
                               });
                               if (rowId) {
-                                setMotionHistoryItems((prev) =>
+                                setHistoryTarget((prev) =>
                                   prev.map((i) =>
                                     i.id === jobId
                                       ? { ...i, id: rowId, studioGenerationKind: generationKind }
@@ -3552,7 +3561,11 @@ export default function AppBrandWizard() {
                                     : "Unknown error";
                               refundPlatformCredits(platformChargeMotion, grantCredits, creditsRef);
                               toast.error(msg);
-                              (isVoiceChange ? setVoiceHistoryItems : setMotionHistoryItems)((prev) =>
+                              (isVoiceChange
+                                ? setVoiceHistoryItems
+                                : appSection === "ad_clone"
+                                  ? setTranslateHistoryItems
+                                  : setMotionHistoryItems)((prev) =>
                                 prev.map((i) =>
                                   i.id === jobId && i.status === "generating"
                                     ? {
@@ -3611,13 +3624,21 @@ export default function AppBrandWizard() {
                         hasOutput
                         output={
                           <StudioGenerationsHistory
-                            items={appSection === "voice" ? voiceHistoryItems : motionHistoryItems}
+                            items={
+                              appSection === "voice"
+                                ? voiceHistoryItems
+                                : appSection === "ad_clone"
+                                  ? translateHistoryItems
+                                  : motionHistoryItems
+                            }
                             empty={<StudioEmptyExamples variant="motion" />}
                             mediaLabel={appSection === "voice" ? "Voice" : appSection === "ad_clone" ? "Translation" : "Motion"}
                             onItemDeleted={(id) =>
                               appSection === "voice"
                                 ? setVoiceHistoryItems((prev) => prev.filter((i) => i.id !== id))
-                                : setMotionHistoryItems((prev) => prev.filter((i) => i.id !== id))
+                                : appSection === "ad_clone"
+                                  ? setTranslateHistoryItems((prev) => prev.filter((i) => i.id !== id))
+                                  : setMotionHistoryItems((prev) => prev.filter((i) => i.id !== id))
                             }
                             onChangeVoice={handleChangeVoiceFromHistory}
                           />
@@ -4209,7 +4230,7 @@ export default function AppBrandWizard() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <p className="text-xs text-muted-foreground">
-                Provider: <span className="font-medium">Kling 3.0 Standard</span> (KIE Market), aspect 9:16. 15s, 720p
+                Provider: <span className="font-medium">Kling 3.0 Standard</span>, aspect 9:16. 15s, 720p
                 Standard, audio ON (voix native).
                   </p>
 

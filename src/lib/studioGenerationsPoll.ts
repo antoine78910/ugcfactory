@@ -97,7 +97,7 @@ export async function pollStudioGenerationRow(
             const translationTaskId = String(translateTask.id ?? "").trim();
             const translationStatus = String(translateTask.status ?? "").toLowerCase();
             if (!translationTaskId && translationStatus !== "completed") {
-              throw new Error("WaveSpeed did not return a task id.");
+              throw new Error("Translation service did not return a task id.");
             }
             const { error } = await supabase
               .from("studio_generations")
@@ -131,7 +131,7 @@ export async function pollStudioGenerationRow(
           } catch (err) {
             out = {
               kind: "fail",
-              message: err instanceof Error ? err.message : "WaveSpeed translation failed",
+              message: err instanceof Error ? err.message : "Translation failed",
             };
           }
         }
@@ -162,7 +162,7 @@ export async function pollStudioGenerationRow(
         });
         out = {
           kind: "fail",
-          message: err instanceof Error ? err.message : "WaveSpeed prediction lookup failed",
+          message: err instanceof Error ? err.message : "Could not check translation status.",
         };
       }
     }
@@ -172,7 +172,7 @@ export async function pollStudioGenerationRow(
     const mapped = piapiGenericTaskStatusToLegacy(raw);
     if (mapped.status === "IN_PROGRESS") out = { kind: "processing" };
     else if (mapped.status === "SUCCESS") out = { kind: "success", urls: mapped.response };
-    else out = { kind: "fail", message: mapped.error_message ?? "PiAPI task failed" };
+    else out = { kind: "fail", message: mapped.error_message ?? "Video task failed." };
   } else {
     /**
      * Platform jobs: always use platform KIE key (override undefined).

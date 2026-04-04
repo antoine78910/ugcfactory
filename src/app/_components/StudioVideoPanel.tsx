@@ -39,6 +39,8 @@ import {
 import {
   canUseStudioVideoEditPicker,
   canUseStudioVideoModel,
+  studioVideoDisplayLabel,
+  studioVideoEditPickerDisplayLabel,
   studioVideoEditUpgradeMessage,
   studioVideoUpgradeMessage,
 } from "@/lib/subscriptionModelAccess";
@@ -171,7 +173,7 @@ const VIDEO_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
   {
     id: "veo3_fast",
     label: "Veo 3.1 Fast",
-    subtitle: `Google · Fal Fast tier · ${VEO_3_1_FAST.credits} credits / video`,
+    subtitle: `Veo 3.1 · Fast · ${VEO_3_1_FAST.credits} credits / video`,
     icon: "veo",
     resolution: "1080p",
     durationRange: "5–10s",
@@ -179,7 +181,7 @@ const VIDEO_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
   {
     id: "veo3",
     label: "Veo 3.1",
-    subtitle: `Google · Fal Quality tier · ${VEO_3_1_QUALITY.credits} credits / video`,
+    subtitle: `Veo 3.1 · Quality · ${VEO_3_1_QUALITY.credits} credits / video`,
     icon: "veo",
     resolution: "1080p",
     durationRange: "5–10s",
@@ -478,6 +480,8 @@ async function registerStudioTask(params: {
   label: string;
   taskId: string;
   provider?: string;
+  /** Video market model id, edit picker id, or `motion_control`. */
+  model?: string;
   creditsCharged: number;
   personalApiKey?: string;
   inputUrls?: string[];
@@ -1166,6 +1170,8 @@ export default function StudioVideoPanel({
         label,
         posterUrl: poster,
         createdAt: startedAt,
+        model: motionEdit ? "motion_control" : editPickerId,
+        modelLabel: motionEdit ? "Motion control" : studioVideoEditPickerDisplayLabel(editPickerId),
       },
       ...prev,
     ]);
@@ -1207,6 +1213,7 @@ export default function StudioVideoPanel({
             kind: "studio_video",
             label,
             taskId: json.taskId,
+            model: "motion_control",
             creditsCharged: platformChargeEdit,
             personalApiKey: editPKey,
             inputUrls: [snap.editMotionImageUrl, snap.editMotionVideoUrl].filter(Boolean) as string[],
@@ -1225,6 +1232,8 @@ export default function StudioVideoPanel({
                 mediaUrl: url,
                 posterUrl: snap.editMotionImageUrl ?? undefined,
                 createdAt: doneAt,
+                model: "motion_control",
+                modelLabel: "Motion control",
               },
               ...rest,
             ];
@@ -1254,6 +1263,7 @@ export default function StudioVideoPanel({
           kind: "studio_video",
           label,
           taskId: json.taskId,
+          model: snap.editPickerId,
           creditsCharged: platformChargeEdit,
           personalApiKey: editPKey,
           inputUrls: [snap.editVideoUrl, ...(snap.editElementUrls || [])].filter(Boolean) as string[],
@@ -1272,6 +1282,8 @@ export default function StudioVideoPanel({
               mediaUrl: url,
               posterUrl: snap.editElementUrls[0] ?? undefined,
               createdAt: doneAt,
+              model: snap.editPickerId,
+              modelLabel: studioVideoEditPickerDisplayLabel(snap.editPickerId),
             },
             ...rest,
           ];
@@ -1334,6 +1346,8 @@ export default function StudioVideoPanel({
         label,
         posterUrl: startUrl ?? undefined,
         createdAt: startedAt,
+        model: modelId,
+        modelLabel: studioVideoDisplayLabel(modelId),
       },
       ...prev,
     ]);
@@ -1380,6 +1394,7 @@ export default function StudioVideoPanel({
             kind: "studio_video",
             label,
             taskId: json.taskId,
+            model: snap.modelId,
             creditsCharged: platformChargeCreate,
             personalApiKey: pKey,
             inputUrls: snap.startUrl ? [snap.startUrl] : undefined,
@@ -1401,6 +1416,8 @@ export default function StudioVideoPanel({
                 mediaUrl: url,
                 posterUrl: snap.startUrl ?? undefined,
                 createdAt: doneAt,
+                model: snap.modelId,
+                modelLabel: studioVideoDisplayLabel(snap.modelId),
               },
               ...rest,
             ];
@@ -1435,6 +1452,7 @@ export default function StudioVideoPanel({
             kind: "studio_video",
             label,
             taskId: json.taskId,
+            model: snap.modelId,
             creditsCharged: platformChargeCreate,
             personalApiKey: pKey,
             inputUrls: urls.length ? urls : undefined,
@@ -1453,6 +1471,8 @@ export default function StudioVideoPanel({
                 mediaUrl: url,
                 posterUrl: snap.startUrl ?? undefined,
                 createdAt: doneAt,
+                model: snap.modelId,
+                modelLabel: studioVideoDisplayLabel(snap.modelId),
               },
               ...rest,
             ];
@@ -1488,6 +1508,7 @@ export default function StudioVideoPanel({
           label,
           taskId: json.taskId,
           provider: json.provider,
+          model: snap.modelId,
           creditsCharged: platformChargeCreate,
           personalApiKey: pKey,
           inputUrls: snap.startUrl ? [snap.startUrl] : undefined,
@@ -1506,6 +1527,8 @@ export default function StudioVideoPanel({
               mediaUrl: url,
               posterUrl: snap.startUrl ?? undefined,
               createdAt: doneAt,
+              model: snap.modelId,
+              modelLabel: studioVideoDisplayLabel(snap.modelId),
             },
             ...rest,
           ];
@@ -2029,7 +2052,7 @@ export default function StudioVideoPanel({
                       <Label className="text-xs text-white/45">Quality</Label>
                       <p className="mt-0.5 text-[10px] leading-snug text-white/35">
                         {modelId === "openai/sora-2"
-                          ? "Standard or Stable (stable uses the higher Fal tier — credits update accordingly)."
+                          ? "Standard or Stable (stable uses the higher quality tier — credits update accordingly)."
                           : modelId === "openai/sora-2-pro"
                             ? "Standard or High (Pro). Credits match the Sora 2 Pro sheet."
                             : modelId === "kling-2.6/video"

@@ -263,8 +263,8 @@ export function StudioVoiceClonePanel() {
         </div>
 
         <p className="text-[11px] leading-relaxed text-white/40">
-          This voice is now available in your ElevenLabs account. Use the Voice ID in the
-          Voice Change tool or copy it for use in your workflows.
+          This voice is now available on your account. Use the Voice ID in the Voice Change tool or copy it for use in
+          your workflows.
         </p>
 
         <Button
@@ -435,15 +435,15 @@ export function StudioVoiceClonePanel() {
         />
       </div>
 
-      {/* Labels — ElevenLabs API keys: language, accent, gender, age */}
+      {/* Optional voice metadata: language, accent, gender, age */}
       <div className="space-y-3">
         <div>
           <Label className="text-xs font-semibold text-white/70">
             Labels <span className="font-normal text-white/40">(optional)</span>
           </Label>
           <p className="mt-0.5 text-[10px] leading-snug text-white/35">
-            Same keys as in the ElevenLabs voice library. Values match the dashboard filters (language, accent,
-            gender, age).
+            Optional metadata for organizing voices (language, accent, gender, age). Use the same values as in the voice
+            picker filters when applicable.
           </p>
         </div>
 

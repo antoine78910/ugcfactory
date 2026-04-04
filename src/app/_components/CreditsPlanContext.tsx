@@ -105,7 +105,7 @@ function clearPlanData() {
   lsRemove(LS_CHECKOUT_TS);
 }
 
-/** Returns the user's Kie API key when Personal API mode is active, or undefined. */
+/** Returns the user's primary personal API key when Personal API mode is active, or undefined. */
 export function getPersonalApiKey(): string | undefined {
   if (typeof window === "undefined") return undefined;
   if (lsGet(LS_PERSONAL_API_ENABLED) !== "1") return undefined;
@@ -118,7 +118,7 @@ export function isPersonalApiActive(): boolean {
   return getPersonalApiKey() !== undefined;
 }
 
-/** Returns the user's PiAPI key when PiAPI mode is active, or undefined. */
+/** Returns the user's alternate video API key when that mode is active, or undefined. */
 export function getPersonalPiapiApiKey(): string | undefined {
   if (typeof window === "undefined") return undefined;
   if (lsGet(LS_PIAPI_PERSONAL_ENABLED) !== "1") return undefined;
@@ -130,7 +130,7 @@ export function isPersonalPiapiActive(): boolean {
   return getPersonalPiapiApiKey() !== undefined;
 }
 
-/** Returns the user's ElevenLabs API key when ElevenLabs personal mode is active, or undefined. */
+/** Returns the user's personal voice API key when that mode is active, or undefined. */
 export function getPersonalElevenLabsApiKey(): string | undefined {
   if (typeof window === "undefined") return undefined;
   if (lsGet(LS_ELEVENLABS_PERSONAL_ENABLED) !== "1") return undefined;
@@ -143,7 +143,7 @@ export function isPersonalElevenLabsActive(): boolean {
 }
 
 /**
- * When either personal KIE or PiAPI key is enabled, skip platform credit charges and
+ * When either personal video API key is enabled, skip platform credit charges and
  * balance checks in the studio (you bill the provider directly).
  */
 export function isPlatformCreditBypassActive(): boolean {

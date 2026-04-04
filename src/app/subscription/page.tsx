@@ -258,17 +258,18 @@ export default function SubscriptionPage() {
                   type="button"
                   onClick={() => setBilling("yearly")}
                   className={cn(
-                    "rounded-full px-4 py-2 text-sm font-semibold transition-all duration-200",
+                    "relative overflow-visible rounded-full px-6 py-2.5 text-sm font-semibold transition-all duration-200",
                     billing === "yearly"
                       ? "bg-violet-500 text-white shadow-[0_4px_20px_rgba(139,92,246,0.35)]"
                       : "text-white/45 hover:text-white/75",
                   )}
                 >
-                  <span className="inline-flex items-center gap-2">
-                    Yearly
-                    <span className="rounded-full border border-emerald-300/45 bg-emerald-400/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-100 shadow-[0_0_16px_rgba(16,185,129,0.28)]">
-                      Save 30%
-                    </span>
+                  Yearly
+                  <span
+                    className="pointer-events-none absolute -right-1 -top-2 z-10 whitespace-nowrap rounded-full border border-emerald-300/45 bg-emerald-400/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-100 shadow-[0_0_12px_rgba(16,185,129,0.28)]"
+                    aria-hidden
+                  >
+                    Save 30%
                   </span>
                 </button>
               </div>
@@ -328,12 +329,12 @@ export default function SubscriptionPage() {
                           {plan.badge}
                         </span>
                       ) : null}
-                      {showYearlySavingsBadge ? (
-                        <span className="rounded-full border border-emerald-300/45 bg-emerald-400/20 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-100">
-                          Save 30%
-                        </span>
-                      ) : null}
                     </div>
+                    {showYearlySavingsBadge ? (
+                      <span className="pointer-events-none absolute right-3 top-3 z-10 rounded-full border border-emerald-300/45 bg-emerald-400/20 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-100 shadow-[0_0_12px_rgba(16,185,129,0.22)]">
+                        Save 30%
+                      </span>
+                    ) : null}
 
                     <div className="shrink-0">
                       <h2 className="text-lg font-bold leading-tight text-white sm:text-xl">{plan.name}</h2>
@@ -342,8 +343,8 @@ export default function SubscriptionPage() {
                       </p>
                     </div>
 
-                    {/* Same vertical space for price + billing note + yearly pill slot */}
-                    <div className="mt-3 flex min-h-[5.5rem] shrink-0 flex-col">
+                    {/* Same vertical space for price + billing note */}
+                    <div className="mt-3 flex min-h-[4.25rem] shrink-0 flex-col">
                       <div className="flex flex-wrap items-baseline gap-1">
                         <span className="text-3xl font-extrabold tabular-nums leading-none text-white md:text-4xl">
                           ${mainLabel}
@@ -351,13 +352,6 @@ export default function SubscriptionPage() {
                         <span className="text-sm font-semibold text-white/55">/mo</span>
                       </div>
                       <p className="mt-1.5 line-clamp-2 min-h-[1.75rem] text-[11px] leading-snug text-white/38">{sub}</p>
-                      <div className="mt-1.5 min-h-[1.35rem]">
-                        {billing === "yearly" ? (
-                          <p className="inline-flex items-center rounded-md border border-emerald-400/35 bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-200">
-                            Save 30% on yearly billing
-                          </p>
-                        ) : null}
-                      </div>
                     </div>
 
                     <Button
@@ -425,7 +419,7 @@ export default function SubscriptionPage() {
                         </span>
                       </li>
                       <li className="pl-1 text-white/50">
-                        Up to {Number(plan.usage.images).toLocaleString()} AI images (NanoBanana 2)
+                        Up to {Number(plan.usage.images).toLocaleString()} AI images (Nanobanana)
                       </li>
                       <li className="pl-1 text-white/50">
                         Up to {Number(plan.usage.videos).toLocaleString()} AI videos (Sora 2)

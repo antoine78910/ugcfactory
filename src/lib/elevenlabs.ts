@@ -28,7 +28,7 @@ export type ElevenLabsSpeechToSpeechInput = {
 
 function getElevenLabsApiKey(): string {
   const key = process.env.ELEVENLABS_API_KEY?.trim();
-  if (!key) throw new Error("ElevenLabs API key missing on server. Set ELEVENLABS_API_KEY.");
+  if (!key) throw new Error("Voice service is not configured on the server.");
   return key;
 }
 
@@ -85,7 +85,7 @@ export async function listElevenLabsVoices(): Promise<ElevenLabsVoice[]> {
     },
     cache: "no-store",
   });
-  if (!res.ok) await readElevenLabsError(res, "Could not load ElevenLabs voices.");
+  if (!res.ok) await readElevenLabsError(res, "Could not load voices.");
   const json = (await res.json()) as { voices?: ElevenLabsVoice[] };
   return Array.isArray(json.voices) ? json.voices : [];
 }
@@ -132,7 +132,7 @@ export async function listElevenLabsSharedVoicesPage(opts?: {
     },
     cache: "no-store",
   });
-  if (!res.ok) await readElevenLabsError(res, "Could not load shared ElevenLabs voices.");
+  if (!res.ok) await readElevenLabsError(res, "Could not load shared voices.");
   const json = (await res.json()) as {
     voices?: ElevenLabsSharedVoice[];
     has_more?: boolean;
@@ -173,7 +173,7 @@ export async function listElevenLabsSharedVoices(maxPages = 2): Promise<ElevenLa
       },
       cache: "no-store",
     });
-    if (!res.ok) await readElevenLabsError(res, "Could not load shared ElevenLabs voices.");
+    if (!res.ok) await readElevenLabsError(res, "Could not load shared voices.");
     const json = (await res.json()) as {
       voices?: ElevenLabsSharedVoice[];
       has_more?: boolean;
@@ -244,10 +244,10 @@ export async function createElevenLabsVoiceClone(
     cache: "no-store",
   });
 
-  if (!res.ok) await readElevenLabsError(res, "ElevenLabs voice clone creation failed.");
+  if (!res.ok) await readElevenLabsError(res, "Voice clone creation failed.");
   const json = (await res.json()) as { voice_id?: string };
   const voiceId = json.voice_id?.trim() ?? "";
-  if (!voiceId) throw new Error("ElevenLabs returned no voice_id for the clone.");
+  if (!voiceId) throw new Error("Voice clone response did not include an id.");
   return { voiceId, name };
 }
 
@@ -255,7 +255,7 @@ export async function convertSpeechToSpeechWithElevenLabs(
   input: ElevenLabsSpeechToSpeechInput,
 ): Promise<{ buffer: Buffer; contentType: string }> {
   const voiceId = input.voiceId.trim();
-  if (!voiceId) throw new Error("Missing ElevenLabs voice id.");
+  if (!voiceId) throw new Error("Missing voice id.");
 
   const query = new URLSearchParams();
   if (typeof input.enableLogging === "boolean") query.set("enable_logging", String(input.enableLogging));
@@ -288,10 +288,10 @@ export async function convertSpeechToSpeechWithElevenLabs(
     },
   );
 
-  if (!res.ok) await readElevenLabsError(res, "ElevenLabs voice conversion failed.");
+  if (!res.ok) await readElevenLabsError(res, "Voice conversion failed.");
   const bytes = await res.arrayBuffer();
   const buffer = Buffer.from(bytes);
-  if (!buffer.length) throw new Error("ElevenLabs returned empty audio.");
+  if (!buffer.length) throw new Error("Voice conversion returned empty audio.");
   return {
     buffer,
     contentType: res.headers.get("content-type") ?? "application/octet-stream",

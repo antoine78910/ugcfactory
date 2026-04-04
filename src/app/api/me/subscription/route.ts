@@ -74,7 +74,7 @@ export type MeSubscriptionResponse = {
   /** When true the client must not deduct or check credits — account has unlimited access. */
   unlimited?: boolean;
   /**
-   * When true the client should auto-activate stored personal API keys (KIE + PiAPI)
+   * When true the client should auto-activate stored personal API keys
    * so that generations use the founder's own provider accounts.
    * Only set for emails in the server-side allowlist — never exposed for other users.
    */

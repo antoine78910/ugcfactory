@@ -48,7 +48,7 @@ export async function POST(req: Request) {
     const result = await submitWaveSpeedHeygenVideoTranslate({ videoUrl, outputLanguage });
     const taskId = String(result.id ?? "").trim();
     if (!taskId && String(result.status ?? "").toLowerCase() !== "completed") {
-      throw new Error("WaveSpeed did not return a task id.");
+      throw new Error("Translation service did not return a task id.");
     }
 
     serverLog("wavespeed_translate_submit_ok", {

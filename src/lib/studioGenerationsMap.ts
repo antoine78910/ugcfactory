@@ -1,5 +1,11 @@
 import type { StudioHistoryItem } from "@/app/_components/StudioGenerationsHistory";
 import { userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
+import { KIE_TOPAZ_IMAGE_UPSCALE_MODEL, KIE_TOPAZ_VIDEO_UPSCALE_MODEL } from "@/lib/pricing";
+import {
+  studioImagePickerDisplayLabel,
+  studioVideoDisplayLabel,
+  studioVideoEditPickerDisplayLabel,
+} from "@/lib/subscriptionModelAccess";
 
 function resultUrlLooksLikeVideo(url: string): boolean {
   const t = url.trim().toLowerCase();
@@ -62,6 +68,8 @@ export type StudioGenerationRow = {
   kind: string;
   status: string;
   label: string;
+  /** Picker / backend model id (e.g. `pro`, `kling-3.0/video`, Topaz model id). */
+  model?: string;
   external_task_id: string;
   provider: string;
   result_urls: string[] | null;
@@ -71,6 +79,48 @@ export type StudioGenerationRow = {
   uses_personal_api: boolean;
   credits_refund_hint_sent?: boolean;
 };
+
+/**
+ * Human-readable model line for history / lightbox (no raw provider ids in UI when avoidable).
+ */
+export function studioGenerationModelDisplayLabel(
+  kind: string,
+  rawModel: string | null | undefined,
+): string | undefined {
+  const m = (rawModel ?? "").trim();
+  if (!m) return undefined;
+  switch (kind) {
+    case "studio_image":
+    case "link_to_ad_image":
+      return studioImagePickerDisplayLabel(m);
+    case "studio_video":
+    case "studio_watermark":
+    case "link_to_ad_video":
+      if (m.startsWith("studio-edit/")) return studioVideoEditPickerDisplayLabel(m);
+      if (m === "motion_control") return "Motion control";
+      return studioVideoDisplayLabel(m);
+    case "studio_upscale":
+      if (m === KIE_TOPAZ_IMAGE_UPSCALE_MODEL || m.includes("image-upscale")) return "Topaz image upscale";
+      if (m === KIE_TOPAZ_VIDEO_UPSCALE_MODEL || m.includes("video-upscale")) return "Topaz video upscale";
+      return "Upscale";
+    case "motion_control":
+      return "Motion control";
+    case "studio_translate_video":
+      return "Video translate";
+    case "studio_voice_change":
+    case "studio_audio":
+      return "Voice";
+    default:
+      return m.length > 56 ? `${m.slice(0, 53)}…` : m;
+  }
+}
+
+function modelFieldsFromRow(row: StudioGenerationRow): { model?: string; modelLabel?: string } {
+  const raw = typeof row.model === "string" ? row.model.trim() : "";
+  if (!raw) return {};
+  const modelLabel = studioGenerationModelDisplayLabel(row.kind, raw);
+  return { model: raw, ...(modelLabel ? { modelLabel } : {}) };
+}
 
 function rowKindToMediaKind(kind: string, resultUrls: string[], label: string): StudioHistoryItem["kind"] {
   if (kind === "motion_control") {
@@ -107,6 +157,7 @@ export function studioGenerationRowToHistoryItem(row: StudioGenerationRow): Stud
   const isReady = ["ready", "success", "succeeded", "completed", "done"].includes(status);
   const isFailed = ["failed", "error", "errored", "cancelled", "canceled"].includes(status);
   const inputUrlsOrUndef = inputUrls.length > 0 ? inputUrls : undefined;
+  const modelExtra = modelFieldsFromRow(row);
   if (hasUrls || isReady) {
     return {
       id: row.id,
@@ -117,6 +168,7 @@ export function studioGenerationRowToHistoryItem(row: StudioGenerationRow): Stud
       createdAt,
       studioGenerationKind: row.kind,
       inputUrls: inputUrlsOrUndef,
+      ...modelExtra,
     };
   }
   if (hasError || isFailed) {
@@ -130,6 +182,7 @@ export function studioGenerationRowToHistoryItem(row: StudioGenerationRow): Stud
       createdAt,
       studioGenerationKind: row.kind,
       inputUrls: inputUrlsOrUndef,
+      ...modelExtra,
     };
   }
   return {
@@ -140,5 +193,6 @@ export function studioGenerationRowToHistoryItem(row: StudioGenerationRow): Stud
     createdAt,
     studioGenerationKind: row.kind,
     inputUrls: inputUrlsOrUndef,
+    ...modelExtra,
   };
 }

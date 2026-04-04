@@ -27,6 +27,7 @@ import type { StudioHistoryItem, StudioImageLightboxEditModelOption } from "@/ap
 import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
 import { formatDisplayCredits } from "@/lib/creditLedgerTicks";
 import {
+  KIE_TOPAZ_IMAGE_UPSCALE_MODEL,
   studioImageCreditsChargedTotal,
   studioImageCreditsPerOutput,
   topazImageUpscaleCredits,
@@ -39,6 +40,7 @@ import { userMessageFromCaughtError } from "@/lib/generationUserMessage";
 import { cn } from "@/lib/utils";
 import {
   canUseStudioImagePickerModel,
+  studioImagePickerDisplayLabel,
   studioImagePickerUpgradeMessage,
 } from "@/lib/subscriptionModelAccess";
 import {
@@ -309,7 +311,7 @@ export default function StudioImagePanel() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ imageUrl: url, upscaleFactor: f, personalApiKey: pKey }),
           });
-          const json = (await res.json()) as { taskId?: string; error?: string };
+          const json = (await res.json()) as { taskId?: string; model?: string; error?: string };
           if (!res.ok || !json.taskId) throw new Error(json.error || "Upscale request failed");
 
           const regRes = await fetch("/api/studio/generations/register", {
@@ -319,6 +321,7 @@ export default function StudioImagePanel() {
               kind: "studio_upscale",
               label,
               taskId: json.taskId,
+              model: json.model?.trim() || KIE_TOPAZ_IMAGE_UPSCALE_MODEL,
               creditsCharged: platformCharge,
               personalApiKey: pKey,
             }),
@@ -340,6 +343,8 @@ export default function StudioImagePanel() {
               label,
               createdAt: startedAt,
               studioGenerationKind: "studio_upscale",
+              model: json.model?.trim() || KIE_TOPAZ_IMAGE_UPSCALE_MODEL,
+              modelLabel: "Topaz image upscale",
             };
             return [row, ...prev.filter((i) => i.id !== rowId)];
           });
@@ -535,12 +540,11 @@ export default function StudioImagePanel() {
             label: summary,
             createdAt: startedAt,
             studioGenerationKind: "studio_image",
+            model: opts.model,
+            modelLabel: studioImagePickerDisplayLabel(opts.model),
           }));
           const drop = new Set(rowIds);
           return [...gens, ...prev.filter((i) => !drop.has(i.id))];
-        });
-        toast.message("Generation running", {
-          description: "You can open My Projects — jobs stay in sync. Safe to leave this page.",
         });
       } catch (e) {
         const msg = userMessageFromCaughtError(

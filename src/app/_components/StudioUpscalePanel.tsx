@@ -20,6 +20,8 @@ import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
 import { StudioModelPicker, type StudioModelPickerItem } from "@/app/_components/StudioModelPicker";
 import { StudioUpscaleDiscreteSlider } from "@/app/_components/StudioUpscaleDiscreteSlider";
 import {
+  KIE_TOPAZ_IMAGE_UPSCALE_MODEL,
+  KIE_TOPAZ_VIDEO_UPSCALE_MODEL,
   topazImageUpscaleCredits,
   topazImageUpscaleKieFactorToTierLabel,
   topazVideoUpscaleCredits,
@@ -309,7 +311,15 @@ export default function StudioUpscalePanel() {
     }
 
     setHistoryItems((prev) => [
-      { id: jobId, kind: isImage ? "image" : "video", status: "generating", label, createdAt: startedAt },
+      {
+        id: jobId,
+        kind: isImage ? "image" : "video",
+        status: "generating",
+        label,
+        createdAt: startedAt,
+        model: isImage ? KIE_TOPAZ_IMAGE_UPSCALE_MODEL : KIE_TOPAZ_VIDEO_UPSCALE_MODEL,
+        modelLabel: isImage ? "Topaz image upscale" : "Topaz video upscale",
+      },
       ...prev,
     ]);
 
@@ -326,13 +336,16 @@ export default function StudioUpscalePanel() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         });
-        const json = (await res.json()) as { taskId?: string; error?: string };
+        const json = (await res.json()) as { taskId?: string; model?: string; error?: string };
         if (!res.ok || !json.taskId) throw new Error(json.error || "Upscale request failed");
 
         const rowId = await registerStudioGenerationClient({
           kind: "studio_upscale",
           label,
           taskId: json.taskId,
+          model:
+            json.model?.trim() ||
+            (isImage ? KIE_TOPAZ_IMAGE_UPSCALE_MODEL : KIE_TOPAZ_VIDEO_UPSCALE_MODEL),
           creditsCharged: platformCharge,
           personalApiKey: upPKey,
           inputUrls: inputUrl ? [inputUrl] : undefined,

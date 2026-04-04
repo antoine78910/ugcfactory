@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Download, FolderOpen, Info, LayoutGrid, List, Loader2, Mic, Sparkles, Trash2, Volume2, Wand2, X } from "lucide-react";
 import { CreditCostBadge } from "@/app/_components/CreditCostBadge";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,10 @@ export type StudioHistoryItem = {
   studioGenerationKind?: string;
   /** Input image/video URLs used for this generation. */
   inputUrls?: string[];
+  /** Backend model / picker id (optional). */
+  model?: string;
+  /** Human-readable model name for UI (optional). */
+  modelLabel?: string;
 };
 
 function formatHistoryDate(ts: number): string {
@@ -90,7 +95,7 @@ export function isProbablyAudioUrl(url: string | undefined): boolean {
 
 export type StudioImageLightboxEditModelOption = { value: string; label: string };
 
-/** Image tab: edit open image with same KIE fields as Studio (NanoBanana + Seedream image-to-image). */
+/** Image tab: edit open image with same fields as Studio (NanoBanana + Seedream image-to-image). */
 export type StudioImageLightboxEditConfig = {
   nanoAspectOptions: readonly string[];
   proAspectOptions: readonly string[];
@@ -111,7 +116,7 @@ export type StudioImageLightboxEditConfig = {
   }) => void;
 };
 
-/** Studio Images: Topaz image upscale (KIE) from history lightbox. */
+/** Studio Images: Topaz image upscale from history lightbox. */
 export type StudioImageLightboxUpscaleConfig = {
   /** Kie factors 2 / 4 / 8 → 2K / 4K / 8K (not video-style 1×/2×/4×). */
   upscaleFactorOptions?: readonly ("2" | "4" | "8")[];
@@ -160,6 +165,7 @@ export function StudioGenerationsHistory({
     kind: "image" | "video" | "audio";
     prompt: string;
     inputUrls?: string[];
+    modelLabel?: string;
   } | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editPrompt, setEditPrompt] = useState("");
@@ -273,6 +279,20 @@ export function StudioGenerationsHistory({
       failedDismissTimersRef.current.clear();
     };
   }, []);
+
+  const [lightboxPortalReady, setLightboxPortalReady] = useState(false);
+  useEffect(() => {
+    setLightboxPortalReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!lightboxItem) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [lightboxItem]);
 
   const deleteHistoryEntry = useCallback(
     async (id: string, studioGenerationKind?: string) => {
@@ -547,6 +567,7 @@ export function StudioGenerationsHistory({
                               kind: "video",
                               prompt: item.label || "",
                               inputUrls: item.inputUrls,
+                              modelLabel: item.modelLabel,
                             });
                           }}
                         />
@@ -565,6 +586,7 @@ export function StudioGenerationsHistory({
                                 kind: "image",
                                 prompt: item.label || "",
                                 inputUrls: item.inputUrls,
+                                modelLabel: item.modelLabel,
                               });
                             }}
                             className="block h-full w-full"
@@ -604,6 +626,11 @@ export function StudioGenerationsHistory({
                       )}
                     >
                       <p className="line-clamp-2 text-xs leading-snug text-white/50">{item.label}</p>
+                      {item.modelLabel ? (
+                        <p className="line-clamp-1 text-[10px] font-medium uppercase tracking-wide text-violet-300/85">
+                          {item.modelLabel}
+                        </p>
+                      ) : null}
                       {item.status === "failed" ? (
                         <div className="flex flex-wrap gap-2">
                           <span className="inline-flex items-center gap-1 rounded-full border border-red-500/35 bg-red-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-red-200/90">
@@ -628,9 +655,10 @@ export function StudioGenerationsHistory({
           </div>
         )}
       </div>
-      {lightboxItem ? (
+      {lightboxPortalReady && lightboxItem
+        ? createPortal(
         <div
-          className="fixed inset-0 z-[220] flex items-center justify-center bg-black/90 p-2 backdrop-blur-sm animate-in fade-in duration-200 sm:p-4"
+          className="fixed inset-0 z-[400] flex items-center justify-center bg-black/90 p-2 backdrop-blur-sm animate-in fade-in duration-200 sm:p-4"
           onClick={() => setLightboxItem(null)}
           role="dialog"
           aria-modal="true"
@@ -638,7 +666,7 @@ export function StudioGenerationsHistory({
         >
           <button
             type="button"
-            className="absolute right-3 top-3 z-[222] inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white/70 backdrop-blur-md transition-all duration-200 hover:bg-white/20 hover:text-white sm:right-5 sm:top-5"
+            className="absolute right-3 top-3 z-[402] inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white/70 backdrop-blur-md transition-all duration-200 hover:bg-white/20 hover:text-white sm:right-5 sm:top-5"
             onClick={(e) => {
               e.stopPropagation();
               setLightboxItem(null);
@@ -700,6 +728,11 @@ export function StudioGenerationsHistory({
                 <p className="whitespace-pre-wrap break-words text-[12px] leading-relaxed text-white/55">
                   {lightboxItem.prompt?.trim() ? lightboxItem.prompt.trim() : "—"}
                 </p>
+                {lightboxItem.modelLabel ? (
+                  <p className="mt-2.5 text-[10px] font-semibold uppercase tracking-wide text-violet-300/90">
+                    Model · {lightboxItem.modelLabel}
+                  </p>
+                ) : null}
               </div>
 
               <div className="flex flex-col gap-2">
@@ -801,8 +834,8 @@ export function StudioGenerationsHistory({
                 {imageLightboxUpscale ? (
                   <div className="rounded-xl border border-white/10 bg-[#14141c]/80 p-3">
                     <div className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-white/90">
-                      <Wand2 className="h-4 w-4 text-emerald-300/90" aria-hidden />
-                      Topaz image upscale (KIE)
+                      <Wand2 className="h-4 w-4 text-violet-300" aria-hidden />
+                      Topaz image upscale
                     </div>
                     <p className="mb-2 text-[11px] leading-snug text-white/45">
                       Sharper, higher-resolution output. Billing follows the selected scale (2K / 4K / 8K tier).
@@ -819,7 +852,7 @@ export function StudioGenerationsHistory({
                       />
                       <Button
                         type="button"
-                        className="h-11 w-full border border-emerald-500/35 bg-emerald-700/90 text-white transition-colors duration-200 hover:bg-emerald-600"
+                        className="h-11 w-full border border-violet-400/35 bg-violet-600 text-white shadow-[0_4px_0_0_rgba(76,29,149,0.55)] transition-colors duration-200 hover:bg-violet-500"
                         onClick={() => {
                           if (!lightboxItem?.url) return;
                           imageLightboxUpscale.onSubmitUpscale({
@@ -949,8 +982,10 @@ export function StudioGenerationsHistory({
               ) : null}
             </aside>
           </div>
-        </div>
-      ) : null}
+        </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }
