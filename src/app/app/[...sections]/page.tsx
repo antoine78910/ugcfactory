@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
-import { Download, Loader2, Maximize2, Play, Plus, Sparkles, Star, Trash2, X } from "lucide-react";
+import { Download, Loader2, Maximize2, Play, Plus, Sparkles, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -570,7 +570,6 @@ export default function AppBrandWizard() {
   const [elevenSharedVoicesPageByLang, setElevenSharedVoicesPageByLang] = useState<Record<string, number>>({});
   const [elevenSharedVoicesHasMoreByLang, setElevenSharedVoicesHasMoreByLang] = useState<Record<string, boolean>>({});
   const [elevenVoiceId, setElevenVoiceId] = useState<string>("");
-  const [favoriteElevenVoiceIds, setFavoriteElevenVoiceIds] = useState<string[]>([]);
   const [voiceChangeUploadKind, setVoiceChangeUploadKind] = useState<VoiceChangeUploadKind>("audio");
   const [voiceChangeUploadFile, setVoiceChangeUploadFile] = useState<File | null>(null);
   const [voiceChangeUploadPreviewUrl, setVoiceChangeUploadPreviewUrl] = useState<string | null>(null);
@@ -584,7 +583,6 @@ export default function AppBrandWizard() {
   const [voiceChangeSeed, setVoiceChangeSeed] = useState<string>("");
   const [voiceChangeRemoveBackgroundNoise, setVoiceChangeRemoveBackgroundNoise] = useState(false);
   const [voiceChangeVoiceSettingsJson, setVoiceChangeVoiceSettingsJson] = useState<string>("");
-  const [voiceChangeVoiceTab, setVoiceChangeVoiceTab] = useState<"all" | "favorites">("all");
   const [motionHistoryItems, setMotionHistoryItems] = useState<StudioHistoryItem[]>([]);
   const [motionServerHistory, setMotionServerHistory] = useState<boolean | null>(null);
   type MotionBilling =
@@ -617,64 +615,6 @@ export default function AppBrandWizard() {
       }
     }
   }, []);
-
-  const languageDisplayNames = useMemo(() => {
-    try {
-      // Use English UI labels consistently across the app.
-      return new Intl.DisplayNames(["en"], { type: "language" });
-    } catch {
-      return null;
-    }
-  }, []);
-
-  const formatLanguageCodeLabel = useCallback(
-    (code: string): string => {
-      const raw = (code || "").trim();
-      if (!raw) return "Unknown";
-      // Handle locales like "en-US" / "pt_BR" / "zh-Hans".
-      const normalized = raw.replace("_", "-").toLowerCase();
-      const base = normalized.split("-")[0] || normalized;
-      const pretty = languageDisplayNames?.of(base);
-      if (pretty && pretty.trim()) return pretty;
-      return raw.toUpperCase();
-    },
-    [languageDisplayNames],
-  );
-
-  useEffect(() => {
-    void (async () => {
-      try {
-        const res = await fetch("/api/elevenlabs/favorite-voices", { cache: "no-store" });
-        const json = (await res.json().catch(() => ({}))) as { favorites?: string[] };
-        if (!res.ok) return;
-        if (Array.isArray(json.favorites)) {
-          setFavoriteElevenVoiceIds(json.favorites.map((x) => String(x)).filter(Boolean));
-        }
-      } catch {
-        /* ignore */
-      }
-    })();
-  }, []);
-
-  const saveFavoriteElevenVoices = useCallback(async (ids: string[]) => {
-    await fetch("/api/elevenlabs/favorite-voices", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ favorites: ids }),
-    });
-  }, []);
-
-  const toggleFavoriteElevenVoice = useCallback((voiceId: string) => {
-    const id = String(voiceId || "").trim();
-    if (!id) return;
-    setFavoriteElevenVoiceIds((prev) => {
-      const has = prev.includes(id);
-      const next = has ? prev.filter((x) => x !== id) : [id, ...prev];
-      void saveFavoriteElevenVoices(next);
-      return next;
-    });
-  }, [saveFavoriteElevenVoices]);
-
 
   /** Billable seconds: real clip length, or placeholder so 720p ↔ 1080p updates credits before upload. */
   const MOTION_CREDITS_PLACEHOLDER_SEC = 12;
@@ -719,17 +659,8 @@ export default function AppBrandWizard() {
   );
 
   const filteredElevenVoices = useMemo(() => {
-    const base = elevenVoices;
-    const favoritesSet = new Set(favoriteElevenVoiceIds);
-    const byTab =
-      voiceChangeVoiceTab === "favorites" ? base.filter((v) => favoritesSet.has(v.voiceId)) : base;
-    return [...byTab].sort((a, b) => {
-      const af = favoritesSet.has(a.voiceId) ? 1 : 0;
-      const bf = favoritesSet.has(b.voiceId) ? 1 : 0;
-      if (af !== bf) return bf - af;
-      return a.name.localeCompare(b.name);
-    });
-  }, [favoriteElevenVoiceIds, elevenVoices, voiceChangeVoiceTab]);
+    return [...elevenVoices].sort((a, b) => a.name.localeCompare(b.name));
+  }, [elevenVoices]);
 
   const elevenVoiceLangHasMore = elevenSharedVoicesHasMoreByLang.__all__ ?? true;
 
@@ -1097,6 +1028,7 @@ export default function AppBrandWizard() {
   const clearVoiceChangeUpload = useCallback(() => {
     setVoiceChangeUploadFile(null);
     setVoiceChangeUploadKind("audio");
+    setVoiceChangeRemoveBackgroundNoise(false);
     setVoiceChangeUploadPreviewUrl((prev) => {
       if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
       return null;
@@ -2888,6 +2820,25 @@ export default function AppBrandWizard() {
                                   </button>
                                 ) : null}
                               </div>
+                              {voiceChangeUploadPreviewUrl || voiceChangeHistoryUrl ? (
+                                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2.5 transition hover:bg-white/[0.04]">
+                                  <input
+                                    type="checkbox"
+                                    checked={voiceChangeRemoveBackgroundNoise}
+                                    onChange={(e) => setVoiceChangeRemoveBackgroundNoise(e.target.checked)}
+                                    className="mt-0.5 h-4 w-4 shrink-0 rounded border-white/25 bg-[#0a0a0d] text-violet-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-500/60"
+                                  />
+                                  <span className="min-w-0 flex-1">
+                                    <span className="block text-xs font-semibold text-white/85">
+                                      Remove background noise from audio recordings
+                                    </span>
+                                    <span className="mt-0.5 block text-[10px] leading-snug text-white/40">
+                                      ElevenLabs will clean the input before speech-to-speech (recommended for noisy
+                                      samples).
+                                    </span>
+                                  </span>
+                                </label>
+                              ) : null}
                             </div>
                             </>
                             ) : null}
@@ -3144,120 +3095,51 @@ export default function AppBrandWizard() {
                         {appSection === "ad_clone" || appSection === "voice" ? (
                           appSection === "voice" ? (
                             <div className="space-y-3">
-                              <div className="rounded-xl border border-white/10 bg-black/20 p-2.5 space-y-2">
-                                <Label className="text-xs text-white/45">Voice</Label>
+                              {voiceToolMode === "voice_change" ? (
+                                <div className="rounded-xl border border-white/10 bg-black/20 p-2.5 space-y-2">
+                                  <Label className="text-xs text-white/45">Target voice</Label>
+                                  <p className="text-[10px] leading-snug text-white/35">
+                                    Pick the ElevenLabs voice to apply to your audio or video.
+                                  </p>
 
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => setVoiceChangeVoiceTab("all")}
-                                    className={cn(
-                                      "rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition",
-                                      voiceChangeVoiceTab === "all"
-                                        ? "border-violet-400/40 bg-violet-500/15 text-white"
-                                        : "border-white/10 bg-black/20 text-white/60 hover:bg-white/[0.04]",
-                                    )}
-                                  >
-                                    All
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => setVoiceChangeVoiceTab("favorites")}
-                                    className={cn(
-                                      "rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition",
-                                      voiceChangeVoiceTab === "favorites"
-                                        ? "border-violet-400/40 bg-violet-500/15 text-white"
-                                        : "border-white/10 bg-black/20 text-white/60 hover:bg-white/[0.04]",
-                                    )}
-                                  >
-                                    Favorites
-                                  </button>
-                                </div>
-
-                                <Select value={elevenVoiceId} onValueChange={setElevenVoiceId}>
-                                  <SelectTrigger className="h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
-                                    <SelectValue
-                                      placeholder={
-                                        elevenVoicesLoading
-                                          ? "Loading voices..."
-                                          : filteredElevenVoices.length === 0
-                                            ? "No voice for this language"
-                                            : "Choose a voice"
-                                      }
-                                    />
-                                  </SelectTrigger>
-                                  <SelectContent position="popper" className={studioSelectContentClass}>
-                                    {filteredElevenVoices.map((voice) => (
-                                      <SelectItem key={voice.voiceId} value={voice.voiceId} className={studioSelectItemClass}>
-                                        <span className="flex w-full items-center justify-between gap-2">
-                                          <span className="flex min-w-0 items-center gap-2">
-                                            <span className="truncate">{voice.name}</span>
-                                            {(voice.labels?.language || voice.language) ? (
-                                              <span className="text-[10px] text-white/35">
-                                                {formatLanguageCodeLabel((voice.labels?.language || voice.language || "").trim())}
-                                              </span>
-                                            ) : null}
-                                            {voice.labels?.gender ? (
-                                              <span className="text-[10px] text-white/25">
-                                                {voice.labels.gender.charAt(0).toUpperCase() + voice.labels.gender.slice(1)}
-                                              </span>
-                                            ) : null}
-                                          </span>
+                                  <Select value={elevenVoiceId} onValueChange={setElevenVoiceId}>
+                                    <SelectTrigger className="h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
+                                      <SelectValue
+                                        placeholder={
+                                          elevenVoicesLoading
+                                            ? "Loading voices..."
+                                            : filteredElevenVoices.length === 0
+                                              ? "No voices available"
+                                              : "Choose a voice"
+                                        }
+                                      />
+                                    </SelectTrigger>
+                                    <SelectContent position="popper" className={studioSelectContentClass}>
+                                      {filteredElevenVoices.map((voice) => (
+                                        <SelectItem key={voice.voiceId} value={voice.voiceId} className={studioSelectItemClass}>
+                                          <span className="block min-w-0 truncate">{voice.name}</span>
+                                        </SelectItem>
+                                      ))}
+                                      {elevenVoiceLangHasMore ? (
+                                        <div className="mt-1 border-t border-white/10 p-1">
                                           <button
                                             type="button"
-                                            aria-label={favoriteElevenVoiceIds.includes(voice.voiceId) ? "Unfavorite voice" : "Favorite voice"}
+                                            disabled={elevenVoicesLoadMorePending}
                                             onPointerDown={(ev) => {
                                               ev.preventDefault();
                                               ev.stopPropagation();
-                                              // Radix Select closes/unmounts items on pointer interactions.
-                                              // Toggle on pointerdown so the UI updates immediately.
-                                              toggleFavoriteElevenVoice(voice.voiceId);
+                                              void loadMoreElevenVoices();
                                             }}
-                                            onKeyDown={(ev) => {
-                                              if (ev.key !== "Enter" && ev.key !== " ") return;
-                                              ev.preventDefault();
-                                              ev.stopPropagation();
-                                              toggleFavoriteElevenVoice(voice.voiceId);
-                                            }}
-                                            className={cn(
-                                              "flex h-7 w-7 items-center justify-center rounded-md border transition",
-                                              favoriteElevenVoiceIds.includes(voice.voiceId)
-                                                ? "border-violet-400/40 bg-violet-500/15 text-violet-200"
-                                                : "border-white/10 bg-black/20 text-white/45 hover:bg-white/[0.04]",
-                                            )}
+                                            className="w-full rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-[11px] font-semibold text-white/70 transition hover:bg-white/[0.04] disabled:opacity-40"
                                           >
-                                            {/** Lucide icons default to fill="none"; set fill explicitly for a solid favorite state. */}
-                                            <Star
-                                              className={cn(
-                                                "h-4 w-4",
-                                                favoriteElevenVoiceIds.includes(voice.voiceId) ? "text-violet-200" : "",
-                                              )}
-                                              fill={favoriteElevenVoiceIds.includes(voice.voiceId) ? "currentColor" : "none"}
-                                            />
+                                            {elevenVoicesLoadMorePending ? "Loading..." : "Load 10 more voices"}
                                           </button>
-                                        </span>
-                                      </SelectItem>
-                                    ))}
-                                    {voiceChangeVoiceTab === "all" && elevenVoiceLangHasMore ? (
-                                      <div className="mt-1 border-t border-white/10 p-1">
-                                        <button
-                                          type="button"
-                                          disabled={elevenVoicesLoadMorePending}
-                                          onPointerDown={(ev) => {
-                                            ev.preventDefault();
-                                            ev.stopPropagation();
-                                            void loadMoreElevenVoices();
-                                          }}
-                                          className="w-full rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-[11px] font-semibold text-white/70 transition hover:bg-white/[0.04] disabled:opacity-40"
-                                        >
-                                          {elevenVoicesLoadMorePending ? "Loading..." : "Load 10 more voices"}
-                                        </button>
-                                      </div>
-                                    ) : null}
-                                  </SelectContent>
-                                </Select>
-
-                              </div>
+                                        </div>
+                                      ) : null}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              ) : null}
 
                               {/* Advanced settings hidden for now */}
                             </div>
@@ -3365,6 +3247,7 @@ export default function AppBrandWizard() {
                         )}
                       </div>
 
+                      {!(appSection === "voice" && voiceToolMode === "create_voice") ? (
                       <Button
                         type="button"
                         disabled={
@@ -3701,7 +3584,7 @@ export default function AppBrandWizard() {
                       >
                         <span className="inline-flex items-center gap-2">
                           {appSection === "voice"
-                            ? "Change voice"
+                            ? "Create voice"
                             : appSection === "ad_clone"
                               ? "Translate"
                               : "Generate"}
@@ -3729,6 +3612,7 @@ export default function AppBrandWizard() {
                           )}
                         </span>
                       </Button>
+                      ) : null}
                       </div>
                     </div>
 

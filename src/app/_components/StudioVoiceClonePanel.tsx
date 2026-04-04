@@ -1,26 +1,62 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
-import { CheckCircle2, Loader2, Mic, Plus, Trash2, Upload } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { CheckCircle2, Loader2, Mic, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { studioSelectContentClass, studioSelectItemClass } from "@/app/_components/StudioModelPicker";
+import {
+  ELEVENLABS_AGE_OPTIONS,
+  ELEVENLABS_ACCENT_OPTIONS,
+  ELEVENLABS_GENDER_OPTIONS,
+  ELEVENLABS_LABEL_SKIP,
+  ELEVENLABS_LANGUAGE_OPTIONS,
+} from "@/lib/elevenLabsVoiceLabelOptions";
 import { cn } from "@/lib/utils";
 import { getPersonalElevenLabsApiKey } from "@/app/_components/CreditsPlanContext";
 
 const MAX_FILES = 25;
 const MAX_FILE_MB = 10;
 const MAX_FILE_BYTES = MAX_FILE_MB * 1024 * 1024;
+/** ElevenLabs IVC expects enough speech content; we enforce a minimum total duration. */
+export const VOICE_CLONE_MIN_AUDIO_SECONDS = 10;
 const ACCEPTED_TYPES = ".mp3,.wav,.ogg,.flac,.aac,.m4a,.mp4,.mov,.webm";
+
+function isProbablyVideoFile(file: File): boolean {
+  const t = (file.type || "").toLowerCase();
+  if (t.startsWith("video/")) return true;
+  return /\.(mp4|mov|webm|m4v)$/i.test(file.name);
+}
+
+/** Reads duration in seconds from an audio or video file in the browser. */
+function getMediaDurationSeconds(file: File): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const isVideo = isProbablyVideoFile(file);
+    const el = isVideo ? document.createElement("video") : document.createElement("audio");
+    el.preload = "metadata";
+    const cleanup = () => URL.revokeObjectURL(url);
+    el.onloadedmetadata = () => {
+      const d = el.duration;
+      cleanup();
+      resolve(Number.isFinite(d) && d > 0 ? d : 0);
+    };
+    el.onerror = () => {
+      cleanup();
+      reject(new Error("Could not read media duration."));
+    };
+    el.src = url;
+  });
+}
 
 type ClonedVoice = {
   voiceId: string;
   name: string;
 };
-
-type LabelEntry = { key: string; value: string };
 
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
@@ -33,11 +69,42 @@ export function StudioVoiceClonePanel() {
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [labelEntries, setLabelEntries] = useState<LabelEntry[]>([]);
+  const [labelLanguage, setLabelLanguage] = useState<string>(ELEVENLABS_LABEL_SKIP);
+  const [labelAccent, setLabelAccent] = useState<string>(ELEVENLABS_LABEL_SKIP);
+  const [labelGender, setLabelGender] = useState<string>(ELEVENLABS_LABEL_SKIP);
+  const [labelAge, setLabelAge] = useState<string>(ELEVENLABS_LABEL_SKIP);
   const [files, setFiles] = useState<File[]>([]);
+  const [totalAudioSeconds, setTotalAudioSeconds] = useState<number | null>(null);
+  const [durationLoading, setDurationLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState<ClonedVoice | null>(null);
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (files.length === 0) {
+      setTotalAudioSeconds(0);
+      return;
+    }
+    let cancelled = false;
+    setDurationLoading(true);
+    void (async () => {
+      try {
+        let sum = 0;
+        for (const f of files) {
+          const d = await getMediaDurationSeconds(f);
+          sum += d;
+        }
+        if (!cancelled) setTotalAudioSeconds(sum);
+      } catch {
+        if (!cancelled) setTotalAudioSeconds(null);
+      } finally {
+        if (!cancelled) setDurationLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [files]);
 
   // ---- file management ----
 
@@ -75,16 +142,6 @@ export function StudioVoiceClonePanel() {
     [addFiles],
   );
 
-  // ---- label entries ----
-
-  const addLabel = () => setLabelEntries((prev) => [...prev, { key: "", value: "" }]);
-
-  const updateLabel = (i: number, field: "key" | "value", val: string) => {
-    setLabelEntries((prev) => prev.map((e, idx) => (idx === i ? { ...e, [field]: val } : e)));
-  };
-
-  const removeLabel = (i: number) => setLabelEntries((prev) => prev.filter((_, idx) => idx !== i));
-
   // ---- submit ----
 
   const handleSubmit = async () => {
@@ -97,6 +154,16 @@ export function StudioVoiceClonePanel() {
       toast.error("Upload at least one audio sample.");
       return;
     }
+    if (durationLoading || totalAudioSeconds === null) {
+      toast.error("Wait until audio duration is measured.");
+      return;
+    }
+    if (totalAudioSeconds < VOICE_CLONE_MIN_AUDIO_SECONDS) {
+      toast.error(`At least ${VOICE_CLONE_MIN_AUDIO_SECONDS} seconds of audio required.`, {
+        description: `Current total: ${totalAudioSeconds.toFixed(1)} s.`,
+      });
+      return;
+    }
 
     setIsSubmitting(true);
     setResult(null);
@@ -107,11 +174,10 @@ export function StudioVoiceClonePanel() {
       if (description.trim()) form.set("description", description.trim());
 
       const validLabels: Record<string, string> = {};
-      for (const { key, value } of labelEntries) {
-        const k = key.trim();
-        const v = value.trim();
-        if (k && v) validLabels[k] = v;
-      }
+      if (labelLanguage !== ELEVENLABS_LABEL_SKIP) validLabels.language = labelLanguage;
+      if (labelAccent !== ELEVENLABS_LABEL_SKIP) validLabels.accent = labelAccent;
+      if (labelGender !== ELEVENLABS_LABEL_SKIP) validLabels.gender = labelGender;
+      if (labelAge !== ELEVENLABS_LABEL_SKIP) validLabels.age = labelAge;
       if (Object.keys(validLabels).length) {
         form.set("labels", JSON.stringify(validLabels));
       }
@@ -156,7 +222,10 @@ export function StudioVoiceClonePanel() {
     setResult(null);
     setName("");
     setDescription("");
-    setLabelEntries([]);
+    setLabelLanguage(ELEVENLABS_LABEL_SKIP);
+    setLabelAccent(ELEVENLABS_LABEL_SKIP);
+    setLabelGender(ELEVENLABS_LABEL_SKIP);
+    setLabelAge(ELEVENLABS_LABEL_SKIP);
     setFiles([]);
   };
 
@@ -225,9 +294,13 @@ export function StudioVoiceClonePanel() {
         <Label className="text-xs font-semibold text-white/70">
           Audio samples *
           <span className="ml-1 font-normal text-white/40">
-            (up to {MAX_FILES} files · {MAX_FILE_MB} MB each)
+            (min {VOICE_CLONE_MIN_AUDIO_SECONDS}s total · up to {MAX_FILES} files · {MAX_FILE_MB} MB each)
           </span>
         </Label>
+        <p className="text-[11px] leading-snug text-amber-200/80">
+          {VOICE_CLONE_MIN_AUDIO_SECONDS} seconds of audio required — add enough samples so the total duration
+          reaches at least {VOICE_CLONE_MIN_AUDIO_SECONDS}s (multiple files count together).
+        </p>
 
         {/* Drop zone */}
         <div
@@ -291,6 +364,24 @@ export function StudioVoiceClonePanel() {
             ))}
           </ul>
         )}
+        {files.length > 0 ? (
+          <p
+            className={cn(
+              "text-[11px] font-medium",
+              durationLoading
+                ? "text-white/45"
+                : totalAudioSeconds !== null && totalAudioSeconds >= VOICE_CLONE_MIN_AUDIO_SECONDS
+                  ? "text-emerald-400/90"
+                  : "text-amber-200/85",
+            )}
+          >
+            {durationLoading
+              ? "Measuring total audio duration…"
+              : totalAudioSeconds === null
+                ? "Could not measure duration — try other files."
+                : `Total: ${totalAudioSeconds.toFixed(1)} s · minimum ${VOICE_CLONE_MIN_AUDIO_SECONDS}s required`}
+          </p>
+        ) : null}
       </div>
 
       {/* Description */}
@@ -308,58 +399,95 @@ export function StudioVoiceClonePanel() {
         />
       </div>
 
-      {/* Labels */}
-      <div className="space-y-1.5">
-        <div className="flex items-center justify-between">
+      {/* Labels — ElevenLabs API keys: language, accent, gender, age */}
+      <div className="space-y-3">
+        <div>
           <Label className="text-xs font-semibold text-white/70">
             Labels <span className="font-normal text-white/40">(optional)</span>
           </Label>
-          <button
-            type="button"
-            onClick={addLabel}
-            disabled={isSubmitting || labelEntries.length >= 8}
-            className="flex items-center gap-1 rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-[10px] font-medium text-white/60 transition hover:bg-white/[0.07] disabled:pointer-events-none disabled:opacity-40"
-          >
-            <Plus className="h-3 w-3" />
-            Add label
-          </button>
+          <p className="mt-0.5 text-[10px] leading-snug text-white/35">
+            Same keys as in the ElevenLabs voice library. Values match the dashboard filters (language, accent,
+            gender, age).
+          </p>
         </div>
 
-        {labelEntries.length > 0 && (
-          <div className="space-y-1.5">
-            {labelEntries.map((entry, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <Input
-                  value={entry.key}
-                  onChange={(e) => updateLabel(i, "key", e.target.value)}
-                  placeholder="Key (e.g. gender)"
-                  disabled={isSubmitting}
-                  className="h-8 flex-1 border-white/10 bg-black/20 text-xs text-white placeholder:text-white/30"
-                />
-                <Input
-                  value={entry.value}
-                  onChange={(e) => updateLabel(i, "value", e.target.value)}
-                  placeholder="Value (e.g. female)"
-                  disabled={isSubmitting}
-                  className="h-8 flex-1 border-white/10 bg-black/20 text-xs text-white placeholder:text-white/30"
-                />
-                <button
-                  type="button"
-                  onClick={() => removeLabel(i)}
-                  disabled={isSubmitting}
-                  className="shrink-0 rounded p-1 text-white/30 transition hover:text-red-400"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            ))}
+        <div className="grid gap-3">
+          <div className="space-y-1">
+            <Label className="text-[11px] text-white/55">Language</Label>
+            <Select value={labelLanguage} onValueChange={setLabelLanguage} disabled={isSubmitting}>
+              <SelectTrigger className="h-10 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-xs text-white">
+                <SelectValue placeholder="Not set" />
+              </SelectTrigger>
+              <SelectContent position="popper" className={studioSelectContentClass}>
+                <SelectItem value={ELEVENLABS_LABEL_SKIP} className={studioSelectItemClass}>
+                  Not set
+                </SelectItem>
+                {ELEVENLABS_LANGUAGE_OPTIONS.map((opt) => (
+                  <SelectItem key={opt} value={opt} className={studioSelectItemClass}>
+                    {opt}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-        )}
-        {labelEntries.length === 0 && (
-          <p className="text-[10px] text-white/30">
-            Labels appear in your ElevenLabs voice library (e.g. gender, accent, use_case).
-          </p>
-        )}
+
+          <div className="space-y-1">
+            <Label className="text-[11px] text-white/55">Accent</Label>
+            <Select value={labelAccent} onValueChange={setLabelAccent} disabled={isSubmitting}>
+              <SelectTrigger className="h-10 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-xs text-white">
+                <SelectValue placeholder="Not set" />
+              </SelectTrigger>
+              <SelectContent position="popper" className={studioSelectContentClass}>
+                <SelectItem value={ELEVENLABS_LABEL_SKIP} className={studioSelectItemClass}>
+                  Not set
+                </SelectItem>
+                {ELEVENLABS_ACCENT_OPTIONS.map((opt) => (
+                  <SelectItem key={opt} value={opt} className={studioSelectItemClass}>
+                    {opt}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1">
+            <Label className="text-[11px] text-white/55">Gender</Label>
+            <Select value={labelGender} onValueChange={setLabelGender} disabled={isSubmitting}>
+              <SelectTrigger className="h-10 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-xs text-white">
+                <SelectValue placeholder="Not set" />
+              </SelectTrigger>
+              <SelectContent position="popper" className={studioSelectContentClass}>
+                <SelectItem value={ELEVENLABS_LABEL_SKIP} className={studioSelectItemClass}>
+                  Not set
+                </SelectItem>
+                {ELEVENLABS_GENDER_OPTIONS.map((opt) => (
+                  <SelectItem key={opt} value={opt} className={studioSelectItemClass}>
+                    {opt}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1">
+            <Label className="text-[11px] text-white/55">Age</Label>
+            <Select value={labelAge} onValueChange={setLabelAge} disabled={isSubmitting}>
+              <SelectTrigger className="h-10 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-xs text-white">
+                <SelectValue placeholder="Not set" />
+              </SelectTrigger>
+              <SelectContent position="popper" className={studioSelectContentClass}>
+                <SelectItem value={ELEVENLABS_LABEL_SKIP} className={studioSelectItemClass}>
+                  Not set
+                </SelectItem>
+                {ELEVENLABS_AGE_OPTIONS.map((opt) => (
+                  <SelectItem key={opt} value={opt} className={studioSelectItemClass}>
+                    {opt}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
       </div>
 
       {/* Tip */}
@@ -371,7 +499,14 @@ export function StudioVoiceClonePanel() {
       {/* Submit */}
       <Button
         onClick={handleSubmit}
-        disabled={isSubmitting || !name.trim() || files.length === 0}
+        disabled={
+          isSubmitting ||
+          !name.trim() ||
+          files.length === 0 ||
+          durationLoading ||
+          totalAudioSeconds === null ||
+          totalAudioSeconds < VOICE_CLONE_MIN_AUDIO_SECONDS
+        }
         className="w-full bg-violet-600 font-semibold text-white hover:bg-violet-500 disabled:opacity-50"
       >
         {isSubmitting ? (
