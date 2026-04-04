@@ -84,6 +84,22 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(target, 308);
   }
 
+  /**
+   * Sign-in / sign-up / auth callbacks must run on the app host (`app.youry.io`).
+   * Supabase PKCE stores `code_verifier` in a host-scoped cookie. If the user starts
+   * Google OAuth on `www.youry.io/signin` but the callback hits `app.youry.io/auth/callback`,
+   * `exchangeCodeForSession` fails (no verifier) and they bounce to /signin forever.
+   */
+  if (MAIN_HOSTS.has(host)) {
+    const first = pathname.split("/").filter(Boolean)[0] ?? "";
+    if (first === "signin" || first === "signup" || first === "auth") {
+      const target = req.nextUrl.clone();
+      target.protocol = "https";
+      target.host = APP_HOST;
+      return NextResponse.redirect(target, 308);
+    }
+  }
+
   // Keep the marketing landing page cache-friendly and eligible for bfcache.
   if (MAIN_HOSTS.has(host) && pathname === "/") {
     return NextResponse.next();

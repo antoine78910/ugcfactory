@@ -67,11 +67,11 @@ export async function GET(req: NextRequest) {
     },
   });
 
-  function redirectSignin() {
+  function redirectSignin(reason: string) {
     if (errorDescription) {
       signinUrl.searchParams.set("error_description", errorDescription);
     }
-    console.log("[auth/callback] redirectToSignin", { target: signinUrl.toString() });
+    console.log("[auth/callback] redirectToSignin", { reason, target: signinUrl.toString() });
     return NextResponse.redirect(signinUrl, 302);
   }
 
@@ -95,7 +95,7 @@ export async function GET(req: NextRequest) {
       return redirectResponse;
     }
 
-    return redirectSignin();
+    return redirectSignin("oauth_error_query");
   }
 
   if (code) {
@@ -122,9 +122,11 @@ export async function GET(req: NextRequest) {
     console.log("[auth/callback] exchange failed → signin", {
       exchangeError: exchangeError ? String(exchangeError).slice(0, 120) : undefined,
     });
-    return redirectSignin();
+    return redirectSignin(
+      `exchange_failed:${exchangeError ? String(exchangeError).slice(0, 80) : "unknown"}`,
+    );
   }
 
-  console.log("[auth/callback] no code and no usable error handler → signin");
-  return redirectSignin();
+  console.log("[auth/callback] no code in callback URL → signin (open sign-in on app.youry.io, not www)");
+  return redirectSignin("missing_code");
 }
