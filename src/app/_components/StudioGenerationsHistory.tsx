@@ -518,7 +518,7 @@ export function StudioGenerationsHistory({
                           <div className="flex h-16 w-16 items-center justify-center rounded-full border border-white/10 bg-white/[0.06]">
                             <Volume2 className="h-8 w-8 text-violet-200/80" aria-hidden />
                           </div>
-                          <audio controls preload="metadata" className="w-full max-w-[14rem]">
+                          <audio controls preload="metadata" className="studio-native-audio w-full max-w-[14rem]">
                             <source src={item.mediaUrl} />
                           </audio>
                           <a
@@ -691,7 +691,7 @@ export function StudioGenerationsHistory({
                   <div className="flex h-20 w-20 items-center justify-center rounded-full border border-white/10 bg-white/[0.06]">
                     <Volume2 className="h-10 w-10 text-violet-200/80" aria-hidden />
                   </div>
-                  <audio controls autoPlay preload="metadata" className="w-full">
+                  <audio controls autoPlay preload="metadata" className="studio-native-audio w-full">
                     <source src={lightboxMediaUrl} />
                   </audio>
                 </div>

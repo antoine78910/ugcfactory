@@ -90,6 +90,32 @@ export async function listElevenLabsVoices(): Promise<ElevenLabsVoice[]> {
   return Array.isArray(json.voices) ? json.voices : [];
 }
 
+/** Single voice by id (library + shared voices the user saved). */
+export async function getElevenLabsVoiceById(voiceId: string): Promise<ElevenLabsVoice | null> {
+  const id = voiceId.trim();
+  if (!id) return null;
+  const res = await fetch(`${ELEVENLABS_API_BASE}/voices/${encodeURIComponent(id)}`, {
+    method: "GET",
+    headers: {
+      "xi-api-key": getElevenLabsApiKey(),
+    },
+    cache: "no-store",
+  });
+  if (!res.ok) return null;
+  const json = (await res.json()) as Partial<ElevenLabsVoice> & { voice_id?: string };
+  const vid = typeof json.voice_id === "string" && json.voice_id.trim() ? json.voice_id.trim() : id;
+  return {
+    voice_id: vid,
+    name: typeof json.name === "string" && json.name.trim() ? json.name.trim() : "Voice",
+    category: json.category ?? "",
+    preview_url: json.preview_url ?? "",
+    labels: json.labels && typeof json.labels === "object" ? json.labels : {},
+    language: json.language ?? "",
+    public_owner_id: json.public_owner_id ?? "",
+    is_shared: Boolean(json.is_shared),
+  };
+}
+
 type ElevenLabsSharedVoice = {
   voice_id: string;
   name: string;

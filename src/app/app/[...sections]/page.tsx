@@ -14,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { Dialog } from "radix-ui";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -172,6 +173,40 @@ const ELEVEN_VOICE_LANGUAGE_OPTIONS: { value: string; label: string }[] = [
   { value: "uk", label: "Ukrainian" },
   { value: "vi", label: "Vietnamese" },
 ];
+
+function normalizeElevenVoiceLangCode(code: string | undefined): string {
+  const s = String(code ?? "")
+    .trim()
+    .toLowerCase();
+  if (!s) return "";
+  return s.split(/[-_]/)[0] ?? s;
+}
+
+/** Same rules as the shared-voices API filters — drops favorited voices that do not match Language/Gender. */
+function elevenVoiceMatchesStudioFilters(
+  v: ElevenVoiceOption,
+  languageFilter: string,
+  genderFilter: string,
+): boolean {
+  const langF = languageFilter.trim();
+  if (langF) {
+    const want = normalizeElevenVoiceLangCode(langF);
+    const fromVoice = normalizeElevenVoiceLangCode(v.language);
+    const fromLabels = normalizeElevenVoiceLangCode(v.labels?.language);
+    const ok =
+      (fromVoice && fromVoice === want) ||
+      (fromLabels && fromLabels === want);
+    if (!ok) return false;
+  }
+  const gF = genderFilter.trim().toLowerCase();
+  if (gF) {
+    const g = String(v.labels?.gender ?? "")
+      .trim()
+      .toLowerCase();
+    if (g !== gF) return false;
+  }
+  return true;
+}
 
 /** When true, Create Voice tab is disabled and `/voice/create` redirects to Voice Change. */
 const VOICE_CREATE_COMING_SOON = true;
@@ -621,7 +656,9 @@ export default function AppBrandWizard() {
   const [elevenVoiceLanguageFilter, setElevenVoiceLanguageFilter] = useState("");
   const [elevenVoiceGenderFilter, setElevenVoiceGenderFilter] = useState("");
   const [elevenVoiceFavoriteIds, setElevenVoiceFavoriteIds] = useState<string[]>([]);
-  const [elevenVoiceFavoritesOnly, setElevenVoiceFavoritesOnly] = useState(false);
+  const [elevenFavoritesDialogOpen, setElevenFavoritesDialogOpen] = useState(false);
+  const [elevenFavoritesDialogVoices, setElevenFavoritesDialogVoices] = useState<ElevenVoiceOption[]>([]);
+  const [elevenFavoritesDialogLoading, setElevenFavoritesDialogLoading] = useState(false);
   const [voiceChangeUploadKind, setVoiceChangeUploadKind] = useState<VoiceChangeUploadKind>("audio");
   const [voiceChangeUploadFile, setVoiceChangeUploadFile] = useState<File | null>(null);
   const [voiceChangeUploadPreviewUrl, setVoiceChangeUploadPreviewUrl] = useState<string | null>(null);
@@ -712,21 +749,91 @@ export default function AppBrandWizard() {
   );
 
   const filteredElevenVoices = useMemo(() => {
-    let list = [...elevenVoices].sort((a, b) => a.name.localeCompare(b.name));
-    if (elevenVoiceFavoritesOnly) {
-      const fav = new Set(elevenVoiceFavoriteIds);
-      list = list.filter((v) => fav.has(v.voiceId));
-    }
-    return list;
-  }, [elevenVoices, elevenVoiceFavoritesOnly, elevenVoiceFavoriteIds]);
+    const list = elevenVoices.filter((v) =>
+      elevenVoiceMatchesStudioFilters(v, elevenVoiceLanguageFilter, elevenVoiceGenderFilter),
+    );
+    return list.sort((a, b) => a.name.localeCompare(b.name));
+  }, [elevenVoices, elevenVoiceLanguageFilter, elevenVoiceGenderFilter]);
 
   const elevenVoiceLangHasMore = elevenSharedVoicesHasMoreByLang.__all__ ?? true;
 
+  const openElevenFavoritesDialog = useCallback(async () => {
+    setElevenFavoritesDialogOpen(true);
+    const ids = [...elevenVoiceFavoriteIds];
+    if (ids.length === 0) {
+      setElevenFavoritesDialogVoices([]);
+      return;
+    }
+    setElevenFavoritesDialogLoading(true);
+    try {
+      const byId = new Map(elevenVoices.map((v) => [v.voiceId, v]));
+      const missing = ids.filter((id) => !byId.has(id));
+      const resolved = new Map<string, ElevenVoiceOption>();
+      if (missing.length > 0) {
+        const res = await fetch("/api/elevenlabs/voices/resolve", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids: missing }),
+        });
+        const json = (await res.json()) as { voices?: ElevenVoiceOption[]; error?: string };
+        if (!res.ok) throw new Error(json.error || "Could not load favorite voices");
+        for (const v of json.voices ?? []) {
+          resolved.set(v.voiceId, v);
+        }
+      }
+      const ordered: ElevenVoiceOption[] = [];
+      for (const id of ids) {
+        const v = byId.get(id) ?? resolved.get(id);
+        if (v) ordered.push(v);
+      }
+      setElevenFavoritesDialogVoices(ordered);
+      setElevenVoices((prev) => {
+        const m = new Map(prev.map((x) => [x.voiceId, x]));
+        for (const v of ordered) m.set(v.voiceId, v);
+        return [...m.values()].sort((a, b) => a.name.localeCompare(b.name));
+      });
+    } catch (e) {
+      toast.error("Could not load favorites.", {
+        description: userMessageFromCaughtError(e, "Please try again."),
+      });
+      setElevenFavoritesDialogVoices([]);
+    } finally {
+      setElevenFavoritesDialogLoading(false);
+    }
+  }, [elevenVoiceFavoriteIds, elevenVoices]);
+
+  const pickElevenFavoriteVoice = useCallback(
+    (voice: ElevenVoiceOption) => {
+      setElevenVoices((prev) => {
+        const m = new Map(prev.map((x) => [x.voiceId, x]));
+        m.set(voice.voiceId, voice);
+        return [...m.values()].sort((a, b) => a.name.localeCompare(b.name));
+      });
+      setElevenVoiceId(voice.voiceId);
+      setElevenFavoritesDialogOpen(false);
+      if (!elevenVoiceMatchesStudioFilters(voice, elevenVoiceLanguageFilter, elevenVoiceGenderFilter)) {
+        const lang = normalizeElevenVoiceLangCode(voice.language || voice.labels?.language);
+        setElevenVoiceLanguageFilter(lang);
+        const g = String(voice.labels?.gender ?? "")
+          .trim()
+          .toLowerCase();
+        setElevenVoiceGenderFilter(g === "male" || g === "female" ? g : "");
+      }
+    },
+    [elevenVoiceLanguageFilter, elevenVoiceGenderFilter],
+  );
+
   useEffect(() => {
-    if (!elevenVoiceFavoritesOnly || filteredElevenVoices.length === 0) return;
-    if (filteredElevenVoices.some((v) => v.voiceId === elevenVoiceId)) return;
-    setElevenVoiceId(filteredElevenVoices[0]!.voiceId);
-  }, [elevenVoiceFavoritesOnly, filteredElevenVoices, elevenVoiceId]);
+    if (appSection !== "voice" || voiceToolMode !== "voice_change") return;
+    if (filteredElevenVoices.length === 0) {
+      if (elevenVoiceId) setElevenVoiceId("");
+      return;
+    }
+    if (!elevenVoiceId || !filteredElevenVoices.some((v) => v.voiceId === elevenVoiceId)) {
+      setElevenVoiceId(filteredElevenVoices[0]!.voiceId);
+    }
+  }, [appSection, voiceToolMode, filteredElevenVoices, elevenVoiceId]);
 
   const translateLanguagesFiltered = useMemo(() => {
     const base = [...(WAVESPEED_HEYGEN_TRANSLATE_LANGUAGES as readonly string[])];
@@ -2908,7 +3015,9 @@ export default function AppBrandWizard() {
                       <div className="studio-params-scroll flex min-w-0 flex-col gap-2 lg:h-full lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pb-10">
                       <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
                         {appSection === "voice"
-                          ? "Voice"
+                          ? voiceToolMode === "create_voice" && !VOICE_CREATE_COMING_SOON
+                            ? "Create voice"
+                            : "Voice change"
                           : appSection === "ad_clone"
                             ? "Translate"
                             : "Kling 3.0 Motion Control"}
@@ -3008,7 +3117,7 @@ export default function AppBrandWizard() {
                                       <p className="text-xs font-medium text-white">
                                         {voiceChangeUploadFile?.name || "Selected audio file"}
                                       </p>
-                                      <audio controls preload="metadata" className="w-full">
+                                      <audio controls preload="metadata" className="studio-native-audio w-full">
                                         <source src={voiceChangeUploadPreviewUrl} />
                                       </audio>
                                     </div>
@@ -3299,25 +3408,116 @@ export default function AppBrandWizard() {
                                 <div className="rounded-xl border border-white/10 bg-black/20 p-2.5 space-y-2">
                                   <Label className="text-xs text-white/45">Target voice</Label>
                                   <p className="text-[10px] leading-snug text-white/35">
-                                    Filter by language, star voices in the list, use My favorites, then preview before
+                                    Filter by language, star voices in the list, open{" "}
+                                    <span className="text-white/55">My favorites</span> to pick one, then preview before
                                     generating.
                                   </p>
 
-                                  <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-white/10 bg-[#0a0a0d] px-3 py-2.5 transition hover:border-violet-500/25">
+                                  <button
+                                    type="button"
+                                    onClick={() => void openElevenFavoritesDialog()}
+                                    className="flex w-full cursor-pointer items-center justify-between gap-3 rounded-xl border border-white/10 bg-[#0a0a0d] px-3 py-2.5 text-left transition hover:border-violet-500/35 hover:bg-white/[0.03]"
+                                  >
                                     <span className="inline-flex min-w-0 items-center gap-2">
-                                      <Star className="h-4 w-4 shrink-0 text-violet-400/95" aria-hidden />
+                                      <Star className="h-4 w-4 shrink-0 text-amber-400/95" aria-hidden />
                                       <span className="text-xs font-semibold text-white/90">My favorites</span>
                                       <span className="text-[10px] text-white/40">
                                         ({elevenVoiceFavoriteIds.length} saved)
                                       </span>
                                     </span>
-                                    <input
-                                      type="checkbox"
-                                      checked={elevenVoiceFavoritesOnly}
-                                      onChange={(e) => setElevenVoiceFavoritesOnly(e.target.checked)}
-                                      className="h-4 w-4 shrink-0 rounded border-white/25 bg-[#050507] text-violet-500 focus:ring-violet-500/40"
-                                    />
-                                  </label>
+                                    <span className="shrink-0 text-[11px] font-semibold text-violet-300/90">
+                                      Open list
+                                    </span>
+                                  </button>
+
+                                  <Dialog.Root open={elevenFavoritesDialogOpen} onOpenChange={setElevenFavoritesDialogOpen}>
+                                    <Dialog.Portal>
+                                      <Dialog.Overlay className="fixed inset-0 z-[240] bg-black/70 backdrop-blur-[3px] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+                                      <Dialog.Content className="fixed left-1/2 top-1/2 z-[241] flex max-h-[min(85vh,520px)] w-[min(92vw,420px)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-gradient-to-b from-[#14141a] to-[#0a0a0e] shadow-[0_24px_80px_rgba(0,0,0,0.65),inset_0_1px_0_rgba(255,255,255,0.04)] outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-[0.98] data-[state=open]:zoom-in-[0.98]">
+                                        <div className="border-b border-white/[0.06] px-5 py-4">
+                                          <Dialog.Title className="text-[17px] font-semibold tracking-tight text-white">
+                                            Favorite voices
+                                          </Dialog.Title>
+                                          <Dialog.Description className="mt-1 text-sm text-white/50">
+                                            Choose a voice for this generation. Starred from the main list below.
+                                          </Dialog.Description>
+                                        </div>
+                                        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+                                          {elevenFavoritesDialogLoading ? (
+                                            <div className="flex items-center justify-center gap-2 py-12 text-sm text-white/45">
+                                              <Loader2 className="h-5 w-5 shrink-0 animate-spin text-violet-400/90" aria-hidden />
+                                              Loading…
+                                            </div>
+                                          ) : elevenFavoritesDialogVoices.length === 0 ? (
+                                            <p className="py-10 text-center text-sm text-white/45">
+                                              {elevenVoiceFavoriteIds.length === 0
+                                                ? "No favorites yet — star voices in the list below."
+                                                : "Could not load voice details for your favorites."}
+                                            </p>
+                                          ) : (
+                                            <ul className="space-y-1.5 pb-2">
+                                              {elevenFavoritesDialogVoices.map((voice) => {
+                                                const isFav = elevenVoiceFavoriteIds.includes(voice.voiceId);
+                                                const isSelected = elevenVoiceId === voice.voiceId;
+                                                return (
+                                                  <li key={voice.voiceId}>
+                                                    <div
+                                                      className={cn(
+                                                        "flex w-full items-center gap-2 rounded-xl border px-2.5 py-2 transition",
+                                                        isSelected
+                                                          ? "border-violet-500/45 bg-violet-500/10"
+                                                          : "border-white/[0.06] bg-white/[0.02] hover:border-violet-500/25 hover:bg-white/[0.04]",
+                                                      )}
+                                                    >
+                                                      <button
+                                                        type="button"
+                                                        aria-label={isFav ? "Remove from favorites" : "Add to favorites"}
+                                                        className={cn(
+                                                          "shrink-0 rounded-md p-1.5 transition hover:bg-white/10",
+                                                          isFav ? "text-amber-400/95" : "text-violet-400/80",
+                                                        )}
+                                                        onClick={() => void toggleElevenVoiceFavorite(voice.voiceId)}
+                                                      >
+                                                        <Star className={cn("h-4 w-4", isFav && "fill-amber-400/90")} aria-hidden />
+                                                      </button>
+                                                      <button
+                                                        type="button"
+                                                        onClick={() => pickElevenFavoriteVoice(voice)}
+                                                        className="min-w-0 flex-1 text-left"
+                                                      >
+                                                        <span className="block truncate text-sm font-semibold text-white/95">
+                                                          {voice.name}
+                                                        </span>
+                                                        {voice.language ? (
+                                                          <span className="text-[11px] text-white/40">{voice.language}</span>
+                                                        ) : null}
+                                                      </button>
+                                                      {isSelected ? (
+                                                        <span className="shrink-0 rounded-md border border-violet-400/35 bg-violet-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-violet-200">
+                                                          Selected
+                                                        </span>
+                                                      ) : null}
+                                                    </div>
+                                                  </li>
+                                                );
+                                              })}
+                                            </ul>
+                                          )}
+                                        </div>
+                                        <div className="border-t border-white/[0.06] px-4 py-3">
+                                          <Dialog.Close asChild>
+                                            <Button
+                                              type="button"
+                                              variant="ghost"
+                                              className="h-10 w-full text-white/55 hover:bg-white/[0.06] hover:text-white"
+                                            >
+                                              Close
+                                            </Button>
+                                          </Dialog.Close>
+                                        </div>
+                                      </Dialog.Content>
+                                    </Dialog.Portal>
+                                  </Dialog.Root>
 
                                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                                     <div className="space-y-1">
@@ -3452,7 +3652,7 @@ export default function AppBrandWizard() {
                                       <audio
                                         controls
                                         preload="none"
-                                        className="studio-voice-preview-audio w-full max-w-full"
+                                        className="studio-native-audio w-full max-w-full"
                                         src={proxiedMediaSrc(selectedElevenVoice.previewUrl)}
                                       />
                                     </div>
@@ -3912,7 +4112,7 @@ export default function AppBrandWizard() {
                       >
                         <span className="inline-flex items-center gap-2">
                           {appSection === "voice"
-                            ? "Create voice"
+                            ? "Change voice"
                             : appSection === "ad_clone"
                               ? "Translate"
                               : "Generate"}

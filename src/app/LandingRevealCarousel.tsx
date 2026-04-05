@@ -14,14 +14,17 @@ const PRODUCTS = [
   { src: "/carousel/product-7.png", alt: "Pure Serum" },
 ] as const;
 
+/** Bump when replacing carousel MP4s so immutable CDN cache does not serve stale 404s. */
+const CAROUSEL_MP4_CACHE = "v3";
+
 const UGC_SLIDES = [
-  { src: "/carousel/slide1.mp4" },
-  { src: "/carousel/slide2.mp4" },
-  { src: "/carousel/slide3.mp4" },
-  { src: "/carousel/slide4.mp4" },
-  { src: "/carousel/slide5.mp4" },
-  { src: "/carousel/slide6.mp4" },
-  { src: "/carousel/slide7.mp4" },
+  { src: `/carousel/slide1.mp4?${CAROUSEL_MP4_CACHE}` },
+  { src: `/carousel/slide2.mp4?${CAROUSEL_MP4_CACHE}` },
+  { src: `/carousel/slide3.mp4?${CAROUSEL_MP4_CACHE}` },
+  { src: `/carousel/slide4.mp4?${CAROUSEL_MP4_CACHE}` },
+  { src: `/carousel/slide5.mp4?${CAROUSEL_MP4_CACHE}` },
+  { src: `/carousel/slide6.mp4?${CAROUSEL_MP4_CACHE}` },
+  { src: `/carousel/slide7.mp4?${CAROUSEL_MP4_CACHE}` },
 ] as const;
 
 const PAIRED_CAROUSEL_ITEMS = PRODUCTS.map((product, index) => ({
@@ -52,7 +55,6 @@ function RevealSlide({
   const cardRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-
   useEffect(() => {
     const card = cardRef.current;
     const overlay = overlayRef.current;
@@ -104,7 +106,9 @@ function RevealSlide({
         {videoSrc ? (
           <video
             ref={videoRef}
+            key={`${slideIndex}-${videoSrc}`}
             src={videoSrc}
+            poster={imageSrc}
             autoPlay
             loop
             muted
@@ -140,6 +144,8 @@ export function LandingRevealCarousel() {
   const [isActive, setIsActive] = useState(false);
   const carouselTrackRef = useRef<HTMLDivElement>(null);
   const carouselSetRef = useRef<HTMLDivElement>(null);
+  /** Second copy of the strip — used to measure scroll period (first set width + flex gap). */
+  const carouselSet2Ref = useRef<HTMLDivElement>(null);
   const revealSectionRef = useRef<HTMLElement | null>(null);
   const revealRegistryRef = useRef<(RevealRegistryEntry | null)[]>(
     Array.from({ length: REVEAL_SLIDE_TOTAL }, () => null),
@@ -172,12 +178,22 @@ export function LandingRevealCarousel() {
 
     let rafId = 0;
     let lastTs = performance.now();
-    let setWidth = 0;
+    /** One full loop = distance from copy A’s left edge to copy B’s left edge (includes inter-set flex gap). */
+    let scrollPeriodPx = 0;
     let offset = 0;
     const speedPxPerSec = 70;
 
     const measure = () => {
-      setWidth = setEl.getBoundingClientRect().width;
+      const set2 = carouselSet2Ref.current;
+      if (!set2) {
+        scrollPeriodPx = setEl.getBoundingClientRect().width;
+        return;
+      }
+      const r1 = setEl.getBoundingClientRect();
+      const r2 = set2.getBoundingClientRect();
+      const period = r2.left - r1.left;
+      scrollPeriodPx = Number.isFinite(period) && period > 1 ? period : setEl.getBoundingClientRect().width;
+      while (scrollPeriodPx > 0 && offset >= scrollPeriodPx) offset -= scrollPeriodPx;
     };
 
     const tick = (ts: number) => {
@@ -189,9 +205,10 @@ export function LandingRevealCarousel() {
       const dt = (ts - lastTs) / 1000;
       lastTs = ts;
 
-      if (setWidth > 0) {
-        offset = (offset + speedPxPerSec * dt) % setWidth;
-        trackEl.style.transform = `translate3d(${(-setWidth + offset).toFixed(2)}px, 0, 0)`;
+      if (scrollPeriodPx > 0) {
+        offset += speedPxPerSec * dt;
+        while (offset >= scrollPeriodPx) offset -= scrollPeriodPx;
+        trackEl.style.transform = `translate3d(${-offset}px, 0, 0)`;
       }
 
       const cx = window.innerWidth * 0.5;
@@ -221,8 +238,11 @@ export function LandingRevealCarousel() {
     };
 
     measure();
+    requestAnimationFrame(() => measure());
     const resizeObserver = new ResizeObserver(measure);
     resizeObserver.observe(setEl);
+    const set2El = carouselSet2Ref.current;
+    if (set2El) resizeObserver.observe(set2El);
     window.addEventListener("resize", measure);
     rafId = requestAnimationFrame(tick);
 
@@ -276,7 +296,7 @@ export function LandingRevealCarousel() {
               />
             ))}
           </div>
-          <div aria-hidden="true" className="flex items-center gap-3 md:gap-5">
+          <div ref={carouselSet2Ref} aria-hidden="true" className="flex items-center gap-3 md:gap-5">
             {PAIRED_CAROUSEL_ITEMS.map((item, i) => (
               <RevealSlide
                 key={`reveal-b-${i}`}

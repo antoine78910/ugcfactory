@@ -277,34 +277,35 @@
   height: 0;
 }
 
-/* Voice preview: dark panel + violet icons (Chromium/Safari filter-tint black glyphs → violet) */
-.studio-voice-preview-audio {
-  accent-color: rgb(167 139 250);
+/* Native <audio controls>: dark panel + violet-500 accents (not pink/rose) */
+.studio-native-audio {
+  accent-color: rgb(139 92 246);
   color-scheme: dark;
   border-radius: 0.5rem;
   background: linear-gradient(180deg, rgba(15, 12, 22, 0.95) 0%, rgba(5, 5, 8, 0.98) 100%);
   min-height: 2.5rem;
 }
 
-.studio-voice-preview-audio::-webkit-media-controls-panel {
+.studio-native-audio::-webkit-media-controls-panel {
   background: linear-gradient(180deg, #14101c 0%, #0a0810 100%);
   border-radius: 0.5rem;
 }
 
-/* Tint default black control glyphs to violet (#a78bfa) */
-.studio-voice-preview-audio::-webkit-media-controls-play-button,
-.studio-voice-preview-audio::-webkit-media-controls-mute-button,
-.studio-voice-preview-audio::-webkit-media-controls-overflow-button,
-.studio-voice-preview-audio::-webkit-media-controls-fullscreen-button {
-  filter: brightness(0) saturate(100%) invert(67%) sepia(42%) saturate(2045%) hue-rotate(221deg) brightness(102%) contrast(96%);
+/* Black glyphs → #8b5cf6 (violet-500); hue ~239° avoids magenta/rose cast */
+.studio-native-audio::-webkit-media-controls-play-button,
+.studio-native-audio::-webkit-media-controls-mute-button,
+.studio-native-audio::-webkit-media-controls-overflow-button,
+.studio-native-audio::-webkit-media-controls-fullscreen-button {
+  filter: brightness(0) saturate(100%) invert(42%) sepia(93%) saturate(3331%) hue-rotate(239deg) brightness(101%) contrast(101%);
 }
 
-.studio-voice-preview-audio::-webkit-media-controls-current-time-display,
-.studio-voice-preview-audio::-webkit-media-controls-time-remaining-display {
+.studio-native-audio::-webkit-media-controls-current-time-display,
+.studio-native-audio::-webkit-media-controls-time-remaining-display {
   color: rgba(237, 233, 254, 0.92);
-  text-shadow: 0 0 8px rgba(139, 92, 246, 0.25);
+  text-shadow: 0 0 8px rgba(139, 92, 246, 0.35);
 }
 
-.studio-voice-preview-audio::-webkit-media-controls-timeline {
+.studio-native-audio::-webkit-media-controls-timeline {
   border-radius: 2px;
+  accent-color: rgb(139 92 246);
 }
