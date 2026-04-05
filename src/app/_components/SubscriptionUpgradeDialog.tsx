@@ -15,26 +15,17 @@ export type SubscriptionUpgradePreview = {
     priceUsd: number;
     creditsPerMonth: number;
   };
-  creditBalance: number;
   subscriptionCreditsRemaining: number;
-  subscriptionCreditValueUsd: number;
-  stripeProrationCreditCents: number;
+  prorationCreditUsd: number;
+  prorationCreditCents: number;
   amountDueCents: number;
   currency: string;
   renewalSummary: string;
 };
 
-function formatUsdFromCents(cents: number, currency: string): string {
-  const cur = currency.toLowerCase() === "usd" ? "USD" : currency.toUpperCase();
+function formatUsd(cents: number): string {
   const v = Math.abs(cents) / 100;
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: cur }).format(v);
-}
-
-function formatMoneySignedCents(cents: number, currency: string): string {
-  const sign = cents < 0 ? "-" : cents > 0 ? "" : "";
-  const cur = currency.toLowerCase() === "usd" ? "USD" : currency.toUpperCase();
-  const v = Math.abs(cents) / 100;
-  return sign + new Intl.NumberFormat("en-US", { style: "currency", currency: cur }).format(v);
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(v);
 }
 
 type Props = {
@@ -68,17 +59,11 @@ export function SubscriptionUpgradeDialog({
           <div className="border-b border-white/[0.06] px-5 pb-4 pt-5">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-violet-400/90">Upgrading plan</p>
             <Dialog.Title className="mt-1.5 text-lg font-bold tracking-tight text-white sm:text-xl">
-              Your new plan starts now
+              Upgrade your plan
             </Dialog.Title>
             <Dialog.Description className="mt-2 text-sm leading-relaxed text-white/55">
-              Unused subscription time is credited by Stripe toward this change. Remaining subscription credits are shown
-              for reference ({preview?.subscriptionCreditsRemaining ?? "—"} cr. ≈{" "}
-              {preview
-                ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(
-                    preview.subscriptionCreditValueUsd,
-                  )
-                : "—"}
-              ).
+              Your unused subscription credits are applied as a discount on the first payment.
+              You&apos;ll be redirected to Stripe to complete the payment.
             </Dialog.Description>
           </div>
 
@@ -86,7 +71,7 @@ export function SubscriptionUpgradeDialog({
             {loadingPreview ? (
               <div className="flex flex-col items-center justify-center gap-3 py-16 text-white/50">
                 <Loader2 className="h-8 w-8 animate-spin text-violet-400/90" aria-hidden />
-                <span className="text-sm">Calculating proration…</span>
+                <span className="text-sm">Calculating…</span>
               </div>
             ) : preview ? (
               <div className="space-y-4">
@@ -101,6 +86,7 @@ export function SubscriptionUpgradeDialog({
                       {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(
                         preview.current.priceUsd,
                       )}
+                      <span className="text-sm font-medium text-white/40">/mo</span>
                     </p>
                   </div>
                   <div className="rounded-xl border border-violet-500/30 bg-violet-500/[0.08] px-3 py-3 shadow-[inset_0_1px_0_rgba(139,92,246,0.15)]">
@@ -116,29 +102,34 @@ export function SubscriptionUpgradeDialog({
                       {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(
                         preview.target.priceUsd,
                       )}
+                      <span className="text-sm font-medium text-white/40">/mo</span>
                     </p>
                   </div>
                 </div>
 
-                <div className="rounded-xl border border-white/[0.06] bg-black/20 px-3 py-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Prorations</p>
-                  <div className="mt-2 flex items-center justify-between text-sm">
-                    <span className="text-white/65">Unused credits (time proration)</span>
-                    <span className="font-semibold tabular-nums text-emerald-300/95">
-                      {formatMoneySignedCents(preview.stripeProrationCreditCents, preview.currency)}
-                    </span>
+                {preview.subscriptionCreditsRemaining > 0 ? (
+                  <div className="rounded-xl border border-white/[0.06] bg-black/20 px-3 py-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Proration credit</p>
+                    <div className="mt-2 flex items-center justify-between text-sm">
+                      <span className="text-white/65">
+                        {preview.subscriptionCreditsRemaining} unused credits × $0.07
+                      </span>
+                      <span className="font-semibold tabular-nums text-emerald-300/95">
+                        −{formatUsd(preview.prorationCreditCents)}
+                      </span>
+                    </div>
                   </div>
-                </div>
+                ) : null}
 
                 <div className="flex items-center justify-between rounded-xl border border-violet-400/25 bg-violet-500/10 px-3 py-3">
                   <span className="text-sm font-semibold text-white/90">Amount due today</span>
                   <span className="text-xl font-bold tabular-nums text-white">
-                    {formatUsdFromCents(preview.amountDueCents, preview.currency)}
+                    {formatUsd(preview.amountDueCents)}
                   </span>
                 </div>
 
                 <p className="text-[11px] leading-relaxed text-white/38">
-                  By clicking Confirm Change, you agree to our{" "}
+                  By clicking Proceed to checkout, you agree to our{" "}
                   <Link href="https://stripe.com/legal" className="text-violet-300/90 underline-offset-2 hover:underline">
                     Terms
                   </Link>{" "}
@@ -146,7 +137,8 @@ export function SubscriptionUpgradeDialog({
                   <Link href="https://stripe.com/privacy" className="text-violet-300/90 underline-offset-2 hover:underline">
                     Privacy
                   </Link>
-                  . Any balance or credit from Stripe is applied automatically. {preview.renewalSummary}
+                  . Your current subscription will be cancelled and replaced by the new plan once payment is confirmed.{" "}
+                  {preview.renewalSummary}
                 </p>
               </div>
             ) : (
@@ -164,12 +156,12 @@ export function SubscriptionUpgradeDialog({
               {confirming ? (
                 <span className="inline-flex items-center gap-2">
                   <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
-                  Processing…
+                  Redirecting…
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-2">
                   <Sparkles className="h-5 w-5 opacity-90" aria-hidden />
-                  Confirm Change
+                  Proceed to checkout
                 </span>
               )}
             </Button>

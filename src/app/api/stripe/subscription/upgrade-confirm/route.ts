@@ -2,16 +2,20 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
+import { getUserCreditBalance } from "@/lib/creditGrants";
+import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
+import { getDataFastStripeMetadata } from "@/lib/stripe/datafastMetadata";
 import {
   classifySubscriptionChange,
   isSubscriptionPlanId,
   loadUserSubscriptionRow,
   parseDbBilling,
-  resolveSubscriptionItemForPlan,
   getSubscriptionStripePriceId,
   type SubscriptionPlanId,
 } from "@/lib/stripe/subscriptionUpgrade";
+
+const CREDIT_PRORATION_VALUE_USD = 0.07;
 
 export async function POST(req: Request) {
   const auth = await requireSupabaseUser();
@@ -38,6 +42,10 @@ export async function POST(req: Request) {
       ? String((body as { billing: unknown }).billing)
       : "monthly";
   const targetBilling = billingRaw === "yearly" ? "yearly" : "monthly";
+  const referral =
+    typeof body === "object" && body !== null && "referral" in body
+      ? String((body as { referral: unknown }).referral).slice(0, 500)
+      : "";
 
   if (!isSubscriptionPlanId(planIdRaw)) {
     return NextResponse.json({ error: "Invalid plan" }, { status: 400 });
@@ -67,7 +75,10 @@ export async function POST(req: Request) {
     targetBilling,
   });
   if (change !== "ok") {
-    return NextResponse.json({ error: "This change must be done from the billing portal." }, { status: 400 });
+    return NextResponse.json(
+      { error: "This change must be done from the billing portal." },
+      { status: 400 },
+    );
   }
 
   const newPriceId = getSubscriptionStripePriceId(targetPlanId, targetBilling);
@@ -75,37 +86,70 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Price is not configured for this plan." }, { status: 422 });
   }
 
-  const stripe = new Stripe(secret, { apiVersion: "2026-02-25.clover" });
-
-  let subscription: Stripe.Subscription;
+  let prorationCreditCents = 0;
+  let unusedCreditsCount = 0;
   try {
-    subscription = await stripe.subscriptions.retrieve(row.stripe_subscription_id, {
-      expand: ["items.data.price"],
-    });
+    const admin = createSupabaseServiceClient();
+    if (admin) {
+      const bal = await getUserCreditBalance(admin, auth.user.id);
+      unusedCreditsCount = bal.subscriptionCredits;
+      prorationCreditCents = Math.round(unusedCreditsCount * CREDIT_PRORATION_VALUE_USD * 100);
+    }
   } catch {
-    return NextResponse.json({ error: "Could not load Stripe subscription." }, { status: 502 });
+    /* best-effort */
   }
 
-  const item = resolveSubscriptionItemForPlan(subscription.items.data, currentPlanId, currentBilling);
-  if (!item?.id) {
-    return NextResponse.json({ error: "Could not resolve subscription item." }, { status: 422 });
-  }
+  const stripe = new Stripe(secret, { apiVersion: "2026-02-25.clover" });
+  const base =
+    process.env.APP_URL?.trim() ||
+    process.env.NEXT_PUBLIC_APP_URL?.trim() ||
+    "http://localhost:3000";
+  const datafastMeta = await getDataFastStripeMetadata();
 
   try {
-    await stripe.subscriptions.update(subscription.id, {
-      items: [
-        {
-          id: item.id,
-          price: newPriceId,
-          quantity: item.quantity ?? 1,
-        },
-      ],
-      proration_behavior: "create_prorations",
-    });
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "Stripe could not update the subscription.";
-    return NextResponse.json({ error: msg }, { status: 502 });
-  }
+    let couponId: string | undefined;
+    if (prorationCreditCents > 0) {
+      const coupon = await stripe.coupons.create({
+        amount_off: prorationCreditCents,
+        currency: "usd",
+        duration: "once",
+        name: `Proration: ${unusedCreditsCount} unused credits × $0.07`,
+        max_redemptions: 1,
+      });
+      couponId = coupon.id;
+    }
 
-  return NextResponse.json({ ok: true });
+    const sessionParams: Stripe.Checkout.SessionCreateParams = {
+      mode: "subscription",
+      line_items: [{ price: newPriceId, quantity: 1 }],
+      success_url: `${base.replace(/\/$/, "")}/subscription?checkout=success&plan=${encodeURIComponent(targetPlanId)}`,
+      cancel_url: `${base.replace(/\/$/, "")}/subscription?checkout=cancel`,
+      customer: row.stripe_customer_id,
+      metadata: {
+        user_id: auth.user.id,
+        subscription_plan: targetPlanId,
+        subscription_billing: targetBilling,
+        upgrade_from_subscription_id: row.stripe_subscription_id,
+        ...datafastMeta,
+      },
+      ...(referral ? { client_reference_id: referral } : {}),
+    };
+
+    if (couponId) {
+      sessionParams.discounts = [{ coupon: couponId }];
+    } else {
+      sessionParams.allow_promotion_codes = true;
+    }
+
+    const session = await stripe.checkout.sessions.create(sessionParams);
+
+    if (!session.url) {
+      return NextResponse.json({ error: "No checkout URL returned" }, { status: 500 });
+    }
+
+    return NextResponse.json({ url: session.url });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Stripe error";
+    return NextResponse.json({ error: message }, { status: 502 });
+  }
 }

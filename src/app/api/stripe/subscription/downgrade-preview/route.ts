@@ -1,8 +1,7 @@
 export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
-import { getUserCreditBalance } from "@/lib/creditGrants";
-import { createSupabaseServiceClient } from "@/lib/supabase/admin";
+import Stripe from "stripe";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import {
   classifySubscriptionChange,
@@ -13,8 +12,6 @@ import {
   subscriptionPriceDisplayUsd,
   type SubscriptionPlanId,
 } from "@/lib/stripe/subscriptionUpgrade";
-
-const CREDIT_PRORATION_VALUE_USD = 0.07;
 
 function planLabel(planId: SubscriptionPlanId): string {
   const labels: Record<SubscriptionPlanId, string> = {
@@ -29,6 +26,11 @@ function planLabel(planId: SubscriptionPlanId): string {
 export async function POST(req: Request) {
   const auth = await requireSupabaseUser();
   if (auth.response) return auth.response;
+
+  const secret = process.env.STRIPE_SECRET_KEY?.trim();
+  if (!secret) {
+    return NextResponse.json({ error: "Stripe is not configured." }, { status: 503 });
+  }
 
   let body: unknown;
   try {
@@ -54,12 +56,8 @@ export async function POST(req: Request) {
 
   const row = await loadUserSubscriptionRow(auth.user.id);
   if (!row) {
-    return NextResponse.json(
-      { error: "No active subscription on file. Use checkout to subscribe first." },
-      { status: 404 },
-    );
+    return NextResponse.json({ error: "No active subscription." }, { status: 404 });
   }
-
   if (row.status !== "active" && row.status !== "trialing") {
     return NextResponse.json({ error: "Subscription is not active." }, { status: 409 });
   }
@@ -77,40 +75,26 @@ export async function POST(req: Request) {
     targetPlanId,
     targetBilling,
   });
-  if (change === "same") {
-    return NextResponse.json({ error: "You already have this plan and billing." }, { status: 400 });
-  }
-  if (change === "downgrade") {
-    return NextResponse.json(
-      { error: "To switch to a lower tier, use Manage billing in the Stripe customer portal." },
-      { status: 400 },
-    );
+  if (change !== "downgrade") {
+    return NextResponse.json({ error: "This is not a downgrade." }, { status: 400 });
   }
 
-  let subscriptionCreditsRemaining = 0;
+  let effectiveAt = "the end of your current billing period";
   try {
-    const admin = createSupabaseServiceClient();
-    if (admin) {
-      const bal = await getUserCreditBalance(admin, auth.user.id);
-      subscriptionCreditsRemaining = bal.subscriptionCredits;
+    const stripe = new Stripe(secret, { apiVersion: "2026-02-25.clover" });
+    const sub = await stripe.subscriptions.retrieve(row.stripe_subscription_id);
+    const periodEnd = (sub as any).current_period_end;
+    if (typeof periodEnd === "number" && periodEnd > 0) {
+      const d = new Date(periodEnd * 1000);
+      effectiveAt = d.toLocaleDateString("en-US", {
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      });
     }
   } catch {
-    /* best-effort */
+    /* use generic label */
   }
-
-  const prorationCreditUsd =
-    Math.round(subscriptionCreditsRemaining * CREDIT_PRORATION_VALUE_USD * 100) / 100;
-  const prorationCreditCents = Math.round(prorationCreditUsd * 100);
-
-  const targetPriceUsd = subscriptionPriceDisplayUsd(targetPlanId, targetBilling);
-  const targetPriceCents = Math.round(targetPriceUsd * 100);
-
-  const amountDueCents = Math.max(0, targetPriceCents - prorationCreditCents);
-
-  const renewalSummary =
-    targetBilling === "yearly"
-      ? `Your subscription renews at $${targetPriceUsd.toFixed(2)}/mo (billed yearly), and you can cancel anytime from Manage billing.`
-      : `Your subscription renews at $${targetPriceUsd.toFixed(0)} per month, and you can cancel anytime from Manage billing.`;
 
   return NextResponse.json({
     current: {
@@ -118,19 +102,15 @@ export async function POST(req: Request) {
       name: planLabel(currentPlanId),
       billingLabel: currentBilling === "yearly" ? "Yearly" : "Monthly",
       priceUsd: subscriptionPriceDisplayUsd(currentPlanId, currentBilling),
+      creditsPerMonth: subscriptionCreditsPerMonth(currentPlanId),
     },
     target: {
       planId: targetPlanId,
       name: planLabel(targetPlanId),
       billingLabel: targetBilling === "yearly" ? "Yearly" : "Monthly",
-      priceUsd: targetPriceUsd,
+      priceUsd: subscriptionPriceDisplayUsd(targetPlanId, targetBilling),
       creditsPerMonth: subscriptionCreditsPerMonth(targetPlanId),
     },
-    subscriptionCreditsRemaining,
-    prorationCreditUsd,
-    prorationCreditCents,
-    amountDueCents,
-    currency: "usd",
-    renewalSummary,
+    effectiveAt,
   });
 }

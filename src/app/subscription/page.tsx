@@ -9,6 +9,10 @@ import {
   SubscriptionUpgradeDialog,
   type SubscriptionUpgradePreview,
 } from "@/app/_components/SubscriptionUpgradeDialog";
+import {
+  SubscriptionDowngradeDialog,
+  type SubscriptionDowngradePreview,
+} from "@/app/_components/SubscriptionDowngradeDialog";
 import { consumeCheckoutQueryParams, useCreditsPlan } from "@/app/_components/CreditsPlanContext";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -111,6 +115,12 @@ export default function SubscriptionPage() {
   const [upgradeConfirmLoading, setUpgradeConfirmLoading] = useState(false);
   const [pendingUpgradePlanId, setPendingUpgradePlanId] = useState<string | null>(null);
 
+  const [downgradeDialogOpen, setDowngradeDialogOpen] = useState(false);
+  const [downgradePreview, setDowngradePreview] = useState<SubscriptionDowngradePreview | null>(null);
+  const [downgradePreviewLoading, setDowngradePreviewLoading] = useState(false);
+  const [downgradeConfirmLoading, setDowngradeConfirmLoading] = useState(false);
+  const [pendingDowngradePlanId, setPendingDowngradePlanId] = useState<string | null>(null);
+
   const openUpgradeDialog = useCallback(
     async (planIdCheckout: string) => {
       setPendingUpgradePlanId(planIdCheckout);
@@ -148,21 +158,71 @@ export default function SubscriptionPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ planId: pendingUpgradePlanId, billing }),
       });
-      const data = (await res.json()) as { ok?: boolean; error?: string };
-      if (!res.ok) throw new Error(data.error || "Could not update subscription.");
-      toast.success("Subscription updated", {
-        description: "Your plan will refresh in a moment.",
-      });
-      setUpgradeDialogOpen(false);
-      setUpgradePreview(null);
-      setPendingUpgradePlanId(null);
-      window.location.reload();
+      const data = (await res.json()) as { url?: string; error?: string };
+      if (!res.ok) throw new Error(data.error || "Could not start upgrade checkout.");
+      if (data.url) {
+        window.location.href = data.url;
+        return;
+      }
+      throw new Error("No checkout URL returned");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Upgrade failed.");
     } finally {
       setUpgradeConfirmLoading(false);
     }
   }, [billing, pendingUpgradePlanId]);
+
+  const openDowngradeDialog = useCallback(
+    async (planIdTarget: string) => {
+      setPendingDowngradePlanId(planIdTarget);
+      setDowngradeDialogOpen(true);
+      setDowngradePreviewLoading(true);
+      setDowngradePreview(null);
+      try {
+        const res = await fetch("/api/stripe/subscription/downgrade-preview", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ planId: planIdTarget, billing }),
+        });
+        const data = (await res.json()) as SubscriptionDowngradePreview & { error?: string };
+        if (!res.ok) throw new Error(data.error || "Could not load downgrade preview.");
+        setDowngradePreview(data);
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Could not load downgrade preview.");
+        setDowngradeDialogOpen(false);
+        setPendingDowngradePlanId(null);
+      } finally {
+        setDowngradePreviewLoading(false);
+      }
+    },
+    [billing],
+  );
+
+  const confirmDowngrade = useCallback(async () => {
+    if (!pendingDowngradePlanId) return;
+    setDowngradeConfirmLoading(true);
+    try {
+      const res = await fetch("/api/stripe/subscription/downgrade-confirm", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ planId: pendingDowngradePlanId, billing }),
+      });
+      const data = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok) throw new Error(data.error || "Could not process downgrade.");
+      toast.success("Downgrade scheduled", {
+        description: `Your plan will switch to ${downgradePreview?.target.name ?? "the new plan"} at your next renewal.`,
+      });
+      setDowngradeDialogOpen(false);
+      setDowngradePreview(null);
+      setPendingDowngradePlanId(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Downgrade failed.");
+    } finally {
+      setDowngradeConfirmLoading(false);
+    }
+  }, [billing, pendingDowngradePlanId, downgradePreview]);
 
   useEffect(() => {
     let cancelled = false;
@@ -423,7 +483,9 @@ export default function SubscriptionPage() {
                         Boolean(checkoutLoading) ||
                         portalLoading ||
                         upgradeConfirmLoading ||
+                        downgradeConfirmLoading ||
                         (upgradePreviewLoading && pendingUpgradePlanId === plan.id) ||
+                        (downgradePreviewLoading && pendingDowngradePlanId === plan.id) ||
                         exactPlanAndBilling ||
                         (isSameTier && serverSubBilling === "pending")
                       }
@@ -433,7 +495,7 @@ export default function SubscriptionPage() {
                           return;
                         }
                         if (isLowerTier && isSubscribed) {
-                          void goToBillingManagement();
+                          void openDowngradeDialog(plan.id);
                           return;
                         }
                         if (exactPlanAndBilling || (isSameTier && serverSubBilling === "pending")) {
@@ -452,7 +514,9 @@ export default function SubscriptionPage() {
                               : "border border-white/15 bg-white/10 text-white hover:bg-white/15",
                       )}
                     >
-                      {portalLoading ? (
+                      {downgradePreviewLoading && pendingDowngradePlanId === plan.id ? (
+                        "Preparing…"
+                      ) : portalLoading ? (
                         "Opening billing…"
                       ) : upgradePreviewLoading && pendingUpgradePlanId === plan.id ? (
                         "Preparing…"
@@ -584,14 +648,14 @@ export default function SubscriptionPage() {
                           className="w-full rounded-xl border border-amber-400/35 bg-amber-500/10 text-amber-50 hover:bg-amber-500/20 sm:w-auto"
                           onClick={() => void goToBillingManagement()}
                         >
-                          {portalLoading ? "Opening…" : "Downgrade plan"}
+                          {portalLoading ? "Opening…" : "Cancel subscription"}
                         </Button>
                       </div>
                     ) : null}
 
                     <p className="mt-1.5 max-w-md text-sm leading-snug text-white/48">
                       {isSubscribed
-                        ? "Your monthly credits refresh with your plan. Use Downgrade plan to switch to a lower tier or cancel; Stripe applies changes at renewal."
+                        ? "Your monthly credits refresh with your plan. Upgrade or downgrade from the plan cards above; downgrades take effect at renewal."
                         : "You’re on the free tier. Add a subscription for monthly credits or buy packs on the Credits page."}
                     </p>
 
@@ -624,6 +688,21 @@ export default function SubscriptionPage() {
         loadingPreview={upgradePreviewLoading}
         confirming={upgradeConfirmLoading}
         onConfirm={confirmSubscriptionUpgrade}
+      />
+
+      <SubscriptionDowngradeDialog
+        open={downgradeDialogOpen}
+        onOpenChange={(o) => {
+          setDowngradeDialogOpen(o);
+          if (!o) {
+            setDowngradePreview(null);
+            setPendingDowngradePlanId(null);
+          }
+        }}
+        preview={downgradePreview}
+        loadingPreview={downgradePreviewLoading}
+        confirming={downgradeConfirmLoading}
+        onConfirm={confirmDowngrade}
       />
     </StudioShell>
   );

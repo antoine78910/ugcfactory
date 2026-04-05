@@ -23,7 +23,7 @@ export async function GET() {
 
 import Stripe from "stripe";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
-import { isSubscriptionPlanId } from "@/lib/stripe/subscriptionPrices";
+import { isSubscriptionPlanId, getPlanFromPriceId } from "@/lib/stripe/subscriptionPrices";
 import { isCreditPackKey } from "@/lib/stripe/creditPackPrices";
 import { serverLog } from "@/lib/serverLog";
 import {
@@ -112,6 +112,20 @@ export async function POST(req: Request) {
           const planId = session.metadata?.subscription_plan ?? "";
           const billing = (session.metadata?.subscription_billing === "yearly" ? "yearly" : "monthly") as "monthly" | "yearly";
 
+          const upgradeFromSubId = session.metadata?.upgrade_from_subscription_id;
+          if (upgradeFromSubId) {
+            try {
+              await stripe.subscriptions.cancel(upgradeFromSubId);
+              serverLog("stripe_webhook_upgrade_old_sub_canceled", { userId, oldSubId: upgradeFromSubId });
+            } catch (cancelErr) {
+              serverLog("stripe_webhook_upgrade_cancel_failed", {
+                userId,
+                oldSubId: upgradeFromSubId,
+                error: cancelErr instanceof Error ? cancelErr.message : "unknown",
+              });
+            }
+          }
+
           if (isSubscriptionPlanId(planId)) {
             const periodEnd = safePeriodEndDate((sub as any).current_period_end);
             const periodEndIso = periodEnd.toISOString();
@@ -125,7 +139,6 @@ export async function POST(req: Request) {
               current_period_end: periodEndIso,
             }, { onConflict: "user_id" });
 
-            // Reset subscription credits (non-cumulative): invalidate old, create fresh grant expiring at period end
             const credits = SUBSCRIPTION_CREDITS[planId] ?? 0;
             await resetSubscriptionCredits(admin, userId, credits, periodEnd);
             serverLog("stripe_webhook_subscription_start", { userId, planId, credits });
@@ -149,36 +162,54 @@ export async function POST(req: Request) {
       // -----------------------------------------------------------------------
       case "invoice.payment_succeeded": {
         const invoice = event.data.object as Stripe.Invoice;
-        // Only for subscription renewals (not the first invoice — that's handled above)
         if ((invoice as any).billing_reason !== "subscription_cycle") break;
 
         const subId = typeof (invoice as any).subscription === "string" ? (invoice as any).subscription : null;
         if (!subId) break;
 
-        // Fetch the live subscription to get the new current_period_end
         const stripe = new Stripe(secret, { apiVersion: "2026-02-25.clover" });
+        let liveSub: Stripe.Subscription | null = null;
         let renewalPeriodEnd: Date;
         try {
-          const liveSub = await stripe.subscriptions.retrieve(subId);
+          liveSub = await stripe.subscriptions.retrieve(subId);
           renewalPeriodEnd = safePeriodEndDate((liveSub as any).current_period_end);
-          await admin.from("user_subscriptions").update({
-            current_period_end: renewalPeriodEnd.toISOString(),
-          }).eq("stripe_subscription_id", subId);
         } catch {
           renewalPeriodEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
         }
 
+        let detectedPlanId: string | null = null;
+        let detectedBilling: "monthly" | "yearly" | null = null;
+        if (liveSub) {
+          for (const item of liveSub.items.data) {
+            const match = getPlanFromPriceId(item.price.id);
+            if (match) {
+              detectedPlanId = match.planId;
+              detectedBilling = match.billing;
+              break;
+            }
+          }
+        }
+
         const { data: row } = await admin
           .from("user_subscriptions")
-          .select("user_id, plan_id")
+          .select("user_id, plan_id, billing")
           .eq("stripe_subscription_id", subId)
           .maybeSingle();
 
-        if (row?.user_id && row.plan_id) {
-          const credits = SUBSCRIPTION_CREDITS[row.plan_id] ?? 0;
-          // Reset (not accumulate): invalidate leftover subscription credits, create fresh grant
+        if (row?.user_id) {
+          const effectivePlanId = detectedPlanId || row.plan_id;
+          const effectiveBilling = detectedBilling || row.billing;
+
+          await admin.from("user_subscriptions").update({
+            plan_id: effectivePlanId,
+            billing: effectiveBilling,
+            status: liveSub?.status ?? "active",
+            current_period_end: renewalPeriodEnd.toISOString(),
+          }).eq("stripe_subscription_id", subId);
+
+          const credits = SUBSCRIPTION_CREDITS[effectivePlanId] ?? 0;
           await resetSubscriptionCredits(admin, row.user_id, credits, renewalPeriodEnd);
-          serverLog("stripe_webhook_subscription_renewal", { userId: row.user_id, planId: row.plan_id, credits });
+          serverLog("stripe_webhook_subscription_renewal", { userId: row.user_id, planId: effectivePlanId, credits });
         }
         break;
       }
