@@ -1,10 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Check, Coins, CreditCard, TrendingDown, X } from "lucide-react";
 import { toast } from "sonner";
 import StudioShell from "@/app/_components/StudioShell";
+import {
+  SubscriptionUpgradeDialog,
+  type SubscriptionUpgradePreview,
+} from "@/app/_components/SubscriptionUpgradeDialog";
 import { consumeCheckoutQueryParams, useCreditsPlan } from "@/app/_components/CreditsPlanContext";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -100,6 +104,65 @@ export default function SubscriptionPage() {
     "pending",
   );
   const { planId, planDisplayName } = useCreditsPlan();
+
+  const [upgradeDialogOpen, setUpgradeDialogOpen] = useState(false);
+  const [upgradePreview, setUpgradePreview] = useState<SubscriptionUpgradePreview | null>(null);
+  const [upgradePreviewLoading, setUpgradePreviewLoading] = useState(false);
+  const [upgradeConfirmLoading, setUpgradeConfirmLoading] = useState(false);
+  const [pendingUpgradePlanId, setPendingUpgradePlanId] = useState<string | null>(null);
+
+  const openUpgradeDialog = useCallback(
+    async (planIdCheckout: string) => {
+      setPendingUpgradePlanId(planIdCheckout);
+      setUpgradeDialogOpen(true);
+      setUpgradePreviewLoading(true);
+      setUpgradePreview(null);
+      try {
+        const res = await fetch("/api/stripe/subscription/upgrade-preview", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ planId: planIdCheckout, billing }),
+        });
+        const data = (await res.json()) as SubscriptionUpgradePreview & { error?: string };
+        if (!res.ok) throw new Error(data.error || "Could not load upgrade preview.");
+        setUpgradePreview(data);
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Could not load upgrade preview.");
+        setUpgradeDialogOpen(false);
+        setPendingUpgradePlanId(null);
+      } finally {
+        setUpgradePreviewLoading(false);
+      }
+    },
+    [billing],
+  );
+
+  const confirmSubscriptionUpgrade = useCallback(async () => {
+    if (!pendingUpgradePlanId) return;
+    setUpgradeConfirmLoading(true);
+    try {
+      const res = await fetch("/api/stripe/subscription/upgrade-confirm", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ planId: pendingUpgradePlanId, billing }),
+      });
+      const data = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok) throw new Error(data.error || "Could not update subscription.");
+      toast.success("Subscription updated", {
+        description: "Your plan will refresh in a moment.",
+      });
+      setUpgradeDialogOpen(false);
+      setUpgradePreview(null);
+      setPendingUpgradePlanId(null);
+      window.location.reload();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Upgrade failed.");
+    } finally {
+      setUpgradeConfirmLoading(false);
+    }
+  }, [billing, pendingUpgradePlanId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -359,15 +422,24 @@ export default function SubscriptionPage() {
                       disabled={
                         Boolean(checkoutLoading) ||
                         portalLoading ||
+                        upgradeConfirmLoading ||
+                        (upgradePreviewLoading && pendingUpgradePlanId === plan.id) ||
                         exactPlanAndBilling ||
                         (isSameTier && serverSubBilling === "pending")
                       }
                       onClick={() => {
-                        if (isSubscribed) {
+                        if (!isSubscribed) {
+                          void startSubscriptionCheckout(plan.id);
+                          return;
+                        }
+                        if (isLowerTier && isSubscribed) {
                           void goToBillingManagement();
                           return;
                         }
-                        void startSubscriptionCheckout(plan.id);
+                        if (exactPlanAndBilling || (isSameTier && serverSubBilling === "pending")) {
+                          return;
+                        }
+                        void openUpgradeDialog(plan.id);
                       }}
                       className={cn(
                         "mt-3 h-10 w-full rounded-xl text-sm font-bold transition-all sm:h-11",
@@ -382,6 +454,8 @@ export default function SubscriptionPage() {
                     >
                       {portalLoading ? (
                         "Opening billing…"
+                      ) : upgradePreviewLoading && pendingUpgradePlanId === plan.id ? (
+                        "Preparing…"
                       ) : checkoutLoading === plan.id ? (
                         "Redirecting…"
                       ) : isSameTier && serverSubBilling === "pending" ? (
@@ -536,6 +610,21 @@ export default function SubscriptionPage() {
           </section>
         </div>
       </div>
+
+      <SubscriptionUpgradeDialog
+        open={upgradeDialogOpen}
+        onOpenChange={(o) => {
+          setUpgradeDialogOpen(o);
+          if (!o) {
+            setUpgradePreview(null);
+            setPendingUpgradePlanId(null);
+          }
+        }}
+        preview={upgradePreview}
+        loadingPreview={upgradePreviewLoading}
+        confirming={upgradeConfirmLoading}
+        onConfirm={confirmSubscriptionUpgrade}
+      />
     </StudioShell>
   );
 }

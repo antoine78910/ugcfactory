@@ -208,7 +208,8 @@ export function LandingRevealCarousel() {
       if (scrollPeriodPx > 0) {
         offset += speedPxPerSec * dt;
         while (offset >= scrollPeriodPx) offset -= scrollPeriodPx;
-        trackEl.style.transform = `translate3d(${-offset}px, 0, 0)`;
+        /* Same direction as before: -period + offset (not -offset), with period = set1→set2 distance incl. gap */
+        trackEl.style.transform = `translate3d(${(-scrollPeriodPx + offset).toFixed(2)}px, 0, 0)`;
       }
 
       const cx = window.innerWidth * 0.5;
