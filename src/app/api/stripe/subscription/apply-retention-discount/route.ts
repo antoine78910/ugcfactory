@@ -50,7 +50,7 @@ export async function POST() {
     });
 
     await stripe.subscriptions.update(subscription.id, {
-      coupon: coupon.id,
+      discounts: [{ coupon: coupon.id }],
     });
 
     return NextResponse.json({ ok: true });

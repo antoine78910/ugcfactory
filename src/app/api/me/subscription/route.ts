@@ -229,7 +229,7 @@ export async function GET() {
             } catch { /* non-critical */ }
 
             return NextResponse.json({
-              planId: effectivePlanId,
+              planId: parseAccountPlan(effectivePlanId),
               billing: effectiveBilling,
               userId: auth.user.id,
               creditBalance,
