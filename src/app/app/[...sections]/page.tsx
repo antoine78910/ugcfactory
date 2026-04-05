@@ -8,8 +8,8 @@ import {
   Maximize2,
   Play,
   Plus,
-  Search,
   Sparkles,
+  Star,
   Trash2,
   X,
 } from "lucide-react";
@@ -618,10 +618,10 @@ export default function AppBrandWizard() {
   const [elevenSharedVoicesPageByLang, setElevenSharedVoicesPageByLang] = useState<Record<string, number>>({});
   const [elevenSharedVoicesHasMoreByLang, setElevenSharedVoicesHasMoreByLang] = useState<Record<string, boolean>>({});
   const [elevenVoiceId, setElevenVoiceId] = useState<string>("");
-  const [elevenVoiceSearchInput, setElevenVoiceSearchInput] = useState("");
-  const [elevenVoiceSearchDebounced, setElevenVoiceSearchDebounced] = useState("");
   const [elevenVoiceLanguageFilter, setElevenVoiceLanguageFilter] = useState("");
   const [elevenVoiceGenderFilter, setElevenVoiceGenderFilter] = useState("");
+  const [elevenVoiceFavoriteIds, setElevenVoiceFavoriteIds] = useState<string[]>([]);
+  const [elevenVoiceFavoritesOnly, setElevenVoiceFavoritesOnly] = useState(false);
   const [voiceChangeUploadKind, setVoiceChangeUploadKind] = useState<VoiceChangeUploadKind>("audio");
   const [voiceChangeUploadFile, setVoiceChangeUploadFile] = useState<File | null>(null);
   const [voiceChangeUploadPreviewUrl, setVoiceChangeUploadPreviewUrl] = useState<string | null>(null);
@@ -712,15 +712,21 @@ export default function AppBrandWizard() {
   );
 
   const filteredElevenVoices = useMemo(() => {
-    return [...elevenVoices].sort((a, b) => a.name.localeCompare(b.name));
-  }, [elevenVoices]);
+    let list = [...elevenVoices].sort((a, b) => a.name.localeCompare(b.name));
+    if (elevenVoiceFavoritesOnly) {
+      const fav = new Set(elevenVoiceFavoriteIds);
+      list = list.filter((v) => fav.has(v.voiceId));
+    }
+    return list;
+  }, [elevenVoices, elevenVoiceFavoritesOnly, elevenVoiceFavoriteIds]);
 
   const elevenVoiceLangHasMore = elevenSharedVoicesHasMoreByLang.__all__ ?? true;
 
   useEffect(() => {
-    const t = window.setTimeout(() => setElevenVoiceSearchDebounced(elevenVoiceSearchInput.trim()), 380);
-    return () => window.clearTimeout(t);
-  }, [elevenVoiceSearchInput]);
+    if (!elevenVoiceFavoritesOnly || filteredElevenVoices.length === 0) return;
+    if (filteredElevenVoices.some((v) => v.voiceId === elevenVoiceId)) return;
+    setElevenVoiceId(filteredElevenVoices[0]!.voiceId);
+  }, [elevenVoiceFavoritesOnly, filteredElevenVoices, elevenVoiceId]);
 
   const translateLanguagesFiltered = useMemo(() => {
     const base = [...(WAVESPEED_HEYGEN_TRANSLATE_LANGUAGES as readonly string[])];
@@ -839,6 +845,42 @@ export default function AppBrandWizard() {
 
   useEffect(() => {
     if (appSection !== "ad_clone" && appSection !== "voice") return;
+    void (async () => {
+      try {
+        const res = await fetch("/api/elevenlabs/favorite-voices", { credentials: "include", cache: "no-store" });
+        if (!res.ok) return;
+        const json = (await res.json().catch(() => ({}))) as { favorites?: unknown };
+        const fav = Array.isArray(json.favorites)
+          ? json.favorites.map((x) => String(x ?? "").trim()).filter(Boolean)
+          : [];
+        setElevenVoiceFavoriteIds(fav);
+      } catch {
+        /* ignore */
+      }
+    })();
+  }, [appSection]);
+
+  const toggleElevenVoiceFavorite = useCallback(async (voiceId: string) => {
+    if (!voiceId) return;
+    const prev = elevenVoiceFavoriteIds;
+    const next = prev.includes(voiceId) ? prev.filter((id) => id !== voiceId) : [...prev, voiceId];
+    setElevenVoiceFavoriteIds(next);
+    try {
+      const res = await fetch("/api/elevenlabs/favorite-voices", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ favorites: next }),
+      });
+      if (!res.ok) throw new Error("save failed");
+    } catch {
+      setElevenVoiceFavoriteIds(prev);
+      toast.error("Could not update favorites.");
+    }
+  }, [elevenVoiceFavoriteIds]);
+
+  useEffect(() => {
+    if (appSection !== "ad_clone" && appSection !== "voice") return;
     let cancelled = false;
     setElevenVoicesLoading(true);
     void (async () => {
@@ -848,7 +890,6 @@ export default function AppBrandWizard() {
           sharedPageSize: "100",
           includeAccount: "true",
         });
-        if (elevenVoiceSearchDebounced) params.set("search", elevenVoiceSearchDebounced);
         if (elevenVoiceLanguageFilter) params.set("language", elevenVoiceLanguageFilter);
         if (elevenVoiceGenderFilter) params.set("gender", elevenVoiceGenderFilter);
         const res = await fetch(`/api/elevenlabs/voices?${params.toString()}`, { cache: "no-store" });
@@ -877,7 +918,7 @@ export default function AppBrandWizard() {
     return () => {
       cancelled = true;
     };
-  }, [appSection, elevenVoiceSearchDebounced, elevenVoiceLanguageFilter, elevenVoiceGenderFilter]);
+  }, [appSection, elevenVoiceLanguageFilter, elevenVoiceGenderFilter]);
 
   const loadMoreElevenVoices = useCallback(async () => {
     if (elevenVoicesLoadMorePending) return;
@@ -893,7 +934,6 @@ export default function AppBrandWizard() {
         sharedPageSize: "10",
         includeAccount: "false",
       });
-      if (elevenVoiceSearchDebounced) params.set("search", elevenVoiceSearchDebounced);
       if (elevenVoiceLanguageFilter) params.set("language", elevenVoiceLanguageFilter);
       if (elevenVoiceGenderFilter) params.set("gender", elevenVoiceGenderFilter);
       const res = await fetch(`/api/elevenlabs/voices?${params.toString()}`, { cache: "no-store" });
@@ -929,7 +969,6 @@ export default function AppBrandWizard() {
     elevenSharedVoicesHasMoreByLang,
     elevenSharedVoicesPageByLang,
     elevenVoicesLoadMorePending,
-    elevenVoiceSearchDebounced,
     elevenVoiceLanguageFilter,
     elevenVoiceGenderFilter,
   ]);
@@ -3260,21 +3299,25 @@ export default function AppBrandWizard() {
                                 <div className="rounded-xl border border-white/10 bg-black/20 p-2.5 space-y-2">
                                   <Label className="text-xs text-white/45">Target voice</Label>
                                   <p className="text-[10px] leading-snug text-white/35">
-                                    Search, filter by language, and preview the voice before generating.
+                                    Filter by language, star voices in the list, use My favorites, then preview before
+                                    generating.
                                   </p>
 
-                                  <div className="relative">
-                                    <Search
-                                      className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/35"
-                                      aria-hidden
+                                  <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-white/10 bg-[#0a0a0d] px-3 py-2.5 transition hover:border-violet-500/25">
+                                    <span className="inline-flex min-w-0 items-center gap-2">
+                                      <Star className="h-4 w-4 shrink-0 text-violet-400/95" aria-hidden />
+                                      <span className="text-xs font-semibold text-white/90">My favorites</span>
+                                      <span className="text-[10px] text-white/40">
+                                        ({elevenVoiceFavoriteIds.length} saved)
+                                      </span>
+                                    </span>
+                                    <input
+                                      type="checkbox"
+                                      checked={elevenVoiceFavoritesOnly}
+                                      onChange={(e) => setElevenVoiceFavoritesOnly(e.target.checked)}
+                                      className="h-4 w-4 shrink-0 rounded border-white/25 bg-[#050507] text-violet-500 focus:ring-violet-500/40"
                                     />
-                                    <Input
-                                      value={elevenVoiceSearchInput}
-                                      onChange={(e) => setElevenVoiceSearchInput(e.target.value)}
-                                      placeholder="Search voices…"
-                                      className="h-10 rounded-xl border-white/15 bg-[#0a0a0d] pl-9 text-sm text-white placeholder:text-white/30"
-                                    />
-                                  </div>
+                                  </label>
 
                                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                                     <div className="space-y-1">
@@ -3336,16 +3379,51 @@ export default function AppBrandWizard() {
                                       />
                                     </SelectTrigger>
                                     <SelectContent position="popper" className={cn(studioSelectContentClass, "max-h-[min(320px,50vh)]")}>
-                                      {filteredElevenVoices.map((voice) => (
-                                        <SelectItem key={voice.voiceId} value={voice.voiceId} className={studioSelectItemClass}>
-                                          <span className="flex min-w-0 items-center gap-2">
-                                            <span className="min-w-0 truncate">{voice.name}</span>
-                                            {voice.language ? (
-                                              <span className="shrink-0 text-[10px] text-white/35">{voice.language}</span>
-                                            ) : null}
-                                          </span>
-                                        </SelectItem>
-                                      ))}
+                                      {filteredElevenVoices.map((voice) => {
+                                        const isFav = elevenVoiceFavoriteIds.includes(voice.voiceId);
+                                        return (
+                                          <SelectItem
+                                            key={voice.voiceId}
+                                            value={voice.voiceId}
+                                            className={cn(studioSelectItemClass, "pr-2")}
+                                            onPointerDown={(e) => {
+                                              const t = e.target as HTMLElement;
+                                              if (t.closest("[data-voice-fav-toggle]")) e.preventDefault();
+                                            }}
+                                          >
+                                            <span className="flex w-full min-w-0 items-center gap-2">
+                                              <button
+                                                type="button"
+                                                data-voice-fav-toggle
+                                                tabIndex={-1}
+                                                aria-label={isFav ? "Remove from favorites" : "Add to favorites"}
+                                                className={cn(
+                                                  "shrink-0 rounded-md p-1 transition hover:bg-white/10",
+                                                  isFav ? "text-amber-400/95" : "text-violet-400/80",
+                                                )}
+                                                onClick={(e) => {
+                                                  e.preventDefault();
+                                                  e.stopPropagation();
+                                                }}
+                                                onPointerDown={(e) => {
+                                                  e.preventDefault();
+                                                  e.stopPropagation();
+                                                  void toggleElevenVoiceFavorite(voice.voiceId);
+                                                }}
+                                              >
+                                                <Star
+                                                  className={cn("h-3.5 w-3.5", isFav && "fill-amber-400/90")}
+                                                  aria-hidden
+                                                />
+                                              </button>
+                                              <span className="min-w-0 flex-1 truncate">{voice.name}</span>
+                                              {voice.language ? (
+                                                <span className="shrink-0 text-[10px] text-white/35">{voice.language}</span>
+                                              ) : null}
+                                            </span>
+                                          </SelectItem>
+                                        );
+                                      })}
                                       {elevenVoiceLangHasMore ? (
                                         <div className="mt-1 border-t border-white/10 p-1">
                                           <button
