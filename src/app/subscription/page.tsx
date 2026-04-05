@@ -125,6 +125,7 @@ export default function SubscriptionPage() {
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelDiscountLoading, setCancelDiscountLoading] = useState(false);
   const [cancelPortalLoading, setCancelPortalLoading] = useState(false);
+  const [subscriptionActiveUntilLabel, setSubscriptionActiveUntilLabel] = useState<string | null>(null);
 
   const openUpgradeDialog = useCallback(
     async (planIdCheckout: string) => {
@@ -267,16 +268,40 @@ export default function SubscriptionPage() {
       try {
         const res = await fetch("/api/me/subscription", { credentials: "include" });
         if (!res.ok) {
-          if (!cancelled) setServerSubBilling(null);
+          if (!cancelled) {
+            setServerSubBilling(null);
+            setSubscriptionActiveUntilLabel(null);
+          }
           return;
         }
-        const data = (await res.json()) as { billing?: unknown };
+        const data = (await res.json()) as {
+          billing?: unknown;
+          currentPeriodEndIso?: string | null;
+        };
         const raw = data.billing;
         const b =
           raw === "yearly" ? "yearly" : raw === "monthly" ? "monthly" : null;
-        if (!cancelled) setServerSubBilling(b);
+        let untilLabel: string | null = null;
+        const iso = data.currentPeriodEndIso;
+        if (typeof iso === "string" && iso) {
+          const d = new Date(iso);
+          if (Number.isFinite(d.getTime())) {
+            untilLabel = d.toLocaleDateString("en-US", {
+              month: "long",
+              day: "numeric",
+              year: "numeric",
+            });
+          }
+        }
+        if (!cancelled) {
+          setServerSubBilling(b);
+          setSubscriptionActiveUntilLabel(untilLabel);
+        }
       } catch {
-        if (!cancelled) setServerSubBilling(null);
+        if (!cancelled) {
+          setServerSubBilling(null);
+          setSubscriptionActiveUntilLabel(null);
+        }
       }
     })();
     return () => {
@@ -745,6 +770,7 @@ export default function SubscriptionPage() {
         open={cancelDialogOpen}
         onOpenChange={setCancelDialogOpen}
         planName={planDisplayName}
+        subscriptionActiveUntilLabel={subscriptionActiveUntilLabel}
         onAcceptDiscount={acceptRetentionDiscount}
         onConfirmCancel={proceedWithCancellation}
         applyingDiscount={cancelDiscountLoading}

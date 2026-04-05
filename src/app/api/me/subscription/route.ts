@@ -71,6 +71,8 @@ export type MeSubscriptionResponse = {
   planId: AccountPlanId;
   billing: "monthly" | "yearly" | null;
   userId: string;
+  /** ISO 8601 end of current billing period (Stripe), when known. */
+  currentPeriodEndIso?: string | null;
   /** When true the client must not deduct or check credits — account has unlimited access. */
   unlimited?: boolean;
   /**
@@ -233,6 +235,7 @@ export async function GET() {
               billing: effectiveBilling,
               userId: auth.user.id,
               creditBalance,
+              currentPeriodEndIso: periodEndIso,
             } satisfies MeSubscriptionResponse);
           }
         }
@@ -292,10 +295,17 @@ export async function GET() {
       }
     }
 
+    let periodEndIso: string | null = null;
+    if (data.current_period_end) {
+      const d = new Date(String(data.current_period_end));
+      if (Number.isFinite(d.getTime())) periodEndIso = d.toISOString();
+    }
+
     return NextResponse.json(await withCreditBalance({
       planId,
       billing: planId === "free" ? null : billing,
       userId: auth.user.id,
+      currentPeriodEndIso: periodEndIso,
     }));
   } catch (err) {
     console.error("[me/subscription] DB fallback error:", err);
