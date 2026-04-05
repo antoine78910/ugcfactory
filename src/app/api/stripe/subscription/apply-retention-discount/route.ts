@@ -4,6 +4,10 @@ import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { loadUserSubscriptionRow } from "@/lib/stripe/subscriptionUpgrade";
+import {
+  hasUsedRetentionDiscount,
+  STRIPE_METADATA_RETENTION_30_APPLIED,
+} from "@/lib/stripe/retentionDiscount";
 
 const RETENTION_COUPON_NAME = "Retention 30% off — 1 month";
 const RETENTION_PERCENT_OFF = 30;
@@ -27,6 +31,24 @@ export async function POST() {
 
   const stripe = new Stripe(secret, { apiVersion: "2026-02-25.clover" });
 
+  let customer: Stripe.Customer;
+  try {
+    const c = await stripe.customers.retrieve(row.stripe_customer_id);
+    if (c.deleted || !("metadata" in c)) {
+      return NextResponse.json({ error: "Could not load customer." }, { status: 502 });
+    }
+    customer = c;
+  } catch {
+    return NextResponse.json({ error: "Could not load customer." }, { status: 502 });
+  }
+
+  if (hasUsedRetentionDiscount(customer.metadata)) {
+    return NextResponse.json(
+      { error: "You have already used the retention discount. It can only be applied once per account." },
+      { status: 409 },
+    );
+  }
+
   let subscription: Stripe.Subscription;
   try {
     subscription = await stripe.subscriptions.retrieve(row.stripe_subscription_id);
@@ -34,7 +56,7 @@ export async function POST() {
     return NextResponse.json({ error: "Could not load subscription." }, { status: 502 });
   }
 
-  if ((subscription as any).discount?.coupon) {
+  if ((subscription as { discount?: { coupon?: unknown } }).discount?.coupon) {
     return NextResponse.json(
       { error: "A discount is already applied to your subscription." },
       { status: 409 },
@@ -51,6 +73,13 @@ export async function POST() {
 
     await stripe.subscriptions.update(subscription.id, {
       discounts: [{ coupon: coupon.id }],
+    });
+
+    await stripe.customers.update(customer.id, {
+      metadata: {
+        ...customer.metadata,
+        [STRIPE_METADATA_RETENTION_30_APPLIED]: "true",
+      },
     });
 
     return NextResponse.json({ ok: true });

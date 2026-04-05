@@ -20,6 +20,9 @@ type Props = {
   planName: string;
   /** e.g. "March 25, 2026" — shown as "Your subscription is active until …" */
   subscriptionActiveUntilLabel: string | null;
+  /** When false, the -30% step is skipped (already used once per Stripe customer). */
+  retentionOfferEligible: boolean;
+  retentionEligibilityLoading: boolean;
   onAcceptDiscount: () => void | Promise<void>;
   onConfirmCancel: () => void | Promise<void>;
   applyingDiscount: boolean;
@@ -39,6 +42,8 @@ export function CancelSubscriptionDialog({
   onOpenChange,
   planName,
   subscriptionActiveUntilLabel,
+  retentionOfferEligible,
+  retentionEligibilityLoading,
   onAcceptDiscount,
   onConfirmCancel,
   applyingDiscount,
@@ -52,6 +57,7 @@ export function CancelSubscriptionDialog({
   }
 
   const busy = applyingDiscount || cancelling;
+  const checkingEligibility = retentionEligibilityLoading;
 
   return (
     <Dialog.Root open={open} onOpenChange={handleOpenChange}>
@@ -139,10 +145,25 @@ export function CancelSubscriptionDialog({
                 <Button
                   type="button"
                   variant="ghost"
-                  onClick={() => setStep("offer")}
-                  className="h-10 w-full text-red-300/60 hover:bg-red-500/[0.08] hover:text-red-200/80"
+                  disabled={checkingEligibility}
+                  onClick={() => {
+                    if (checkingEligibility) return;
+                    if (!retentionOfferEligible) {
+                      void onConfirmCancel();
+                      return;
+                    }
+                    setStep("offer");
+                  }}
+                  className="h-10 w-full text-red-300/60 hover:bg-red-500/[0.08] hover:text-red-200/80 disabled:opacity-50"
                 >
-                  I still want to cancel
+                  {checkingEligibility ? (
+                    <span className="inline-flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                      Checking…
+                    </span>
+                  ) : (
+                    "I still want to cancel"
+                  )}
                 </Button>
               </div>
             </>

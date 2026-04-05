@@ -126,6 +126,8 @@ export default function SubscriptionPage() {
   const [cancelDiscountLoading, setCancelDiscountLoading] = useState(false);
   const [cancelPortalLoading, setCancelPortalLoading] = useState(false);
   const [subscriptionActiveUntilLabel, setSubscriptionActiveUntilLabel] = useState<string | null>(null);
+  const [retentionOfferEligible, setRetentionOfferEligible] = useState(false);
+  const [retentionEligibilityLoading, setRetentionEligibilityLoading] = useState(false);
 
   const openUpgradeDialog = useCallback(
     async (planIdCheckout: string) => {
@@ -261,6 +263,28 @@ export default function SubscriptionPage() {
       setCancelDialogOpen(false);
     }
   }, []);
+
+  useEffect(() => {
+    if (!cancelDialogOpen) return;
+    let cancelled = false;
+    setRetentionEligibilityLoading(true);
+    (async () => {
+      try {
+        const res = await fetch("/api/stripe/subscription/retention-eligibility", {
+          credentials: "include",
+        });
+        const data = (await res.json()) as { eligible?: boolean };
+        if (!cancelled) setRetentionOfferEligible(data.eligible === true);
+      } catch {
+        if (!cancelled) setRetentionOfferEligible(false);
+      } finally {
+        if (!cancelled) setRetentionEligibilityLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [cancelDialogOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -771,6 +795,8 @@ export default function SubscriptionPage() {
         onOpenChange={setCancelDialogOpen}
         planName={planDisplayName}
         subscriptionActiveUntilLabel={subscriptionActiveUntilLabel}
+        retentionOfferEligible={retentionOfferEligible}
+        retentionEligibilityLoading={retentionEligibilityLoading}
         onAcceptDiscount={acceptRetentionDiscount}
         onConfirmCancel={proceedWithCancellation}
         applyingDiscount={cancelDiscountLoading}
