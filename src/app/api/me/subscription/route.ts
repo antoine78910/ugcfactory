@@ -134,7 +134,6 @@ export async function GET() {
       });
 
       for (const customer of customers.data) {
-        // Check active and trialing subscriptions
         const subs = await stripe.subscriptions.list({
           customer: customer.id,
           status: "active",
@@ -153,41 +152,73 @@ export async function GET() {
             const match = getPlanFromPriceId(item.price.id);
             if (!match) continue;
 
-            const { planId, billing } = match;
+            const stripePlanId = match.planId;
+            const stripeBilling = match.billing;
 
-            // Sync DB with the live Stripe data
+            const rawEnd = (sub as any).current_period_end;
+            const endMs = typeof rawEnd === "number" && rawEnd > 0 ? rawEnd * 1000 : NaN;
+            const periodEndIso = Number.isFinite(endMs)
+              ? new Date(endMs).toISOString()
+              : null;
+            const periodNotEnded = Number.isFinite(endMs) && endMs > Date.now();
+
+            let effectivePlanId: string = stripePlanId;
+            let effectiveBilling: "monthly" | "yearly" = stripeBilling;
+
             try {
               const admin = createSupabaseServiceClient();
               if (admin) {
-                const rawEnd = (sub as any).current_period_end;
-                const endMs = typeof rawEnd === "number" && rawEnd > 0 ? rawEnd * 1000 : NaN;
-                const periodEndIso = Number.isFinite(endMs)
-                  ? new Date(endMs).toISOString()
-                  : null;
+                const { data: dbRow } = await admin
+                  .from("user_subscriptions")
+                  .select("plan_id, billing")
+                  .eq("user_id", auth.user.id)
+                  .maybeSingle();
 
-                await admin.from("user_subscriptions").upsert(
-                  {
-                    user_id: auth.user.id,
+                const dbPlanId = dbRow?.plan_id;
+                const isPendingDowngrade =
+                  dbPlanId &&
+                  isSubscriptionPlanId(dbPlanId) &&
+                  isSubscriptionPlanId(stripePlanId) &&
+                  subscriptionPlanSortIndex(stripePlanId) < subscriptionPlanSortIndex(dbPlanId) &&
+                  periodNotEnded;
+
+                if (isPendingDowngrade) {
+                  effectivePlanId = dbPlanId;
+                  effectiveBilling = dbRow.billing === "yearly" ? "yearly" : "monthly";
+
+                  await admin.from("user_subscriptions").update({
                     stripe_subscription_id: sub.id,
                     stripe_customer_id: String(sub.customer),
-                    plan_id: planId,
-                    billing,
                     status: sub.status,
                     ...(periodEndIso ? { current_period_end: periodEndIso } : {}),
-                  },
-                  { onConflict: "user_id" },
-                );
+                  }).eq("user_id", auth.user.id);
+                } else {
+                  await admin.from("user_subscriptions").upsert(
+                    {
+                      user_id: auth.user.id,
+                      stripe_subscription_id: sub.id,
+                      stripe_customer_id: String(sub.customer),
+                      plan_id: stripePlanId,
+                      billing: stripeBilling,
+                      status: sub.status,
+                      ...(periodEndIso ? { current_period_end: periodEndIso } : {}),
+                    },
+                    { onConflict: "user_id" },
+                  );
+                  effectivePlanId = stripePlanId;
+                  effectiveBilling = stripeBilling;
+                }
 
-                if (isSubscriptionPlanId(planId)) {
+                const healPlan = isSubscriptionPlanId(effectivePlanId) ? effectivePlanId : null;
+                if (healPlan) {
                   const periodEndHint = Number.isFinite(endMs) ? new Date(endMs) : null;
-                  await healMissingSubscriptionCredits(admin, userId, planId, periodEndHint);
+                  await healMissingSubscriptionCredits(admin, userId, healPlan, periodEndHint);
                 }
               }
             } catch (dbErr) {
               console.error("[me/subscription] DB sync error:", dbErr);
             }
 
-            // Fetch authoritative credit balance from the ledger
             let creditBalance = 0;
             try {
               const adminForBalance = createSupabaseServiceClient();
@@ -198,8 +229,8 @@ export async function GET() {
             } catch { /* non-critical */ }
 
             return NextResponse.json({
-              planId,
-              billing,
+              planId: effectivePlanId,
+              billing: effectiveBilling,
               userId: auth.user.id,
               creditBalance,
             } satisfies MeSubscriptionResponse);
