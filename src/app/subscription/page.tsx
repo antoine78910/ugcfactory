@@ -13,6 +13,7 @@ import {
   SubscriptionDowngradeDialog,
   type SubscriptionDowngradePreview,
 } from "@/app/_components/SubscriptionDowngradeDialog";
+import { CancelSubscriptionDialog } from "@/app/_components/CancelSubscriptionDialog";
 import { consumeCheckoutQueryParams, useCreditsPlan } from "@/app/_components/CreditsPlanContext";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -121,6 +122,10 @@ export default function SubscriptionPage() {
   const [downgradeConfirmLoading, setDowngradeConfirmLoading] = useState(false);
   const [pendingDowngradePlanId, setPendingDowngradePlanId] = useState<string | null>(null);
 
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [cancelDiscountLoading, setCancelDiscountLoading] = useState(false);
+  const [cancelPortalLoading, setCancelPortalLoading] = useState(false);
+
   const openUpgradeDialog = useCallback(
     async (planIdCheckout: string) => {
       setPendingUpgradePlanId(planIdCheckout);
@@ -223,6 +228,38 @@ export default function SubscriptionPage() {
       setDowngradeConfirmLoading(false);
     }
   }, [billing, pendingDowngradePlanId, downgradePreview]);
+
+  const acceptRetentionDiscount = useCallback(async () => {
+    setCancelDiscountLoading(true);
+    try {
+      const res = await fetch("/api/stripe/subscription/apply-retention-discount", {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok) throw new Error(data.error || "Could not apply discount.");
+      toast.success("30% discount applied!", {
+        description: "Your next billing cycle will be 30% off. Thank you for staying!",
+      });
+      setCancelDialogOpen(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not apply discount.");
+    } finally {
+      setCancelDiscountLoading(false);
+    }
+  }, []);
+
+  const proceedWithCancellation = useCallback(async () => {
+    setCancelPortalLoading(true);
+    try {
+      await openStripeBillingPortal();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not open billing portal");
+    } finally {
+      setCancelPortalLoading(false);
+      setCancelDialogOpen(false);
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -644,11 +681,10 @@ export default function SubscriptionPage() {
                         <Button
                           type="button"
                           variant="secondary"
-                          disabled={portalLoading}
-                          className="w-full rounded-xl border border-amber-400/35 bg-amber-500/10 text-amber-50 hover:bg-amber-500/20 sm:w-auto"
-                          onClick={() => void goToBillingManagement()}
+                          className="w-full rounded-xl border border-red-400/30 bg-red-500/10 text-red-50 hover:bg-red-500/20 sm:w-auto"
+                          onClick={() => setCancelDialogOpen(true)}
                         >
-                          {portalLoading ? "Opening…" : "Cancel subscription"}
+                          Cancel subscription
                         </Button>
                       </div>
                     ) : null}
@@ -703,6 +739,16 @@ export default function SubscriptionPage() {
         loadingPreview={downgradePreviewLoading}
         confirming={downgradeConfirmLoading}
         onConfirm={confirmDowngrade}
+      />
+
+      <CancelSubscriptionDialog
+        open={cancelDialogOpen}
+        onOpenChange={setCancelDialogOpen}
+        planName={planDisplayName}
+        onAcceptDiscount={acceptRetentionDiscount}
+        onConfirmCancel={proceedWithCancellation}
+        applyingDiscount={cancelDiscountLoading}
+        cancelling={cancelPortalLoading}
       />
     </StudioShell>
   );
