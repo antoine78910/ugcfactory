@@ -6,7 +6,7 @@ import { HeroVideoCarousel3D } from "./HeroVideoCarousel3D";
 import { LandingSeedanceTopButton } from "./LandingSeedanceTopButton";
 import { LandingRevealCarousel } from "./LandingRevealCarousel";
 import { LandingFaq } from "./LandingFaq";
-import { ArrowRight, Percent, Sparkles } from "lucide-react";
+import { ArrowRight, Sparkles } from "lucide-react";
 
 /** Auth lives on the app host — same origin as Supabase OAuth / PKCE (see middleware). */
 const APP_ORIGIN =
@@ -56,26 +56,7 @@ const HERO_STUDIO_VIDEOS = [
 export default function LandingPage() {
   return (
     <div className="min-h-screen overflow-x-clip bg-[#050507] text-white selection:bg-violet-500/30">
-      {/*
-        Sticky: announcement + nav move together so the promo stays visible while scrolling.
-      */}
       <div className="sticky top-0 z-50">
-        <div className="border-b border-violet-500/30 bg-gradient-to-r from-violet-950/95 via-[#1a0f2e]/98 to-violet-950/95 px-4 py-2.5 text-center shadow-[0_8px_32px_rgba(0,0,0,0.35)] sm:py-3">
-          <p className="mx-auto flex max-w-4xl flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[12px] leading-snug text-white/88 sm:text-[13px] md:text-sm">
-            <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-violet-400/35 bg-violet-500/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-violet-100 sm:text-[11px]">
-              <Percent className="h-3 w-3 text-violet-200" aria-hidden />
-              Limited
-            </span>
-            <span>
-              Get <strong className="font-semibold text-white">50% off</strong> with code{" "}
-              <code className="rounded-md border border-white/15 bg-white/10 px-1.5 py-0.5 font-mono text-[0.95em] font-semibold tracking-wide text-violet-100">
-                BETA50
-              </code>{" "}
-              at checkout — until <time dateTime="2026-04-30">April 30, 2026</time>, for the first{" "}
-              <strong className="font-semibold text-white">50</strong> users.
-            </span>
-          </p>
-        </div>
         <header className="overflow-hidden border-b border-white/[0.08] bg-[#050507]/85 backdrop-blur-md supports-[backdrop-filter]:bg-[#050507]/20">
         <div className="mx-auto flex min-w-0 max-w-6xl items-center gap-3 px-5 py-5 sm:gap-4 sm:px-6 sm:py-6">
           <Link href="/" className="flex flex-shrink-0 items-center">

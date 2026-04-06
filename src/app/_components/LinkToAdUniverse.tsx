@@ -971,8 +971,11 @@ export default function LinkToAdUniverse({
     [spendCredits],
   );
 
+  const [storeUrl, setStoreUrl] = useState("");
+
   const registerLinkToAdStudioImage = useCallback(async (taskId: string, label: string) => {
     try {
+      const productUrl = storeUrl.trim();
       await fetch("/api/studio/generations/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -983,14 +986,13 @@ export default function LinkToAdUniverse({
           provider: "kie-market",
           creditsCharged: 0,
           personalApiKey: getPersonalApiKey(),
+          ...(productUrl ? { inputUrls: [productUrl] } : {}),
         }),
       });
     } catch {
       /* ignore */
     }
-  }, []);
-
-  const [storeUrl, setStoreUrl] = useState("");
+  }, [storeUrl]);
   const [isWorking, setIsWorking] = useState(false);
   /** Extra product photo uploads should not trigger global "Working..." pipeline state. */
   const [isUploadingAdditionalPhotos, setIsUploadingAdditionalPhotos] = useState(false);
@@ -3922,6 +3924,7 @@ export default function LinkToAdUniverse({
           selectedAngleIndex === 0 || selectedAngleIndex === 1 || selectedAngleIndex === 2
             ? `Link to Ad · Angle ${selectedAngleIndex + 1}`
             : "Link to Ad · Video";
+        const productUrl = storeUrl.trim();
         await fetch("/api/studio/generations/register", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -3933,6 +3936,7 @@ export default function LinkToAdUniverse({
             creditsCharged: 0,
             personalApiKey: getPersonalApiKey(),
             piapiApiKey: getPersonalPiapiApiKey(),
+            ...(productUrl ? { inputUrls: [productUrl] } : {}),
           }),
         });
       } catch {

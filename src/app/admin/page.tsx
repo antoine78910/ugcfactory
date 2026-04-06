@@ -34,6 +34,8 @@ type GenerationRow = {
   provider: string;
   model?: string;
   app_endpoint?: string;
+  /** Product / page URL for Link to Ad (and other flows that set `input_urls`). */
+  input_urls?: string[] | null;
   result_urls: string[] | null;
   error_message: string | null;
   credits_charged: number;
@@ -84,6 +86,16 @@ function statusColor(status: string): string {
 
 function kindLabel(kind: string): string {
   return kind.replace(/_/g, " ").replace(/\bstudio\b/i, "").trim() || kind;
+}
+
+function productLinkLabel(raw: string): string {
+  const t = raw.trim();
+  if (!t) return "—";
+  try {
+    return new URL(t).hostname;
+  } catch {
+    return t.length > 42 ? `${t.slice(0, 40)}…` : t;
+  }
 }
 
 function formatDurationMs(ms: number): string {
@@ -385,11 +397,12 @@ export default function AdminPage() {
           </div>
         ) : tab === "generations" ? (
           <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[900px] text-left text-xs">
+            <table className="w-full min-w-[1040px] text-left text-xs">
               <thead>
                 <tr className="border-b border-white/10 text-[10px] uppercase tracking-wide text-white/40">
                   <th className="px-3 py-2.5 font-semibold">User</th>
                   <th className="px-3 py-2.5 font-semibold">Type</th>
+                  <th className="px-3 py-2.5 font-semibold">Link to Ad URL</th>
                   <th className="px-3 py-2.5 font-semibold">Status</th>
                   <th className="px-3 py-2.5 font-semibold">Credits</th>
                   <th className="px-3 py-2.5 font-semibold">Model</th>
@@ -421,6 +434,22 @@ export default function AdminPage() {
                         <span className="rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-medium text-white/60">
                           {kindLabel(row.kind)}
                         </span>
+                      </td>
+                      <td className="max-w-[160px] truncate px-3 py-2.5">
+                        {row.input_urls?.[0]?.trim() ? (
+                          <a
+                            href={row.input_urls[0].trim()}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-violet-300 underline underline-offset-2 hover:text-violet-200"
+                            title={row.input_urls[0].trim()}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {productLinkLabel(row.input_urls[0])}
+                          </a>
+                        ) : (
+                          <span className="text-white/25">—</span>
+                        )}
                       </td>
                       <td className="px-3 py-2.5">
                         <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-semibold", statusColor(row.status))}>
@@ -454,7 +483,7 @@ export default function AdminPage() {
                     </tr>
                     {expandedGenId === row.id && (
                       <tr key={`${row.id}-expand`} className="border-b border-white/5">
-                        <td colSpan={11} className="bg-white/[0.02] px-4 py-3">
+                        <td colSpan={12} className="bg-white/[0.02] px-4 py-3">
                           <div className="grid gap-3 sm:grid-cols-2">
                             <div>
                               <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Full Label / Prompt</p>
@@ -466,6 +495,19 @@ export default function AdminPage() {
                                 <p><span className="text-white/40">ID:</span> {row.id}</p>
                                 <p><span className="text-white/40">Task ID:</span> {row.external_task_id}</p>
                                 <p><span className="text-white/40">User:</span> {genEmailMap[row.user_id] ?? row.user_id}</p>
+                                {row.input_urls?.[0]?.trim() ? (
+                                  <p>
+                                    <span className="text-white/40">Link to Ad URL:</span>{" "}
+                                    <a
+                                      href={row.input_urls[0].trim()}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="break-all text-violet-300 underline underline-offset-2 hover:text-violet-200"
+                                    >
+                                      {row.input_urls[0].trim()}
+                                    </a>
+                                  </p>
+                                ) : null}
                                 <p><span className="text-white/40">Created:</span> {new Date(row.created_at).toLocaleString()}</p>
                                 <p><span className="text-white/40">Model:</span> {row.model?.trim() ? row.model : "—"}</p>
                                 <p><span className="text-white/40">App API:</span> <span className="font-mono">{row.app_endpoint?.trim() ? row.app_endpoint : "—"}</span></p>
