@@ -72,10 +72,13 @@ export type LinkToAdAnglePipelineV1 = {
 /** One NanoBanana reference frame’s video state (index-aligned with nanoBananaImageUrls). */
 export type KlingReferenceSlotV1 = {
   videoUrl?: string | null;
+  /** Second clip for 30s workflow (15s + 15s). */
+  videoUrlPart2?: string | null;
   taskId?: string | null;
   history?: string[];
   /** Motion prompt used / last saved for this frame */
   ugcVideoPrompt?: string;
+  ugcVideoPromptPart2?: string;
 };
 
 const EMPTY_KLING_SLOT: KlingReferenceSlotV1 = {
@@ -96,9 +99,11 @@ export function createEmptyKlingByReference(): KlingReferenceSlotV1[] {
 function cloneSlot(s: KlingReferenceSlotV1): KlingReferenceSlotV1 {
   return {
     videoUrl: s.videoUrl ?? null,
+    videoUrlPart2: s.videoUrlPart2 ?? null,
     taskId: s.taskId ?? null,
     history: Array.isArray(s.history) ? [...s.history] : [],
     ugcVideoPrompt: typeof s.ugcVideoPrompt === "string" ? s.ugcVideoPrompt : undefined,
+    ugcVideoPromptPart2: typeof s.ugcVideoPromptPart2 === "string" ? s.ugcVideoPromptPart2 : undefined,
   };
 }
 
@@ -113,10 +118,13 @@ function parseKlingSlotsFromUnknown(raw: unknown): KlingReferenceSlotV1[] | null
     const o = s as Record<string, unknown>;
     out.push({
       videoUrl: typeof o.videoUrl === "string" ? o.videoUrl : o.videoUrl === null ? null : null,
+      videoUrlPart2:
+        typeof o.videoUrlPart2 === "string" ? o.videoUrlPart2 : o.videoUrlPart2 === null ? null : null,
       taskId: typeof o.taskId === "string" ? o.taskId : o.taskId === null ? null : null,
       history:
         Array.isArray(o.history) && o.history.every((x) => typeof x === "string") ? [...(o.history as string[])] : [],
       ugcVideoPrompt: typeof o.ugcVideoPrompt === "string" ? o.ugcVideoPrompt : undefined,
+      ugcVideoPromptPart2: typeof o.ugcVideoPromptPart2 === "string" ? o.ugcVideoPromptPart2 : undefined,
     });
   }
   return out.length === 3 ? out : null;
@@ -257,6 +265,8 @@ export function findPendingKlingInUniverse(snap: LinkToAdUniverseSnapshotV1): {
   angleIndex: 0 | 1 | 2;
   refIndex: 0 | 1 | 2;
   taskId: string;
+  /** 2 when part 1 URL exists but part 2 is still rendering (30s two-pass). */
+  clipPart: 1 | 2;
 } | null {
   const triple = normalizePipelineByAngle(snap);
   for (let a = 0; a < 3; a++) {
@@ -265,7 +275,11 @@ export function findPendingKlingInUniverse(snap: LinkToAdUniverseSnapshotV1): {
     for (let r = 0; r < 3; r++) {
       const tid = typeof slots[r]?.taskId === "string" ? slots[r].taskId!.trim() : "";
       const v = typeof slots[r]?.videoUrl === "string" ? slots[r].videoUrl!.trim() : "";
-      if (tid && !v) return { angleIndex: a as 0 | 1 | 2, refIndex: r as 0 | 1 | 2, taskId: tid };
+      const v2 = typeof slots[r]?.videoUrlPart2 === "string" ? slots[r].videoUrlPart2!.trim() : "";
+      if (tid && !v)
+        return { angleIndex: a as 0 | 1 | 2, refIndex: r as 0 | 1 | 2, taskId: tid, clipPart: 1 };
+      if (tid && v && !v2)
+        return { angleIndex: a as 0 | 1 | 2, refIndex: r as 0 | 1 | 2, taskId: tid, clipPart: 2 };
     }
   }
   const legacyRef = findPendingKlingSlotIndex(snap);
@@ -275,7 +289,9 @@ export function findPendingKlingInUniverse(snap: LinkToAdUniverseSnapshotV1): {
   const slotsNorm = normalizeKlingByReference(snap);
   const tid = slotsNorm[legacyRef]?.taskId?.trim();
   if (!tid) return null;
-  return { angleIndex: ai, refIndex: legacyRef as 0 | 1 | 2, taskId: tid };
+  const v = typeof slotsNorm[legacyRef]?.videoUrl === "string" ? slotsNorm[legacyRef].videoUrl!.trim() : "";
+  const clipPart: 1 | 2 = v ? 2 : 1;
+  return { angleIndex: ai, refIndex: legacyRef as 0 | 1 | 2, taskId: tid, clipPart };
 }
 
 export function snapshotAfterKlingVideoSuccessForAngle(
@@ -284,6 +300,7 @@ export function snapshotAfterKlingVideoSuccessForAngle(
   refIndex: 0 | 1 | 2,
   videoUrl: string,
   taskId: string,
+  clipPart: 1 | 2 = 1,
 ): LinkToAdUniverseSnapshotV1 {
   const triple = normalizePipelineByAngle(snap).map((p) => cloneAnglePipeline(p)) as [
     LinkToAdAnglePipelineV1,
@@ -291,22 +308,31 @@ export function snapshotAfterKlingVideoSuccessForAngle(
     LinkToAdAnglePipelineV1,
   ];
   const pipe = triple[angleIndex];
-  let slots =
+  const slots =
     pipe.klingByReferenceIndex && pipe.klingByReferenceIndex.length === 3
       ? pipe.klingByReferenceIndex.map((s) => cloneSlot(s))
       : createEmptyKlingByReference();
   const cur = slots[refIndex];
-  const prevUrl = typeof cur.videoUrl === "string" ? cur.videoUrl.trim() : "";
-  let history = [...(cur.history || [])];
-  if (prevUrl && prevUrl !== videoUrl) {
-    history = [prevUrl, ...history.filter((u) => u !== prevUrl)];
+  if (clipPart === 1) {
+    const prevUrl = typeof cur.videoUrl === "string" ? cur.videoUrl.trim() : "";
+    let history = [...(cur.history || [])];
+    if (prevUrl && prevUrl !== videoUrl) {
+      history = [prevUrl, ...history.filter((u) => u !== prevUrl)];
+    }
+    slots[refIndex] = {
+      ...cur,
+      videoUrl,
+      taskId,
+      history: history.slice(0, 12),
+    };
+  } else {
+    slots[refIndex] = {
+      ...cur,
+      videoUrlPart2: videoUrl,
+      taskId,
+      history: [...(cur.history || [])].slice(0, 12),
+    };
   }
-  slots[refIndex] = {
-    ...cur,
-    videoUrl,
-    taskId,
-    history: history.slice(0, 12),
-  };
   triple[angleIndex] = { ...pipe, klingByReferenceIndex: slots };
 
   const sel = snap.selectedAngleIndex;
@@ -346,15 +372,26 @@ export function normalizeKlingByReference(
         const o = s as Record<string, unknown>;
         slots[i] = {
           videoUrl: typeof o.videoUrl === "string" ? o.videoUrl : o.videoUrl === null ? null : null,
+          videoUrlPart2:
+            typeof o.videoUrlPart2 === "string" ? o.videoUrlPart2 : o.videoUrlPart2 === null ? null : null,
           taskId: typeof o.taskId === "string" ? o.taskId : o.taskId === null ? null : null,
           history:
             Array.isArray(o.history) && o.history.every((x) => typeof x === "string") ? [...(o.history as string[])] : [],
           ugcVideoPrompt: typeof o.ugcVideoPrompt === "string" ? o.ugcVideoPrompt : undefined,
+          ugcVideoPromptPart2: typeof o.ugcVideoPromptPart2 === "string" ? o.ugcVideoPromptPart2 : undefined,
         };
       }
     }
   }
-  const hasAnySlotData = slots.some((s) => s.videoUrl || s.taskId || (s.history && s.history.length) || s.ugcVideoPrompt);
+  const hasAnySlotData = slots.some(
+    (s) =>
+      s.videoUrl ||
+      s.videoUrlPart2 ||
+      s.taskId ||
+      (s.history && s.history.length) ||
+      s.ugcVideoPrompt ||
+      s.ugcVideoPromptPart2,
+  );
   if (!hasAnySlotData) {
     const lv = typeof snap.klingVideoUrl === "string" ? snap.klingVideoUrl.trim() : "";
     const lt = typeof snap.klingTaskId === "string" ? snap.klingTaskId.trim() : "";
@@ -383,7 +420,9 @@ export function universeHasPendingKlingTask(snap: LinkToAdUniverseSnapshotV1 | n
     for (const s of slots) {
       const tid = typeof s.taskId === "string" ? s.taskId.trim() : "";
       const v = typeof s.videoUrl === "string" ? s.videoUrl.trim() : "";
+      const v2 = typeof s.videoUrlPart2 === "string" ? s.videoUrlPart2.trim() : "";
       if (tid && !v) return true;
+      if (tid && v && !v2) return true;
     }
   }
   return false;
@@ -395,7 +434,9 @@ export function findPendingKlingSlotIndex(snap: LinkToAdUniverseSnapshotV1): num
   for (let i = 0; i < slots.length; i++) {
     const tid = typeof slots[i].taskId === "string" ? slots[i].taskId!.trim() : "";
     const v = typeof slots[i].videoUrl === "string" ? slots[i].videoUrl!.trim() : "";
+    const v2 = typeof slots[i].videoUrlPart2 === "string" ? slots[i].videoUrlPart2!.trim() : "";
     if (tid && !v) return i;
+    if (tid && v && !v2) return i;
   }
   return null;
 }

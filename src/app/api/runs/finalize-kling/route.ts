@@ -75,7 +75,7 @@ export async function POST(req: Request) {
   if (!pending) {
     return NextResponse.json({ error: "No pending video task on this run." }, { status: 400 });
   }
-  const { angleIndex, refIndex, taskId } = pending;
+  const { angleIndex, refIndex, taskId, clipPart } = pending;
 
   const sleepMs = 4000;
   const maxWaitMs = 14 * 60 * 1000;
@@ -123,7 +123,14 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Task succeeded but no video URL in result." }, { status: 502 });
       }
 
-      const nextSnap = snapshotAfterKlingVideoSuccessForAngle(snap, angleIndex, refIndex, vUrl, taskId);
+      const nextSnap = snapshotAfterKlingVideoSuccessForAngle(
+        snap,
+        angleIndex,
+        refIndex,
+        vUrl,
+        taskId,
+        clipPart,
+      );
       const base = cloneExtractedBase(run.extracted);
       const extracted = { ...base, __universe: nextSnap };
 

@@ -1,0 +1,10 @@
+# Supabase CLI — https://supabase.com/docs/guides/cli/config
+# Run `supabase link` to set your project ref, then deploy functions:
+#   supabase functions deploy signup-call-invite-webhook --no-verify-jwt
+#   supabase functions deploy signup-call-invite-cron --no-verify-jwt
+
+[functions.signup-call-invite-webhook]
+verify_jwt = false
+
+[functions.signup-call-invite-cron]
+verify_jwt = false

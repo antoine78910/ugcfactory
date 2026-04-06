@@ -43,8 +43,10 @@ Set:
 ### 2b) Supabase setup (Auth + save history + GPT cache)
 
 - Create a Supabase project
-- In Supabase SQL editor, run `supabase/schema.sql`
+- In Supabase SQL editor, run `supabase/schema.sql`, then `supabase/profiles_call_invite.sql` (profiles row on signup + queue for the deferred call-invite email)
 - Enable Auth providers you want (Email / Magic link)
+
+**Optional — deferred “book a call” email (3 days after signup, Resend):** deploy `supabase/functions/signup-call-invite-webhook` and `signup-call-invite-cron`, set Edge Function secrets (`RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `CALL_INVITE_BOOKING_URL`, `CRON_SECRET`, optional `WEBHOOK_SECRET`). Create a **Database Webhook** on `INSERT` → `public.profiles` pointing at the webhook function. Schedule the cron function (e.g. hourly) with `Authorization: Bearer <CRON_SECRET>`. See comments in `.env.example`.
 
 ### 2c) Upload d’images en production (Vercel / serverless)
 

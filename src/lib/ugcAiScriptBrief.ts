@@ -1,5 +1,5 @@
 /**
- * Target lengths for UGC scripts. Matches Link to Ad duration buttons (5 / 10 / 15 s).
+ * Target lengths for UGC scripts. Matches Link to Ad duration buttons (5 / 10 / 15 / 30 s).
  * Legacy callers sometimes sent 8 → treated as the 10-second word tier.
  */
 export type UgcScriptVideoDurationSec = 5 | 10 | 15 | 30;
@@ -35,9 +35,10 @@ export function durationRulesForUgcApi(seconds: UgcScriptVideoDurationSec): stri
   }
   if (seconds === 30) {
     return [
-      "USER SELECTED 30-SECOND VIDEOS — LENGTH RULES has no 30s row; scale the 15s tier proportionally.",
-      "Spoken words: MAXIMUM 90 total (~3 words/sec). Keep HOOK 15%, PROBLEM 25%, SOLUTION 45%, CTA 15% of total; SOLUTION must stay the longest section.",
-      "Set video_duration in VIDEO_METADATA to 30s.",
+      "USER SELECTED 30-SECOND VIDEOS — mandatory.",
+      "Total spoken words: MAXIMUM 90. Structure: PART 1 (~38 words: HOOK ~8 + PROBLEM ~30) and PART 2 (~52 words: SOLUTION ~46 + CTA ~6). Label PART 1 and PART 2 clearly.",
+      "SOLUTION must remain the longest section of the entire script. PART 2 continues PART 1 with no restart — one continuous video.",
+      "Set video_duration in VIDEO_METADATA to exactly 30s. word_count must be ≤ 90 spoken words total.",
     ].join(" ");
   }
   return [
@@ -125,28 +126,28 @@ export function factorWordRulesForUgcDuration(rawSeconds: unknown): UgcFactorWor
       includeProblem: true,
       maxTotalSpoken: 90,
       hook: {
-        min: 12,
-        max: 14,
-        label: "Hook",
-        hint: "12–14 words (~15% of 90)",
+        min: 6,
+        max: 10,
+        label: "Hook (Part 1)",
+        hint: "~8 words",
       },
       problem: {
-        min: 21,
-        max: 23,
-        label: "Problem",
-        hint: "21–23 words (~25% of 90)",
+        min: 26,
+        max: 34,
+        label: "Problem (Part 1)",
+        hint: "~30 words",
       },
       benefits: {
-        min: 36,
-        max: 39,
-        label: "Solution",
-        hint: "36–39 words (longest block)",
+        min: 42,
+        max: 50,
+        label: "Solution (Part 2)",
+        hint: "~46 words — longest section",
       },
       cta: {
-        min: 12,
-        max: 14,
-        label: "CTA",
-        hint: "12–14 words",
+        min: 4,
+        max: 8,
+        label: "CTA (Part 2)",
+        hint: "~6 words",
       },
     };
   }
@@ -175,38 +176,38 @@ marketing angles while keeping the same target persona.
 All scripts must be written in English.
 
 Scripts must be optimized for:
-- AI lipsync
-- shot segmentation
-- UGC realism
-- image-to-video generation
+* AI lipsync
+* shot segmentation
+* UGC realism
+* image-to-video generation
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 STEP 0 — ANALYZE ALL PROVIDED INPUTS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 You will receive:
-- A brand brief (pre-analyzed summary of the brand and product)
-- Optionally: one or more product images
-- Optionally: one or more avatar images
+* A brand brief (pre-analyzed summary of the brand and product)
+* Optionally: one or more product images
+* Optionally: one or more avatar images
 
 Analyze all inputs before writing any script.
 
 BRAND BRIEF ANALYSIS:
-- Brand tone and values
-- Target audience
-- Key product claims and benefits
-- Product category and usage context
+* Brand tone and values
+* Target audience
+* Key product claims and benefits
+* Product category and usage context
 
 PRODUCT IMAGE ANALYSIS:
-- Product state → OPEN, CLOSED, or WEARABLE
-- Visible details (color, label, texture, shape, size)
-- Realistic usage: how can this product physically be used on camera?
+* Product state → OPEN, CLOSED, or WEARABLE
+* Visible details (color, label, texture, shape, size)
+* Realistic usage: how can this product physically be used on camera?
 
 AVATAR IMAGE ANALYSIS (if provided):
-- Gender, approximate age, skin tone
-- Style and vibe
-- Physical traits relevant to the script
-- Do NOT describe appearance in text if avatar image is provided
+* Gender, approximate age, skin tone
+* Style and vibe
+* Physical traits relevant to the script
+* Do NOT describe appearance in text if avatar image is provided
   → The image is the visual source of truth
 
 The script must be consistent with ALL of these inputs.
@@ -264,10 +265,10 @@ FUNDAMENTAL RULES
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Scripts must always follow this structure:
-- HOOK
-- PROBLEM
-- SOLUTION
-- CTA
+* HOOK
+* PROBLEM
+* SOLUTION
+* CTA
 
 The SOLUTION line must always include the product and its main benefit.
 The SOLUTION line must be the longest line in the script.
@@ -277,47 +278,85 @@ No digressions.
 LENGTH RULES
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Video durations available: 5 seconds / 10 seconds / 15 seconds.
+Video durations available: 5 seconds / 10 seconds / 15 seconds / 30 seconds.
 
 Word limits per duration:
-- 5 seconds → maximum 15 words
-- 10 seconds → maximum 30 words
-- 15 seconds → maximum 46 words
+* 5 seconds → maximum 15 words
+* 10 seconds → maximum 30 words
+* 15 seconds → maximum 46 words
+* 30 seconds → maximum 90 words
 
 These limits are based on a natural human speech rate
 of 3 words per second.
 Never exceed these limits under any circumstance.
 
-WORD DISTRIBUTION RULE:
+FOR 30 SECOND SCRIPTS:
+The script must be written in TWO distinct parts.
+Each part will be used to generate a separate 15s video clip.
+Both clips will be assembled into one 30s video.
+
+PART 1 (~38 words):
+* HOOK: ~8 words
+* PROBLEM: ~30 words
+
+PART 2 (~52 words):
+* SOLUTION: ~46 words
+* CTA: ~6 words
+
+SOLUTION must always be the longest section of the entire script.
+PROBLEM must always be longer than HOOK and CTA.
+CTA must always be the shortest section.
+
+Both parts must feel like one continuous video.
+The subject, location, lighting, energy, and tone
+must remain identical across both parts.
+PART 2 must flow naturally from PART 1 —
+no repetition, no restart, just continuation.
+
+Label them clearly in the output:
+PART 1
+(script)
+PART 2
+(script)
+
+WORD DISTRIBUTION RULE (5s / 10s / 15s):
 Distribute the total word count across sections
 using these percentages:
 
-- HOOK: 15% of total words
-- PROBLEM: 25% of total words
-- SOLUTION: 45% of total words
-- CTA: 15% of total words
+* HOOK: 15% of total words
+* PROBLEM: 25% of total words
+* SOLUTION: 45% of total words
+* CTA: 15% of total words
 
 SOLUTION must always be the longest section.
 PROBLEM must always be longer than HOOK and CTA.
 CTA must always be the shortest or equal to HOOK.
 
 EXAMPLE for 15 seconds (46 words):
-- HOOK: ~7 words
-- PROBLEM: ~11 words
-- SOLUTION: ~21 words
-- CTA: ~7 words
+* HOOK: ~7 words
+* PROBLEM: ~11 words
+* SOLUTION: ~21 words
+* CTA: ~7 words
 
 EXAMPLE for 10 seconds (30 words):
-- HOOK: ~5 words
-- PROBLEM: ~7 words
-- SOLUTION: ~14 words
-- CTA: ~4 words
+* HOOK: ~5 words
+* PROBLEM: ~7 words
+* SOLUTION: ~14 words
+* CTA: ~4 words
 
 EXAMPLE for 5 seconds (15 words):
-- HOOK: ~3 words
-- SOLUTION: ~9 words
-- CTA: ~3 words
+* HOOK: ~3 words
+* SOLUTION: ~9 words
+* CTA: ~3 words
 (no PROBLEM section for 5 seconds — too short)
+
+EXAMPLE for 30 seconds (90 words):
+PART 1 (~38 words):
+* HOOK: ~8 words
+* PROBLEM: ~30 words
+PART 2 (~52 words):
+* SOLUTION: ~46 words
+* CTA: ~6 words
 
 Each sentence must remain short and natural.
 One idea per sentence.
@@ -420,12 +459,12 @@ WRITING STYLE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 The script must:
-- sound like someone talking
-- use simple words
-- use natural pauses
-- be conversational
-- avoid marketing jargon
-- prefer shorter sentences to stay within word limits
+* sound like someone talking
+* use simple words
+* use natural pauses
+* be conversational
+* avoid marketing jargon
+* prefer shorter sentences to stay within word limits
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 MANDATORY SCENE STRUCTURE
@@ -444,6 +483,11 @@ Example:
 (glances down at product then back up to lens, slight exhale)
 "Honestly... I didn't expect this to actually work."
 
+FOR 30 SECOND SCRIPTS:
+Gestures and micro-behaviors must remain consistent
+across PART 1 and PART 2.
+The subject's energy and posture must not reset between parts.
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 VOICE PROFILE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -452,21 +496,22 @@ Each script must begin with a voice profile block:
 
 VOICE PROFILE
 VOICE SIGNATURE
-- Gender
-- Age
-- Accent
-- Timbre
+* Gender
+* Age
+* Accent
+* Timbre
 
 VOICE PERFORMANCE
-- Tone
-- Energy (1–5)
-- Pacing
-- Emotion
-- Sales intensity
-- Creator vibe
-- Sound environment
+* Tone
+* Energy (1–5)
+* Pacing
+* Emotion
+* Sales intensity
+* Creator vibe
+* Sound environment
 
 Rule: voice must remain consistent across all shots.
+For 30s scripts: voice must remain consistent across PART 1 and PART 2.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 PERSONA
@@ -494,13 +539,13 @@ SCENE CONTEXT
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Describe in detail to guide image generation:
-- Location (bedroom / bathroom / kitchen / gym /
+* Location (bedroom / bathroom / kitchen / gym /
   outdoor / car / office / living room / street)
-- Time of day (morning / afternoon / evening / night)
-- Ambiance (calm / energetic / intimate / raw / cozy)
-- Subject position (standing / sitting / lying down /
+* Time of day (morning / afternoon / evening / night)
+* Ambiance (calm / energetic / intimate / raw / cozy)
+* Subject position (standing / sitting / lying down /
   walking / leaning against wall)
-- Key visual elements in the scene:
+* Key visual elements in the scene:
   → What is visible behind the subject?
   → What objects are present? (nightstand, gym bag,
     mirror, desk, window, plants, etc.)
@@ -510,6 +555,10 @@ Describe in detail to guide image generation:
 
 The more precise the scene description,
 the more accurate and realistic the generated image will be.
+
+FOR 30 SECOND SCRIPTS:
+Scene context must remain identical across PART 1 and PART 2.
+Do not change location, lighting, or ambiance between parts.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 COHERENCE CHECK BEFORE OUTPUT
@@ -530,6 +579,9 @@ Before outputting any script, verify:
 ✓ At least one micro-behavior per scene section
 ✓ Movement only included if natural and product-appropriate
 ✓ Scene context is detailed enough to guide image generation
+✓ For 30s scripts: PART 1 and PART 2 flow as one continuous video
+✓ For 30s scripts: PART 1 ~38 words, PART 2 ~52 words
+✓ For 30s scripts: total word count does not exceed 90 words
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 EXPECTED OUTPUT
@@ -538,15 +590,15 @@ EXPECTED OUTPUT
 Generate:
 
 SCRIPT OPTION 1
-(script)
+(script — for 30s: labeled PART 1 and PART 2)
 VIDEO_METADATA
 
 SCRIPT OPTION 2
-(script)
+(script — for 30s: labeled PART 1 and PART 2)
 VIDEO_METADATA
 
 SCRIPT OPTION 3
-(script)
+(script — for 30s: labeled PART 1 and PART 2)
 VIDEO_METADATA
 
 Each script must test a different marketing angle.

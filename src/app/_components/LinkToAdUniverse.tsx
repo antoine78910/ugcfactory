@@ -88,6 +88,7 @@ import {
   factorWordRulesForUgcDuration,
   normalizeUgcScriptVideoDurationSec,
 } from "@/lib/ugcAiScriptBrief";
+import { parseUgcI2v30sParts } from "@/lib/ugcI2vParse";
 import { LINK_TO_AD_LOADING_MESSAGES } from "@/lib/linkToAd/loadingMessageLoops";
 import { assertStudioImageUpload, STUDIO_IMAGE_FILE_ACCEPT } from "@/lib/studioUploadValidation";
 import {
@@ -892,6 +893,40 @@ function PersonaPhotoSection({
   );
 }
 
+function LinkToAdFullSequencePlayer({
+  part1Url,
+  part2Url,
+  posterUrl,
+}: {
+  part1Url: string;
+  part2Url: string;
+  posterUrl?: string | null;
+}) {
+  const [phase, setPhase] = useState<0 | 1>(0);
+  const src = phase === 0 ? part1Url : part2Url;
+  return (
+    <div className="mx-auto w-[11.5rem] max-w-full shrink-0 sm:w-[12.5rem]">
+      <p className="mb-2 text-center text-[10px] font-semibold uppercase tracking-wide text-white/50">
+        Full sequence (30s)
+      </p>
+      <video
+        key={phase}
+        className="aspect-[9/16] w-full rounded-lg bg-black object-cover"
+        src={proxiedMediaSrc(src)}
+        poster={posterUrl?.trim() ? proxiedMediaSrc(posterUrl) : undefined}
+        controls
+        playsInline
+        onEnded={() => {
+          if (phase === 0) setPhase(1);
+        }}
+      />
+      <p className="mt-2 text-center text-[9px] text-white/45">
+        Part 1 plays first, then part 2 automatically.
+      </p>
+    </div>
+  );
+}
+
 export default function LinkToAdUniverse({
   resumeRunId,
   onResumeConsumed,
@@ -1102,6 +1137,9 @@ export default function LinkToAdUniverse({
   const nanoThreeAbortRef = useRef<AbortController | null>(null);
   const videoPromptAbortRef = useRef<AbortController | null>(null);
   const klingAbortRef = useRef<AbortController | null>(null);
+  /** 30s workflow: part 2 prompt chained after part 1 video is ready. */
+  const kling30sPart2PromptRef = useRef<string | null>(null);
+  const kling30sNextClipIsPart2Ref = useRef(false);
   /** Debounced auto-save for angle summary edits (View full script). */
   const angleSummarySaveTimersRef = useRef<Partial<Record<number, ReturnType<typeof setTimeout>>>>({});
 
@@ -1359,16 +1397,23 @@ export default function LinkToAdUniverse({
   const selImg = nanoBananaSelectedImageIndex;
   const activeKlingSlot = useMemo(() => {
     if (selImg === null) {
-      return { videoUrl: null as string | null, taskId: null as string | null, history: [] as string[] };
+      return {
+        videoUrl: null as string | null,
+        videoUrlPart2: null as string | null,
+        taskId: null as string | null,
+        history: [] as string[],
+      };
     }
     const s = klingByRef[selImg];
     return {
       videoUrl: (s?.videoUrl ?? null) as string | null,
+      videoUrlPart2: (s?.videoUrlPart2 ?? null) as string | null,
       taskId: (s?.taskId ?? null) as string | null,
       history: [...(s?.history ?? [])],
     };
   }, [selImg, klingByRef]);
   const klingVideoUrl = activeKlingSlot.videoUrl;
+  const klingVideoUrlPart2 = activeKlingSlot.videoUrlPart2;
   const klingTaskId = activeKlingSlot.taskId;
   const klingHistory = activeKlingSlot.history;
 
@@ -1409,10 +1454,12 @@ export default function LinkToAdUniverse({
     const imgIdx = nanoBananaSelectedImageIndex;
     const klingMerged = klingByRef.map((s, i) => ({
       videoUrl: s.videoUrl ?? null,
+      videoUrlPart2: s.videoUrlPart2 ?? null,
       taskId: s.taskId ?? null,
       history: [...(s.history || [])],
       ugcVideoPrompt:
         i === imgIdx ? ugcVideoPromptGpt || undefined : s.ugcVideoPrompt,
+      ugcVideoPromptPart2: s.ugcVideoPromptPart2,
     }));
     return {
       nanoBananaPromptsRaw,
@@ -1450,9 +1497,11 @@ export default function LinkToAdUniverse({
       k && k.length === 3
         ? k.map((s) => ({
             videoUrl: s.videoUrl ?? null,
+            videoUrlPart2: s.videoUrlPart2 ?? null,
             taskId: s.taskId ?? null,
             history: [...(s.history || [])],
             ugcVideoPrompt: s.ugcVideoPrompt,
+            ugcVideoPromptPart2: s.ugcVideoPromptPart2,
           }))
         : createEmptyKlingByReference(),
     );
@@ -3738,24 +3787,39 @@ export default function LinkToAdUniverse({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
-        body: JSON.stringify({ angleScript: script, provider: scriptProvider }),
+        body: JSON.stringify({
+          angleScript: script,
+          provider: scriptProvider,
+          videoDurationSeconds: videoDuration,
+        }),
       });
-      const json = (await res.json()) as { data?: string; error?: string };
+      const json = (await res.json()) as {
+        data?: string;
+        error?: string;
+        part1?: string;
+        part2?: string;
+      };
       if (!res.ok || !json.data) throw new Error(json.error || "Video prompt failed");
       const text = String(json.data);
       setUgcVideoPromptGpt(text);
       hydrateVideoPromptFromStored(text);
       const idx = nanoBananaSelectedImageIndex;
       if (idx === 0 || idx === 1 || idx === 2) {
-        patchKlingSlot(idx, { ugcVideoPrompt: text });
+        const p30 =
+          normalizeUgcScriptVideoDurationSec(videoDuration) === 30 && json.part1 && json.part2
+            ? { ugcVideoPrompt: json.part1, ugcVideoPromptPart2: json.part2 }
+            : { ugcVideoPrompt: text };
+        patchKlingSlot(idx, p30);
       }
       const base = latestSnapRef.current;
       if (base && lastExtractedJson) {
         const nextSlots = klingByRef.map((s, i) => ({
           videoUrl: s.videoUrl ?? null,
+          videoUrlPart2: s.videoUrlPart2 ?? null,
           taskId: s.taskId ?? null,
           history: [...(s.history || [])],
           ugcVideoPrompt: i === idx ? text : s.ugcVideoPrompt,
+          ugcVideoPromptPart2: s.ugcVideoPromptPart2,
         }));
         const triple = buildPersistTriplePatchingActive({
           ugcVideoPromptGpt: text,
@@ -3778,15 +3842,56 @@ export default function LinkToAdUniverse({
     }
   }
 
-  async function onGenerateKlingVideo(overrideVideoPrompt?: string) {
+  /**
+   * @param chainPart2Prompt — If set, runs the second 15s clip only (30s workflow). Do not clear 30s refs.
+   */
+  async function onGenerateKlingVideo(overrideVideoPrompt?: string, chainPart2Prompt?: string) {
     const url = storeUrl.trim();
     const img = nanoBananaImageUrl;
-    const prompt = (overrideVideoPrompt ?? mergedVideoPromptDraft).trim() || ugcVideoPromptGpt.trim();
     const idx = nanoBananaSelectedImageIndex;
-    if (!url || !lastExtractedJson || !img || !prompt || idx === null) {
+    if (!url || !lastExtractedJson || !img || idx === null) {
       toast.error("Reference image and video prompt are required.");
       return;
     }
+
+    if (!chainPart2Prompt) {
+      kling30sPart2PromptRef.current = null;
+      kling30sNextClipIsPart2Ref.current = false;
+    }
+
+    let prompt: string;
+    let apiDuration: number;
+
+    if (chainPart2Prompt) {
+      prompt = chainPart2Prompt.trim();
+      apiDuration = 15;
+    } else {
+      const merged = (overrideVideoPrompt ?? mergedVideoPromptDraft).trim() || ugcVideoPromptGpt.trim();
+      if (!merged) {
+        toast.error("Reference image and video prompt are required.");
+        return;
+      }
+      prompt = merged;
+      apiDuration = videoDuration;
+      if (normalizeUgcScriptVideoDurationSec(videoDuration) === 30) {
+        const slot = klingByRef[idx];
+        const fromSlots = slot?.ugcVideoPrompt?.trim() && slot?.ugcVideoPromptPart2?.trim();
+        const parsed = fromSlots
+          ? {
+              part1: String(slot.ugcVideoPrompt),
+              part2: String(slot.ugcVideoPromptPart2),
+            }
+          : parseUgcI2v30sParts(merged);
+        if (!parsed?.part1?.trim() || !parsed?.part2?.trim()) {
+          toast.error("30s needs PROMPT PART 1 and PART 2. Regenerate the video prompt with 30s duration selected.");
+          return;
+        }
+        prompt = parsed.part1.trim();
+        kling30sPart2PromptRef.current = parsed.part2.trim();
+        apiDuration = 15;
+      }
+    }
+
     setIsKlingSubmitting(true);
     const klingPrompt = withAudioHint(prompt);
     lastKlingVideoPromptRef.current = klingPrompt;
@@ -3804,7 +3909,7 @@ export default function LinkToAdUniverse({
           marketModel: LINK_TO_AD_VIDEO_MARKET_MODEL,
           prompt: klingPrompt,
           imageUrl: img,
-          duration: videoDuration,
+          duration: apiDuration,
           aspectRatio: "9:16",
           personalApiKey: getPersonalApiKey(),
           piapiApiKey: getPersonalPiapiApiKey(),
@@ -3844,9 +3949,11 @@ export default function LinkToAdUniverse({
       klingPollAngleRef.current = ang;
       klingPollSlotsRef.current = nextSlots.map((s) => ({
         videoUrl: s.videoUrl ?? null,
+        videoUrlPart2: s.videoUrlPart2 ?? null,
         taskId: s.taskId ?? null,
         history: [...(s.history || [])],
         ugcVideoPrompt: s.ugcVideoPrompt,
+        ugcVideoPromptPart2: s.ugcVideoPromptPart2,
       }));
       setKlingPollTaskId(json.taskId);
       setKlingPollImageIndex(idx);
@@ -3855,9 +3962,11 @@ export default function LinkToAdUniverse({
         const triple = buildPersistTriplePatchingActive({
           klingByReferenceIndex: nextSlots.map((s) => ({
             videoUrl: s.videoUrl ?? null,
+            videoUrlPart2: s.videoUrlPart2 ?? null,
             taskId: s.taskId ?? null,
             history: [...(s.history || [])],
             ugcVideoPrompt: s.ugcVideoPrompt,
+            ugcVideoPromptPart2: s.ugcVideoPromptPart2,
           })),
         });
         setPipelineByAngle(triple);
@@ -3881,7 +3990,7 @@ export default function LinkToAdUniverse({
   }
 
   const klingSlotSignature = useMemo(
-    () => klingByRef.map((s) => `${s.taskId ?? ""}|${s.videoUrl ?? ""}`).join(";"),
+    () => klingByRef.map((s) => `${s.taskId ?? ""}|${s.videoUrl ?? ""}|${s.videoUrlPart2 ?? ""}`).join(";"),
     [klingByRef],
   );
 
@@ -3969,9 +4078,11 @@ export default function LinkToAdUniverse({
         klingPollAngleRef.current = ang;
         klingPollSlotsRef.current = klingByRef.map((s) => ({
           videoUrl: s.videoUrl ?? null,
+          videoUrlPart2: s.videoUrlPart2 ?? null,
           taskId: s.taskId ?? null,
           history: [...(s.history || [])],
           ugcVideoPrompt: s.ugcVideoPrompt,
+          ugcVideoPromptPart2: s.ugcVideoPromptPart2,
         }));
         setKlingPollTaskId(tid);
         setKlingPollImageIndex(i as 0 | 1 | 2);
@@ -4017,6 +4128,7 @@ export default function LinkToAdUniverse({
         if (s === "SUCCESS") {
           const vUrl = json.data.response?.[0];
           if (!vUrl) throw new Error("Video OK but URL missing.");
+          const clipPart: 1 | 2 = kling30sNextClipIsPart2Ref.current ? 2 : 1;
           klingMergedSnapRef.current = null;
           setKlingByRef((prev) => {
             const base = latestSnapRef.current;
@@ -4025,14 +4137,18 @@ export default function LinkToAdUniverse({
             const slotsFromPoll =
               klingPollSlotsRef.current?.map((s) => ({
                 videoUrl: s.videoUrl ?? null,
+                videoUrlPart2: s.videoUrlPart2 ?? null,
                 taskId: s.taskId ?? null,
                 history: [...(s.history || [])],
                 ugcVideoPrompt: s.ugcVideoPrompt,
+                ugcVideoPromptPart2: s.ugcVideoPromptPart2,
               })) ?? prev.map((s) => ({
                 videoUrl: s.videoUrl ?? null,
+                videoUrlPart2: s.videoUrlPart2 ?? null,
                 taskId: s.taskId ?? null,
                 history: [...(s.history || [])],
                 ugcVideoPrompt: s.ugcVideoPrompt,
+                ugcVideoPromptPart2: s.ugcVideoPromptPart2,
               }));
             const triple = normalizePipelineByAngle(base).map((p) => cloneAnglePipeline(p)) as [
               LinkToAdAnglePipelineV1,
@@ -4048,6 +4164,7 @@ export default function LinkToAdUniverse({
               slotIndex,
               vUrl,
               taskId,
+              clipPart,
             );
             klingMergedSnapRef.current = nextSnap;
             klingPollAngleRef.current = null;
@@ -4074,7 +4191,22 @@ export default function LinkToAdUniverse({
               });
             }
           }
-          toast.success("Video saved in the project");
+          if (clipPart === 1 && kling30sPart2PromptRef.current) {
+            const p2 = kling30sPart2PromptRef.current;
+            kling30sPart2PromptRef.current = null;
+            kling30sNextClipIsPart2Ref.current = true;
+            toast.success("Part 1 saved — generating part 2…");
+            void onGenerateKlingVideo(undefined, p2);
+          } else {
+            if (clipPart === 2) {
+              kling30sNextClipIsPart2Ref.current = false;
+            }
+            toast.success(
+              clipPart === 2 && normalizeUgcScriptVideoDurationSec(videoDuration) === 30
+                ? "Full 30s video saved (two clips)"
+                : "Video saved in the project",
+            );
+          }
           if (interval) clearInterval(interval);
           interval = null;
           return;
@@ -4098,6 +4230,7 @@ export default function LinkToAdUniverse({
       cancelled = true;
       if (interval) clearInterval(interval);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- poll tick closes over latest snap/refs; avoid resetting interval on every render
   }, [klingPollTaskId, klingPollImageIndex]);
 
   const showAnglePicker = Boolean(scriptsText && angleLabels[0] && angleLabels[1] && angleLabels[2]);
@@ -4489,7 +4622,7 @@ export default function LinkToAdUniverse({
               </p>
             ) : (
               <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] p-1">
-                {[5, 10, 15].map((d) => (
+                {[5, 10, 15, 30].map((d) => (
                   <button
                     key={d}
                     type="button"
@@ -6331,18 +6464,59 @@ export default function LinkToAdUniverse({
                             statusText={
                               isKlingSubmitting
                                 ? LINK_TO_AD_LOADING_MESSAGES.kling_starting
-                                : LINK_TO_AD_LOADING_MESSAGES.kling_rendering
+                                : normalizeUgcScriptVideoDurationSec(videoDuration) === 30 &&
+                                    klingVideoUrl?.trim() &&
+                                    !klingVideoUrlPart2?.trim()
+                                  ? "Rendering part 2 of 2 (30s)…"
+                                  : LINK_TO_AD_LOADING_MESSAGES.kling_rendering
                             }
                           />
                         ) : klingVideoUrl ? (
                           <>
                             <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-5">
-                              <div className="mx-auto w-[11.5rem] max-w-full shrink-0 sm:mx-0 sm:w-[12.5rem]">
-                                <VideoCard
-                                  src={klingVideoUrl}
-                                  poster={nanoBananaImageUrl ?? undefined}
-                                />
-                              </div>
+                              {klingVideoUrlPart2 ? (
+                                <div className="flex w-full flex-col gap-6 lg:flex-row lg:items-start lg:gap-6">
+                                  <div className="flex flex-col items-center">
+                                    <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-white/50">
+                                      Part 1 (15s)
+                                    </p>
+                                    <div className="w-[11.5rem] max-w-full shrink-0 sm:w-[12.5rem]">
+                                      <VideoCard
+                                        src={klingVideoUrl}
+                                        poster={nanoBananaImageUrl ?? undefined}
+                                      />
+                                    </div>
+                                  </div>
+                                  <div className="flex flex-col items-center">
+                                    <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-white/50">
+                                      Part 2 (15s)
+                                    </p>
+                                    <div className="w-[11.5rem] max-w-full shrink-0 sm:w-[12.5rem]">
+                                      <VideoCard
+                                        src={klingVideoUrlPart2}
+                                        poster={nanoBananaImageUrl ?? undefined}
+                                      />
+                                    </div>
+                                  </div>
+                                  <LinkToAdFullSequencePlayer
+                                    part1Url={klingVideoUrl}
+                                    part2Url={klingVideoUrlPart2}
+                                    posterUrl={nanoBananaImageUrl}
+                                  />
+                                </div>
+                              ) : (
+                                <div className="mx-auto w-[11.5rem] max-w-full shrink-0 sm:mx-0 sm:w-[12.5rem]">
+                                  {normalizeUgcScriptVideoDurationSec(videoDuration) === 30 ? (
+                                    <p className="mb-1 text-center text-[10px] font-semibold uppercase tracking-wide text-amber-200/75">
+                                      Part 1 (15s)
+                                    </p>
+                                  ) : null}
+                                  <VideoCard
+                                    src={klingVideoUrl}
+                                    poster={nanoBananaImageUrl ?? undefined}
+                                  />
+                                </div>
+                              )}
                               <div className="flex w-full flex-col justify-center gap-2 sm:w-auto sm:min-w-[11rem] sm:flex-1">
                                 <Button
                                   type="button"
@@ -6369,20 +6543,53 @@ export default function LinkToAdUniverse({
                                     </span>
                                   )}
                                 </Button>
-                                <Button
-                                  variant="secondary"
-                                  size="sm"
-                                  className="h-10 w-full justify-center border border-white/15 bg-white/5 text-white hover:bg-white/10 sm:w-full"
-                                  asChild
-                                >
-                                  <a
-                                    href={`/api/download?url=${encodeURIComponent(klingVideoUrl)}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
+                                {klingVideoUrlPart2?.trim() ? (
+                                  <div className="flex w-full flex-col gap-2">
+                                    <Button
+                                      variant="secondary"
+                                      size="sm"
+                                      className="h-10 w-full justify-center border border-white/15 bg-white/5 text-white hover:bg-white/10 sm:w-full"
+                                      asChild
+                                    >
+                                      <a
+                                        href={`/api/download?url=${encodeURIComponent(klingVideoUrl)}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                      >
+                                        Download part 1
+                                      </a>
+                                    </Button>
+                                    <Button
+                                      variant="secondary"
+                                      size="sm"
+                                      className="h-10 w-full justify-center border border-white/15 bg-white/5 text-white hover:bg-white/10 sm:w-full"
+                                      asChild
+                                    >
+                                      <a
+                                        href={`/api/download?url=${encodeURIComponent(klingVideoUrlPart2)}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                      >
+                                        Download part 2
+                                      </a>
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    className="h-10 w-full justify-center border border-white/15 bg-white/5 text-white hover:bg-white/10 sm:w-full"
+                                    asChild
                                   >
-                                    Download video
-                                  </a>
-                                </Button>
+                                    <a
+                                      href={`/api/download?url=${encodeURIComponent(klingVideoUrl)}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                    >
+                                      Download video
+                                    </a>
+                                  </Button>
+                                )}
                               </div>
                             </div>
                             {klingHistory.length > 0 &&
