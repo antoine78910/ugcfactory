@@ -33,6 +33,7 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
   const router = useRouter();
   const supabase = useMemo(() => (HAS_SUPABASE_ENV ? createSupabaseBrowserClient() : null), []);
 
+  const [firstName, setFirstName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -84,11 +85,19 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
   async function onSignUp() {
     setIsLoading(true);
     try {
+      const cleanFirst = firstName.trim();
+      if (!cleanFirst) {
+        toast.error("First name required", { description: "Please enter your first name." });
+        return;
+      }
       const cleanEmail = email.trim();
       const { error } = await client.auth.signUp({
         email: email.trim(),
         password,
-        options: { emailRedirectTo: getAuthCallbackUrl() },
+        options: {
+          emailRedirectTo: getAuthCallbackUrl(),
+          data: { first_name: cleanFirst },
+        },
       });
       if (error) throw error;
       window.datafast?.("signup", { email: cleanEmail });
@@ -204,6 +213,23 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
                 else void onSignUp();
               }}
             >
+              {!isSignIn ? (
+                <div className="space-y-2">
+                  <Label htmlFor="auth-first-name" className="text-white/80">
+                    First name
+                  </Label>
+                  <Input
+                    id="auth-first-name"
+                    name="given-name"
+                    autoComplete="given-name"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    placeholder="Alex"
+                    className="h-11 border-white/15 bg-white/[0.03] text-base text-white placeholder:text-white/30 md:text-sm"
+                  />
+                </div>
+              ) : null}
+
               <div className="space-y-2">
                 <Label htmlFor="auth-email" className="text-white/80">
                   Email

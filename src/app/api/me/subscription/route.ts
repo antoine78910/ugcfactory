@@ -73,6 +73,11 @@ export type MeSubscriptionResponse = {
   userId: string;
   /** ISO 8601 end of current billing period (Stripe), when known. */
   currentPeriodEndIso?: string | null;
+  /**
+   * True when the user canceled renewal but still has access until `currentPeriodEndIso`.
+   * From Stripe `cancel_at_period_end` (live query only).
+   */
+  cancelAtPeriodEnd?: boolean;
   /** When true the client must not deduct or check credits — account has unlimited access. */
   unlimited?: boolean;
   /**
@@ -236,6 +241,7 @@ export async function GET() {
               userId: auth.user.id,
               creditBalance,
               currentPeriodEndIso: periodEndIso,
+              cancelAtPeriodEnd: Boolean(sub.cancel_at_period_end),
             } satisfies MeSubscriptionResponse);
           }
         }

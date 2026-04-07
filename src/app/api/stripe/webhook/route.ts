@@ -65,6 +65,60 @@ const SUBSCRIPTION_CREDITS: Record<string, number> = {
   scale: 3200,
 };
 
+type SupabaseAdmin = NonNullable<ReturnType<typeof createSupabaseServiceClient>>;
+
+async function resolveUserEmailForBrevo(admin: SupabaseAdmin, userId: string): Promise<string | null> {
+  const { data: authUser } = await admin.auth.admin.getUserById(userId);
+  const e = authUser?.user?.email?.trim().toLowerCase();
+  return e && e.length > 0 ? e : null;
+}
+
+async function resolveEmailFromStripeCustomer(stripe: Stripe, customerId: string): Promise<string | null> {
+  try {
+    const c = await stripe.customers.retrieve(customerId);
+    if (c.deleted) return null;
+    const email = typeof c.email === "string" ? c.email.trim().toLowerCase() : "";
+    return email || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Most users "cancel" via Stripe portal → cancel at period end. That fires
+ * `customer.subscription.updated` (not `deleted`). `deleted` only fires when
+ * the subscription object is removed (end of period or immediate cancel).
+ */
+async function brevoEmitCancelSubscription(opts: {
+  email: string;
+  planId: string;
+  phase: "at_period_end_scheduled" | "subscription_ended";
+  accessEndsAtIso?: string | null;
+}): Promise<void> {
+  if (opts.phase === "subscription_ended") {
+    await brevoUpsertContact(opts.email, {
+      PLAN: "",
+      SUBSCRIPTION_STATUS: "canceled",
+    });
+  } else {
+    await brevoUpsertContact(opts.email, {
+      SUBSCRIPTION_STATUS: "cancel_at_period_end",
+    });
+  }
+  await brevoTrackEvent(opts.email, "cancel_subscription", {
+    eventProperties: {
+      phase: opts.phase,
+      plan: opts.planId || "unknown",
+      ...(opts.accessEndsAtIso ? { access_ends_at: opts.accessEndsAtIso } : {}),
+      ...(opts.phase === "subscription_ended" ? { ended_at: new Date().toISOString() } : {}),
+    },
+  });
+  serverLog("brevo_cancel_subscription_ok", {
+    phase: opts.phase,
+    email_domain: opts.email.includes("@") ? opts.email.split("@")[1] : "?",
+  });
+}
+
 export async function POST(req: Request) {
   const secret = process.env.STRIPE_SECRET_KEY?.trim();
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET?.trim();
@@ -259,7 +313,16 @@ export async function POST(req: Request) {
         const stripe = new Stripe(secret, { apiVersion: "2026-02-25.clover" });
         const session = await stripe.subscriptions.retrieve(sub.id);
 
-        // Try to find new plan from metadata or price lookup
+        const previousAttributes = (event.data as Stripe.Event.Data & {
+          previous_attributes?: Partial<Stripe.Subscription> | null;
+        }).previous_attributes;
+
+        /** User canceled renewal in portal — subscription stays active until period end. */
+        const cancelJustScheduled =
+          sub.cancel_at_period_end === true &&
+          previousAttributes != null &&
+          previousAttributes.cancel_at_period_end === false;
+
         const { data: existing } = await admin
           .from("user_subscriptions")
           .select("user_id, plan_id")
@@ -275,6 +338,37 @@ export async function POST(req: Request) {
 
           serverLog("stripe_webhook_subscription_updated", { userId: existing.user_id, status: session.status });
         }
+
+        if (cancelJustScheduled) {
+          try {
+            let email: string | null = null;
+            let planId = existing?.plan_id ?? "unknown";
+            if (existing?.user_id) {
+              email = await resolveUserEmailForBrevo(admin, existing.user_id);
+            }
+            if (!email && typeof sub.customer === "string") {
+              email = await resolveEmailFromStripeCustomer(stripe, sub.customer);
+              const firstItem = sub.items?.data?.[0];
+              const match = firstItem?.price?.id ? getPlanFromPriceId(firstItem.price.id) : null;
+              if (match) planId = match.planId;
+            }
+            if (email) {
+              const accessEnds = safePeriodEndIso((sub as any).current_period_end);
+              await brevoEmitCancelSubscription({
+                email,
+                planId: typeof planId === "string" ? planId : "unknown",
+                phase: "at_period_end_scheduled",
+                accessEndsAtIso: accessEnds,
+              });
+            } else {
+              serverLog("brevo_cancel_subscription_skipped_no_email", { subId: sub.id });
+            }
+          } catch (brevoErr) {
+            serverLog("stripe_webhook_brevo_cancel_scheduled_error", {
+              error: brevoErr instanceof Error ? brevoErr.message : "unknown",
+            });
+          }
+        }
         break;
       }
 
@@ -283,6 +377,7 @@ export async function POST(req: Request) {
       // -----------------------------------------------------------------------
       case "customer.subscription.deleted": {
         const sub = event.data.object as Stripe.Subscription;
+        const stripe = new Stripe(secret, { apiVersion: "2026-02-25.clover" });
 
         const { data: canceledRow } = await admin
           .from("user_subscriptions")
@@ -296,28 +391,31 @@ export async function POST(req: Request) {
 
         serverLog("stripe_webhook_subscription_canceled", { subId: sub.id });
 
-        // --- Brevo: track cancel_subscription event ---
-        if (canceledRow?.user_id) {
-          try {
-            const { data: authUser } = await admin.auth.admin.getUserById(canceledRow.user_id);
-            const email = authUser?.user?.email?.trim().toLowerCase() ?? "";
-            if (email) {
-              void brevoUpsertContact(email, {
-                PLAN: "",
-                SUBSCRIPTION_STATUS: "canceled",
-              });
-              void brevoTrackEvent(email, "cancel_subscription", {
-                eventProperties: {
-                  plan: canceledRow.plan_id ?? "unknown",
-                  canceled_at: new Date().toISOString(),
-                },
-              });
-            }
-          } catch (brevoErr) {
-            serverLog("stripe_webhook_brevo_cancel_error", {
-              error: brevoErr instanceof Error ? brevoErr.message : "unknown",
-            });
+        try {
+          let email: string | null = null;
+          let planId = canceledRow?.plan_id ?? "unknown";
+          if (canceledRow?.user_id) {
+            email = await resolveUserEmailForBrevo(admin, canceledRow.user_id);
           }
+          if (!email && typeof sub.customer === "string") {
+            email = await resolveEmailFromStripeCustomer(stripe, sub.customer);
+            const firstItem = sub.items?.data?.[0];
+            const match = firstItem?.price?.id ? getPlanFromPriceId(firstItem.price.id) : null;
+            if (match) planId = match.planId;
+          }
+          if (email) {
+            await brevoEmitCancelSubscription({
+              email,
+              planId: typeof planId === "string" ? planId : "unknown",
+              phase: "subscription_ended",
+            });
+          } else {
+            serverLog("brevo_cancel_subscription_deleted_skipped_no_email", { subId: sub.id });
+          }
+        } catch (brevoErr) {
+          serverLog("stripe_webhook_brevo_cancel_deleted_error", {
+            error: brevoErr instanceof Error ? brevoErr.message : "unknown",
+          });
         }
 
         break;

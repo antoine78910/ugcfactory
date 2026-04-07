@@ -126,6 +126,8 @@ export default function SubscriptionPage() {
   const [cancelDiscountLoading, setCancelDiscountLoading] = useState(false);
   const [cancelPortalLoading, setCancelPortalLoading] = useState(false);
   const [subscriptionActiveUntilLabel, setSubscriptionActiveUntilLabel] = useState<string | null>(null);
+  /** From Stripe: user canceled renewal but still has access until period end. */
+  const [cancelAtPeriodEnd, setCancelAtPeriodEnd] = useState(false);
   const [retentionOfferEligible, setRetentionOfferEligible] = useState(false);
   const [retentionEligibilityLoading, setRetentionEligibilityLoading] = useState(false);
 
@@ -286,52 +288,56 @@ export default function SubscriptionPage() {
     };
   }, [cancelDialogOpen]);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch("/api/me/subscription", { credentials: "include" });
-        if (!res.ok) {
-          if (!cancelled) {
-            setServerSubBilling(null);
-            setSubscriptionActiveUntilLabel(null);
-          }
-          return;
-        }
-        const data = (await res.json()) as {
-          billing?: unknown;
-          currentPeriodEndIso?: string | null;
-        };
-        const raw = data.billing;
-        const b =
-          raw === "yearly" ? "yearly" : raw === "monthly" ? "monthly" : null;
-        let untilLabel: string | null = null;
-        const iso = data.currentPeriodEndIso;
-        if (typeof iso === "string" && iso) {
-          const d = new Date(iso);
-          if (Number.isFinite(d.getTime())) {
-            untilLabel = d.toLocaleDateString("en-US", {
-              month: "long",
-              day: "numeric",
-              year: "numeric",
-            });
-          }
-        }
-        if (!cancelled) {
-          setServerSubBilling(b);
-          setSubscriptionActiveUntilLabel(untilLabel);
-        }
-      } catch {
-        if (!cancelled) {
-          setServerSubBilling(null);
-          setSubscriptionActiveUntilLabel(null);
+  const fetchSubscriptionMeta = useCallback(async () => {
+    try {
+      const res = await fetch("/api/me/subscription", { credentials: "include" });
+      if (!res.ok) {
+        setServerSubBilling(null);
+        setSubscriptionActiveUntilLabel(null);
+        setCancelAtPeriodEnd(false);
+        return;
+      }
+      const data = (await res.json()) as {
+        billing?: unknown;
+        currentPeriodEndIso?: string | null;
+        cancelAtPeriodEnd?: boolean;
+      };
+      const raw = data.billing;
+      const b =
+        raw === "yearly" ? "yearly" : raw === "monthly" ? "monthly" : null;
+      let untilLabel: string | null = null;
+      const iso = data.currentPeriodEndIso;
+      if (typeof iso === "string" && iso) {
+        const d = new Date(iso);
+        if (Number.isFinite(d.getTime())) {
+          untilLabel = d.toLocaleDateString("en-US", {
+            month: "long",
+            day: "numeric",
+            year: "numeric",
+          });
         }
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
+      setServerSubBilling(b);
+      setSubscriptionActiveUntilLabel(untilLabel);
+      setCancelAtPeriodEnd(data.cancelAtPeriodEnd === true);
+    } catch {
+      setServerSubBilling(null);
+      setSubscriptionActiveUntilLabel(null);
+      setCancelAtPeriodEnd(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void fetchSubscriptionMeta();
+  }, [fetchSubscriptionMeta]);
+
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState === "visible") void fetchSubscriptionMeta();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, [fetchSubscriptionMeta]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -707,11 +713,13 @@ export default function SubscriptionPage() {
                         className={cn(
                           "rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide",
                           isSubscribed
-                            ? "border-emerald-400/35 bg-emerald-500/15 text-emerald-200"
+                            ? cancelAtPeriodEnd
+                              ? "border-amber-400/40 bg-amber-500/15 text-amber-100"
+                              : "border-emerald-400/35 bg-emerald-500/15 text-emerald-200"
                             : "border-white/15 bg-white/[0.06] text-white/55",
                         )}
                       >
-                        {isSubscribed ? "Subscribed" : "Free"}
+                        {isSubscribed ? (cancelAtPeriodEnd ? "Canceled" : "Subscribed") : "Free"}
                       </span>
                     </div>
                     <h3 className="mt-1.5 text-xl font-bold text-white sm:text-2xl">{planDisplayName}</h3>
@@ -727,20 +735,37 @@ export default function SubscriptionPage() {
                         >
                           {portalLoading ? "Opening…" : "Manage billing"}
                         </Button>
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          className="w-full rounded-xl border border-red-400/30 bg-red-500/10 text-red-50 hover:bg-red-500/20 sm:w-auto"
-                          onClick={() => setCancelDialogOpen(true)}
-                        >
-                          Cancel subscription
-                        </Button>
+                        {!cancelAtPeriodEnd ? (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            className="w-full rounded-xl border border-red-400/30 bg-red-500/10 text-red-50 hover:bg-red-500/20 sm:w-auto"
+                            onClick={() => setCancelDialogOpen(true)}
+                          >
+                            Cancel subscription
+                          </Button>
+                        ) : null}
                       </div>
+                    ) : null}
+
+                    {isSubscribed && cancelAtPeriodEnd ? (
+                      <p className="mt-2 max-w-md rounded-xl border border-amber-400/25 bg-amber-500/[0.08] px-3 py-2 text-sm leading-snug text-amber-100/95">
+                        Your subscription is canceled. You keep full access{" "}
+                        {subscriptionActiveUntilLabel ? (
+                          <>
+                            until <span className="font-semibold text-white">{subscriptionActiveUntilLabel}</span>.
+                          </>
+                        ) : (
+                          <>until the end of your current billing period.</>
+                        )}
+                      </p>
                     ) : null}
 
                     <p className="mt-1.5 max-w-md text-sm leading-snug text-white/48">
                       {isSubscribed
-                        ? "Your monthly credits refresh with your plan. Upgrade or downgrade from the plan cards above; downgrades take effect at renewal."
+                        ? cancelAtPeriodEnd
+                          ? "After that date you’ll move to the free tier unless you subscribe again."
+                          : "Your monthly credits refresh with your plan. Upgrade or downgrade from the plan cards above; downgrades take effect at renewal."
                         : "You’re on the free tier. Add a subscription for monthly credits or buy packs on the Credits page."}
                     </p>
 
