@@ -106,15 +106,15 @@ export async function GET(req: NextRequest) {
         setCookieNames: redactedCookieNames(redirectResponse.cookies.getAll() as any),
       });
 
-      // Fire Brevo signup event (non-blocking). Runs on every callback but Brevo
-      // deduplicates contacts; the automation workflow filters by event date.
+      // Fire Brevo signup event (non-blocking).
+      // 5-min window covers slow OAuth round-trips (Google consent, MFA, etc.).
       try {
         const { data: userData } = await supabase.auth.getUser();
         const email = userData?.user?.email?.trim();
         if (email) {
           const createdAt = userData.user?.created_at;
           const isNewUser =
-            createdAt && Date.now() - new Date(createdAt).getTime() < 60_000;
+            createdAt && Date.now() - new Date(createdAt).getTime() < 5 * 60_000;
           void brevoUpsertContact(email, {
             SIGNUP_DATE: new Date().toISOString().slice(0, 10),
           });
@@ -137,6 +137,17 @@ export async function GET(req: NextRequest) {
         console.log("[auth/callback] exchangeError but user present; redirect home", {
           exchangeError: String(exchangeError).slice(0, 120),
         });
+
+        // Brevo upsert for returning users that hit the "exchangeError but session" path
+        try {
+          const email = data.user.email?.trim();
+          if (email) {
+            void brevoUpsertContact(email, {
+              SIGNUP_DATE: new Date().toISOString().slice(0, 10),
+            });
+          }
+        } catch { /* ignore */ }
+
         return redirectResponse;
       }
     } catch {

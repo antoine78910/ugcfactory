@@ -283,11 +283,43 @@ export async function POST(req: Request) {
       // -----------------------------------------------------------------------
       case "customer.subscription.deleted": {
         const sub = event.data.object as Stripe.Subscription;
+
+        const { data: canceledRow } = await admin
+          .from("user_subscriptions")
+          .select("user_id, plan_id")
+          .eq("stripe_subscription_id", sub.id)
+          .maybeSingle();
+
         await admin.from("user_subscriptions")
           .update({ status: "canceled" })
           .eq("stripe_subscription_id", sub.id);
 
         serverLog("stripe_webhook_subscription_canceled", { subId: sub.id });
+
+        // --- Brevo: track cancel_subscription event ---
+        if (canceledRow?.user_id) {
+          try {
+            const { data: authUser } = await admin.auth.admin.getUserById(canceledRow.user_id);
+            const email = authUser?.user?.email?.trim().toLowerCase() ?? "";
+            if (email) {
+              void brevoUpsertContact(email, {
+                PLAN: "",
+                SUBSCRIPTION_STATUS: "canceled",
+              });
+              void brevoTrackEvent(email, "cancel_subscription", {
+                eventProperties: {
+                  plan: canceledRow.plan_id ?? "unknown",
+                  canceled_at: new Date().toISOString(),
+                },
+              });
+            }
+          } catch (brevoErr) {
+            serverLog("stripe_webhook_brevo_cancel_error", {
+              error: brevoErr instanceof Error ? brevoErr.message : "unknown",
+            });
+          }
+        }
+
         break;
       }
 
