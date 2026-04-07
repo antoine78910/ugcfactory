@@ -883,26 +883,78 @@ export type VideoPromptEditableSections = {
   ambience: string;
 };
 
+/**
+ * Heuristic: extract spoken dialogue (quoted text with "He/She speaks…" lead-in)
+ * and ambient sound sentences from an unstructured video prompt blob.
+ */
+function extractLegacySections(text: string): { motion: string; dialogue: string; ambience: string } | null {
+  const t = text.replace(/\r\n/g, "\n").trim();
+  if (!t || t.length < 40) return null;
+
+  const sentences = t.split(/(?<=\.)\s+/);
+  const dialogueLines: string[] = [];
+  const ambienceLines: string[] = [];
+  const motionLines: string[] = [];
+
+  for (const s of sentences) {
+    const lower = s.toLowerCase();
+    const hasQuote = /"[^"]{8,}"/.test(s);
+    const isSpeech =
+      hasQuote &&
+      (/\bspe(?:aks?|aking)\b/i.test(s) ||
+        /\bsays?\b/i.test(s) ||
+        /\bvoice\b/i.test(s) ||
+        /\bdelivery\b/i.test(s) ||
+        /\bpacing\b/i.test(s) ||
+        /\bregister\b/i.test(s) ||
+        /\bphrases?\b/i.test(s));
+    const isAmbience =
+      /\bambien/i.test(lower) ||
+      /\broom tone\b/i.test(lower) ||
+      /\bfaint\b.*\b(?:noise|sound|hum|creak|music|chatter)\b/i.test(lower) ||
+      /\bdistant\b.*\b(?:noise|sound|creak|traffic|bird)\b/i.test(lower) ||
+      (/\bhums?\b/i.test(lower) && /\bbeneath\b/i.test(lower));
+
+    if (isSpeech) dialogueLines.push(s.trim());
+    else if (isAmbience) ambienceLines.push(s.trim());
+    else motionLines.push(s.trim());
+  }
+
+  if (!dialogueLines.length && !ambienceLines.length) return null;
+
+  return {
+    motion: motionLines.join(" "),
+    dialogue: dialogueLines.join(" "),
+    ambience: ambienceLines.join(" "),
+  };
+}
+
 /** True when the video prompt uses EDIT — Motion / Dialogue / Ambience blocks. */
 export function parseVideoPromptEditableSections(editable: string): VideoPromptEditableSections & { isStructured: boolean } {
   const raw = editable.replace(/\r\n/g, "\n");
   if (!raw.trim()) {
     return { motion: "", dialogue: "", ambience: "", isStructured: false };
   }
-  if (!/EDIT\s*[—:-]\s*Motion\b/im.test(raw)) {
-    return { motion: raw.trim(), dialogue: "", ambience: "", isStructured: false };
+  if (/EDIT\s*[—:-]\s*Motion\b/im.test(raw)) {
+    const motionM = raw.match(/EDIT\s*[—:-]\s*Motion\s*[:\n]\s*([\s\S]*?)(?=\n\s*EDIT\s*[—:-]\s*Dialogue\b|$)/i);
+    const dialogueM = raw.match(/EDIT\s*[—:-]\s*Dialogue\s*[:\n]\s*([\s\S]*?)(?=\n\s*EDIT\s*[—:-]\s*Ambience\b|$)/i);
+    const ambienceM = raw.match(
+      /EDIT\s*[—:-]\s*Ambience\s*[:\n]\s*([\s\S]*?)(?=\n\s*\*{0,2}TECHNICAL|\n\s*TECHNICAL\b|$)/i,
+    );
+    return {
+      motion: motionM?.[1]?.trim() ?? "",
+      dialogue: dialogueM?.[1]?.trim() ?? "",
+      ambience: ambienceM?.[1]?.trim() ?? "",
+      isStructured: true,
+    };
   }
-  const motionM = raw.match(/EDIT\s*[—:-]\s*Motion\s*[:\n]\s*([\s\S]*?)(?=\n\s*EDIT\s*[—:-]\s*Dialogue\b|$)/i);
-  const dialogueM = raw.match(/EDIT\s*[—:-]\s*Dialogue\s*[:\n]\s*([\s\S]*?)(?=\n\s*EDIT\s*[—:-]\s*Ambience\b|$)/i);
-  const ambienceM = raw.match(
-    /EDIT\s*[—:-]\s*Ambience\s*[:\n]\s*([\s\S]*?)(?=\n\s*\*{0,2}TECHNICAL|\n\s*TECHNICAL\b|$)/i,
-  );
-  return {
-    motion: motionM?.[1]?.trim() ?? "",
-    dialogue: dialogueM?.[1]?.trim() ?? "",
-    ambience: ambienceM?.[1]?.trim() ?? "",
-    isStructured: true,
-  };
+
+  const legacy = extractLegacySections(raw);
+  if (legacy) {
+    return { ...legacy, isStructured: true };
+  }
+
+  return { motion: raw.trim(), dialogue: "", ambience: "", isStructured: false };
 }
 
 export function composeVideoPromptEditableSections(parts: VideoPromptEditableSections): string {
