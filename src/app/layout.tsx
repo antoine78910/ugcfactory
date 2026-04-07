@@ -5,6 +5,7 @@ import "./globals.css";
 import { CreditsPlanProvider } from "@/app/_components/CreditsPlanContext";
 import { Toaster } from "@/components/ui/sonner";
 import HeyoInit from "@/app/_components/HeyoInit";
+import ClarityInit from "@/app/_components/ClarityInit";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -71,6 +72,7 @@ export default function RootLayout({
         />
         <CreditsPlanProvider>
           <HeyoInit />
+          <ClarityInit />
           {children}
         </CreditsPlanProvider>
         <Toaster richColors />
