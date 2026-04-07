@@ -89,6 +89,7 @@ import {
   normalizeUgcScriptVideoDurationSec,
 } from "@/lib/ugcAiScriptBrief";
 import { parseUgcI2v30sParts } from "@/lib/ugcI2vParse";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { LINK_TO_AD_LOADING_MESSAGES } from "@/lib/linkToAd/loadingMessageLoops";
 import { assertStudioImageUpload, STUDIO_IMAGE_FILE_ACCEPT } from "@/lib/studioUploadValidation";
 import {
@@ -976,6 +977,15 @@ export default function LinkToAdUniverse({
 }: LinkToAdUniverseProps) {
   const reduceMotion = useReducedMotion();
   const { planId, current: creditsBalance, spendCredits, grantCredits } = useCreditsPlan();
+
+  const [_userEmail, _setUserEmail] = useState<string | null>(null);
+  useEffect(() => {
+    createSupabaseBrowserClient()
+      .auth.getUser()
+      .then(({ data }) => _setUserEmail(data.user?.email ?? null))
+      .catch(() => {});
+  }, []);
+  const _30sUnlocked = _userEmail === "anto.delbos@mail.com";
   /** After a fresh store scan starts, gate later steps against this snapshot so the wallet UI does not “jump” each step. Resync on image/video redo actions only. */
   const [ltaFrozenCredits, setLtaFrozenCredits] = useState<number | null>(null);
   const creditsBalanceRef = useRef(creditsBalance);
@@ -4671,22 +4681,30 @@ export default function LinkToAdUniverse({
               </p>
             ) : (
               <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] p-1">
-                {[5, 10, 15, 30].map((d) => (
-                  <button
-                    key={d}
-                    type="button"
-                    onClick={() => setVideoDuration(d)}
-                    disabled={isWorking}
-                    className={cn(
-                      "rounded-md px-3 py-1.5 text-xs font-semibold transition",
-                      videoDuration === d
-                        ? "bg-violet-500/15 text-white border border-violet-400/60"
-                        : "bg-black/20 text-white/65 hover:border-white/20 border border-white/10",
-                    )}
-                  >
-                    {d}s
-                  </button>
-                ))}
+                {[5, 10, 15, 30].map((d) => {
+                  const locked30 = d === 30 && !_30sUnlocked;
+                  return (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => { if (!locked30) setVideoDuration(d); }}
+                      disabled={isWorking || locked30}
+                      className={cn(
+                        "rounded-md px-3 py-1.5 text-xs font-semibold transition relative",
+                        videoDuration === d
+                          ? "bg-violet-500/15 text-white border border-violet-400/60"
+                          : locked30
+                            ? "bg-black/20 text-white/25 border border-white/5 cursor-not-allowed"
+                            : "bg-black/20 text-white/65 hover:border-white/20 border border-white/10",
+                      )}
+                    >
+                      {d}s
+                      {locked30 && (
+                        <span className="ml-1 text-[9px] uppercase tracking-wider text-white/30">soon</span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
