@@ -926,7 +926,7 @@ function extractLegacySections(text: string): { motion: string; dialogue: string
 
   let dialogueEnd = quoteEnd;
   const voiceAfter = after.match(
-    /^[^.]*?\.\s*(?:[^.]*?\b(?:voice|register|pacing|delivery|tone|phrases?|inflection|pauses?|realization|emphasis)\b[^.]*\.)?/i,
+    /^\s*(?:[^.]*\b(?:voice|register|pacing|delivery|tone|phrases?|inflection|pauses?|realization|emphasis)\b[^.]*\.\s*){1,2}/i,
   );
   if (voiceAfter) {
     dialogueEnd = quoteEnd + voiceAfter[0].length;
@@ -941,7 +941,7 @@ function extractLegacySections(text: string): { motion: string; dialogue: string
   // --- 2. Extract ambience sentences ---
   const ambienceParts: string[] = [];
   const ambienceRe =
-    /[^.]*?\b(?:ambient|room tone|faint\s+\w+\s+(?:noise|sound|hum|creak|music|chatter)|distant\s+\w+\s+(?:noise|sound|creak|traffic|bird)|hums?\s+beneath|settling around)\b[^.]*\./gi;
+    /[^.]*?\b(?:ambient|ambience|room tone|faint\s+(?:(?:\w+\s+){0,3})?(?:noise|sound|hum|hums|creak|music|chatter)|distant\s+(?:(?:\w+\s+){0,3})?(?:noise|sound|creak|traffic|bird)|hums?\s+beneath|settling around)\b[^.]*\./gi;
   let am: RegExpExecArray | null;
   while ((am = ambienceRe.exec(working)) !== null) {
     ambienceParts.push(am[0].trim());
