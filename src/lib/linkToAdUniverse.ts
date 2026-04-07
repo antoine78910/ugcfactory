@@ -884,49 +884,79 @@ export type VideoPromptEditableSections = {
 };
 
 /**
- * Heuristic: extract spoken dialogue (quoted text with "He/She speaks…" lead-in)
- * and ambient sound sentences from an unstructured video prompt blob.
+ * Heuristic: extract spoken dialogue (quoted text + voice description)
+ * and ambient sound region from an unstructured video prompt blob.
+ * Works by locating quoted speech blocks, voice description, and ambient
+ * sound — rather than naively splitting on sentence boundaries which
+ * breaks text inside quotation marks.
  */
 function extractLegacySections(text: string): { motion: string; dialogue: string; ambience: string } | null {
-  const t = text.replace(/\r\n/g, "\n").trim();
+  let t = text.replace(/\r\n/g, "\n").trim();
   if (!t || t.length < 40) return null;
 
-  const sentences = t.split(/(?<=\.)\s+/);
-  const dialogueLines: string[] = [];
-  const ambienceLines: string[] = [];
-  const motionLines: string[] = [];
+  // --- 0. Strip stability/realism anchors ---
+  t = t
+    .replace(/\bThe scene remains consistent[^.]*\./gi, "")
+    .replace(/\bsubject identical[^.]*\./gi, "")
+    .replace(/\bno new objects[^.]*\./gi, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
 
-  for (const s of sentences) {
-    const lower = s.toLowerCase();
-    const hasQuote = /"[^"]{8,}"/.test(s);
-    const isSpeech =
-      hasQuote &&
-      (/\bspe(?:aks?|aking)\b/i.test(s) ||
-        /\bsays?\b/i.test(s) ||
-        /\bvoice\b/i.test(s) ||
-        /\bdelivery\b/i.test(s) ||
-        /\bpacing\b/i.test(s) ||
-        /\bregister\b/i.test(s) ||
-        /\bphrases?\b/i.test(s));
-    const isAmbience =
-      /\bambien/i.test(lower) ||
-      /\broom tone\b/i.test(lower) ||
-      /\bfaint\b.*\b(?:noise|sound|hum|creak|music|chatter)\b/i.test(lower) ||
-      /\bdistant\b.*\b(?:noise|sound|creak|traffic|bird)\b/i.test(lower) ||
-      (/\bhums?\b/i.test(lower) && /\bbeneath\b/i.test(lower));
+  // --- 1. Locate the quoted dialogue block and surrounding speech context ---
+  const quoteRe = /"([^"]{8,})"/;
+  const quoteMatch = quoteRe.exec(t);
+  if (!quoteMatch) return null;
 
-    if (isSpeech) dialogueLines.push(s.trim());
-    else if (isAmbience) ambienceLines.push(s.trim());
-    else motionLines.push(s.trim());
+  const quoteStart = quoteMatch.index;
+  const quoteEnd = quoteMatch.index + quoteMatch[0].length;
+
+  const before = t.slice(0, quoteStart);
+  const after = t.slice(quoteEnd);
+
+  const lastPeriod = before.lastIndexOf(". ");
+  let dialogueStart = quoteStart;
+  if (lastPeriod >= 0) {
+    const intro = before.slice(lastPeriod + 2);
+    if (/\b(?:speaks?|says?|delivers?|pacing|thoughtful|voice|whispers?)\b/i.test(intro)) {
+      dialogueStart = lastPeriod + 2;
+    }
+  } else if (/\b(?:speaks?|says?|delivers?|pacing|thoughtful|voice)\b/i.test(before)) {
+    dialogueStart = 0;
   }
 
-  if (!dialogueLines.length && !ambienceLines.length) return null;
+  let dialogueEnd = quoteEnd;
+  const voiceAfter = after.match(
+    /^[^.]*?\.\s*(?:[^.]*?\b(?:voice|register|pacing|delivery|tone|phrases?|inflection|pauses?|realization|emphasis)\b[^.]*\.)?/i,
+  );
+  if (voiceAfter) {
+    dialogueEnd = quoteEnd + voiceAfter[0].length;
+  }
 
-  return {
-    motion: motionLines.join(" "),
-    dialogue: dialogueLines.join(" "),
-    ambience: ambienceLines.join(" "),
-  };
+  const dialogue = t.slice(dialogueStart, dialogueEnd).trim();
+
+  let working = (t.slice(0, dialogueStart) + " " + t.slice(dialogueEnd))
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+  // --- 2. Extract ambience sentences ---
+  const ambienceParts: string[] = [];
+  const ambienceRe =
+    /[^.]*?\b(?:ambient|room tone|faint\s+\w+\s+(?:noise|sound|hum|creak|music|chatter)|distant\s+\w+\s+(?:noise|sound|creak|traffic|bird)|hums?\s+beneath|settling around)\b[^.]*\./gi;
+  let am: RegExpExecArray | null;
+  while ((am = ambienceRe.exec(working)) !== null) {
+    ambienceParts.push(am[0].trim());
+  }
+  for (const part of ambienceParts) {
+    working = working.replace(part, " ");
+  }
+  working = working.replace(/\s{2,}/g, " ").trim();
+
+  const ambience = ambienceParts.join(" ").trim();
+  const motion = working.replace(/\.\s*$/, ".").trim();
+
+  if (!dialogue && !ambience) return null;
+
+  return { motion, dialogue, ambience };
 }
 
 /** True when the video prompt uses EDIT — Motion / Dialogue / Ambience blocks. */
@@ -989,6 +1019,14 @@ export function splitUgcVideoPromptForEditing(body: string): { editable: string;
     return {
       editable: t.slice(0, deviceLine.index).trim(),
       technicalTail: t.slice(deviceLine.index).replace(/^\n+/, "").trim(),
+    };
+  }
+
+  const deviceInline = /(?<=\.)\s+(?=Shot on|Recorded with)\s*/i.exec(t);
+  if (deviceInline && deviceInline.index !== undefined) {
+    return {
+      editable: t.slice(0, deviceInline.index + 1).trim(),
+      technicalTail: t.slice(deviceInline.index + 1).trim(),
     };
   }
 
