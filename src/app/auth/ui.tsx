@@ -92,6 +92,11 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
       });
       if (error) throw error;
       window.datafast?.("signup", { email: cleanEmail });
+      fetch("/api/track/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: cleanEmail }),
+      }).catch(() => {});
       toast.success("Account created", { description: "Check your inbox to confirm your email." });
       router.push(`/auth/check-email?email=${encodeURIComponent(cleanEmail)}`);
       router.refresh();

@@ -30,6 +30,7 @@ import {
   resetSubscriptionCredits,
   addPackCredits as addPackCreditsLedger,
 } from "@/lib/creditGrants";
+import { brevoUpsertContact, brevoTrackEvent } from "@/lib/brevo";
 
 /** Safely convert a Stripe Unix-second timestamp to an ISO string; returns null on invalid input. */
 function safePeriodEndIso(raw: unknown): string | null {
@@ -149,11 +150,47 @@ export async function POST(req: Request) {
           const packKey = session.metadata?.credit_pack ?? "";
           if (isCreditPackKey(packKey)) {
             const credits = CREDIT_PACK_CREDITS[packKey] ?? 0;
-            // Pack credits expire after 3 months
             await addPackCreditsLedger(admin, userId, credits);
             serverLog("stripe_webhook_credits_granted", { userId, packKey, credits });
           }
         }
+
+        // --- Brevo: track payment event (non-blocking) ---
+        try {
+          const customerEmail =
+            (session.customer_details as any)?.email ??
+            (session.customer_email as string | null);
+          let email = typeof customerEmail === "string" ? customerEmail.trim().toLowerCase() : "";
+          if (!email) {
+            const { data: authUser } = await admin.auth.admin.getUserById(userId);
+            email = authUser?.user?.email?.trim().toLowerCase() ?? "";
+          }
+          if (email) {
+            const amountTotal = (session.amount_total ?? 0) / 100;
+            const currency = (session as any).currency ?? "usd";
+            const isSubscription = session.mode === "subscription";
+            const planId = session.metadata?.subscription_plan ?? "";
+            const packKey = session.metadata?.credit_pack ?? "";
+            void brevoUpsertContact(email, {
+              PAID: "true",
+              LAST_PAYMENT_DATE: new Date().toISOString().slice(0, 10),
+              ...(isSubscription && planId ? { PLAN: planId } : {}),
+            });
+            void brevoTrackEvent(email, "payment", {
+              eventProperties: {
+                type: isSubscription ? "subscription" : "credit_pack",
+                plan: planId || packKey || "unknown",
+                amount: amountTotal,
+                currency,
+              },
+            });
+          }
+        } catch (brevoErr) {
+          serverLog("stripe_webhook_brevo_error", {
+            error: brevoErr instanceof Error ? brevoErr.message : "unknown",
+          });
+        }
+
         break;
       }
 

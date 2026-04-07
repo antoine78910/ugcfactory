@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/supabase/env";
+import { brevoUpsertContact, brevoTrackEvent } from "@/lib/brevo";
 
 export async function GET(req: NextRequest) {
   const url = req.nextUrl;
@@ -104,6 +105,29 @@ export async function GET(req: NextRequest) {
       console.log("[auth/callback] exchangeCodeForSession success; redirect home", {
         setCookieNames: redactedCookieNames(redirectResponse.cookies.getAll() as any),
       });
+
+      // Fire Brevo signup event (non-blocking). Runs on every callback but Brevo
+      // deduplicates contacts; the automation workflow filters by event date.
+      try {
+        const { data: userData } = await supabase.auth.getUser();
+        const email = userData?.user?.email?.trim();
+        if (email) {
+          const createdAt = userData.user?.created_at;
+          const isNewUser =
+            createdAt && Date.now() - new Date(createdAt).getTime() < 60_000;
+          void brevoUpsertContact(email, {
+            SIGNUP_DATE: new Date().toISOString().slice(0, 10),
+          });
+          if (isNewUser) {
+            void brevoTrackEvent(email, "signup", {
+              eventProperties: { source: "app", method: "oauth_or_magic_link" },
+            });
+          }
+        }
+      } catch {
+        /* never block the redirect */
+      }
+
       return redirectResponse;
     }
 
