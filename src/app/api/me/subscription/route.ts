@@ -99,16 +99,39 @@ export async function GET() {
   const auth = await requireSupabaseUser();
   if (auth.response) return auth.response;
 
-  // Allowlisted accounts get unlimited access — skip Stripe entirely.
+  // Allowlisted accounts get unlimited access, but still query Stripe for
+  // cancel-at-period-end / period-end so the UI reflects cancellation state.
   if (isAllowedUser(auth.user.email)) {
-    return NextResponse.json({
+    const base: MeSubscriptionResponse = {
       planId: "scale" as AccountPlanId,
       billing: null,
       userId: auth.user.id,
       unlimited: true,
       autoEnablePersonalApi: true,
       creditBalance: 999_999,
-    } satisfies MeSubscriptionResponse);
+    };
+    const sk = process.env.STRIPE_SECRET_KEY?.trim();
+    if (sk && auth.user.email) {
+      try {
+        const stripe = new Stripe(sk, { apiVersion: "2026-02-25.clover" });
+        const custs = await stripe.customers.list({ email: auth.user.email, limit: 5 });
+        for (const c of custs.data) {
+          const subs = await stripe.subscriptions.list({ customer: c.id, status: "active", limit: 3 });
+          for (const sub of subs.data) {
+            const rawEnd = (sub as any).current_period_end;
+            const endMs = typeof rawEnd === "number" && rawEnd > 0 ? rawEnd * 1000 : NaN;
+            base.currentPeriodEndIso = Number.isFinite(endMs) ? new Date(endMs).toISOString() : null;
+            base.cancelAtPeriodEnd = Boolean(sub.cancel_at_period_end);
+            base.billing = sub.items.data[0]?.price?.recurring?.interval === "year" ? "yearly" : "monthly";
+            break;
+          }
+          if (base.cancelAtPeriodEnd !== undefined) break;
+        }
+      } catch (e) {
+        console.error("[me/subscription] allowed-user Stripe check:", e);
+      }
+    }
+    return NextResponse.json(base satisfies MeSubscriptionResponse);
   }
 
   const userId = auth.user.id;

@@ -260,6 +260,11 @@ export function flattenAnglePipeToTopLevel(
   };
 }
 
+/** A slot expects a part 2 clip only when a part 2 prompt was actually stored (30s workflow). */
+function slotExpectsPart2(s: KlingReferenceSlotV1): boolean {
+  return Boolean(s.ugcVideoPromptPart2?.trim());
+}
+
 /** First pending Kling task anywhere (multi-angle), for server finalize. */
 export function findPendingKlingInUniverse(snap: LinkToAdUniverseSnapshotV1): {
   angleIndex: 0 | 1 | 2;
@@ -273,12 +278,13 @@ export function findPendingKlingInUniverse(snap: LinkToAdUniverseSnapshotV1): {
     const slots = triple[a].klingByReferenceIndex;
     if (!Array.isArray(slots) || slots.length < 3) continue;
     for (let r = 0; r < 3; r++) {
-      const tid = typeof slots[r]?.taskId === "string" ? slots[r].taskId!.trim() : "";
-      const v = typeof slots[r]?.videoUrl === "string" ? slots[r].videoUrl!.trim() : "";
-      const v2 = typeof slots[r]?.videoUrlPart2 === "string" ? slots[r].videoUrlPart2!.trim() : "";
+      const s = slots[r];
+      const tid = typeof s?.taskId === "string" ? s.taskId.trim() : "";
+      const v = typeof s?.videoUrl === "string" ? s.videoUrl.trim() : "";
+      const v2 = typeof s?.videoUrlPart2 === "string" ? s.videoUrlPart2.trim() : "";
       if (tid && !v)
         return { angleIndex: a as 0 | 1 | 2, refIndex: r as 0 | 1 | 2, taskId: tid, clipPart: 1 };
-      if (tid && v && !v2)
+      if (tid && v && !v2 && slotExpectsPart2(s))
         return { angleIndex: a as 0 | 1 | 2, refIndex: r as 0 | 1 | 2, taskId: tid, clipPart: 2 };
     }
   }
@@ -290,7 +296,7 @@ export function findPendingKlingInUniverse(snap: LinkToAdUniverseSnapshotV1): {
   const tid = slotsNorm[legacyRef]?.taskId?.trim();
   if (!tid) return null;
   const v = typeof slotsNorm[legacyRef]?.videoUrl === "string" ? slotsNorm[legacyRef].videoUrl!.trim() : "";
-  const clipPart: 1 | 2 = v ? 2 : 1;
+  const clipPart: 1 | 2 = v && slotExpectsPart2(slotsNorm[legacyRef]) ? 2 : 1;
   return { angleIndex: ai, refIndex: legacyRef as 0 | 1 | 2, taskId: tid, clipPart };
 }
 
@@ -422,7 +428,7 @@ export function universeHasPendingKlingTask(snap: LinkToAdUniverseSnapshotV1 | n
       const v = typeof s.videoUrl === "string" ? s.videoUrl.trim() : "";
       const v2 = typeof s.videoUrlPart2 === "string" ? s.videoUrlPart2.trim() : "";
       if (tid && !v) return true;
-      if (tid && v && !v2) return true;
+      if (tid && v && !v2 && slotExpectsPart2(s)) return true;
     }
   }
   return false;
@@ -432,11 +438,12 @@ export function universeHasPendingKlingTask(snap: LinkToAdUniverseSnapshotV1 | n
 export function findPendingKlingSlotIndex(snap: LinkToAdUniverseSnapshotV1): number | null {
   const slots = normalizeKlingByReference(snap);
   for (let i = 0; i < slots.length; i++) {
-    const tid = typeof slots[i].taskId === "string" ? slots[i].taskId!.trim() : "";
-    const v = typeof slots[i].videoUrl === "string" ? slots[i].videoUrl!.trim() : "";
-    const v2 = typeof slots[i].videoUrlPart2 === "string" ? slots[i].videoUrlPart2!.trim() : "";
+    const s = slots[i];
+    const tid = typeof s.taskId === "string" ? s.taskId.trim() : "";
+    const v = typeof s.videoUrl === "string" ? s.videoUrl.trim() : "";
+    const v2 = typeof s.videoUrlPart2 === "string" ? s.videoUrlPart2.trim() : "";
     if (tid && !v) return i;
-    if (tid && v && !v2) return i;
+    if (tid && v && !v2 && slotExpectsPart2(s)) return i;
   }
   return null;
 }
