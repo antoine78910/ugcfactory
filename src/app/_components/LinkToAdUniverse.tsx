@@ -200,8 +200,45 @@ function angleBriefPartsFromScriptOption(
   return { brief: teaser, full: teaser, canExpand };
 }
 
+function spokenLinesFromPartBlock(partText: string): string[] {
+  const text = partText.replace(/\r\n/g, "\n").trim();
+  if (!text) return [];
+  const quoted = [...text.matchAll(/"([^"]+)"/g)].map((m) => m[1].trim()).filter(Boolean);
+  if (quoted.length) return quoted;
+  return text
+    .split("\n")
+    .map((line) => line.replace(/\([^)]*\)/g, " ").replace(/^\s*[*•-]\s*/, "").replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+}
+
+/**
+ * New Claude 30s format can include large VOICE PROFILE / METADATA blocks.
+ * Keep the angle editor compact by showing only spoken script lines.
+ */
+function compactSummaryFromPartBasedScript(raw: string): string | null {
+  const t = raw.replace(/\r\n/g, "\n").trim();
+  if (!t) return null;
+
+  const p1 = /(?:^|\n)\s*\*{0,2}\s*PART\s*1\s*\*{0,2}\s*\n([\s\S]*?)(?=\n\s*\*{0,2}\s*PART\s*2\s*\*{0,2}\s*\n|$)/i.exec(t)?.[1] ?? "";
+  const p2 = /(?:^|\n)\s*\*{0,2}\s*PART\s*2\s*\*{0,2}\s*\n([\s\S]*?)(?=\n\s*-{3,}\s*\n|\n\s*\*{0,2}\s*VIDEO_METADATA\s*\*{0,2}\s*\n|$)/i.exec(t)?.[1] ?? "";
+
+  if (!p1.trim() && !p2.trim()) return null;
+
+  const p1Lines = spokenLinesFromPartBlock(p1);
+  const p2Lines = spokenLinesFromPartBlock(p2);
+
+  const hook = p1Lines[0] ?? "";
+  const problem = p1Lines[1] ?? "";
+  const benefits = p2Lines[0] ?? "";
+  const cta = p2Lines[1] ?? "";
+  const lines = [hook, problem, benefits, cta].filter(Boolean);
+  return lines.length ? lines.join("\n") : null;
+}
+
 function angleFullSummaryFromScriptOption(raw: string): string {
   const { editable, headline } = angleBlockForEditing(raw);
+  const compactFromParts = compactSummaryFromPartBasedScript(editable);
+  if (compactFromParts) return compactFromParts;
   const factors = splitScriptFactorsForUi(editable, headline);
   const lines = [
     factors.hook?.trim(),
