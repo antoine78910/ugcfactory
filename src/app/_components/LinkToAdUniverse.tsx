@@ -1419,6 +1419,10 @@ export default function LinkToAdUniverse({
   const klingTaskId = activeKlingSlot.taskId;
   const klingHistory = activeKlingSlot.history;
 
+  const activeSlotIs30s = Boolean(
+    selImg !== null && klingByRef[selImg]?.ugcVideoPromptPart2?.trim(),
+  );
+
   const klingRenderingThisReference = Boolean(
     klingPollTaskId &&
       klingPollImageIndex !== null &&
@@ -6478,7 +6482,7 @@ export default function LinkToAdUniverse({
                         ) : klingVideoUrl ? (
                           <>
                             <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-5">
-                              {klingVideoUrlPart2 ? (
+                              {activeSlotIs30s && klingVideoUrlPart2 ? (
                                 <div className="flex w-full flex-col gap-6 lg:flex-row lg:items-start lg:gap-6">
                                   <div className="flex flex-col items-center">
                                     <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-white/50">
@@ -6510,7 +6514,7 @@ export default function LinkToAdUniverse({
                                 </div>
                               ) : (
                                 <div className="mx-auto w-[11.5rem] max-w-full shrink-0 sm:mx-0 sm:w-[12.5rem]">
-                                  {normalizeUgcScriptVideoDurationSec(videoDuration) === 30 ? (
+                                  {activeSlotIs30s && !klingVideoUrlPart2 ? (
                                     <p className="mb-1 text-center text-[10px] font-semibold uppercase tracking-wide text-amber-200/75">
                                       Part 1 (15s)
                                     </p>
@@ -6547,7 +6551,7 @@ export default function LinkToAdUniverse({
                                     </span>
                                   )}
                                 </Button>
-                                {klingVideoUrlPart2?.trim() ? (
+                                {activeSlotIs30s && klingVideoUrlPart2?.trim() ? (
                                   <div className="flex w-full flex-col gap-2">
                                     <Button
                                       variant="secondary"
