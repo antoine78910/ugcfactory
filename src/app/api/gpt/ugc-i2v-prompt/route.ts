@@ -31,9 +31,11 @@ export async function POST(req: Request) {
   const developer = [
     "Follow OUTPUT FORMAT in the user instructions exactly.",
     videoDurationSeconds === 30
-      ? "For 30s: output PROMPT PART 1, PROMPT PART 2, then one FULL SEQUENCE line. Each part 120–180 words. Plain text only, no markdown."
-      : "For 5s/10s/15s: output ONE compact prompt (120–180 words) as a continuous cinematic description. Plain text only, no markdown.",
+      ? "For 30s: output PROMPT PART 1 and PROMPT PART 2 only. Each part 120–180 words and internally structured with EDIT — Motion / EDIT — Dialogue / EDIT — Ambience blocks."
+      : "For 5s/10s/15s: output ONE prompt structured with EDIT — Motion / EDIT — Dialogue / EDIT — Ambience blocks.",
     "The script and VIDEO_METADATA are the source of truth for dialogue and product behavior.",
+    "Non-interactive mode: never ask for more inputs, never request image/script, never explain what you need, never add prefaces/disclaimers.",
+    "Return the prompt content directly and nothing else.",
   ].join("\n");
 
   const user = [
@@ -44,6 +46,8 @@ export async function POST(req: Request) {
     videoDurationSeconds === 30
       ? "You MUST output PROMPT PART 1 and PROMPT PART 2 (30s workflow — two 15s clips)."
       : "Output a single continuous video prompt (not PART 1 / PART 2).",
+    "The reference image is already selected and available in this pipeline. Do not ask for it.",
+    "Do not ask questions. Do not ask for additional inputs. Produce final prompts now.",
     "",
     "UGC SCRIPT FOR THIS ANGLE (includes voice profile — use it):",
     angleScript,

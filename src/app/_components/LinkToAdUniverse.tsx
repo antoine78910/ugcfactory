@@ -3845,7 +3845,11 @@ export default function LinkToAdUniverse({
       if (!res.ok || !json.data) throw new Error(json.error || "Video prompt failed");
       const text = String(json.data);
       setUgcVideoPromptGpt(text);
-      hydrateVideoPromptFromStored(text);
+      const displayPrompt =
+        normalizeUgcScriptVideoDurationSec(videoDuration) === 30 && json.part1?.trim()
+          ? String(json.part1)
+          : text;
+      hydrateVideoPromptFromStored(displayPrompt);
       const idx = nanoBananaSelectedImageIndex;
       if (idx === 0 || idx === 1 || idx === 2) {
         const p30 =
