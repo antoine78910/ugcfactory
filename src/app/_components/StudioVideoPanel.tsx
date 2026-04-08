@@ -434,6 +434,7 @@ function FrameSlot({
   onClear,
   disabled,
   avatarLibraryBadge,
+  onAvatarBadgeClick,
 }: {
   label: string;
   optional?: boolean;
@@ -444,19 +445,40 @@ function FrameSlot({
   onPick: () => void;
   onClear: () => void;
   disabled?: boolean;
-  /** Small app icon hint: use “Upload my avatar” for published avatars */
+  /** Avatar-library shortcut in the corner */
   avatarLibraryBadge?: boolean;
+  /** Opens avatar picker without triggering file upload / clear */
+  onAvatarBadgeClick?: () => void;
 }) {
   const display = url || previewUrl;
+  const activateSlot = () => {
+    if (disabled) return;
+    if (display) onClear();
+    else onPick();
+  };
   return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={() => (display ? onClear() : onPick())}
-      className="relative flex aspect-[5/4] w-full flex-col items-center justify-center overflow-hidden rounded-xl border border-dashed border-white/20 bg-[#0c0c10] text-white/50 transition hover:border-violet-400/40 hover:bg-white/[0.03] disabled:opacity-50"
+    <div
+      role="button"
+      tabIndex={disabled ? -1 : 0}
+      aria-disabled={disabled}
+      onClick={activateSlot}
+      onKeyDown={(ev) => {
+        if (ev.key === "Enter" || ev.key === " ") {
+          ev.preventDefault();
+          activateSlot();
+        }
+      }}
+      className={cn(
+        "relative flex aspect-[5/4] w-full flex-col items-center justify-center overflow-hidden rounded-xl border border-dashed border-white/20 bg-[#0c0c10] text-white/50 transition hover:border-violet-400/40 hover:bg-white/[0.03]",
+        disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer",
+      )}
     >
       {avatarLibraryBadge ? (
-        <AvatarInputCornerBadge align={optional ? "left" : "right"} />
+        <AvatarInputCornerBadge
+          align={optional ? "left" : "right"}
+          onClick={onAvatarBadgeClick}
+          disabled={disabled}
+        />
       ) : null}
       {optional ? (
         <span className="absolute right-2 top-2 z-[1] rounded-md bg-white/10 px-2 py-0.5 text-[10px] font-medium text-white/60">
@@ -478,7 +500,7 @@ function FrameSlot({
       {display ? (
         <span className="absolute bottom-2 z-[1] rounded-md bg-black/70 px-2 py-1 text-[10px] text-white">Tap to remove</span>
       ) : null}
-    </button>
+    </div>
   );
 }
 
@@ -682,7 +704,9 @@ export default function StudioVideoPanel({
   const [elementUploadPreviewBlob, setElementUploadPreviewBlob] = useState<string | null>(null);
   const [avatarUrls, setAvatarUrls] = useState<string[]>([]);
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
-  const [avatarPickTarget, setAvatarPickTarget] = useState<"create_start" | "edit_motion" | "edit_elements">("create_start");
+  const [avatarPickTarget, setAvatarPickTarget] = useState<
+    "create_start" | "create_end" | "edit_motion" | "edit_elements"
+  >("create_start");
 
   const meta = MODEL_OPTIONS.find((m) => m.id === modelId)!;
   /** Seedance / non-Kling KIE models need a start image; Veo, Sora, Kling 2.6/3.0 text-to-video do not. */
@@ -838,6 +862,13 @@ export default function StudioVideoPanel({
     toast.success("Avatar set as start frame");
   }, []);
 
+  const applyAvatarToEndFrame = useCallback((avatarUrl: string) => {
+    const u = avatarUrl.trim();
+    if (!u) return;
+    setEndUrl(u);
+    toast.success("Avatar set as end frame");
+  }, []);
+
   const applyAvatarToMotionCharacter = useCallback((avatarUrl: string) => {
     const u = avatarUrl.trim();
     if (!u) return;
@@ -862,9 +893,19 @@ export default function StudioVideoPanel({
         applyAvatarToElements(url);
         return;
       }
+      if (avatarPickTarget === "create_end") {
+        applyAvatarToEndFrame(url);
+        return;
+      }
       applyAvatarToStartFrame(url);
     },
-    [avatarPickTarget, applyAvatarToMotionCharacter, applyAvatarToElements, applyAvatarToStartFrame],
+    [
+      avatarPickTarget,
+      applyAvatarToMotionCharacter,
+      applyAvatarToElements,
+      applyAvatarToStartFrame,
+      applyAvatarToEndFrame,
+    ],
   );
 
   const pickEditSourceVideo = useCallback(() => {
@@ -1658,6 +1699,10 @@ export default function StudioVideoPanel({
                     uploading={editUploadBusy && Boolean(motionCharPreviewBlob)}
                     disabled={editUploadBusy}
                     onPick={pickMotionCharacter}
+                    onAvatarBadgeClick={() => {
+                      setAvatarPickTarget("edit_motion");
+                      setAvatarPickerOpen(true);
+                    }}
                     onClear={() => {
                       setEditMotionImageUrl(null);
                       setMotionCharPreviewBlob((prev) => {
@@ -1897,6 +1942,10 @@ export default function StudioVideoPanel({
                   uploading={frameUploadBusy && frameUploadSlot === "start"}
                   disabled={frameUploadBusy}
                   onPick={() => pickFrame("start")}
+                  onAvatarBadgeClick={() => {
+                    setAvatarPickTarget("create_start");
+                    setAvatarPickerOpen(true);
+                  }}
                   onClear={() => {
                     setStartUrl(null);
                     setStartFramePreviewBlob((prev) => {
@@ -1914,6 +1963,10 @@ export default function StudioVideoPanel({
                   uploading={frameUploadBusy && frameUploadSlot === "end"}
                   disabled={frameUploadBusy}
                   onPick={() => pickFrame("end")}
+                  onAvatarBadgeClick={() => {
+                    setAvatarPickTarget("create_end");
+                    setAvatarPickerOpen(true);
+                  }}
                   onClear={() => {
                     setEndUrl(null);
                     setEndFramePreviewBlob((prev) => {

@@ -1,35 +1,60 @@
 "use client";
 
-import Image from "next/image";
+import { User } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Props = {
   /** When the slot already has a top-right label (e.g. “Optional”), place the badge on the left. */
   align?: "left" | "right";
   className?: string;
+  /** Opens avatar library picker; click is isolated from the parent drop zone. */
+  onClick?: () => void;
+  disabled?: boolean;
 };
+
+const iconClass = "h-3.5 w-3.5 shrink-0";
 
 /**
  * Compact avatar-library hint on image drop zones (Motion Control character, Studio frames, etc.).
  */
-export function AvatarInputCornerBadge({ align = "right", className }: Props) {
+export function AvatarInputCornerBadge({ align = "right", className, onClick, disabled }: Props) {
+  const position = cn(
+    "absolute top-1.5 z-[4] flex h-6 w-6 items-center justify-center rounded-md border border-white/20 bg-[#08080c]/90 shadow-sm backdrop-blur-sm",
+    align === "left" ? "left-1.5" : "right-1.5",
+    className,
+  );
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        disabled={disabled}
+        className={cn(
+          position,
+          "pointer-events-auto text-white/85 transition",
+          !disabled && "hover:border-violet-400/45 hover:bg-[#12121a]/95",
+          disabled && "cursor-not-allowed opacity-45",
+        )}
+        title="Pick avatar from library"
+        aria-label="Pick avatar from library"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onClick();
+        }}
+      >
+        <User className={iconClass} aria-hidden />
+      </button>
+    );
+  }
+
   return (
     <span
-      className={cn(
-        "pointer-events-none absolute top-1.5 z-[2] flex h-6 w-6 items-center justify-center rounded-md border border-white/20 bg-[#08080c]/90 shadow-sm backdrop-blur-sm",
-        align === "left" ? "left-1.5" : "right-1.5",
-        className,
-      )}
+      className={cn(position, "pointer-events-none text-white/55")}
       title="You can pick a published avatar via “Upload my avatar” below"
       aria-hidden
     >
-      <Image
-        src="/icon.png"
-        alt=""
-        width={18}
-        height={18}
-        className="h-[18px] w-[18px] rounded object-cover opacity-95"
-      />
+      <User className={iconClass} />
     </span>
   );
 }

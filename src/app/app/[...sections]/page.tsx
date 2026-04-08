@@ -66,6 +66,7 @@ import {
 import { motionControlUpgradeMessage } from "@/lib/subscriptionModelAccess";
 import { clipboardImageFiles } from "@/lib/clipboardImage";
 import { AvatarInputCornerBadge } from "@/app/_components/AvatarInputCornerBadge";
+import { AvatarPickerDialog } from "@/app/_components/AvatarPickerDialog";
 import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
 import { userMessageFromCaughtError } from "@/lib/generationUserMessage";
 import {
@@ -75,6 +76,7 @@ import {
   STUDIO_VIDEO_FILE_ACCEPT,
 } from "@/lib/studioUploadValidation";
 import { uploadBlobUrlToCdn, uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
+import { loadAvatarUrls } from "@/lib/avatarLibrary";
 import { proxiedMediaSrc } from "@/lib/mediaProxyUrl";
 import { cn } from "@/lib/utils";
 import { WAVESPEED_PROVIDER } from "@/lib/wavespeedChain";
@@ -631,6 +633,8 @@ export default function AppBrandWizard() {
   const [motionVideoDetectedDuration, setMotionVideoDetectedDuration] = useState<number | null>(null);
   const [motionCharacterImageUrl, setMotionCharacterImageUrl] = useState<string | null>(null);
   const [motionCharacterFile, setMotionCharacterFile] = useState<File | null>(null);
+  const [motionCharacterAvatarPickerOpen, setMotionCharacterAvatarPickerOpen] = useState(false);
+  const [motionCharacterAvatarUrls, setMotionCharacterAvatarUrls] = useState<string[]>([]);
   const [motionQuality, setMotionQuality] = useState<string>("720p");
   const [motionPrompt, setMotionPrompt] = useState<string>("");
   const [adCloneOutputLanguage, setAdCloneOutputLanguage] = useState<string>(
@@ -1091,9 +1095,35 @@ export default function AppBrandWizard() {
     }
     const url = URL.createObjectURL(file);
     setMotionCharacterFile(file);
-    setMotionCharacterImageUrl(url);
+    setMotionCharacterImageUrl((prev) => {
+      if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
+      return url;
+    });
     toast.success("Character image selected", { description: file.name });
   }, []);
+
+  const applyMotionCharacterAvatarUrl = useCallback((avatarUrl: string) => {
+    const u = avatarUrl.trim();
+    if (!u) return;
+    setMotionCharacterFile(null);
+    setMotionCharacterImageUrl((prev) => {
+      if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
+      return u;
+    });
+    toast.success("Avatar set as character");
+  }, []);
+
+  useEffect(() => {
+    if (appSection !== "motion_control") return;
+    let cancelled = false;
+    void (async () => {
+      const urls = await loadAvatarUrls();
+      if (!cancelled) setMotionCharacterAvatarUrls(urls);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [appSection]);
 
   useEffect(() => {
     if (appSection !== "motion_control" && appSection !== "ad_clone") return;
@@ -3365,6 +3395,7 @@ export default function AppBrandWizard() {
                                 >
                                   <AvatarInputCornerBadge
                                     align={motionCharacterImageUrl ? "left" : "right"}
+                                    onClick={() => setMotionCharacterAvatarPickerOpen(true)}
                                   />
                                   {motionCharacterImageUrl ? (
                                     // eslint-disable-next-line @next/next/no-img-element
@@ -4938,6 +4969,14 @@ export default function AppBrandWizard() {
           </Card>
         </div>
       ) : null}
+
+      <AvatarPickerDialog
+        open={motionCharacterAvatarPickerOpen}
+        onOpenChange={setMotionCharacterAvatarPickerOpen}
+        avatarUrls={motionCharacterAvatarUrls}
+        onPick={applyMotionCharacterAvatarUrl}
+        title="Choose avatar for character"
+      />
 
       {lightboxUrl ? (
         <div
