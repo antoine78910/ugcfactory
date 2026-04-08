@@ -1,3 +1,5 @@
+import { normalizeUgcScriptVideoDurationSec } from "@/lib/ugcAiScriptBrief";
+
 /** Persisted Link to Ad Universe state (stored inside ugc_runs.extracted.__universe) */
 export type LinkToAdUniverseSnapshotV1 = {
   v: 1;
@@ -23,6 +25,8 @@ export type LinkToAdUniverseSnapshotV1 = {
   scriptsText: string;
   /** Seedance 2 vs Seedance 2 Fast (PiAPI `task_type`); default normal when absent. */
   ltaSeedanceSpeed?: "normal" | "fast";
+  /** Link to Ad target clip duration (5 / 10 / 15 / 30) chosen for this run; must match script & video API. */
+  ltaVideoDurationSec?: number;
   /** One label per script angle (3 or 4 SCRIPT OPTION blocks). */
   angleLabels: string[];
   /** 0–3 when four angles are stored; video/image pipeline still uses slots 0–2 only (angle 3 mirrors slot 2 until extended). */
@@ -1123,6 +1127,16 @@ export function readUniverseFromExtracted(extracted: unknown): LinkToAdUniverseS
     summaryText: typeof o.summaryText === "string" ? o.summaryText : "",
     scriptsText: typeof o.scriptsText === "string" ? o.scriptsText : "",
     ltaSeedanceSpeed: o.ltaSeedanceSpeed === "fast" ? "fast" : o.ltaSeedanceSpeed === "normal" ? "normal" : undefined,
+    ltaVideoDurationSec: (() => {
+      const raw = (o as Record<string, unknown>).ltaVideoDurationSec;
+      if (typeof raw === "number" && Number.isFinite(raw)) {
+        return normalizeUgcScriptVideoDurationSec(raw);
+      }
+      if (typeof raw === "string" && raw.trim()) {
+        return normalizeUgcScriptVideoDurationSec(Number(raw));
+      }
+      return undefined;
+    })(),
     angleLabels: parseAngleLabelsFromSnapshot(o),
     selectedAngleIndex:
       typeof o.selectedAngleIndex === "number" && o.selectedAngleIndex >= 0 && o.selectedAngleIndex <= 3

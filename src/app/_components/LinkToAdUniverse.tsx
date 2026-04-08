@@ -1700,6 +1700,7 @@ export default function LinkToAdUniverse({
       klingVideoUrl: mirror?.videoUrl ?? undefined,
       linkToAdPipelineByAngle: triple,
       ltaSeedanceSpeed,
+      ltaVideoDurationSec: normalizeUgcScriptVideoDurationSec(videoDuration),
     };
   }, [
     cleanCandidate,
@@ -1729,6 +1730,7 @@ export default function LinkToAdUniverse({
     pipelineByAngle,
     videoStageMode,
     ltaSeedanceSpeed,
+    videoDuration,
   ]);
 
   const quality = useMemo(() => confidenceToQuality(confidence ?? undefined), [confidence]);
@@ -2068,7 +2070,15 @@ export default function LinkToAdUniverse({
       setNanoPollTaskId(null);
       setKlingPollTaskId(null);
       setKlingPollImageIndex(null);
-      setLtaSeedanceSpeed(snap.ltaSeedanceSpeed === "fast" ? "fast" : "normal");
+      if (snap.ltaSeedanceSpeed === "fast" || snap.ltaSeedanceSpeed === "normal") {
+        setLtaSeedanceSpeed(snap.ltaSeedanceSpeed);
+      }
+      setVideoDuration(
+        snap.ltaVideoDurationSec != null
+          ? normalizeUgcScriptVideoDurationSec(snap.ltaVideoDurationSec)
+          : LINK_TO_AD_DEFAULT_VIDEO_DURATION_SEC,
+      );
+      setLtaVideoDurationLocked(Boolean(snap.scriptsText.trim()));
       prevAngleRef.current = snap.selectedAngleIndex;
       setLastExtractedJson(cloneExtractedBase(run.extracted));
       setStage("ready");
@@ -4688,7 +4698,7 @@ export default function LinkToAdUniverse({
             )}
           </div>
         ) : null}
-        {/* Duration + Seedance tier — locked once generation has started. */}
+        {/* Duration: locked once scripts exist / generation started so prompts stay aligned. Seedance tier stays user-editable. */}
         <div className="flex flex-wrap items-center gap-4">
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Duration</p>
@@ -4704,16 +4714,23 @@ export default function LinkToAdUniverse({
                     <button
                       key={d}
                       type="button"
-                      onClick={() => setVideoDuration(d)}
-                      disabled={isWorking}
+                      onClick={() => {
+                        if (!locked30) setVideoDuration(d);
+                      }}
+                      disabled={isWorking || locked30}
                       className={cn(
                         "rounded-md px-3 py-1.5 text-xs font-semibold transition relative",
                         videoDuration === d
                           ? "bg-violet-500/15 text-white border border-violet-400/60"
-                          : "bg-black/20 text-white/65 hover:border-white/20 border border-white/10",
+                          : locked30
+                            ? "bg-black/20 text-white/25 border border-white/5 cursor-not-allowed"
+                            : "bg-black/20 text-white/65 hover:border-white/20 border border-white/10",
                       )}
                     >
                       {d}s
+                      {locked30 && (
+                        <span className="ml-1 text-[9px] uppercase tracking-wider text-white/30">soon</span>
+                      )}
                     </button>
                   );
                 })}
@@ -4722,31 +4739,24 @@ export default function LinkToAdUniverse({
           </div>
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Seedance</p>
-            {ltaVideoDurationLocked ? (
-              <p className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/80">
-                {ltaSeedanceSpeed === "fast" ? "Fast" : "Normal"}
-                <span className="font-normal text-white/45"> (locked)</span>
-              </p>
-            ) : (
-              <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] p-1">
-                {(["normal", "fast"] as const).map((tier) => (
-                  <button
-                    key={tier}
-                    type="button"
-                    disabled={isWorking}
-                    onClick={() => setLtaSeedanceSpeed(tier)}
-                    className={cn(
-                      "rounded-md px-3 py-1.5 text-xs font-semibold transition",
-                      ltaSeedanceSpeed === tier
-                        ? "bg-violet-500/15 text-white border border-violet-400/60"
-                        : "bg-black/20 text-white/65 hover:border-white/20 border border-white/10",
-                    )}
-                  >
-                    {tier === "fast" ? "Fast" : "Normal"}
-                  </button>
-                ))}
-              </div>
-            )}
+            <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] p-1">
+              {(["normal", "fast"] as const).map((tier) => (
+                <button
+                  key={tier}
+                  type="button"
+                  disabled={isWorking}
+                  onClick={() => setLtaSeedanceSpeed(tier)}
+                  className={cn(
+                    "rounded-md px-3 py-1.5 text-xs font-semibold transition",
+                    ltaSeedanceSpeed === tier
+                      ? "bg-violet-500/15 text-white border border-violet-400/60"
+                      : "bg-black/20 text-white/65 hover:border-white/20 border border-white/10",
+                  )}
+                >
+                  {tier === "fast" ? "Fast" : "Normal"}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
