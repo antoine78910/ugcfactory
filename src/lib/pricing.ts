@@ -39,12 +39,15 @@ export const STARTER_CREDIT_VALUE_USD = 29.99 / 250;
 
 /**
  * Video + Claude prompt step only. With scan (8) + 3× Nano Pro (9), full pipeline totals:
- * 5s → 33, 10s → 49, 15s → 69 credits.
+ * 5s → 33, 10s → 49, 15s → 96 credits.
+ *
+ * Note: 30s is implemented as two chained 15s clips but uses a discounted bundle price.
  */
-export const LINK_TO_AD_SEEDANCE_VIDEO_CREDITS_BY_DURATION_SEC: Record<5 | 10 | 15, number> = {
+export const LINK_TO_AD_SEEDANCE_VIDEO_CREDITS_BY_DURATION_SEC: Record<5 | 10 | 15 | 30, number> = {
   5: 16,
   10: 32,
-  15: 52,
+  15: 79,
+  30: 144,
 };
 
 /** Fast tier (~PiAPI $0.08/s vs $0.10/s): slightly lower credit burn than normal. */
@@ -87,9 +90,9 @@ export function linkToAdVideoCredits(
       ? LINK_TO_AD_SEEDANCE_FAST_VIDEO_CREDITS_BY_DURATION_SEC
       : LINK_TO_AD_SEEDANCE_VIDEO_CREDITS_BY_DURATION_SEC;
   const d = Math.round(Number(durationSec)) || 10;
-  if (d === 5 || d === 10 || d === 15) {
-    return table[d];
-  }
+  if (d === 5 || d === 10 || d === 15) return table[d];
+  if (d === 30 && seedanceSpeed !== "fast") return LINK_TO_AD_SEEDANCE_VIDEO_CREDITS_BY_DURATION_SEC[30];
+
   const ref15 = table[15];
   return Math.max(1, Math.ceil((d / 15) * ref15));
 }
