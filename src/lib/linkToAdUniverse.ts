@@ -1001,6 +1001,32 @@ export function composeVideoPromptEditableSections(parts: VideoPromptEditableSec
 }
 
 /**
+ * Compose sections as clean continuous text (for the actual API prompt sent to PiAPI / Seedance).
+ * No section headers — just the raw content joined with spacing.
+ */
+export function composeVideoPromptForApi(parts: VideoPromptEditableSections): string {
+  const m = parts.motion.replace(/\r\n/g, "\n").trim();
+  const d = parts.dialogue.replace(/\r\n/g, "\n").trim();
+  const a = parts.ambience.replace(/\r\n/g, "\n").trim();
+  const blocks: string[] = [];
+  if (m) blocks.push(m);
+  if (d) blocks.push(d);
+  if (a) blocks.push(a);
+  return blocks.join(" ");
+}
+
+/**
+ * Strip `EDIT — Motion:`, `EDIT — Dialogue:`, `EDIT — Ambience:` labels from a prompt string,
+ * returning clean continuous text ready for the video generation API.
+ */
+export function stripEditSectionLabels(text: string): string {
+  return text
+    .replace(/\s*EDIT\s*[—:-]\s*(?:Motion|Dialogue|Ambience)\s*[:\n]\s*/gi, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+/**
  * Splits stored video prompt into UI-visible creative text vs hidden technical/fidelity tail.
  * Legacy outputs without TECHNICAL may still end with device-spec spam; tuck that after a heuristic cut.
  */

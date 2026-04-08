@@ -178,14 +178,11 @@ export async function POST(req: Request) {
           { status: 400 },
         );
       }
-      // KIE does not reliably support Seedance yet. Route Seedance via PiAPI (Seedance 2 API).
-      let taskType: "seedance-2" | "seedance-2-fast";
-      if (model === "bytedance/seedance-2-fast" || model === "bytedance/seedance-1.5-pro") {
-        taskType = "seedance-2-fast";
-      } else if (model === "bytedance/seedance-2" || model === "bytedance/seedance-2.0-pro") {
-        taskType = "seedance-2";
+      let taskType: "seedance-2-preview" | "seedance-2-fast-preview";
+      if (model === "bytedance/seedance-2-fast-preview" || model === "bytedance/seedance-1.5-pro") {
+        taskType = "seedance-2-fast-preview";
       } else {
-        taskType = "seedance-2";
+        taskType = "seedance-2-preview";
       }
       const duration = Number(body.duration ?? 10);
       const rawTaskId = await piapiCreateSeedanceTask({

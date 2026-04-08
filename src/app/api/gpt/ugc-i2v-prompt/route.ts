@@ -32,7 +32,7 @@ export async function POST(req: Request) {
     "Follow OUTPUT FORMAT in the user instructions exactly.",
     videoDurationSeconds === 30
       ? "For 30s: output PROMPT PART 1 and PROMPT PART 2 only. Each part 120–180 words and internally structured with EDIT — Motion / EDIT — Dialogue / EDIT — Ambience blocks."
-      : "For 5s/10s/15s: output ONE prompt structured with EDIT — Motion / EDIT — Dialogue / EDIT — Ambience blocks.",
+      : "For 5s/10s/15s: output ONE prompt as a continuous cinematic description. No section titles, no bullet points, no 'EDIT —' labels. Write a single flowing paragraph covering camera, motion, dialogue, ambience, and the technical line.",
     "The script and VIDEO_METADATA are the source of truth for dialogue and product behavior.",
     "Non-interactive mode: never ask for more inputs, never request image/script, never explain what you need, never add prefaces/disclaimers.",
     "Return the prompt content directly and nothing else.",

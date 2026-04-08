@@ -49,9 +49,11 @@ import {
   composeNanoEditableSections,
   composeThreeLabeledPrompts,
   composeVideoPromptEditableSections,
+  composeVideoPromptForApi,
   parseNanoEditableSections,
   parseThreeLabeledPrompts,
   parseVideoPromptEditableSections,
+  stripEditSectionLabels,
   splitUgcVideoPromptForEditing,
   type VideoPromptEditableSections,
   readUniverseFromExtracted,
@@ -1231,7 +1233,7 @@ export default function LinkToAdUniverse({
   const mergedVideoPromptDraft = useMemo(() => {
     const editable = videoPromptIsLegacyBlob
       ? videoPromptSections.motion.trim()
-      : composeVideoPromptEditableSections(videoPromptSections).trim();
+      : composeVideoPromptForApi(videoPromptSections).trim();
     return mergeNanoPromptForApi(editable, videoPromptTechnicalTail).trim();
   }, [videoPromptSections, videoPromptTechnicalTail, videoPromptIsLegacyBlob]);
 
@@ -1241,7 +1243,7 @@ export default function LinkToAdUniverse({
         const next = { ...prev, ...patch };
         const editable = videoPromptIsLegacyBlob
           ? next.motion.trim()
-          : composeVideoPromptEditableSections(next).trim();
+          : composeVideoPromptForApi(next).trim();
         setUgcVideoPromptGpt(mergeNanoPromptForApi(editable, videoPromptTechnicalTail).trim());
         return next;
       });
@@ -3950,14 +3952,14 @@ export default function LinkToAdUniverse({
           toast.error("30s needs PROMPT PART 1 and PART 2. Regenerate the video prompt with 30s duration selected.");
           return;
         }
-        prompt = parsed.part1.trim();
-        kling30sPart2PromptRef.current = parsed.part2.trim();
+        prompt = stripEditSectionLabels(parsed.part1);
+        kling30sPart2PromptRef.current = stripEditSectionLabels(parsed.part2);
         apiDuration = 15;
       }
     }
 
     setIsKlingSubmitting(true);
-    const klingPrompt = withAudioHint(prompt);
+    const klingPrompt = withAudioHint(stripEditSectionLabels(prompt));
     lastKlingVideoPromptRef.current = klingPrompt;
     try {
       klingAbortRef.current?.abort();

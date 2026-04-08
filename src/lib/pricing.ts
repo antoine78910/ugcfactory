@@ -58,14 +58,14 @@ export const LINK_TO_AD_SEEDANCE_FAST_VIDEO_CREDITS_BY_DURATION_SEC: Record<5 | 
 export type LinkToAdSeedanceSpeed = "normal" | "fast";
 
 export function linkToAdSeedanceMarketModel(speed: LinkToAdSeedanceSpeed): string {
-  return speed === "fast" ? "bytedance/seedance-2-fast" : "bytedance/seedance-2";
+  return speed === "fast" ? "bytedance/seedance-2-fast-preview" : "bytedance/seedance-2-preview";
 }
 
-/** Link to Ad video: Seedance 2 only (Kling disabled for this flow). */
+/** Link to Ad video: Seedance 2 Preview only (Kling disabled for this flow). */
 export const LINK_TO_AD_VIDEO_MODELS = {
   seedance: {
-    marketModelNormal: "bytedance/seedance-2" as const,
-    marketModelFast: "bytedance/seedance-2-fast" as const,
+    marketModelNormal: "bytedance/seedance-2-preview" as const,
+    marketModelFast: "bytedance/seedance-2-fast-preview" as const,
   },
 } as const;
 
@@ -1009,9 +1009,9 @@ export function calculateVideoCreditsForModel(opts: VideoCreditOptions): number 
     case "kling-2.6/video":
       return calculateKling26VideoCredits(d, quality, audio);
 
-    case "bytedance/seedance-2":
+    case "bytedance/seedance-2-preview":
       return Math.max(1, calculateKling30VideoCredits(d, "pro", true));
-    case "bytedance/seedance-2-fast":
+    case "bytedance/seedance-2-fast-preview":
       return Math.max(1, Math.ceil(calculateKling30VideoCredits(d, "pro", true) * 0.82));
 
     default:

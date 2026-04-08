@@ -66,8 +66,8 @@ type VideoModelId =
   | "kling-2.6/video"
   | "openai/sora-2"
   | "openai/sora-2-pro"
-  | "bytedance/seedance-2"
-  | "bytedance/seedance-2-fast"
+  | "bytedance/seedance-2-preview"
+  | "bytedance/seedance-2-fast-preview"
   | "veo3_fast"
   | "veo3";
 
@@ -78,8 +78,8 @@ const MODEL_OPTIONS: { id: VideoModelId; label: string; family: VideoFamily }[] 
   { id: "kling-2.6/video", label: "Kling 2.6", family: "kie" },
   { id: "openai/sora-2", label: "Sora 2", family: "sora" },
   { id: "openai/sora-2-pro", label: "Sora 2 Pro", family: "sora" },
-  { id: "bytedance/seedance-2", label: "Seedance 2", family: "kie" },
-  { id: "bytedance/seedance-2-fast", label: "Seedance 2 Fast", family: "kie" },
+  { id: "bytedance/seedance-2-preview", label: "Seedance 2", family: "kie" },
+  { id: "bytedance/seedance-2-fast-preview", label: "Seedance 2 Fast", family: "kie" },
   { id: "veo3_fast", label: "Veo 3.1 Fast", family: "veo" },
   { id: "veo3", label: "Veo 3.1", family: "veo" },
 ];
@@ -166,7 +166,7 @@ const VIDEO_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
     durationRange: "10–15s",
   },
   {
-    id: "bytedance/seedance-2",
+    id: "bytedance/seedance-2-preview",
     label: "Seedance 2",
     icon: "seedance",
     newBadge: true,
@@ -174,7 +174,7 @@ const VIDEO_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
     durationRange: "5–15s",
   },
   {
-    id: "bytedance/seedance-2-fast",
+    id: "bytedance/seedance-2-fast-preview",
     label: "Seedance 2 Fast",
     icon: "seedance",
     resolution: "1080p",
@@ -204,8 +204,8 @@ const VIDEO_EDIT_PICKER_ACCESS_ORDER = [...STUDIO_VIDEO_EDIT_PICKER_IDS];
 /** Cheapest first; used to pick a valid model after plan change. */
 const VIDEO_MODEL_ACCESS_ORDER: VideoModelId[] = [
   "kling-2.6/video",
-  "bytedance/seedance-2-fast",
-  "bytedance/seedance-2",
+  "bytedance/seedance-2-fast-preview",
+  "bytedance/seedance-2-preview",
   "veo3_fast",
   "kling-3.0/video",
   "veo3",
@@ -223,8 +223,8 @@ function getDurationChoices(modelId: VideoModelId): string[] {
       return ["10", "15"];
     case "openai/sora-2-pro":
       return ["10", "15"];
-    case "bytedance/seedance-2":
-    case "bytedance/seedance-2-fast":
+    case "bytedance/seedance-2-preview":
+    case "bytedance/seedance-2-fast-preview":
       return ["5", "10", "15"];
     default:
       return ["5", "10"];

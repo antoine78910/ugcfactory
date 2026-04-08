@@ -44,8 +44,8 @@ const IMAGE_MIN_RANK: Record<"nano" | "pro", number> = {
 const VIDEO_MIN_RANK: Record<string, number> = {
   "kling-2.6/video": 1, // Starter+
   // Starter should not include Seedance 2; unlock on Growth+
-  "bytedance/seedance-2": 2,
-  "bytedance/seedance-2-fast": 2,
+  "bytedance/seedance-2-preview": 2,
+  "bytedance/seedance-2-fast-preview": 2,
   "bytedance/seedance-2.0-pro": 2,
   "veo3_fast": 2,
   "kling-3.0/video": 2,
@@ -172,8 +172,8 @@ const STUDIO_VIDEO_LABELS: Record<string, string> = {
   "kling-2.6/video": "Kling 2.6",
   "openai/sora-2": "Sora 2",
   "openai/sora-2-pro": "Sora 2 Pro",
-  "bytedance/seedance-2": "Seedance 2",
-  "bytedance/seedance-2-fast": "Seedance 2 Fast",
+  "bytedance/seedance-2-preview": "Seedance 2",
+  "bytedance/seedance-2-fast-preview": "Seedance 2 Fast",
   "bytedance/seedance-2.0-pro": "Seedance 2.0 Pro",
   veo3_fast: "Veo 3.1 Fast",
   veo3: "Veo 3.1",
@@ -190,8 +190,8 @@ const STUDIO_VIDEO_EDIT_PICKER_LABELS: Record<string, string> = {
 /** Order used in “included with your plan” lists (cheapest → premium). */
 export const STUDIO_VIDEO_IDS_ORDERED: readonly string[] = [
   "kling-2.6/video",
-  "bytedance/seedance-2-fast",
-  "bytedance/seedance-2",
+  "bytedance/seedance-2-fast-preview",
+  "bytedance/seedance-2-preview",
   "veo3_fast",
   "kling-3.0/video",
   "veo3",
@@ -337,7 +337,7 @@ export const SUBSCRIPTION_MODEL_MATRIX_ROWS: SubscriptionModelMatrixRow[] = [
     tiers: tierBools(IMAGE_MIN_RANK.pro),
   },
   { label: "Kling 2.6", tiers: tierBools(VIDEO_MIN_RANK["kling-2.6/video"]) },
-  { label: "Seedance 2", tiers: tierBools(VIDEO_MIN_RANK["bytedance/seedance-2"]) },
+  { label: "Seedance 2", tiers: tierBools(VIDEO_MIN_RANK["bytedance/seedance-2-preview"]) },
   {
     label: "Veo 3.1 Fast",
     tiers: tierBools(VIDEO_MIN_RANK.veo3_fast),

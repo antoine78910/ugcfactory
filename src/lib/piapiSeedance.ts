@@ -21,20 +21,34 @@ export function isPiapiTaskId(taskId: string): boolean {
   return taskId.trim().startsWith(PIAPI_TASK_PREFIX);
 }
 
-/** PiAPI unified task `task_type` for Seedance 2 (see https://piapi.ai/docs/seedance-api/seedance-2). */
-export type PiapiSeedanceTaskType = "seedance-2" | "seedance-2-fast";
+/** PiAPI unified task `task_type` for Seedance 2 Preview (see https://piapi.ai/docs/seedance-api/seedance-2-preview). */
+export type PiapiSeedanceTaskType =
+  | "seedance-2-preview"
+  | "seedance-2-fast-preview";
 
 export async function piapiCreateSeedanceTask(opts: {
   taskType: PiapiSeedanceTaskType;
   prompt: string;
-  imageUrl: string;
+  imageUrl?: string;
   duration: number;
-  /** Ignored for `first_last_frames` (API derives AR from image); kept for forward compatibility. */
-  aspectRatio?: "16:9" | "9:16" | "1:1" | "auto";
+  aspectRatio?: "16:9" | "9:16" | "3:4" | "4:3";
   overrideApiKey?: string;
 }): Promise<string> {
   const apiKey = opts.overrideApiKey?.trim() || getPiApiKey();
-  const duration = Math.min(15, Math.max(4, Math.round(Number(opts.duration)) || 5));
+  const duration = Math.min(15, Math.max(5, Math.round(Number(opts.duration)) || 5));
+
+  const prompt = opts.imageUrl
+    ? `@image1 ${opts.prompt}`
+    : opts.prompt;
+
+  const input: Record<string, unknown> = {
+    prompt,
+    duration,
+    aspect_ratio: opts.aspectRatio ?? "9:16",
+  };
+  if (opts.imageUrl) {
+    input.image_urls = [opts.imageUrl];
+  }
   const res = await fetch(`${PIAPI_BASE}/api/v1/task`, {
     method: "POST",
     headers: {
@@ -44,13 +58,7 @@ export async function piapiCreateSeedanceTask(opts: {
     body: JSON.stringify({
       model: "seedance",
       task_type: opts.taskType,
-      input: {
-        prompt: opts.prompt,
-        mode: "first_last_frames",
-        duration,
-        aspect_ratio: "auto",
-        image_urls: [opts.imageUrl],
-      },
+      input,
       // Avoid workspace default "private/HYA" pool quota surprises.
       config: {
         service_mode: "public",
