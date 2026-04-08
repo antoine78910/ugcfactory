@@ -3049,7 +3049,10 @@ export default function LinkToAdUniverse({
     }
   }
 
-  async function onGenerateNanoBananaPrompts(angleIdx?: number | null): Promise<string | null> {
+  async function onGenerateNanoBananaPrompts(
+    angleIdx?: number | null,
+    opts?: { keepThreeImagesSubmitting?: boolean },
+  ): Promise<string | null> {
     const url = storeUrl.trim();
     const idx = angleIdx !== undefined && angleIdx !== null ? angleIdx : selectedAngleIndex;
     const selectedScript = selectedScriptOptionByIndex(scriptsText, idx);
@@ -3071,7 +3074,9 @@ export default function LinkToAdUniverse({
       return null;
     }
     setIsNanoPromptsLoading(true);
-    setIsNanoAllImagesSubmitting(false);
+    if (!opts?.keepThreeImagesSubmitting) {
+      setIsNanoAllImagesSubmitting(false);
+    }
     let text = "";
     try {
       nanoPromptsAbortRef.current?.abort();
@@ -3533,7 +3538,7 @@ export default function LinkToAdUniverse({
 
     let prompts: [string, string, string];
     if (!signatureMatches) {
-      const nextPrompts = await onGenerateNanoBananaPrompts(idx);
+      const nextPrompts = await onGenerateNanoBananaPrompts(idx, { keepThreeImagesSubmitting: true });
       if (!nextPrompts) {
         setIsNanoAllImagesSubmitting(false);
         return;
