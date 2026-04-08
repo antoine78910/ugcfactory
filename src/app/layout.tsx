@@ -68,7 +68,7 @@ export default function RootLayout({
         <Script
           id="linkjolt"
           src={`https://www.linkjolt.io/api/tracking.js?id=${LINKJOLT_MERCHANT_ID}`}
-          strategy="lazyOnload"
+          strategy="afterInteractive"
         />
         <CreditsPlanProvider>
           <HeyoInit />

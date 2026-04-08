@@ -166,7 +166,11 @@ export default function SubscriptionPage() {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ planId: pendingUpgradePlanId, billing }),
+        body: JSON.stringify({
+          planId: pendingUpgradePlanId,
+          billing,
+          referral: window.linkjolt?.referral ?? "",
+        }),
       });
       const data = (await res.json()) as { url?: string; error?: string };
       if (!res.ok) throw new Error(data.error || "Could not start upgrade checkout.");
