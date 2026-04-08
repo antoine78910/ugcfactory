@@ -9,10 +9,12 @@ import {
   IMAGE_MODEL,
   LINK_TO_AD_VIDEO_MODELS,
   LINK_TO_AD_VIDEO_MARKET_MODEL,
+  type LinkToAdSeedanceSpeed,
   type LinkToAdVideoModelId,
   calculateMotionControlCreditsFromDuration,
   calculateVideoCreditsForModel,
   calculateVideoCreditsFromDuration,
+  linkToAdSeedanceMarketModel,
   linkToAdVideoCredits,
 } from "@/lib/pricing";
 
@@ -37,8 +39,13 @@ export const CREDITS_LINK_TO_AD_VIDEO_PROMPT_AI = CLAUDE_AI_CREDITS;
 // Video — dynamic pricing by model + duration (Link to Ad)
 // ---------------------------------------------------------------------------
 
-export { linkToAdVideoCredits, LINK_TO_AD_VIDEO_MODELS, LINK_TO_AD_VIDEO_MARKET_MODEL };
-export type { LinkToAdVideoModelId };
+export {
+  linkToAdVideoCredits,
+  LINK_TO_AD_VIDEO_MODELS,
+  LINK_TO_AD_VIDEO_MARKET_MODEL,
+  linkToAdSeedanceMarketModel,
+};
+export type { LinkToAdVideoModelId, LinkToAdSeedanceSpeed };
 
 export const LINK_TO_AD_DEFAULT_VIDEO_MODEL: LinkToAdVideoModelId = "seedance";
 export const LINK_TO_AD_DEFAULT_VIDEO_DURATION_SEC = 10;
@@ -46,18 +53,20 @@ export const LINK_TO_AD_DEFAULT_VIDEO_DURATION_SEC = 10;
 export function creditsLinkToAdVideoFromImage(
   model: LinkToAdVideoModelId,
   durationSec: number,
+  seedanceSpeed: LinkToAdSeedanceSpeed = "normal",
 ): number {
-  return linkToAdVideoCredits(model, durationSec);
+  return linkToAdVideoCredits(model, durationSec, seedanceSpeed);
 }
 
 export function creditsLinkToAdFullPipeline(
   model: LinkToAdVideoModelId,
   durationSec: number,
+  seedanceSpeed: LinkToAdSeedanceSpeed = "normal",
 ): number {
   return (
     CREDITS_LINK_TO_AD_STORE_SCAN +
     CREDITS_LINK_TO_AD_THREE_REF_IMAGES +
-    creditsLinkToAdVideoFromImage(model, durationSec)
+    creditsLinkToAdVideoFromImage(model, durationSec, seedanceSpeed)
   );
 }
 

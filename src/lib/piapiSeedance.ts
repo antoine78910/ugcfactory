@@ -21,17 +21,20 @@ export function isPiapiTaskId(taskId: string): boolean {
   return taskId.trim().startsWith(PIAPI_TASK_PREFIX);
 }
 
-type PiapiSeedanceTaskType = "seedance-2-preview" | "seedance-2-fast-preview";
+/** PiAPI unified task `task_type` for Seedance 2 (see https://piapi.ai/docs/seedance-api/seedance-2). */
+export type PiapiSeedanceTaskType = "seedance-2" | "seedance-2-fast";
 
 export async function piapiCreateSeedanceTask(opts: {
   taskType: PiapiSeedanceTaskType;
   prompt: string;
   imageUrl: string;
   duration: number;
-  aspectRatio: "16:9" | "9:16" | "1:1";
+  /** Ignored for `first_last_frames` (API derives AR from image); kept for forward compatibility. */
+  aspectRatio?: "16:9" | "9:16" | "1:1" | "auto";
   overrideApiKey?: string;
 }): Promise<string> {
   const apiKey = opts.overrideApiKey?.trim() || getPiApiKey();
+  const duration = Math.min(15, Math.max(4, Math.round(Number(opts.duration)) || 5));
   const res = await fetch(`${PIAPI_BASE}/api/v1/task`, {
     method: "POST",
     headers: {
@@ -43,8 +46,9 @@ export async function piapiCreateSeedanceTask(opts: {
       task_type: opts.taskType,
       input: {
         prompt: opts.prompt,
-        duration: opts.duration,
-        aspect_ratio: opts.aspectRatio,
+        mode: "first_last_frames",
+        duration,
+        aspect_ratio: "auto",
         image_urls: [opts.imageUrl],
       },
       // Avoid workspace default "private/HYA" pool quota surprises.

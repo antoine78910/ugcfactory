@@ -97,7 +97,8 @@ import {
   creditsLinkToAdVideoFromImage,
   LINK_TO_AD_DEFAULT_VIDEO_MODEL,
   LINK_TO_AD_DEFAULT_VIDEO_DURATION_SEC,
-  LINK_TO_AD_VIDEO_MARKET_MODEL,
+  linkToAdSeedanceMarketModel,
+  type LinkToAdSeedanceSpeed,
 } from "@/lib/linkToAd/generationCredits";
 import type { InternalFetch } from "@/lib/linkToAd/internalFetch";
 import { runInitialPipeline } from "@/lib/linkToAd/runInitialPipeline";
@@ -1079,6 +1080,8 @@ export default function LinkToAdUniverse({
   const scriptProvider = "claude" as const;
 
   const [videoDuration, setVideoDuration] = useState<number>(LINK_TO_AD_DEFAULT_VIDEO_DURATION_SEC);
+  /** PiAPI Seedance 2 (`seedance-2`) vs Seedance 2 Fast (`seedance-2-fast`). */
+  const [ltaSeedanceSpeed, setLtaSeedanceSpeed] = useState<LinkToAdSeedanceSpeed>("normal");
   /** After Generate from URL (or when a saved run is loaded), duration is fixed for this session. */
   const [ltaVideoDurationLocked, setLtaVideoDurationLocked] = useState(false);
   const [customUgcTopic, setCustomUgcTopic] = useState("");
@@ -1415,6 +1418,7 @@ export default function LinkToAdUniverse({
     setCustomUgcCta("");
     setLtaFrozenCredits(null);
     setLtaVideoDurationLocked(false);
+    setLtaSeedanceSpeed("normal");
     latestSnapRef.current = null;
     prevAngleRef.current = null;
     nanoBananaPromptsSignatureRef.current = null;
@@ -1692,6 +1696,7 @@ export default function LinkToAdUniverse({
       klingTaskId: mirror?.taskId ?? undefined,
       klingVideoUrl: mirror?.videoUrl ?? undefined,
       linkToAdPipelineByAngle: triple,
+      ltaSeedanceSpeed,
     };
   }, [
     cleanCandidate,
@@ -1720,6 +1725,7 @@ export default function LinkToAdUniverse({
     nanoBananaSelectedImageIndex,
     pipelineByAngle,
     videoStageMode,
+    ltaSeedanceSpeed,
   ]);
 
   const quality = useMemo(() => confidenceToQuality(confidence ?? undefined), [confidence]);
@@ -2059,6 +2065,7 @@ export default function LinkToAdUniverse({
       setNanoPollTaskId(null);
       setKlingPollTaskId(null);
       setKlingPollImageIndex(null);
+      setLtaSeedanceSpeed(snap.ltaSeedanceSpeed === "fast" ? "fast" : "normal");
       prevAngleRef.current = snap.selectedAngleIndex;
       setLastExtractedJson(cloneExtractedBase(run.extracted));
       setStage("ready");
@@ -3963,7 +3970,7 @@ export default function LinkToAdUniverse({
         body: JSON.stringify({
           linkToAd: true,
           accountPlan: planId,
-          marketModel: LINK_TO_AD_VIDEO_MARKET_MODEL,
+          marketModel: linkToAdSeedanceMarketModel(ltaSeedanceSpeed),
           prompt: klingPrompt,
           imageUrl: img,
           duration: apiDuration,
@@ -4353,12 +4360,12 @@ export default function LinkToAdUniverse({
   );
 
   const ltaGenerateCredits = useMemo(
-    () => creditsLinkToAdFullPipeline(LINK_TO_AD_DEFAULT_VIDEO_MODEL, videoDuration),
-    [videoDuration],
+    () => creditsLinkToAdFullPipeline(LINK_TO_AD_DEFAULT_VIDEO_MODEL, videoDuration, ltaSeedanceSpeed),
+    [videoDuration, ltaSeedanceSpeed],
   );
   const ltaVideoOnlyCredits = useMemo(
-    () => creditsLinkToAdVideoFromImage(LINK_TO_AD_DEFAULT_VIDEO_MODEL, videoDuration),
-    [videoDuration],
+    () => creditsLinkToAdVideoFromImage(LINK_TO_AD_DEFAULT_VIDEO_MODEL, videoDuration, ltaSeedanceSpeed),
+    [videoDuration, ltaSeedanceSpeed],
   );
 
   /** Match product image resolution used for Nano prompts (preview or packshots), not only main preview URL. */
@@ -4671,7 +4678,7 @@ export default function LinkToAdUniverse({
             )}
           </div>
         ) : null}
-        {/* Duration — hidden once generation has started (new pipeline or continue scripts). */}
+        {/* Duration + Seedance tier — locked once generation has started. */}
         <div className="flex flex-wrap items-center gap-4">
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Duration</p>
@@ -4705,6 +4712,34 @@ export default function LinkToAdUniverse({
                     </button>
                   );
                 })}
+              </div>
+            )}
+          </div>
+          <div className="space-y-1">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Seedance</p>
+            {ltaVideoDurationLocked ? (
+              <p className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/80">
+                {ltaSeedanceSpeed === "fast" ? "Fast" : "Normal"}
+                <span className="font-normal text-white/45"> (locked)</span>
+              </p>
+            ) : (
+              <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] p-1">
+                {(["normal", "fast"] as const).map((tier) => (
+                  <button
+                    key={tier}
+                    type="button"
+                    disabled={isWorking}
+                    onClick={() => setLtaSeedanceSpeed(tier)}
+                    className={cn(
+                      "rounded-md px-3 py-1.5 text-xs font-semibold transition",
+                      ltaSeedanceSpeed === tier
+                        ? "bg-violet-500/15 text-white border border-violet-400/60"
+                        : "bg-black/20 text-white/65 hover:border-white/20 border border-white/10",
+                    )}
+                  >
+                    {tier === "fast" ? "Fast" : "Normal"}
+                  </button>
+                ))}
               </div>
             )}
           </div>

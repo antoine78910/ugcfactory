@@ -47,27 +47,50 @@ export const LINK_TO_AD_SEEDANCE_VIDEO_CREDITS_BY_DURATION_SEC: Record<5 | 10 | 
   15: 52,
 };
 
-/** Link to Ad video: Seedance only (Kling 3.0 disabled for this flow). */
+/** Fast tier (~PiAPI $0.08/s vs $0.10/s): slightly lower credit burn than normal. */
+export const LINK_TO_AD_SEEDANCE_FAST_VIDEO_CREDITS_BY_DURATION_SEC: Record<5 | 10 | 15, number> = {
+  5: 13,
+  10: 26,
+  15: 42,
+};
+
+/** Link to Ad image→video: PiAPI `task_type` maps to these ids for `/api/kling/generate`. */
+export type LinkToAdSeedanceSpeed = "normal" | "fast";
+
+export function linkToAdSeedanceMarketModel(speed: LinkToAdSeedanceSpeed): string {
+  return speed === "fast" ? "bytedance/seedance-2-fast" : "bytedance/seedance-2";
+}
+
+/** Link to Ad video: Seedance 2 only (Kling disabled for this flow). */
 export const LINK_TO_AD_VIDEO_MODELS = {
   seedance: {
-    marketModel: "bytedance/seedance-2.0-pro" as const,
+    marketModelNormal: "bytedance/seedance-2" as const,
+    marketModelFast: "bytedance/seedance-2-fast" as const,
   },
 } as const;
 
 export type LinkToAdVideoModelId = keyof typeof LINK_TO_AD_VIDEO_MODELS;
 
-/** Kie market id for Link to Ad image→video (always Seedance 2.0 Pro here). */
-export const LINK_TO_AD_VIDEO_MARKET_MODEL = LINK_TO_AD_VIDEO_MODELS.seedance.marketModel;
+/** @deprecated Use `linkToAdSeedanceMarketModel("normal")` */
+export const LINK_TO_AD_VIDEO_MARKET_MODEL = LINK_TO_AD_VIDEO_MODELS.seedance.marketModelNormal;
 
 export const CLAUDE_AI_CREDITS = 5;
 
-export function linkToAdVideoCredits(model: LinkToAdVideoModelId, durationSec: number): number {
+export function linkToAdVideoCredits(
+  model: LinkToAdVideoModelId,
+  durationSec: number,
+  seedanceSpeed: LinkToAdSeedanceSpeed = "normal",
+): number {
   void LINK_TO_AD_VIDEO_MODELS[model];
+  const table =
+    seedanceSpeed === "fast"
+      ? LINK_TO_AD_SEEDANCE_FAST_VIDEO_CREDITS_BY_DURATION_SEC
+      : LINK_TO_AD_SEEDANCE_VIDEO_CREDITS_BY_DURATION_SEC;
   const d = Math.round(Number(durationSec)) || 10;
   if (d === 5 || d === 10 || d === 15) {
-    return LINK_TO_AD_SEEDANCE_VIDEO_CREDITS_BY_DURATION_SEC[d];
+    return table[d];
   }
-  const ref15 = LINK_TO_AD_SEEDANCE_VIDEO_CREDITS_BY_DURATION_SEC[15];
+  const ref15 = table[15];
   return Math.max(1, Math.ceil((d / 15) * ref15));
 }
 
@@ -986,8 +1009,13 @@ export function calculateVideoCreditsForModel(opts: VideoCreditOptions): number 
     case "kling-2.6/video":
       return calculateKling26VideoCredits(d, quality, audio);
 
+    case "bytedance/seedance-2":
+      return Math.max(1, calculateKling30VideoCredits(d, "pro", true));
+    case "bytedance/seedance-2-fast":
+      return Math.max(1, Math.ceil(calculateKling30VideoCredits(d, "pro", true) * 0.82));
+
     default:
-      // Seedance, Veo, etc.: anchor tier until per-model tables exist
+      // Veo, etc.: anchor tier until per-model tables exist
       return Math.max(1, calculateKling30VideoCredits(d, "pro", true));
   }
 }

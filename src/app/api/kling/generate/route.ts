@@ -67,9 +67,13 @@ function validateDurationForModel(model: string, duration: number | undefined) {
     }
     return;
   }
-  if (model.startsWith("bytedance/seedance-2")) {
+  if (
+    model === "bytedance/seedance-2" ||
+    model === "bytedance/seedance-2-fast" ||
+    model.startsWith("bytedance/seedance-2")
+  ) {
     if (duration !== 5 && duration !== 10 && duration !== 15) {
-      throw new Error("Invalid duration for Seedance 2.0. Must be 5, 10, or 15.");
+      throw new Error("Invalid duration for Seedance 2. Must be 5, 10, or 15.");
     }
     return;
   }
@@ -174,16 +178,22 @@ export async function POST(req: Request) {
           { status: 400 },
         );
       }
-      // KIE does not reliably support Seedance yet. Route Seedance via PiAPI.
-      const taskType = model === "bytedance/seedance-1.5-pro" ? "seedance-2-fast-preview" : "seedance-2-preview";
+      // KIE does not reliably support Seedance yet. Route Seedance via PiAPI (Seedance 2 API).
+      let taskType: "seedance-2" | "seedance-2-fast";
+      if (model === "bytedance/seedance-2-fast" || model === "bytedance/seedance-1.5-pro") {
+        taskType = "seedance-2-fast";
+      } else if (model === "bytedance/seedance-2" || model === "bytedance/seedance-2.0-pro") {
+        taskType = "seedance-2";
+      } else {
+        taskType = "seedance-2";
+      }
       const duration = Number(body.duration ?? 10);
-      const aspectRatio = body.aspectRatio ?? "9:16";
       const rawTaskId = await piapiCreateSeedanceTask({
         taskType,
         prompt,
         imageUrl,
         duration,
-        aspectRatio,
+        aspectRatio: "auto",
         overrideApiKey: piapiKey,
       });
       return NextResponse.json({

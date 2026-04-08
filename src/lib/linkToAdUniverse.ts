@@ -21,6 +21,8 @@ export type LinkToAdUniverseSnapshotV1 = {
   personaPhotoUrls?: string[] | null;
   summaryText: string;
   scriptsText: string;
+  /** Seedance 2 vs Seedance 2 Fast (PiAPI `task_type`); default normal when absent. */
+  ltaSeedanceSpeed?: "normal" | "fast";
   /** One label per script angle (3 or 4 SCRIPT OPTION blocks). */
   angleLabels: string[];
   /** 0–3 when four angles are stored; video/image pipeline still uses slots 0–2 only (angle 3 mirrors slot 2 until extended). */
@@ -1091,6 +1093,7 @@ export function readUniverseFromExtracted(extracted: unknown): LinkToAdUniverseS
         : null,
     summaryText: typeof o.summaryText === "string" ? o.summaryText : "",
     scriptsText: typeof o.scriptsText === "string" ? o.scriptsText : "",
+    ltaSeedanceSpeed: o.ltaSeedanceSpeed === "fast" ? "fast" : o.ltaSeedanceSpeed === "normal" ? "normal" : undefined,
     angleLabels: parseAngleLabelsFromSnapshot(o),
     selectedAngleIndex:
       typeof o.selectedAngleIndex === "number" && o.selectedAngleIndex >= 0 && o.selectedAngleIndex <= 3
