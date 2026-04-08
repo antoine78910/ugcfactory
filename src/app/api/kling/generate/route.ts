@@ -67,11 +67,7 @@ function validateDurationForModel(model: string, duration: number | undefined) {
     }
     return;
   }
-  if (
-    model === "bytedance/seedance-2" ||
-    model === "bytedance/seedance-2-fast" ||
-    model.startsWith("bytedance/seedance-2")
-  ) {
+  if (model.startsWith("bytedance/seedance-2")) {
     if (duration !== 5 && duration !== 10 && duration !== 15) {
       throw new Error("Invalid duration for Seedance 2. Must be 5, 10, or 15.");
     }

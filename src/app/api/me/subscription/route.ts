@@ -4,84 +4,19 @@ import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { SUBSCRIPTIONS } from "@/lib/pricing";
 import { parseAccountPlan, type AccountPlanId } from "@/lib/subscriptionModelAccess";
-import {
-  getPlanFromPriceId,
-  isSubscriptionPlanId,
-  subscriptionPlanSortIndex,
-  type SubscriptionPlanId,
-} from "@/lib/stripe/subscriptionPrices";
+import { getPlanFromPriceId } from "@/lib/stripe/subscriptionPrices";
 import { isAllowedUser } from "@/lib/allowedUsers";
-import { getUserCreditBalance, resetSubscriptionCredits } from "@/lib/creditGrants";
-
-/** Monthly credits for a paid tier (aligned with Stripe webhook). */
-function subscriptionCreditsForPlan(planId: SubscriptionPlanId): number {
-  const i = subscriptionPlanSortIndex(planId);
-  return i >= 0 ? SUBSCRIPTIONS[i].credits_per_month : 0;
-}
-
-/**
- * If the user has a paid plan but zero active subscription credits in the
- * ledger, create the monthly grant. This covers webhook failures, Stripe
- * timing issues, and Date-parse crashes.
- *
- * Only runs once per period: if there is ANY non-expired subscription grant
- * with remaining > 0 we assume the user already has (or spent) their credits.
- * If all subscription grants have remaining = 0, the user legitimately spent
- * everything — we do NOT re-grant.
- *
- * To distinguish "never granted" from "fully spent" we check if there are
- * ANY subscription grants at all (even with remaining=0) created in the last
- * 35 days. If there are, skip. If there are none → webhook never fired.
- */
-async function healMissingSubscriptionCredits(
-  admin: SupabaseClient,
-  userId: string,
-  planId: SubscriptionPlanId,
-  periodEndHint?: Date | null,
-): Promise<void> {
-  const amount = subscriptionCreditsForPlan(planId);
-  if (amount <= 0) return;
-
-  const thirtyFiveDaysAgo = new Date(Date.now() - 35 * 24 * 60 * 60 * 1000).toISOString();
-
-  const { data: recentGrants } = await admin
-    .from("user_credit_grants")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("source", "subscription")
-    .gte("created_at", thirtyFiveDaysAgo)
-    .limit(1)
-    .maybeSingle();
-
-  if (recentGrants) return;
-
-  const expiresAt =
-    periodEndHint && Number.isFinite(periodEndHint.getTime())
-      ? periodEndHint
-      : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-
-  console.log("[me/subscription] healing missing credits", { userId, planId, amount, expiresAt: expiresAt.toISOString() });
-  await resetSubscriptionCredits(admin, userId, amount, expiresAt);
-}
+import { getUserCreditBalance } from "@/lib/creditGrants";
 
 export type MeSubscriptionResponse = {
   planId: AccountPlanId;
   billing: "monthly" | "yearly" | null;
   userId: string;
-  /** ISO 8601 end of current billing period (Stripe), when known. */
-  currentPeriodEndIso?: string | null;
-  /**
-   * True when the user canceled renewal but still has access until `currentPeriodEndIso`.
-   * From Stripe `cancel_at_period_end` (live query only).
-   */
-  cancelAtPeriodEnd?: boolean;
   /** When true the client must not deduct or check credits — account has unlimited access. */
   unlimited?: boolean;
   /**
-   * When true the client should auto-activate stored personal API keys
+   * When true the client should auto-activate stored personal API keys (KIE + PiAPI)
    * so that generations use the founder's own provider accounts.
    * Only set for emails in the server-side allowlist — never exposed for other users.
    */
@@ -99,39 +34,16 @@ export async function GET() {
   const auth = await requireSupabaseUser();
   if (auth.response) return auth.response;
 
-  // Allowlisted accounts get unlimited access, but still query Stripe for
-  // cancel-at-period-end / period-end so the UI reflects cancellation state.
+  // Allowlisted accounts get unlimited access — skip Stripe entirely.
   if (isAllowedUser(auth.user.email)) {
-    const base: MeSubscriptionResponse = {
+    return NextResponse.json({
       planId: "scale" as AccountPlanId,
       billing: null,
       userId: auth.user.id,
       unlimited: true,
       autoEnablePersonalApi: true,
       creditBalance: 999_999,
-    };
-    const sk = process.env.STRIPE_SECRET_KEY?.trim();
-    if (sk && auth.user.email) {
-      try {
-        const stripe = new Stripe(sk, { apiVersion: "2026-02-25.clover" });
-        const custs = await stripe.customers.list({ email: auth.user.email, limit: 5 });
-        for (const c of custs.data) {
-          const subs = await stripe.subscriptions.list({ customer: c.id, status: "active", limit: 3 });
-          for (const sub of subs.data) {
-            const rawEnd = (sub as any).current_period_end;
-            const endMs = typeof rawEnd === "number" && rawEnd > 0 ? rawEnd * 1000 : NaN;
-            base.currentPeriodEndIso = Number.isFinite(endMs) ? new Date(endMs).toISOString() : null;
-            base.cancelAtPeriodEnd = Boolean(sub.cancel_at_period_end);
-            base.billing = sub.items.data[0]?.price?.recurring?.interval === "year" ? "yearly" : "monthly";
-            break;
-          }
-          if (base.cancelAtPeriodEnd !== undefined) break;
-        }
-      } catch (e) {
-        console.error("[me/subscription] allowed-user Stripe check:", e);
-      }
-    }
-    return NextResponse.json(base satisfies MeSubscriptionResponse);
+    } satisfies MeSubscriptionResponse);
   }
 
   const userId = auth.user.id;
@@ -164,6 +76,7 @@ export async function GET() {
       });
 
       for (const customer of customers.data) {
+        // Check active and trialing subscriptions
         const subs = await stripe.subscriptions.list({
           customer: customer.id,
           status: "active",
@@ -182,73 +95,32 @@ export async function GET() {
             const match = getPlanFromPriceId(item.price.id);
             if (!match) continue;
 
-            const stripePlanId = match.planId;
-            const stripeBilling = match.billing;
+            const { planId, billing } = match;
 
-            const rawEnd = (sub as any).current_period_end;
-            const endMs = typeof rawEnd === "number" && rawEnd > 0 ? rawEnd * 1000 : NaN;
-            const periodEndIso = Number.isFinite(endMs)
-              ? new Date(endMs).toISOString()
-              : null;
-            const periodNotEnded = Number.isFinite(endMs) && endMs > Date.now();
-
-            let effectivePlanId: string = stripePlanId;
-            let effectiveBilling: "monthly" | "yearly" = stripeBilling;
-
+            // Sync DB with the live Stripe data
             try {
               const admin = createSupabaseServiceClient();
               if (admin) {
-                const { data: dbRow } = await admin
-                  .from("user_subscriptions")
-                  .select("plan_id, billing")
-                  .eq("user_id", auth.user.id)
-                  .maybeSingle();
-
-                const dbPlanId = dbRow?.plan_id;
-                const isPendingDowngrade =
-                  dbPlanId &&
-                  isSubscriptionPlanId(dbPlanId) &&
-                  isSubscriptionPlanId(stripePlanId) &&
-                  subscriptionPlanSortIndex(stripePlanId) < subscriptionPlanSortIndex(dbPlanId) &&
-                  periodNotEnded;
-
-                if (isPendingDowngrade) {
-                  effectivePlanId = dbPlanId;
-                  effectiveBilling = dbRow.billing === "yearly" ? "yearly" : "monthly";
-
-                  await admin.from("user_subscriptions").update({
+                await admin.from("user_subscriptions").upsert(
+                  {
+                    user_id: auth.user.id,
                     stripe_subscription_id: sub.id,
                     stripe_customer_id: String(sub.customer),
+                    plan_id: planId,
+                    billing,
                     status: sub.status,
-                    ...(periodEndIso ? { current_period_end: periodEndIso } : {}),
-                  }).eq("user_id", auth.user.id);
-                } else {
-                  await admin.from("user_subscriptions").upsert(
-                    {
-                      user_id: auth.user.id,
-                      stripe_subscription_id: sub.id,
-                      stripe_customer_id: String(sub.customer),
-                      plan_id: stripePlanId,
-                      billing: stripeBilling,
-                      status: sub.status,
-                      ...(periodEndIso ? { current_period_end: periodEndIso } : {}),
-                    },
-                    { onConflict: "user_id" },
-                  );
-                  effectivePlanId = stripePlanId;
-                  effectiveBilling = stripeBilling;
-                }
-
-                const healPlan = isSubscriptionPlanId(effectivePlanId) ? effectivePlanId : null;
-                if (healPlan) {
-                  const periodEndHint = Number.isFinite(endMs) ? new Date(endMs) : null;
-                  await healMissingSubscriptionCredits(admin, userId, healPlan, periodEndHint);
-                }
+                    current_period_end: new Date(
+                      (sub as any).current_period_end * 1000,
+                    ).toISOString(),
+                  },
+                  { onConflict: "user_id" },
+                );
               }
             } catch (dbErr) {
               console.error("[me/subscription] DB sync error:", dbErr);
             }
 
+            // Fetch authoritative credit balance from the ledger
             let creditBalance = 0;
             try {
               const adminForBalance = createSupabaseServiceClient();
@@ -259,12 +131,10 @@ export async function GET() {
             } catch { /* non-critical */ }
 
             return NextResponse.json({
-              planId: parseAccountPlan(effectivePlanId),
-              billing: effectiveBilling,
+              planId,
+              billing,
               userId: auth.user.id,
               creditBalance,
-              currentPeriodEndIso: periodEndIso,
-              cancelAtPeriodEnd: Boolean(sub.cancel_at_period_end),
             } satisfies MeSubscriptionResponse);
           }
         }
@@ -298,7 +168,7 @@ export async function GET() {
 
     const { data, error } = await admin
       .from("user_subscriptions")
-      .select("plan_id, billing, status, current_period_end")
+      .select("plan_id, billing, status")
       .eq("user_id", auth.user.id)
       .maybeSingle();
 
@@ -311,30 +181,10 @@ export async function GET() {
     const raw = data.billing;
     const billing = raw === "yearly" ? "yearly" : raw === "monthly" ? "monthly" : null;
 
-    if (planId !== "free" && isSubscriptionPlanId(planId)) {
-      try {
-        let pe: Date | null = null;
-        if (data.current_period_end) {
-          const d = new Date(String(data.current_period_end));
-          if (Number.isFinite(d.getTime())) pe = d;
-        }
-        await healMissingSubscriptionCredits(admin, auth.user.id, planId, pe);
-      } catch {
-        /* non-critical */
-      }
-    }
-
-    let periodEndIso: string | null = null;
-    if (data.current_period_end) {
-      const d = new Date(String(data.current_period_end));
-      if (Number.isFinite(d.getTime())) periodEndIso = d.toISOString();
-    }
-
     return NextResponse.json(await withCreditBalance({
       planId,
       billing: planId === "free" ? null : billing,
       userId: auth.user.id,
-      currentPeriodEndIso: periodEndIso,
     }));
   } catch (err) {
     console.error("[me/subscription] DB fallback error:", err);

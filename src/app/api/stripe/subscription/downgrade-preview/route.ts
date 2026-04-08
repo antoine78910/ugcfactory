@@ -2,7 +2,9 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
+import { normalizeStripeCurrency } from "@/lib/geo/billingRegion";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
+import { getSubscriptionStripePriceId } from "@/lib/stripe/subscriptionPrices";
 import {
   classifySubscriptionChange,
   isSubscriptionPlanId,
@@ -80,9 +82,14 @@ export async function POST(req: Request) {
   }
 
   let effectiveAt = "the end of your current billing period";
+  let currency: "usd" | "eur" = "usd";
+  let currentPrice = subscriptionPriceDisplayUsd(currentPlanId, currentBilling);
+  let targetPrice = subscriptionPriceDisplayUsd(targetPlanId, targetBilling);
+
   try {
     const stripe = new Stripe(secret, { apiVersion: "2026-02-25.clover" });
     const sub = await stripe.subscriptions.retrieve(row.stripe_subscription_id);
+    currency = normalizeStripeCurrency(sub.currency);
     const periodEnd = (sub as any).current_period_end;
     if (typeof periodEnd === "number" && periodEnd > 0) {
       const d = new Date(periodEnd * 1000);
@@ -92,23 +99,34 @@ export async function POST(req: Request) {
         year: "numeric",
       });
     }
+    const curPid = getSubscriptionStripePriceId(currentPlanId, currentBilling, currency);
+    const tgtPid = getSubscriptionStripePriceId(targetPlanId, targetBilling, currency);
+    if (curPid) {
+      const p = await stripe.prices.retrieve(curPid);
+      if (p.unit_amount != null) currentPrice = p.unit_amount / 100;
+    }
+    if (tgtPid) {
+      const p = await stripe.prices.retrieve(tgtPid);
+      if (p.unit_amount != null) targetPrice = p.unit_amount / 100;
+    }
   } catch {
-    /* use generic label */
+    /* use generic label + catalog fallback */
   }
 
   return NextResponse.json({
+    currency,
     current: {
       planId: currentPlanId,
       name: planLabel(currentPlanId),
       billingLabel: currentBilling === "yearly" ? "Yearly" : "Monthly",
-      priceUsd: subscriptionPriceDisplayUsd(currentPlanId, currentBilling),
+      priceUsd: currentPrice,
       creditsPerMonth: subscriptionCreditsPerMonth(currentPlanId),
     },
     target: {
       planId: targetPlanId,
       name: planLabel(targetPlanId),
       billingLabel: targetBilling === "yearly" ? "Yearly" : "Monthly",
-      priceUsd: subscriptionPriceDisplayUsd(targetPlanId, targetBilling),
+      priceUsd: targetPrice,
       creditsPerMonth: subscriptionCreditsPerMonth(targetPlanId),
     },
     effectiveAt,

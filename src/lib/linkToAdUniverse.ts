@@ -989,6 +989,9 @@ export function parseVideoPromptEditableSections(editable: string): VideoPromptE
   return { motion: raw.trim(), dialogue: "", ambience: "", isStructured: false };
 }
 
+/**
+ * Compose sections WITH `EDIT —` headers (for UI editor display only).
+ */
 export function composeVideoPromptEditableSections(parts: VideoPromptEditableSections): string {
   const m = parts.motion.replace(/\r\n/g, "\n").trim();
   const d = parts.dialogue.replace(/\r\n/g, "\n").trim();

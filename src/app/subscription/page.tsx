@@ -1,27 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Check, Coins, CreditCard, TrendingDown, X } from "lucide-react";
+import { ArrowRight, Check, Coins, CreditCard, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 import StudioShell from "@/app/_components/StudioShell";
-import {
-  SubscriptionUpgradeDialog,
-  type SubscriptionUpgradePreview,
-} from "@/app/_components/SubscriptionUpgradeDialog";
-import {
-  SubscriptionDowngradeDialog,
-  type SubscriptionDowngradePreview,
-} from "@/app/_components/SubscriptionDowngradeDialog";
-import { CancelSubscriptionDialog } from "@/app/_components/CancelSubscriptionDialog";
 import { consumeCheckoutQueryParams, useCreditsPlan } from "@/app/_components/CreditsPlanContext";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import {
-  SUBSCRIPTIONS,
-  upToAiImagesCountFromCredits,
-  upToAiVideosCountFromCredits,
-} from "@/lib/pricing";
+import { SUBSCRIPTIONS } from "@/lib/pricing";
 import {
   planRank,
   SUBSCRIPTION_MODEL_MATRIX_ROWS,
@@ -31,9 +18,11 @@ import {
   subscriptionPlanSortIndex,
   type SubscriptionPlanId,
 } from "@/lib/stripe/subscriptionPrices";
-import { openStripeBillingPortal } from "@/lib/stripe/openBillingPortalClient";
 
 type Billing = "monthly" | "yearly";
+const BILLING_PORTAL_URL =
+  process.env.NEXT_PUBLIC_STRIPE_BILLING_PORTAL_URL ??
+  "https://billing.stripe.com/p/login/14A00icKheIV9ws8ZNfUQ00";
 
 type PlanDef = {
   id: string;
@@ -47,55 +36,66 @@ type PlanDef = {
   highlight?: boolean;
 };
 
+const CREDITS_PER_NANOBANANA_IMAGE = 0.5;
+const CREDITS_PER_SORA2_VIDEO = 5;
+
+function upToAiImagesFromMonthlyCredits(creditsPerMonth: number): string {
+  return String(Math.max(1, Math.floor(creditsPerMonth / CREDITS_PER_NANOBANANA_IMAGE)));
+}
+
+function upToAiVideosFromMonthlyCredits(creditsPerMonth: number): string {
+  return String(Math.max(1, Math.floor(creditsPerMonth / CREDITS_PER_SORA2_VIDEO)));
+}
+
 const PLANS: PlanDef[] = [
   {
     id: "starter",
     name: "Starter",
-    description: "First campaigns and core workflow.",
+    description: "Learn the workflow and launch your first campaigns.",
     monthly: SUBSCRIPTIONS[0].price_usd,
     credits: SUBSCRIPTIONS[0].credits_per_month,
     usage: {
       linkToAd: "4",
-      images: String(upToAiImagesCountFromCredits(SUBSCRIPTIONS[0].credits_per_month)),
-      videos: String(upToAiVideosCountFromCredits(SUBSCRIPTIONS[0].credits_per_month)),
+      images: upToAiImagesFromMonthlyCredits(SUBSCRIPTIONS[0].credits_per_month),
+      videos: upToAiVideosFromMonthlyCredits(SUBSCRIPTIONS[0].credits_per_month),
     },
   },
   {
     id: "growth",
     name: "Growth",
     badge: "Popular",
-    description: "Weekly content — most teams start here.",
+    description: "The plan most teams pick once content is weekly.",
     monthly: SUBSCRIPTIONS[1].price_usd,
     credits: SUBSCRIPTIONS[1].credits_per_month,
     usage: {
       linkToAd: "10",
-      images: String(upToAiImagesCountFromCredits(SUBSCRIPTIONS[1].credits_per_month)),
-      videos: String(upToAiVideosCountFromCredits(SUBSCRIPTIONS[1].credits_per_month)),
+      images: upToAiImagesFromMonthlyCredits(SUBSCRIPTIONS[1].credits_per_month),
+      videos: upToAiVideosFromMonthlyCredits(SUBSCRIPTIONS[1].credits_per_month),
     },
     highlight: true,
   },
   {
     id: "pro",
     name: "Pro",
-    description: "Higher volume without constant limits.",
+    description: "Scale creatives without hitting limits every few days.",
     monthly: SUBSCRIPTIONS[2].price_usd,
     credits: SUBSCRIPTIONS[2].credits_per_month,
     usage: {
       linkToAd: "24",
-      images: String(upToAiImagesCountFromCredits(SUBSCRIPTIONS[2].credits_per_month)),
-      videos: String(upToAiVideosCountFromCredits(SUBSCRIPTIONS[2].credits_per_month)),
+      images: upToAiImagesFromMonthlyCredits(SUBSCRIPTIONS[2].credits_per_month),
+      videos: upToAiVideosFromMonthlyCredits(SUBSCRIPTIONS[2].credits_per_month),
     },
   },
   {
     id: "scale",
     name: "Scale",
-    description: "Agencies & brands with many products.",
+    description: "Agencies and brands running multiple products at once.",
     monthly: SUBSCRIPTIONS[3].price_usd,
     credits: SUBSCRIPTIONS[3].credits_per_month,
     usage: {
       linkToAd: "55",
-      images: String(upToAiImagesCountFromCredits(SUBSCRIPTIONS[3].credits_per_month)),
-      videos: String(upToAiVideosCountFromCredits(SUBSCRIPTIONS[3].credits_per_month)),
+      images: upToAiImagesFromMonthlyCredits(SUBSCRIPTIONS[3].credits_per_month),
+      videos: upToAiVideosFromMonthlyCredits(SUBSCRIPTIONS[3].credits_per_month),
     },
   },
 ];
@@ -103,7 +103,6 @@ const PLANS: PlanDef[] = [
 export default function SubscriptionPage() {
   const [billing, setBilling] = useState<Billing>("monthly");
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
-  const [portalLoading, setPortalLoading] = useState(false);
   /** Stripe subscription billing from DB; null = free, unknown, or not loaded yet. */
   const [serverSubBilling, setServerSubBilling] = useState<"monthly" | "yearly" | null | "pending">(
     "pending",
@@ -271,77 +270,27 @@ export default function SubscriptionPage() {
   }, []);
 
   useEffect(() => {
-    if (!cancelDialogOpen) return;
     let cancelled = false;
-    setRetentionEligibilityLoading(true);
     (async () => {
       try {
-        const res = await fetch("/api/stripe/subscription/retention-eligibility", {
-          credentials: "include",
-        });
-        const data = (await res.json()) as { eligible?: boolean };
-        if (!cancelled) setRetentionOfferEligible(data.eligible === true);
+        const res = await fetch("/api/me/subscription", { credentials: "include" });
+        if (!res.ok) {
+          if (!cancelled) setServerSubBilling(null);
+          return;
+        }
+        const data = (await res.json()) as { billing?: unknown };
+        const raw = data.billing;
+        const b =
+          raw === "yearly" ? "yearly" : raw === "monthly" ? "monthly" : null;
+        if (!cancelled) setServerSubBilling(b);
       } catch {
-        if (!cancelled) setRetentionOfferEligible(false);
-      } finally {
-        if (!cancelled) setRetentionEligibilityLoading(false);
+        if (!cancelled) setServerSubBilling(null);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [cancelDialogOpen]);
-
-  const fetchSubscriptionMeta = useCallback(async () => {
-    try {
-      const res = await fetch("/api/me/subscription", { credentials: "include" });
-      if (!res.ok) {
-        setServerSubBilling(null);
-        setSubscriptionActiveUntilLabel(null);
-        setCancelAtPeriodEnd(false);
-        return;
-      }
-      const data = (await res.json()) as {
-        billing?: unknown;
-        currentPeriodEndIso?: string | null;
-        cancelAtPeriodEnd?: boolean;
-      };
-      const raw = data.billing;
-      const b =
-        raw === "yearly" ? "yearly" : raw === "monthly" ? "monthly" : null;
-      let untilLabel: string | null = null;
-      const iso = data.currentPeriodEndIso;
-      if (typeof iso === "string" && iso) {
-        const d = new Date(iso);
-        if (Number.isFinite(d.getTime())) {
-          untilLabel = d.toLocaleDateString("en-US", {
-            month: "long",
-            day: "numeric",
-            year: "numeric",
-          });
-        }
-      }
-      setServerSubBilling(b);
-      setSubscriptionActiveUntilLabel(untilLabel);
-      setCancelAtPeriodEnd(data.cancelAtPeriodEnd === true);
-    } catch {
-      setServerSubBilling(null);
-      setSubscriptionActiveUntilLabel(null);
-      setCancelAtPeriodEnd(false);
-    }
   }, []);
-
-  useEffect(() => {
-    void fetchSubscriptionMeta();
-  }, [fetchSubscriptionMeta]);
-
-  useEffect(() => {
-    const onVis = () => {
-      if (document.visibilityState === "visible") void fetchSubscriptionMeta();
-    };
-    document.addEventListener("visibilitychange", onVis);
-    return () => document.removeEventListener("visibilitychange", onVis);
-  }, [fetchSubscriptionMeta]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -363,26 +312,8 @@ export default function SubscriptionPage() {
     }
   }, []);
 
-  async function goToBillingManagement() {
-    setPortalLoading(true);
-    try {
-      await openStripeBillingPortal();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not open billing portal");
-    } finally {
-      setPortalLoading(false);
-    }
-  }
-
   async function startSubscriptionCheckout(planIdCheckout: string) {
     setCheckoutLoading(planIdCheckout);
-    const plan = PLANS.find((p) => p.id === planIdCheckout);
-    window.datafast?.("initiate_checkout", {
-      type: "subscription",
-      plan: planIdCheckout,
-      billing,
-      price: String(plan?.monthly ?? ""),
-    });
     try {
       const res = await fetch("/api/stripe/checkout/subscription", {
         method: "POST",
@@ -430,8 +361,7 @@ export default function SubscriptionPage() {
 
   const isSubscribed = planId !== "free";
 
-  const planGridClass =
-    "grid-cols-1 items-stretch sm:grid-cols-2 xl:grid-cols-4 xl:items-stretch";
+  const planGridClass = "grid-cols-1 sm:grid-cols-2 xl:grid-cols-4";
 
   return (
     <StudioShell>
@@ -439,13 +369,13 @@ export default function SubscriptionPage() {
         <div className="pointer-events-none absolute left-1/2 top-0 h-[480px] w-[960px] -translate-x-1/2 rounded-full bg-violet-600/14 blur-[130px]" />
         <div className="pointer-events-none absolute -left-24 top-1/4 h-64 w-64 rounded-full bg-indigo-600/10 blur-[90px]" />
 
-        <div className="relative mx-auto max-w-6xl space-y-8 px-4 py-6 md:px-6 md:py-8">
+        <div className="relative mx-auto max-w-6xl space-y-14 px-5 py-10 md:px-8 md:py-12">
           <header className="mx-auto max-w-2xl text-center">
             <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-violet-400/90">Subscription</p>
-            <h1 className="mt-2 bg-gradient-to-b from-white via-white to-white/55 bg-clip-text text-3xl font-bold tracking-tight text-transparent sm:text-4xl md:text-[2.75rem] md:leading-[1.08]">
+            <h1 className="mt-3 bg-gradient-to-b from-white via-white to-white/55 bg-clip-text text-3xl font-bold tracking-tight text-transparent sm:text-4xl md:text-[2.75rem] md:leading-[1.08]">
               Grow with a plan that keeps up
             </h1>
-            <p className="mt-3 text-xs text-white/38">
+            <p className="mt-4 text-xs text-white/38">
               Need a one-time boost instead?{" "}
               <Link
                 href="/credits"
@@ -455,7 +385,7 @@ export default function SubscriptionPage() {
               </Link>
             </p>
 
-            <div className="mt-6 flex justify-center">
+            <div className="mt-10 flex justify-center">
               <div
                 className="inline-flex rounded-full border border-white/10 bg-black/40 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
                 role="group"
@@ -477,18 +407,17 @@ export default function SubscriptionPage() {
                   type="button"
                   onClick={() => setBilling("yearly")}
                   className={cn(
-                    "relative overflow-visible rounded-full px-6 py-2.5 text-sm font-semibold transition-all duration-200",
+                    "rounded-full px-4 py-2 text-sm font-semibold transition-all duration-200",
                     billing === "yearly"
                       ? "bg-violet-500 text-white shadow-[0_4px_20px_rgba(139,92,246,0.35)]"
                       : "text-white/45 hover:text-white/75",
                   )}
                 >
-                  Yearly
-                  <span
-                    className="pointer-events-none absolute -right-1 -top-2 z-10 whitespace-nowrap rounded-full border border-emerald-300/45 bg-emerald-400/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-100 shadow-[0_0_12px_rgba(16,185,129,0.28)]"
-                    aria-hidden
-                  >
-                    Save 30%
+                  <span className="inline-flex items-center gap-2">
+                    Yearly
+                    <span className="rounded-full border border-emerald-300/45 bg-emerald-400/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-100 shadow-[0_0_16px_rgba(16,185,129,0.28)]">
+                      Save 30%
+                    </span>
                   </span>
                 </button>
               </div>
@@ -496,7 +425,16 @@ export default function SubscriptionPage() {
           </header>
 
           <section>
-            <div className={cn("mx-auto grid max-w-6xl gap-3 sm:gap-4", planGridClass)}>
+            <div className="mb-8 flex flex-col items-center gap-2 text-center">
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1">
+                <Sparkles className="h-3.5 w-3.5 text-violet-300" aria-hidden />
+                <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/50">
+                  Compare plans
+                </span>
+              </div>
+            </div>
+
+            <div className={cn("mx-auto grid max-w-6xl gap-5 pt-3", planGridClass)}>
               {PLANS.map((plan) => {
                 const { mainLabel, sub } = priceFor(plan);
                 const planIdx = subscriptionPlanSortIndex(plan.id as SubscriptionPlanId);
@@ -528,16 +466,15 @@ export default function SubscriptionPage() {
                   <div
                     key={plan.id}
                     className={cn(
-                      "relative flex h-full flex-col rounded-2xl border p-4 transition-all duration-300 sm:p-5",
+                      "relative flex flex-col rounded-2xl border p-6 transition-all duration-300",
                       isCurrentPlanCard
                         ? "border-emerald-400/45 bg-gradient-to-b from-emerald-600/[0.14] via-[#0b0914] to-[#06070d] shadow-[0_0_40px_rgba(16,185,129,0.12)]"
                         : plan.highlight
-                          ? "border-violet-400/40 bg-gradient-to-b from-violet-600/[0.18] via-[#0b0914] to-[#06070d] shadow-[0_0_48px_rgba(139,92,246,0.14),0_8px_0_0_rgba(76,29,149,0.4)]"
+                          ? "border-violet-400/40 bg-gradient-to-b from-violet-600/[0.18] via-[#0b0914] to-[#06070d] shadow-[0_0_48px_rgba(139,92,246,0.14),0_8px_0_0_rgba(76,29,149,0.4)] xl:scale-[1.02]"
                           : "border-white/10 bg-white/[0.03] hover:border-violet-500/20 hover:bg-white/[0.045]",
                     )}
                   >
-                    {/* Fixed row height so badges line up across plans */}
-                    <div className="mb-2 flex min-h-[1.5rem] flex-wrap content-start items-center gap-1.5">
+                    <div className="mb-3 flex flex-wrap items-center gap-1.5">
                       {isCurrentPlanCard ? (
                         <span className="rounded-full border border-emerald-400/50 bg-emerald-500/20 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-100">
                           Current plan
@@ -548,85 +485,59 @@ export default function SubscriptionPage() {
                           {plan.badge}
                         </span>
                       ) : null}
-                    </div>
-                    {showYearlySavingsBadge ? (
-                      <span className="pointer-events-none absolute right-3 top-3 z-10 rounded-full border border-emerald-300/45 bg-emerald-400/20 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-100 shadow-[0_0_12px_rgba(16,185,129,0.22)]">
-                        Save 30%
-                      </span>
-                    ) : null}
-
-                    <div className="shrink-0">
-                      <h2 className="text-lg font-bold leading-tight text-white sm:text-xl">{plan.name}</h2>
-                      <p className="mt-1 line-clamp-2 min-h-[2.25rem] text-[13px] leading-snug text-white/48 sm:text-sm">
-                        {plan.description}
-                      </p>
+                      {showYearlySavingsBadge ? (
+                        <span className="rounded-full border border-emerald-300/45 bg-emerald-400/20 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-100">
+                          Save 30%
+                        </span>
+                      ) : null}
                     </div>
 
-                    {/* Same vertical space for price + billing note */}
-                    <div className="mt-3 flex min-h-[4.25rem] shrink-0 flex-col">
+                    <div>
+                      <h2 className="text-xl font-bold text-white">{plan.name}</h2>
+                      <p className="mt-2 min-h-[2.75rem] text-sm leading-relaxed text-white/48">{plan.description}</p>
+                    </div>
+
+                    <div className="mt-6">
                       <div className="flex flex-wrap items-baseline gap-1">
-                        <span className="text-3xl font-extrabold tabular-nums leading-none text-white md:text-4xl">
+                        <span className="text-4xl font-extrabold tabular-nums leading-none text-white md:text-5xl">
                           ${mainLabel}
                         </span>
-                        <span className="text-sm font-semibold text-white/55">/mo</span>
+                        <span className="text-sm font-semibold text-white/55 md:text-base">/mo</span>
                       </div>
-                      <p className="mt-1.5 line-clamp-2 min-h-[1.75rem] text-[11px] leading-snug text-white/38">{sub}</p>
+                      <p className="mt-2 text-xs leading-snug text-white/38">{sub}</p>
+                      {billing === "yearly" ? (
+                        <p className="mt-2 inline-flex items-center rounded-md border border-emerald-400/35 bg-emerald-500/15 px-2 py-1 text-[11px] font-semibold text-emerald-200">
+                          Save 30% on yearly billing
+                        </p>
+                      ) : null}
                     </div>
 
                     <Button
                       type="button"
                       disabled={
                         Boolean(checkoutLoading) ||
-                        portalLoading ||
-                        upgradeConfirmLoading ||
-                        downgradeConfirmLoading ||
-                        (upgradePreviewLoading && pendingUpgradePlanId === plan.id) ||
-                        (downgradePreviewLoading && pendingDowngradePlanId === plan.id) ||
                         exactPlanAndBilling ||
+                        isLowerTier ||
                         (isSameTier && serverSubBilling === "pending")
                       }
-                      onClick={() => {
-                        if (!isSubscribed) {
-                          void startSubscriptionCheckout(plan.id);
-                          return;
-                        }
-                        if (isLowerTier && isSubscribed) {
-                          void openDowngradeDialog(plan.id);
-                          return;
-                        }
-                        if (exactPlanAndBilling || (isSameTier && serverSubBilling === "pending")) {
-                          return;
-                        }
-                        void openUpgradeDialog(plan.id);
-                      }}
+                      onClick={() => void startSubscriptionCheckout(plan.id)}
                       className={cn(
-                        "mt-3 h-10 w-full rounded-xl text-sm font-bold transition-all sm:h-11",
-                        exactPlanAndBilling
+                        "mt-6 h-12 w-full rounded-xl text-sm font-bold transition-all",
+                        exactPlanAndBilling || isLowerTier
                           ? "cursor-not-allowed border border-white/10 bg-white/[0.06] text-white/40 shadow-none hover:bg-white/[0.06]"
-                          : isLowerTier && isSubscribed
-                            ? "border border-amber-400/40 bg-amber-500/15 text-amber-50 shadow-[0_4px_0_0_rgba(180,83,9,0.35)] hover:bg-amber-500/25 hover:shadow-[0_6px_0_0_rgba(180,83,9,0.35)]"
-                            : plan.highlight
-                              ? "border border-violet-200/35 bg-violet-400 text-black shadow-[0_6px_0_0_rgba(76,29,149,0.9)] hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9)]"
-                              : "border border-white/15 bg-white/10 text-white hover:bg-white/15",
+                          : plan.highlight
+                            ? "border border-violet-200/35 bg-violet-400 text-black shadow-[0_6px_0_0_rgba(76,29,149,0.9)] hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9)]"
+                            : "border border-white/15 bg-white/10 text-white hover:bg-white/15",
                       )}
                     >
-                      {downgradePreviewLoading && pendingDowngradePlanId === plan.id ? (
-                        "Preparing…"
-                      ) : portalLoading ? (
-                        "Opening billing…"
-                      ) : upgradePreviewLoading && pendingUpgradePlanId === plan.id ? (
-                        "Preparing…"
-                      ) : checkoutLoading === plan.id ? (
+                      {checkoutLoading === plan.id ? (
                         "Redirecting…"
                       ) : isSameTier && serverSubBilling === "pending" ? (
                         "Loading…"
                       ) : exactPlanAndBilling ? (
                         "Current plan"
-                      ) : isLowerTier && isSubscribed ? (
-                        <span className="inline-flex items-center justify-center gap-2">
-                          Downgrade
-                          <TrendingDown className="h-4 w-4" aria-hidden />
-                        </span>
+                      ) : isLowerTier ? (
+                        "Below current plan"
                       ) : isSameTier && billing === "yearly" && serverSubBilling !== "yearly" ? (
                         <span className="inline-flex items-center justify-center gap-2">
                           Switch to yearly
@@ -645,28 +556,22 @@ export default function SubscriptionPage() {
                       )}
                     </Button>
 
-                    <ul className="mt-3 flex flex-1 flex-col space-y-1.5 border-t border-white/10 pt-3 text-left text-[11px] text-white/72 sm:text-xs">
-                      <li className="flex items-center gap-2">
-                        <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-md bg-violet-500/20 text-violet-200 sm:h-5 sm:w-5">
-                          <Coins className="h-2.5 w-2.5 sm:h-3 sm:w-3" aria-hidden />
+                    <ul className="mt-6 space-y-2 border-t border-white/10 pt-6 text-left text-xs text-white/72">
+                      <li className="flex items-start gap-2.5">
+                        <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-violet-500/20 text-violet-200">
+                          <Coins className="h-3 w-3" aria-hidden />
                         </span>
-                        <span className="min-w-0 leading-none">
-                          <span className="font-semibold tabular-nums text-white">
-                            {plan.credits.toLocaleString()} credits
-                          </span>
+                        <span className="min-w-0">
+                          <span className="font-semibold text-white">{plan.credits.toLocaleString()} credits</span>
                         </span>
                       </li>
-                      <li className="pl-1 text-white/50">
-                        Up to {Number(plan.usage.images).toLocaleString()} AI images (Nanobanana)
-                      </li>
-                      <li className="pl-1 text-white/50">
-                        Up to {Number(plan.usage.videos).toLocaleString()} AI videos (Sora 2)
-                      </li>
-                      <li className="pt-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-white/45">
+                      <li className="pl-1 text-white/50">Up to 1200 AI images (Nanobanana)</li>
+                      <li className="pl-1 text-white/50">Up to 120 AI videos (Sora 2)</li>
+                      <li className="pt-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-white/45">
                         Included models
                       </li>
                       <li className="pl-1 text-white/55">
-                        <div className="space-y-1">
+                        <div className="space-y-1.5">
                           {SUBSCRIPTION_MODEL_MATRIX_ROWS.map((row) => {
                             const included = isModelIncluded(plan.id, row);
                             return (
@@ -705,10 +610,10 @@ export default function SubscriptionPage() {
 
           <section className="mx-auto max-w-4xl">
             <h2 className="text-center text-xs font-bold uppercase tracking-[0.16em] text-white/40">Your account</h2>
-            <div className="mt-3 rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.05] to-transparent p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] md:p-6">
-              <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
-                <div className="flex gap-3">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-violet-500/25 bg-violet-500/10 sm:h-14 sm:w-14 sm:rounded-2xl">
+            <div className="mt-4 rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.05] to-transparent p-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] md:p-8">
+              <div className="flex flex-col gap-8 sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex gap-4">
+                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-violet-500/25 bg-violet-500/10">
                     <CreditCard className="h-6 w-6 text-violet-200/90" strokeWidth={1.5} />
                   </div>
                   <div className="min-w-0">
@@ -717,64 +622,38 @@ export default function SubscriptionPage() {
                         className={cn(
                           "rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide",
                           isSubscribed
-                            ? cancelAtPeriodEnd
-                              ? "border-amber-400/40 bg-amber-500/15 text-amber-100"
-                              : "border-emerald-400/35 bg-emerald-500/15 text-emerald-200"
+                            ? "border-emerald-400/35 bg-emerald-500/15 text-emerald-200"
                             : "border-white/15 bg-white/[0.06] text-white/55",
                         )}
                       >
-                        {isSubscribed ? (cancelAtPeriodEnd ? "Canceled" : "Subscribed") : "Free"}
+                        {isSubscribed ? "Subscribed" : "Free"}
                       </span>
                     </div>
-                    <h3 className="mt-1.5 text-xl font-bold text-white sm:text-2xl">{planDisplayName}</h3>
+                    <h3 className="mt-2 text-2xl font-bold text-white">{planDisplayName}</h3>
 
                     {isSubscribed ? (
-                      <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                      <div className="mt-3">
                         <Button
                           type="button"
                           variant="secondary"
-                          disabled={portalLoading}
                           className="w-full rounded-xl border border-white/15 bg-white/5 text-white hover:bg-white/10 sm:w-auto"
-                          onClick={() => void goToBillingManagement()}
+                          onClick={() =>
+                            window.open(BILLING_PORTAL_URL, "_blank", "noopener,noreferrer")
+                          }
                         >
-                          {portalLoading ? "Opening…" : "Manage billing"}
+                          Manage billing
                         </Button>
-                        {!cancelAtPeriodEnd ? (
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            className="w-full rounded-xl border border-red-400/30 bg-red-500/10 text-red-50 hover:bg-red-500/20 sm:w-auto"
-                            onClick={() => setCancelDialogOpen(true)}
-                          >
-                            Cancel subscription
-                          </Button>
-                        ) : null}
                       </div>
                     ) : null}
 
-                    {isSubscribed && cancelAtPeriodEnd ? (
-                      <p className="mt-2 max-w-md rounded-xl border border-amber-400/25 bg-amber-500/[0.08] px-3 py-2 text-sm leading-snug text-amber-100/95">
-                        Your subscription is canceled. You keep full access{" "}
-                        {subscriptionActiveUntilLabel ? (
-                          <>
-                            until <span className="font-semibold text-white">{subscriptionActiveUntilLabel}</span>.
-                          </>
-                        ) : (
-                          <>until the end of your current billing period.</>
-                        )}
-                      </p>
-                    ) : null}
-
-                    <p className="mt-1.5 max-w-md text-sm leading-snug text-white/48">
+                    <p className="mt-2 max-w-md text-sm leading-relaxed text-white/48">
                       {isSubscribed
-                        ? cancelAtPeriodEnd
-                          ? "After that date you’ll move to the free tier unless you subscribe again."
-                          : "Your monthly credits refresh with your plan. Upgrade or downgrade from the plan cards above; downgrades take effect at renewal."
+                        ? "Your monthly credits refresh with your plan. Use them across Link to Ad, Image, and Video in the studio."
                         : "You’re on the free tier. Add a subscription for monthly credits or buy packs on the Credits page."}
                     </p>
 
                     {isSubscribed ? (
-                      <div className="mt-3 flex flex-col gap-2">
+                      <div className="mt-4 flex flex-col gap-3">
                         <p className="text-center text-[11px] text-white/28">
                           Checkout is powered by Stripe. Subscription credits reset each billing cycle and do not carry over.
                         </p>
@@ -788,49 +667,6 @@ export default function SubscriptionPage() {
           </section>
         </div>
       </div>
-
-      <SubscriptionUpgradeDialog
-        open={upgradeDialogOpen}
-        onOpenChange={(o) => {
-          setUpgradeDialogOpen(o);
-          if (!o) {
-            setUpgradePreview(null);
-            setPendingUpgradePlanId(null);
-          }
-        }}
-        preview={upgradePreview}
-        loadingPreview={upgradePreviewLoading}
-        confirming={upgradeConfirmLoading}
-        onConfirm={confirmSubscriptionUpgrade}
-      />
-
-      <SubscriptionDowngradeDialog
-        open={downgradeDialogOpen}
-        onOpenChange={(o) => {
-          setDowngradeDialogOpen(o);
-          if (!o) {
-            setDowngradePreview(null);
-            setPendingDowngradePlanId(null);
-          }
-        }}
-        preview={downgradePreview}
-        loadingPreview={downgradePreviewLoading}
-        confirming={downgradeConfirmLoading}
-        onConfirm={confirmDowngrade}
-      />
-
-      <CancelSubscriptionDialog
-        open={cancelDialogOpen}
-        onOpenChange={setCancelDialogOpen}
-        planName={planDisplayName}
-        subscriptionActiveUntilLabel={subscriptionActiveUntilLabel}
-        retentionOfferEligible={retentionOfferEligible}
-        retentionEligibilityLoading={retentionEligibilityLoading}
-        onAcceptDiscount={acceptRetentionDiscount}
-        onConfirmCancel={proceedWithCancellation}
-        applyingDiscount={cancelDiscountLoading}
-        cancelling={cancelPortalLoading}
-      />
     </StudioShell>
   );
 }

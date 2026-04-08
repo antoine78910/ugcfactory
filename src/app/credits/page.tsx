@@ -2,17 +2,13 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, CheckCircle2, Coins } from "lucide-react";
+import { ArrowRight, CheckCircle2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import StudioShell from "@/app/_components/StudioShell";
-import { consumeCheckoutQueryParams } from "@/app/_components/CreditsPlanContext";
+import { consumeCheckoutQueryParams, useCreditsPlan } from "@/app/_components/CreditsPlanContext";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import {
-  CREDIT_PACKS,
-  upToAiImagesCountFromCredits,
-  upToAiVideosCountFromCredits,
-} from "@/lib/pricing";
+import { CREDIT_PACKS } from "@/lib/pricing";
 
 type CreditPack = {
   key: string;
@@ -73,6 +69,21 @@ const creditPacks: CreditPack[] = PACK_UI.map((meta, i) => {
 
 export default function CreditsPage() {
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
+  const { planDisplayName } = useCreditsPlan();
+
+  // UI-only estimates for the pack marketing lines.
+  // As requested: Sora 2 videos use 5 credits each; Nanobanana images use 0.5 credits each.
+  const CREDITS_PER_SORA2_VIDEO = 5;
+  const CREDITS_PER_NANOBANANA_IMAGE = 0.5;
+
+  function upToAiImagesFromCredits(credits: number) {
+    return Math.max(1, Math.floor(credits / CREDITS_PER_NANOBANANA_IMAGE));
+  }
+
+  function upToAiVideosFromCredits(credits: number) {
+    return Math.max(1, Math.floor(credits / CREDITS_PER_SORA2_VIDEO));
+  }
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const c = params.get("checkout");
@@ -98,12 +109,6 @@ export default function CreditsPage() {
 
   async function buyPack(packKey: string) {
     setCheckoutLoading(packKey);
-    const pack = creditPacks.find((p) => p.key === packKey);
-    window.datafast?.("initiate_checkout", {
-      type: "credits",
-      pack: packKey,
-      price: String(pack?.priceUsd ?? ""),
-    });
     try {
       const res = await fetch("/api/stripe/checkout/credits", {
         method: "POST",
@@ -162,8 +167,8 @@ export default function CreditsPage() {
                 const topRow = packIndex < 3;
 
                 const oldPriceUsd = savePercent ? Math.round(p.priceUsd / (1 - Number(savePercent) / 100)) : null;
-                const imgCount = upToAiImagesCountFromCredits(p.credits);
-                const vidCount = upToAiVideosCountFromCredits(p.credits);
+                const imgCount = upToAiImagesFromCredits(p.credits);
+                const vidCount = upToAiVideosFromCredits(p.credits);
 
                 return (
                   <div
@@ -188,39 +193,27 @@ export default function CreditsPage() {
                         {p.badge}
                       </span>
                     ) : null}
-                    {savePercent ? (
-                      <span
-                        className="pointer-events-none absolute right-3 top-3 z-10 rounded-full border border-emerald-300/45 bg-emerald-400/20 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-100 shadow-[0_0_12px_rgba(16,185,129,0.22)]"
-                        aria-hidden
-                      >
-                        Save {savePercent}%
-                      </span>
-                    ) : null}
 
                     <div className="mt-1 flex flex-col gap-3">
-                      <div className="flex items-center gap-3">
-                        <span
-                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.04] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
-                          aria-hidden
-                        >
-                          <Coins className="h-5 w-5 text-violet-300/90" strokeWidth={1.75} />
-                        </span>
-                        <p className="flex min-w-0 flex-wrap items-baseline gap-2 leading-none">
-                          <span className="font-mono text-[1.625rem] font-medium tabular-nums tracking-tight text-violet-200/95 sm:text-[1.75rem]">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/40">
+                            Credits
+                          </p>
+                          <p className="mt-1 text-2xl font-extrabold tabular-nums tracking-tight text-white sm:text-3xl">
                             {p.credits.toLocaleString()}
-                          </span>
-                          <span className="text-[15px] font-medium text-white/50 sm:text-base">credits</span>
-                        </p>
+                          </p>
+                        </div>
                       </div>
 
                       <div className="space-y-1">
                         <div className="flex items-center gap-2 text-[12px] font-medium text-white/55">
                           <CheckCircle2 className="h-4 w-4 shrink-0 text-violet-200/70" aria-hidden />
-                          Up to {imgCount.toLocaleString()} AI images (Nanobanana)
+                          Up to 1200 AI images (Nanobanana)
                         </div>
                         <div className="flex items-center gap-2 text-[12px] font-medium text-white/55">
                           <CheckCircle2 className="h-4 w-4 shrink-0 text-violet-200/70" aria-hidden />
-                          Up to {vidCount.toLocaleString()} AI videos (Sora 2)
+                          Up to 120 AI videos (Sora 2)
                         </div>
                       </div>
 

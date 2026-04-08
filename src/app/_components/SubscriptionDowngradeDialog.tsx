@@ -5,7 +5,13 @@ import { Dialog } from "radix-ui";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+function formatMoneyMajor(amount: number, currency: string): string {
+  const code = currency?.toLowerCase() === "eur" ? "EUR" : "USD";
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: code }).format(amount);
+}
+
 export type SubscriptionDowngradePreview = {
+  currency?: string;
   current: {
     planId: string;
     name: string;
@@ -83,7 +89,7 @@ export function SubscriptionDowngradeDialog({
                       {preview.current.creditsPerMonth.toLocaleString()} credits/mo
                     </p>
                     <p className="mt-1 text-xl font-bold tabular-nums text-white">
-                      ${preview.current.priceUsd}
+                      {formatMoneyMajor(preview.current.priceUsd, preview.currency ?? "usd")}
                       <span className="text-sm font-medium text-white/40">/mo</span>
                     </p>
                   </div>
@@ -98,7 +104,7 @@ export function SubscriptionDowngradeDialog({
                       {preview.target.creditsPerMonth.toLocaleString()} credits/mo
                     </p>
                     <p className="mt-1 text-xl font-bold tabular-nums text-white">
-                      ${preview.target.priceUsd}
+                      {formatMoneyMajor(preview.target.priceUsd, preview.currency ?? "usd")}
                       <span className="text-sm font-medium text-white/40">/mo</span>
                     </p>
                   </div>
@@ -119,7 +125,7 @@ export function SubscriptionDowngradeDialog({
                         <span className="font-semibold text-white/95">
                           {preview.target.creditsPerMonth.toLocaleString()} credits/mo
                         </span>{" "}
-                        at ${preview.target.priceUsd}/mo.
+                        at {formatMoneyMajor(preview.target.priceUsd, preview.currency ?? "usd")}/mo.
                       </p>
                     </div>
                   </div>

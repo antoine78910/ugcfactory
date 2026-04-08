@@ -8,11 +8,6 @@ import { LandingRevealCarousel } from "./LandingRevealCarousel";
 import { LandingFaq } from "./LandingFaq";
 import { ArrowRight, Sparkles } from "lucide-react";
 
-/** Auth lives on the app host — same origin as Supabase OAuth / PKCE (see middleware). */
-const APP_ORIGIN =
-  (process.env.NEXT_PUBLIC_APP_URL && process.env.NEXT_PUBLIC_APP_URL.replace(/\/+$/, "")) ||
-  "https://app.youry.io";
-
 const STEPS = [
   {
     number: "01",
@@ -56,8 +51,11 @@ const HERO_STUDIO_VIDEOS = [
 export default function LandingPage() {
   return (
     <div className="min-h-screen overflow-x-clip bg-[#050507] text-white selection:bg-violet-500/30">
-      <div className="sticky top-0 z-50">
-        <header className="overflow-hidden border-b border-white/[0.08] bg-[#050507]/85 backdrop-blur-md supports-[backdrop-filter]:bg-[#050507]/20">
+      {/*
+        Sticky nav must be a direct child of the full-page column so it stays pinned for the whole
+        scroll (not only the hero). Hero art stays in a sibling wrapper; overflow-x clip stays on the art layer.
+      */}
+      <header className="sticky top-0 z-50 overflow-hidden border-b border-white/[0.08] bg-[#050507]/85 backdrop-blur-md supports-[backdrop-filter]:bg-[#050507]/20">
         <div className="mx-auto flex min-w-0 max-w-6xl items-center gap-3 px-5 py-5 sm:gap-4 sm:px-6 sm:py-6">
           <Link href="/" className="flex flex-shrink-0 items-center">
             <Image
@@ -77,14 +75,14 @@ export default function LandingPage() {
               size="sm"
               className="h-9 px-4 text-sm text-white/70 hover:bg-white/10 hover:text-white sm:h-10 sm:px-5"
             >
-              <Link href={`${APP_ORIGIN}/signin`}>Log in</Link>
+              <Link href="/signin">Log in</Link>
             </Button>
             <Button
               asChild
               size="sm"
               className="h-9 rounded-2xl border border-violet-200/40 bg-violet-400 px-4 text-sm font-semibold text-black shadow-[0_6px_0_0_rgba(76,29,149,0.9)] ring-offset-0 transition-all hover:-translate-y-[1px] hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9),0_0_28px_rgba(167,139,250,0.5)] focus-visible:border-violet-400/45 focus-visible:ring-violet-400/55 focus-visible:ring-[3px] active:translate-y-[6px] active:shadow-[0_0_0_0_rgba(76,29,149,0.9)] sm:h-10 sm:px-6 sm:text-base"
             >
-              <Link href={`${APP_ORIGIN}/signup`}>
+              <Link href="/signup">
                 <Sparkles className="mr-1 h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 Get started
                 <ArrowRight className="ml-1 h-3.5 w-3.5 sm:h-4 sm:w-4" />
@@ -92,8 +90,7 @@ export default function LandingPage() {
             </Button>
           </div>
         </div>
-        </header>
-      </div>
+      </header>
 
       <div className="relative">
         <div className="pointer-events-none absolute inset-x-0 top-0 z-0 h-[min(100svh,1040px)] overflow-x-hidden">
@@ -142,7 +139,7 @@ export default function LandingPage() {
                 asChild
                 className="h-auto min-h-10 shrink-0 rounded-xl bg-violet-400 px-3 py-2.5 text-center text-[11px] font-semibold leading-snug text-black border border-violet-200/40 shadow-[0_6px_0_0_rgba(76,29,149,0.9)] ring-offset-0 transition-all hover:-translate-y-[1px] hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9),0_0_32px_rgba(167,139,250,0.55)] focus-visible:border-violet-400/45 focus-visible:ring-violet-400/55 focus-visible:ring-[3px] active:translate-y-[6px] active:shadow-[0_0_0_0_rgba(76,29,149,0.9)] sm:rounded-2xl sm:px-5 sm:py-2.5 sm:text-xs md:text-sm"
               >
-                <Link href={`${APP_ORIGIN}/signup`} className="inline-flex items-center justify-center gap-1.5">
+                <Link href="/signup" className="inline-flex items-center justify-center gap-1.5">
                   <Sparkles className="h-4 w-4 shrink-0" aria-hidden />
                   <span>Generate</span>
                 </Link>
@@ -212,7 +209,7 @@ export default function LandingPage() {
           asChild
           className="mt-7 h-12 rounded-2xl bg-violet-400 px-8 text-base font-semibold text-black border border-violet-200/40 shadow-[0_7px_0_0_rgba(76,29,149,0.9)] ring-offset-0 transition-all hover:-translate-y-[1px] hover:bg-violet-300 hover:shadow-[0_9px_0_0_rgba(76,29,149,0.9),0_0_36px_rgba(167,139,250,0.55)] focus-visible:border-violet-400/45 focus-visible:ring-violet-400/55 focus-visible:ring-[3px] active:translate-y-[7px] active:shadow-[0_0_0_0_rgba(76,29,149,0.9)]"
         >
-          <Link href={`${APP_ORIGIN}/signup`}>
+          <Link href="/signup">
             <Sparkles className="mr-2 h-4 w-4" />
             Try it yourself
             <ArrowRight className="ml-2 h-4 w-4" />
@@ -237,7 +234,7 @@ export default function LandingPage() {
             asChild
             className="relative mt-8 h-11 rounded-2xl bg-violet-400 px-7 text-sm font-semibold text-black border border-violet-200/40 shadow-[0_6px_0_0_rgba(76,29,149,0.9)] ring-offset-0 transition-all hover:-translate-y-[1px] hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9),0_0_30px_rgba(167,139,250,0.5)] focus-visible:border-violet-400/45 focus-visible:ring-violet-400/55 focus-visible:ring-[3px] active:translate-y-[6px] active:shadow-[0_0_0_0_rgba(76,29,149,0.9)]"
           >
-            <Link href={`${APP_ORIGIN}/signup`}>
+            <Link href="/signup">
               <Sparkles className="mr-1.5 h-4 w-4" />
               Generate your ad
             </Link>

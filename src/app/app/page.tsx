@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
 export default function AppIndexPage() {
-  redirect("/link-to-ad");
+  redirect("/app/link-to-ad");
 }

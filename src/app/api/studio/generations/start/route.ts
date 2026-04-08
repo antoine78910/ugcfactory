@@ -129,7 +129,6 @@ export async function POST(req: Request) {
     kind,
     status: "processing" as const,
     label,
-    model,
     external_task_id,
     provider: "kie-market",
     credits_charged: baseCharge + (i === 0 ? remainder : 0),

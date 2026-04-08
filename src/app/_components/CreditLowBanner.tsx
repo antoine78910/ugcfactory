@@ -71,7 +71,13 @@ function UpgradeModal({
                 <h3 className="mt-1 text-lg font-bold text-white">{plan.name}</h3>
 
                 <div className="mt-3 flex items-baseline gap-1">
-                  <span className="text-3xl font-extrabold text-white">${plan.monthly}</span>
+                  <span className="text-3xl font-extrabold text-white">
+                    {new Intl.NumberFormat("en-US", {
+                      style: "currency",
+                      currency: "USD",
+                      maximumFractionDigits: 0,
+                    }).format(plan.monthly)}
+                  </span>
                   <span className="text-sm text-white/45">/mo</span>
                 </div>
 

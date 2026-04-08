@@ -3558,6 +3558,8 @@ export default function LinkToAdUniverse({
       return;
     }
 
+    setIsNanoAllImagesSubmitting(true);
+
     // Reset old images + downstream state so we don't “reuse” previous results.
     setNanoBananaImageUrl(null);
     setNanoBananaImageUrls([]);
@@ -5637,6 +5639,12 @@ export default function LinkToAdUniverse({
                           const url = nanoImageSlots[i];
                           const sel = nanoBananaSelectedImageIndex === i;
                           const pollingHere = Boolean(nanoPollTaskId && nanoPollingSlotIndex === i);
+                          const slotBusy =
+                            !url &&
+                            (pollingHere ||
+                              isNanoAllImagesSubmitting ||
+                              /** Prompts refresh before the 3 image tasks; keep thumbnails alive */
+                              isNanoPromptsLoading);
                           return (
                             <button
                               key={i}
@@ -5647,7 +5655,7 @@ export default function LinkToAdUniverse({
                                 sel
                                   ? "border-violet-400 shadow-[0_0_12px_rgba(139,92,246,0.35)]"
                                   : "border-transparent opacity-80 hover:border-white/20 hover:opacity-100",
-                                !url && !pollingHere && "cursor-default opacity-50 hover:opacity-50",
+                                !url && !slotBusy && "cursor-default opacity-50 hover:opacity-50",
                               )}
                             >
                               {url ? (
@@ -5660,7 +5668,7 @@ export default function LinkToAdUniverse({
                                   decoding="async"
                                   fetchPriority="high"
                                 />
-                              ) : pollingHere ? (
+                              ) : slotBusy ? (
                                 <span className="flex h-full w-full items-center justify-center bg-black/40">
                                   <Loader2 className="h-5 w-5 shrink-0 animate-spin text-violet-300" aria-hidden />
                                 </span>
@@ -6113,9 +6121,12 @@ export default function LinkToAdUniverse({
                                   decoding="async"
                                   fetchPriority="high"
                                 />
-                              ) : isNanoAllImagesSubmitting ? (
-                                <span className="flex h-full w-full items-center justify-center bg-black/40">
+                              ) : isNanoAllImagesSubmitting || isNanoPromptsLoading ? (
+                                <span className="flex h-full w-full flex-col items-center justify-center gap-1 bg-black/40 px-1">
                                   <Loader2 className="h-6 w-6 shrink-0 animate-spin text-violet-300" aria-hidden />
+                                  <span className="text-center text-[9px] font-medium leading-tight text-white/45">
+                                    {isNanoPromptsLoading ? "Prompts…" : "Generating…"}
+                                  </span>
                                 </span>
                               ) : (
                                 <span className="flex h-full w-full items-center justify-center text-xs font-medium uppercase tracking-wide text-white/25">

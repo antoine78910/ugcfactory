@@ -9,12 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import {
-  CREDIT_PACKS,
-  SUBSCRIPTIONS,
-  upToAiImagesCountFromCredits,
-  upToAiVideosCountFromCredits,
-} from "@/lib/pricing";
+import { CREDIT_PACKS, SUBSCRIPTIONS } from "@/lib/pricing";
 import {
   CREDIT_PACK_KEYS,
   type CreditPackKey,
@@ -105,7 +100,7 @@ function clearPlanData() {
   lsRemove(LS_CHECKOUT_TS);
 }
 
-/** Returns the user's primary personal API key when Personal API mode is active, or undefined. */
+/** Returns the user's Kie API key when Personal API mode is active, or undefined. */
 export function getPersonalApiKey(): string | undefined {
   if (typeof window === "undefined") return undefined;
   if (lsGet(LS_PERSONAL_API_ENABLED) !== "1") return undefined;
@@ -118,7 +113,7 @@ export function isPersonalApiActive(): boolean {
   return getPersonalApiKey() !== undefined;
 }
 
-/** Returns the user's alternate video API key when that mode is active, or undefined. */
+/** Returns the user's PiAPI key when PiAPI mode is active, or undefined. */
 export function getPersonalPiapiApiKey(): string | undefined {
   if (typeof window === "undefined") return undefined;
   if (lsGet(LS_PIAPI_PERSONAL_ENABLED) !== "1") return undefined;
@@ -130,7 +125,7 @@ export function isPersonalPiapiActive(): boolean {
   return getPersonalPiapiApiKey() !== undefined;
 }
 
-/** Returns the user's personal voice API key when that mode is active, or undefined. */
+/** Returns the user's ElevenLabs API key when ElevenLabs personal mode is active, or undefined. */
 export function getPersonalElevenLabsApiKey(): string | undefined {
   if (typeof window === "undefined") return undefined;
   if (lsGet(LS_ELEVENLABS_PERSONAL_ENABLED) !== "1") return undefined;
@@ -143,7 +138,7 @@ export function isPersonalElevenLabsActive(): boolean {
 }
 
 /**
- * When either personal video API key is enabled, skip platform credit charges and
+ * When either personal KIE or PiAPI key is enabled, skip platform credit charges and
  * balance checks in the studio (you bill the provider directly).
  */
 export function isPlatformCreditBypassActive(): boolean {
@@ -242,11 +237,7 @@ const SUBSCRIPTION_TIERS = [
     name: "Starter",
     monthly: SUBSCRIPTIONS[0].price_usd,
     credits: SUBSCRIPTIONS[0].credits_per_month,
-    usage: {
-      linkToAd: "4",
-      images: String(upToAiImagesCountFromCredits(SUBSCRIPTIONS[0].credits_per_month)),
-      videos: String(upToAiVideosCountFromCredits(SUBSCRIPTIONS[0].credits_per_month)),
-    },
+    usage: { linkToAd: "4", images: "125", videos: "24" },
     cardBorder: "border-white/10",
     btnClass: "bg-white text-black hover:bg-white/90",
   },
@@ -255,11 +246,7 @@ const SUBSCRIPTION_TIERS = [
     name: "Growth",
     monthly: SUBSCRIPTIONS[1].price_usd,
     credits: SUBSCRIPTIONS[1].credits_per_month,
-    usage: {
-      linkToAd: "10",
-      images: String(upToAiImagesCountFromCredits(SUBSCRIPTIONS[1].credits_per_month)),
-      videos: String(upToAiVideosCountFromCredits(SUBSCRIPTIONS[1].credits_per_month)),
-    },
+    usage: { linkToAd: "10", images: "300", videos: "60" },
     cardBorder: "border-sky-400/35",
     btnClass: "bg-sky-400 text-white hover:bg-sky-300",
     popular: true,
@@ -269,11 +256,7 @@ const SUBSCRIPTION_TIERS = [
     name: "Pro",
     monthly: SUBSCRIPTIONS[2].price_usd,
     credits: SUBSCRIPTIONS[2].credits_per_month,
-    usage: {
-      linkToAd: "24",
-      images: String(upToAiImagesCountFromCredits(SUBSCRIPTIONS[2].credits_per_month)),
-      videos: String(upToAiVideosCountFromCredits(SUBSCRIPTIONS[2].credits_per_month)),
-    },
+    usage: { linkToAd: "24", images: "700", videos: "140" },
     cardBorder: "border-white/10",
     btnClass: "bg-white text-black hover:bg-white/90",
   },
@@ -282,11 +265,7 @@ const SUBSCRIPTION_TIERS = [
     name: "Scale",
     monthly: SUBSCRIPTIONS[3].price_usd,
     credits: SUBSCRIPTIONS[3].credits_per_month,
-    usage: {
-      linkToAd: "55",
-      images: String(upToAiImagesCountFromCredits(SUBSCRIPTIONS[3].credits_per_month)),
-      videos: String(upToAiVideosCountFromCredits(SUBSCRIPTIONS[3].credits_per_month)),
-    },
+    usage: { linkToAd: "55", images: "1600", videos: "320" },
     cardBorder: "border-violet-500/40",
     btnClass: "bg-violet-500 text-white hover:bg-violet-400",
   },
@@ -409,21 +388,10 @@ export function CreditsPlanProvider({
         // Server confirms a paid plan — apply it with the authoritative ledger balance.
         const alloc = subscriptionCredits(serverPlan);
         lsSet(LS_PLAN, serverPlan);
-
-        // Grace period: right after checkout the webhook may not have created
-        // the credit grants yet, so serverBalance is 0. During the grace window
-        // keep the optimistic credits written by consumeCheckoutQueryParams.
-        const checkoutTs = Number(lsGet(LS_CHECKOUT_TS));
-        const inCheckoutGrace = Number.isFinite(checkoutTs) && Date.now() - checkoutTs < 5 * 60 * 1000;
-        const localCredits = Number(lsGet(LS_CREDITS));
-
-        if (serverBalance !== null && serverBalance > 0) {
-          lsSet(LS_CREDITS, String(serverBalance));
-        } else if (inCheckoutGrace && Number.isFinite(localCredits) && localCredits > 0) {
-          // Keep local credits during grace window — don't overwrite with 0.
-        } else if (serverBalance !== null) {
+        if (serverBalance !== null) {
           lsSet(LS_CREDITS, String(serverBalance));
         } else {
+          const localCredits = Number(lsGet(LS_CREDITS));
           if (!Number.isFinite(localCredits) || localCredits > alloc * 2) {
             lsSet(LS_CREDITS, String(alloc));
           }

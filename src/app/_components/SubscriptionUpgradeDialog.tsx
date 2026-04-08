@@ -23,9 +23,15 @@ export type SubscriptionUpgradePreview = {
   renewalSummary: string;
 };
 
-function formatUsd(cents: number): string {
+function formatMoneyCents(cents: number, currency: string): string {
   const v = Math.abs(cents) / 100;
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(v);
+  const code = currency?.toLowerCase() === "eur" ? "EUR" : "USD";
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: code }).format(v);
+}
+
+function formatMoneyMajor(amount: number, currency: string): string {
+  const code = currency?.toLowerCase() === "eur" ? "EUR" : "USD";
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: code }).format(amount);
 }
 
 type Props = {
@@ -83,9 +89,7 @@ export function SubscriptionUpgradeDialog({
                       <span className="font-medium text-white/65">{preview.current.billingLabel.toLowerCase()}</span>
                     </p>
                     <p className="mt-2 text-xl font-bold tabular-nums text-white">
-                      {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(
-                        preview.current.priceUsd,
-                      )}
+                      {formatMoneyMajor(preview.current.priceUsd, preview.currency)}
                       <span className="text-sm font-medium text-white/40">/mo</span>
                     </p>
                   </div>
@@ -99,9 +103,7 @@ export function SubscriptionUpgradeDialog({
                       {preview.target.creditsPerMonth.toLocaleString()} credits/mo
                     </p>
                     <p className="mt-1 text-xl font-bold tabular-nums text-white">
-                      {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(
-                        preview.target.priceUsd,
-                      )}
+                      {formatMoneyMajor(preview.target.priceUsd, preview.currency)}
                       <span className="text-sm font-medium text-white/40">/mo</span>
                     </p>
                   </div>
@@ -112,10 +114,11 @@ export function SubscriptionUpgradeDialog({
                     <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Proration credit</p>
                     <div className="mt-2 flex items-center justify-between text-sm">
                       <span className="text-white/65">
-                        {preview.subscriptionCreditsRemaining} unused credits × $0.07
+                        {preview.subscriptionCreditsRemaining} unused credits ×{" "}
+                        {formatMoneyMajor(0.07, preview.currency)}
                       </span>
                       <span className="font-semibold tabular-nums text-emerald-300/95">
-                        −{formatUsd(preview.prorationCreditCents)}
+                        −{formatMoneyCents(preview.prorationCreditCents, preview.currency)}
                       </span>
                     </div>
                   </div>
@@ -124,7 +127,7 @@ export function SubscriptionUpgradeDialog({
                 <div className="flex items-center justify-between rounded-xl border border-violet-400/25 bg-violet-500/10 px-3 py-3">
                   <span className="text-sm font-semibold text-white/90">Amount due today</span>
                   <span className="text-xl font-bold tabular-nums text-white">
-                    {formatUsd(preview.amountDueCents)}
+                    {formatMoneyCents(preview.amountDueCents, preview.currency)}
                   </span>
                 </div>
 
