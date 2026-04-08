@@ -173,7 +173,7 @@ const STUDIO_VIDEO_LABELS: Record<string, string> = {
   "openai/sora-2": "Sora 2",
   "openai/sora-2-pro": "Sora 2 Pro",
   "bytedance/seedance-2-preview": "Seedance 2",
-  "bytedance/seedance-2-fast-preview": "Seedance 2 Fast",
+  "bytedance/seedance-2-fast-preview": "Seedance 2 Turbo",
   "bytedance/seedance-2.0-pro": "Seedance 2.0 Pro",
   veo3_fast: "Veo 3.1 Fast",
   veo3: "Veo 3.1",

@@ -988,7 +988,8 @@ export default function LinkToAdUniverse({
       .then(({ data }) => _setUserEmail(data.user?.email ?? null))
       .catch(() => {});
   }, []);
-  const _30sUnlocked = _userEmail === "anto.delbos@mail.com";
+  // 30s Link-to-Ad is enabled for testing (renders as two chained 15s clips).
+  const _30sUnlocked = true;
   /** After a fresh store scan starts, gate later steps against this snapshot so the wallet UI does not “jump” each step. Resync on image/video redo actions only. */
   const [ltaFrozenCredits, setLtaFrozenCredits] = useState<number | null>(null);
   const creditsBalanceRef = useRef(creditsBalance);
@@ -4696,21 +4697,16 @@ export default function LinkToAdUniverse({
                     <button
                       key={d}
                       type="button"
-                      onClick={() => { if (!locked30) setVideoDuration(d); }}
-                      disabled={isWorking || locked30}
+                      onClick={() => setVideoDuration(d)}
+                      disabled={isWorking}
                       className={cn(
                         "rounded-md px-3 py-1.5 text-xs font-semibold transition relative",
                         videoDuration === d
                           ? "bg-violet-500/15 text-white border border-violet-400/60"
-                          : locked30
-                            ? "bg-black/20 text-white/25 border border-white/5 cursor-not-allowed"
-                            : "bg-black/20 text-white/65 hover:border-white/20 border border-white/10",
+                          : "bg-black/20 text-white/65 hover:border-white/20 border border-white/10",
                       )}
                     >
                       {d}s
-                      {locked30 && (
-                        <span className="ml-1 text-[9px] uppercase tracking-wider text-white/30">soon</span>
-                      )}
                     </button>
                   );
                 })}
