@@ -25,9 +25,27 @@ function pathnameLastSegment(url: string): string {
   }
 }
 
+function normalizeExternalImageUrl(raw: string): string {
+  let u = raw.trim();
+  if (!u) return u;
+
+  // Many upstream providers reject non-HTTPS references.
+  if (/^http:\/\//i.test(u)) {
+    u = u.replace(/^http:\/\//i, "https://");
+  }
+
+  // Shopify-style templated width URLs (often 404 until replaced).
+  // Example: "..._{width}x.jpg" or URL-encoded "%7Bwidth%7D".
+  u = u
+    .replace(/\{width\}/gi, "1200")
+    .replace(/%7Bwidth%7D/gi, "1200");
+
+  return u;
+}
+
 /** KIE accepts our JPEG/PNG URLs; everything else is re-encoded to JPEG on storage. */
 export function needsKieNanoBananaImageInputNormalize(url: string): boolean {
-  const u = url.trim();
+  const u = normalizeExternalImageUrl(url);
   if (!u) return false;
   const base = pathnameLastSegment(u);
   if (!base) return true;
@@ -73,7 +91,7 @@ async function uploadJpegToUgcUploads(jpeg: Buffer): Promise<string> {
 }
 
 async function normalizeOneUrl(raw: string): Promise<string> {
-  const url = raw.trim();
+  const url = normalizeExternalImageUrl(raw);
   if (!url) return url;
 
   if (!needsKieNanoBananaImageInputNormalize(url)) {
@@ -107,7 +125,7 @@ async function normalizeOneUrl(raw: string): Promise<string> {
  */
 export async function normalizeKieNanoBananaImageInputUrls(urls: string[] | undefined): Promise<string[] | undefined> {
   if (!urls?.length) return urls;
-  const trimmed = urls.map((u) => u.trim()).filter(Boolean);
+  const trimmed = urls.map((u) => normalizeExternalImageUrl(u)).filter(Boolean);
   if (!trimmed.length) return undefined;
 
   const unique = [...new Set(trimmed)];
