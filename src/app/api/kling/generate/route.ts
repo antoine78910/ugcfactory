@@ -185,12 +185,14 @@ export async function POST(req: Request) {
         taskType = "seedance-2-preview";
       }
       const duration = Number(body.duration ?? 10);
+      const seedanceAspectRatio =
+        body.aspectRatio === "1:1" ? ("4:3" as const) : (body.aspectRatio ?? "9:16");
       const rawTaskId = await piapiCreateSeedanceTask({
         taskType,
         prompt,
         imageUrl,
         duration,
-        aspectRatio: body.aspectRatio ?? "9:16",
+        aspectRatio: seedanceAspectRatio,
         overrideApiKey: piapiKey,
       });
       return NextResponse.json({
