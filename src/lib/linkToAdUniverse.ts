@@ -1,4 +1,5 @@
 import { normalizeUgcScriptVideoDurationSec } from "@/lib/ugcAiScriptBrief";
+import { sanitizeUgcAngleScriptText } from "@/lib/sanitizeUgcAngleScript";
 
 /** Persisted Link to Ad Universe state (stored inside ugc_runs.extracted.__universe) */
 export type LinkToAdUniverseSnapshotV1 = {
@@ -1090,6 +1091,21 @@ export function readUniverseFromExtracted(extracted: unknown): LinkToAdUniverseS
   const o = u as Record<string, unknown>;
   if (o.v !== 1) return null;
   const clean = o.cleanCandidate;
+  const rawScriptsStored = typeof o.scriptsText === "string" ? o.scriptsText : "";
+  const ltaVideoDurationSecParsed = (() => {
+    const raw = (o as Record<string, unknown>).ltaVideoDurationSec;
+    if (typeof raw === "number" && Number.isFinite(raw)) {
+      return normalizeUgcScriptVideoDurationSec(raw);
+    }
+    if (typeof raw === "string" && raw.trim()) {
+      return normalizeUgcScriptVideoDurationSec(Number(raw));
+    }
+    return undefined;
+  })();
+  const scriptsTextForSnap =
+    rawScriptsStored.trim() === ""
+      ? ""
+      : sanitizeUgcAngleScriptText(rawScriptsStored, ltaVideoDurationSecParsed);
   const base: LinkToAdUniverseSnapshotV1 = {
     v: 1,
     phase: o.phase === "after_scripts" ? "after_scripts" : "after_summary",
@@ -1125,18 +1141,9 @@ export function readUniverseFromExtracted(extracted: unknown): LinkToAdUniverseS
         ? (o.personaPhotoUrls as string[])
         : null,
     summaryText: typeof o.summaryText === "string" ? o.summaryText : "",
-    scriptsText: typeof o.scriptsText === "string" ? o.scriptsText : "",
+    scriptsText: scriptsTextForSnap,
     ltaSeedanceSpeed: o.ltaSeedanceSpeed === "fast" ? "fast" : o.ltaSeedanceSpeed === "normal" ? "normal" : undefined,
-    ltaVideoDurationSec: (() => {
-      const raw = (o as Record<string, unknown>).ltaVideoDurationSec;
-      if (typeof raw === "number" && Number.isFinite(raw)) {
-        return normalizeUgcScriptVideoDurationSec(raw);
-      }
-      if (typeof raw === "string" && raw.trim()) {
-        return normalizeUgcScriptVideoDurationSec(Number(raw));
-      }
-      return undefined;
-    })(),
+    ltaVideoDurationSec: ltaVideoDurationSecParsed,
     angleLabels: parseAngleLabelsFromSnapshot(o),
     selectedAngleIndex:
       typeof o.selectedAngleIndex === "number" && o.selectedAngleIndex >= 0 && o.selectedAngleIndex <= 3
