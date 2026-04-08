@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
+import { billingCheckoutCurrencyFromRequest } from "@/lib/geo/billingRegion";
 import {
   getSubscriptionStripePriceId,
   isSubscriptionPlanId,
@@ -45,14 +46,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid plan" }, { status: 400 });
   }
 
-  const priceId = getSubscriptionStripePriceId(planId, billing);
+  const checkoutCurrency = billingCheckoutCurrencyFromRequest(req);
+  const priceId = getSubscriptionStripePriceId(planId, billing, checkoutCurrency);
   if (!priceId) {
     return NextResponse.json(
       {
         error:
           billing === "yearly"
-            ? "Yearly price not configured. Set STRIPE_PRICE_SUBSCRIPTION_*_YEARLY in env or choose Monthly."
-            : "Subscription price not configured for this plan.",
+            ? `Yearly price not configured for ${checkoutCurrency.toUpperCase()}. Set the matching STRIPE_PRICE_* env vars or choose Monthly.`
+            : `Subscription price not configured for this plan (${checkoutCurrency.toUpperCase()}).`,
       },
       { status: 422 },
     );

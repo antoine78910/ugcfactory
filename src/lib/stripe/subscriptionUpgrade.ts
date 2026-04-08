@@ -1,4 +1,5 @@
 import type Stripe from "stripe";
+import type { BillingCheckoutCurrency } from "@/lib/geo/billingRegion";
 import { SUBSCRIPTIONS } from "@/lib/pricing";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import {
@@ -69,10 +70,13 @@ export function resolveSubscriptionItemForPlan(
   currentPlanId: SubscriptionPlanId,
   currentBilling: "monthly" | "yearly",
 ): Stripe.SubscriptionItem | null {
-  const expected = getSubscriptionStripePriceId(currentPlanId, currentBilling);
-  if (expected) {
-    const byExact = items.find((it) => it.price.id === expected);
-    if (byExact) return byExact;
+  const currencies: BillingCheckoutCurrency[] = ["usd", "eur"];
+  for (const c of currencies) {
+    const expected = getSubscriptionStripePriceId(currentPlanId, currentBilling, c);
+    if (expected) {
+      const byExact = items.find((it) => it.price.id === expected);
+      if (byExact) return byExact;
+    }
   }
   const byPlan = items.find((it) => getPlanFromPriceId(it.price.id)?.planId === currentPlanId);
   if (byPlan) return byPlan;

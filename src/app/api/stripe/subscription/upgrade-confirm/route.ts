@@ -6,6 +6,7 @@ import { getUserCreditBalance } from "@/lib/creditGrants";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { getDataFastStripeMetadata } from "@/lib/stripe/datafastMetadata";
+import { normalizeStripeCurrency } from "@/lib/geo/billingRegion";
 import {
   classifySubscriptionChange,
   isSubscriptionPlanId,
@@ -81,7 +82,17 @@ export async function POST(req: Request) {
     );
   }
 
-  const newPriceId = getSubscriptionStripePriceId(targetPlanId, targetBilling);
+  const stripe = new Stripe(secret, { apiVersion: "2026-02-25.clover" });
+
+  let subCurrency = "usd" as "usd" | "eur";
+  try {
+    const existing = await stripe.subscriptions.retrieve(row.stripe_subscription_id);
+    subCurrency = normalizeStripeCurrency(existing.currency);
+  } catch {
+    return NextResponse.json({ error: "Could not load Stripe subscription." }, { status: 502 });
+  }
+
+  const newPriceId = getSubscriptionStripePriceId(targetPlanId, targetBilling, subCurrency);
   if (!newPriceId) {
     return NextResponse.json({ error: "Price is not configured for this plan." }, { status: 422 });
   }
@@ -99,7 +110,6 @@ export async function POST(req: Request) {
     /* best-effort */
   }
 
-  const stripe = new Stripe(secret, { apiVersion: "2026-02-25.clover" });
   const base =
     process.env.APP_URL?.trim() ||
     process.env.NEXT_PUBLIC_APP_URL?.trim() ||
@@ -111,7 +121,7 @@ export async function POST(req: Request) {
     if (prorationCreditCents > 0) {
       const coupon = await stripe.coupons.create({
         amount_off: prorationCreditCents,
-        currency: "usd",
+        currency: subCurrency,
         duration: "once",
         name: `Proration: ${unusedCreditsCount} unused credits × $0.07`,
         max_redemptions: 1,

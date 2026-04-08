@@ -1,9 +1,12 @@
 export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
+import Stripe from "stripe";
+import { normalizeStripeCurrency } from "@/lib/geo/billingRegion";
 import { getUserCreditBalance } from "@/lib/creditGrants";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
+import { getSubscriptionStripePriceId } from "@/lib/stripe/subscriptionPrices";
 import {
   classifySubscriptionChange,
   isSubscriptionPlanId,
@@ -102,35 +105,64 @@ export async function POST(req: Request) {
     Math.round(subscriptionCreditsRemaining * CREDIT_PRORATION_VALUE_USD * 100) / 100;
   const prorationCreditCents = Math.round(prorationCreditUsd * 100);
 
-  const targetPriceUsd = subscriptionPriceDisplayUsd(targetPlanId, targetBilling);
-  const targetPriceCents = Math.round(targetPriceUsd * 100);
+  let checkoutCurrency: "usd" | "eur" = "usd";
+  let targetPriceMajor = subscriptionPriceDisplayUsd(targetPlanId, targetBilling);
+  let currentPriceMajor = subscriptionPriceDisplayUsd(currentPlanId, currentBilling);
+  const secret = process.env.STRIPE_SECRET_KEY?.trim();
+  if (secret) {
+    try {
+      const stripe = new Stripe(secret, { apiVersion: "2026-02-25.clover" });
+      const sub = await stripe.subscriptions.retrieve(row.stripe_subscription_id, {
+        expand: ["items.data.price"],
+      });
+      checkoutCurrency = normalizeStripeCurrency(sub.currency);
+      const tid = getSubscriptionStripePriceId(targetPlanId, targetBilling, checkoutCurrency);
+      const cid = getSubscriptionStripePriceId(currentPlanId, currentBilling, checkoutCurrency);
+      if (tid) {
+        const tp = await stripe.prices.retrieve(tid);
+        if (tp.unit_amount != null) {
+          targetPriceMajor = tp.unit_amount / 100;
+        }
+      }
+      if (cid) {
+        const cp = await stripe.prices.retrieve(cid);
+        if (cp.unit_amount != null) {
+          currentPriceMajor = cp.unit_amount / 100;
+        }
+      }
+    } catch (e) {
+      console.error("[upgrade-preview] Stripe price load:", e);
+    }
+  }
 
+  const targetPriceCents = Math.round(targetPriceMajor * 100);
   const amountDueCents = Math.max(0, targetPriceCents - prorationCreditCents);
 
+  const curSym = checkoutCurrency === "eur" ? "€" : "$";
   const renewalSummary =
     targetBilling === "yearly"
-      ? `Your subscription renews at $${targetPriceUsd.toFixed(2)}/mo (billed yearly), and you can cancel anytime from Manage billing.`
-      : `Your subscription renews at $${targetPriceUsd.toFixed(0)} per month, and you can cancel anytime from Manage billing.`;
+      ? `Your subscription renews at ${curSym}${targetPriceMajor.toFixed(2)}/mo (billed yearly), and you can cancel anytime from Manage billing.`
+      : `Your subscription renews at ${curSym}${targetPriceMajor.toFixed(0)} per month, and you can cancel anytime from Manage billing.`;
 
   return NextResponse.json({
     current: {
       planId: currentPlanId,
       name: planLabel(currentPlanId),
       billingLabel: currentBilling === "yearly" ? "Yearly" : "Monthly",
-      priceUsd: subscriptionPriceDisplayUsd(currentPlanId, currentBilling),
+      priceUsd: currentPriceMajor,
     },
     target: {
       planId: targetPlanId,
       name: planLabel(targetPlanId),
       billingLabel: targetBilling === "yearly" ? "Yearly" : "Monthly",
-      priceUsd: targetPriceUsd,
+      priceUsd: targetPriceMajor,
       creditsPerMonth: subscriptionCreditsPerMonth(targetPlanId),
     },
     subscriptionCreditsRemaining,
     prorationCreditUsd,
     prorationCreditCents,
     amountDueCents,
-    currency: "usd",
+    currency: checkoutCurrency,
     renewalSummary,
   });
 }

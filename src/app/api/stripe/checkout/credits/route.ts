@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
+import { billingCheckoutCurrencyFromRequest } from "@/lib/geo/billingRegion";
 import { getCreditPackStripePriceId, isCreditPackKey } from "@/lib/stripe/creditPackPrices";
 import { getDataFastStripeMetadata } from "@/lib/stripe/datafastMetadata";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
@@ -38,10 +39,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid credit pack" }, { status: 400 });
   }
 
-  const priceId = getCreditPackStripePriceId(packKey);
+  const checkoutCurrency = billingCheckoutCurrencyFromRequest(req);
+  const priceId = getCreditPackStripePriceId(packKey, checkoutCurrency);
   if (!priceId) {
     return NextResponse.json(
-      { error: "Credit pack price not configured in env." },
+      {
+        error: `Credit pack price not configured for ${checkoutCurrency.toUpperCase()} (set STRIPE_PRICE_EUR_* or USD env vars).`,
+      },
       { status: 422 },
     );
   }

@@ -3,6 +3,7 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
+import { normalizeStripeCurrency } from "@/lib/geo/billingRegion";
 import {
   classifySubscriptionChange,
   isSubscriptionPlanId,
@@ -69,11 +70,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "This is not a downgrade." }, { status: 400 });
   }
 
-  const newPriceId = getSubscriptionStripePriceId(targetPlanId, targetBilling);
-  if (!newPriceId) {
-    return NextResponse.json({ error: "Price is not configured for this plan." }, { status: 422 });
-  }
-
   const stripe = new Stripe(secret, { apiVersion: "2026-02-25.clover" });
 
   let subscription: Stripe.Subscription;
@@ -83,6 +79,12 @@ export async function POST(req: Request) {
     });
   } catch {
     return NextResponse.json({ error: "Could not load Stripe subscription." }, { status: 502 });
+  }
+
+  const subCurrency = normalizeStripeCurrency(subscription.currency);
+  const newPriceId = getSubscriptionStripePriceId(targetPlanId, targetBilling, subCurrency);
+  if (!newPriceId) {
+    return NextResponse.json({ error: "Price is not configured for this plan." }, { status: 422 });
   }
 
   const item = resolveSubscriptionItemForPlan(
