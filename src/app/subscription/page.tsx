@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Check, Coins, CreditCard, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 import StudioShell from "@/app/_components/StudioShell";
+import type { SubscriptionDowngradePreview } from "@/app/_components/SubscriptionDowngradeDialog";
+import type { SubscriptionUpgradePreview } from "@/app/_components/SubscriptionUpgradeDialog";
 import { consumeCheckoutQueryParams, useCreditsPlan } from "@/app/_components/CreditsPlanContext";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -18,6 +20,7 @@ import {
   subscriptionPlanSortIndex,
   type SubscriptionPlanId,
 } from "@/lib/stripe/subscriptionPrices";
+import { openStripeBillingPortal } from "@/lib/stripe/openBillingPortalClient";
 
 type Billing = "monthly" | "yearly";
 const BILLING_PORTAL_URL =
