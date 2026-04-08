@@ -11,6 +11,7 @@ import {
   UGC_SCRIPT_INSTRUCTIONS,
 } from "@/lib/ugcAiScriptBrief";
 import { MAX_GPT_PRODUCT_REFERENCE_IMAGES } from "@/lib/productReferenceImages";
+import { sanitizeUgcAngleScriptText } from "@/lib/sanitizeUgcAngleScript";
 
 type Body = {
   storeUrl?: string;
@@ -30,30 +31,6 @@ type Body = {
   customUgcIntent?: string | null;
   provider?: "gpt" | "claude";
 };
-
-function sanitizeAngleScript(raw: string, videoDurationSeconds: number): string {
-  const t0 = String(raw ?? "").replace(/\r\n/g, "\n").trim();
-  if (!t0) return "";
-
-  // Remove non-script blocks.
-  let t = t0
-    .replace(/\*\*VOICE PROFILE\*\*[\s\S]*?(?=^\s*---\s*$|^##\s*PART\s*1\b|^##\s*HOOK\b|^HOOK\b|^SCRIPT OPTION\b|$)/gim, "")
-    .replace(/\*\*VOICE SIGNATURE\*\*[\s\S]*?(?=^\s*---\s*$|^##\s*PART\s*1\b|^##\s*HOOK\b|^HOOK\b|^SCRIPT OPTION\b|$)/gim, "")
-    .replace(/\*\*VOICE PERFORMANCE\*\*[\s\S]*?(?=^\s*---\s*$|^##\s*PART\s*1\b|^##\s*HOOK\b|^HOOK\b|^SCRIPT OPTION\b|$)/gim, "")
-    .replace(/\*\*VIDEO_METADATA\*\*[\s\S]*?(?=^SCRIPT OPTION\b|$)/gim, "")
-    .replace(/^\s*ANGLE_HEADLINE\s*:\s*.*$/gim, "")
-    .trim();
-
-  if (videoDurationSeconds === 30) {
-    const m1 = /^\s*##\s*PART\s*1\s*[\s\S]*?(?=^\s*##\s*PART\s*2\b)/gim.exec(t);
-    const m2 = /^\s*##\s*PART\s*2\s*[\s\S]*$/gim.exec(t);
-    const p1 = m1?.[0]?.trim() ?? "";
-    const p2 = m2?.[0]?.trim() ?? "";
-    if (p1 && p2) return `${p1}\n\n${p2}`.trim();
-  }
-
-  return t.replace(/\n{3,}/g, "\n\n").trim();
-}
 
 function collectHttpsProductImageUrls(body: Body): string[] {
   const raw: string[] = [];
@@ -154,7 +131,7 @@ export async function POST(req: Request) {
 
   try {
     const cacheKey = makeCacheKey({
-      v: 7,
+      v: 8,
       kind: "ugc_scripts_from_brief",
       provider,
       brandBrief,
@@ -195,7 +172,7 @@ export async function POST(req: Request) {
           ? (await openaiResponsesTextWithImages({ developer, userText: userPayload, imageUrls: allImageUrls })).text
           : (await openaiResponsesText({ developer, user: userPayload })).text;
 
-    const cleaned = sanitizeAngleScript(String(text ?? ""), videoDurationSeconds);
+    const cleaned = sanitizeUgcAngleScriptText(String(text ?? ""), videoDurationSeconds);
 
     try {
       await supabase

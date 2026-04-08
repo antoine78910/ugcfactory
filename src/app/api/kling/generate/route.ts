@@ -1,7 +1,9 @@
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 import { NextResponse } from "next/server";
 import { kieMarketCreateTask } from "@/lib/kieMarket";
+import { mirrorImageUrlForPiapiSeedance } from "@/lib/mirrorImageUrlForPiapi";
 import { encodePiapiTaskId, piapiCreateSeedanceTask } from "@/lib/piapiSeedance";
 import { hasPersonalApiKey } from "@/lib/personalApiBypass";
 import {
@@ -183,10 +185,34 @@ export async function POST(req: Request) {
       const duration = Number(body.duration ?? 10);
       const seedanceAspectRatio =
         body.aspectRatio === "1:1" ? ("4:3" as const) : (body.aspectRatio ?? "9:16");
+      let piapiImageUrl = imageUrl;
+      try {
+        piapiImageUrl = await mirrorImageUrlForPiapiSeedance(imageUrl, user.id);
+      } catch (mirrorErr) {
+        logGenerationFailure("kling/generate/mirror-seedance-image", mirrorErr, {
+          model,
+          imageHost: (() => {
+            try {
+              return new URL(imageUrl).hostname;
+            } catch {
+              return "invalid";
+            }
+          })(),
+        });
+        return NextResponse.json(
+          {
+            error:
+              mirrorErr instanceof Error
+                ? mirrorErr.message
+                : "Could not prepare the reference image for the video provider.",
+          },
+          { status: 502 },
+        );
+      }
       const rawTaskId = await piapiCreateSeedanceTask({
         taskType,
         prompt,
-        imageUrl,
+        imageUrl: piapiImageUrl,
         duration,
         aspectRatio: seedanceAspectRatio,
         overrideApiKey: piapiKey,
