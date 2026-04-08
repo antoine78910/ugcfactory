@@ -190,7 +190,7 @@ export async function POST(req: Request) {
         prompt,
         imageUrl,
         duration,
-        aspectRatio: "auto",
+        aspectRatio: body.aspectRatio ?? "9:16",
         overrideApiKey: piapiKey,
       });
       return NextResponse.json({
