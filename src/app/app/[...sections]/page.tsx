@@ -54,6 +54,9 @@ import {
 import { motionControlUpgradeMessage } from "@/lib/subscriptionModelAccess";
 import { clipboardImageFiles } from "@/lib/clipboardImage";
 import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
+import { AvatarInputCornerBadge } from "@/app/_components/AvatarInputCornerBadge";
+import { AvatarPickerDialog } from "@/app/_components/AvatarPickerDialog";
+import { loadAvatarUrls } from "@/lib/avatarLibrary";
 import { userMessageFromCaughtError } from "@/lib/generationUserMessage";
 import {
   assertStudioImageUpload,
@@ -796,6 +799,8 @@ export default function AppBrandWizard() {
   const [motionVideoDetectedDuration, setMotionVideoDetectedDuration] = useState<number | null>(null);
   const [motionCharacterImageUrl, setMotionCharacterImageUrl] = useState<string | null>(null);
   const [motionCharacterFile, setMotionCharacterFile] = useState<File | null>(null);
+  const [avatarUrls, setAvatarUrls] = useState<string[]>([]);
+  const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   const [motionQuality, setMotionQuality] = useState<string>("720p");
   const [motionPrompt, setMotionPrompt] = useState<string>("");
   const [adCloneOutputLanguage, setAdCloneOutputLanguage] = useState<string>(
@@ -1243,6 +1248,17 @@ export default function AppBrandWizard() {
     setMotionCharacterFile(file);
     setMotionCharacterImageUrl(url);
     toast.success("Character image selected", { description: file.name });
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const urls = await loadAvatarUrls();
+      if (!cancelled) setAvatarUrls(urls);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -3435,6 +3451,11 @@ export default function AppBrandWizard() {
                                   onClick={() => motionCharacterInputRef.current?.click()}
                                   className="relative flex aspect-[3/4] w-full cursor-pointer flex-col items-center justify-center gap-1.5 overflow-hidden rounded-xl border border-dashed border-white/20 bg-[#0c0c10] text-white/50 transition hover:border-violet-400/40 hover:bg-white/[0.03]"
                                 >
+                                  {avatarUrls.length > 0 ? (
+                                    <AvatarInputCornerBadge
+                                      onClick={() => setAvatarPickerOpen(true)}
+                                    />
+                                  ) : null}
                                   {motionCharacterImageUrl ? (
                                     // eslint-disable-next-line @next/next/no-img-element
                                     <img
@@ -4957,6 +4978,18 @@ export default function AppBrandWizard() {
           </div>
         </div>
       ) : null}
+
+      <AvatarPickerDialog
+        open={avatarPickerOpen}
+        onOpenChange={setAvatarPickerOpen}
+        avatarUrls={avatarUrls}
+        title="Choose your avatar"
+        onPick={(url) => {
+          setMotionCharacterFile(null);
+          setMotionCharacterImageUrl(url);
+          toast.success("Character image selected", { description: "Picked from your avatar library." });
+        }}
+      />
     </>
   );
 }

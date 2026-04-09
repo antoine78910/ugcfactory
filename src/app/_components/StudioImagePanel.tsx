@@ -50,8 +50,6 @@ import {
   type StudioImageKiePickerModelId,
 } from "@/lib/studioImageModels";
 import { STUDIO_IMAGE_TAB_KINDS } from "@/lib/studioGenerationKinds";
-import { loadAvatarUrls } from "@/lib/avatarLibrary";
-import { AvatarPickerDialog } from "@/app/_components/AvatarPickerDialog";
 import { clipboardImageFiles } from "@/lib/clipboardImage";
 import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
 import { uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
@@ -234,8 +232,6 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
   const [resolution, setResolution] = useState<(typeof PRO_RESOLUTIONS)[number]>("2K");
   const [numImages, setNumImages] = useState(1);
   const [refUrls, setRefUrls] = useState<string[]>([]);
-  const [avatarUrls, setAvatarUrls] = useState<string[]>([]);
-  const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   /** Reference image uploads only; does not block Generate. */
   const [refUploadBusy, setRefUploadBusy] = useState(false);
   const [refUploadPreviews, setRefUploadPreviews] = useState<{ id: string; blob: string }[]>([]);
@@ -401,16 +397,7 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
     writeStudioHistoryLocal(LS_STUDIO_IMAGE_HISTORY, historyItems);
   }, [serverHistory, historyItems]);
 
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const urls = await loadAvatarUrls();
-      if (!cancelled) setAvatarUrls(urls);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [historyItems]);
+  // Avatar library picker is intentionally kept only in the Video tab (single place in the app).
 
   const aspectOptions = useMemo(() => {
     if (model === "nano") return NANO_BANANA_2_ASPECT_RATIOS;
@@ -628,13 +615,6 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
     }
   }, []);
 
-  const onUseAvatarRef = useCallback((avatarUrl: string) => {
-    const u = avatarUrl.trim();
-    if (!u) return;
-    setRefUrls((prev) => [u, ...prev.filter((x) => x !== u)].slice(0, 12));
-    toast.success("Avatar added as reference");
-  }, []);
-
   useEffect(() => {
     const onPaste = (event: ClipboardEvent) => {
       const files = clipboardImageFiles(event);
@@ -680,23 +660,6 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
             >
               <Plus className="h-5 w-5" />
             </Button>
-            {avatarUrls.length > 0 ? (
-              <Button
-                type="button"
-                variant="secondary"
-                size="icon"
-                className="group relative h-14 w-14 shrink-0 rounded-xl border border-white/10 bg-white/5 text-white hover:bg-white/10"
-                title="Choose a generated avatar"
-                disabled={refUploadBusy}
-                onClick={() => setAvatarPickerOpen(true)}
-              >
-                <UserRound className="h-5 w-5" />
-                <span className="sr-only">Upload avatar</span>
-                <span className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 -translate-x-1/2 translate-y-1 whitespace-nowrap rounded-md border border-white/15 bg-[#0b0b10]/95 px-2 py-1 text-[11px] font-medium text-white/85 opacity-0 shadow-lg transition-all duration-200 ease-out group-hover:translate-y-0 group-hover:opacity-100">
-                  Upload avatar
-                </span>
-              </Button>
-            ) : null}
             {refUploadPreviews.map((row) => (
               <div
                 key={row.id}
@@ -909,13 +872,6 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
               ? { kind: "plan", blockedModelId: billing.blockedId }
               : { kind: "credits", currentCredits: creditsBalance, requiredCredits: billing.required }
         }
-      />
-      <AvatarPickerDialog
-        open={avatarPickerOpen}
-        onOpenChange={setAvatarPickerOpen}
-        avatarUrls={avatarUrls}
-        onPick={onUseAvatarRef}
-        title="Choose avatar for image references"
       />
     </div>
   );
