@@ -37,6 +37,41 @@ type Body = {
   piapiApiKey?: string;
 };
 
+/**
+ * KIE requires separate model names for text-to-video vs image-to-video.
+ * Client still sends picker ids; resolve here from presence of an image.
+ */
+function resolveKieModelName(pickerModel: string, hasImage: boolean): string {
+  switch (pickerModel) {
+    case "kling-2.6/video":
+      return hasImage ? "kling-2.6/image-to-video" : "kling-2.6/text-to-video";
+    case "openai/sora-2":
+      return hasImage ? "sora-2-image-to-video" : "sora-2-text-to-video";
+    default:
+      return pickerModel;
+  }
+}
+
+function isKling26(model: string): boolean {
+  return (
+    model === "kling-2.6/video" ||
+    model === "kling-2.6/image-to-video" ||
+    model === "kling-2.6/text-to-video"
+  );
+}
+
+function isSora2(model: string): boolean {
+  return (
+    model === "openai/sora-2" ||
+    model === "sora-2-image-to-video" ||
+    model === "sora-2-text-to-video"
+  );
+}
+
+function isSora2Pro(model: string): boolean {
+  return model === "openai/sora-2-pro";
+}
+
 function validateDurationForModel(model: string, duration: number | undefined) {
   if (duration == null) return;
   if (model === "kling-3.0/video") {
@@ -45,19 +80,19 @@ function validateDurationForModel(model: string, duration: number | undefined) {
     }
     return;
   }
-  if (model === "kling-2.6/video") {
+  if (isKling26(model)) {
     if (duration !== 5 && duration !== 10) {
       throw new Error("Invalid duration for Kling 2.6. Must be 5 or 10.");
     }
     return;
   }
-  if (model === "openai/sora-2") {
+  if (isSora2(model)) {
     if (duration !== 10 && duration !== 15) {
       throw new Error("Invalid duration for Sora 2. Must be 10 or 15.");
     }
     return;
   }
-  if (model === "openai/sora-2-pro") {
+  if (isSora2Pro(model)) {
     if (duration !== 10 && duration !== 15) {
       throw new Error("Invalid duration for Sora 2 Pro. Must be 10 or 15.");
     }
@@ -91,7 +126,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
-  const model = (body.marketModel ?? "kling-3.0/video").trim() || "kling-3.0/video";
+  const rawModel = (body.marketModel ?? "kling-3.0/video").trim() || "kling-3.0/video";
+  const imageUrl = (body.imageUrl ?? "").trim();
+  const model = resolveKieModelName(rawModel, Boolean(imageUrl));
   const prompt = (body.prompt ?? "").trim();
   if (!prompt) {
     return NextResponse.json({ error: "Missing `prompt`." }, { status: 400 });
@@ -115,7 +152,6 @@ export async function POST(req: Request) {
     }
   }
 
-  const imageUrl = (body.imageUrl ?? "").trim();
   const mode = body.mode ?? "pro";
   try {
     validateDurationForModel(model, body.duration);
@@ -127,7 +163,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    let input: any;
+    let input: Record<string, unknown>;
     if (model === "kling-3.0/video") {
       input = {
         prompt,
@@ -141,31 +177,30 @@ export async function POST(req: Request) {
       if (imageUrl) {
         input.image_urls = [imageUrl];
         // KIE docs: when first-frame image is provided, aspect_ratio is invalid.
-        // Safer: omit it to avoid server-side errors.
       } else {
         if (body.aspectRatio) input.aspect_ratio = body.aspectRatio;
       }
-    } else if (model === "kling-2.6/video") {
+    } else if (isKling26(model)) {
       input = {
         prompt,
         sound: body.sound ?? false,
         duration: String(body.duration ?? 5),
-        mode,
       };
       if (imageUrl) {
         input.image_urls = [imageUrl];
       } else if (body.aspectRatio) {
         input.aspect_ratio = body.aspectRatio;
       }
-    } else if (model === "openai/sora-2" || model === "openai/sora-2-pro") {
+    } else if (isSora2(model) || isSora2Pro(model)) {
+      const nFrames = String(body.duration ?? 10);
+      const soraAspect = body.aspectRatio === "9:16" ? "portrait" : "landscape";
       input = {
         prompt,
-        duration: String(body.duration ?? 10),
+        n_frames: nFrames,
+        aspect_ratio: soraAspect,
+        upload_method: "s3",
+        remove_watermark: true,
       };
-      if ((model === "openai/sora-2-pro" || model === "openai/sora-2") && body.mode) {
-        // Sora 2 Pro: Standard vs High. Sora 2: Standard vs stable.
-        input.mode = body.mode;
-      }
       if (imageUrl) {
         input.image_urls = [imageUrl];
       }
@@ -229,10 +264,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const taskId = await kieMarketCreateTask(
-      { model, input },
-      personalKey,
-    );
+    const taskId = await kieMarketCreateTask({ model, input }, personalKey);
 
     return NextResponse.json({
       taskId,
@@ -245,4 +277,3 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: userFacingProviderErrorOrDefault(message) }, { status: 502 });
   }
 }
-

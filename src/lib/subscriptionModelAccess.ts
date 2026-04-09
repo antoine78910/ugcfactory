@@ -86,8 +86,15 @@ export function canUseStudioImagePickerModel(planId: AccountPlanId, pickerId: st
   return false;
 }
 
+/** KIE splits some models into text-to-video / image-to-video; normalize to the picker id for gates. */
+function normalizeVideoModelForGate(id: string): string {
+  if (id === "kling-2.6/image-to-video" || id === "kling-2.6/text-to-video") return "kling-2.6/video";
+  if (id === "sora-2-image-to-video" || id === "sora-2-text-to-video") return "openai/sora-2";
+  return id;
+}
+
 export function canUseStudioVideoModel(planId: AccountPlanId, marketModelId: string): boolean {
-  const id = marketModelId.trim();
+  const id = normalizeVideoModelForGate(marketModelId.trim());
   const min = VIDEO_MIN_RANK[id];
   if (min === undefined) return false;
   return planRank(planId) >= min;
@@ -131,7 +138,7 @@ export function minPlanForStudioImagePicker(pickerId: string): AccountPlanId {
 }
 
 export function minPlanForStudioVideo(marketModelId: string): AccountPlanId {
-  const min = VIDEO_MIN_RANK[marketModelId.trim()];
+  const min = VIDEO_MIN_RANK[normalizeVideoModelForGate(marketModelId.trim())];
   if (min === undefined) return "scale";
   return planIdAtMinRank(min);
 }
@@ -200,7 +207,7 @@ export const STUDIO_VIDEO_IDS_ORDERED: readonly string[] = [
 ];
 
 export function studioVideoDisplayLabel(modelId: string): string {
-  return STUDIO_VIDEO_LABELS[modelId] ?? modelId;
+  return STUDIO_VIDEO_LABELS[normalizeVideoModelForGate(modelId)] ?? modelId;
 }
 
 export function studioVideoEditPickerDisplayLabel(pickerId: string): string {

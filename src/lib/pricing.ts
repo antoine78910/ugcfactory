@@ -1004,6 +1004,8 @@ export function calculateVideoCreditsForModel(opts: VideoCreditOptions): number 
     case "veo3_fast":
       return VEO_3_1_FAST.credits;
     case "openai/sora-2":
+    case "sora-2-image-to-video":
+    case "sora-2-text-to-video":
       return calculateSora2BaseCredits(d, quality);
     case "openai/sora-2-pro":
       return calculateSora2ProCredits(d, quality);
@@ -1011,6 +1013,8 @@ export function calculateVideoCreditsForModel(opts: VideoCreditOptions): number 
     case "kling-3.0/video":
       return calculateKling30VideoCredits(d, quality, audio);
     case "kling-2.6/video":
+    case "kling-2.6/image-to-video":
+    case "kling-2.6/text-to-video":
       return calculateKling26VideoCredits(d, quality, audio);
 
     case "bytedance/seedance-2-preview":

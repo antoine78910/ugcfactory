@@ -629,6 +629,8 @@ export default function StudioVideoPanel({
   /** Widen the history / preview column on large screens (not fullscreen). */
   const [wideVideoPreview, setWideVideoPreview] = useState(false);
   const [historyItems, setHistoryItems] = useState<StudioHistoryItem[]>([]);
+  /** Client-side optimistic job IDs that must survive server poll replacements. */
+  const inFlightJobsRef = useRef<Set<string>>(new Set());
   const grantCreditsRef = useRef(grantCredits);
   grantCreditsRef.current = grantCredits;
 
@@ -650,7 +652,14 @@ export default function StudioVideoPanel({
       }
       const json = (await res.json()) as { data?: StudioHistoryItem[]; refundHints?: { jobId: string; credits: number }[] };
       setServerHistory(true);
-      setHistoryItems(json.data ?? []);
+      const serverItems = json.data ?? [];
+      setHistoryItems((prev) => {
+        const optimistic = prev.filter((i) => inFlightJobsRef.current.has(i.id));
+        if (!optimistic.length) return serverItems;
+        const serverIds = new Set(serverItems.map((s) => s.id));
+        const kept = optimistic.filter((o) => !serverIds.has(o.id));
+        return [...kept, ...serverItems];
+      });
       const hints = json.refundHints ?? [];
       if (hints.length) {
         for (const h of hints) {
@@ -677,7 +686,16 @@ export default function StudioVideoPanel({
         });
         if (!res.ok) return;
         const json = (await res.json()) as { data?: StudioHistoryItem[]; refundHints?: { jobId: string; credits: number }[] };
-        if (Array.isArray(json.data)) setHistoryItems(json.data);
+        if (Array.isArray(json.data)) {
+          const serverItems = json.data;
+          setHistoryItems((prev) => {
+            const optimistic = prev.filter((i) => inFlightJobsRef.current.has(i.id));
+            if (!optimistic.length) return serverItems;
+            const serverIds = new Set(serverItems.map((s) => s.id));
+            const kept = optimistic.filter((o) => !serverIds.has(o.id));
+            return [...kept, ...serverItems];
+          });
+        }
         const hints = json.refundHints ?? [];
         if (hints.length) {
           for (const h of hints) {
@@ -1220,6 +1238,7 @@ export default function StudioVideoPanel({
     }
 
     const jobId = crypto.randomUUID();
+    inFlightJobsRef.current.add(jobId);
     const label = p;
     const platformChargeEdit = creditBypass ? 0 : editCredits;
     if (!creditBypass) {
@@ -1290,6 +1309,7 @@ export default function StudioVideoPanel({
           toast.message("Motion control started", { description: "Polling…" });
           const url = await pollKlingVideo(json.taskId, editPKey, getPersonalPiapiApiKey() ?? undefined);
           const doneAt = Date.now();
+          inFlightJobsRef.current.delete(jobId);
           setHistoryItems((prev) => {
             const rest = prev.filter((i) => i.id !== jobId);
             return [
@@ -1340,6 +1360,7 @@ export default function StudioVideoPanel({
         toast.message("Edit started", { description: "Polling provider…" });
         const url = await pollKlingVideo(json.taskId, editPKey, getPersonalPiapiApiKey() ?? undefined);
         const doneAt = Date.now();
+        inFlightJobsRef.current.delete(jobId);
         setHistoryItems((prev) => {
           const rest = prev.filter((i) => i.id !== jobId);
           return [
@@ -1362,6 +1383,7 @@ export default function StudioVideoPanel({
         const msg = userMessageFromCaughtError(e, "Something went wrong while generating. Please try again.");
         refundPlatformCredits(platformChargeEdit, grantCredits, creditsRef);
         toast.error(msg);
+        inFlightJobsRef.current.delete(jobId);
         setHistoryItems((prev) =>
           prev.map((i) =>
             i.id === jobId && i.status === "generating"
@@ -1400,6 +1422,7 @@ export default function StudioVideoPanel({
     }
 
     const jobId = crypto.randomUUID();
+    inFlightJobsRef.current.add(jobId);
     const label = p;
     const platformChargeCreate = creditBypassCreate ? 0 : credits;
     if (!creditBypassCreate) {
@@ -1475,6 +1498,7 @@ export default function StudioVideoPanel({
           );
           const url = await pollKlingVideo(json.taskId, pKey, piKey);
           const doneAt = Date.now();
+          inFlightJobsRef.current.delete(jobId);
           setHistoryItems((prev) => {
             const rest = prev.filter((i) => i.id !== jobId);
             return [
@@ -1530,6 +1554,7 @@ export default function StudioVideoPanel({
           toast.message("Veo started", { description: "Rendering…" });
           const url = await pollVeoVideo(json.taskId, pKey);
           const doneAt = Date.now();
+          inFlightJobsRef.current.delete(jobId);
           setHistoryItems((prev) => {
             const rest = prev.filter((i) => i.id !== jobId);
             return [
@@ -1594,6 +1619,7 @@ export default function StudioVideoPanel({
         toast.message("Generation started", { description: "Polling provider…" });
         const url = await pollKlingVideo(json.taskId, pKey, piKey);
         const doneAt = Date.now();
+        inFlightJobsRef.current.delete(jobId);
         setHistoryItems((prev) => {
           const rest = prev.filter((i) => i.id !== jobId);
           return [
@@ -1616,6 +1642,7 @@ export default function StudioVideoPanel({
         const msg = userMessageFromCaughtError(e, "Something went wrong while generating. Please try again.");
         refundPlatformCredits(platformChargeCreate, grantCredits, creditsRef);
         toast.error(msg);
+        inFlightJobsRef.current.delete(jobId);
         setHistoryItems((prev) =>
           prev.map((i) =>
             i.id === jobId && i.status === "generating"
