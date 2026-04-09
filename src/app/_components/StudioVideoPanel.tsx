@@ -78,8 +78,8 @@ const MODEL_OPTIONS: { id: VideoModelId; label: string; family: VideoFamily }[] 
   { id: "kling-2.6/video", label: "Kling 2.6", family: "kie" },
   { id: "openai/sora-2", label: "Sora 2", family: "sora" },
   { id: "openai/sora-2-pro", label: "Sora 2 Pro", family: "sora" },
-  { id: "bytedance/seedance-2-preview", label: "Seedance 2", family: "kie" },
-  { id: "bytedance/seedance-2-fast-preview", label: "Seedance 2 Turbo", family: "kie" },
+  { id: "bytedance/seedance-2-preview", label: "Seedance 2 Preview", family: "kie" },
+  { id: "bytedance/seedance-2-fast-preview", label: "Seedance 2 Turbo Preview", family: "kie" },
   { id: "veo3_fast", label: "Veo 3.1 Fast", family: "veo" },
   { id: "veo3", label: "Veo 3.1", family: "veo" },
 ];
@@ -167,18 +167,22 @@ const VIDEO_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
   },
   {
     id: "bytedance/seedance-2-preview",
-    label: "Seedance 2",
+    label: "Seedance 2 Preview",
+    subtitle: "PiAPI · image → video",
     icon: "seedance",
     newBadge: true,
     resolution: "1080p",
     durationRange: "5–15s",
+    searchText: "seedance preview piapi bytedance",
   },
   {
     id: "bytedance/seedance-2-fast-preview",
-    label: "Seedance 2 Turbo",
+    label: "Seedance 2 Turbo Preview",
+    subtitle: "PiAPI · faster preview",
     icon: "seedance",
     resolution: "1080p",
     durationRange: "5–15s",
+    searchText: "seedance turbo fast preview piapi",
   },
   {
     id: "veo3_fast",
@@ -540,8 +544,14 @@ async function registerStudioTask(params: {
   }
 }
 
-async function pollKlingVideo(taskId: string, personalApiKey?: string): Promise<string> {
-  const keyParam = personalApiKey ? `&personalApiKey=${encodeURIComponent(personalApiKey)}` : "";
+async function pollKlingVideo(
+  taskId: string,
+  personalApiKey?: string,
+  piapiApiKey?: string,
+): Promise<string> {
+  const p = personalApiKey ? `&personalApiKey=${encodeURIComponent(personalApiKey)}` : "";
+  const pi = piapiApiKey ? `&piapiApiKey=${encodeURIComponent(piapiApiKey)}` : "";
+  const keyParam = `${p}${pi}`;
   for (let i = 0; i < 120; i++) {
     const res = await fetch(`/api/kling/status?taskId=${encodeURIComponent(taskId)}${keyParam}`, { cache: "no-store" });
     const json = (await res.json()) as {
@@ -1278,7 +1288,7 @@ export default function StudioVideoPanel({
             inputUrls: [snap.editMotionImageUrl, snap.editMotionVideoUrl].filter(Boolean) as string[],
           });
           toast.message("Motion control started", { description: "Polling…" });
-          const url = await pollKlingVideo(json.taskId, editPKey);
+          const url = await pollKlingVideo(json.taskId, editPKey, getPersonalPiapiApiKey() ?? undefined);
           const doneAt = Date.now();
           setHistoryItems((prev) => {
             const rest = prev.filter((i) => i.id !== jobId);
@@ -1328,7 +1338,7 @@ export default function StudioVideoPanel({
           inputUrls: [snap.editVideoUrl, ...(snap.editElementUrls || [])].filter(Boolean) as string[],
         });
         toast.message("Edit started", { description: "Polling provider…" });
-        const url = await pollKlingVideo(json.taskId, editPKey);
+        const url = await pollKlingVideo(json.taskId, editPKey, getPersonalPiapiApiKey() ?? undefined);
         const doneAt = Date.now();
         setHistoryItems((prev) => {
           const rest = prev.filter((i) => i.id !== jobId);
@@ -1429,6 +1439,7 @@ export default function StudioVideoPanel({
     void (async () => {
       try {
         const pKey = getPersonalApiKey();
+        const piKey = getPersonalPiapiApiKey() ?? undefined;
         if (snap.family === "sora") {
           const res = await fetch("/api/kling/generate", {
             method: "POST",
@@ -1462,7 +1473,7 @@ export default function StudioVideoPanel({
             snap.modelId === "openai/sora-2-pro" ? "Sora 2 Pro started" : "Sora 2 started",
             { description: "Rendering…" },
           );
-          const url = await pollKlingVideo(json.taskId, pKey);
+          const url = await pollKlingVideo(json.taskId, pKey, piKey);
           const doneAt = Date.now();
           setHistoryItems((prev) => {
             const rest = prev.filter((i) => i.id !== jobId);
@@ -1543,6 +1554,9 @@ export default function StudioVideoPanel({
         const isKling30 = snap.modelId === "kling-3.0/video";
         const isKling26 = snap.modelId === "kling-2.6/video";
         const isSora2Pro = snap.modelId === "openai/sora-2-pro";
+        const isSeedancePreview =
+          snap.modelId === "bytedance/seedance-2-preview" ||
+          snap.modelId === "bytedance/seedance-2-fast-preview";
         const res = await fetch("/api/kling/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1552,12 +1566,17 @@ export default function StudioVideoPanel({
             prompt: snap.prompt,
             imageUrl: snap.startUrl ?? undefined,
             duration: Number(snap.duration),
-            aspectRatio: (isKling30 || isKling26) && !snap.startUrl ? snap.aspect : undefined,
+            aspectRatio:
+              (isKling30 || isKling26) && !snap.startUrl
+                ? snap.aspect
+                : isSeedancePreview && snap.startUrl
+                  ? snap.aspect
+                  : undefined,
             sound: modelHasAudio(snap.modelId) ? snap.soundOn : undefined,
             mode: isKling30 || isKling26 || isSora2Pro ? snap.klingMode : undefined,
             multiShots: isKling30 ? snap.multiShot : undefined,
             personalApiKey: pKey,
-            piapiApiKey: getPersonalPiapiApiKey() ?? undefined,
+            piapiApiKey: piKey,
           }),
         });
         const json = (await res.json()) as { taskId?: string; provider?: string; error?: string };
@@ -1573,7 +1592,7 @@ export default function StudioVideoPanel({
           inputUrls: snap.startUrl ? [snap.startUrl] : undefined,
         });
         toast.message("Generation started", { description: "Polling provider…" });
-        const url = await pollKlingVideo(json.taskId, pKey);
+        const url = await pollKlingVideo(json.taskId, pKey, piKey);
         const doneAt = Date.now();
         setHistoryItems((prev) => {
           const rest = prev.filter((i) => i.id !== jobId);
@@ -2100,7 +2119,10 @@ export default function StudioVideoPanel({
                       </SelectContent>
                     </Select>
                   </div>
-                  {(modelId === "kling-3.0/video" || modelId === "kling-2.6/video") && !startUrl ? (
+                  {((modelId === "kling-3.0/video" || modelId === "kling-2.6/video") && !startUrl) ||
+                  ((modelId === "bytedance/seedance-2-preview" ||
+                    modelId === "bytedance/seedance-2-fast-preview") &&
+                    Boolean(startUrl)) ? (
                     <div>
                       <Label className="text-xs text-white/45">Aspect ratio</Label>
                       <Select value={aspect} onValueChange={setAspect}>
