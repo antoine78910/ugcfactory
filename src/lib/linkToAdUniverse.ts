@@ -891,6 +891,37 @@ export type VideoPromptEditableSections = {
 };
 
 /**
+ * When the model folds ambient audio into motion prose (or uses wording our older
+ * regex missed), peel likely ambience sentences into the Ambience field for the UI.
+ */
+function peelAmbienceSentencesFromParagraph(paragraph: string): { motion: string; ambience: string } {
+  const raw = paragraph.replace(/\r\n/g, "\n").replace(/\s+/g, " ").trim();
+  if (!raw) return { motion: "", ambience: "" };
+
+  const visualAmbientFalsePositive = /\bambient\s+light\b/i;
+  const ambienceClauseHint =
+    /\b(?:ambien[ct](?:e| sounds?| noise| audio)?|room tone|soundscape|diegetic(?:\s+sound)?|background(?:\s+(?:noise|hum|buzz|hiss|audio|chatter|din))?|acoustic\s+(?:texture|environment)|natural(?:ly)?\s+(?:heard|audible|present)\s+in|(?:faint|distant|soft|subtle|low|quiet|muffled|muted|barely\s+audible)\s+(?:hum|buzz|hiss|rumble|roar|drone|murmur|chatter|clatter|rustle|creak|whir|whirr)|hums?\s+beneath|settling around|under(?:neath)?\s+the\s+dialogue|beneath\s+(?:their|his|her)\s+voice|(?:street|city|office|café|cafe|kitchen|bathroom|crowd|traffic|highway|subway)\s+(?:noise|sounds?|hum|murmur|din|roar|rumble)|(?:birds?(?:ong|ing)?|rain(?:fall)?|thunder|wind|waves?|ocean surf|forest|crickets?|reverb|echo(?:s|es)?)(?:\s|,|\.|$)|(?:espresso|coffee)\s+machine|HVAC|A\/C\b|rumble\s+of)\b/i;
+
+  const chunks = raw.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter(Boolean);
+  if (chunks.length === 0) return { motion: raw, ambience: "" };
+
+  const ambi: string[] = [];
+  const mov: string[] = [];
+  for (const c of chunks) {
+    if (visualAmbientFalsePositive.test(c)) {
+      mov.push(c);
+      continue;
+    }
+    if (ambienceClauseHint.test(c)) ambi.push(c);
+    else mov.push(c);
+  }
+  return {
+    motion: mov.join(" ").trim(),
+    ambience: ambi.join(" ").trim(),
+  };
+}
+
+/**
  * Heuristic: extract spoken dialogue (quoted text + voice description)
  * and ambient sound region from an unstructured video prompt blob.
  * Works by locating quoted speech blocks, voice description, and ambient
@@ -958,7 +989,12 @@ function extractLegacySections(text: string): { motion: string; dialogue: string
   }
   working = working.replace(/\s{2,}/g, " ").trim();
 
-  const ambience = ambienceParts.join(" ").trim();
+  let ambience = ambienceParts.join(" ").trim();
+  if (!ambience && working) {
+    const peeled = peelAmbienceSentencesFromParagraph(working);
+    ambience = peeled.ambience;
+    working = peeled.motion;
+  }
   const motion = working.replace(/\.\s*$/, ".").trim();
 
   if (!dialogue && !ambience) return null;
@@ -975,22 +1011,23 @@ export function parseVideoPromptEditableSections(editable: string): VideoPromptE
   // Structured prompts (including legacy ones) may place "EDIT — Dialogue:" / "EDIT — Ambience:" inline
   // (not necessarily on their own line) and sometimes omit "EDIT — Motion:" entirely.
   // Split sections by label positions so each part lands in the correct UI panel.
-  if (/EDIT\s*[—:-]\s*(?:Motion|Dialogue|Ambience)\b/im.test(raw)) {
+  if (/EDIT\s*[—:-]\s*(?:Motion|Dialogue|Ambience|Ambient)\b/im.test(raw)) {
     const techIdx = raw.search(/(?:^|\n|\s)\s*(?:#\s*)?\*{0,2}TECHNICAL\*{0,2}\b/i);
     const t = (techIdx >= 0 ? raw.slice(0, techIdx) : raw).trim();
 
     const pieces: { key: "motion" | "dialogue" | "ambience"; labelStart: number; contentStart: number }[] = [];
-    const labelRe = /(?:^|[\n\s])\s*EDIT\s*[—:-]\s*(Motion|Dialogue|Ambience)\s*[:\n]\s*/gi;
+    const labelRe = /(?:^|[\n\s])\s*EDIT\s*[—:-]\s*(Motion|Dialogue|Ambience|Ambient)\s*[:\n]\s*/gi;
     for (const m of t.matchAll(labelRe)) {
       const idx = m.index ?? 0;
       const labelOffset = (m[0] || "").toLowerCase().indexOf("edit");
       const labelStart = idx + Math.max(0, labelOffset);
       const contentStart = idx + (m[0] || "").length;
       const sec = String(m[1] || "").toLowerCase();
-      const key = (sec === "dialogue" ? "dialogue" : sec === "ambience" ? "ambience" : "motion") as
-        | "motion"
-        | "dialogue"
-        | "ambience";
+      const key = (sec === "dialogue"
+        ? "dialogue"
+        : sec === "ambience" || sec === "ambient"
+          ? "ambience"
+          : "motion") as "motion" | "dialogue" | "ambience";
       pieces.push({ key, labelStart, contentStart });
     }
 
@@ -1010,10 +1047,20 @@ export function parseVideoPromptEditableSections(editable: string): VideoPromptE
         out[cur.key] = out[cur.key] ? `${out[cur.key]}\n\n${content}` : content;
       }
 
+      let motion = stripEditSectionLabels(out.motion);
+      const dialogue = stripEditSectionLabels(out.dialogue);
+      let ambience = stripEditSectionLabels(out.ambience);
+      if (!ambience.trim() && motion.trim()) {
+        const peeled = peelAmbienceSentencesFromParagraph(motion);
+        if (peeled.ambience.trim()) {
+          motion = peeled.motion;
+          ambience = peeled.ambience;
+        }
+      }
       return {
-        motion: stripEditSectionLabels(out.motion),
-        dialogue: stripEditSectionLabels(out.dialogue),
-        ambience: stripEditSectionLabels(out.ambience),
+        motion,
+        dialogue,
+        ambience,
         isStructured: true,
       };
     }
@@ -1062,7 +1109,7 @@ export function composeVideoPromptForApi(parts: VideoPromptEditableSections): st
  */
 export function stripEditSectionLabels(text: string): string {
   return text
-    .replace(/\s*EDIT\s*[—:-]\s*(?:Motion|Dialogue|Ambience)\s*[:\n]\s*/gi, " ")
+    .replace(/\s*EDIT\s*[—:-]\s*(?:Motion|Dialogue|Ambience|Ambient)\s*[:\n]\s*/gi, " ")
     .replace(/\s{2,}/g, " ")
     .trim();
 }
