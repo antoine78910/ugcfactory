@@ -976,7 +976,7 @@ export function parseVideoPromptEditableSections(editable: string): VideoPromptE
     const motionM = raw.match(/EDIT\s*[—:-]\s*Motion\s*[:\n]\s*([\s\S]*?)(?=\n\s*EDIT\s*[—:-]\s*Dialogue\b|$)/i);
     const dialogueM = raw.match(/EDIT\s*[—:-]\s*Dialogue\s*[:\n]\s*([\s\S]*?)(?=\n\s*EDIT\s*[—:-]\s*Ambience\b|$)/i);
     const ambienceM = raw.match(
-      /EDIT\s*[—:-]\s*Ambience\s*[:\n]\s*([\s\S]*?)(?=\n\s*\*{0,2}TECHNICAL|\n\s*TECHNICAL\b|$)/i,
+      /EDIT\s*[—:-]\s*Ambience\s*[:\n]\s*([\s\S]*?)(?=\n\s*#\s*TECHNICAL\b|\n\s*\*{0,2}TECHNICAL|\n\s*TECHNICAL\b|$)/i,
     );
     return {
       motion: motionM?.[1]?.trim() ?? "",
@@ -1042,7 +1042,7 @@ export function splitUgcVideoPromptForEditing(body: string): { editable: string;
   const t = body.replace(/\r\n/g, "\n");
   if (!t.trim()) return { editable: "", technicalTail: "" };
 
-  const tech = /(?:^|\n)\s*\*{0,2}TECHNICAL\*{0,2}\s*[—:*\s]/im.exec(t);
+  const tech = /(?:^|\n)\s*(?:#\s*)?\*{0,2}TECHNICAL\*{0,2}\s*[—:*\s]/im.exec(t);
   if (tech && tech.index !== undefined) {
     return {
       editable: t.slice(0, tech.index).trim(),

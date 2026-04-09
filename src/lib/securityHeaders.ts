@@ -42,7 +42,8 @@ export function securityHeadersList(): { key: string; value: string }[] {
     },
     {
       key: "Permissions-Policy",
-      value: "camera=(), microphone=(), geolocation=()",
+      // Allow in-app recording; block geolocation by default.
+      value: "camera=(self), microphone=(self), geolocation=()",
     },
     // Safer than strict same-origin for OAuth / checkout popups
     {

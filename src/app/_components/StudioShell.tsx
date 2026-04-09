@@ -148,9 +148,8 @@ function StudioShellInner({
   const isStudioShell =
     pathname.startsWith("/app") || isStudioShellPath(pathname);
 
-  const controlled = Boolean(
-    isStudioShell && onStudioSectionChange && studioSection !== undefined,
-  );
+  // If parent provides section state, always trust it (prevents wrong highlights if pathname is stale).
+  const controlled = Boolean(onStudioSectionChange && studioSection !== undefined);
 
   const activeSection: StudioNavSection = useMemo(() => {
     if (controlled && studioSection) return studioSection;

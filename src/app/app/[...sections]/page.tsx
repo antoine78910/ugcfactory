@@ -1517,12 +1517,11 @@ export default function AppBrandWizard() {
     return out;
   }, [savedRuns]);
 
-  /** Last 3 Link to Ad runs (any product) for quick switching without leaving this tab. */
+  /** Previous Link to Ad runs (any product) for quick switching without leaving this tab. */
   const recentLinkToAdRuns = useMemo(() => {
     return savedRuns
       .filter((r) => runHasLinkToAdUniverse(r.extracted))
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-      .slice(0, 3)
       .map((r) => ({
         id: r.id,
         title: r.title,
@@ -1543,6 +1542,13 @@ export default function AppBrandWizard() {
       setSelectedProjectNormalizedUrl(null);
     }
   }, [projects, selectedProjectNormalizedUrl]);
+
+  useEffect(() => {
+    if (appSection !== "projects") return;
+    if (selectedProjectNormalizedUrl) return;
+    const first = projects[0]?.normalizedUrl ?? null;
+    if (first) setSelectedProjectNormalizedUrl(first);
+  }, [appSection, projects, selectedProjectNormalizedUrl]);
 
   function resetForNewProject() {
     setStep("url");
