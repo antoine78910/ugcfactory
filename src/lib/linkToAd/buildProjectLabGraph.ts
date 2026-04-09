@@ -118,7 +118,7 @@ export function buildProjectLabGraph(params: {
     const ox = 40;
     const oy = cursorY;
     const genId = `gen-${run.id}`;
-    const dateStr = new Date(run.created_at).toLocaleString(undefined, {
+    const dateStr = new Date(run.created_at).toLocaleString("en-US", {
       dateStyle: "medium",
       timeStyle: "short",
     });

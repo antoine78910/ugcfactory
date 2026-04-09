@@ -691,7 +691,7 @@ function LinkToAdRecentRunsChips({
                   })();
                 const dateShort = (() => {
                   try {
-                    return new Date(r.createdAt).toLocaleDateString(undefined, {
+                    return new Date(r.createdAt).toLocaleDateString("en-US", {
                       month: "short",
                       day: "numeric",
                     });

@@ -2743,7 +2743,7 @@ export default function AppBrandWizard() {
                                     {proj.runs.length} ad{proj.runs.length > 1 ? "s" : ""}
                                   </span>
                                   <span className="ml-auto text-[10px] text-white/30">
-                                    {new Date(latestRun.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                                    {new Date(latestRun.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                                   </span>
                                 </div>
                               </div>
@@ -2900,7 +2900,7 @@ export default function AppBrandWizard() {
                                         )}
                                       </div>
                                       <span className="truncate px-0.5 text-center text-[10px] leading-tight text-white/50">
-                                        {new Date(run.created_at).toLocaleDateString(undefined, {
+                                        {new Date(run.created_at).toLocaleDateString("en-US", {
                                           month: "short",
                                           day: "numeric",
                                           hour: "2-digit",
@@ -2926,7 +2926,7 @@ export default function AppBrandWizard() {
                                           <div key={`proj-imgs-${run.id}`}>
                                             <p className="mb-1.5 text-[10px] text-white/40">
                                               Ad ·{" "}
-                                              {new Date(run.created_at).toLocaleString(undefined, {
+                                              {new Date(run.created_at).toLocaleString("en-US", {
                                                 dateStyle: "medium",
                                                 timeStyle: "short",
                                               })}
@@ -2978,7 +2978,7 @@ export default function AppBrandWizard() {
                                           <div key={`proj-vids-${run.id}`}>
                                             <p className="mb-1.5 text-[10px] text-white/40">
                                               Ad ·{" "}
-                                              {new Date(run.created_at).toLocaleString(undefined, {
+                                              {new Date(run.created_at).toLocaleString("en-US", {
                                                 dateStyle: "medium",
                                                 timeStyle: "short",
                                               })}
@@ -3025,7 +3025,7 @@ export default function AppBrandWizard() {
                                           <div>
                                             <p className="text-xs font-semibold text-white/85">
                                               Ad ·{" "}
-                                              {new Date(run.created_at).toLocaleString(undefined, {
+                                              {new Date(run.created_at).toLocaleString("en-US", {
                                                 dateStyle: "medium",
                                                 timeStyle: "short",
                                               })}
