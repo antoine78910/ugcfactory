@@ -709,6 +709,8 @@ export default function AppBrandWizard() {
   const [isLoadingRuns, setIsLoadingRuns] = useState(false);
   /** While set, ignore pathname→section sync so a stale URL cannot overwrite a sidebar click. */
   const pendingSectionNavRef = useRef<AppSection | null>(null);
+  /** Previous sidebar section — used so we only auto-open the first brand when *entering* My Projects, not after "Back to brands". */
+  const prevAppSectionRef = useRef<AppSection | null>(null);
 
   const [storeUrl, setStoreUrl] = useState("");
   const [isExtracting, setIsExtracting] = useState(false);
@@ -1560,10 +1562,12 @@ export default function AppBrandWizard() {
   }, [projects, selectedProjectNormalizedUrl]);
 
   useEffect(() => {
-    if (appSection !== "projects") return;
-    if (selectedProjectNormalizedUrl) return;
-    const first = projects[0]?.normalizedUrl ?? null;
-    if (first) setSelectedProjectNormalizedUrl(first);
+    const prev = prevAppSectionRef.current;
+    if (appSection === "projects" && prev !== "projects" && !selectedProjectNormalizedUrl) {
+      const first = projects[0]?.normalizedUrl ?? null;
+      if (first) setSelectedProjectNormalizedUrl(first);
+    }
+    prevAppSectionRef.current = appSection;
   }, [appSection, projects, selectedProjectNormalizedUrl]);
 
   function resetForNewProject() {
