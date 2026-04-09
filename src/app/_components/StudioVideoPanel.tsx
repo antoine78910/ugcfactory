@@ -1752,21 +1752,7 @@ export default function StudioVideoPanel({
                     hint="Duration: 3–30 secs"
                     onDurationSec={setEditMotionDurationSec}
                   />
-                  {avatarUrls.length > 0 ? (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      className="h-9 rounded-lg border border-white/15 bg-white/5 text-xs text-white/75 hover:bg-white/10"
-                      onClick={() => {
-                        setAvatarPickTarget("edit_motion");
-                        setAvatarPickerOpen(true);
-                      }}
-                      disabled={editUploadBusy}
-                    >
-                      Upload my avatar
-                    </Button>
-                  ) : null}
+                  {/* Avatar library is accessible via the corner badge on the image input. */}
                 </div>
               ) : (
                 <>
@@ -1790,21 +1776,7 @@ export default function StudioVideoPanel({
                     pendingPreviewUrl={elementUploadPreviewBlob}
                     pendingUploading={editUploadBusy && Boolean(elementUploadPreviewBlob)}
                   />
-                  {avatarUrls.length > 0 ? (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      className="h-9 rounded-lg border border-white/15 bg-white/5 text-xs text-white/75 hover:bg-white/10"
-                      onClick={() => {
-                        setAvatarPickTarget("edit_elements");
-                        setAvatarPickerOpen(true);
-                      }}
-                      disabled={editUploadBusy}
-                    >
-                      Upload my avatar
-                    </Button>
-                  ) : null}
+                  {/* Avatar library is accessible via the corner badge on the image input(s). */}
                 </>
               )}
               {motionEdit ? (
@@ -2006,21 +1978,6 @@ export default function StudioVideoPanel({
                   }}
                 />
               </div>
-              {avatarUrls.length > 0 ? (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  className="mt-2 h-9 rounded-lg border border-white/15 bg-white/5 text-xs text-white/75 hover:bg-white/10"
-                  onClick={() => {
-                    setAvatarPickTarget("create_start");
-                    setAvatarPickerOpen(true);
-                  }}
-                  disabled={frameUploadBusy}
-                >
-                  Upload my avatar
-                </Button>
-              ) : null}
               <Textarea
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}

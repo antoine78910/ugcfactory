@@ -14,6 +14,7 @@ import {
   ImagePlus,
   Loader2,
   Maximize2,
+  Download,
   PenLine,
   Plus,
   RefreshCw,
@@ -176,6 +177,23 @@ function fnv1aHash(input: string): string {
   return (h >>> 0).toString(16);
 }
 
+async function downloadImageUrl(url: string, filename: string): Promise<void> {
+  const href = proxiedMediaSrc(url);
+  const res = await fetch(href);
+  if (!res.ok) throw new Error(`Download failed (HTTP ${res.status}).`);
+  const blob = await res.blob();
+  const objUrl = URL.createObjectURL(blob);
+  try {
+    const a = document.createElement("a");
+    a.href = objUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } finally {
+    URL.revokeObjectURL(objUrl);
+  }
+}
 /** 30s scripts: show ## PART 1 + ## PART 2 (gestures, lines) in the angle card “Show all”. */
 function extractPartOneAndTwoForDisplay(editable: string): string | null {
   const inner = editable.replace(/\r\n/g, "\n").trim();
@@ -5738,16 +5756,40 @@ export default function LinkToAdUniverse({
                                 </span>
                               )}
                               {url ? (
-                                <span
-                                  role="button"
-                                  tabIndex={0}
-                                  aria-label="Open full size"
-                                  className="absolute left-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-md bg-black/60 text-white opacity-0 transition-opacity group-hover/thumb:opacity-100"
-                                  onClick={(e) => { e.stopPropagation(); setNanoImageLightboxUrl(url); }}
-                                  onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); setNanoImageLightboxUrl(url); } }}
-                                >
-                                  <Maximize2 className="h-3 w-3" aria-hidden />
-                                </span>
+                                <>
+                                  <span
+                                    role="button"
+                                    tabIndex={0}
+                                    aria-label="Open full size"
+                                    className="absolute left-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-md bg-black/60 text-white opacity-0 transition-opacity group-hover/thumb:opacity-100"
+                                    onClick={(e) => { e.stopPropagation(); setNanoImageLightboxUrl(url); }}
+                                    onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); setNanoImageLightboxUrl(url); } }}
+                                  >
+                                    <Maximize2 className="h-3 w-3" aria-hidden />
+                                  </span>
+                                  <span
+                                    role="button"
+                                    tabIndex={0}
+                                    aria-label="Download image"
+                                    className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-md bg-black/60 text-white opacity-0 transition-opacity group-hover/thumb:opacity-100"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      void downloadImageUrl(url, `link-to-ad-reference-${i + 1}.jpg`).catch((err) => {
+                                        toast.error(err instanceof Error ? err.message : "Could not download image.");
+                                      });
+                                    }}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") {
+                                        e.stopPropagation();
+                                        void downloadImageUrl(url, `link-to-ad-reference-${i + 1}.jpg`).catch((err) => {
+                                          toast.error(err instanceof Error ? err.message : "Could not download image.");
+                                        });
+                                      }
+                                    }}
+                                  >
+                                    <Download className="h-3 w-3" aria-hidden />
+                                  </span>
+                                </>
                               ) : null}
                               {sel ? (
                                 <span className="absolute bottom-0.5 right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-violet-400 text-black shadow">
@@ -6194,16 +6236,40 @@ export default function LinkToAdUniverse({
                                 </span>
                               )}
                               {imgUrl ? (
-                                <span
-                                  role="button"
-                                  tabIndex={0}
-                                  aria-label="Open full size"
-                                  className="absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-lg bg-black/60 text-white opacity-0 shadow transition-opacity group-hover/card:opacity-100"
-                                  onClick={(e) => { e.stopPropagation(); setNanoImageLightboxUrl(imgUrl); }}
-                                  onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); setNanoImageLightboxUrl(imgUrl); } }}
-                                >
-                                  <Maximize2 className="h-4 w-4" aria-hidden />
-                                </span>
+                                <div className="absolute right-1.5 top-1.5 flex items-center gap-1">
+                                  <span
+                                    role="button"
+                                    tabIndex={0}
+                                    aria-label="Download image"
+                                    className="flex h-7 w-7 items-center justify-center rounded-lg bg-black/60 text-white opacity-0 shadow transition-opacity group-hover/card:opacity-100"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      void downloadImageUrl(imgUrl, `link-to-ad-reference-${i + 1}.jpg`).catch((err) => {
+                                        toast.error(err instanceof Error ? err.message : "Could not download image.");
+                                      });
+                                    }}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") {
+                                        e.stopPropagation();
+                                        void downloadImageUrl(imgUrl, `link-to-ad-reference-${i + 1}.jpg`).catch((err) => {
+                                          toast.error(err instanceof Error ? err.message : "Could not download image.");
+                                        });
+                                      }
+                                    }}
+                                  >
+                                    <Download className="h-4 w-4" aria-hidden />
+                                  </span>
+                                  <span
+                                    role="button"
+                                    tabIndex={0}
+                                    aria-label="Open full size"
+                                    className="flex h-7 w-7 items-center justify-center rounded-lg bg-black/60 text-white opacity-0 shadow transition-opacity group-hover/card:opacity-100"
+                                    onClick={(e) => { e.stopPropagation(); setNanoImageLightboxUrl(imgUrl); }}
+                                    onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); setNanoImageLightboxUrl(imgUrl); } }}
+                                  >
+                                    <Maximize2 className="h-4 w-4" aria-hidden />
+                                  </span>
+                                </div>
                               ) : null}
                               {imgUrl && sel ? (
                                 <span className="absolute bottom-1 right-1 flex h-5 w-5 items-center justify-center rounded-full bg-violet-400 text-black shadow sm:h-6 sm:w-6">
@@ -6948,6 +7014,20 @@ export default function LinkToAdUniverse({
           loading="eager"
           decoding="async"
         />
+        <Button
+          type="button"
+          variant="secondary"
+          className="absolute bottom-5 z-10 rounded-full border border-white/15 bg-black/65 text-xs text-white/90 shadow-lg hover:bg-black/85"
+          onClick={(e) => {
+            e.stopPropagation();
+            void downloadImageUrl(nanoImageLightboxUrl, "link-to-ad-reference.jpg").catch((err) => {
+              toast.error(err instanceof Error ? err.message : "Could not download image.");
+            });
+          }}
+        >
+          <Download className="mr-1.5 h-4 w-4" aria-hidden />
+          Download
+        </Button>
       </div>
     ) : null}
 

@@ -1,7 +1,9 @@
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
+import sharp from "sharp";
 
 const STORAGE_BUCKET = "ugc-uploads";
 const MAX_BYTES = 20 * 1024 * 1024;
+const TARGET_MAX_SIDE_PX = 2048;
 
 const MIME_EXT: Record<string, string> = {
   "image/jpeg": ".jpg",
@@ -42,18 +44,45 @@ export async function mirrorImageUrlForPiapiSeedance(imageUrl: string, userId: s
     throw new Error("Reference URL did not return an image.");
   }
 
-  const buf = Buffer.from(await res.arrayBuffer());
+  let buf: Buffer = Buffer.from(await res.arrayBuffer());
+  let reencodedToJpeg = false;
   if (buf.byteLength > MAX_BYTES) {
-    throw new Error("Reference image is too large.");
+    // Re-encode oversized images to a smaller JPEG so PiAPI can pull them reliably.
+    // This mirrors the approach used by KIE Nano reference normalization.
+    try {
+      let quality = 85;
+      for (let attempt = 0; attempt < 4; attempt++) {
+        const next: Buffer = await sharp(buf)
+          .rotate()
+          .resize({
+            width: TARGET_MAX_SIDE_PX,
+            height: TARGET_MAX_SIDE_PX,
+            fit: "inside",
+            withoutEnlargement: true,
+          })
+          .jpeg({ quality, mozjpeg: true })
+          .toBuffer();
+        buf = next;
+        reencodedToJpeg = true;
+        if (buf.byteLength <= MAX_BYTES) break;
+        quality = Math.max(55, quality - 10);
+      }
+    } catch {
+      // If conversion fails, fall through to size error below.
+    }
+    if (buf.byteLength > MAX_BYTES) {
+      throw new Error("Reference image is too large.");
+    }
   }
 
-  const ext = MIME_EXT[ct] ?? ".jpg";
+  const ext = reencodedToJpeg ? ".jpg" : (MIME_EXT[ct] ?? ".jpg");
+  const contentType = reencodedToJpeg ? "image/jpeg" : ct;
   const filename = `piapi-seedance/${crypto.randomUUID()}${ext}`;
   const storagePath = `${userId}/${filename}`;
 
   const { data, error } = await supabase.storage
     .from(STORAGE_BUCKET)
-    .upload(storagePath, buf, { contentType: ct, upsert: false });
+    .upload(storagePath, buf, { contentType, upsert: false });
 
   if (error) {
     throw new Error(error.message);
