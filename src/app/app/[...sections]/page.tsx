@@ -415,6 +415,20 @@ function universeThumbFromExtracted(extracted: unknown): string | null {
   const u = (extracted as Record<string, unknown>).__universe;
   if (!u || typeof u !== "object") return null;
   const o = u as Record<string, unknown>;
+  const nano = typeof o.nanoBananaImageUrl === "string" ? o.nanoBananaImageUrl.trim() : "";
+  if (nano) return nano;
+  const nanoArr = o.nanoBananaImageUrls;
+  if (Array.isArray(nanoArr)) {
+    for (const x of nanoArr) {
+      if (typeof x === "string" && x.trim()) return x.trim();
+    }
+  }
+  const po = o.productOnlyImageUrls;
+  if (Array.isArray(po)) {
+    for (const x of po) {
+      if (typeof x === "string" && x.trim()) return x.trim();
+    }
+  }
   if (typeof o.neutralUploadUrl === "string" && o.neutralUploadUrl.trim()) return o.neutralUploadUrl.trim();
   const cc = o.cleanCandidate;
   if (cc && typeof cc === "object" && typeof (cc as { url?: string }).url === "string") {
@@ -451,43 +465,85 @@ function addNonEmptyUrl(set: Set<string>, url: string | null | undefined) {
   if (t) set.add(t);
 }
 
-/** All still-image URLs we persist on a run (wizard + Link to Ad universe). */
+/**
+ * Images to show under each ad on the brand dashboard — scoped to this run only.
+ * Excludes crawl "fallback" hero images and avatar/persona refs so packs stay product-consistent.
+ */
 function collectProjectRunImageUrls(run: {
   extracted?: unknown;
   selected_image_url: string | null;
   generated_image_urls?: string[] | null;
+  packshot_urls?: string[] | null;
 }): string[] {
-  const set = new Set<string>();
-  addNonEmptyUrl(set, run.selected_image_url);
-  if (Array.isArray(run.generated_image_urls)) {
-    for (const u of run.generated_image_urls) addNonEmptyUrl(set, u);
-  }
+  const ordered: string[] = [];
+  const seen = new Set<string>();
   const snap = readUniverseFromExtracted(run.extracted);
+  const personaExclude = new Set<string>();
+  if (snap && Array.isArray(snap.personaPhotoUrls)) {
+    for (const u of snap.personaPhotoUrls) {
+      const t = typeof u === "string" ? u.trim() : "";
+      if (t) personaExclude.add(t);
+    }
+  }
+  const add = (url: string | null | undefined) => {
+    const t = typeof url === "string" ? url.trim() : "";
+    if (!t || seen.has(t) || personaExclude.has(t)) return;
+    seen.add(t);
+    ordered.push(t);
+  };
+
+  const packshots = Array.isArray(run.packshot_urls)
+    ? run.packshot_urls.map((u) => (typeof u === "string" ? u.trim() : "")).filter(Boolean)
+    : [];
+  for (const t of packshots) add(t);
+
   if (snap) {
-    addNonEmptyUrl(set, snap.cleanCandidate?.url ?? null);
-    addNonEmptyUrl(set, snap.fallbackImageUrl);
-    addNonEmptyUrl(set, snap.neutralUploadUrl);
-    if (Array.isArray(snap.productOnlyImageUrls)) {
-      for (const u of snap.productOnlyImageUrls) addNonEmptyUrl(set, u);
+    const productOnly = Array.isArray(snap.productOnlyImageUrls)
+      ? snap.productOnlyImageUrls.map((u) => (typeof u === "string" ? u.trim() : "")).filter(Boolean)
+      : [];
+    const userPhotos = Array.isArray(snap.userPhotoUrls)
+      ? snap.userPhotoUrls.map((u) => (typeof u === "string" ? u.trim() : "")).filter(Boolean)
+      : [];
+    const packSet = new Set(packshots);
+
+    for (const t of productOnly) add(t);
+    for (const t of userPhotos) add(t);
+    add(snap.neutralUploadUrl);
+
+    const ccUrl = snap.cleanCandidate?.url?.trim() ?? "";
+    if (ccUrl) {
+      const inProduct = productOnly.includes(ccUrl);
+      const inPack = packSet.has(ccUrl);
+      const noExplicitProductRefs = productOnly.length === 0 && packshots.length === 0;
+      if (inProduct || inPack || noExplicitProductRefs) add(ccUrl);
     }
-    if (Array.isArray(snap.userPhotoUrls)) {
-      for (const u of snap.userPhotoUrls) addNonEmptyUrl(set, u);
+
+    if (Array.isArray(run.generated_image_urls)) {
+      for (const u of run.generated_image_urls) add(u);
     }
-    addNonEmptyUrl(set, snap.nanoBananaImageUrl ?? null);
+    add(run.selected_image_url);
+
+    add(snap.nanoBananaImageUrl ?? null);
     if (Array.isArray(snap.nanoBananaImageUrls)) {
-      for (const u of snap.nanoBananaImageUrls) addNonEmptyUrl(set, u);
+      for (const u of snap.nanoBananaImageUrls) add(u);
     }
     if (Array.isArray(snap.linkToAdPipelineByAngle)) {
       for (const pipe of snap.linkToAdPipelineByAngle) {
         if (!pipe) continue;
-        addNonEmptyUrl(set, pipe.nanoBananaImageUrl ?? null);
+        add(pipe.nanoBananaImageUrl ?? null);
         if (Array.isArray(pipe.nanoBananaImageUrls)) {
-          for (const u of pipe.nanoBananaImageUrls) addNonEmptyUrl(set, u);
+          for (const u of pipe.nanoBananaImageUrls) add(u);
         }
       }
     }
+  } else {
+    add(run.selected_image_url);
+    if (Array.isArray(run.generated_image_urls)) {
+      for (const u of run.generated_image_urls) add(u);
+    }
   }
-  return [...set];
+
+  return ordered;
 }
 
 function addVideosFromKlingSlots(set: Set<string>, slots: unknown) {
@@ -620,6 +676,7 @@ export default function AppBrandWizard() {
       selected_image_url: string | null;
       video_url: string | null;
       generated_image_urls?: string[] | null;
+      packshot_urls?: string[] | null;
       extracted?: unknown;
     }>
   >([]);
