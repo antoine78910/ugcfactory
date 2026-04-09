@@ -972,31 +972,51 @@ export function parseVideoPromptEditableSections(editable: string): VideoPromptE
   if (!raw.trim()) {
     return { motion: "", dialogue: "", ambience: "", isStructured: false };
   }
-  if (/EDIT\s*[—:-]\s*Motion\b/im.test(raw)) {
-    // Some legacy generations put "EDIT — Ambience:" inline after the dialogue sentence (no newline).
-    // Treat any whitespace boundary (newline OR space) before "EDIT — <section>" as a valid delimiter.
-    const nextEditBoundary = String.raw`(?=(?:\n|\s)\s*EDIT\s*[—:-]\s*`;
-    const motionM = raw.match(
-      new RegExp(
-        String.raw`EDIT\s*[—:-]\s*Motion\s*[:\n]\s*([\s\S]*?)${nextEditBoundary}Dialogue\b|$)`,
-        "i",
-      ),
-    );
-    const dialogueM = raw.match(
-      new RegExp(
-        String.raw`EDIT\s*[—:-]\s*Dialogue\s*[:\n]\s*([\s\S]*?)${nextEditBoundary}Ambience\b|$)`,
-        "i",
-      ),
-    );
-    const ambienceM = raw.match(
-      /EDIT\s*[—:-]\s*Ambience\s*[:\n]\s*([\s\S]*?)(?=(?:\n|\s)\s*#\s*TECHNICAL\b|(?:\n|\s)\s*\*{0,2}TECHNICAL|(?:\n|\s)\s*TECHNICAL\b|$)/i,
-    );
-    return {
-      motion: stripEditSectionLabels(motionM?.[1]?.trim() ?? ""),
-      dialogue: stripEditSectionLabels(dialogueM?.[1]?.trim() ?? ""),
-      ambience: stripEditSectionLabels(ambienceM?.[1]?.trim() ?? ""),
-      isStructured: true,
-    };
+  // Structured prompts (including legacy ones) may place "EDIT — Dialogue:" / "EDIT — Ambience:" inline
+  // (not necessarily on their own line) and sometimes omit "EDIT — Motion:" entirely.
+  // Split sections by label positions so each part lands in the correct UI panel.
+  if (/EDIT\s*[—:-]\s*(?:Motion|Dialogue|Ambience)\b/im.test(raw)) {
+    const techIdx = raw.search(/(?:^|\n|\s)\s*(?:#\s*)?\*{0,2}TECHNICAL\*{0,2}\b/i);
+    const t = (techIdx >= 0 ? raw.slice(0, techIdx) : raw).trim();
+
+    const pieces: { key: "motion" | "dialogue" | "ambience"; labelStart: number; contentStart: number }[] = [];
+    const labelRe = /(?:^|[\n\s])\s*EDIT\s*[—:-]\s*(Motion|Dialogue|Ambience)\s*[:\n]\s*/gi;
+    for (const m of t.matchAll(labelRe)) {
+      const idx = m.index ?? 0;
+      const labelOffset = (m[0] || "").toLowerCase().indexOf("edit");
+      const labelStart = idx + Math.max(0, labelOffset);
+      const contentStart = idx + (m[0] || "").length;
+      const sec = String(m[1] || "").toLowerCase();
+      const key = (sec === "dialogue" ? "dialogue" : sec === "ambience" ? "ambience" : "motion") as
+        | "motion"
+        | "dialogue"
+        | "ambience";
+      pieces.push({ key, labelStart, contentStart });
+    }
+
+    if (pieces.length) {
+      pieces.sort((a, b) => a.labelStart - b.labelStart);
+      const out: VideoPromptEditableSections = { motion: "", dialogue: "", ambience: "" };
+
+      // Any content before the first label is almost always the motion/camera block.
+      const pre = t.slice(0, pieces[0].labelStart).trim();
+      if (pre) out.motion = pre;
+
+      for (let i = 0; i < pieces.length; i++) {
+        const cur = pieces[i];
+        const end = i + 1 < pieces.length ? pieces[i + 1].labelStart : t.length;
+        const content = t.slice(cur.contentStart, end).trim();
+        if (!content) continue;
+        out[cur.key] = out[cur.key] ? `${out[cur.key]}\n\n${content}` : content;
+      }
+
+      return {
+        motion: stripEditSectionLabels(out.motion),
+        dialogue: stripEditSectionLabels(out.dialogue),
+        ambience: stripEditSectionLabels(out.ambience),
+        isStructured: true,
+      };
+    }
   }
 
   const legacy = extractLegacySections(raw);
