@@ -25,6 +25,7 @@ import StudioGenerationsBackgroundPoll from "@/app/_components/StudioGenerations
 import { useCreditsPlan } from "@/app/_components/CreditsPlanContext";
 import SidebarCreditsBar from "@/app/_components/SidebarCreditsBar";
 import { cn } from "@/lib/utils";
+import { isStudioShellPath } from "@/lib/studioPaths";
 
 const SIDEBAR_COLLAPSED_LS = "youry-studio-sidebar-collapsed";
 
@@ -143,15 +144,19 @@ function StudioShellInner({
     }
   }, [navCollapsed]);
 
-  const isApp = pathname.startsWith("/app");
+  /** App host uses bare `/link-to-ad` (middleware rewrites to `/app/...`); pathname often has no `/app` prefix. */
+  const isStudioShell =
+    pathname.startsWith("/app") || isStudioShellPath(pathname);
 
-  const controlled = Boolean(isApp && onStudioSectionChange && studioSection !== undefined);
+  const controlled = Boolean(
+    isStudioShell && onStudioSectionChange && studioSection !== undefined,
+  );
 
   const activeSection: StudioNavSection = useMemo(() => {
     if (controlled && studioSection) return studioSection;
-    if (isApp) return sectionFromPathname(pathname);
+    if (isStudioShell) return sectionFromPathname(pathname);
     return "link_to_ad";
-  }, [controlled, studioSection, isApp, pathname]);
+  }, [controlled, studioSection, isStudioShell, pathname]);
 
   useEffect(() => {
     void (async () => {
