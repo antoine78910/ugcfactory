@@ -2067,7 +2067,7 @@ export default function LinkToAdUniverse({
         title?: string | null;
         extracted?: unknown;
       },
-      opts?: { silent?: boolean },
+      opts?: { silent?: boolean; preserveVideoDuration?: boolean },
     ) => {
       const snap = readUniverseFromExtracted(run.extracted);
       if (!snap) {
@@ -2141,11 +2141,13 @@ export default function LinkToAdUniverse({
       if (snap.ltaSeedanceSpeed === "fast" || snap.ltaSeedanceSpeed === "normal") {
         setLtaSeedanceSpeed(snap.ltaSeedanceSpeed);
       }
-      setVideoDuration(
-        snap.ltaVideoDurationSec != null
-          ? normalizeUgcScriptVideoDurationSec(snap.ltaVideoDurationSec)
-          : LINK_TO_AD_DEFAULT_VIDEO_DURATION_SEC,
-      );
+      if (!opts?.preserveVideoDuration) {
+        setVideoDuration(
+          snap.ltaVideoDurationSec != null
+            ? normalizeUgcScriptVideoDurationSec(snap.ltaVideoDurationSec)
+            : LINK_TO_AD_DEFAULT_VIDEO_DURATION_SEC,
+        );
+      }
       setLtaVideoDurationLocked(Boolean(snap.scriptsText.trim()));
       prevAngleRef.current = snap.selectedAngleIndex;
       setLastExtractedJson(cloneExtractedBase(run.extracted));
@@ -2768,7 +2770,7 @@ export default function LinkToAdUniverse({
       if (!getRes.ok || !getJson.data) {
         throw new Error(getJson.error || "Could not reload project");
       }
-      hydrateFromRun(getJson.data, { silent: true });
+      hydrateFromRun(getJson.data, { silent: true, preserveVideoDuration: true });
       setStage("ready");
       toast.success("3 UGC scripts ready");
       onRunsChanged?.();
@@ -2962,7 +2964,7 @@ export default function LinkToAdUniverse({
         if (findRes.ok && findJson.data) {
           const snap = readUniverseFromExtracted(findJson.data.extracted);
           if (snap) {
-            hydrateFromRun(findJson.data);
+            hydrateFromRun(findJson.data, { preserveVideoDuration: true });
             if (linkToAdFlowEpochRef.current !== epochAtStart) {
               setIsWorking(false);
               setLtaVideoDurationLocked(false);
@@ -3069,7 +3071,7 @@ export default function LinkToAdUniverse({
             error?: string;
           };
           if (getRes.ok && getJson.data) {
-            hydrateFromRun(getJson.data, { silent: true });
+            hydrateFromRun(getJson.data, { silent: true, preserveVideoDuration: true });
             if (linkToAdFlowEpochRef.current !== epochAtStart) {
               setIsWorking(false);
               setLtaVideoDurationLocked(false);
@@ -3094,7 +3096,7 @@ export default function LinkToAdUniverse({
       if (!getRes.ok || !getJson.data) {
         throw new Error(getJson.error || "Could not reload project after pipeline");
       }
-      hydrateFromRun(getJson.data, { silent: true });
+      hydrateFromRun(getJson.data, { silent: true, preserveVideoDuration: true });
       if (linkToAdFlowEpochRef.current !== epochAtStart) {
         setLtaVideoDurationLocked(false);
         return;
