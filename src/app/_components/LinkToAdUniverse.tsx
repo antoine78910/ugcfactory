@@ -1051,6 +1051,20 @@ export default function LinkToAdUniverse({
   }, []);
   // 30s Link-to-Ad is enabled for testing (renders as two chained 15s clips).
   const _30sUnlocked = true;
+  const DEMO_EMAILS = new Set(["anto.delbos@gmail.com", "app@youry.com"]);
+  const isDemoUser = Boolean(_userEmail && DEMO_EMAILS.has(_userEmail.toLowerCase()));
+  const [hideCredits, setHideCredits] = useState(false);
+  const [demoReplayActive, setDemoReplayActive] = useState(false);
+  const [demoPhaseIndex, setDemoPhaseIndex] = useState(0);
+  const DEMO_PHASES = [
+    { stage: "scanning" as const, label: "Scanning site…", delay: 4000 },
+    { stage: "finding_image" as const, label: "Finding images…", delay: 3000 },
+    { stage: "summarizing" as const, label: "Analyzing brand…", delay: 3500 },
+    { stage: "writing_scripts" as const, label: "Writing scripts…", delay: 4000 },
+    { stage: "server_pipeline" as const, label: "Server pipeline…", delay: 3000 },
+    { stage: "ready" as const, label: "Done", delay: 0 },
+  ] as const;
+  const demoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** After a fresh store scan starts, gate later steps against this snapshot so the wallet UI does not “jump” each step. Resync on image/video redo actions only. */
   const [ltaFrozenCredits, setLtaFrozenCredits] = useState<number | null>(null);
   const creditsBalanceRef = useRef(creditsBalance);
@@ -1143,9 +1157,9 @@ export default function LinkToAdUniverse({
   const [generationMode, setGenerationMode] = useState<"automatic" | "custom_ugc">("automatic");
   const scriptProvider = "claude" as const;
 
-  const [videoDuration, setVideoDuration] = useState<number>(LINK_TO_AD_DEFAULT_VIDEO_DURATION_SEC);
+  const [videoDuration, setVideoDuration] = useState<number>(10);
   /** PiAPI Seedance 2 (`seedance-2`) vs Seedance 2 Fast (`seedance-2-fast`). */
-  const [ltaSeedanceSpeed, setLtaSeedanceSpeed] = useState<LinkToAdSeedanceSpeed>("normal");
+  const [ltaSeedanceSpeed, setLtaSeedanceSpeed] = useState<LinkToAdSeedanceSpeed>("fast");
   /** After Generate from URL (or when a saved run is loaded), duration is fixed for this session. */
   const [ltaVideoDurationLocked, setLtaVideoDurationLocked] = useState(false);
   const [customUgcTopic, setCustomUgcTopic] = useState("");
@@ -1266,6 +1280,67 @@ export default function LinkToAdUniverse({
         if (t) clearTimeout(t);
       });
     };
+  }, []);
+
+  useEffect(() => {
+    if (!demoReplayActive) return;
+    const phase = DEMO_PHASES[demoPhaseIndex];
+    if (!phase || phase.stage === "ready") {
+      setDemoReplayActive(false);
+      setIsWorking(false);
+      setStage("ready");
+      return;
+    }
+    setIsWorking(true);
+    setStage(phase.stage);
+    if (phase.stage === "server_pipeline") setServerPipelineStepIndex(2);
+    demoTimerRef.current = setTimeout(() => {
+      setDemoPhaseIndex((i) => i + 1);
+    }, phase.delay);
+    return () => {
+      if (demoTimerRef.current) clearTimeout(demoTimerRef.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [demoReplayActive, demoPhaseIndex]);
+
+  const startDemoReplay = useCallback(() => {
+    setDemoPhaseIndex(0);
+    setDemoReplayActive(true);
+  }, []);
+
+  const stopDemoReplay = useCallback(() => {
+    setDemoReplayActive(false);
+    if (demoTimerRef.current) clearTimeout(demoTimerRef.current);
+    setIsWorking(false);
+    setStage("ready");
+    setServerPipelineStepIndex(null);
+  }, []);
+
+  const demoSimulateImageGen = useCallback(() => {
+    setIsWorking(true);
+    setIsNanoAllImagesSubmitting(true);
+    setTimeout(() => {
+      setIsNanoAllImagesSubmitting(false);
+      setIsWorking(false);
+    }, 6000);
+  }, []);
+
+  const demoSimulateVideoPrompt = useCallback(() => {
+    setIsWorking(true);
+    setIsVideoPromptLoading(true);
+    setTimeout(() => {
+      setIsVideoPromptLoading(false);
+      setIsWorking(false);
+    }, 4000);
+  }, []);
+
+  const demoSimulateVideoRender = useCallback(() => {
+    setIsWorking(true);
+    setIsKlingSubmitting(true);
+    setTimeout(() => {
+      setIsKlingSubmitting(false);
+      setIsWorking(false);
+    }, 5000);
   }, []);
 
   const hydrateVideoPromptFromStored = useCallback((full: string) => {
@@ -1406,6 +1481,12 @@ export default function LinkToAdUniverse({
     ],
   );
 
+  // Only show "Return / Cancel" once a scan/run actually started (typing a URL shouldn't show them).
+  const hasBegunLinkToAdGeneration = useMemo(
+    () => Boolean(universeRunId || stage !== "idle" || isWorking || summaryText.trim() || scriptsText.trim()),
+    [universeRunId, stage, isWorking, summaryText, scriptsText],
+  );
+
   const confirmAndResetLinkToAdToStart = useCallback(() => {
     const msg = [
       "Cancel this Link to Ad?",
@@ -1482,7 +1563,8 @@ export default function LinkToAdUniverse({
     setCustomUgcCta("");
     setLtaFrozenCredits(null);
     setLtaVideoDurationLocked(false);
-    setLtaSeedanceSpeed("normal");
+    setVideoDuration(10);
+    setLtaSeedanceSpeed("fast");
     latestSnapRef.current = null;
     prevAngleRef.current = null;
     nanoBananaPromptsSignatureRef.current = null;
@@ -4615,11 +4697,11 @@ export default function LinkToAdUniverse({
 
   return (
     <>
-    <Card className="border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.10)]">
+    <Card className="w-full min-h-[calc(100svh-10rem)] border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.10)] flex flex-col">
       <CardHeader className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
-            {hasStartedLinkToAdFlow ? (
+            {hasBegunLinkToAdGeneration ? (
               <Button
                 type="button"
                 size="sm"
@@ -4641,7 +4723,7 @@ export default function LinkToAdUniverse({
                 reduceMotion={reduceMotion ?? false}
               />
             ) : null}
-            {hasStartedLinkToAdFlow ? (
+            {hasBegunLinkToAdGeneration ? (
               <Button
                 type="button"
                 size="sm"
@@ -4671,35 +4753,210 @@ export default function LinkToAdUniverse({
         ) : null}
       </CardHeader>
 
-      <CardContent className="space-y-6">
-        <div className="space-y-2">
-          {!showBrandHeaderInsteadOfUrl && recentLinkToAdRuns.length > 0 ? (
-            <div className="rounded-lg border border-violet-500/15 bg-violet-500/[0.05] px-2.5 py-2">
-              <p className="text-[9px] font-semibold uppercase tracking-wide text-violet-200/85">Recent projects</p>
-              <p className="mt-0.5 text-[9px] leading-snug text-white/40">
-                Tap a project to continue where you left off, or enter a new URL below.
+      <CardContent className="flex flex-1 flex-col gap-6">
+        {/* ---------- HERO URL INPUT (idle state: centered, prominent) ---------- */}
+        {!showBrandHeaderInsteadOfUrl && !isWorking && stage === "idle" ? (
+          <div className="flex min-h-[60vh] flex-col items-center gap-6 py-4">
+            <div className="text-center">
+              <h2 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">Paste your product link</h2>
+              <p className="mt-1.5 text-sm text-white/50">We scan the page and create a UGC video ad for you.</p>
+            </div>
+            <div className="w-full max-w-xl space-y-3">
+              <div className="relative">
+                {/* Landing-page input style, with reduced glow for filming. */}
+                <div className="pointer-events-none absolute -inset-6 rounded-[1.25rem] bg-violet-600/10 blur-2xl opacity-30" />
+                <div className="relative overflow-hidden rounded-[1.25rem] bg-transparent p-2 ring-1 ring-violet-500/40 shadow-[0_0_45px_rgba(139,92,246,0.10)] transition-all duration-300 ease-out focus-within:ring-2 focus-within:ring-violet-400 focus-within:shadow-[0_0_60px_rgba(139,92,246,0.18)] sm:py-1.5">
+                  <Input
+                    value={storeUrl}
+                    onChange={(e) => setStoreUrl(e.target.value)}
+                    placeholder="https://your-product-page.com"
+                    autoFocus
+                    className="h-11 w-full border-0 !bg-transparent pl-4 pr-36 text-sm text-white placeholder:text-white/25 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleGenerateFromUrl();
+                      }
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    disabled={!storeUrl.trim()}
+                    onClick={handleGenerateFromUrl}
+                    className="absolute right-2 top-1/2 inline-flex h-[2.75rem] -translate-y-1/2 items-center justify-center rounded-[1rem] border border-violet-200/40 bg-violet-400 px-4 text-center text-sm font-semibold text-black shadow-[0_6px_0_0_rgba(76,29,149,0.9)] ring-offset-0 transition-all hover:-translate-y-[calc(50%+1px)] hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9),0_0_18px_rgba(167,139,250,0.30)] focus-visible:border-violet-400/45 focus-visible:ring-violet-400/55 focus-visible:ring-[3px] active:translate-y-[calc(-50%+6px)] active:shadow-[0_0_0_0_rgba(76,29,149,0.9)] disabled:opacity-40"
+                  >
+                    <Sparkles className="mr-1.5 h-4 w-4 shrink-0" aria-hidden />
+                    <span>Generate</span>
+                    {hideCredits ? null : <span className="ml-2 text-[11px] font-semibold text-black/60">{ltaGenerateCredits}</span>}
+                  </Button>
+                </div>
+              </div>
+              <p className="text-center text-[11px] leading-snug text-white/40">
+                Paste the exact product page URL, not just the shop homepage.
               </p>
-              <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-3">
-                <LinkToAdRecentRunsToggle
-                  compact
-                  hidePreviousLtaGenerations={hidePreviousLtaGenerations}
-                  onToggle={toggleHidePreviousLtaGenerations}
-                  reduceMotion={reduceMotion ?? false}
-                />
-                <div className="min-w-0 flex-1">
-                  <LinkToAdRecentRunsChips
+            </div>
+            {/* Compact settings row: duration + speed + mode, collapsed */}
+            <details className="w-full max-w-xl rounded-xl border border-white/8 bg-white/[0.02] text-white/60 [&[open]>summary]:mb-3">
+              <summary className="flex cursor-pointer select-none items-center gap-2 px-4 py-2.5 text-xs font-semibold tracking-wide">
+                <ChevronRight className="h-3.5 w-3.5 transition-transform [[open]>&]:rotate-90" aria-hidden />
+                Settings
+                <span className="ml-auto text-[10px] font-normal text-white/35">
+                  {videoDuration}s · {ltaSeedanceSpeed === "fast" ? "Fast" : "Normal"} · {generationMode === "custom_ugc" ? "Custom" : "Auto"}
+                </span>
+              </summary>
+              <div className="space-y-3 px-4 pb-3">
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className="space-y-1">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Duration</p>
+                    <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] p-1">
+                      {[5, 10, 15, 30].map((d) => {
+                        const locked30 = d === 30 && !_30sUnlocked;
+                        return (
+                          <button
+                            key={d}
+                            type="button"
+                            onClick={() => { if (!locked30) setVideoDuration(d); }}
+                            disabled={locked30}
+                            className={cn(
+                              "rounded-md px-3 py-1.5 text-xs font-semibold transition relative",
+                              videoDuration === d
+                                ? "bg-violet-500/15 text-white border border-violet-400/60"
+                                : locked30
+                                  ? "bg-black/20 text-white/25 border border-white/5 cursor-not-allowed"
+                                  : "bg-black/20 text-white/65 hover:border-white/20 border border-white/10",
+                            )}
+                          >
+                            {d}s
+                            {locked30 && <span className="ml-1 text-[9px] uppercase tracking-wider text-white/30">soon</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Seedance</p>
+                    <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] p-1">
+                      {(["normal", "fast"] as const).map((tier) => (
+                        <button
+                          key={tier}
+                          type="button"
+                          onClick={() => setLtaSeedanceSpeed(tier)}
+                          className={cn(
+                            "rounded-md px-3 py-1.5 text-xs font-semibold transition",
+                            ltaSeedanceSpeed === tier
+                              ? "bg-violet-500/15 text-white border border-violet-400/60"
+                              : "bg-black/20 text-white/65 hover:border-white/20 border border-white/10",
+                          )}
+                        >
+                          {tier === "normal" ? "Normal" : "Fast"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-white/55">Mode</p>
+                  <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <button
+                      type="button"
+                      onClick={() => setGenerationMode("automatic")}
+                      className={cn(
+                        "rounded-lg border px-3 py-2 text-left transition",
+                        generationMode === "automatic"
+                          ? "border-violet-400/60 bg-violet-500/15 text-white"
+                          : "border-white/10 bg-black/20 text-white/65 hover:border-white/20",
+                      )}
+                    >
+                      <p className="text-sm font-semibold">Automatic</p>
+                      <p className="mt-0.5 text-[11px] leading-relaxed text-white/55">
+                        Current Link to Ad flow with editable script factors.
+                      </p>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setGenerationMode("custom_ugc")}
+                      className={cn(
+                        "rounded-lg border px-3 py-2 text-left transition",
+                        generationMode === "custom_ugc"
+                          ? "border-violet-400/60 bg-violet-500/15 text-white"
+                          : "border-white/10 bg-black/20 text-white/65 hover:border-white/20",
+                      )}
+                    >
+                      <p className="text-sm font-semibold">Custom UGC intent</p>
+                      <p className="mt-0.5 text-[11px] leading-relaxed text-white/55">
+                        Add your own creative direction on top of Link to Ad.
+                      </p>
+                    </button>
+                  </div>
+                </div>
+                {generationMode === "custom_ugc" ? (
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold text-white/70">What should your UGC focus on?</Label>
+                    <Textarea
+                      value={customUgcTopic}
+                      onChange={(e) => setCustomUgcTopic(e.target.value)}
+                      placeholder="Ex: no talk, just show texture/results and product usage in real-life shots."
+                      className="min-h-[92px] border-white/10 bg-black/30 text-sm text-white/85 placeholder:text-white/30"
+                    />
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <div className="space-y-1">
+                        <Label className="text-xs font-semibold text-white/70">Your offer (optional)</Label>
+                        <Input
+                          value={customUgcOffer}
+                          onChange={(e) => setCustomUgcOffer(e.target.value)}
+                          placeholder="Ex: 20% off today / free shipping"
+                          className="h-10 border-white/10 bg-black/30 text-sm text-white/85 placeholder:text-white/30"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs font-semibold text-white/70">CTA (optional)</Label>
+                        <Input
+                          value={customUgcCta}
+                          onChange={(e) => setCustomUgcCta(e.target.value)}
+                          placeholder="Ex: Tap to shop now"
+                          className="h-10 border-white/10 bg-black/30 text-sm text-white/85 placeholder:text-white/30"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+                {isDemoUser ? (
+                  <button
+                    type="button"
+                    onClick={() => setHideCredits((v) => !v)}
+                    className="mt-1 h-4 w-4 rounded-sm opacity-[0.08] hover:opacity-30 transition bg-white/20"
+                    title=""
+                    aria-label="toggle"
+                  />
+                ) : null}
+              </div>
+            </details>
+            {recentLinkToAdRuns.length > 0 ? (
+              <div className="w-full max-w-xl rounded-xl border border-white/8 bg-white/[0.02] px-3 py-2">
+                <div className="flex items-center gap-2">
+                  <p className="shrink-0 text-[9px] font-semibold uppercase tracking-wide text-violet-200/85">Recent</p>
+                  <LinkToAdRecentRunsToggle
                     compact
-                    recentLinkToAdRuns={recentLinkToAdRuns}
                     hidePreviousLtaGenerations={hidePreviousLtaGenerations}
-                    activeRunIdProp={activeRunIdProp}
-                    universeRunId={universeRunId}
-                    onSelectRun={handleSwitchRecentRun}
+                    onToggle={toggleHidePreviousLtaGenerations}
                     reduceMotion={reduceMotion ?? false}
                   />
                 </div>
+                <LinkToAdRecentRunsChips
+                  compact
+                  recentLinkToAdRuns={recentLinkToAdRuns}
+                  hidePreviousLtaGenerations={hidePreviousLtaGenerations}
+                  activeRunIdProp={activeRunIdProp}
+                  universeRunId={universeRunId}
+                  onSelectRun={handleSwitchRecentRun}
+                  reduceMotion={reduceMotion ?? false}
+                />
               </div>
-            </div>
-          ) : null}
+            ) : null}
+          </div>
+        ) : (
+        <>
+        <div className="space-y-2">
           <LinkToAdUniverseStepper currentStep={universeCurrentStep} />
         </div>
         {showTopUniverseLoading ? (
@@ -4830,6 +5087,37 @@ export default function LinkToAdUniverse({
           </div>
         </div>
 
+        {/* Recent projects pinned to bottom (non-idle header). */}
+        <div className="mt-6">
+          {!showBrandHeaderInsteadOfUrl && recentLinkToAdRuns.length > 0 ? (
+            <div className="rounded-lg border border-violet-500/15 bg-violet-500/[0.05] px-2.5 py-2">
+              <p className="text-[9px] font-semibold uppercase tracking-wide text-violet-200/85">Recent projects</p>
+              <p className="mt-0.5 text-[9px] leading-snug text-white/40">
+                Tap a project to continue where you left off, or enter a new URL below.
+              </p>
+              <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-3">
+                <LinkToAdRecentRunsToggle
+                  compact
+                  hidePreviousLtaGenerations={hidePreviousLtaGenerations}
+                  onToggle={toggleHidePreviousLtaGenerations}
+                  reduceMotion={reduceMotion ?? false}
+                />
+                <div className="min-w-0 flex-1">
+                  <LinkToAdRecentRunsChips
+                    compact
+                    recentLinkToAdRuns={recentLinkToAdRuns}
+                    hidePreviousLtaGenerations={hidePreviousLtaGenerations}
+                    activeRunIdProp={activeRunIdProp}
+                    universeRunId={universeRunId}
+                    onSelectRun={handleSwitchRecentRun}
+                    reduceMotion={reduceMotion ?? false}
+                  />
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </div>
+
         <div className="space-y-3">
           {!showBrandHeaderInsteadOfUrl ? (
             <div>
@@ -4936,9 +5224,11 @@ export default function LinkToAdUniverse({
                         <Sparkles className="h-5 w-5 shrink-0" aria-hidden />
                         Generate
                       </span>
-                      <span className="text-[11px] font-semibold text-black/70">
-                        {ltaGenerateCredits} credits
-                      </span>
+                      {hideCredits ? null : (
+                        <span className="text-[11px] font-semibold text-black/70">
+                          {ltaGenerateCredits} credits
+                        </span>
+                      )}
                     </>
                   )}
                 </Button>
@@ -5357,7 +5647,7 @@ export default function LinkToAdUniverse({
                   >
                     <RefreshCw className="h-3 w-3 transition-transform group-hover/regen:rotate-90" aria-hidden />
                     Regenerate
-                    <CreditCostBadge amount={2} />
+                    {hideCredits ? null : <CreditCostBadge amount={2} />}
                   </button>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-3">
@@ -5818,7 +6108,7 @@ export default function LinkToAdUniverse({
                         >
                           <RefreshCw className="h-2.5 w-2.5 transition-transform group-hover/ri:rotate-90" aria-hidden />
                           Regen 3 images
-                          <CreditCostBadge amount={10} className="text-[9px]" />
+                          {hideCredits ? null : <CreditCostBadge amount={10} className="text-[9px]" />}
                         </button>
                       ) : null}
                     </div>
@@ -5880,7 +6170,7 @@ export default function LinkToAdUniverse({
                       >
                         <RefreshCw className="h-2.5 w-2.5 transition-transform group-hover/regen-sa:rotate-90" aria-hidden />
                         Regenerate
-                        <CreditCostBadge amount={2} className="px-1 py-px text-[9px]" />
+                        {hideCredits ? null : <CreditCostBadge amount={2} className="px-1 py-px text-[9px]" />}
                       </button>
                     </div>
                     <div className="grid grid-cols-1 gap-2">
@@ -6192,7 +6482,7 @@ export default function LinkToAdUniverse({
                           >
                             <RefreshCw className="h-3 w-3 transition-transform group-hover/ri:rotate-90" aria-hidden />
                             Regenerate 3 images
-                            <CreditCostBadge amount={10} />
+                            {hideCredits ? null : <CreditCostBadge amount={10} />}
                           </button>
                         ) : null}
                       </div>
@@ -6983,6 +7273,8 @@ export default function LinkToAdUniverse({
             </div>
           </div>
         ) : null}
+      </>
+      )}
       </CardContent>
     </Card>
 
@@ -7108,7 +7400,7 @@ export default function LinkToAdUniverse({
               className="flex h-10 items-center justify-center gap-2 rounded-xl border border-violet-400/25 bg-violet-500/15 text-[13px] font-medium text-white/90 transition-all hover:border-violet-400/40 hover:bg-violet-500/25"
             >
               Regenerate images too
-              <CreditCostBadge amount={10} className="px-2" iconClassName="h-3 w-3" />
+              {hideCredits ? null : <CreditCostBadge amount={10} className="px-2" iconClassName="h-3 w-3" />}
             </button>
             <button
               type="button"
@@ -7144,6 +7436,38 @@ export default function LinkToAdUniverse({
       onPick={addAvatarAsPersonaPhoto}
       title="Choose persona / avatar"
     />
+
+    {isDemoUser && stage === "ready" && !demoReplayActive ? (
+      <div className="fixed bottom-4 right-4 z-[9999] flex flex-col gap-1.5 rounded-xl border border-white/10 bg-black/80 p-3 shadow-2xl backdrop-blur-md"
+        style={{ maxWidth: 200 }}
+      >
+        <span className="text-[10px] font-bold uppercase tracking-widest text-white/30">Demo</span>
+        <button type="button" onClick={startDemoReplay} className="rounded-md bg-violet-600/80 px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-violet-500">
+          Replay pipeline
+        </button>
+        <button type="button" onClick={demoSimulateImageGen} className="rounded-md bg-white/10 px-2.5 py-1.5 text-[11px] font-medium text-white/70 hover:bg-white/20">
+          Simulate image gen
+        </button>
+        <button type="button" onClick={demoSimulateVideoPrompt} className="rounded-md bg-white/10 px-2.5 py-1.5 text-[11px] font-medium text-white/70 hover:bg-white/20">
+          Simulate prompt write
+        </button>
+        <button type="button" onClick={demoSimulateVideoRender} className="rounded-md bg-white/10 px-2.5 py-1.5 text-[11px] font-medium text-white/70 hover:bg-white/20">
+          Simulate video render
+        </button>
+      </div>
+    ) : null}
+
+    {isDemoUser && demoReplayActive ? (
+      <div className="fixed bottom-4 right-4 z-[9999] flex flex-col items-center gap-2 rounded-xl border border-violet-500/30 bg-black/80 p-3 shadow-2xl backdrop-blur-md"
+        style={{ maxWidth: 200 }}
+      >
+        <span className="text-[10px] font-bold uppercase tracking-widest text-violet-300/60">Replaying…</span>
+        <span className="text-[11px] font-medium text-white/80">{DEMO_PHASES[demoPhaseIndex]?.label ?? "—"}</span>
+        <button type="button" onClick={stopDemoReplay} className="rounded-md bg-red-600/70 px-3 py-1 text-[11px] font-semibold text-white hover:bg-red-500">
+          Stop
+        </button>
+      </div>
+    ) : null}
     </>
   );
 }
