@@ -973,15 +973,28 @@ export function parseVideoPromptEditableSections(editable: string): VideoPromptE
     return { motion: "", dialogue: "", ambience: "", isStructured: false };
   }
   if (/EDIT\s*[—:-]\s*Motion\b/im.test(raw)) {
-    const motionM = raw.match(/EDIT\s*[—:-]\s*Motion\s*[:\n]\s*([\s\S]*?)(?=\n\s*EDIT\s*[—:-]\s*Dialogue\b|$)/i);
-    const dialogueM = raw.match(/EDIT\s*[—:-]\s*Dialogue\s*[:\n]\s*([\s\S]*?)(?=\n\s*EDIT\s*[—:-]\s*Ambience\b|$)/i);
+    // Some legacy generations put "EDIT — Ambience:" inline after the dialogue sentence (no newline).
+    // Treat any whitespace boundary (newline OR space) before "EDIT — <section>" as a valid delimiter.
+    const nextEditBoundary = String.raw`(?=(?:\n|\s)\s*EDIT\s*[—:-]\s*`;
+    const motionM = raw.match(
+      new RegExp(
+        String.raw`EDIT\s*[—:-]\s*Motion\s*[:\n]\s*([\s\S]*?)${nextEditBoundary}Dialogue\b|$)`,
+        "i",
+      ),
+    );
+    const dialogueM = raw.match(
+      new RegExp(
+        String.raw`EDIT\s*[—:-]\s*Dialogue\s*[:\n]\s*([\s\S]*?)${nextEditBoundary}Ambience\b|$)`,
+        "i",
+      ),
+    );
     const ambienceM = raw.match(
-      /EDIT\s*[—:-]\s*Ambience\s*[:\n]\s*([\s\S]*?)(?=\n\s*#\s*TECHNICAL\b|\n\s*\*{0,2}TECHNICAL|\n\s*TECHNICAL\b|$)/i,
+      /EDIT\s*[—:-]\s*Ambience\s*[:\n]\s*([\s\S]*?)(?=(?:\n|\s)\s*#\s*TECHNICAL\b|(?:\n|\s)\s*\*{0,2}TECHNICAL|(?:\n|\s)\s*TECHNICAL\b|$)/i,
     );
     return {
-      motion: motionM?.[1]?.trim() ?? "",
-      dialogue: dialogueM?.[1]?.trim() ?? "",
-      ambience: ambienceM?.[1]?.trim() ?? "",
+      motion: stripEditSectionLabels(motionM?.[1]?.trim() ?? ""),
+      dialogue: stripEditSectionLabels(dialogueM?.[1]?.trim() ?? ""),
+      ambience: stripEditSectionLabels(ambienceM?.[1]?.trim() ?? ""),
       isStructured: true,
     };
   }
