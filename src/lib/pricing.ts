@@ -1008,6 +1008,8 @@ export function calculateVideoCreditsForModel(opts: VideoCreditOptions): number 
     case "sora-2-text-to-video":
       return calculateSora2BaseCredits(d, quality);
     case "openai/sora-2-pro":
+    case "sora-2-pro-image-to-video":
+    case "sora-2-pro-text-to-video":
       return calculateSora2ProCredits(d, quality);
 
     case "kling-3.0/video":

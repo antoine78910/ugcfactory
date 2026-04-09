@@ -2,15 +2,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { ledgerTicksToDisplayCredits } from "@/lib/creditLedgerTicks";
 import { kieMarketRecordInfo } from "@/lib/kieMarket";
 import { kieImageTaskPollOutcome } from "@/lib/kieTaskPoll";
+import { kieVeoRecordInfo } from "@/lib/kie";
 import type { StudioGenerationRow } from "@/lib/studioGenerationsMap";
 import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
 import { isPiapiTaskId, piapiGenericTaskStatusToLegacy, piapiGetTask } from "@/lib/piapiSeedance";
 import { serverLog } from "@/lib/serverLog";
-import { createSupabaseServiceClient } from "@/lib/supabase/admin";
-import {
-  isStudioMediaPublicUrl,
-  persistStudioMediaUrls,
-} from "@/lib/studioGenerationsMedia";
 import {
   getWaveSpeedPrediction,
   submitWaveSpeedHeygenVideoTranslate,
@@ -173,6 +169,20 @@ export async function pollStudioGenerationRow(
     if (mapped.status === "IN_PROGRESS") out = { kind: "processing" };
     else if (mapped.status === "SUCCESS") out = { kind: "success", urls: mapped.response };
     else out = { kind: "fail", message: mapped.error_message ?? "Video task failed." };
+  } else if (providerLc === "kie-veo") {
+    /** Veo uses a dedicated endpoint — not the KIE Market jobs API. */
+    const veoData = await kieVeoRecordInfo(row.external_task_id, kieKey);
+    const flag = veoData.successFlag;
+    if (flag === 1) {
+      const urls = veoData.response?.resultUrls ?? [];
+      out = urls.length > 0
+        ? { kind: "success", urls }
+        : { kind: "fail", message: "Veo completed but returned no video URL." };
+    } else if (flag === 2 || flag === 3) {
+      out = { kind: "fail", message: veoData.errorMessage ?? "Veo generation failed." };
+    } else {
+      out = { kind: "processing" };
+    }
   } else {
     /**
      * Platform jobs: always use platform KIE key (override undefined).
@@ -185,40 +195,16 @@ export async function pollStudioGenerationRow(
   if (out.kind === "processing") return;
 
   if (out.kind === "success") {
-    const rawUrls = out.urls ?? [];
-    const admin = createSupabaseServiceClient();
-
-    const allAlreadyOurs =
-      rawUrls.length > 0 && rawUrls.every((u) => isStudioMediaPublicUrl(String(u).trim()));
-    let resultUrlsToSave: string[] = rawUrls;
-
-    if (rawUrls.length > 0 && !allAlreadyOurs) {
-      const trimmed = rawUrls.map((u) => String(u).trim());
-
-      if (!admin) {
-        // No service-role key: save original URLs as-is. Cron backfill will archive later.
-        resultUrlsToSave = trimmed;
-      } else {
-        // Always attempt to archive ALL provider URLs to Supabase Storage.
-        // persistStudioMediaUrls now keeps the original URL as fallback on failure,
-        // so `persisted` always has the same count as `trimmed` — never drops URLs.
-        const { urls: persisted } = await persistStudioMediaUrls({
-          admin,
-          userId: row.user_id,
-          rowId: row.id,
-          urls: trimmed,
-        });
-        // Save whatever we got (mix of studio-media URLs + fallback originals).
-        // The cron backfill will gradually migrate any remaining fallback URLs.
-        resultUrlsToSave = persisted.length ? persisted : trimmed;
-      }
-    }
+    // Save provider URLs directly — cron backfill (backfillEphemeralStudioResults) archives
+    // them to Supabase Storage asynchronously, keeping this poll path fast and avoiding
+    // Vercel serverless timeouts caused by large video downloads.
+    const resultUrls = (out.urls ?? []).map((u) => String(u).trim()).filter(Boolean);
 
     const { error } = await supabase
       .from("studio_generations")
       .update({
         status: "ready",
-        result_urls: resultUrlsToSave.length ? resultUrlsToSave : null,
+        result_urls: resultUrls.length ? resultUrls : null,
         error_message: null,
       })
       .eq("id", row.id);

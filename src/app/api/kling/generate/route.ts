@@ -47,6 +47,8 @@ function resolveKieModelName(pickerModel: string, hasImage: boolean): string {
       return hasImage ? "kling-2.6/image-to-video" : "kling-2.6/text-to-video";
     case "openai/sora-2":
       return hasImage ? "sora-2-image-to-video" : "sora-2-text-to-video";
+    case "openai/sora-2-pro":
+      return hasImage ? "sora-2-pro-image-to-video" : "sora-2-pro-text-to-video";
     default:
       return pickerModel;
   }
@@ -69,7 +71,11 @@ function isSora2(model: string): boolean {
 }
 
 function isSora2Pro(model: string): boolean {
-  return model === "openai/sora-2-pro";
+  return (
+    model === "openai/sora-2-pro" ||
+    model === "sora-2-pro-text-to-video" ||
+    model === "sora-2-pro-image-to-video"
+  );
 }
 
 function validateDurationForModel(model: string, duration: number | undefined) {

@@ -1549,12 +1549,13 @@ export default function StudioVideoPanel({
               personalApiKey: pKey,
             }),
           });
-          const json = (await res.json()) as { taskId?: string; error?: string };
+          const json = (await res.json()) as { taskId?: string; provider?: string; error?: string };
           if (!res.ok || !json.taskId) throw new Error(json.error || "Veo failed");
           await registerStudioTask({
             kind: "studio_video",
             label,
             taskId: json.taskId,
+            provider: json.provider,
             model: snap.modelId,
             creditsCharged: platformChargeCreate,
             personalApiKey: pKey,

@@ -80,6 +80,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       taskId,
+      provider: "kie-veo",
       generationType,
       model: body?.model ?? "veo3_fast",
       aspect_ratio: body?.aspectRatio ?? "16:9",
