@@ -631,6 +631,12 @@ export default function StudioVideoPanel({
   const [historyItems, setHistoryItems] = useState<StudioHistoryItem[]>([]);
   /** Client-side optimistic job IDs that must survive server poll replacements. */
   const inFlightJobsRef = useRef<Set<string>>(new Set());
+  /** Swap a generating jobId for a done-row id, auto-expire after server has time to sync. */
+  const retireInFlightJob = useCallback((jobId: string, doneId: string) => {
+    inFlightJobsRef.current.delete(jobId);
+    inFlightJobsRef.current.add(doneId);
+    setTimeout(() => inFlightJobsRef.current.delete(doneId), 20_000);
+  }, []);
   const grantCreditsRef = useRef(grantCredits);
   grantCreditsRef.current = grantCredits;
 
@@ -1309,12 +1315,13 @@ export default function StudioVideoPanel({
           toast.message("Motion control started", { description: "Polling…" });
           const url = await pollKlingVideo(json.taskId, editPKey, getPersonalPiapiApiKey() ?? undefined);
           const doneAt = Date.now();
-          inFlightJobsRef.current.delete(jobId);
+          const doneId = `${jobId}-done-${doneAt}`;
+          retireInFlightJob(jobId, doneId);
           setHistoryItems((prev) => {
             const rest = prev.filter((i) => i.id !== jobId);
             return [
               {
-                id: `${jobId}-done-${doneAt}`,
+                id: doneId,
                 kind: "video",
                 status: "ready",
                 label,
@@ -1360,12 +1367,13 @@ export default function StudioVideoPanel({
         toast.message("Edit started", { description: "Polling provider…" });
         const url = await pollKlingVideo(json.taskId, editPKey, getPersonalPiapiApiKey() ?? undefined);
         const doneAt = Date.now();
-        inFlightJobsRef.current.delete(jobId);
+        const doneId = `${jobId}-done-${doneAt}`;
+        retireInFlightJob(jobId, doneId);
         setHistoryItems((prev) => {
           const rest = prev.filter((i) => i.id !== jobId);
           return [
             {
-              id: `${jobId}-done-${doneAt}`,
+              id: doneId,
               kind: "video",
               status: "ready",
               label,
@@ -1498,12 +1506,13 @@ export default function StudioVideoPanel({
           );
           const url = await pollKlingVideo(json.taskId, pKey, piKey);
           const doneAt = Date.now();
-          inFlightJobsRef.current.delete(jobId);
+          const doneId = `${jobId}-done-${doneAt}`;
+          retireInFlightJob(jobId, doneId);
           setHistoryItems((prev) => {
             const rest = prev.filter((i) => i.id !== jobId);
             return [
               {
-                id: `${jobId}-done-${doneAt}`,
+                id: doneId,
                 kind: "video",
                 status: "ready",
                 label,
@@ -1554,12 +1563,13 @@ export default function StudioVideoPanel({
           toast.message("Veo started", { description: "Rendering…" });
           const url = await pollVeoVideo(json.taskId, pKey);
           const doneAt = Date.now();
-          inFlightJobsRef.current.delete(jobId);
+          const doneId = `${jobId}-done-${doneAt}`;
+          retireInFlightJob(jobId, doneId);
           setHistoryItems((prev) => {
             const rest = prev.filter((i) => i.id !== jobId);
             return [
               {
-                id: `${jobId}-done-${doneAt}`,
+                id: doneId,
                 kind: "video",
                 status: "ready",
                 label,
@@ -1619,12 +1629,13 @@ export default function StudioVideoPanel({
         toast.message("Generation started", { description: "Polling provider…" });
         const url = await pollKlingVideo(json.taskId, pKey, piKey);
         const doneAt = Date.now();
-        inFlightJobsRef.current.delete(jobId);
+        const doneId = `${jobId}-done-${doneAt}`;
+        retireInFlightJob(jobId, doneId);
         setHistoryItems((prev) => {
           const rest = prev.filter((i) => i.id !== jobId);
           return [
             {
-              id: `${jobId}-done-${doneAt}`,
+              id: doneId,
               kind: "video",
               status: "ready",
               label,
