@@ -39,10 +39,10 @@ export const STARTER_CREDIT_VALUE_USD = 29.99 / 250;
 // ---------------------------------------------------------------------------
 
 /**
- * Credits for the **image→video** slice only (Seedance normal). Full first “Generate” on the URL step
- * also bills store scan (8) + 3× Nano Pro ref images; example totals: 15s → 8+27+79 = 114 · 30s → 8+27+144 = 179.
+ * Credits for the **image→video** slice (Seedance normal): 15s → 79 · 30s → 144 (see `LINK_TO_AD_SEEDANCE_VIDEO_CREDITS_BY_DURATION_SEC`).
+ * First URL “Generate” for 15s/30s normal uses this amount only (bundle — no extra scan/ref line items). Other durations / Fast still add scan + 3× Nano Pro.
  *
- * 30s is two chained 15s API calls; billed as one bundle (144 cr) for the video portion.
+ * 30s is two chained 15s API calls; billed as one bundle (144 cr).
  */
 export const LINK_TO_AD_SEEDANCE_VIDEO_CREDITS_BY_DURATION_SEC: Record<5 | 10 | 15 | 30, number> = {
   5: 16,
