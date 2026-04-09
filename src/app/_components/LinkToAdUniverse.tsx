@@ -176,13 +176,47 @@ function fnv1aHash(input: string): string {
   return (h >>> 0).toString(16);
 }
 
+/** 30s scripts: show ## PART 1 + ## PART 2 (gestures, lines) in the angle card “Show all”. */
+function extractPartOneAndTwoForDisplay(editable: string): string | null {
+  const inner = editable.replace(/\r\n/g, "\n").trim();
+  const idx = inner.search(/#{1,2}\s*PART\s*1\b/i);
+  if (idx < 0) return null;
+  if (!/#{1,2}\s*PART\s*2\b/i.test(inner)) return null;
+  let end = inner.length;
+  for (const re of [
+    /\n\s*(?:\*\*)?VIDEO_METADATA\b/i,
+    /\n\s*---+(\s*\n|$)/,
+    /\n\s*SCRIPT\s+OPTION\s*\d+/i,
+  ]) {
+    const at = inner.search(re);
+    if (at >= 0) end = Math.min(end, at);
+  }
+  const slice = inner.slice(idx, end).trim();
+  if (!slice || !/PART\s*2\b/i.test(slice)) return null;
+  return slice;
+}
+
 function angleBriefPartsFromScriptOption(
   raw: string,
   angleIndex: 0 | 1 | 2,
 ): { brief: string; full: string; canExpand: boolean } {
   const { editable, headline } = angleBlockForEditing(raw);
-  const factors = splitScriptFactorsForUi(editable, headline);
   const headlineClean = headline.replace(/\s+/g, " ").trim();
+  const partDisplay = extractPartOneAndTwoForDisplay(editable);
+
+  if (partDisplay) {
+    const full = headlineClean ? `${headlineClean}\n\n${partDisplay}` : partDisplay;
+    const canExpand = full.length > 160;
+    const brief =
+      headlineClean || (canExpand ? `${full.slice(0, 160)}…` : full);
+    return {
+      brief: headlineClean ? headlineClean : brief,
+      full,
+      canExpand: headlineClean ? true : canExpand,
+    };
+  }
+
+  const factors = splitScriptFactorsForUi(editable, headline);
   const hookClean = (factors.hook || "").replace(/\s+/g, " ").trim();
   const benefitsClean = (factors.benefits || "").replace(/\s+/g, " ").trim();
 
@@ -223,8 +257,17 @@ function compactSummaryFromPartBasedScript(raw: string): string | null {
   const t = raw.replace(/\r\n/g, "\n").trim();
   if (!t) return null;
 
-  const p1 = /(?:^|\n)\s*\*{0,2}\s*PART\s*1\s*\*{0,2}\s*\n([\s\S]*?)(?=\n\s*\*{0,2}\s*PART\s*2\s*\*{0,2}\s*\n|$)/i.exec(t)?.[1] ?? "";
-  const p2 = /(?:^|\n)\s*\*{0,2}\s*PART\s*2\s*\*{0,2}\s*\n([\s\S]*?)(?=\n\s*-{3,}\s*\n|\n\s*\*{0,2}\s*VIDEO_METADATA\s*\*{0,2}\s*\n|$)/i.exec(t)?.[1] ?? "";
+  const partHdr = String.raw`(?:#{1,2}\s*|\*{0,2}\s*)`;
+  const p1 =
+    new RegExp(
+      String.raw`(?:^|\n)\s*${partHdr}PART\s*1\s*(?:#{1,2}\s*|\*{0,2}\s*)?\n([\s\S]*?)(?=\n\s*${partHdr}PART\s*2\b|$)`,
+      "i",
+    ).exec(t)?.[1] ?? "";
+  const p2 =
+    new RegExp(
+      String.raw`(?:^|\n)\s*${partHdr}PART\s*2\s*(?:#{1,2}\s*|\*{0,2}\s*)?\n([\s\S]*?)(?=\n\s*-{3,}\s*\n|\n\s*\*{0,2}\s*VIDEO_METADATA\s*\*{0,2}\s*\n|\n\s*VIDEO_METADATA\b|$)`,
+      "i",
+    ).exec(t)?.[1] ?? "";
 
   if (!p1.trim() && !p2.trim()) return null;
 
@@ -1768,11 +1811,18 @@ export default function LinkToAdUniverse({
       const fallbackSafe = shouldSanitize ? sanitizeAngleLabelForAvatar(parts.brief) : parts.brief;
       const fullSafe = shouldSanitize ? sanitizeAngleLabelForAvatar(parts.full) : parts.full;
       const fallback = fallbackSafe;
+      const label = explicitSafe || fallback || "…";
+      const fullLabel =
+        explicitSafe && fullSafe && fullSafe.trim() !== explicitSafe.trim()
+          ? `${explicitSafe}\n\n${fullSafe}`
+          : explicitSafe || fullSafe || fallback || "…";
       return {
         index: i,
-        label: explicitSafe || fallback || "…",
-        fullLabel: explicitSafe || fullSafe || fallback || "…",
-        canExpand: Boolean(!explicitSafe && parts.canExpand && fullSafe && fullSafe !== (explicitSafe || fallback)),
+        label,
+        fullLabel,
+        canExpand: Boolean(
+          parts.canExpand && fullLabel.trim() !== label.trim(),
+        ),
       };
     });
   }, [angleLabels, hasAvatarPhoto, hasPersonaPhoto, sanitizeAngleLabelForAvatar, scriptOptionBodiesAll]);

@@ -428,7 +428,12 @@ Structure in this order:
    organic handheld micro-movement, no artificial stabilization."
 
 FOR 30s SCRIPTS:
-Generate TWO separate prompts labeled clearly:
+Generate TWO separate prompts labeled clearly.
+
+CRITICAL HEADER FORMAT (must match exactly so the app can parse):
+- First line of block 1: PROMPT PART 1 (no ##, no markdown, no bold)
+- First line of block 2: PROMPT PART 2
+Never use "## PART 1" / "## PART 2" — those break parsing. Use only the two lines above.
 
 PROMPT PART 1
 (prompt for video generation 1 — based on reference image + PART 1 of script)

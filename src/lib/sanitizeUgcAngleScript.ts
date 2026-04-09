@@ -55,9 +55,19 @@ function stripLeadingVoicePreamble(body: string): string {
 }
 
 function stripVideoMetadataAndAngleHeadline(s: string): string {
+  const stopBefore = String.raw`(?=^\s*#{1,2}\s*PART\s*\d+\b|^\s*SCRIPT\s+OPTION\b|\Z)`;
   let t = s
-    .replace(/\n\s*\*\*VIDEO_METADATA\*\*[\s\S]*$/i, "")
-    .replace(/\n\s*VIDEO_METADATA\b[\s\S]*$/i, "");
+    .replace(
+      new RegExp(
+        String.raw`\n\s*\*\*VIDEO_METADATA\*\*\s*\n([\s\S]*?)${stopBefore}`,
+        "gim",
+      ),
+      "\n",
+    )
+    .replace(
+      new RegExp(String.raw`\n\s*VIDEO_METADATA\b\s*\n([\s\S]*?)${stopBefore}`, "gim"),
+      "\n",
+    );
   t = t.replace(/^\s*ANGLE_HEADLINE\s*:.*$/gim, "").trim();
   return t;
 }
@@ -77,17 +87,24 @@ function sanitizeMonolithRegex(t0: string): string {
       /(?:^|\n)\s*:?\s*\*?\*?VOICE\s+PERFORMANCE\*?\*?[^\n]*\n[\s\S]*?(?=(?:^|\n)\s*(?:SCRIPT OPTION\b|##\s*PART\s*1\b|##\s*HOOK\b|\*?\s*HOOK\b|\*\*VIDEO_METADATA\*\*|^\s*---\s*$)|$)/gim,
       "\n",
     )
-    .replace(/\*\*VIDEO_METADATA\*\*[\s\S]*?(?=^SCRIPT OPTION\b|$)/gim, "")
+    .replace(
+      /\*\*VIDEO_METADATA\*\*\s*\n([\s\S]*?)(?=^\s*#{1,2}\s*PART\s*\d+\b|^SCRIPT OPTION\b|\Z)/gim,
+      "",
+    )
     .replace(/^\s*ANGLE_HEADLINE\s*:.*$/gim, "")
     .trim();
   return t.replace(/\n{3,}/g, "\n\n").trim();
 }
 
 function extract30sPartsIfPresent(inner: string): string {
-  const m1 = /^\s*##\s*PART\s*1\s*[\s\S]*?(?=^\s*##\s*PART\s*2\b)/gim.exec(inner);
-  const m2 = /^\s*##\s*PART\s*2\s*[\s\S]*$/gim.exec(inner);
+  const m1 =
+    /^\s*#{1,2}\s*PART\s*1\b[^\n]*\n[\s\S]*?(?=^\s*#{1,2}\s*PART\s*2\b)/gim.exec(inner);
+  const m2 =
+    /(^\s*#{1,2}\s*PART\s*2\b[^\n]*\n[\s\S]*?)(?=^\s*(?:\*\*)?VIDEO_METADATA\b|^\s*---+|^\s*SCRIPT\s+OPTION\b|\Z)/gim.exec(
+      inner,
+    );
   const p1 = m1?.[0]?.trim() ?? "";
-  const p2 = m2?.[0]?.trim() ?? "";
+  const p2 = m2?.[1]?.trim() ?? "";
   if (p1 && p2) return `${p1}\n\n${p2}`.trim();
   return inner;
 }
