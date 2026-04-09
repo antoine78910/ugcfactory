@@ -9,12 +9,12 @@ const CSP_PARTS_BASE = [
   "form-action 'self'",
   "frame-ancestors 'self'",
   // Next.js needs unsafe-inline for its runtime scripts; third-party widgets (heyo, stripe) also require it.
-  "script-src 'self' 'unsafe-inline' https://datafa.st https://www.linkjolt.io https://linkjolt.io https://heyo.so https://*.heyo.so https://cdn.heyo.so https://js.stripe.com https://*.stripe.com https://browser.sentry-cdn.com https://www.clarity.ms",
+  "script-src 'self' 'unsafe-inline' https://datafa.st https://www.linkjolt.io https://linkjolt.io https://heyo.so https://*.heyo.so https://cdn.heyo.so https://js.stripe.com https://*.stripe.com https://browser.sentry-cdn.com https://www.clarity.ms https://scripts.clarity.ms",
   "style-src 'self' 'unsafe-inline' https://heyo.so https://*.heyo.so https://cdn.heyo.so",
   "img-src 'self' data: blob: https:",
   "media-src 'self' data: blob: https:",
   "font-src 'self' data: https://fonts.gstatic.com",
-  "connect-src 'self' https://datafa.st https://*.datafa.st https://www.linkjolt.io https://linkjolt.io https://heyo.so https://*.heyo.so https://cdn.heyo.so https://*.supabase.co wss://*.supabase.co https://api.stripe.com https://*.stripe.com https://m.stripe.network https://q.stripe.com https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://*.ingest.de.sentry.io https://*.sentry.io https://cdn.jsdelivr.net https://www.clarity.ms",
+  "connect-src 'self' https://datafa.st https://*.datafa.st https://www.linkjolt.io https://linkjolt.io https://heyo.so https://*.heyo.so https://cdn.heyo.so https://*.supabase.co wss://*.supabase.co https://api.stripe.com https://*.stripe.com https://m.stripe.network https://q.stripe.com https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://*.ingest.de.sentry.io https://*.sentry.io https://cdn.jsdelivr.net https://www.clarity.ms https://scripts.clarity.ms",
   "frame-src 'self' https://heyo.so https://*.heyo.so https://cdn.heyo.so https://js.stripe.com https://hooks.stripe.com https://*.stripe.com",
   "object-src 'none'",
   "worker-src 'self' blob:",
@@ -39,11 +39,6 @@ export function securityHeadersList(): { key: string; value: string }[] {
     {
       key: "Referrer-Policy",
       value: "strict-origin-when-cross-origin",
-    },
-    {
-      key: "Permissions-Policy",
-      // Allow in-app recording; block geolocation by default.
-      value: "camera=(self), microphone=(self), geolocation=()",
     },
     // Safer than strict same-origin for OAuth / checkout popups
     {
