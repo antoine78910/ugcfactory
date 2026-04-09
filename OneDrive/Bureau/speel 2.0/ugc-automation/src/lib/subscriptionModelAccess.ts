@@ -43,6 +43,7 @@ const IMAGE_MIN_RANK: Record<"nano" | "pro", number> = {
 /** KIE / OpenAI ids used by Studio video panel + Veo API. */
 const VIDEO_MIN_RANK: Record<string, number> = {
   "kling-2.6/video": 1, // Starter+
+  // Starter should not include Seedance 2; unlock on Growth+
   "bytedance/seedance-2-preview": 2,
   "bytedance/seedance-2-fast-preview": 2,
   "bytedance/seedance-2.0-pro": 2,
@@ -85,8 +86,15 @@ export function canUseStudioImagePickerModel(planId: AccountPlanId, pickerId: st
   return false;
 }
 
+/** KIE now splits some models into text-to-video / image-to-video variants; normalize to the picker id. */
+function normalizeVideoModelForGate(id: string): string {
+  if (id === "kling-2.6/image-to-video" || id === "kling-2.6/text-to-video") return "kling-2.6/video";
+  if (id === "sora-2-image-to-video" || id === "sora-2-text-to-video") return "openai/sora-2";
+  return id;
+}
+
 export function canUseStudioVideoModel(planId: AccountPlanId, marketModelId: string): boolean {
-  const id = marketModelId.trim();
+  const id = normalizeVideoModelForGate(marketModelId.trim());
   const min = VIDEO_MIN_RANK[id];
   if (min === undefined) return false;
   return planRank(planId) >= min;
@@ -130,7 +138,7 @@ export function minPlanForStudioImagePicker(pickerId: string): AccountPlanId {
 }
 
 export function minPlanForStudioVideo(marketModelId: string): AccountPlanId {
-  const min = VIDEO_MIN_RANK[marketModelId.trim()];
+  const min = VIDEO_MIN_RANK[normalizeVideoModelForGate(marketModelId.trim())];
   if (min === undefined) return "scale";
   return planIdAtMinRank(min);
 }
@@ -171,8 +179,8 @@ const STUDIO_VIDEO_LABELS: Record<string, string> = {
   "kling-2.6/video": "Kling 2.6",
   "openai/sora-2": "Sora 2",
   "openai/sora-2-pro": "Sora 2 Pro",
-  "bytedance/seedance-2-preview": "Seedance 2",
-  "bytedance/seedance-2-fast-preview": "Seedance 2 Fast",
+  "bytedance/seedance-2-preview": "Seedance 2 Preview",
+  "bytedance/seedance-2-fast-preview": "Seedance 2 Turbo Preview",
   "bytedance/seedance-2.0-pro": "Seedance 2.0 Pro",
   veo3_fast: "Veo 3.1 Fast",
   veo3: "Veo 3.1",
@@ -199,7 +207,7 @@ export const STUDIO_VIDEO_IDS_ORDERED: readonly string[] = [
 ];
 
 export function studioVideoDisplayLabel(modelId: string): string {
-  return STUDIO_VIDEO_LABELS[modelId] ?? modelId;
+  return STUDIO_VIDEO_LABELS[normalizeVideoModelForGate(modelId)] ?? modelId;
 }
 
 export function studioVideoEditPickerDisplayLabel(pickerId: string): string {
@@ -336,7 +344,7 @@ export const SUBSCRIPTION_MODEL_MATRIX_ROWS: SubscriptionModelMatrixRow[] = [
     tiers: tierBools(IMAGE_MIN_RANK.pro),
   },
   { label: "Kling 2.6", tiers: tierBools(VIDEO_MIN_RANK["kling-2.6/video"]) },
-  { label: "Seedance 2", tiers: tierBools(VIDEO_MIN_RANK["bytedance/seedance-2-preview"]) },
+  { label: "Seedance 2 Preview", tiers: tierBools(VIDEO_MIN_RANK["bytedance/seedance-2-preview"]) },
   {
     label: "Veo 3.1 Fast",
     tiers: tierBools(VIDEO_MIN_RANK.veo3_fast),

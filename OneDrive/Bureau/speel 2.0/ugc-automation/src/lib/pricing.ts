@@ -8,6 +8,7 @@ import {
   isStudioSeedreamImagePickerId,
   isStudioUnifiedSeedreamPickerId,
 } from "@/lib/studioImageModels";
+import { normalizeUgcScriptVideoDurationSec } from "@/lib/ugcAiScriptBrief";
 
 // ---------------------------------------------------------------------------
 // Global base
@@ -34,17 +35,20 @@ export const PRICING_BASE = {
 export const STARTER_CREDIT_VALUE_USD = 29.99 / 250;
 
 // ---------------------------------------------------------------------------
-// Link to Ad — video model pricing (Seedance tiers; full Generate = 33 / 49 / 69 cr)
+// Link to Ad — Seedance normal (preview): video slice only (full URL Generate adds scan + 3× ref images)
 // ---------------------------------------------------------------------------
 
 /**
- * Video + Claude prompt step only. With scan (8) + 3× Nano Pro (9), full pipeline totals:
- * 5s → 33, 10s → 49, 15s → 69 credits.
+ * Credits for the **image→video** slice (Seedance normal): 15s → 79 · 30s → 144 (see `LINK_TO_AD_SEEDANCE_VIDEO_CREDITS_BY_DURATION_SEC`).
+ * First URL “Generate” for 15s/30s normal uses this amount only (bundle — no extra scan/ref line items). Other durations / Fast still add scan + 3× Nano Pro.
+ *
+ * 30s is two chained 15s API calls; billed as one bundle (144 cr).
  */
-export const LINK_TO_AD_SEEDANCE_VIDEO_CREDITS_BY_DURATION_SEC: Record<5 | 10 | 15, number> = {
+export const LINK_TO_AD_SEEDANCE_VIDEO_CREDITS_BY_DURATION_SEC: Record<5 | 10 | 15 | 30, number> = {
   5: 16,
   10: 32,
-  15: 52,
+  15: 79,
+  30: 144,
 };
 
 /** Fast tier (~PiAPI $0.08/s vs $0.10/s): slightly lower credit burn than normal. */
@@ -86,10 +90,10 @@ export function linkToAdVideoCredits(
     seedanceSpeed === "fast"
       ? LINK_TO_AD_SEEDANCE_FAST_VIDEO_CREDITS_BY_DURATION_SEC
       : LINK_TO_AD_SEEDANCE_VIDEO_CREDITS_BY_DURATION_SEC;
-  const d = Math.round(Number(durationSec)) || 10;
-  if (d === 5 || d === 10 || d === 15) {
-    return table[d];
-  }
+  const d = normalizeUgcScriptVideoDurationSec(durationSec);
+  if (d === 5 || d === 10 || d === 15) return table[d];
+  if (d === 30 && seedanceSpeed !== "fast") return LINK_TO_AD_SEEDANCE_VIDEO_CREDITS_BY_DURATION_SEC[30];
+
   const ref15 = table[15];
   return Math.max(1, Math.ceil((d / 15) * ref15));
 }
@@ -1000,6 +1004,8 @@ export function calculateVideoCreditsForModel(opts: VideoCreditOptions): number 
     case "veo3_fast":
       return VEO_3_1_FAST.credits;
     case "openai/sora-2":
+    case "sora-2-image-to-video":
+    case "sora-2-text-to-video":
       return calculateSora2BaseCredits(d, quality);
     case "openai/sora-2-pro":
       return calculateSora2ProCredits(d, quality);
@@ -1007,6 +1013,8 @@ export function calculateVideoCreditsForModel(opts: VideoCreditOptions): number 
     case "kling-3.0/video":
       return calculateKling30VideoCredits(d, quality, audio);
     case "kling-2.6/video":
+    case "kling-2.6/image-to-video":
+    case "kling-2.6/text-to-video":
       return calculateKling26VideoCredits(d, quality, audio);
 
     case "bytedance/seedance-2-preview":
