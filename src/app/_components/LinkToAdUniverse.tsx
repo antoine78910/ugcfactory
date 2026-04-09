@@ -114,6 +114,7 @@ import {
   STUDIO_GENERATION_KIND_LINK_TO_AD_IMAGE,
   STUDIO_GENERATION_KIND_LINK_TO_AD_VIDEO,
 } from "@/lib/studioGenerationKinds";
+import { registerFailedStudioGeneration } from "@/lib/registerStudioGenerationClient";
 
 /** Same-origin API calls with session (mirrors server `createInternalFetchFromRequest`). */
 const browserPipelineFetch = ((path: string, init?: RequestInit) => fetch(path, init)) as InternalFetch;
@@ -1102,7 +1103,7 @@ export default function LinkToAdUniverse({
   const registerLinkToAdStudioImage = useCallback(async (taskId: string, label: string) => {
     try {
       const productUrl = storeUrl.trim();
-      await fetch("/api/studio/generations/register", {
+      const res = await fetch("/api/studio/generations/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1115,9 +1116,32 @@ export default function LinkToAdUniverse({
           ...(productUrl ? { inputUrls: [productUrl] } : {}),
         }),
       });
-    } catch {
-      /* ignore */
+      if (!res.ok) console.warn("[LTA] image history registration failed", res.status);
+    } catch (err) {
+      console.warn("[LTA] image history registration error", err);
     }
+  }, [storeUrl]);
+
+  const registerLinkToAdStudioImageFailed = useCallback(async (label: string, errorMessage: string) => {
+    const productUrl = storeUrl.trim();
+    await registerFailedStudioGeneration({
+      kind: STUDIO_GENERATION_KIND_LINK_TO_AD_IMAGE,
+      label,
+      provider: "kie-market",
+      errorMessage,
+      ...(productUrl ? { inputUrls: [productUrl] } : {}),
+    });
+  }, [storeUrl]);
+
+  const registerLinkToAdStudioVideoFailed = useCallback(async (label: string, errorMessage: string) => {
+    const productUrl = storeUrl.trim();
+    await registerFailedStudioGeneration({
+      kind: STUDIO_GENERATION_KIND_LINK_TO_AD_VIDEO,
+      label,
+      provider: "piapi",
+      errorMessage,
+      ...(productUrl ? { inputUrls: [productUrl] } : {}),
+    });
   }, [storeUrl]);
   const [isWorking, setIsWorking] = useState(false);
   /** Extra product photo uploads should not trigger global "Working..." pipeline state. */
@@ -1257,6 +1281,20 @@ export default function LinkToAdUniverse({
   const [angleSummaryDrafts, setAngleSummaryDrafts] = useState<Record<number, string>>({});
   /** Screen-recording: hide recent-generation chips (stored in localStorage). */
   const [hidePreviousLtaGenerations, setHidePreviousLtaGenerations] = useState(false);
+  /** Generation history for this Link to Ad session (images + videos, including failed). */
+  const [ltaHistoryItems, setLtaHistoryItems] = useState<
+    Array<{
+      id: string;
+      kind: "image" | "video";
+      status: "generating" | "ready" | "failed";
+      label: string;
+      mediaUrl?: string;
+      errorMessage?: string;
+      createdAt: number;
+    }>
+  >([]);
+  const [ltaHistoryOpen, setLtaHistoryOpen] = useState(false);
+  const ltaHistoryLoadedRef = useRef(false);
 
   const nanoBananaPromptsSignatureRef = useRef<string | null>(null);
   /** Incremented when user abandons the flow so late pipeline responses do not re-hydrate the UI. */
@@ -1342,6 +1380,42 @@ export default function LinkToAdUniverse({
       setIsWorking(false);
     }, 5000);
   }, []);
+
+  const loadLtaHistory = useCallback(async () => {
+    try {
+      const kinds = "link_to_ad_image,link_to_ad_video";
+      const res = await fetch(`/api/studio/generations?kind=${encodeURIComponent(kinds)}`, { cache: "no-store" });
+      if (!res.ok) return;
+      const json = (await res.json()) as { data?: Array<Record<string, unknown>> };
+      const rows = Array.isArray(json.data) ? json.data : [];
+      const mapped = rows.map((r) => {
+        const kindRaw = String(r.studioGenerationKind ?? r.kind ?? "");
+        const isVideo = kindRaw.includes("video");
+        const status =
+          r.status === "ready" ? "ready" as const
+          : r.status === "failed" ? "failed" as const
+          : "generating" as const;
+        return {
+          id: String(r.id ?? ""),
+          kind: (isVideo ? "video" : "image") as "image" | "video",
+          status,
+          label: String(r.label ?? ""),
+          mediaUrl: typeof r.mediaUrl === "string" && r.mediaUrl.trim() ? r.mediaUrl : undefined,
+          errorMessage: typeof r.errorMessage === "string" && r.errorMessage.trim() ? r.errorMessage : undefined,
+          createdAt: typeof r.createdAt === "number" ? r.createdAt : Date.now(),
+        };
+      });
+      setLtaHistoryItems(mapped);
+    } catch {
+      /* silently fail — user just won't see history */
+    }
+  }, []);
+
+  useEffect(() => {
+    if (ltaHistoryLoadedRef.current) return;
+    ltaHistoryLoadedRef.current = true;
+    void loadLtaHistory();
+  }, [loadLtaHistory]);
 
   const hydrateVideoPromptFromStored = useCallback((full: string) => {
     const raw = full.replace(/\r\n/g, "\n").trim();
@@ -3358,11 +3432,14 @@ export default function LinkToAdUniverse({
         });
       }
       toast.success("Image generation started");
+      void loadLtaHistory();
     } catch (e) {
       if (e instanceof DOMException && e.name === "AbortError") return;
-      toast.error("Image generation", {
-        description: e instanceof Error ? e.message : "Unknown error",
-      });
+      const errMsg = e instanceof Error ? e.message : "Unknown error";
+      toast.error("Image generation", { description: errMsg });
+      const angleIdx =
+        selectedAngleIndex === 0 || selectedAngleIndex === 1 || selectedAngleIndex === 2 ? selectedAngleIndex : 0;
+      void registerLinkToAdStudioImageFailed(`Link to Ad · Angle ${angleIdx + 1} · image`, errMsg).then(() => loadLtaHistory());
     } finally {
       setIsNanoImageSubmitting(false);
     }
@@ -3799,6 +3876,7 @@ export default function LinkToAdUniverse({
       await persistNanoThreeGeneratedImages(url, prompts as [string, string, string], storedUrls, lastTaskId);
 
       toast.success("3 images generated");
+      void loadLtaHistory();
       if (shouldCharge || usingPrepaid) setLtaPrepaidThreeImagesRegen(false);
       setLtaFrozenCredits(null);
     } catch (e) {
@@ -3809,9 +3887,9 @@ export default function LinkToAdUniverse({
         setLtaPrepaidThreeImagesRegen(false);
         setLtaFrozenCredits(null);
       }
-      toast.error("Image generation", {
-        description: e instanceof Error ? e.message : "Unknown error",
-      });
+      const errMsg = e instanceof Error ? e.message : "Unknown error";
+      toast.error("Image generation", { description: errMsg });
+      void registerLinkToAdStudioImageFailed(`Link to Ad · Angle ${idx + 1} · 3 images`, errMsg).then(() => loadLtaHistory());
       // Clear the generating flag so the user can retry cleanly.
       const base = latestSnapRef.current;
       if (base && lastExtractedJson) {
@@ -4153,28 +4231,31 @@ export default function LinkToAdUniverse({
       });
       const json = (await res.json()) as { taskId?: string; error?: string };
       if (!res.ok || !json.taskId) throw new Error(json.error || "Video generation failed");
-      try {
+      {
         const angLabel =
           selectedAngleIndex === 0 || selectedAngleIndex === 1 || selectedAngleIndex === 2
             ? `Link to Ad · Angle ${selectedAngleIndex + 1}`
             : "Link to Ad · Video";
         const productUrl = storeUrl.trim();
-        await fetch("/api/studio/generations/register", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            kind: STUDIO_GENERATION_KIND_LINK_TO_AD_VIDEO,
-            label: angLabel,
-            taskId: json.taskId,
-            provider: "piapi",
-            creditsCharged: 0,
-            personalApiKey: getPersonalApiKey(),
-            piapiApiKey: getPersonalPiapiApiKey(),
-            ...(productUrl ? { inputUrls: [productUrl] } : {}),
-          }),
-        });
-      } catch {
-        /* ignore history registration */
+        try {
+          const regRes = await fetch("/api/studio/generations/register", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              kind: STUDIO_GENERATION_KIND_LINK_TO_AD_VIDEO,
+              label: angLabel,
+              taskId: json.taskId,
+              provider: "piapi",
+              creditsCharged: 0,
+              personalApiKey: getPersonalApiKey(),
+              piapiApiKey: getPersonalPiapiApiKey(),
+              ...(productUrl ? { inputUrls: [productUrl] } : {}),
+            }),
+          });
+          if (!regRes.ok) console.warn("[LTA] video history registration failed", regRes.status);
+        } catch (regErr) {
+          console.warn("[LTA] video history registration error", regErr);
+        }
       }
       const nextSlots = klingByRef.map((s, i) => ({
         ...s,
@@ -4219,9 +4300,16 @@ export default function LinkToAdUniverse({
         });
       }
       toast.success("Video generation started");
+      void loadLtaHistory();
     } catch (e) {
       if (e instanceof DOMException && e.name === "AbortError") return;
-      toast.error("Video", { description: e instanceof Error ? e.message : "Unknown error" });
+      const errMsg = e instanceof Error ? e.message : "Unknown error";
+      toast.error("Video", { description: errMsg });
+      const angLabel =
+        selectedAngleIndex === 0 || selectedAngleIndex === 1 || selectedAngleIndex === 2
+          ? `Link to Ad · Angle ${selectedAngleIndex + 1}`
+          : "Link to Ad · Video";
+      void registerLinkToAdStudioVideoFailed(angLabel, errMsg).then(() => loadLtaHistory());
     } finally {
       setIsKlingSubmitting(false);
     }
@@ -4444,6 +4532,7 @@ export default function LinkToAdUniverse({
                 ? "Full 30s video saved (two clips)"
                 : "Video saved in the project",
             );
+            void loadLtaHistory();
           }
           if (interval) clearInterval(interval);
           interval = null;
@@ -4452,7 +4541,9 @@ export default function LinkToAdUniverse({
         throw new Error(json.data.error_message || `Video generation failed: ${String(s)}`);
       } catch (err) {
         if (cancelled) return;
-        toast.error("Video generation", { description: err instanceof Error ? err.message : "Unknown error" });
+        const errMsg = err instanceof Error ? err.message : "Unknown error";
+        toast.error("Video generation", { description: errMsg });
+        void loadLtaHistory();
         klingPollAngleRef.current = null;
         klingPollSlotsRef.current = null;
         setKlingPollTaskId(null);
@@ -7275,6 +7366,96 @@ export default function LinkToAdUniverse({
         ) : null}
       </>
       )}
+
+      {ltaHistoryItems.length > 0 ? (
+        <div className="mt-6">
+          <button
+            type="button"
+            onClick={() => setLtaHistoryOpen((o) => !o)}
+            className="flex w-full items-center gap-2 rounded-lg px-1 py-2 text-left transition hover:bg-white/[0.03]"
+          >
+            <Sparkles className="h-4 w-4 text-white/40" aria-hidden />
+            <span className="text-sm font-semibold text-white/70">
+              Generation history
+            </span>
+            <span className="ml-1 rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] font-medium tabular-nums text-white/45">
+              {ltaHistoryItems.length}
+            </span>
+            <ChevronRight
+              className={`ml-auto h-4 w-4 text-white/30 transition-transform duration-200 ${ltaHistoryOpen ? "rotate-90" : ""}`}
+              aria-hidden
+            />
+          </button>
+          {ltaHistoryOpen ? (
+            <div className="mt-2 flex flex-wrap gap-3">
+              {ltaHistoryItems.map((item) => (
+                <div key={item.id} className="flex w-[8rem] flex-col gap-1.5">
+                  <div className={`relative aspect-[9/16] w-full overflow-hidden rounded-lg border ${
+                    item.status === "failed"
+                      ? "border-red-500/30 bg-red-950/20"
+                      : item.status === "generating"
+                        ? "border-violet-400/30 bg-violet-950/10"
+                        : "border-white/10 bg-[#12121a]"
+                  }`}>
+                    {item.status === "failed" ? (
+                      <div className="flex h-full flex-col items-center justify-center gap-2 p-2">
+                        <X className="h-5 w-5 text-red-400/60" strokeWidth={2} aria-hidden />
+                        <p className="text-center text-[9px] leading-tight text-red-300/70">
+                          {item.errorMessage || "Failed"}
+                        </p>
+                      </div>
+                    ) : item.status === "generating" ? (
+                      <div className="flex h-full flex-col items-center justify-center gap-2 p-2">
+                        <Loader2 className="h-5 w-5 animate-spin text-violet-300/70" aria-hidden />
+                        <p className="text-center text-[9px] text-white/40">Generating…</p>
+                      </div>
+                    ) : item.mediaUrl ? (
+                      item.kind === "video" ? (
+                        <VideoCard
+                          src={item.mediaUrl}
+                          className="h-full w-full rounded-none border-0"
+                          aspectClassName=""
+                          enableLightbox={false}
+                        />
+                      ) : (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={proxiedMediaSrc(item.mediaUrl)}
+                          alt=""
+                          className="h-full w-full object-cover"
+                          loading="lazy"
+                        />
+                      )
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-[10px] text-white/30">
+                        No preview
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0 px-0.5">
+                    <p className="truncate text-[10px] leading-tight text-white/50">
+                      {item.label || (item.kind === "video" ? "Video" : "Image")}
+                    </p>
+                    <div className="mt-0.5 flex items-center gap-1.5">
+                      {item.status === "failed" ? (
+                        <span className="rounded-sm bg-red-500/15 px-1.5 py-px text-[8px] font-bold uppercase text-red-300/80">Failed</span>
+                      ) : item.status === "generating" ? (
+                        <span className="rounded-sm bg-violet-500/15 px-1.5 py-px text-[8px] font-bold uppercase text-violet-300/80">In progress</span>
+                      ) : (
+                        <span className="rounded-sm bg-emerald-500/15 px-1.5 py-px text-[8px] font-bold uppercase text-emerald-300/80">Done</span>
+                      )}
+                      <span className="text-[9px] text-white/25">
+                        {new Date(item.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
       </CardContent>
     </Card>
 

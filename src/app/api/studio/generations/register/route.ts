@@ -17,6 +17,9 @@ type Body = {
   personalApiKey?: string;
   piapiApiKey?: string;
   inputUrls?: string[];
+  /** Register a row that already failed (no taskId needed). */
+  status?: "processing" | "failed";
+  errorMessage?: string;
 };
 
 export async function POST(req: Request) {
@@ -47,7 +50,13 @@ export async function POST(req: Request) {
     .map((x) => String(x ?? "").trim())
     .filter((x) => x.length > 0);
 
-  if (!kind || taskIds.length === 0) {
+  const isFailed = body.status === "failed";
+  const errorMessage = String(body.errorMessage ?? "").trim();
+
+  if (!kind) {
+    return NextResponse.json({ error: "Missing kind." }, { status: 400 });
+  }
+  if (!isFailed && taskIds.length === 0) {
     return NextResponse.json({ error: "Missing kind or task id." }, { status: 400 });
   }
 
@@ -58,18 +67,33 @@ export async function POST(req: Request) {
     ? body.inputUrls.filter((u): u is string => typeof u === "string" && u.trim().length > 0)
     : [];
 
-  const payload = taskIds.map((externalTaskId, i) => ({
-    user_id: user.id,
-    kind,
-    status: "processing" as const,
-    label,
-    ...(model ? { model } : {}),
-    external_task_id: externalTaskId,
-    provider,
-    credits_charged: baseCharge + (i === 0 ? remainder : 0),
-    uses_personal_api: usesPersonalApi,
-    ...(inputUrls.length > 0 ? { input_urls: inputUrls } : {}),
-  }));
+  const payload = isFailed && taskIds.length === 0
+    ? [{
+        user_id: user.id,
+        kind,
+        status: "failed" as const,
+        label,
+        ...(model ? { model } : {}),
+        external_task_id: `failed-${Date.now()}`,
+        provider,
+        credits_charged: 0,
+        uses_personal_api: usesPersonalApi,
+        ...(errorMessage ? { error_message: errorMessage } : {}),
+        ...(inputUrls.length > 0 ? { input_urls: inputUrls } : {}),
+      }]
+    : taskIds.map((externalTaskId, i) => ({
+        user_id: user.id,
+        kind,
+        status: (isFailed ? "failed" : "processing") as "processing" | "failed",
+        label,
+        ...(model ? { model } : {}),
+        external_task_id: externalTaskId,
+        provider,
+        credits_charged: isFailed ? 0 : baseCharge + (i === 0 ? remainder : 0),
+        uses_personal_api: usesPersonalApi,
+        ...(isFailed && errorMessage ? { error_message: errorMessage } : {}),
+        ...(inputUrls.length > 0 ? { input_urls: inputUrls } : {}),
+      }));
 
   const { data, error } = await supabase.from("studio_generations").insert(payload).select("id, external_task_id");
   if (error) {

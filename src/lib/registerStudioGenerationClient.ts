@@ -16,3 +16,21 @@ export async function registerStudioGenerationClient(body: Record<string, unknow
     return null;
   }
 }
+
+/**
+ * Registers an already-failed generation so it appears in the user's history.
+ */
+export async function registerFailedStudioGeneration(body: {
+  kind: string;
+  label: string;
+  provider: string;
+  errorMessage: string;
+  inputUrls?: string[];
+  model?: string;
+}): Promise<string | null> {
+  return registerStudioGenerationClient({
+    ...body,
+    status: "failed",
+    creditsCharged: 0,
+  });
+}
