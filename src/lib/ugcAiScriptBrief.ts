@@ -4,12 +4,12 @@
  */
 export type UgcScriptVideoDurationSec = 5 | 10 | 15 | 30;
 
-/** Normalize client/API input to a script word-count tier. Default 10 matches Link to Ad UI default. */
+/** Normalize client/API input to a script word-count tier. Invalid/missing → 30s (Link to Ad product default). */
 export function normalizeUgcScriptVideoDurationSec(raw: unknown): UgcScriptVideoDurationSec {
   const n = typeof raw === "number" && Number.isFinite(raw) ? raw : Number(raw);
   if (n === 5 || n === 10 || n === 15 || n === 30) return n;
   if (n === 8) return 10;
-  return 10;
+  return 30;
 }
 
 /**

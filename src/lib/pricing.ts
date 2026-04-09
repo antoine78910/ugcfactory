@@ -8,6 +8,7 @@ import {
   isStudioSeedreamImagePickerId,
   isStudioUnifiedSeedreamPickerId,
 } from "@/lib/studioImageModels";
+import { normalizeUgcScriptVideoDurationSec } from "@/lib/ugcAiScriptBrief";
 
 // ---------------------------------------------------------------------------
 // Global base
@@ -34,14 +35,14 @@ export const PRICING_BASE = {
 export const STARTER_CREDIT_VALUE_USD = 29.99 / 250;
 
 // ---------------------------------------------------------------------------
-// Link to Ad — video model pricing (Seedance tiers; full Generate = 33 / 49 / 69 cr)
+// Link to Ad — Seedance normal (preview): video slice only (full URL Generate adds scan + 3× ref images)
 // ---------------------------------------------------------------------------
 
 /**
- * Video + Claude prompt step only. With scan (8) + 3× Nano Pro (9), full pipeline totals:
- * 5s → 33, 10s → 49, 15s → 96 credits.
+ * Credits for the **image→video** slice only (Seedance normal). Full first “Generate” on the URL step
+ * also bills store scan (8) + 3× Nano Pro ref images; example totals: 15s → 8+27+79 = 114 · 30s → 8+27+144 = 179.
  *
- * Note: 30s is implemented as two chained 15s clips but uses a discounted bundle price.
+ * 30s is two chained 15s API calls; billed as one bundle (144 cr) for the video portion.
  */
 export const LINK_TO_AD_SEEDANCE_VIDEO_CREDITS_BY_DURATION_SEC: Record<5 | 10 | 15 | 30, number> = {
   5: 16,
@@ -89,7 +90,7 @@ export function linkToAdVideoCredits(
     seedanceSpeed === "fast"
       ? LINK_TO_AD_SEEDANCE_FAST_VIDEO_CREDITS_BY_DURATION_SEC
       : LINK_TO_AD_SEEDANCE_VIDEO_CREDITS_BY_DURATION_SEC;
-  const d = Math.round(Number(durationSec)) || 10;
+  const d = normalizeUgcScriptVideoDurationSec(durationSec);
   if (d === 5 || d === 10 || d === 15) return table[d];
   if (d === 30 && seedanceSpeed !== "fast") return LINK_TO_AD_SEEDANCE_VIDEO_CREDITS_BY_DURATION_SEC[30];
 
