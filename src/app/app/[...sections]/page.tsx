@@ -2715,6 +2715,7 @@ export default function AppBrandWizard() {
                                     fill
                                     sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 33vw"
                                     quality={45}
+                                    unoptimized
                                     placeholder="blur"
                                     blurDataURL={THUMB_BLUR}
                                     className="object-cover transition-transform duration-500 group-hover:scale-105"
@@ -2731,6 +2732,7 @@ export default function AppBrandWizard() {
                                             height={32}
                                             sizes="32px"
                                             quality={35}
+                                            unoptimized
                                             placeholder="blur"
                                             blurDataURL={THUMB_BLUR}
                                             className="h-full w-full object-cover"
@@ -2759,6 +2761,7 @@ export default function AppBrandWizard() {
                                         height={20}
                                         sizes="20px"
                                         quality={60}
+                                        unoptimized
                                         placeholder="blur"
                                         blurDataURL={THUMB_BLUR}
                                         className="h-5 w-5 object-contain"
