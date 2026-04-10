@@ -119,7 +119,7 @@ function WorkflowPagesPanel({
           <button
             type="button"
             onClick={onAddPage}
-            className="text-[12px] font-semibold text-white/90 transition hover:text-cyan-200"
+            className="text-[12px] font-semibold text-white/90 transition hover:text-violet-200"
           >
             + New
           </button>
@@ -139,7 +139,7 @@ function WorkflowPagesPanel({
                       if (e.key === "Enter") commitRename();
                       if (e.key === "Escape") setRenamingId(null);
                     }}
-                    className="w-full rounded-xl border border-cyan-500/35 bg-black/40 px-3 py-2 text-center text-[13px] font-semibold text-white outline-none focus:ring-2 focus:ring-cyan-500/40"
+                    className="w-full rounded-xl border border-violet-500/35 bg-black/40 px-3 py-2 text-center text-[13px] font-semibold text-white outline-none focus:ring-2 focus:ring-violet-500/40"
                   />
                 ) : (
                   <div className="flex items-center gap-1">
@@ -255,13 +255,13 @@ function WorkflowReactFlowChrome({
         variant={BackgroundVariant.Dots}
         gap={20}
         size={1.15}
-        color="rgba(34, 211, 238, 0.14)"
+        color="rgba(167, 139, 250, 0.16)"
       />
       {showMiniMap ? (
         <MiniMap
-          className="!bottom-14 !right-4 !h-28 !w-44 !overflow-hidden !rounded-xl !border !border-cyan-500/20 !bg-[#0b0912]/95"
+          className="!bottom-14 !right-4 !h-28 !w-44 !overflow-hidden !rounded-xl !border !border-violet-500/25 !bg-[#0b0912]/95"
           maskColor="rgba(0,0,0,0.72)"
-          nodeColor={() => "#22d3ee"}
+          nodeColor={() => "#a78bfa"}
         />
       ) : null}
 
@@ -416,7 +416,7 @@ function WorkflowReactFlowChrome({
           <Layers className="h-4 w-4 text-white/70" aria-hidden />
           {activeName}
         </button>
-        <div className="flex items-center gap-3 rounded-full border border-cyan-500/20 bg-[#06070d]/95 px-4 py-2 text-[12px] text-white/50 shadow-lg backdrop-blur-md">
+        <div className="flex items-center gap-3 rounded-full border border-violet-500/25 bg-[#06070d]/95 px-4 py-2 text-[12px] text-white/50 shadow-lg backdrop-blur-md">
           <button type="button" className="text-white/40 hover:text-white/65">
             Give feedback
           </button>
@@ -426,7 +426,7 @@ function WorkflowReactFlowChrome({
             onClick={() => setShowMiniMap((s) => !s)}
             className={[
               "inline-flex items-center gap-1.5 rounded-lg px-2 py-1 transition-colors",
-              showMiniMap ? "bg-cyan-500/15 text-cyan-100/85" : "text-white/45 hover:bg-white/[0.06]",
+              showMiniMap ? "bg-violet-500/15 text-violet-100/90" : "text-white/45 hover:bg-white/[0.06]",
             ].join(" ")}
           >
             <MapIcon className="h-3.5 w-3.5" />
@@ -519,7 +519,7 @@ function WorkflowFlowWorkspace({ project, setProject }: FlowWorkspaceProps) {
         addEdge(
           {
             ...params,
-            style: { stroke: "rgba(34, 211, 238, 0.45)", strokeWidth: 2 },
+            style: { stroke: "rgba(167, 139, 250, 0.5)", strokeWidth: 2 },
           },
           eds,
         ),
@@ -554,7 +554,7 @@ function WorkflowFlowWorkspace({ project, setProject }: FlowWorkspaceProps) {
         onPaneClick={() => setAddOpen(false)}
         className="workflow-flow !bg-transparent"
         defaultEdgeOptions={{
-          style: { stroke: "rgba(34, 211, 238, 0.4)", strokeWidth: 2 },
+          style: { stroke: "rgba(167, 139, 250, 0.42)", strokeWidth: 2 },
         }}
       >
         <WorkflowReactFlowChrome
@@ -617,21 +617,21 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
 
   return (
     <div className="relative flex min-h-[100dvh] min-w-0 flex-col overflow-hidden bg-[#06070d] text-white">
-      <div className="pointer-events-none absolute left-1/2 top-0 h-[420px] w-[900px] -translate-x-1/2 rounded-full bg-cyan-600/10 blur-[120px]" />
+      <div className="pointer-events-none absolute left-1/2 top-0 h-[420px] w-[900px] -translate-x-1/2 rounded-full bg-violet-600/12 blur-[120px]" />
 
       <header className="relative z-20 flex h-12 shrink-0 items-center justify-between border-b border-white/10 bg-[#06070d]/95 px-4 backdrop-blur-md sm:h-14 sm:px-5">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
           <div className="flex min-w-0 items-center gap-2 text-[13px] text-white/45">
-            <Link href="/app/link-to-ad" className="shrink-0 text-white/55 hover:text-cyan-200/90">
+            <Link href="/app/link-to-ad" className="shrink-0 text-white/55 hover:text-violet-200/90">
               Youry
             </Link>
             <span className="text-white/25">/</span>
-            <Link href="/workflow" className="shrink-0 text-cyan-200/80 hover:text-cyan-100">
+            <Link href="/workflow" className="shrink-0 text-violet-200/85 hover:text-violet-100">
               Workflow
             </Link>
             <span className="text-white/25">/</span>
             <span className="flex min-w-0 items-center gap-1.5 truncate font-medium text-white/80">
-              <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-cyan-400/50" aria-hidden />
+              <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-violet-400/55" aria-hidden />
               <span className="truncate">{spaceName}</span>
             </span>
           </div>
@@ -639,7 +639,7 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
         <div className="flex shrink-0 items-center gap-2">
           <button
             type="button"
-            className="inline-flex h-9 items-center gap-2 rounded-full border border-cyan-500/25 bg-white px-3.5 text-[13px] font-semibold text-zinc-900 shadow-sm transition hover:bg-white/95"
+            className="inline-flex h-9 items-center gap-2 rounded-full border border-violet-400/35 bg-white px-3.5 text-[13px] font-semibold text-zinc-900 shadow-sm transition hover:bg-white/95"
           >
             <Share2 className="h-3.5 w-3.5" />
             Share
@@ -649,10 +649,10 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
 
       <div className="relative z-10 flex min-h-0 min-w-0 flex-1">
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-[#06070d]">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(34,211,238,0.06),transparent)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(139,92,246,0.08),transparent)]" />
           <div className="relative flex h-full min-h-[480px] min-w-0 flex-1 flex-col">
             <div className="border-b border-white/10 px-4 py-2.5 sm:px-5">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-cyan-300/90">Canvas</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-300/90">Canvas</p>
               <p className="mt-0.5 text-[10px] text-white/40">
                 Multiple pages per project — use the Pages panel (top right). Double-click a page name to rename.
               </p>
@@ -676,7 +676,7 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
         ) : null}
       </div>
 
-      <p className="pointer-events-none absolute bottom-1 left-1/2 z-10 -translate-x-1/2 text-[10px] text-cyan-200/25">
+      <p className="pointer-events-none absolute bottom-1 left-1/2 z-10 -translate-x-1/2 text-[10px] text-violet-200/30">
         Pages and canvas are saved in this browser
       </p>
     </div>

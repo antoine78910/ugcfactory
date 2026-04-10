@@ -13,21 +13,21 @@ export type AdAssetNodeType = Node<AdAssetNodeData, "adAsset">;
 const kindConfig = {
   image: {
     icon: ImageIcon,
-    border: "border-cyan-500/35",
-    glow: "shadow-[0_0_24px_rgba(34,211,238,0.12)]",
-    chip: "bg-cyan-500/15 text-cyan-200/90",
+    border: "border-violet-400/40",
+    glow: "shadow-[0_0_24px_rgba(167,139,250,0.14)]",
+    chip: "bg-violet-400/18 text-violet-100/90",
   },
   video: {
     icon: Clapperboard,
-    border: "border-violet-500/35",
-    glow: "shadow-[0_0_24px_rgba(139,92,246,0.12)]",
-    chip: "bg-violet-500/15 text-violet-200/90",
+    border: "border-violet-600/40",
+    glow: "shadow-[0_0_24px_rgba(139,92,246,0.14)]",
+    chip: "bg-violet-600/18 text-violet-100/90",
   },
   variation: {
     icon: Sparkles,
-    border: "border-cyan-500/35",
-    glow: "shadow-[0_0_28px_rgba(34,211,238,0.14)]",
-    chip: "bg-cyan-500/15 text-cyan-200/90",
+    border: "border-violet-300/35",
+    glow: "shadow-[0_0_28px_rgba(196,181,253,0.12)]",
+    chip: "bg-violet-300/15 text-violet-50/95",
   },
 } as const;
 
@@ -42,14 +42,14 @@ export function AdAssetNode({ data, selected }: NodeProps<AdAssetNodeType>) {
         "min-w-[200px] max-w-[240px] rounded-2xl border bg-[#0b0912]/95 px-3 py-2.5 backdrop-blur-md",
         cfg.border,
         cfg.glow,
-        selected ? "ring-2 ring-cyan-400/45" : "",
+        selected ? "ring-2 ring-violet-400/50" : "",
       ].join(" ")}
     >
       {showTarget ? (
         <Handle
           type="target"
           position={Position.Left}
-          className="!h-3 !w-3 !border-2 !border-cyan-400/55 !bg-[#06070d]"
+          className="!h-3 !w-3 !border-2 !border-violet-400/55 !bg-[#06070d]"
         />
       ) : null}
       <div className="flex items-start gap-2.5">
@@ -66,7 +66,7 @@ export function AdAssetNode({ data, selected }: NodeProps<AdAssetNodeType>) {
       <Handle
         type="source"
         position={Position.Right}
-        className="!h-3 !w-3 !border-2 !border-cyan-400/50 !bg-[#06070d]"
+        className="!h-3 !w-3 !border-2 !border-violet-400/50 !bg-[#06070d]"
       />
     </div>
   );

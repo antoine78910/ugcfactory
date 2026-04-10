@@ -67,11 +67,11 @@ export function WorkflowSpacesLanding() {
 
   return (
     <div className="relative min-h-[100dvh] overflow-hidden bg-[#06070d] text-white">
-      <div className="pointer-events-none absolute left-1/2 top-0 h-[380px] w-[min(100%,920px)] -translate-x-1/2 rounded-full bg-cyan-600/10 blur-[100px]" />
+      <div className="pointer-events-none absolute left-1/2 top-0 h-[380px] w-[min(100%,920px)] -translate-x-1/2 rounded-full bg-violet-600/11 blur-[100px]" />
       <div className="pointer-events-none absolute right-0 top-[120px] h-[320px] w-[480px] rounded-full bg-violet-600/12 blur-[90px]" />
 
       <div className="relative z-10 mx-auto max-w-6xl px-4 pb-16 pt-8 sm:px-6 sm:pt-10">
-        <div className="overflow-hidden rounded-[22px] border border-white/[0.08] bg-gradient-to-br from-violet-950/75 via-[#0c0d12] to-cyan-950/40 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.45)] sm:p-10">
+        <div className="overflow-hidden rounded-[22px] border border-white/[0.08] bg-gradient-to-br from-violet-950/80 via-[#0c0d12] to-violet-950/45 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.45)] sm:p-10">
           <div className="flex flex-col gap-8 lg:flex-row lg:items-center lg:justify-between">
             <div className="max-w-xl">
               <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Spaces</h1>
@@ -82,7 +82,7 @@ export function WorkflowSpacesLanding() {
               <button
                 type="button"
                 onClick={onNewSpace}
-                className="mt-6 inline-flex items-center gap-2 rounded-full border border-violet-400/40 bg-white px-5 py-2.5 text-[14px] font-semibold text-zinc-900 shadow-[0_8px_32px_rgba(139,92,246,0.2)] transition hover:border-cyan-400/35 hover:bg-white hover:shadow-[0_10px_36px_rgba(34,211,238,0.12)]"
+                className="mt-6 inline-flex items-center gap-2 rounded-full border border-violet-400/40 bg-white px-5 py-2.5 text-[14px] font-semibold text-zinc-900 shadow-[0_8px_32px_rgba(139,92,246,0.2)] transition hover:border-violet-300/50 hover:bg-white hover:shadow-[0_10px_36px_rgba(139,92,246,0.25)]"
               >
                 <Plus className="h-4 w-4" strokeWidth={2.5} />
                 New space
@@ -92,7 +92,7 @@ export function WorkflowSpacesLanding() {
             <div className="relative hidden h-[200px] w-[min(100%,380px)] shrink-0 lg:block" aria-hidden>
               <div className="absolute inset-0 rounded-2xl border border-white/10 bg-[#06070d]/90 p-4">
                 <div className="relative h-full">
-                  <div className="absolute left-2 top-6 h-14 w-24 rounded-xl border border-cyan-500/30 bg-black/60" />
+                  <div className="absolute left-2 top-6 h-14 w-24 rounded-xl border border-violet-500/35 bg-black/60" />
                   <div className="absolute right-4 top-10 h-12 w-32 rounded-xl border border-violet-500/35 bg-black/50 px-2 py-1.5 text-[9px] leading-snug text-white/55">
                     Slowly and cinematically zoom out of the scene…
                   </div>
@@ -112,12 +112,12 @@ export function WorkflowSpacesLanding() {
                     />
                     <defs>
                       <linearGradient id="g1" x1="0" y1="0" x2="1" y2="0">
-                        <stop stopColor="#22d3ee" stopOpacity="0.65" />
-                        <stop offset="1" stopColor="#a78bfa" stopOpacity="0.6" />
+                        <stop stopColor="#c4b5fd" stopOpacity="0.55" />
+                        <stop offset="1" stopColor="#a78bfa" stopOpacity="0.65" />
                       </linearGradient>
                       <linearGradient id="g2" x1="0" y1="0" x2="1" y2="0">
                         <stop stopColor="#a78bfa" stopOpacity="0.65" />
-                        <stop offset="1" stopColor="#22d3ee" stopOpacity="0.5" />
+                        <stop offset="1" stopColor="#7c3aed" stopOpacity="0.45" />
                       </linearGradient>
                     </defs>
                   </svg>
@@ -143,7 +143,7 @@ export function WorkflowSpacesLanding() {
                 className={cn(
                   "inline-flex items-center gap-2 rounded-full px-3.5 py-2 text-[13px] font-semibold transition",
                   tab === id
-                    ? "bg-violet-500/15 text-violet-100 shadow-[inset_0_0_0_1px_rgba(139,92,246,0.35)] ring-1 ring-cyan-500/15"
+                    ? "bg-violet-500/15 text-violet-100 shadow-[inset_0_0_0_1px_rgba(139,92,246,0.35)] ring-1 ring-violet-400/25"
                     : "text-white/45 hover:bg-violet-500/10 hover:text-violet-100/90",
                 )}
               >
@@ -160,7 +160,7 @@ export function WorkflowSpacesLanding() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search spaces…"
-              className="w-full rounded-full border border-white/[0.1] bg-[#0b0912]/90 py-2.5 pl-10 pr-4 text-[13px] text-white placeholder:text-white/35 outline-none ring-cyan-500/0 transition focus:border-cyan-500/30 focus:ring-2 focus:ring-cyan-500/20"
+              className="w-full rounded-full border border-white/[0.1] bg-[#0b0912]/90 py-2.5 pl-10 pr-4 text-[13px] text-white placeholder:text-white/35 outline-none ring-violet-500/0 transition focus:border-violet-500/35 focus:ring-2 focus:ring-violet-500/25"
             />
           </div>
         </div>
@@ -186,7 +186,7 @@ export function WorkflowSpacesLanding() {
                   onClick={() => openSpace(s.id)}
                   className="group flex w-full flex-col overflow-hidden rounded-2xl border border-white/[0.1] bg-[#0b0912]/90 text-left shadow-[0_12px_40px_rgba(0,0,0,0.35)] transition hover:border-violet-400/30 hover:bg-[#0b0912] hover:shadow-[0_12px_40px_rgba(139,92,246,0.08)]"
                 >
-                  <div className="aspect-[16/10] w-full bg-gradient-to-br from-violet-900/25 via-[#1a1a22] to-cyan-900/20" />
+                  <div className="aspect-[16/10] w-full bg-gradient-to-br from-violet-900/30 via-[#1a1a22] to-violet-950/35" />
                   <div className="flex items-start justify-between gap-2 p-4">
                     <div className="min-w-0">
                       <p className="truncate font-semibold text-white">{s.name}</p>
@@ -208,7 +208,7 @@ export function WorkflowSpacesLanding() {
         )}
 
         <p className="mt-10 text-center text-[11px] text-white/30">
-          <Link href="/app/link-to-ad" className="text-violet-300/55 hover:text-cyan-200/85">
+          <Link href="/app/link-to-ad" className="text-violet-300/55 hover:text-violet-200/90">
             Back to Youry
           </Link>
         </p>

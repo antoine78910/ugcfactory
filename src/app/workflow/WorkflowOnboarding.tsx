@@ -26,7 +26,7 @@ const cards: {
     kind: "image_gen",
     label: "Image Generator",
     icon: ImageIcon,
-    iconWrap: "bg-cyan-500/25 ring-1 ring-cyan-400/35",
+    iconWrap: "bg-violet-500/28 ring-1 ring-violet-400/40",
   },
   {
     kind: "video_gen",
@@ -38,7 +38,7 @@ const cards: {
     kind: "assistant",
     label: "Assistant",
     icon: Sparkles,
-    iconWrap: "bg-violet-500/20 ring-1 ring-cyan-400/25",
+    iconWrap: "bg-violet-500/22 ring-1 ring-violet-300/35",
   },
 ];
 
@@ -164,7 +164,7 @@ export function WorkflowOnboarding({ onChoose, onSkip }: Props) {
               className={cn(
                 "flex h-full w-full flex-col items-center gap-3 rounded-2xl border border-white/[0.1] bg-[#0b0912]/95 px-3 py-4 text-center shadow-[0_12px_40px_rgba(0,0,0,0.45)] transition",
                 "hover:border-white/20 hover:bg-[#0b0912] hover:shadow-[0_16px_48px_rgba(0,0,0,0.55)]",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/40",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/45",
               )}
             >
               <span className={cn("flex h-11 w-11 items-center justify-center rounded-xl", iconWrap)}>
