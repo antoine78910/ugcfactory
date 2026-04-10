@@ -16,9 +16,11 @@ import {
   useNodesState,
   useReactFlow,
   useStore,
+  type XYPosition,
 } from "@xyflow/react";
 import {
   ChevronDown,
+  GripVertical,
   Hand,
   Infinity,
   Layers,
@@ -36,11 +38,19 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
-import { AdAssetNode, type AdAssetNodeType } from "./nodes/AdAssetNode";
+import { AdAssetNode, type AdAssetNodeData, type AdAssetNodeType } from "./nodes/AdAssetNode";
+import {
+  GROUP_COLOR_PRESETS,
+  WorkflowGroupNode,
+  type WorkflowGroupNodeData,
+  type WorkflowGroupNodeType,
+} from "./nodes/WorkflowGroupNode";
+import type { WorkflowCanvasNode } from "./workflowFlowTypes";
 import { WorkflowOnboarding, starterNodeForKind, type WorkflowStarterKind } from "./WorkflowOnboarding";
 import {
   defaultWorkflowProject,
@@ -49,8 +59,14 @@ import {
   type WorkflowProjectStateV1,
 } from "./workflowProjectStorage";
 import { loadProjectForSpace, loadSpacesIndex, saveProjectForSpace } from "./workflowSpacesStorage";
+import { WorkflowNodePatchProvider } from "./workflowNodePatchContext";
+import {
+  buildAdAssetNode,
+  WORKFLOW_NODE_DND,
+  type WorkflowDragNodeKind,
+} from "./workflowNodeFactory";
 
-const nodeTypes = { adAsset: AdAssetNode };
+const nodeTypes = { adAsset: AdAssetNode, workflowGroup: WorkflowGroupNode };
 
 type Tool = "select" | "pan";
 
@@ -75,7 +91,7 @@ function WorkflowPagesPanel({
   setProject: React.Dispatch<React.SetStateAction<WorkflowProjectStateV1>>;
   onSelectPage: (id: string) => void;
   onAddPage: () => void;
-  nodesEdgesRef: React.MutableRefObject<{ nodes: AdAssetNodeType[]; edges: Edge[] } | null>;
+  nodesEdgesRef: React.MutableRefObject<{ nodes: WorkflowCanvasNode[]; edges: Edge[] } | null>;
 }) {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
@@ -203,9 +219,12 @@ type ChromeProps = {
   setShowMiniMap: (v: boolean | ((b: boolean) => boolean)) => void;
   addOpen: boolean;
   setAddOpen: (v: boolean | ((b: boolean) => boolean)) => void;
-  setNodes: React.Dispatch<React.SetStateAction<AdAssetNodeType[]>>;
+  setNodes: React.Dispatch<React.SetStateAction<WorkflowCanvasNode[]>>;
   activePageId: string;
   activeName: string;
+  selectedNodes: WorkflowCanvasNode[];
+  frameOpen: boolean;
+  setFrameOpen: (v: boolean | ((b: boolean) => boolean)) => void;
 };
 
 function WorkflowReactFlowChrome({
@@ -218,32 +237,93 @@ function WorkflowReactFlowChrome({
   setNodes,
   activePageId,
   activeName,
+  selectedNodes,
+  frameOpen,
+  setFrameOpen,
 }: ChromeProps) {
-  const { screenToFlowPosition } = useReactFlow();
+  const { screenToFlowPosition, getNodesBounds, getInternalNode } = useReactFlow();
+  const [groupNameDraft, setGroupNameDraft] = useState("Group");
+  const [groupColorDraft, setGroupColorDraft] = useState<string>(GROUP_COLOR_PRESETS[0].value);
+
+  const eligibleForGroup = useMemo(
+    () => selectedNodes.filter((n): n is AdAssetNodeType => n.type === "adAsset" && !n.parentId),
+    [selectedNodes],
+  );
+  const canGroup = eligibleForGroup.length >= 2;
+
+  const createGroup = useCallback(() => {
+    if (!canGroup) {
+      toast.error("Select at least two top-level nodes to group.");
+      return;
+    }
+    const HEADER = 40;
+    const PAD = 24;
+    const bounds = getNodesBounds(eligibleForGroup);
+    const gx = bounds.x - PAD;
+    const gy = bounds.y - PAD - HEADER;
+    const gw = Math.max(bounds.width + 2 * PAD, 200);
+    const gh = Math.max(bounds.height + 2 * PAD + HEADER, 160);
+    const groupId = crypto.randomUUID();
+    const name = groupNameDraft.trim() || "Group";
+    const color = groupColorDraft;
+
+    const childUpdates = eligibleForGroup.map((n) => {
+      const internal = getInternalNode(n.id);
+      const abs = internal?.internals.positionAbsolute ?? { x: n.position.x, y: n.position.y };
+      return { node: n, abs };
+    });
+
+    setNodes((prev) => {
+      const selectedIds = new Set(eligibleForGroup.map((n) => n.id));
+      const rest = prev.filter((n) => !selectedIds.has(n.id));
+      const groupNode: WorkflowGroupNodeType = {
+        id: groupId,
+        type: "workflowGroup",
+        position: { x: gx, y: gy },
+        style: { width: gw, height: gh },
+        data: { label: name, color },
+        zIndex: -1,
+      };
+      const updatedChildren = childUpdates.map(({ node: n, abs }) => ({
+        ...n,
+        parentId: groupId,
+        extent: "parent" as const,
+        position: { x: abs.x - gx, y: abs.y - gy },
+        selected: false,
+      }));
+      return [...rest, groupNode, ...updatedChildren].map((n) =>
+        n.id === groupId ? { ...n, selected: true } : n,
+      );
+    });
+    setFrameOpen(false);
+    toast.success("Group created");
+  }, [
+    canGroup,
+    eligibleForGroup,
+    getInternalNode,
+    getNodesBounds,
+    groupColorDraft,
+    groupNameDraft,
+    setNodes,
+  ]);
 
   const addNode = useCallback(
     (kind: AdAssetNodeType["data"]["kind"]) => {
-      const id = crypto.randomUUID();
-      const labels: Record<AdAssetNodeType["data"]["kind"], string> = {
-        image: "Product image",
-        video: "UGC video",
-        variation: "Ad variation",
-      };
       const position = screenToFlowPosition({
         x: window.innerWidth / 2,
         y: window.innerHeight / 2,
       });
-      const n: AdAssetNodeType = {
-        id,
-        type: "adAsset",
-        position,
-        data: { kind, label: labels[kind] },
-      };
-      setNodes((prev) => [...prev, n]);
+      setNodes((prev) => [...prev, buildAdAssetNode(kind, position)]);
       setAddOpen(false);
+      setFrameOpen(false);
     },
-    [screenToFlowPosition, setNodes, setAddOpen],
+    [screenToFlowPosition, setNodes, setAddOpen, setFrameOpen],
   );
+
+  const setDragPayload = useCallback((e: DragEvent, payload: string) => {
+    e.dataTransfer.setData(WORKFLOW_NODE_DND, payload);
+    e.dataTransfer.effectAllowed = "copy";
+  }, []);
 
   const barIcon = "h-[18px] w-[18px] shrink-0";
 
@@ -261,7 +341,13 @@ function WorkflowReactFlowChrome({
         <MiniMap
           className="!bottom-14 !right-4 !h-28 !w-44 !overflow-hidden !rounded-xl !border !border-violet-500/25 !bg-[#0b0912]/95"
           maskColor="rgba(0,0,0,0.72)"
-          nodeColor={() => "#a78bfa"}
+          nodeColor={(n) => {
+            if (n.type === "workflowGroup") {
+              const d = n.data as WorkflowGroupNodeData;
+              return d.color ?? "#a78bfa";
+            }
+            return "#a78bfa";
+          }}
         />
       ) : null}
 
@@ -275,15 +361,37 @@ function WorkflowReactFlowChrome({
             <button
               type="button"
               title="Add node"
-              onClick={() => setAddOpen((o) => !o)}
+              onClick={() => {
+                setAddOpen((o) => !o);
+                setFrameOpen(false);
+              }}
               className="flex h-9 w-9 items-center justify-center rounded-full text-white transition-colors hover:bg-white/[0.08]"
             >
               <Plus className={barIcon} strokeWidth={2.25} />
             </button>
             {addOpen ? (
-              <div className="absolute left-[calc(100%+10px)] top-0 z-20 min-w-[168px] rounded-xl border border-white/10 bg-[#0b0912] py-1 shadow-xl">
+              <div className="absolute left-[calc(100%+10px)] top-0 z-20 min-w-[200px] rounded-xl border border-white/10 bg-[#0b0912] py-1 shadow-xl">
+                <div
+                  draggable
+                  onDragStart={(e) => {
+                    setDragPayload(e, "pick");
+                    setAddOpen(false);
+                    setFrameOpen(false);
+                  }}
+                  className="flex cursor-grab items-center gap-2 border-b border-white/[0.08] px-3 py-2.5 text-[12px] text-white/65 active:cursor-grabbing"
+                  title="Drop on the canvas to choose node type"
+                >
+                  <GripVertical className="h-4 w-4 shrink-0 text-white/35" aria-hidden />
+                  <span>Drag to canvas — pick type on drop</span>
+                </div>
                 <button
                   type="button"
+                  draggable
+                  onDragStart={(e) => {
+                    setDragPayload(e, "image");
+                    setAddOpen(false);
+                    setFrameOpen(false);
+                  }}
                   className="block w-full px-3 py-2 text-left text-[13px] text-white/85 hover:bg-white/[0.06]"
                   onClick={() => addNode("image")}
                 >
@@ -291,6 +399,12 @@ function WorkflowReactFlowChrome({
                 </button>
                 <button
                   type="button"
+                  draggable
+                  onDragStart={(e) => {
+                    setDragPayload(e, "video");
+                    setAddOpen(false);
+                    setFrameOpen(false);
+                  }}
                   className="block w-full px-3 py-2 text-left text-[13px] text-white/85 hover:bg-white/[0.06]"
                   onClick={() => addNode("video")}
                 >
@@ -298,6 +412,12 @@ function WorkflowReactFlowChrome({
                 </button>
                 <button
                   type="button"
+                  draggable
+                  onDragStart={(e) => {
+                    setDragPayload(e, "variation");
+                    setAddOpen(false);
+                    setFrameOpen(false);
+                  }}
                   className="block w-full px-3 py-2 text-left text-[13px] text-white/85 hover:bg-white/[0.06]"
                   onClick={() => addNode("variation")}
                 >
@@ -349,19 +469,72 @@ function WorkflowReactFlowChrome({
               aria-hidden
             />
           </button>
-          <button
-            type="button"
-            title="Frame (coming soon)"
-            disabled
-            className="relative flex h-9 w-9 cursor-not-allowed items-center justify-center rounded-full text-white/75 opacity-90"
-          >
-            <Square className={barIcon} strokeWidth={2} />
-            <ChevronDown
-              className="pointer-events-none absolute bottom-0.5 right-0.5 h-2.5 w-2.5 text-white/55"
-              strokeWidth={3}
-              aria-hidden
-            />
-          </button>
+          <div className="relative flex w-full flex-col items-center">
+            <button
+              type="button"
+              title={
+                canGroup
+                  ? "Group selection — name and color"
+                  : "Select two or more nodes (marquee) to group"
+              }
+              disabled={!canGroup}
+              onClick={() => {
+                if (!canGroup) return;
+                setFrameOpen((o) => !o);
+                setAddOpen(false);
+              }}
+              className={cn(
+                "relative flex h-9 w-9 items-center justify-center rounded-full transition-colors",
+                canGroup
+                  ? "text-white/90 hover:bg-white/[0.08]"
+                  : "cursor-not-allowed text-white/35 opacity-90",
+              )}
+            >
+              <Square className={barIcon} strokeWidth={2} />
+              <ChevronDown
+                className="pointer-events-none absolute bottom-0.5 right-0.5 h-2.5 w-2.5 text-white/55"
+                strokeWidth={3}
+                aria-hidden
+              />
+            </button>
+            {frameOpen && canGroup ? (
+              <div className="absolute left-[calc(100%+10px)] top-0 z-20 w-[220px] rounded-xl border border-white/10 bg-[#0b0912] p-3 shadow-xl">
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-white/45">New group</p>
+                <label className="mb-2 block">
+                  <span className="mb-1 block text-[10px] text-white/40">Name</span>
+                  <input
+                    value={groupNameDraft}
+                    onChange={(e) => setGroupNameDraft(e.target.value)}
+                    className="w-full rounded-lg border border-white/12 bg-black/40 px-2.5 py-1.5 text-[13px] text-white outline-none focus:border-violet-500/40"
+                    placeholder="Group name"
+                  />
+                </label>
+                <p className="mb-1.5 text-[10px] text-white/40">Color</p>
+                <div className="mb-3 flex flex-wrap gap-1.5">
+                  {GROUP_COLOR_PRESETS.map((c) => (
+                    <button
+                      key={c.value}
+                      type="button"
+                      title={c.label}
+                      className={cn(
+                        "h-6 w-6 rounded-full border border-white/15 transition hover:scale-105",
+                        groupColorDraft === c.value && "ring-2 ring-white/50 ring-offset-2 ring-offset-[#0b0912]",
+                      )}
+                      style={{ backgroundColor: c.value }}
+                      onClick={() => setGroupColorDraft(c.value)}
+                    />
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={createGroup}
+                  className="w-full rounded-lg bg-violet-500/90 py-2 text-[13px] font-semibold text-white transition hover:bg-violet-500"
+                >
+                  Create group
+                </button>
+              </div>
+            ) : null}
+          </div>
           <button
             type="button"
             title="Note (coming soon)"
@@ -444,18 +617,25 @@ function WorkflowReactFlowChrome({
 }
 
 function WorkflowFlowWorkspace({ project, setProject }: FlowWorkspaceProps) {
+  const { screenToFlowPosition } = useReactFlow();
   const activePage = useMemo(
     () => project.pages.find((p) => p.id === project.activePageId) ?? project.pages[0],
     [project.pages, project.activePageId],
   );
 
-  const [nodes, setNodes, onNodesChange] = useNodesState<AdAssetNodeType>(activePage?.nodes ?? []);
+  const [nodes, setNodes, onNodesChange] = useNodesState<WorkflowCanvasNode>(activePage?.nodes ?? []);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(activePage?.edges ?? []);
   const [tool, setTool] = useState<Tool>("select");
   const [showMiniMap, setShowMiniMap] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
+  const [frameOpen, setFrameOpen] = useState(false);
+  const [selectedNodes, setSelectedNodes] = useState<WorkflowCanvasNode[]>([]);
+  const [placementPicker, setPlacementPicker] = useState<null | { flow: XYPosition; screenX: number; screenY: number }>(
+    null,
+  );
+  const placementRef = useRef<HTMLDivElement>(null);
 
-  const nodesEdgesRef = useRef<{ nodes: AdAssetNodeType[]; edges: Edge[] } | null>(null);
+  const nodesEdgesRef = useRef<{ nodes: WorkflowCanvasNode[]; edges: Edge[] } | null>(null);
   nodesEdgesRef.current = { nodes, edges };
 
   const prevActiveId = useRef(project.activePageId);
@@ -467,8 +647,66 @@ function WorkflowFlowWorkspace({ project, setProject }: FlowWorkspaceProps) {
     if (p) {
       setNodes(p.nodes);
       setEdges(p.edges);
+      setSelectedNodes([]);
+      setFrameOpen(false);
+      setPlacementPicker(null);
     }
   }, [project.activePageId, project.pages, setNodes, setEdges]);
+
+  const onDragOver = useCallback((e: DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  }, []);
+
+  const onDrop = useCallback(
+    (e: DragEvent) => {
+      e.preventDefault();
+      const raw = e.dataTransfer.getData(WORKFLOW_NODE_DND);
+      if (!raw) return;
+      const flowPos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+      setAddOpen(false);
+      setFrameOpen(false);
+      if (raw === "pick") {
+        setPlacementPicker({ flow: flowPos, screenX: e.clientX, screenY: e.clientY });
+        return;
+      }
+      if (raw === "image" || raw === "video" || raw === "variation") {
+        setNodes((prev) => [...prev, buildAdAssetNode(raw, flowPos)]);
+        toast.success("Node added");
+      }
+    },
+    [screenToFlowPosition, setNodes],
+  );
+
+  useEffect(() => {
+    if (!placementPicker) return;
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") setPlacementPicker(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [placementPicker]);
+
+  useEffect(() => {
+    if (!placementPicker) return;
+    const onDown = (ev: MouseEvent) => {
+      const el = placementRef.current;
+      if (el && ev.target instanceof Node && el.contains(ev.target)) return;
+      setPlacementPicker(null);
+    };
+    window.addEventListener("mousedown", onDown, true);
+    return () => window.removeEventListener("mousedown", onDown, true);
+  }, [placementPicker]);
+
+  const placeKindAtPicker = useCallback(
+    (kind: WorkflowDragNodeKind) => {
+      if (!placementPicker) return;
+      setNodes((prev) => [...prev, buildAdAssetNode(kind, placementPicker.flow)]);
+      setPlacementPicker(null);
+      toast.success("Node added");
+    },
+    [placementPicker, setNodes],
+  );
 
   useEffect(() => {
     const id = project.activePageId;
@@ -530,6 +768,17 @@ function WorkflowFlowWorkspace({ project, setProject }: FlowWorkspaceProps) {
 
   const activeName = activePage?.name ?? "Page";
 
+  const patchNodeData = useCallback(
+    (nodeId: string, patch: Partial<AdAssetNodeData & WorkflowGroupNodeData>) => {
+      setNodes((nds) =>
+        nds.map((n) =>
+          n.id === nodeId ? ({ ...n, data: { ...n.data, ...patch } } as WorkflowCanvasNode) : n,
+        ),
+      );
+    },
+    [setNodes],
+  );
+
   return (
     <div className="relative h-full min-h-0 w-full">
       <WorkflowPagesPanel
@@ -540,35 +789,88 @@ function WorkflowFlowWorkspace({ project, setProject }: FlowWorkspaceProps) {
         nodesEdgesRef={nodesEdgesRef}
       />
 
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
-        nodeTypes={nodeTypes}
-        colorMode="dark"
-        fitView={false}
-        panOnDrag={tool === "pan"}
-        selectionOnDrag={tool === "select"}
-        onPaneClick={() => setAddOpen(false)}
-        className="workflow-flow !bg-transparent"
-        defaultEdgeOptions={{
-          style: { stroke: "rgba(167, 139, 250, 0.42)", strokeWidth: 2 },
-        }}
-      >
-        <WorkflowReactFlowChrome
-          tool={tool}
-          setTool={setTool}
-          showMiniMap={showMiniMap}
-          setShowMiniMap={setShowMiniMap}
-          addOpen={addOpen}
-          setAddOpen={setAddOpen}
-          setNodes={setNodes}
-          activePageId={project.activePageId}
-          activeName={activeName}
-        />
-      </ReactFlow>
+      <WorkflowNodePatchProvider onPatch={patchNodeData}>
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onConnect={onConnect}
+          onDragOver={onDragOver}
+          onDrop={onDrop}
+          onSelectionChange={({ nodes: sel }) => {
+            setSelectedNodes(sel as WorkflowCanvasNode[]);
+          }}
+          nodeTypes={nodeTypes}
+          colorMode="dark"
+          fitView={false}
+          panOnDrag={tool === "pan"}
+          selectionOnDrag={tool === "select"}
+          onPaneClick={() => {
+            setAddOpen(false);
+            setFrameOpen(false);
+            setPlacementPicker(null);
+          }}
+          className="workflow-flow !bg-transparent"
+          defaultEdgeOptions={{
+            style: { stroke: "rgba(167, 139, 250, 0.42)", strokeWidth: 2 },
+          }}
+        >
+          <WorkflowReactFlowChrome
+            tool={tool}
+            setTool={setTool}
+            showMiniMap={showMiniMap}
+            setShowMiniMap={setShowMiniMap}
+            addOpen={addOpen}
+            setAddOpen={setAddOpen}
+            setNodes={setNodes}
+            activePageId={project.activePageId}
+            activeName={activeName}
+            selectedNodes={selectedNodes}
+            frameOpen={frameOpen}
+            setFrameOpen={setFrameOpen}
+          />
+        </ReactFlow>
+      </WorkflowNodePatchProvider>
+
+      {placementPicker ? (
+        <div
+          ref={placementRef}
+          role="dialog"
+          aria-label="Choose node type"
+          className="pointer-events-auto fixed z-[200] w-[min(260px,calc(100vw-16px))] rounded-xl border border-white/12 bg-[#0b0912] p-3 shadow-2xl"
+          style={{
+            left: Math.max(8, Math.min(placementPicker.screenX, window.innerWidth - 268)),
+            top: Math.max(8, Math.min(placementPicker.screenY + 12, window.innerHeight - 220)),
+          }}
+        >
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-white/45">Place node</p>
+          <p className="mb-3 text-[12px] text-white/55">What should be created here?</p>
+          <div className="flex flex-col gap-1.5">
+            <button
+              type="button"
+              className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
+              onClick={() => placeKindAtPicker("image")}
+            >
+              Image generator
+            </button>
+            <button
+              type="button"
+              className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
+              onClick={() => placeKindAtPicker("video")}
+            >
+              Video generator
+            </button>
+            <button
+              type="button"
+              className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
+              onClick={() => placeKindAtPicker("variation")}
+            >
+              Variation
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -5,7 +5,18 @@ import { FolderOpen, ImageIcon, Search, Sparkles, Video, X } from "lucide-react"
 
 import { cn } from "@/lib/utils";
 
-import type { AdAssetNodeType } from "./nodes/AdAssetNode";
+import type { AdAssetNodeData, AdAssetNodeType } from "./nodes/AdAssetNode";
+
+const genDefaults = (kind: AdAssetNodeData["kind"]): Pick<
+  AdAssetNodeData,
+  "prompt" | "model" | "aspectRatio" | "resolution" | "quantity"
+> => ({
+  prompt: "",
+  model: "auto",
+  aspectRatio: kind === "video" ? "9:16" : "1:1",
+  resolution: kind === "video" ? "720p" : "1024",
+  quantity: 1,
+});
 
 export type WorkflowStarterKind = "stock" | "media" | "image_gen" | "video_gen" | "assistant";
 
@@ -51,42 +62,42 @@ export function starterNodeForKind(kind: WorkflowStarterKind): AdAssetNodeType {
         id,
         type: "adAsset",
         position,
-        data: { kind: "image", label: "Stock" },
+        data: { kind: "image", label: "Stock", ...genDefaults("image") },
       };
     case "media":
       return {
         id,
         type: "adAsset",
         position,
-        data: { kind: "video", label: "Media" },
+        data: { kind: "video", label: "Media", ...genDefaults("video") },
       };
     case "image_gen":
       return {
         id,
         type: "adAsset",
         position,
-        data: { kind: "image", label: "Image Generator" },
+        data: { kind: "image", label: "Image Generator", ...genDefaults("image") },
       };
     case "video_gen":
       return {
         id,
         type: "adAsset",
         position,
-        data: { kind: "video", label: "Video Generator" },
+        data: { kind: "video", label: "Video Generator", ...genDefaults("video") },
       };
     case "assistant":
       return {
         id,
         type: "adAsset",
         position,
-        data: { kind: "variation", label: "Assistant" },
+        data: { kind: "variation", label: "Assistant", ...genDefaults("variation") },
       };
     default:
       return {
         id,
         type: "adAsset",
         position,
-        data: { kind: "image", label: "Node" },
+        data: { kind: "image", label: "Node", ...genDefaults("image") },
       };
   }
 }

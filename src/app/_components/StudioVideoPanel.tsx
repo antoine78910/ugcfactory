@@ -655,20 +655,38 @@ export default function StudioVideoPanel({
 
   /**
    * Merge server history with locally-pending / optimistic items.
-   * Keeps any client-only entry for up to 5 minutes so it survives even if
-   * register or complete silently failed.  Matches the strategy in page.tsx.
+   * - "generating"/"failed" client-only items: kept for 5 min (optimistic insertion window).
+   * - "ready" items with a URL that are NOT already represented in the server list (by URL):
+   *   kept for 24 h so a video survives even if the DB write was silently dropped.
+   *   URL-based dedup prevents showing the same video twice once the server catches up.
    */
   const mergeServerWithLocal = useCallback(
     (serverItems: StudioHistoryItem[], prev: StudioHistoryItem[]): StudioHistoryItem[] => {
       const serverIds = new Set(serverItems.map((i) => i.id));
+      const serverMediaUrls = new Set(
+        serverItems.flatMap((i) => (i.mediaUrl?.trim() ? [i.mediaUrl.trim()] : [])),
+      );
       const now = Date.now();
       const KEEP_MS = 5 * 60 * 1000;
-      const kept = prev.filter(
-        (i) =>
-          !serverIds.has(i.id) &&
+      const KEEP_READY_MS = 24 * 60 * 60 * 1000;
+      const kept = prev.filter((i) => {
+        if (serverIds.has(i.id)) return false;
+        // "ready" items with a URL survive 24 h unless the server already holds the same
+        // video URL (prevents duplicates once registerStudioTask / server poll catches up).
+        if (
+          i.status === "ready" &&
+          i.mediaUrl?.trim() &&
+          !serverMediaUrls.has(i.mediaUrl.trim()) &&
+          now - i.createdAt < KEEP_READY_MS
+        ) {
+          return true;
+        }
+        // Optimistic generating/failed items: 5 min window.
+        return (
           now - i.createdAt < KEEP_MS &&
-          (i.status === "generating" || i.status === "ready" || i.status === "failed"),
-      );
+          (i.status === "generating" || i.status === "failed")
+        );
+      });
       if (!kept.length) return serverItems;
       return [...kept, ...serverItems].sort((a, b) => b.createdAt - a.createdAt);
     },
@@ -681,6 +699,17 @@ export default function StudioVideoPanel({
   const grantCreditsRef = useRef(grantCredits);
   grantCreditsRef.current = grantCredits;
 
+  // Seed historyItems from localStorage on mount so videos appear immediately and
+  // survive across reloads even when the server DB write was silently dropped.
+  // Must be declared before the server-fetch effect so it runs first.
+  useEffect(() => {
+    setHistoryItems((prev) => {
+      if (prev.length > 0) return prev;
+      return readStudioHistoryLocal(LS_STUDIO_VIDEO_HISTORY);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     void (async () => {
       const res = await fetch(
@@ -689,12 +718,23 @@ export default function StudioVideoPanel({
       );
       if (res.status === 401) {
         setServerHistory(false);
-        setHistoryItems([]);
+        // Do NOT wipe historyItems — keep the localStorage seed so the user's
+        // previously generated videos remain visible until they re-authenticate.
         return;
       }
       if (!res.ok) {
         setServerHistory(false);
-        setHistoryItems(readStudioHistoryLocal(LS_STUDIO_VIDEO_HISTORY));
+        // On server error, merge localStorage into current state (already seeded on mount)
+        // rather than overwriting, to preserve optimistic items from this session.
+        setHistoryItems((prev) => {
+          const local = readStudioHistoryLocal(LS_STUDIO_VIDEO_HISTORY);
+          if (!local.length) return prev;
+          if (!prev.length) return local;
+          const existingIds = new Set(prev.map((i) => i.id));
+          const extra = local.filter((i) => !existingIds.has(i.id));
+          if (!extra.length) return prev;
+          return [...prev, ...extra].sort((a, b) => b.createdAt - a.createdAt);
+        });
         return;
       }
       const json = (await res.json()) as { data?: StudioHistoryItem[]; refundHints?: { jobId: string; credits: number }[] };

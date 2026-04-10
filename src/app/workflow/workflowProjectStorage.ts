@@ -1,11 +1,11 @@
 import type { Edge } from "@xyflow/react";
 
-import type { AdAssetNodeType } from "./nodes/AdAssetNode";
+import type { WorkflowCanvasNode } from "./workflowFlowTypes";
 
 export type WorkflowFlowPage = {
   id: string;
   name: string;
-  nodes: AdAssetNodeType[];
+  nodes: WorkflowCanvasNode[];
   edges: Edge[];
 };
 
