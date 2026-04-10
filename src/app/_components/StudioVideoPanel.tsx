@@ -544,6 +544,23 @@ async function registerStudioTask(params: {
   }
 }
 
+/**
+ * Directly persist the result URL to Supabase right after the client poll succeeds.
+ * Ensures the video survives beyond the 20-second optimistic window even if the
+ * server-side poll hasn't run yet.
+ */
+async function completeStudioTask(taskId: string, resultUrl: string) {
+  try {
+    await fetch("/api/studio/generations/complete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ taskId, resultUrl }),
+    });
+  } catch {
+    /* non-blocking — server-side poll will still attempt on next tick */
+  }
+}
+
 async function pollKlingVideo(
   taskId: string,
   personalApiKey?: string,
@@ -1314,6 +1331,7 @@ export default function StudioVideoPanel({
           });
           toast.message("Motion control started", { description: "Polling…" });
           const url = await pollKlingVideo(json.taskId, editPKey, getPersonalPiapiApiKey() ?? undefined);
+          void completeStudioTask(json.taskId, url);
           const doneAt = Date.now();
           const doneId = `${jobId}-done-${doneAt}`;
           retireInFlightJob(jobId, doneId);
@@ -1366,6 +1384,7 @@ export default function StudioVideoPanel({
         });
         toast.message("Edit started", { description: "Polling provider…" });
         const url = await pollKlingVideo(json.taskId, editPKey, getPersonalPiapiApiKey() ?? undefined);
+        void completeStudioTask(json.taskId, url);
         const doneAt = Date.now();
         const doneId = `${jobId}-done-${doneAt}`;
         retireInFlightJob(jobId, doneId);
@@ -1505,6 +1524,7 @@ export default function StudioVideoPanel({
             { description: "Rendering…" },
           );
           const url = await pollKlingVideo(json.taskId, pKey, piKey);
+          void completeStudioTask(json.taskId, url);
           const doneAt = Date.now();
           const doneId = `${jobId}-done-${doneAt}`;
           retireInFlightJob(jobId, doneId);
@@ -1563,6 +1583,7 @@ export default function StudioVideoPanel({
           });
           toast.message("Veo started", { description: "Rendering…" });
           const url = await pollVeoVideo(json.taskId, pKey);
+          void completeStudioTask(json.taskId, url);
           const doneAt = Date.now();
           const doneId = `${jobId}-done-${doneAt}`;
           retireInFlightJob(jobId, doneId);
@@ -1629,6 +1650,7 @@ export default function StudioVideoPanel({
         });
         toast.message("Generation started", { description: "Polling provider…" });
         const url = await pollKlingVideo(json.taskId, pKey, piKey);
+        void completeStudioTask(json.taskId, url);
         const doneAt = Date.now();
         const doneId = `${jobId}-done-${doneAt}`;
         retireInFlightJob(jobId, doneId);

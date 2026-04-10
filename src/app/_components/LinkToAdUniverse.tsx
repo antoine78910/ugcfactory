@@ -4414,8 +4414,18 @@ export default function LinkToAdUniverse({
         const s = json.data.status ?? "IN_PROGRESS";
         if (s === "IN_PROGRESS") return;
         if (s === "SUCCESS") {
-          const vUrl = json.data.response?.[0];
+          // Stop polling immediately so no concurrent ticks fire during the mirror + persist awaits.
+          if (interval) clearInterval(interval);
+          interval = null;
+          let vUrl = json.data.response?.[0];
           if (!vUrl) throw new Error("Video OK but URL missing.");
+          // Mirror to Supabase Storage so the URL is permanent (replaces ephemeral CDN URL).
+          try {
+            const mirrored = await reuploadToStorage([vUrl]);
+            if (mirrored[0]) vUrl = mirrored[0];
+          } catch {
+            /* keep original if mirror fails */
+          }
           const clipPart: 1 | 2 = kling30sNextClipIsPart2Ref.current ? 2 : 1;
           klingMergedSnapRef.current = null;
           setKlingByRef((prev) => {
