@@ -1,12 +1,12 @@
 "use client";
 
 import { Layers, LayoutTemplate, Plus, Search, Users } from "lucide-react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
 
 import { cn } from "@/lib/utils";
 
+import { WorkflowAmbientLayer } from "./WorkflowAmbientLayer";
 import { createSpace, deleteSpace, loadSpacesIndex, type WorkflowSpaceMeta } from "./workflowSpacesStorage";
 
 type TabId = "my" | "shared" | "templates";
@@ -32,6 +32,7 @@ export function WorkflowSpacesLanding() {
   const [hydrated, setHydrated] = useState(false);
   const [tab, setTab] = useState<TabId>("my");
   const [query, setQuery] = useState("");
+  const [landingWaveKey, setLandingWaveKey] = useState(0);
 
   const refresh = useCallback(() => {
     setSpaces(loadSpacesIndex().spaces);
@@ -42,6 +43,10 @@ export function WorkflowSpacesLanding() {
     setHydrated(true);
   }, [refresh]);
 
+  useEffect(() => {
+    setLandingWaveKey((k) => k + 1);
+  }, []);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (tab === "shared" || tab === "templates") return [];
@@ -51,6 +56,7 @@ export function WorkflowSpacesLanding() {
   }, [spaces, tab, query]);
 
   const onNewSpace = () => {
+    setLandingWaveKey((k) => k + 1);
     const meta = createSpace();
     router.push(`/workflow/space/${meta.id}`);
   };
@@ -67,8 +73,9 @@ export function WorkflowSpacesLanding() {
 
   return (
     <div className="relative min-h-[100dvh] overflow-hidden bg-[#06070d] text-white">
-      <div className="pointer-events-none absolute left-1/2 top-0 h-[380px] w-[min(100%,920px)] -translate-x-1/2 rounded-full bg-violet-600/11 blur-[100px]" />
-      <div className="pointer-events-none absolute right-0 top-[120px] h-[320px] w-[480px] rounded-full bg-violet-600/12 blur-[90px]" />
+      <WorkflowAmbientLayer waveKey={landingWaveKey} showDotGrid className="z-0" />
+      <div className="pointer-events-none absolute left-1/2 top-0 z-[1] h-[380px] w-[min(100%,920px)] -translate-x-1/2 rounded-full bg-violet-600/11 blur-[100px]" />
+      <div className="pointer-events-none absolute right-0 top-[120px] z-[1] h-[320px] w-[480px] rounded-full bg-violet-600/12 blur-[90px]" />
 
       <div className="relative z-10 mx-auto max-w-6xl px-4 pb-16 pt-8 sm:px-6 sm:pt-10">
         <div className="overflow-hidden rounded-[22px] border border-white/[0.08] bg-gradient-to-br from-violet-950/80 via-[#0c0d12] to-violet-950/45 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.45)] sm:p-10">
@@ -206,12 +213,6 @@ export function WorkflowSpacesLanding() {
             ))}
           </ul>
         )}
-
-        <p className="mt-10 text-center text-[11px] text-white/30">
-          <Link href="/app/link-to-ad" className="text-violet-300/55 hover:text-violet-200/90">
-            Back to Youry
-          </Link>
-        </p>
       </div>
     </div>
   );

@@ -309,3 +309,31 @@
   border-radius: 2px;
   accent-color: rgb(139 92 246);
 }
+
+/* Workflow canvas / landing: wave rings from center toward edges */
+.workflow-ambient-wave-ring {
+  left: 50%;
+  top: 50%;
+  width: 180vmin;
+  height: 180vmin;
+  margin-left: -90vmin;
+  margin-top: -90vmin;
+  animation: workflow-ambient-wave-expand 1.55s cubic-bezier(0.18, 0.88, 0.22, 1) forwards;
+}
+.workflow-ambient-wave-ring--delay-1 {
+  animation-delay: 0.15s;
+}
+.workflow-ambient-wave-ring--delay-2 {
+  animation-delay: 0.3s;
+}
+
+@keyframes workflow-ambient-wave-expand {
+  0% {
+    transform: scale(0.035);
+    opacity: 0.52;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+}

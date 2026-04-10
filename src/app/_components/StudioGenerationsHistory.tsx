@@ -41,6 +41,11 @@ export type StudioHistoryItem = {
   model?: string;
   /** Human-readable model name for UI (optional). */
   modelLabel?: string;
+  /**
+   * Supabase `studio_generations.id` from `/api/studio/generations/register`.
+   * Used to hide a stale “processing” server row when the client already has a ready item with media.
+   */
+  studioGenerationId?: string;
 };
 
 function formatHistoryDate(ts: number): string {

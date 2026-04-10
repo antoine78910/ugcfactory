@@ -529,7 +529,7 @@ async function registerStudioTask(params: {
   creditsCharged: number;
   personalApiKey?: string;
   inputUrls?: string[];
-}) {
+}): Promise<string | undefined> {
   try {
     const res = await fetch("/api/studio/generations/register", {
       method: "POST",
@@ -541,9 +541,14 @@ async function registerStudioTask(params: {
     });
     if (!res.ok) {
       console.error("[registerStudioTask] server returned", res.status, await res.text().catch(() => ""));
+      return undefined;
     }
+    const json = (await res.json()) as { data?: { rows?: { id?: string }[] } };
+    const id = json.data?.rows?.[0]?.id;
+    return typeof id === "string" && id.trim() ? id.trim() : undefined;
   } catch (err) {
     console.error("[registerStudioTask] network error", err);
+    return undefined;
   }
 }
 
@@ -662,9 +667,36 @@ export default function StudioVideoPanel({
    */
   const mergeServerWithLocal = useCallback(
     (serverItems: StudioHistoryItem[], prev: StudioHistoryItem[]): StudioHistoryItem[] => {
-      const serverIds = new Set(serverItems.map((i) => i.id));
+      /** Hide server rows still “processing” when this browser already has a ready copy with the same DB row id. */
+      const shieldedServerIds = new Set(
+        prev
+          .filter((i) => i.status === "ready" && i.mediaUrl?.trim() && i.studioGenerationId)
+          .map((i) => String(i.studioGenerationId).trim())
+          .filter(Boolean),
+      );
+      const serverFiltered = serverItems.filter((s) => {
+        if (shieldedServerIds.has(s.id)) return false;
+        // Legacy: localStorage items from before `studioGenerationId` could still hide a stuck server row
+        // when a ready copy (same label, nearby time) already exists in the merged list.
+        const stuckGenerating = s.status === "generating" && !s.mediaUrl?.trim();
+        if (
+          stuckGenerating &&
+          prev.some(
+            (p) =>
+              p.status === "ready" &&
+              Boolean(p.mediaUrl?.trim()) &&
+              (p.label || "").trim() === (s.label || "").trim() &&
+              Math.abs(p.createdAt - s.createdAt) < 30 * 60 * 1000,
+          )
+        ) {
+          return false;
+        }
+        return true;
+      });
+
+      const serverIds = new Set(serverFiltered.map((i) => i.id));
       const serverMediaUrls = new Set(
-        serverItems.flatMap((i) => (i.mediaUrl?.trim() ? [i.mediaUrl.trim()] : [])),
+        serverFiltered.flatMap((i) => (i.mediaUrl?.trim() ? [i.mediaUrl.trim()] : [])),
       );
       const now = Date.now();
       const KEEP_MS = 5 * 60 * 1000;
@@ -687,8 +719,8 @@ export default function StudioVideoPanel({
           (i.status === "generating" || i.status === "failed")
         );
       });
-      if (!kept.length) return serverItems;
-      return [...kept, ...serverItems].sort((a, b) => b.createdAt - a.createdAt);
+      if (!kept.length) return serverFiltered;
+      return [...kept, ...serverFiltered].sort((a, b) => b.createdAt - a.createdAt);
     },
     [],
   );
@@ -1370,7 +1402,7 @@ export default function StudioVideoPanel({
           });
           const json = (await res.json()) as { taskId?: string; error?: string };
           if (!res.ok || !json.taskId) throw new Error(json.error || "Motion control failed");
-          await registerStudioTask({
+          const studioGenId = await registerStudioTask({
             kind: "studio_video",
             label,
             taskId: json.taskId,
@@ -1379,6 +1411,11 @@ export default function StudioVideoPanel({
             personalApiKey: editPKey,
             inputUrls: [snap.editMotionImageUrl, snap.editMotionVideoUrl].filter(Boolean) as string[],
           });
+          if (studioGenId) {
+            setHistoryItems((prev) =>
+              prev.map((i) => (i.id === jobId ? { ...i, studioGenerationId: studioGenId } : i)),
+            );
+          }
           toast.message("Motion control started", { description: "Polling…" });
           const url = await pollKlingVideo(json.taskId, editPKey, getPersonalPiapiApiKey() ?? undefined);
           void completeStudioTask(json.taskId, url);
@@ -1398,6 +1435,7 @@ export default function StudioVideoPanel({
                 createdAt: doneAt,
                 model: "motion_control",
                 modelLabel: "Motion control",
+                studioGenerationId: studioGenId,
               },
               ...rest,
             ];
@@ -1423,7 +1461,7 @@ export default function StudioVideoPanel({
         });
         const json = (await res.json()) as { taskId?: string; error?: string };
         if (!res.ok || !json.taskId) throw new Error(json.error || "Video edit failed");
-        await registerStudioTask({
+        const studioGenId = await registerStudioTask({
           kind: "studio_video",
           label,
           taskId: json.taskId,
@@ -1432,6 +1470,11 @@ export default function StudioVideoPanel({
           personalApiKey: editPKey,
           inputUrls: [snap.editVideoUrl, ...(snap.editElementUrls || [])].filter(Boolean) as string[],
         });
+        if (studioGenId) {
+          setHistoryItems((prev) =>
+            prev.map((i) => (i.id === jobId ? { ...i, studioGenerationId: studioGenId } : i)),
+          );
+        }
         toast.message("Edit started", { description: "Polling provider…" });
         const url = await pollKlingVideo(json.taskId, editPKey, getPersonalPiapiApiKey() ?? undefined);
         void completeStudioTask(json.taskId, url);
@@ -1451,6 +1494,7 @@ export default function StudioVideoPanel({
               createdAt: doneAt,
               model: snap.editPickerId,
               modelLabel: studioVideoEditPickerDisplayLabel(snap.editPickerId),
+              studioGenerationId: studioGenId,
             },
             ...rest,
           ];
@@ -1558,7 +1602,7 @@ export default function StudioVideoPanel({
           const json = (await res.json()) as { taskId?: string; error?: string };
           if (!res.ok || !json.taskId)
             throw new Error(json.error || (snap.modelId === "openai/sora-2-pro" ? "Sora 2 Pro failed" : "Sora 2 failed"));
-          await registerStudioTask({
+          const studioGenId = await registerStudioTask({
             kind: "studio_video",
             label,
             taskId: json.taskId,
@@ -1567,6 +1611,11 @@ export default function StudioVideoPanel({
             personalApiKey: pKey,
             inputUrls: snap.startUrl ? [snap.startUrl] : undefined,
           });
+          if (studioGenId) {
+            setHistoryItems((prev) =>
+              prev.map((i) => (i.id === jobId ? { ...i, studioGenerationId: studioGenId } : i)),
+            );
+          }
           toast.message(
             snap.modelId === "openai/sora-2-pro" ? "Sora 2 Pro started" : "Sora 2 started",
             { description: "Rendering…" },
@@ -1589,6 +1638,7 @@ export default function StudioVideoPanel({
                 createdAt: doneAt,
                 model: snap.modelId,
                 modelLabel: studioVideoDisplayLabel(snap.modelId),
+                studioGenerationId: studioGenId,
               },
               ...rest,
             ];
@@ -1619,7 +1669,7 @@ export default function StudioVideoPanel({
           });
           const json = (await res.json()) as { taskId?: string; provider?: string; error?: string };
           if (!res.ok || !json.taskId) throw new Error(json.error || "Veo failed");
-          await registerStudioTask({
+          const studioGenId = await registerStudioTask({
             kind: "studio_video",
             label,
             taskId: json.taskId,
@@ -1629,6 +1679,11 @@ export default function StudioVideoPanel({
             personalApiKey: pKey,
             inputUrls: urls.length ? urls : undefined,
           });
+          if (studioGenId) {
+            setHistoryItems((prev) =>
+              prev.map((i) => (i.id === jobId ? { ...i, studioGenerationId: studioGenId } : i)),
+            );
+          }
           toast.message("Veo started", { description: "Rendering…" });
           const url = await pollVeoVideo(json.taskId, pKey);
           void completeStudioTask(json.taskId, url);
@@ -1648,6 +1703,7 @@ export default function StudioVideoPanel({
                 createdAt: doneAt,
                 model: snap.modelId,
                 modelLabel: studioVideoDisplayLabel(snap.modelId),
+                studioGenerationId: studioGenId,
               },
               ...rest,
             ];
@@ -1686,7 +1742,7 @@ export default function StudioVideoPanel({
         });
         const json = (await res.json()) as { taskId?: string; provider?: string; error?: string };
         if (!res.ok || !json.taskId) throw new Error(json.error || "Video task failed");
-        await registerStudioTask({
+        const studioGenId = await registerStudioTask({
           kind: "studio_video",
           label,
           taskId: json.taskId,
@@ -1696,6 +1752,11 @@ export default function StudioVideoPanel({
           personalApiKey: pKey,
           inputUrls: snap.startUrl ? [snap.startUrl] : undefined,
         });
+        if (studioGenId) {
+          setHistoryItems((prev) =>
+            prev.map((i) => (i.id === jobId ? { ...i, studioGenerationId: studioGenId } : i)),
+          );
+        }
         toast.message("Generation started", { description: "Polling provider…" });
         const url = await pollKlingVideo(json.taskId, pKey, piKey);
         void completeStudioTask(json.taskId, url);
@@ -1715,6 +1776,7 @@ export default function StudioVideoPanel({
               createdAt: doneAt,
               model: snap.modelId,
               modelLabel: studioVideoDisplayLabel(snap.modelId),
+              studioGenerationId: studioGenId,
             },
             ...rest,
           ];

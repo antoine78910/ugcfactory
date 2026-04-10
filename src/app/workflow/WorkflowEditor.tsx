@@ -8,7 +8,6 @@ import {
   BackgroundVariant,
   type Connection,
   type Edge,
-  MiniMap,
   Panel,
   ReactFlow,
   ReactFlowProvider,
@@ -24,7 +23,6 @@ import {
   Hand,
   Infinity,
   Layers,
-  Map as MapIcon,
   MessageSquare,
   MousePointer2,
   Plus,
@@ -60,6 +58,7 @@ import {
 } from "./workflowProjectStorage";
 import { loadProjectForSpace, loadSpacesIndex, saveProjectForSpace } from "./workflowSpacesStorage";
 import { WorkflowNodePatchProvider } from "./workflowNodePatchContext";
+import { WorkflowAmbientLayer } from "./WorkflowAmbientLayer";
 import {
   buildAdAssetNode,
   WORKFLOW_NODE_DND,
@@ -78,6 +77,7 @@ function ZoomLabel() {
 type FlowWorkspaceProps = {
   project: WorkflowProjectStateV1;
   setProject: React.Dispatch<React.SetStateAction<WorkflowProjectStateV1>>;
+  canvasWaveKey: number;
 };
 
 function WorkflowPagesPanel({
@@ -215,8 +215,6 @@ function FitViewOnPageChange({ activePageId }: { activePageId: string }) {
 type ChromeProps = {
   tool: Tool;
   setTool: (t: Tool) => void;
-  showMiniMap: boolean;
-  setShowMiniMap: (v: boolean | ((b: boolean) => boolean)) => void;
   addOpen: boolean;
   setAddOpen: (v: boolean | ((b: boolean) => boolean)) => void;
   setNodes: React.Dispatch<React.SetStateAction<WorkflowCanvasNode[]>>;
@@ -230,8 +228,6 @@ type ChromeProps = {
 function WorkflowReactFlowChrome({
   tool,
   setTool,
-  showMiniMap,
-  setShowMiniMap,
   addOpen,
   setAddOpen,
   setNodes,
@@ -335,21 +331,8 @@ function WorkflowReactFlowChrome({
         variant={BackgroundVariant.Dots}
         gap={20}
         size={1.15}
-        color="rgba(167, 139, 250, 0.16)"
+        color="rgba(196, 181, 253, 0.2)"
       />
-      {showMiniMap ? (
-        <MiniMap
-          className="!bottom-14 !right-4 !h-28 !w-44 !overflow-hidden !rounded-xl !border !border-violet-500/25 !bg-[#0b0912]/95"
-          maskColor="rgba(0,0,0,0.72)"
-          nodeColor={(n) => {
-            if (n.type === "workflowGroup") {
-              const d = n.data as WorkflowGroupNodeData;
-              return d.color ?? "#a78bfa";
-            }
-            return "#a78bfa";
-          }}
-        />
-      ) : null}
 
       <Panel position="top-left" className="!m-0 !mt-5 !ml-4 z-10 flex !w-auto">
         <div
@@ -594,18 +577,6 @@ function WorkflowReactFlowChrome({
             Give feedback
           </button>
           <span className="text-white/25">|</span>
-          <button
-            type="button"
-            onClick={() => setShowMiniMap((s) => !s)}
-            className={[
-              "inline-flex items-center gap-1.5 rounded-lg px-2 py-1 transition-colors",
-              showMiniMap ? "bg-violet-500/15 text-violet-100/90" : "text-white/45 hover:bg-white/[0.06]",
-            ].join(" ")}
-          >
-            <MapIcon className="h-3.5 w-3.5" />
-            Map
-          </button>
-          <span className="text-white/25">|</span>
           <button type="button" className="inline-flex items-center gap-1 text-white/70 hover:text-white">
             <ZoomLabel />
             <ChevronDown className="h-3.5 w-3.5 opacity-50" />
@@ -616,7 +587,7 @@ function WorkflowReactFlowChrome({
   );
 }
 
-function WorkflowFlowWorkspace({ project, setProject }: FlowWorkspaceProps) {
+function WorkflowFlowWorkspace({ project, setProject, canvasWaveKey }: FlowWorkspaceProps) {
   const { screenToFlowPosition } = useReactFlow();
   const activePage = useMemo(
     () => project.pages.find((p) => p.id === project.activePageId) ?? project.pages[0],
@@ -626,7 +597,6 @@ function WorkflowFlowWorkspace({ project, setProject }: FlowWorkspaceProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState<WorkflowCanvasNode>(activePage?.nodes ?? []);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(activePage?.edges ?? []);
   const [tool, setTool] = useState<Tool>("select");
-  const [showMiniMap, setShowMiniMap] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
   const [frameOpen, setFrameOpen] = useState(false);
   const [selectedNodes, setSelectedNodes] = useState<WorkflowCanvasNode[]>([]);
@@ -781,6 +751,8 @@ function WorkflowFlowWorkspace({ project, setProject }: FlowWorkspaceProps) {
 
   return (
     <div className="relative h-full min-h-0 w-full">
+      <WorkflowAmbientLayer waveKey={canvasWaveKey} className="z-0" />
+
       <WorkflowPagesPanel
         project={project}
         setProject={setProject}
@@ -811,7 +783,7 @@ function WorkflowFlowWorkspace({ project, setProject }: FlowWorkspaceProps) {
             setFrameOpen(false);
             setPlacementPicker(null);
           }}
-          className="workflow-flow !bg-transparent"
+          className="workflow-flow relative z-[1] !bg-transparent"
           defaultEdgeOptions={{
             style: { stroke: "rgba(167, 139, 250, 0.42)", strokeWidth: 2 },
           }}
@@ -819,8 +791,6 @@ function WorkflowFlowWorkspace({ project, setProject }: FlowWorkspaceProps) {
           <WorkflowReactFlowChrome
             tool={tool}
             setTool={setTool}
-            showMiniMap={showMiniMap}
-            setShowMiniMap={setShowMiniMap}
             addOpen={addOpen}
             setAddOpen={setAddOpen}
             setNodes={setNodes}
@@ -881,6 +851,7 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
   const [workflowProject, setWorkflowProject] = useState<WorkflowProjectStateV1>(() => defaultWorkflowProject());
   const [workflowHydrated, setWorkflowHydrated] = useState(false);
   const [spaceName, setSpaceName] = useState("Untitled space");
+  const [canvasWaveKey, setCanvasWaveKey] = useState(0);
 
   useEffect(() => {
     const idx = loadSpacesIndex().spaces;
@@ -900,6 +871,12 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
   }, [workflowHydrated, spaceId, workflowProject]);
 
   const showOnboarding = workflowHydrated && shouldShowWorkflowOnboarding(workflowProject);
+
+  const canvasVisible = workflowHydrated && !showOnboarding;
+  useEffect(() => {
+    if (!canvasVisible) return;
+    setCanvasWaveKey((k) => k + 1);
+  }, [canvasVisible, spaceId]);
 
   const finishOnboarding = useCallback((kind?: WorkflowStarterKind) => {
     setWorkflowProject((prev) => {
@@ -924,10 +901,6 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
       <header className="relative z-20 flex h-12 shrink-0 items-center justify-between border-b border-white/10 bg-[#06070d]/95 px-4 backdrop-blur-md sm:h-14 sm:px-5">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
           <div className="flex min-w-0 items-center gap-2 text-[13px] text-white/45">
-            <Link href="/app/link-to-ad" className="shrink-0 text-white/55 hover:text-violet-200/90">
-              Youry
-            </Link>
-            <span className="text-white/25">/</span>
             <Link href="/workflow" className="shrink-0 text-violet-200/85 hover:text-violet-100">
               Workflow
             </Link>
@@ -951,12 +924,16 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
 
       <div className="relative z-10 flex min-h-0 min-w-0 flex-1">
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-[#06070d]">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(139,92,246,0.08),transparent)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_75%_40%_at_50%_0%,rgba(139,92,246,0.05),transparent_70%)]" />
           <div className="relative flex h-full min-h-[480px] min-w-0 flex-1 flex-col">
             <div className="min-h-0 flex-1">
               {workflowHydrated && !showOnboarding ? (
                 <ReactFlowProvider>
-                  <WorkflowFlowWorkspace project={workflowProject} setProject={setWorkflowProject} />
+                  <WorkflowFlowWorkspace
+                    project={workflowProject}
+                    setProject={setWorkflowProject}
+                    canvasWaveKey={canvasWaveKey}
+                  />
                 </ReactFlowProvider>
               ) : (
                 <div className="h-full min-h-[400px] w-full" aria-hidden />
