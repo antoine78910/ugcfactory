@@ -10,6 +10,7 @@ import {
   ChevronRight,
   Copy,
   FolderOpen,
+  GitBranch,
   Image as ImageIcon,
   Link2,
   Maximize2,
@@ -65,10 +66,11 @@ type Props = {
 
 type CreateNavEntry =
   | { kind: "route"; id: StudioNavSection; label: string; icon: LucideIcon }
-  | { kind: "soon"; label: string; icon: LucideIcon };
+  | { kind: "soon"; id: string; label: string; icon: LucideIcon };
 
 const CREATE_NAV: CreateNavEntry[] = [
   { kind: "route", id: "link_to_ad", label: "Link to Ad", icon: Link2 },
+  { kind: "soon", id: "workflow", label: "Workflow", icon: GitBranch },
   { kind: "route", id: "avatar", label: "Avatar", icon: UserRound },
   { kind: "route", id: "ad_clone", label: "Translate", icon: Copy },
   { kind: "route", id: "voice", label: "Voice", icon: Mic },
@@ -290,7 +292,7 @@ function StudioShellInner({
                   if (entry.kind === "soon") {
                     return (
                       <div
-                        key="soon-ad-clone"
+                        key={entry.id}
                         className={cn(
                           soonRowClass(),
                           navCollapsed && "!justify-center gap-0 px-1.5 py-2.5",
