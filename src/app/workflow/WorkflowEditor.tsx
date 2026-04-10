@@ -651,12 +651,6 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-[#06070d]">
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(139,92,246,0.08),transparent)]" />
           <div className="relative flex h-full min-h-[480px] min-w-0 flex-1 flex-col">
-            <div className="border-b border-white/10 px-4 py-2.5 sm:px-5">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-300/90">Canvas</p>
-              <p className="mt-0.5 text-[10px] text-white/40">
-                Multiple pages per project — use the Pages panel (top right). Double-click a page name to rename.
-              </p>
-            </div>
             <div className="min-h-0 flex-1">
               {workflowHydrated && !showOnboarding ? (
                 <ReactFlowProvider>

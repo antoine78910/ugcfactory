@@ -150,11 +150,7 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
     }
   }
 
-  // ─── Google Identity Services ─────────────────────────────────────────────
-  // The GIS button renders directly into `gisContainerRef` (visible in the UI).
-  // No hidden element, no programmatic click forwarding.
-
-  const gisContainerRef = useRef<HTMLDivElement>(null);
+  // ─── Google Identity Services (One Tap) ──────────────────────────────────
   const gisInitializedRef = useRef(false);
 
   const handleGoogleCredential = useCallback(
@@ -187,27 +183,18 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
   );
 
   const initGis = useCallback(() => {
-    if (gisInitializedRef.current || !window.google?.accounts?.id || !GOOGLE_CLIENT_ID || !gisContainerRef.current) return;
+    if (gisInitializedRef.current || !window.google?.accounts?.id || !GOOGLE_CLIENT_ID) return;
     gisInitializedRef.current = true;
     window.google.accounts.id.initialize({
       client_id: GOOGLE_CLIENT_ID,
       callback: handleGoogleCredential,
       ux_mode: "popup",
     });
-    window.google.accounts.id.renderButton(gisContainerRef.current, {
-      theme: "filled_black",
-      size: "large",
-      text: "continue_with",
-      shape: "pill",
-      width: 320,
-    });
   }, [handleGoogleCredential]);
 
-  // Called both by Script onLoad and by useEffect (handles cached-script case)
   useEffect(() => {
     initGis();
   }, [initGis]);
-
   // ─────────────────────────────────────────────────────────────────────────
 
   const isSignIn = mode === "signin";
@@ -344,59 +331,44 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
                 </span>
               </div>
 
-              {/* Google button: custom violet design with GIS overlay */}
-              <div className="relative h-11 w-full">
-                {/* Decorative custom button — always visible */}
-                <div
-                  className="pointer-events-none absolute inset-0 flex items-center justify-center gap-2.5 rounded-2xl border border-violet-200/40 bg-violet-400 font-semibold text-black shadow-[0_6px_0_0_rgba(76,29,149,0.9)]"
-                  aria-hidden
-                >
-                  {isLoading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <svg className="h-5 w-5 flex-shrink-0" viewBox="0 0 256 262" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M255.878 133.451c0-10.734-.871-18.567-2.756-26.69H130.55v48.448h71.947c-1.45 12.04-9.283 30.172-26.69 42.356l-.244 1.622 38.755 30.023 2.685.268c24.659-22.774 38.875-56.282 38.875-96.027" fill="#4285F4"/>
-                      <path d="M130.55 261.1c35.248 0 64.839-11.605 86.453-31.622l-41.196-31.913c-11.024 7.688-25.82 13.055-45.257 13.055-34.523 0-63.824-22.773-74.269-54.25l-1.531.13-40.298 31.187-.527 1.465C35.393 231.798 79.49 261.1 130.55 261.1" fill="#34A853"/>
-                      <path d="M56.281 156.37c-2.756-8.123-4.351-16.827-4.351-25.82 0-8.994 1.595-17.697 4.206-25.82l-.073-1.73L15.26 71.312l-1.335.635C5.077 89.644 0 109.517 0 130.55s5.077 40.905 13.925 58.602l42.356-32.782" fill="#FBBC05"/>
-                      <path d="M130.55 50.479c24.514 0 41.05 10.589 50.479 19.438l36.844-35.974C195.245 12.91 165.798 0 130.55 0 79.49 0 35.393 29.301 13.925 71.947l42.211 32.783c10.59-31.477 39.891-54.251 74.414-54.251" fill="#EB4335"/>
-                    </svg>
-                  )}
-                  <span>{isLoading ? "Signing in…" : "Continue with Google"}</span>
-                </div>
-
-                {/* GIS iframe — invisible overlay that handles the actual click */}
-                {GOOGLE_CLIENT_ID && !isLoading ? (
-                  <div
-                    ref={gisContainerRef}
-                    className="absolute inset-0 overflow-hidden [&>div]:!h-full [&>div]:!w-full [&_iframe]:!h-full [&_iframe]:!max-w-none [&_iframe]:!w-full"
-                    style={{ opacity: 0 }}
-                  />
-                ) : null}
-
-                {/* Fallback: no GOOGLE_CLIENT_ID — use signInWithOAuth */}
-                {!GOOGLE_CLIENT_ID ? (
-                  <button
-                    type="button"
-                    className="absolute inset-0 h-full w-full cursor-pointer rounded-2xl opacity-0"
-                    disabled={isLoading}
-                    onClick={async () => {
-                      setIsLoading(true);
-                      try {
-                        const { error } = await client.auth.signInWithOAuth({
-                          provider: "google",
-                          options: { redirectTo: getAuthCallbackUrl() },
-                        });
-                        if (error) throw error;
-                      } catch (err) {
-                        toast.error("Google sign-in error", {
-                          description: err instanceof Error ? err.message : "Unknown error",
-                        });
-                        setIsLoading(false);
-                      }
-                    }}
-                  />
-                ) : null}
-              </div>
+              {/* Google button */}
+              <button
+                type="button"
+                className="flex h-11 w-full cursor-pointer items-center justify-center gap-2.5 rounded-2xl border border-white/15 bg-white/[0.06] font-semibold text-white transition-all hover:bg-white/10 active:scale-[0.98] disabled:opacity-50"
+                disabled={isLoading}
+                onClick={async () => {
+                  setIsLoading(true);
+                  try {
+                    if (GOOGLE_CLIENT_ID && window.google?.accounts?.id) {
+                      window.google.accounts.id.prompt();
+                      setIsLoading(false);
+                      return;
+                    }
+                    const { error } = await client.auth.signInWithOAuth({
+                      provider: "google",
+                      options: { redirectTo: getAuthCallbackUrl() },
+                    });
+                    if (error) throw error;
+                  } catch (err) {
+                    toast.error("Google sign-in error", {
+                      description: err instanceof Error ? err.message : "Unknown error",
+                    });
+                    setIsLoading(false);
+                  }
+                }}
+              >
+                {isLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <svg className="h-5 w-5 flex-shrink-0" viewBox="0 0 256 262" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M255.878 133.451c0-10.734-.871-18.567-2.756-26.69H130.55v48.448h71.947c-1.45 12.04-9.283 30.172-26.69 42.356l-.244 1.622 38.755 30.023 2.685.268c24.659-22.774 38.875-56.282 38.875-96.027" fill="currentColor" fillOpacity=".7"/>
+                    <path d="M130.55 261.1c35.248 0 64.839-11.605 86.453-31.622l-41.196-31.913c-11.024 7.688-25.82 13.055-45.257 13.055-34.523 0-63.824-22.773-74.269-54.25l-1.531.13-40.298 31.187-.527 1.465C35.393 231.798 79.49 261.1 130.55 261.1" fill="currentColor" fillOpacity=".7"/>
+                    <path d="M56.281 156.37c-2.756-8.123-4.351-16.827-4.351-25.82 0-8.994 1.595-17.697 4.206-25.82l-.073-1.73L15.26 71.312l-1.335.635C5.077 89.644 0 109.517 0 130.55s5.077 40.905 13.925 58.602l42.356-32.782" fill="currentColor" fillOpacity=".7"/>
+                    <path d="M130.55 50.479c24.514 0 41.05 10.589 50.479 19.438l36.844-35.974C195.245 12.91 165.798 0 130.55 0 79.49 0 35.393 29.301 13.925 71.947l42.211 32.783c10.59-31.477 39.891-54.251 74.414-54.251" fill="currentColor" fillOpacity=".7"/>
+                  </svg>
+                )}
+                <span>{isLoading ? "Signing in…" : "Continue with Google"}</span>
+              </button>
             </form>
 
             <p className="mt-6 text-center text-sm text-white/50">

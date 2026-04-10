@@ -531,7 +531,7 @@ async function registerStudioTask(params: {
   inputUrls?: string[];
 }) {
   try {
-    await fetch("/api/studio/generations/register", {
+    const res = await fetch("/api/studio/generations/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -539,25 +539,31 @@ async function registerStudioTask(params: {
         piapiApiKey: getPersonalPiapiApiKey() ?? undefined,
       }),
     });
-  } catch {
-    /* history registration should not block generation */
+    if (!res.ok) {
+      console.error("[registerStudioTask] server returned", res.status, await res.text().catch(() => ""));
+    }
+  } catch (err) {
+    console.error("[registerStudioTask] network error", err);
   }
 }
 
 /**
  * Directly persist the result URL to Supabase right after the client poll succeeds.
- * Ensures the video survives beyond the 20-second optimistic window even if the
- * server-side poll hasn't run yet.
+ * Ensures the video survives in the DB so the server list includes it after the
+ * optimistic window expires.
  */
 async function completeStudioTask(taskId: string, resultUrl: string) {
   try {
-    await fetch("/api/studio/generations/complete", {
+    const res = await fetch("/api/studio/generations/complete", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ taskId, resultUrl }),
     });
-  } catch {
-    /* non-blocking — server-side poll will still attempt on next tick */
+    if (!res.ok) {
+      console.error("[completeStudioTask] server returned", res.status, await res.text().catch(() => ""));
+    }
+  } catch (err) {
+    console.error("[completeStudioTask] network error", err);
   }
 }
 
@@ -646,13 +652,31 @@ export default function StudioVideoPanel({
   /** Widen the history / preview column on large screens (not fullscreen). */
   const [wideVideoPreview, setWideVideoPreview] = useState(false);
   const [historyItems, setHistoryItems] = useState<StudioHistoryItem[]>([]);
-  /** Client-side optimistic job IDs that must survive server poll replacements. */
-  const inFlightJobsRef = useRef<Set<string>>(new Set());
-  /** Swap a generating jobId for a done-row id, auto-expire after server has time to sync. */
-  const retireInFlightJob = useCallback((jobId: string, doneId: string) => {
-    inFlightJobsRef.current.delete(jobId);
-    inFlightJobsRef.current.add(doneId);
-    setTimeout(() => inFlightJobsRef.current.delete(doneId), 20_000);
+
+  /**
+   * Merge server history with locally-pending / optimistic items.
+   * Keeps any client-only entry for up to 5 minutes so it survives even if
+   * register or complete silently failed.  Matches the strategy in page.tsx.
+   */
+  const mergeServerWithLocal = useCallback(
+    (serverItems: StudioHistoryItem[], prev: StudioHistoryItem[]): StudioHistoryItem[] => {
+      const serverIds = new Set(serverItems.map((i) => i.id));
+      const now = Date.now();
+      const KEEP_MS = 5 * 60 * 1000;
+      const kept = prev.filter(
+        (i) =>
+          !serverIds.has(i.id) &&
+          now - i.createdAt < KEEP_MS &&
+          (i.status === "generating" || i.status === "ready" || i.status === "failed"),
+      );
+      if (!kept.length) return serverItems;
+      return [...kept, ...serverItems].sort((a, b) => b.createdAt - a.createdAt);
+    },
+    [],
+  );
+
+  const retireInFlightJob = useCallback((_jobId: string, _doneId: string) => {
+    // no-op: time-based merge now handles optimistic retention
   }, []);
   const grantCreditsRef = useRef(grantCredits);
   grantCreditsRef.current = grantCredits;
@@ -676,13 +700,7 @@ export default function StudioVideoPanel({
       const json = (await res.json()) as { data?: StudioHistoryItem[]; refundHints?: { jobId: string; credits: number }[] };
       setServerHistory(true);
       const serverItems = json.data ?? [];
-      setHistoryItems((prev) => {
-        const optimistic = prev.filter((i) => inFlightJobsRef.current.has(i.id));
-        if (!optimistic.length) return serverItems;
-        const serverIds = new Set(serverItems.map((s) => s.id));
-        const kept = optimistic.filter((o) => !serverIds.has(o.id));
-        return [...kept, ...serverItems];
-      });
+      setHistoryItems((prev) => mergeServerWithLocal(serverItems, prev));
       const hints = json.refundHints ?? [];
       if (hints.length) {
         for (const h of hints) {
@@ -691,7 +709,7 @@ export default function StudioVideoPanel({
         toast.message("Credits refunded", { description: "A studio generation failed after charge." });
       }
     })();
-  }, []);
+  }, [mergeServerWithLocal]);
 
   useEffect(() => {
     if (serverHistory !== true) return;
@@ -710,14 +728,7 @@ export default function StudioVideoPanel({
         if (!res.ok) return;
         const json = (await res.json()) as { data?: StudioHistoryItem[]; refundHints?: { jobId: string; credits: number }[] };
         if (Array.isArray(json.data)) {
-          const serverItems = json.data;
-          setHistoryItems((prev) => {
-            const optimistic = prev.filter((i) => inFlightJobsRef.current.has(i.id));
-            if (!optimistic.length) return serverItems;
-            const serverIds = new Set(serverItems.map((s) => s.id));
-            const kept = optimistic.filter((o) => !serverIds.has(o.id));
-            return [...kept, ...serverItems];
-          });
+          setHistoryItems((prev) => mergeServerWithLocal(json.data!, prev));
         }
         const hints = json.refundHints ?? [];
         if (hints.length) {
@@ -732,7 +743,7 @@ export default function StudioVideoPanel({
     tick();
     const id = window.setInterval(tick, 4000);
     return () => window.clearInterval(id);
-  }, [serverHistory]);
+  }, [serverHistory, mergeServerWithLocal]);
 
   useEffect(() => {
     if (serverHistory === null) return;
@@ -1261,7 +1272,6 @@ export default function StudioVideoPanel({
     }
 
     const jobId = crypto.randomUUID();
-    inFlightJobsRef.current.add(jobId);
     const label = p;
     const platformChargeEdit = creditBypass ? 0 : editCredits;
     if (!creditBypass) {
@@ -1410,7 +1420,6 @@ export default function StudioVideoPanel({
         const msg = userMessageFromCaughtError(e, "Something went wrong while generating. Please try again.");
         refundPlatformCredits(platformChargeEdit, grantCredits, creditsRef);
         toast.error(msg);
-        inFlightJobsRef.current.delete(jobId);
         setHistoryItems((prev) =>
           prev.map((i) =>
             i.id === jobId && i.status === "generating"
@@ -1449,7 +1458,6 @@ export default function StudioVideoPanel({
     }
 
     const jobId = crypto.randomUUID();
-    inFlightJobsRef.current.add(jobId);
     const label = p;
     const platformChargeCreate = creditBypassCreate ? 0 : credits;
     if (!creditBypassCreate) {
@@ -1676,7 +1684,6 @@ export default function StudioVideoPanel({
         const msg = userMessageFromCaughtError(e, "Something went wrong while generating. Please try again.");
         refundPlatformCredits(platformChargeCreate, grantCredits, creditsRef);
         toast.error(msg);
-        inFlightJobsRef.current.delete(jobId);
         setHistoryItems((prev) =>
           prev.map((i) =>
             i.id === jobId && i.status === "generating"
