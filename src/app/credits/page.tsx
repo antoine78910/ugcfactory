@@ -9,6 +9,7 @@ import { consumeCheckoutQueryParams, useCreditsPlan } from "@/app/_components/Cr
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { CREDIT_PACKS } from "@/lib/pricing";
+import type { StripeDisplayPricesPayload } from "@/lib/billing/stripeDisplayTypes";
 
 type CreditPack = {
   key: string;
@@ -56,7 +57,7 @@ const PACK_UI: Omit<CreditPack, "price" | "credits" | "priceUsd">[] = [
   },
 ];
 
-const creditPacks: CreditPack[] = PACK_UI.map((meta, i) => {
+const defaultCreditPacks: CreditPack[] = PACK_UI.map((meta, i) => {
   const row = CREDIT_PACKS[i];
   if (!row) throw new Error(`CREDIT_PACKS[${i}] missing`);
   return {
@@ -70,6 +71,26 @@ const creditPacks: CreditPack[] = PACK_UI.map((meta, i) => {
 export default function CreditsPage() {
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const { planDisplayName } = useCreditsPlan();
+  const [displayPrices, setDisplayPrices] = useState<StripeDisplayPricesPayload | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/billing/stripe-display-prices", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = (await res.json()) as StripeDisplayPricesPayload;
+        if (!cancelled) setDisplayPrices(data);
+      } catch { /* fall back to USD defaults */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const creditPacks: CreditPack[] = defaultCreditPacks.map((p) => {
+    const sp = displayPrices?.creditPacks[p.key as keyof StripeDisplayPricesPayload["creditPacks"]];
+    if (!sp) return p;
+    return { ...p, price: sp.formatted, priceUsd: sp.amount };
+  });
 
   // UI-only estimates for the pack marketing lines.
   // As requested: Sora 2 videos use 5 credits each; Nanobanana images use 0.5 credits each.
@@ -166,7 +187,8 @@ export default function CreditsPage() {
                 const savePercent = savePercentMatch?.[1] ?? null;
                 const topRow = packIndex < 3;
 
-                const oldPriceUsd = savePercent ? Math.round(p.priceUsd / (1 - Number(savePercent) / 100)) : null;
+                const oldPrice = savePercent ? Math.round(p.priceUsd / (1 - Number(savePercent) / 100)) : null;
+                const currencySymbol = displayPrices?.currency === "eur" ? "€" : "$";
                 const imgCount = upToAiImagesFromCredits(p.credits);
                 const vidCount = upToAiVideosFromCredits(p.credits);
 
@@ -219,9 +241,9 @@ export default function CreditsPage() {
 
                       <div className="mt-2 flex items-baseline gap-2">
                         <span className="text-3xl font-extrabold tabular-nums text-white">{p.price}</span>
-                        {oldPriceUsd != null && oldPriceUsd > p.priceUsd ? (
+                        {oldPrice != null && oldPrice > p.priceUsd ? (
                           <span className="text-sm font-semibold text-white/45 line-through">
-                            ${oldPriceUsd}
+                            {currencySymbol}{oldPrice}
                           </span>
                         ) : null}
                       </div>

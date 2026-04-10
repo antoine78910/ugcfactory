@@ -21,6 +21,7 @@ import {
   type SubscriptionPlanId,
 } from "@/lib/stripe/subscriptionPrices";
 import { openStripeBillingPortal } from "@/lib/stripe/openBillingPortalClient";
+import type { StripeDisplayPricesPayload } from "@/lib/billing/stripeDisplayTypes";
 
 type Billing = "monthly" | "yearly";
 const BILLING_PORTAL_URL =
@@ -111,6 +112,7 @@ export default function SubscriptionPage() {
     "pending",
   );
   const { planId, planDisplayName } = useCreditsPlan();
+  const [displayPrices, setDisplayPrices] = useState<StripeDisplayPricesPayload | null>(null);
 
   const [upgradeDialogOpen, setUpgradeDialogOpen] = useState(false);
   const [upgradePreview, setUpgradePreview] = useState<SubscriptionUpgradePreview | null>(null);
@@ -315,6 +317,19 @@ export default function SubscriptionPage() {
     }
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/billing/stripe-display-prices", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = (await res.json()) as StripeDisplayPricesPayload;
+        if (!cancelled) setDisplayPrices(data);
+      } catch { /* fall back to USD defaults */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   async function startSubscriptionCheckout(planIdCheckout: string) {
     setCheckoutLoading(planIdCheckout);
     try {
@@ -343,14 +358,26 @@ export default function SubscriptionPage() {
   }
 
   function priceFor(plan: PlanDef) {
+    const sp = displayPrices?.subscriptions[plan.id as SubscriptionPlanId];
     if (billing === "monthly") {
-      return { mainLabel: String(plan.monthly), sub: "Billed every month" };
+      const formatted = sp?.monthly?.formatted;
+      return {
+        mainLabel: formatted ?? `$${plan.monthly}`,
+        sub: "Billed every month",
+      };
+    }
+    const yearly = sp?.yearly;
+    if (yearly) {
+      return {
+        mainLabel: yearly.perMonthFormatted,
+        sub: `Billed yearly (${yearly.formatted}/yr).`,
+      };
     }
     const perMonthEquiv = plan.monthly * 0.7;
     const yearlyTotal = plan.monthly * 8.4;
     const mainLabel = Number.isInteger(perMonthEquiv) ? String(perMonthEquiv) : perMonthEquiv.toFixed(2);
     return {
-      mainLabel,
+      mainLabel: `$${mainLabel}`,
       sub: `Billed yearly ($${yearlyTotal.toLocaleString("en-US")}/yr).`,
     };
   }
@@ -503,7 +530,7 @@ export default function SubscriptionPage() {
                     <div className="mt-6">
                       <div className="flex flex-wrap items-baseline gap-1">
                         <span className="text-4xl font-extrabold tabular-nums leading-none text-white md:text-5xl">
-                          ${mainLabel}
+                          {mainLabel}
                         </span>
                         <span className="text-sm font-semibold text-white/55 md:text-base">/mo</span>
                       </div>
