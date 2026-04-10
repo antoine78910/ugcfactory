@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
+import Image from "next/image";
 import { Download, Loader2, Maximize2, Play, Plus, Sparkles, Star, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -132,6 +133,13 @@ type ElevenVoiceOption = {
   publicOwnerId?: string;
   isShared?: boolean;
 };
+
+function blurSvgDataUrl(w: number, h: number): string {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0f0b18" offset="0"/><stop stop-color="#1a1430" offset="1"/></linearGradient></defs><rect width="100%" height="100%" fill="url(#g)"/></svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+const THUMB_BLUR = blurSvgDataUrl(24, 24);
 
 function formatClockTime(totalSeconds: number): string {
   if (!Number.isFinite(totalSeconds) || totalSeconds < 0) return "0:00";
@@ -2701,20 +2709,32 @@ export default function AppBrandWizard() {
                             >
                               {heroImg ? (
                                 <div className="relative h-36 w-full overflow-hidden bg-[#100d17]">
-                                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                                  <img
-                                    src={heroImg}
+                                  <Image
+                                    src={proxiedMediaSrc(heroImg)}
                                     alt=""
-                                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                                    referrerPolicy="no-referrer"
+                                    fill
+                                    sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 33vw"
+                                    quality={45}
+                                    placeholder="blur"
+                                    blurDataURL={THUMB_BLUR}
+                                    className="object-cover transition-transform duration-500 group-hover:scale-105"
                                   />
                                   <div className="absolute inset-0 bg-gradient-to-t from-[#0c0a14] via-transparent to-transparent" />
                                   {secondaryImgs.length > 0 ? (
                                     <div className="absolute bottom-2 right-2 flex gap-1">
                                       {secondaryImgs.map((src) => (
                                         <div key={src} className="h-8 w-8 overflow-hidden rounded-md border border-white/15 shadow-sm">
-                                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                                          <img src={src} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                                          <Image
+                                            src={proxiedMediaSrc(src)}
+                                            alt=""
+                                            width={32}
+                                            height={32}
+                                            sizes="32px"
+                                            quality={35}
+                                            placeholder="blur"
+                                            blurDataURL={THUMB_BLUR}
+                                            className="h-full w-full object-cover"
+                                          />
                                         </div>
                                       ))}
                                     </div>
@@ -2732,13 +2752,16 @@ export default function AppBrandWizard() {
                                 <div className="flex items-start gap-3">
                                   {faviconUrl ? (
                                     <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/10 bg-white/[0.06]">
-                                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                                      <img
-                                        src={faviconUrl}
+                                      <Image
+                                        src={proxiedMediaSrc(faviconUrl)}
                                         alt=""
+                                        width={20}
+                                        height={20}
+                                        sizes="20px"
+                                        quality={60}
+                                        placeholder="blur"
+                                        blurDataURL={THUMB_BLUR}
                                         className="h-5 w-5 object-contain"
-                                        referrerPolicy="no-referrer"
-                                        onError={(e) => { (e.currentTarget.parentElement as HTMLElement).style.display = "none"; }}
                                       />
                                     </div>
                                   ) : null}
