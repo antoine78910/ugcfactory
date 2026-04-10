@@ -4,8 +4,6 @@ import "@xyflow/react/dist/style.css";
 
 import {
   addEdge,
-  Background,
-  BackgroundVariant,
   type Connection,
   type Edge,
   Panel,
@@ -326,13 +324,6 @@ function WorkflowReactFlowChrome({
   return (
     <>
       <FitViewOnPageChange activePageId={activePageId} />
-      <Background
-        id="workflow-lab-dots"
-        variant={BackgroundVariant.Dots}
-        gap={20}
-        size={1.15}
-        color="rgba(196, 181, 253, 0.2)"
-      />
 
       <Panel position="top-left" className="!m-0 !mt-5 !ml-4 z-10 flex !w-auto">
         <div
@@ -751,7 +742,7 @@ function WorkflowFlowWorkspace({ project, setProject, canvasWaveKey }: FlowWorks
 
   return (
     <div className="relative h-full min-h-0 w-full">
-      <WorkflowAmbientLayer waveKey={canvasWaveKey} className="z-0" />
+      <WorkflowAmbientLayer waveKey={canvasWaveKey} dots="labs" className="z-0" />
 
       <WorkflowPagesPanel
         project={project}

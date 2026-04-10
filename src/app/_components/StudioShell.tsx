@@ -8,7 +8,6 @@ import type { LucideIcon } from "lucide-react";
 import {
   ChevronLeft,
   ChevronRight,
-  Copy,
   FolderOpen,
   GitBranch,
   Image as ImageIcon,
@@ -18,6 +17,7 @@ import {
   UserRound,
   Video,
   Joystick,
+  Languages,
 } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import SidebarAccountMenu from "@/app/_components/SidebarAccountMenu";
@@ -66,7 +66,7 @@ type Props = {
 
 type CreateNavEntry =
   | { kind: "route"; id: StudioNavSection; label: string; icon: LucideIcon }
-  | { kind: "custom-link"; id: string; href: string; label: string; icon: LucideIcon };
+  | { kind: "custom-link"; id: string; href: string; label: string; icon: LucideIcon; soon?: boolean };
 
 const CREATE_NAV: CreateNavEntry[] = [
   { kind: "route", id: "link_to_ad", label: "Link to Ad", icon: Link2 },
@@ -76,9 +76,10 @@ const CREATE_NAV: CreateNavEntry[] = [
     href: "/workflow",
     label: "Workflow",
     icon: GitBranch,
+    soon: true,
   },
   { kind: "route", id: "avatar", label: "Avatar", icon: UserRound },
-  { kind: "route", id: "ad_clone", label: "Translate", icon: Copy },
+  { kind: "route", id: "ad_clone", label: "Translate", icon: Languages },
   { kind: "route", id: "voice", label: "Voice", icon: Mic },
   { kind: "route", id: "motion_control", label: "Motion Control", icon: Joystick },
   { kind: "route", id: "image", label: "Image", icon: ImageIcon },
@@ -115,6 +116,16 @@ function navButtonClass(active: boolean): string {
     active
       ? "bg-violet-400 text-black shadow-[0_4px_0_0_rgba(76,29,149,0.95)] hover:bg-violet-300 hover:shadow-[0_5px_0_0_rgba(76,29,149,0.95)] active:translate-y-[2px] active:shadow-none"
       : "border border-white/10 bg-white/5 text-white hover:bg-white/10 hover:border-violet-400/35 shadow-[0_0_12px_rgba(139,92,246,0.08)] hover:shadow-[0_0_20px_rgba(139,92,246,0.15)]",
+  ].join(" ");
+}
+
+/** Muted “coming soon” row (Workflow): gray, no violet accents. */
+function navSoonButtonClass(active: boolean): string {
+  return [
+    "block w-full min-w-0 rounded-lg px-4 py-3 text-left text-[15px] font-semibold transition-all cursor-pointer leading-snug",
+    active
+      ? "border border-zinc-600/45 bg-zinc-800/35 text-zinc-300 hover:bg-zinc-800/45"
+      : "border border-white/[0.08] bg-zinc-950/50 text-zinc-500 hover:border-zinc-600/35 hover:bg-zinc-900/45 hover:text-zinc-400",
   ].join(" ");
 }
 
@@ -208,20 +219,20 @@ function StudioShellInner({
           >
             {navCollapsed ? (
               <div
-                className="group relative mx-auto h-8 w-8 shrink-0"
+                className="group relative mx-auto h-8 w-full min-w-0 shrink-0 px-0.5"
                 title="Hover logo to expand menu"
               >
                 <Link
                   href="/app/link-to-ad"
-                  className="relative z-0 block h-8 w-8"
+                  className="relative z-0 block h-8 w-full min-w-0"
                   title="Youry home"
                 >
                   <Image
-                    src="/icon.png"
+                    src="/youry-logo.png"
                     alt="Youry"
-                    width={32}
-                    height={32}
-                    className="h-8 w-8 rounded-lg object-cover"
+                    width={174}
+                    height={52}
+                    className="h-8 w-auto max-w-full object-contain object-left"
                     priority
                   />
                 </Link>
@@ -294,27 +305,48 @@ function StudioShellInner({
                 {CREATE_NAV.map((entry) => {
                   const NavIcon = entry.icon;
                   if (entry.kind === "custom-link") {
-                    const { href, label, id: linkId } = entry;
+                    const { href, label, id: linkId, soon } = entry;
                     const active =
                       pathname === href ||
                       pathname.startsWith(`${href}/`) ||
                       pathname === `/app${href}` ||
                       pathname.startsWith(`/app${href}/`);
+                    const isSoon = soon === true;
+                    const iconSoon = active ? "text-zinc-400" : "text-zinc-500";
                     const content = (
-                      <span className={cn("flex min-w-0 items-center gap-2.5", navCollapsed && "justify-center")}>
-                        <NavIcon
-                          className={`h-5 w-5 shrink-0 ${navRowIconClass(active)}`}
-                          aria-hidden
-                        />
-                        <span className={cn("min-w-0 truncate", navCollapsed && "sr-only")}>{label}</span>
+                      <span
+                        className={cn(
+                          "flex min-w-0 w-full items-center gap-2.5",
+                          navCollapsed && "justify-center",
+                          !navCollapsed && isSoon && "justify-between",
+                        )}
+                      >
+                        <span className={cn("flex min-w-0 items-center gap-2.5", navCollapsed && "justify-center")}>
+                          <NavIcon
+                            className={cn(
+                              "h-5 w-5 shrink-0",
+                              isSoon ? iconSoon : navRowIconClass(active),
+                            )}
+                            aria-hidden
+                          />
+                          <span className={cn("min-w-0 truncate", navCollapsed && "sr-only")}>{label}</span>
+                        </span>
+                        {isSoon && !navCollapsed ? (
+                          <span className="shrink-0 rounded-md border border-zinc-600/55 bg-zinc-900/70 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                            Soon
+                          </span>
+                        ) : null}
                       </span>
                     );
                     return (
                       <Link
                         key={linkId}
                         href={href}
-                        className={cn(navButtonClass(active), navCollapsed && "px-2.5 py-3.5")}
-                        title={label}
+                        className={cn(
+                          isSoon ? navSoonButtonClass(active) : navButtonClass(active),
+                          navCollapsed && "px-2.5 py-3.5",
+                        )}
+                        title={isSoon ? `${label} (Soon)` : label}
                       >
                         {content}
                       </Link>

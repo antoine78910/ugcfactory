@@ -73,7 +73,7 @@ export function WorkflowSpacesLanding() {
 
   return (
     <div className="relative min-h-[100dvh] overflow-hidden bg-[#06070d] text-white">
-      <WorkflowAmbientLayer waveKey={landingWaveKey} showDotGrid className="z-0" />
+      <WorkflowAmbientLayer waveKey={landingWaveKey} dots="labs" className="z-0" />
       <div className="pointer-events-none absolute left-1/2 top-0 z-[1] h-[380px] w-[min(100%,920px)] -translate-x-1/2 rounded-full bg-violet-600/11 blur-[100px]" />
       <div className="pointer-events-none absolute right-0 top-[120px] z-[1] h-[320px] w-[480px] rounded-full bg-violet-600/12 blur-[90px]" />
 

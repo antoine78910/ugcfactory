@@ -310,6 +310,41 @@
   accent-color: rgb(139 92 246);
 }
 
+/* Workflow: labs dots flash in sync with entrance wave */
+@keyframes workflow-ambient-labs-dots-in {
+  0% {
+    opacity: 0.35;
+    filter: brightness(1.85) contrast(1.05);
+  }
+  45% {
+    opacity: 1;
+    filter: brightness(1.2) contrast(1.02);
+  }
+  100% {
+    opacity: 1;
+    filter: brightness(1) contrast(1);
+  }
+}
+
+.workflow-ambient-labs-dots {
+  animation: workflow-ambient-labs-dots-in 1.15s cubic-bezier(0.2, 0.88, 0.28, 1) forwards;
+}
+
+@keyframes workflow-ambient-vignette-in {
+  0% {
+    opacity: 0.55;
+    filter: brightness(1.35);
+  }
+  100% {
+    opacity: 1;
+    filter: brightness(1);
+  }
+}
+
+.workflow-ambient-vignette-pulse {
+  animation: workflow-ambient-vignette-in 0.95s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
 /* Workflow canvas / landing: wave rings from center toward edges */
 .workflow-ambient-wave-ring {
   left: 50%;
@@ -318,19 +353,27 @@
   height: 180vmin;
   margin-left: -90vmin;
   margin-top: -90vmin;
-  animation: workflow-ambient-wave-expand 1.55s cubic-bezier(0.18, 0.88, 0.22, 1) forwards;
+  border: 1px solid rgba(233, 213, 255, 0.42);
+  box-shadow:
+    0 0 50px rgba(196, 181, 253, 0.35),
+    0 0 100px rgba(139, 92, 246, 0.2),
+    inset 0 0 40px rgba(255, 255, 255, 0.04);
+  animation: workflow-ambient-wave-expand 1.85s cubic-bezier(0.14, 0.82, 0.22, 1) forwards;
 }
 .workflow-ambient-wave-ring--delay-1 {
-  animation-delay: 0.15s;
+  animation-delay: 0.12s;
 }
 .workflow-ambient-wave-ring--delay-2 {
-  animation-delay: 0.3s;
+  animation-delay: 0.24s;
+}
+.workflow-ambient-wave-ring--delay-3 {
+  animation-delay: 0.36s;
 }
 
 @keyframes workflow-ambient-wave-expand {
   0% {
-    transform: scale(0.035);
-    opacity: 0.52;
+    transform: scale(0.02);
+    opacity: 0.75;
   }
   100% {
     transform: scale(1);
