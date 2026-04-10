@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import Script from "next/script";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -17,7 +16,6 @@ type AuthMode = "signin" | "signup";
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const HAS_SUPABASE_ENV = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
-const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? "";
 const APP_REDIRECT_BASE =
   (process.env.NEXT_PUBLIC_APP_URL && process.env.NEXT_PUBLIC_APP_URL.trim()) ||
   "https://app.youry.io";
@@ -27,20 +25,6 @@ function getAuthCallbackUrl() {
   if (process.env.NEXT_PUBLIC_APP_URL && process.env.NEXT_PUBLIC_APP_URL.trim()) return AUTH_CALLBACK_FALLBACK;
   if (typeof window !== "undefined" && window.location?.origin) return `${window.location.origin}/auth/callback`;
   return AUTH_CALLBACK_FALLBACK;
-}
-
-declare global {
-  interface Window {
-    google?: {
-      accounts: {
-        id: {
-          initialize: (cfg: Record<string, unknown>) => void;
-          renderButton: (el: HTMLElement, cfg: Record<string, unknown>) => void;
-          prompt: () => void;
-        };
-      };
-    };
-  }
 }
 
 export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
@@ -150,67 +134,12 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
     }
   }
 
-  // ─── Google Identity Services (One Tap) ──────────────────────────────────
-  const gisInitializedRef = useRef(false);
-
-  const handleGoogleCredential = useCallback(
-    async (response: { credential?: string }) => {
-      const idToken = response.credential;
-      if (!idToken) {
-        toast.error("Google sign-in failed", { description: "No credential received." });
-        return;
-      }
-      setIsLoading(true);
-      try {
-        const { error } = await client.auth.signInWithIdToken({
-          provider: "google",
-          token: idToken,
-        });
-        if (error) throw error;
-        window.datafast?.(mode === "signup" ? "signup" : "signin");
-        toast.success(mode === "signup" ? "Account created" : "Signed in");
-        router.push("/");
-        router.refresh();
-      } catch (err) {
-        toast.error("Google sign-in error", {
-          description: err instanceof Error ? err.message : "Unknown error",
-        });
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [client, mode, router],
-  );
-
-  const initGis = useCallback(() => {
-    if (gisInitializedRef.current || !window.google?.accounts?.id || !GOOGLE_CLIENT_ID) return;
-    gisInitializedRef.current = true;
-    window.google.accounts.id.initialize({
-      client_id: GOOGLE_CLIENT_ID,
-      callback: handleGoogleCredential,
-      ux_mode: "popup",
-    });
-  }, [handleGoogleCredential]);
-
-  useEffect(() => {
-    initGis();
-  }, [initGis]);
-  // ─────────────────────────────────────────────────────────────────────────
-
   const isSignIn = mode === "signin";
   const primaryBtnClass =
     "h-11 w-full rounded-2xl bg-violet-400 text-black font-semibold border border-violet-200/40 shadow-[0_6px_0_0_rgba(76,29,149,0.9)] transition-all hover:-translate-y-[1px] hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9)] active:translate-y-[6px] active:shadow-[0_0_0_0_rgba(76,29,149,0.9)]";
 
   return (
     <div className="min-h-[100dvh] min-h-screen overflow-x-hidden bg-[#050507] text-white">
-      {GOOGLE_CLIENT_ID ? (
-        <Script
-          src="https://accounts.google.com/gsi/client"
-          strategy="afterInteractive"
-          onLoad={initGis}
-        />
-      ) : null}
-
       <div
         className="pointer-events-none absolute left-1/2 top-0 -z-0 h-[min(420px,70vh)] w-[min(100vw,900px)] max-w-[100vw] -translate-x-1/2 rounded-full bg-violet-600/15 blur-[100px] sm:h-[520px] sm:blur-[140px]"
         aria-hidden
@@ -339,16 +268,16 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
                 onClick={async () => {
                   setIsLoading(true);
                   try {
-                    if (GOOGLE_CLIENT_ID && window.google?.accounts?.id) {
-                      window.google.accounts.id.prompt();
-                      setIsLoading(false);
-                      return;
-                    }
-                    const { error } = await client.auth.signInWithOAuth({
+                    const { data, error } = await client.auth.signInWithOAuth({
                       provider: "google",
                       options: { redirectTo: getAuthCallbackUrl() },
                     });
                     if (error) throw error;
+                    if (data.url) {
+                      window.location.assign(data.url);
+                      return;
+                    }
+                    throw new Error("No OAuth URL returned. Enable Google in Supabase Auth providers.");
                   } catch (err) {
                     toast.error("Google sign-in error", {
                       description: err instanceof Error ? err.message : "Unknown error",
