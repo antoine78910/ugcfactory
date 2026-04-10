@@ -21,11 +21,15 @@ const APP_REDIRECT_BASE =
   "https://app.youry.io";
 const AUTH_CALLBACK_FALLBACK = `${APP_REDIRECT_BASE.replace(/\/+$/, "")}/auth/callback`;
 
-/** Must match the URL Google/Supabase redirects to (same origin as the page avoids env mismatches). */
+/**
+ * Must match the URL Google/Supabase redirects to.
+ *
+ * In production we want the consent screen to show `app.youry.io` (not the Supabase project domain),
+ * so we prefer the configured public app URL when available.
+ */
 function getAuthCallbackUrl() {
-  if (typeof window !== "undefined" && window.location?.origin) {
-    return `${window.location.origin}/auth/callback`;
-  }
+  if (process.env.NEXT_PUBLIC_APP_URL && process.env.NEXT_PUBLIC_APP_URL.trim()) return AUTH_CALLBACK_FALLBACK;
+  if (typeof window !== "undefined" && window.location?.origin) return `${window.location.origin}/auth/callback`;
   return AUTH_CALLBACK_FALLBACK;
 }
 
