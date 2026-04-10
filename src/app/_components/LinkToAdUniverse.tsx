@@ -3446,7 +3446,16 @@ export default function LinkToAdUniverse({
         if (!urls.length) throw new Error("Generation finished but image URLs are missing.");
         return urls;
       }
-      throw new Error(json.data.errorMessage || `Generation failed (successFlag=${String(s)})`);
+      const errorMessage =
+        json && typeof json === "object"
+          ? (() => {
+              const d = (json as { data?: unknown }).data;
+              if (!d || typeof d !== "object") return undefined;
+              const msg = (d as { errorMessage?: unknown }).errorMessage;
+              return typeof msg === "string" ? msg : undefined;
+            })()
+          : undefined;
+      throw new Error(errorMessage || `Generation failed (successFlag=${String(s)})`);
     }
     throw new Error("Image generation timed out.");
   }
