@@ -174,7 +174,7 @@ export async function POST(req: Request) {
   }
 
   const fetched = await fetchStorePageHtmlForExtract(url);
-  if (!fetched.ok) {
+  if (fetched.ok === false) {
     return fetched.response;
   }
   const html = fetched.html;

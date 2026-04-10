@@ -24,6 +24,7 @@ function isExcludedFromStudioRewrite(pathname: string): boolean {
     "dashboard",
     "admin",
     "apitest",
+    "workflow",
   ]).has(first);
 }
 

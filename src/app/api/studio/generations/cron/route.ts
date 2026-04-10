@@ -14,6 +14,13 @@ import { serverLog } from "@/lib/serverLog";
  * Configure HTTP POST every 30–60s with header:
  *   Authorization: Bearer <STUDIO_GENERATIONS_CRON_SECRET>
  */
+export async function GET() {
+  return NextResponse.json({
+    ok: true,
+    hint: "This endpoint runs on POST with Authorization: Bearer <STUDIO_GENERATIONS_CRON_SECRET>.",
+  });
+}
+
 export async function POST(req: Request) {
   const secret = getEnv("STUDIO_GENERATIONS_CRON_SECRET")?.trim();
   if (!secret) {

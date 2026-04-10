@@ -23,7 +23,7 @@ function applyRefundHints(
   }
 }
 
-/** While jobs finish on KIE, refresh DB-backed items sooner so history UI does not lag. */
+/** While jobs finish on the provider, refresh DB-backed items sooner so history UI does not lag. */
 const POLL_INTERVAL_MS = 4500;
 
 /**

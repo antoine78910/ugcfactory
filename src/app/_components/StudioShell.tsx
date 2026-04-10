@@ -80,9 +80,11 @@ const CREATE_NAV: CreateNavEntry[] = [
   { kind: "route", id: "upscale", label: "Upscale", icon: Maximize2 },
 ];
 
+/** Matches inactive `navButtonClass` footprint (no extra min-height). */
 function soonRowClass(): string {
   return [
-    "flex w-full min-h-[3.55rem] flex-row items-center justify-between gap-2.5 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left",
+    "flex w-full min-w-0 flex-row items-center justify-between gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-left text-[15px] font-semibold leading-snug",
+    "shadow-[0_0_12px_rgba(139,92,246,0.08)]",
     "cursor-not-allowed select-none pointer-events-none",
   ].join(" ");
 }
@@ -295,7 +297,7 @@ function StudioShellInner({
                         key={entry.id}
                         className={cn(
                           soonRowClass(),
-                          navCollapsed && "!justify-center gap-0 px-1.5 py-2.5",
+                          navCollapsed && "!justify-center gap-0 px-2.5 py-3.5",
                         )}
                         title={`${entry.label} — coming soon`}
                         aria-disabled="true"
@@ -318,7 +320,7 @@ function StudioShellInner({
                         </span>
                         <span
                           className={cn(
-                            "shrink-0 rounded-md border border-white/15 bg-white/[0.06] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white/50",
+                            "shrink-0 rounded-md border border-white/15 bg-white/[0.06] px-1.5 py-0.5 text-[9px] font-bold uppercase leading-none tracking-wide text-white/50",
                             navCollapsed && "sr-only",
                           )}
                         >

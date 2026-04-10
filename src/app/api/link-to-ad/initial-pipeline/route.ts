@@ -47,7 +47,7 @@ export async function POST(req: Request) {
     videoDurationSeconds: body?.videoDurationSeconds,
   });
 
-  if (!result.ok) {
+  if (result.ok === false) {
     return NextResponse.json(
       {
         error: result.error,

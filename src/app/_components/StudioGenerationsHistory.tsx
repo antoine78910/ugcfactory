@@ -118,7 +118,7 @@ export type StudioImageLightboxEditConfig = {
 
 /** Studio Images: Topaz image upscale from history lightbox. */
 export type StudioImageLightboxUpscaleConfig = {
-  /** Kie factors 2 / 4 / 8 → 2K / 4K / 8K (not video-style 1×/2×/4×). */
+  /** Provider factors 2 / 4 / 8 → 2K / 4K / 8K (not video-style 1×/2×/4×). */
   upscaleFactorOptions?: readonly ("2" | "4" | "8")[];
   seedFactor?: "2" | "4" | "8";
   creditsFor: (factor: string) => number;

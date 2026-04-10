@@ -2357,7 +2357,11 @@ export default function LinkToAdUniverse({
           const raw = await res.text();
           const parsed = safeParseJson<{ url?: string; error?: string }>(raw);
           if (!res.ok || !parsed.ok) {
-            throw new Error(parsed.ok ? parsed.value.error || `Upload failed (${res.status})` : parsed.error);
+            const msg =
+              parsed.ok === false
+                ? parsed.error
+                : parsed.value.error || `Upload failed (${res.status})`;
+            throw new Error(msg);
           }
           if (!parsed.value.url) throw new Error(parsed.value.error || "Upload failed: missing url");
           uploaded.push(parsed.value.url);
@@ -2414,7 +2418,11 @@ export default function LinkToAdUniverse({
           const raw = await res.text();
           const parsed = safeParseJson<{ url?: string; error?: string }>(raw);
           if (!res.ok || !parsed.ok) {
-            throw new Error(parsed.ok ? parsed.value.error || `Upload failed (${res.status})` : parsed.error);
+            const msg =
+              parsed.ok === false
+                ? parsed.error
+                : parsed.value.error || `Upload failed (${res.status})`;
+            throw new Error(msg);
           }
           if (!parsed.value.url) throw new Error(parsed.value.error || "Upload failed: missing url");
           const url = parsed.value.url;
@@ -2469,7 +2477,11 @@ export default function LinkToAdUniverse({
           const raw = await res.text();
           const parsed = safeParseJson<{ url?: string; error?: string }>(raw);
           if (!res.ok || !parsed.ok) {
-            throw new Error(parsed.ok ? parsed.value.error || `Upload failed (${res.status})` : parsed.error);
+            const msg =
+              parsed.ok === false
+                ? parsed.error
+                : parsed.value.error || `Upload failed (${res.status})`;
+            throw new Error(msg);
           }
           if (!parsed.value.url) throw new Error(parsed.value.error || "Upload failed: missing url");
           const url = parsed.value.url;
@@ -3167,7 +3179,7 @@ export default function LinkToAdUniverse({
         (step) => setServerPipelineStepIndex(step),
       );
 
-      if (!pipeResult.ok) {
+      if (pipeResult.ok === false) {
         if (pipeResult.runId) {
           const getRes = await fetch(`/api/runs/get?runId=${encodeURIComponent(pipeResult.runId)}`, {
             cache: "no-store",
