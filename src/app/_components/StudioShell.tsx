@@ -338,16 +338,26 @@ function StudioShellInner({
                         ) : null}
                       </span>
                     );
+                    const rowClass = cn(
+                      isSoon ? navSoonButtonClass(active) : navButtonClass(active),
+                      navCollapsed && "px-2.5 py-3.5",
+                      isSoon && "cursor-not-allowed select-none",
+                    );
+                    if (isSoon) {
+                      return (
+                        <span
+                          key={linkId}
+                          className={rowClass}
+                          title={`${label} (Soon)`}
+                          aria-disabled="true"
+                          aria-label={`${label}, coming soon`}
+                        >
+                          {content}
+                        </span>
+                      );
+                    }
                     return (
-                      <Link
-                        key={linkId}
-                        href={href}
-                        className={cn(
-                          isSoon ? navSoonButtonClass(active) : navButtonClass(active),
-                          navCollapsed && "px-2.5 py-3.5",
-                        )}
-                        title={isSoon ? `${label} (Soon)` : label}
-                      >
+                      <Link key={linkId} href={href} className={rowClass} title={label}>
                         {content}
                       </Link>
                     );
