@@ -4723,7 +4723,7 @@ export default function AppBrandWizard() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <p className="text-xs text-muted-foreground">
-                Provider: <span className="font-medium">Kling 3.0 Standard</span> (KIE Market), aspect 9:16. 15s, 720p
+                Provider: <span className="font-medium">Kling 3.0 Standard</span> (provider), aspect 9:16. 15s, 720p
                 Standard, audio ON (voix native).
                   </p>
 

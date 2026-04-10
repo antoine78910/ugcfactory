@@ -100,7 +100,7 @@ function clearPlanData() {
   lsRemove(LS_CHECKOUT_TS);
 }
 
-/** Returns the user's Kie API key when Personal API mode is active, or undefined. */
+/** Returns the user's provider API key when Personal API mode is active, or undefined. */
 export function getPersonalApiKey(): string | undefined {
   if (typeof window === "undefined") return undefined;
   if (lsGet(LS_PERSONAL_API_ENABLED) !== "1") return undefined;
@@ -113,7 +113,7 @@ export function isPersonalApiActive(): boolean {
   return getPersonalApiKey() !== undefined;
 }
 
-/** Returns the user's PiAPI key when PiAPI mode is active, or undefined. */
+/** Returns the user's provider key when provider mode is active, or undefined. */
 export function getPersonalPiapiApiKey(): string | undefined {
   if (typeof window === "undefined") return undefined;
   if (lsGet(LS_PIAPI_PERSONAL_ENABLED) !== "1") return undefined;
@@ -138,8 +138,8 @@ export function isPersonalElevenLabsActive(): boolean {
 }
 
 /**
- * When either personal KIE or PiAPI key is enabled, skip platform credit charges and
- * balance checks in the studio (you bill the provider directly).
+ * When a personal provider key is enabled, skip platform credit charges and balance checks
+ * in the studio (you bill the provider directly).
  */
 export function isPlatformCreditBypassActive(): boolean {
   return isPersonalApiActive() || isPersonalPiapiActive();
