@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import Script from "next/script";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -16,21 +17,30 @@ type AuthMode = "signin" | "signup";
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const HAS_SUPABASE_ENV = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
+const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? "";
 const APP_REDIRECT_BASE =
   (process.env.NEXT_PUBLIC_APP_URL && process.env.NEXT_PUBLIC_APP_URL.trim()) ||
   "https://app.youry.io";
 const AUTH_CALLBACK_FALLBACK = `${APP_REDIRECT_BASE.replace(/\/+$/, "")}/auth/callback`;
 
-/**
- * Must match the URL Google/Supabase redirects to.
- *
- * In production we want the consent screen to show `app.youry.io` (not the Supabase project domain),
- * so we prefer the configured public app URL when available.
- */
 function getAuthCallbackUrl() {
   if (process.env.NEXT_PUBLIC_APP_URL && process.env.NEXT_PUBLIC_APP_URL.trim()) return AUTH_CALLBACK_FALLBACK;
   if (typeof window !== "undefined" && window.location?.origin) return `${window.location.origin}/auth/callback`;
   return AUTH_CALLBACK_FALLBACK;
+}
+
+declare global {
+  interface Window {
+    google?: {
+      accounts: {
+        id: {
+          initialize: (cfg: Record<string, unknown>) => void;
+          renderButton: (el: HTMLElement, cfg: Record<string, unknown>) => void;
+          prompt: () => void;
+        };
+      };
+    };
+  }
 }
 
 export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
@@ -140,22 +150,70 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
     }
   }
 
-  async function onGoogle() {
-    setIsLoading(true);
-    try {
-      const { error } = await client.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: getAuthCallbackUrl(),
-        },
-      });
-      if (error) throw error;
-    } catch (err) {
-      toast.error("Google sign-in error", {
-        description: err instanceof Error ? err.message : "Unknown error",
-      });
-      setIsLoading(false);
+  const gisContainerRef = useRef<HTMLDivElement>(null);
+  const gisInitializedRef = useRef(false);
+
+  const handleGoogleCredential = useCallback(
+    async (response: { credential?: string }) => {
+      const idToken = response.credential;
+      if (!idToken) {
+        toast.error("Google sign-in failed", { description: "No credential received." });
+        return;
+      }
+      setIsLoading(true);
+      try {
+        const { error } = await client.auth.signInWithIdToken({
+          provider: "google",
+          token: idToken,
+        });
+        if (error) throw error;
+        window.datafast?.(mode === "signup" ? "signup" : "signin");
+        toast.success(mode === "signup" ? "Account created" : "Signed in");
+        router.push("/");
+        router.refresh();
+      } catch (err) {
+        toast.error("Google sign-in error", {
+          description: err instanceof Error ? err.message : "Unknown error",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [client, mode, router],
+  );
+
+  const initGis = useCallback(() => {
+    if (gisInitializedRef.current || !window.google || !GOOGLE_CLIENT_ID || !gisContainerRef.current) return;
+    gisInitializedRef.current = true;
+    window.google.accounts.id.initialize({
+      client_id: GOOGLE_CLIENT_ID,
+      callback: handleGoogleCredential,
+      ux_mode: "popup",
+    });
+    window.google.accounts.id.renderButton(gisContainerRef.current, {
+      theme: "filled_black",
+      size: "large",
+      text: "continue_with",
+      shape: "pill",
+      width: 320,
+    });
+  }, [handleGoogleCredential]);
+
+  useEffect(() => {
+    initGis();
+  }, [initGis]);
+
+  function onGoogle() {
+    if (!GOOGLE_CLIENT_ID) {
+      toast.error("Google sign-in unavailable", { description: "Missing NEXT_PUBLIC_GOOGLE_CLIENT_ID." });
+      return;
     }
+    const btn = gisContainerRef.current?.querySelector<HTMLElement>('[role="button"], iframe, div[style]');
+    if (btn) {
+      btn.click();
+      return;
+    }
+    window.google?.accounts.id.prompt();
   }
 
   const isSignIn = mode === "signin";
@@ -164,6 +222,14 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
 
   return (
     <div className="min-h-[100dvh] min-h-screen overflow-x-hidden bg-[#050507] text-white">
+      {GOOGLE_CLIENT_ID ? (
+        <Script
+          src="https://accounts.google.com/gsi/client"
+          strategy="afterInteractive"
+          onLoad={initGis}
+        />
+      ) : null}
+      <div ref={gisContainerRef} className="pointer-events-none fixed -left-[9999px] top-0 h-0 w-0 overflow-hidden opacity-0" aria-hidden />
       <div
         className="pointer-events-none absolute left-1/2 top-0 -z-0 h-[min(420px,70vh)] w-[min(100vw,900px)] max-w-[100vw] -translate-x-1/2 rounded-full bg-violet-600/15 blur-[100px] sm:h-[520px] sm:blur-[140px]"
         aria-hidden
