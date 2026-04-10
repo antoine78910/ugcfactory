@@ -51,6 +51,7 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [gisReady, setGisReady] = useState(false);
 
   useEffect(() => {
     window.datafast?.(mode === "signup" ? "view_signup" : "view_signin");
@@ -150,6 +151,10 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
     }
   }
 
+  // ─── Google Identity Services ─────────────────────────────────────────────
+  // The GIS button renders directly into `gisContainerRef` (visible in the UI).
+  // No hidden element, no programmatic click forwarding.
+
   const gisContainerRef = useRef<HTMLDivElement>(null);
   const gisInitializedRef = useRef(false);
 
@@ -183,7 +188,7 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
   );
 
   const initGis = useCallback(() => {
-    if (gisInitializedRef.current || !window.google || !GOOGLE_CLIENT_ID || !gisContainerRef.current) return;
+    if (gisInitializedRef.current || !window.google?.accounts?.id || !GOOGLE_CLIENT_ID || !gisContainerRef.current) return;
     gisInitializedRef.current = true;
     window.google.accounts.id.initialize({
       client_id: GOOGLE_CLIENT_ID,
@@ -197,24 +202,15 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
       shape: "pill",
       width: 320,
     });
+    setGisReady(true);
   }, [handleGoogleCredential]);
 
+  // Called both by Script onLoad and by useEffect (handles cached-script case)
   useEffect(() => {
     initGis();
   }, [initGis]);
 
-  function onGoogle() {
-    if (!GOOGLE_CLIENT_ID) {
-      toast.error("Google sign-in unavailable", { description: "Missing NEXT_PUBLIC_GOOGLE_CLIENT_ID." });
-      return;
-    }
-    const btn = gisContainerRef.current?.querySelector<HTMLElement>('[role="button"], iframe, div[style]');
-    if (btn) {
-      btn.click();
-      return;
-    }
-    window.google?.accounts.id.prompt();
-  }
+  // ─────────────────────────────────────────────────────────────────────────
 
   const isSignIn = mode === "signin";
   const primaryBtnClass =
@@ -229,7 +225,7 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
           onLoad={initGis}
         />
       ) : null}
-      <div ref={gisContainerRef} className="pointer-events-none fixed -left-[9999px] top-0 h-0 w-0 overflow-hidden opacity-0" aria-hidden />
+
       <div
         className="pointer-events-none absolute left-1/2 top-0 -z-0 h-[min(420px,70vh)] w-[min(100vw,900px)] max-w-[100vw] -translate-x-1/2 rounded-full bg-violet-600/15 blur-[100px] sm:h-[520px] sm:blur-[140px]"
         aria-hidden
@@ -350,20 +346,51 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
                 </span>
               </div>
 
-              <Button
-                type="button"
-                className={primaryBtnClass}
-                onClick={onGoogle}
-                disabled={isLoading}
-              >
-                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                <span className="mr-1 text-sm font-semibold">G</span>
-                Continue with Google
-              </Button>
+              {/* Google button: GIS renders directly here when GOOGLE_CLIENT_ID is set */}
+              <div className="flex min-h-[44px] items-center justify-center">
+                {GOOGLE_CLIENT_ID ? (
+                  <>
+                    {/* GIS renders its own button into this div */}
+                    <div ref={gisContainerRef} />
+                    {/* Placeholder while GIS script loads */}
+                    {!gisReady ? (
+                      <div className="flex h-10 w-72 items-center justify-center gap-2 rounded-full bg-white/5 text-sm text-white/40">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Loading…
+                      </div>
+                    ) : null}
+                  </>
+                ) : (
+                  <Button
+                    type="button"
+                    className={`w-full ${primaryBtnClass}`}
+                    disabled={isLoading}
+                    onClick={async () => {
+                      setIsLoading(true);
+                      try {
+                        const { error } = await client.auth.signInWithOAuth({
+                          provider: "google",
+                          options: { redirectTo: getAuthCallbackUrl() },
+                        });
+                        if (error) throw error;
+                      } catch (err) {
+                        toast.error("Google sign-in error", {
+                          description: err instanceof Error ? err.message : "Unknown error",
+                        });
+                        setIsLoading(false);
+                      }
+                    }}
+                  >
+                    {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                    <span className="mr-1 text-sm font-semibold">G</span>
+                    Continue with Google
+                  </Button>
+                )}
+              </div>
             </form>
 
             <p className="mt-6 text-center text-sm text-white/50">
-              {isSignIn ? "No account yet?" : "Already have an account?"} {" "}
+              {isSignIn ? "No account yet?" : "Already have an account?"}{" "}
               <Link
                 href={isSignIn ? "/signup" : "/signin"}
                 className="text-violet-400 hover:text-violet-300"
@@ -377,4 +404,3 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
     </div>
   );
 }
-
