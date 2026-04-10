@@ -22,6 +22,8 @@ import {
 } from "@/lib/stripe/subscriptionPrices";
 import { openStripeBillingPortal } from "@/lib/stripe/openBillingPortalClient";
 import type { StripeDisplayPricesPayload } from "@/lib/billing/stripeDisplayTypes";
+import { formatMoneyAmount, inferClientBillingCurrency } from "@/lib/billing/formatMoney";
+import type { BillingCheckoutCurrency } from "@/lib/geo/billingRegion";
 
 type Billing = "monthly" | "yearly";
 const BILLING_PORTAL_URL =
@@ -113,6 +115,8 @@ export default function SubscriptionPage() {
   );
   const { planId, planDisplayName } = useCreditsPlan();
   const [displayPrices, setDisplayPrices] = useState<StripeDisplayPricesPayload | null>(null);
+  /** After mount only — avoids SSR/client mismatch when inferring from navigator. */
+  const [clientCurrencyHint, setClientCurrencyHint] = useState<BillingCheckoutCurrency | null>(null);
 
   const [upgradeDialogOpen, setUpgradeDialogOpen] = useState(false);
   const [upgradePreview, setUpgradePreview] = useState<SubscriptionUpgradePreview | null>(null);
@@ -318,6 +322,10 @@ export default function SubscriptionPage() {
   }, []);
 
   useEffect(() => {
+    setClientCurrencyHint(inferClientBillingCurrency());
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
@@ -325,7 +333,7 @@ export default function SubscriptionPage() {
         if (!res.ok) return;
         const data = (await res.json()) as StripeDisplayPricesPayload;
         if (!cancelled) setDisplayPrices(data);
-      } catch { /* fall back to USD defaults */ }
+      } catch { /* fall back to formatted defaults */ }
     })();
     return () => { cancelled = true; };
   }, []);
@@ -358,11 +366,12 @@ export default function SubscriptionPage() {
   }
 
   function priceFor(plan: PlanDef) {
+    const cur = displayPrices?.currency ?? clientCurrencyHint ?? "usd";
     const sp = displayPrices?.subscriptions[plan.id as SubscriptionPlanId];
     if (billing === "monthly") {
       const formatted = sp?.monthly?.formatted;
       return {
-        mainLabel: formatted ?? `$${plan.monthly}`,
+        mainLabel: formatted ?? formatMoneyAmount(plan.monthly, cur),
         sub: "Billed every month",
       };
     }
@@ -375,10 +384,9 @@ export default function SubscriptionPage() {
     }
     const perMonthEquiv = plan.monthly * 0.7;
     const yearlyTotal = plan.monthly * 8.4;
-    const mainLabel = Number.isInteger(perMonthEquiv) ? String(perMonthEquiv) : perMonthEquiv.toFixed(2);
     return {
-      mainLabel: `$${mainLabel}`,
-      sub: `Billed yearly ($${yearlyTotal.toLocaleString("en-US")}/yr).`,
+      mainLabel: formatMoneyAmount(perMonthEquiv, cur),
+      sub: `Billed yearly (${formatMoneyAmount(yearlyTotal, cur)}/yr).`,
     };
   }
 

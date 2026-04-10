@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, CheckCircle2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
@@ -10,6 +10,12 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { CREDIT_PACKS } from "@/lib/pricing";
 import type { StripeDisplayPricesPayload } from "@/lib/billing/stripeDisplayTypes";
+import { formatMoneyAmount, inferClientBillingCurrency } from "@/lib/billing/formatMoney";
+import type { BillingCheckoutCurrency } from "@/lib/geo/billingRegion";
+
+function defaultPackPriceUsd(priceUsd: number): string {
+  return formatMoneyAmount(priceUsd, "usd");
+}
 
 type CreditPack = {
   key: string;
@@ -62,7 +68,7 @@ const defaultCreditPacks: CreditPack[] = PACK_UI.map((meta, i) => {
   if (!row) throw new Error(`CREDIT_PACKS[${i}] missing`);
   return {
     ...meta,
-    price: `$${row.price_usd}`,
+    price: defaultPackPriceUsd(row.price_usd),
     priceUsd: row.price_usd,
     credits: row.credits,
   };
@@ -72,6 +78,11 @@ export default function CreditsPage() {
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const { planDisplayName } = useCreditsPlan();
   const [displayPrices, setDisplayPrices] = useState<StripeDisplayPricesPayload | null>(null);
+  const [clientCurrencyHint, setClientCurrencyHint] = useState<BillingCheckoutCurrency | null>(null);
+
+  useEffect(() => {
+    setClientCurrencyHint(inferClientBillingCurrency());
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -81,16 +92,19 @@ export default function CreditsPage() {
         if (!res.ok) return;
         const data = (await res.json()) as StripeDisplayPricesPayload;
         if (!cancelled) setDisplayPrices(data);
-      } catch { /* fall back to USD defaults */ }
+      } catch { /* fall back to formatted defaults */ }
     })();
     return () => { cancelled = true; };
   }, []);
 
-  const creditPacks: CreditPack[] = defaultCreditPacks.map((p) => {
-    const sp = displayPrices?.creditPacks[p.key as keyof StripeDisplayPricesPayload["creditPacks"]];
-    if (!sp) return p;
-    return { ...p, price: sp.formatted, priceUsd: sp.amount };
-  });
+  const creditPacks: CreditPack[] = useMemo(() => {
+    const cur = displayPrices?.currency ?? clientCurrencyHint ?? "usd";
+    return defaultCreditPacks.map((p) => {
+      const sp = displayPrices?.creditPacks[p.key as keyof StripeDisplayPricesPayload["creditPacks"]];
+      if (sp) return { ...p, price: sp.formatted, priceUsd: sp.amount };
+      return { ...p, price: formatMoneyAmount(p.priceUsd, cur) };
+    });
+  }, [displayPrices, clientCurrencyHint]);
 
   // UI-only estimates for the pack marketing lines.
   // As requested: Sora 2 videos use 5 credits each; Nanobanana images use 0.5 credits each.
@@ -154,6 +168,8 @@ export default function CreditsPage() {
     }
   }
 
+  const displayCur = displayPrices?.currency ?? clientCurrencyHint ?? "usd";
+
   return (
     <StudioShell>
       <div className="relative min-w-0 overflow-x-hidden">
@@ -188,9 +204,6 @@ export default function CreditsPage() {
                 const topRow = packIndex < 3;
 
                 const oldPrice = savePercent ? Math.round(p.priceUsd / (1 - Number(savePercent) / 100)) : null;
-                const currencySymbol = displayPrices?.currency === "eur" ? "€" : "$";
-                const imgCount = upToAiImagesFromCredits(p.credits);
-                const vidCount = upToAiVideosFromCredits(p.credits);
 
                 return (
                   <div
@@ -243,7 +256,7 @@ export default function CreditsPage() {
                         <span className="text-3xl font-extrabold tabular-nums text-white">{p.price}</span>
                         {oldPrice != null && oldPrice > p.priceUsd ? (
                           <span className="text-sm font-semibold text-white/45 line-through">
-                            {currencySymbol}{oldPrice}
+                            {formatMoneyAmount(oldPrice, displayCur)}
                           </span>
                         ) : null}
                       </div>

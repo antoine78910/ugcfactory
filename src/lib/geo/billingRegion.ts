@@ -69,7 +69,91 @@ function normalizeIso2(raw: string | null | undefined): string | null {
 
 /** Geo country from edge / hosting headers (no client trust). */
 export function getBillingCountryFromHeaders(h: Headers): string | null {
-  return normalizeIso2(h.get("x-vercel-ip-country") || h.get("cf-ipcountry") || undefined);
+  return normalizeIso2(
+    h.get("x-vercel-ip-country") ||
+      h.get("cf-ipcountry") ||
+      h.get("cloudfront-viewer-country") ||
+      undefined,
+  );
+}
+
+/**
+ * When IP country headers are missing (local dev, some proxies), infer checkout
+ * currency from Accept-Language: `fr-FR`, `de-DE`, … → EUR; `en-US` → USD.
+ */
+export function billingCurrencyHintFromAcceptLanguage(h: Headers): BillingCheckoutCurrency | null {
+  const raw = h.get("accept-language");
+  if (!raw) return null;
+
+  const nonEuRegions = new Set([
+    "US",
+    "CA",
+    "AU",
+    "NZ",
+    "MX",
+    "BR",
+    "IN",
+    "JP",
+    "KR",
+    "SG",
+    "HK",
+    "TW",
+    "AR",
+    "CL",
+    "CO",
+    "ZA",
+  ]);
+
+  for (const part of raw.split(",")) {
+    const tag = part.trim().split(";")[0]?.trim().toLowerCase();
+    if (!tag) continue;
+    const segments = tag.split("-").filter(Boolean);
+    const lang = segments[0] ?? "";
+    if (segments.length >= 2) {
+      const region = segments[segments.length - 1]!.toUpperCase();
+      if (region.length === 2 && /^[A-Z]{2}$/.test(region)) {
+        if (nonEuRegions.has(region)) return "usd";
+        if (isEuropeEuCheckoutCountry(normalizeIso2(region))) return "eur";
+      }
+      continue;
+    }
+    // Language-only tag (e.g. `fr` without region)
+    const euPrimaryLang = new Set([
+      "fr",
+      "de",
+      "it",
+      "es",
+      "nl",
+      "pt",
+      "pl",
+      "sv",
+      "da",
+      "fi",
+      "no",
+      "nb",
+      "nn",
+      "is",
+      "el",
+      "cs",
+      "sk",
+      "hu",
+      "ro",
+      "bg",
+      "hr",
+      "sl",
+      "et",
+      "lv",
+      "lt",
+      "ga",
+      "mt",
+      "lb",
+      "eu",
+      "ca",
+    ]);
+    if (euPrimaryLang.has(lang)) return "eur";
+    if (lang === "en") return "usd";
+  }
+  return null;
 }
 
 export function isEuropeEuCheckoutCountry(iso2: string | null): boolean {
@@ -86,7 +170,12 @@ export function billingCheckoutCurrencyFromRequest(req: Request): BillingCheckou
   if (forced === "eur" || forced === "usd") return forced;
 
   const country = getBillingCountryFromHeaders(req.headers);
-  return isEuropeEuCheckoutCountry(country) ? "eur" : "usd";
+  if (isEuropeEuCheckoutCountry(country)) return "eur";
+
+  const langHint = billingCurrencyHintFromAcceptLanguage(req.headers);
+  if (langHint) return langHint;
+
+  return "usd";
 }
 
 export function normalizeStripeCurrency(c: string | null | undefined): BillingCheckoutCurrency {

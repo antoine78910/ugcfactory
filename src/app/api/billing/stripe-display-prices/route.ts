@@ -16,8 +16,20 @@ import {
 } from "@/lib/stripe/subscriptionPrices";
 
 function intlCurrency(currency: StripeDisplayPricesPayload["currency"]) {
-  const code = currency === "eur" ? "EUR" : "USD";
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: code });
+  if (currency === "eur") {
+    return new Intl.NumberFormat("fr-FR", {
+      style: "currency",
+      currency: "EUR",
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    });
+  }
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
 }
 
 function moneyFromUnitAmount(
@@ -62,25 +74,13 @@ function usdFallbackPayload(country: string | null): StripeDisplayPricesPayload 
   return { currency: "usd", country, creditPacks, subscriptions };
 }
 
-export async function GET(req: Request) {
-  const country = getBillingCountryFromHeaders(req.headers);
-  const currency = billingCheckoutCurrencyFromRequest(req);
-  const nf = intlCurrency(currency);
-
-  const secret = process.env.STRIPE_SECRET_KEY?.trim();
-  if (!secret) {
-    return NextResponse.json(usdFallbackPayload(country));
-  }
-
-  const stripe = new Stripe(secret, { apiVersion: "2026-02-25.clover" });
-
+function collectStripeJobs(currency: StripeDisplayPricesPayload["currency"]) {
   type Job = { kind: "pack"; key: (typeof CREDIT_PACK_KEYS)[number]; id: string } | {
     kind: "sub";
     planId: SubscriptionPlanId;
     billing: "monthly" | "yearly";
     id: string;
   };
-
   const jobs: Job[] = [];
   for (const key of CREDIT_PACK_KEYS) {
     const id = getCreditPackStripePriceId(key, currency);
@@ -92,10 +92,30 @@ export async function GET(req: Request) {
     const yid = getSubscriptionStripePriceId(planId, "yearly", currency);
     if (yid) jobs.push({ kind: "sub", planId, billing: "yearly", id: yid });
   }
+  return jobs;
+}
 
+export async function GET(req: Request) {
+  const country = getBillingCountryFromHeaders(req.headers);
+  let currency = billingCheckoutCurrencyFromRequest(req);
+
+  const secret = process.env.STRIPE_SECRET_KEY?.trim();
+  if (!secret) {
+    return NextResponse.json(usdFallbackPayload(country));
+  }
+
+  const stripe = new Stripe(secret, { apiVersion: "2026-02-25.clover" });
+
+  let jobs = collectStripeJobs(currency);
+  if (jobs.length === 0 && currency === "eur") {
+    currency = "usd";
+    jobs = collectStripeJobs(currency);
+  }
   if (jobs.length === 0) {
     return NextResponse.json(usdFallbackPayload(country));
   }
+
+  const nf = intlCurrency(currency);
 
   try {
     const prices = await Promise.all(jobs.map((j) => stripe.prices.retrieve(j.id)));
