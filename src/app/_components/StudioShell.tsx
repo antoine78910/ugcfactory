@@ -66,11 +66,17 @@ type Props = {
 
 type CreateNavEntry =
   | { kind: "route"; id: StudioNavSection; label: string; icon: LucideIcon }
-  | { kind: "soon"; id: string; label: string; icon: LucideIcon };
+  | { kind: "custom-link"; id: string; href: string; label: string; icon: LucideIcon };
 
 const CREATE_NAV: CreateNavEntry[] = [
   { kind: "route", id: "link_to_ad", label: "Link to Ad", icon: Link2 },
-  { kind: "soon", id: "workflow", label: "Workflow", icon: GitBranch },
+  {
+    kind: "custom-link",
+    id: "workflow",
+    href: "/workflow",
+    label: "Workflow",
+    icon: GitBranch,
+  },
   { kind: "route", id: "avatar", label: "Avatar", icon: UserRound },
   { kind: "route", id: "ad_clone", label: "Translate", icon: Copy },
   { kind: "route", id: "voice", label: "Voice", icon: Mic },
@@ -79,15 +85,6 @@ const CREATE_NAV: CreateNavEntry[] = [
   { kind: "route", id: "video", label: "Video", icon: Video },
   { kind: "route", id: "upscale", label: "Upscale", icon: Maximize2 },
 ];
-
-/** Matches inactive `navButtonClass` footprint (no extra min-height). */
-function soonRowClass(): string {
-  return [
-    "flex w-full min-w-0 flex-row items-center justify-between gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-left text-[15px] font-semibold leading-snug",
-    "shadow-[0_0_12px_rgba(139,92,246,0.08)]",
-    "cursor-not-allowed select-none pointer-events-none",
-  ].join(" ");
-}
 
 const PROJECTS_NAV: { id: StudioNavSection; label: string; icon: LucideIcon } = {
   id: "projects",
@@ -160,6 +157,11 @@ function StudioShellInner({
     if (isStudioShell) return sectionFromPathname(pathname);
     return "link_to_ad";
   }, [controlled, studioSection, isStudioShell, pathname]);
+
+  const onWorkflowRoute = useMemo(() => {
+    const p = pathname.replace(/^\/app(?=\/|$)/, "") || pathname;
+    return p === "/workflow" || p.startsWith("/workflow/");
+  }, [pathname]);
 
   useEffect(() => {
     void (async () => {
@@ -291,46 +293,35 @@ function StudioShellInner({
               <div className={cn("space-y-2", !navCollapsed && "mt-2")}>
                 {CREATE_NAV.map((entry) => {
                   const NavIcon = entry.icon;
-                  if (entry.kind === "soon") {
+                  if (entry.kind === "custom-link") {
+                    const { href, label, id: linkId } = entry;
+                    const active =
+                      pathname === href ||
+                      pathname.startsWith(`${href}/`) ||
+                      pathname === `/app${href}` ||
+                      pathname.startsWith(`/app${href}/`);
+                    const content = (
+                      <span className={cn("flex min-w-0 items-center gap-2.5", navCollapsed && "justify-center")}>
+                        <NavIcon
+                          className={`h-5 w-5 shrink-0 ${navRowIconClass(active)}`}
+                          aria-hidden
+                        />
+                        <span className={cn("min-w-0 truncate", navCollapsed && "sr-only")}>{label}</span>
+                      </span>
+                    );
                     return (
-                      <div
-                        key={entry.id}
-                        className={cn(
-                          soonRowClass(),
-                          navCollapsed && "!justify-center gap-0 px-2.5 py-3.5",
-                        )}
-                        title={`${entry.label} — coming soon`}
-                        aria-disabled="true"
+                      <Link
+                        key={linkId}
+                        href={href}
+                        className={cn(navButtonClass(active), navCollapsed && "px-2.5 py-3.5")}
+                        title={label}
                       >
-                        <span
-                          className={cn(
-                            "flex min-w-0 flex-1 items-center gap-2.5",
-                            navCollapsed && "w-auto flex-none justify-center",
-                          )}
-                        >
-                          <NavIcon className="h-5 w-5 shrink-0 text-white/30" aria-hidden />
-                          <span
-                            className={cn(
-                              "min-w-0 truncate text-[15px] font-semibold text-white/40",
-                              navCollapsed && "sr-only",
-                            )}
-                          >
-                            {entry.label}
-                          </span>
-                        </span>
-                        <span
-                          className={cn(
-                            "shrink-0 rounded-md border border-white/15 bg-white/[0.06] px-1.5 py-0.5 text-[9px] font-bold uppercase leading-none tracking-wide text-white/50",
-                            navCollapsed && "sr-only",
-                          )}
-                        >
-                          Soon
-                        </span>
-                      </div>
+                        {content}
+                      </Link>
                     );
                   }
                   const { id, label } = entry;
-                  const active = activeSection === id;
+                  const active = !onWorkflowRoute && activeSection === id;
                   if (controlled) {
                     return (
                       <button
@@ -381,7 +372,7 @@ function StudioShellInner({
                   <button
                     type="button"
                     className={cn(
-                      navButtonClass(activeSection === PROJECTS_NAV.id),
+                      navButtonClass(!onWorkflowRoute && activeSection === PROJECTS_NAV.id),
                       navCollapsed && "px-2.5 py-3.5",
                     )}
                     title={PROJECTS_NAV.label}
@@ -389,7 +380,7 @@ function StudioShellInner({
                   >
                     <span className={cn("flex min-w-0 items-center gap-2.5", navCollapsed && "justify-center")}>
                       <ProjectsNavIcon
-                        className={`h-5 w-5 shrink-0 ${navRowIconClass(activeSection === PROJECTS_NAV.id)}`}
+                        className={`h-5 w-5 shrink-0 ${navRowIconClass(!onWorkflowRoute && activeSection === PROJECTS_NAV.id)}`}
                         aria-hidden
                       />
                       <span className={cn("min-w-0 truncate", navCollapsed && "sr-only")}>
@@ -401,14 +392,14 @@ function StudioShellInner({
                   <Link
                     href={sectionHref(PROJECTS_NAV.id, studioProjectId ?? null)}
                     className={cn(
-                      navButtonClass(activeSection === PROJECTS_NAV.id),
+                      navButtonClass(!onWorkflowRoute && activeSection === PROJECTS_NAV.id),
                       navCollapsed && "px-2.5 py-3.5",
                     )}
                     title={PROJECTS_NAV.label}
                   >
                     <span className={cn("flex min-w-0 items-center gap-2.5", navCollapsed && "justify-center")}>
                       <ProjectsNavIcon
-                        className={`h-5 w-5 shrink-0 ${navRowIconClass(activeSection === PROJECTS_NAV.id)}`}
+                        className={`h-5 w-5 shrink-0 ${navRowIconClass(!onWorkflowRoute && activeSection === PROJECTS_NAV.id)}`}
                         aria-hidden
                       />
                       <span className={cn("min-w-0 truncate", navCollapsed && "sr-only")}>

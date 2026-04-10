@@ -22,8 +22,19 @@ export function isStudioVideoTabKindQuery(requestedKinds: string[]): boolean {
   return requestedKinds.length === 1 && requestedKinds[0] === "studio_video";
 }
 
-const LEGACY_LTA_LABEL_PREFIX = "link to ad";
 const LEGACY_TRANSLATE_LABEL_PREFIX = "traduction";
+
+/**
+ * True only for **product** Link to Ad job titles (e.g. `Link to Ad · Angle 1 · image`),
+ * not user-written Studio prompts that happen to start with "link to ad …".
+ * Matching only `link to ad` + delimiter avoids hiding legitimate Create → Video rows.
+ */
+function labelLooksLikeLegacyLinkToAdProductEntry(label: string): boolean {
+  const lab = label.trim().toLowerCase();
+  if (!lab.startsWith("link to ad")) return false;
+  const after = lab.slice("link to ad".length).trimStart();
+  return after.startsWith("·") || after.startsWith("•");
+}
 
 /**
  * Rows created before dedicated L2A kinds still use `studio_image` / `studio_video` with a "Link to Ad …" label.
@@ -40,7 +51,7 @@ export function filterLegacyLinkToAdFromTabRows(
   return rows.filter((r) => {
     const lab = (r.label ?? "").trim().toLowerCase();
     if (imageTab || videoTab) {
-      if (lab.startsWith(LEGACY_LTA_LABEL_PREFIX)) {
+      if (labelLooksLikeLegacyLinkToAdProductEntry(r.label ?? "")) {
         if (imageTab && r.kind === "studio_image") return false;
         if (videoTab && r.kind === "studio_video") return false;
       }

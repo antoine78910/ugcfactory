@@ -88,5 +88,6 @@ export function isStudioShellPath(pathname: string): boolean {
   const first = stripped.split("/").filter(Boolean)[0] ?? "";
   if (!first) return true;
   if (first === "watermark") return true;
+  if (first === "workflow") return true;
   return first in SLUG_TO_SECTION;
 }
