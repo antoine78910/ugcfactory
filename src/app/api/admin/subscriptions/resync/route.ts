@@ -33,8 +33,7 @@ export async function GET(req: Request) {
 
   // Resolve user_id from email
   const { data: usersData } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
-  const users = (usersData?.users ?? []) as Array<{ id: string; email?: string | null }>;
-  const user = users.find((u) => u.email?.toLowerCase() === email);
+  const user = usersData?.users?.find((u) => u.email?.toLowerCase() === email);
   if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
   const { data: row } = await admin
@@ -100,8 +99,7 @@ export async function POST(req: Request) {
     dbRow = data as Record<string, unknown> | null;
   } else if (userEmail) {
     const { data: usersData } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
-    const users = (usersData?.users ?? []) as Array<{ id: string; email?: string | null }>;
-    const user = users.find((u) => u.email?.toLowerCase() === userEmail);
+    const user = usersData?.users?.find((u) => u.email?.toLowerCase() === userEmail);
     if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
     const { data } = await admin

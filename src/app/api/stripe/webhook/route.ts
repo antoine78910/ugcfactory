@@ -77,8 +77,7 @@ async function resolveEmailFromStripeCustomer(stripe: Stripe, customerId: string
   try {
     const c = await stripe.customers.retrieve(customerId);
     if (c.deleted) return null;
-    const active = c as Stripe.Customer;
-    const email = typeof active.email === "string" ? active.email.trim().toLowerCase() : "";
+    const email = typeof c.email === "string" ? c.email.trim().toLowerCase() : "";
     return email || null;
   } catch {
     return null;

@@ -23,7 +23,7 @@ export async function POST(req: Request) {
     videoDurationSeconds: body?.videoDurationSeconds,
   });
 
-  if (result.ok === false) {
+  if (!result.ok) {
     return NextResponse.json(
       { error: result.error, ...(result.runId ? { runId: result.runId } : {}) },
       { status: 502 },

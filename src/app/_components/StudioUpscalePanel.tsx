@@ -78,7 +78,7 @@ const UPSCALE_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
     icon: "google",
     resolution: "Up to 4x",
     durationRange: "1s–10min",
-    searchText: "topaz video upscale provider",
+    searchText: "topaz video upscale kie",
   },
   {
     id: "upscale/image",
@@ -100,9 +100,9 @@ export default function StudioUpscalePanel() {
   const [imageUrl, setImageUrl] = useState("");
   // Video duration is only known after metadata is loaded; keep it null until then.
   const [durationSec, setDurationSec] = useState<number | null>(null);
-  /** Video Topaz: 1× / 2× / 4× (provider `topaz/video-upscale`). */
+  /** Video Topaz: 1× / 2× / 4× (Kie `topaz/video-upscale`). */
   const [videoUpscaleFactor, setVideoUpscaleFactor] = useState<"1" | "2" | "4">("2");
-  /** Image Topaz: provider factors 2 / 4 / 8 → 2K / 4K / 8K tiers (`topaz/image-upscale`). */
+  /** Image Topaz: Kie factors 2 / 4 / 8 → 2K / 4K / 8K tiers (`topaz/image-upscale`). */
   const [imageUpscaleTier, setImageUpscaleTier] = useState<"2" | "4" | "8">("2");
   /** Preview / dropzone framing only (short-form default); does not change Topaz output. */
   const [videoAspectPreset, setVideoAspectPreset] = useState<VideoAspectPreset>("9:16");

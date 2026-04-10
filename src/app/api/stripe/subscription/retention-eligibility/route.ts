@@ -30,7 +30,7 @@ export async function GET() {
     if (customer.deleted) {
       return NextResponse.json({ eligible: false });
     }
-    const used = hasUsedRetentionDiscount((customer as Stripe.Customer).metadata);
+    const used = hasUsedRetentionDiscount(customer.metadata);
     return NextResponse.json({ eligible: !used });
   } catch {
     return NextResponse.json({ eligible: false });
