@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Gift, Loader2, Sparkles, XCircle } from "lucide-react";
 import Link from "next/link";
@@ -194,7 +194,7 @@ function GlowRing() {
 
 /* ---------- main page ---------- */
 
-export default function RedeemPage() {
+function RedeemPageContent() {
   const router = useRouter();
   const params = useSearchParams();
   const token = params.get("token")?.trim() ?? "";
@@ -421,5 +421,24 @@ export default function RedeemPage() {
         }
       `}</style>
     </div>
+  );
+}
+
+function RedeemPageFallback() {
+  return (
+    <div className="flex min-h-[100dvh] items-center justify-center bg-[#06070d] px-4 text-white">
+      <div className="w-full max-w-sm rounded-2xl border border-white/[0.08] bg-[#0d0d12] p-8 text-center shadow-[0_24px_64px_rgba(0,0,0,0.5)]">
+        <Loader2 className="mx-auto h-10 w-10 animate-spin text-violet-400" />
+        <p className="mt-4 text-[15px] font-semibold text-white/80">Loading…</p>
+      </div>
+    </div>
+  );
+}
+
+export default function RedeemPage() {
+  return (
+    <Suspense fallback={<RedeemPageFallback />}>
+      <RedeemPageContent />
+    </Suspense>
   );
 }
