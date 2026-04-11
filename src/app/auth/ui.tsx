@@ -22,6 +22,11 @@ export default function AuthClient({ mode = "signin", redirectTo }: { mode?: Aut
   const supabaseReady = useBrowserSupabaseReady();
   const supabase = useSupabaseBrowserClient();
 
+  const redirectQuery =
+    redirectTo && redirectTo.startsWith("/") && !redirectTo.startsWith("//")
+      ? `?redirect=${encodeURIComponent(redirectTo)}`
+      : "";
+
   const [firstName, setFirstName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -89,11 +94,20 @@ export default function AuthClient({ mode = "signin", redirectTo }: { mode?: Aut
         return;
       }
       const cleanEmail = email.trim();
+      const fromProps = redirectTo?.trim();
+      const pending =
+        typeof window !== "undefined" ? sessionStorage.getItem("redeem_token_pending") : null;
+      const resumePath =
+        fromProps && fromProps.startsWith("/") && !fromProps.startsWith("//")
+          ? fromProps
+          : pending
+            ? `/redeem?token=${encodeURIComponent(pending)}`
+            : "";
       const { error } = await client.auth.signUp({
         email: email.trim(),
         password,
         options: {
-          emailRedirectTo: getAuthCallbackUrl(),
+          emailRedirectTo: getAuthCallbackUrl(resumePath || undefined),
           data: { first_name: cleanFirst },
         },
       });
@@ -121,7 +135,7 @@ export default function AuthClient({ mode = "signin", redirectTo }: { mode?: Aut
     try {
       const { error } = await client.auth.signInWithOtp({
         email: email.trim(),
-        options: { emailRedirectTo: getAuthCallbackUrl() },
+        options: { emailRedirectTo: getAuthCallbackUrl(redirectTo) },
       });
       if (error) throw error;
       toast.success("Magic link sent", { description: "Check your email inbox." });
@@ -270,7 +284,7 @@ export default function AuthClient({ mode = "signin", redirectTo }: { mode?: Aut
                   try {
                     const { data, error } = await client.auth.signInWithOAuth({
                       provider: "google",
-                      options: { redirectTo: getAuthCallbackUrl() },
+                      options: { redirectTo: getAuthCallbackUrl(redirectTo) },
                     });
                     if (error) throw error;
                     if (data.url) {
@@ -303,7 +317,7 @@ export default function AuthClient({ mode = "signin", redirectTo }: { mode?: Aut
             <p className="mt-6 text-center text-sm text-white/50">
               {isSignIn ? "No account yet?" : "Already have an account?"}{" "}
               <Link
-                href={isSignIn ? "/signup" : "/signin"}
+                href={isSignIn ? `/signup${redirectQuery}` : `/signin${redirectQuery}`}
                 className="text-violet-400 hover:text-violet-300"
               >
                 {isSignIn ? "Create one" : "Sign in"}

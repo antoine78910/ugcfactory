@@ -3,6 +3,30 @@ import { createServerClient } from "@supabase/ssr";
 import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/supabase/env";
 import { brevoUpsertContact, brevoTrackEvent } from "@/lib/brevo";
 
+/** Same-origin path + query only; prevents open redirects. */
+function resolveSafeNextRedirect(reqUrl: URL): URL {
+  const fallback = new URL("/", reqUrl.origin);
+  const raw = reqUrl.searchParams.get("next");
+  if (!raw?.trim()) return fallback;
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(raw.trim());
+  } catch {
+    return fallback;
+  }
+  const t = decoded.trim();
+  if (!t.startsWith("/") || t.startsWith("//") || t.includes("://")) {
+    return fallback;
+  }
+  try {
+    const target = new URL(t, reqUrl.origin);
+    if (target.origin !== reqUrl.origin) return fallback;
+    return target;
+  } catch {
+    return fallback;
+  }
+}
+
 export async function GET(req: NextRequest) {
   const url = req.nextUrl;
   const code = url.searchParams.get("code");
@@ -31,6 +55,7 @@ export async function GET(req: NextRequest) {
 
   const homeUrl = new URL("/", url.origin);
   const signinUrl = new URL("/signin", url.origin);
+  const postAuthUrl = resolveSafeNextRedirect(url);
 
   /**
    * Session cookies from `exchangeCodeForSession` MUST be set on the same
@@ -39,7 +64,7 @@ export async function GET(req: NextRequest) {
    * and `set(cookie)` drops path/httpOnly/sameSite — so the browser never
    * stores the session and the next request hits `/` unauthenticated → /signin.
    */
-  let redirectResponse = NextResponse.redirect(homeUrl, 302);
+  let redirectResponse = NextResponse.redirect(postAuthUrl, 302);
 
   console.log("[auth/callback] incoming", {
     host: req.headers.get("host"),

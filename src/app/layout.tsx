@@ -7,6 +7,7 @@ import { BrowserSupabaseProvider } from "@/lib/supabase/BrowserSupabaseProvider"
 import { Toaster } from "@/components/ui/sonner";
 import HeyoInit from "@/app/_components/HeyoInit";
 import ClarityInit from "@/app/_components/ClarityInit";
+import { RedeemTokenGuard } from "@/app/_components/RedeemTokenGuard";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -73,6 +74,7 @@ export default function RootLayout({
         />
         <BrowserSupabaseProvider>
           <CreditsPlanProvider>
+            <RedeemTokenGuard />
             <HeyoInit />
             <ClarityInit />
             {children}

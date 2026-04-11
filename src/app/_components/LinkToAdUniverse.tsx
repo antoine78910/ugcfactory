@@ -1052,8 +1052,8 @@ export default function LinkToAdUniverse({
       .then(({ data }) => _setUserEmail(data.user?.email ?? null))
       .catch(() => {});
   }, [supabaseClient]);
-  // 30s Link-to-Ad is enabled for testing (renders as two chained 15s clips).
-  const _30sUnlocked = true;
+  /** 30s = two chained 15s clips — disabled in UI until launch (“Soon”). */
+  const _30sUnlocked = false;
   const DEMO_EMAILS = new Set(["anto.delbos@gmail.com", "app@youry.com"]);
   const isDemoUser = Boolean(_userEmail && DEMO_EMAILS.has(_userEmail.toLowerCase()));
   const [hideCredits, setHideCredits] = useState(false);
@@ -1201,6 +1201,13 @@ export default function LinkToAdUniverse({
     | "ready"
     | "error"
   >("idle");
+
+  useEffect(() => {
+    if (_30sUnlocked) return;
+    if (ltaVideoDurationLocked) return;
+    if (videoDuration !== 30) return;
+    setVideoDuration(15);
+  }, [_30sUnlocked, ltaVideoDurationLocked, videoDuration]);
 
   /** Real checklist step 0–4 during `runInitialPipeline` from the browser (no fake timer). */
   const [serverPipelineStepIndex, setServerPipelineStepIndex] = useState<number | null>(null);
@@ -4878,19 +4885,26 @@ export default function LinkToAdUniverse({
                           <button
                             key={d}
                             type="button"
-                            onClick={() => { if (!locked30) setVideoDuration(d); }}
+                            onClick={() => {
+                              if (!locked30) setVideoDuration(d);
+                            }}
                             disabled={locked30}
+                            aria-disabled={locked30}
                             className={cn(
-                              "rounded-md px-3 py-1.5 text-xs font-semibold transition relative",
-                              videoDuration === d
-                                ? "bg-violet-500/15 text-white border border-violet-400/60"
+                              "relative inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition",
+                              videoDuration === d && !locked30
+                                ? "border border-violet-400/60 bg-violet-500/15 text-white"
                                 : locked30
-                                  ? "bg-black/20 text-white/25 border border-white/5 cursor-not-allowed"
-                                  : "bg-black/20 text-white/65 hover:border-white/20 border border-white/10",
+                                  ? "pointer-events-none cursor-not-allowed border border-white/[0.07] bg-white/[0.02] text-white/28 shadow-none"
+                                  : "border border-white/10 bg-black/20 text-white/65 hover:border-white/20",
                             )}
                           >
-                            {d}s
-                            {locked30 && <span className="ml-1 text-[9px] uppercase tracking-wider text-white/30">soon</span>}
+                            <span>{d}s</span>
+                            {locked30 ? (
+                              <span className="shrink-0 rounded-md border border-white/10 bg-white/[0.05] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white/38">
+                                Soon
+                              </span>
+                            ) : null}
                           </button>
                         );
                       })}
@@ -5108,19 +5122,22 @@ export default function LinkToAdUniverse({
                         if (!locked30) setVideoDuration(d);
                       }}
                       disabled={isWorking || locked30}
+                      aria-disabled={isWorking || locked30}
                       className={cn(
-                        "rounded-md px-3 py-1.5 text-xs font-semibold transition relative",
-                        videoDuration === d
-                          ? "bg-violet-500/15 text-white border border-violet-400/60"
+                        "relative inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition",
+                        videoDuration === d && !locked30
+                          ? "border border-violet-400/60 bg-violet-500/15 text-white"
                           : locked30
-                            ? "bg-black/20 text-white/25 border border-white/5 cursor-not-allowed"
-                            : "bg-black/20 text-white/65 hover:border-white/20 border border-white/10",
+                            ? "pointer-events-none cursor-not-allowed border border-white/[0.07] bg-white/[0.02] text-white/28 shadow-none"
+                            : "border border-white/10 bg-black/20 text-white/65 hover:border-white/20",
                       )}
                     >
-                      {d}s
-                      {locked30 && (
-                        <span className="ml-1 text-[9px] uppercase tracking-wider text-white/30">soon</span>
-                      )}
+                      <span>{d}s</span>
+                      {locked30 ? (
+                        <span className="shrink-0 rounded-md border border-white/10 bg-white/[0.05] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white/38">
+                          Soon
+                        </span>
+                      ) : null}
                     </button>
                   );
                 })}

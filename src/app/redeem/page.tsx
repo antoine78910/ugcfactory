@@ -10,7 +10,7 @@ import {
 } from "@/lib/supabase/BrowserSupabaseProvider";
 import { dispatchAuthoritativeCreditBalance } from "@/app/_components/CreditsPlanContext";
 
-type Status = "loading" | "success" | "error" | "no-token" | "auth-redirect";
+type Status = "loading" | "success" | "error" | "no-token";
 
 /* ---------- confetti / particles canvas ---------- */
 
@@ -228,7 +228,9 @@ function RedeemPageContent() {
       return;
     }
 
-    if (pending) sessionStorage.removeItem("redeem_token_pending");
+    if (token) {
+      sessionStorage.removeItem("redeem_token_pending");
+    }
 
     if (!token && effectiveToken) {
       router.replace(`/redeem?token=${encodeURIComponent(effectiveToken)}`);
@@ -242,11 +244,12 @@ function RedeemPageContent() {
       const { data: { user } } = await supabase.auth.getUser();
 
       if (!user) {
+        const secret = token;
         if (typeof window !== "undefined") {
-          sessionStorage.setItem("redeem_token_pending", token);
+          sessionStorage.setItem("redeem_token_pending", secret);
+          const back = `/redeem?token=${encodeURIComponent(secret)}`;
+          router.replace(`/signin?redirect=${encodeURIComponent(back)}`);
         }
-        setStatus("auth-redirect");
-        setTimeout(() => router.push("/signin"), 1500);
         return;
       }
 
@@ -318,22 +321,6 @@ function RedeemPageContent() {
         </div>
       )}
 
-      {/* ---- Auth redirect ---- */}
-      {status === "auth-redirect" && (
-        <div className="animate-in fade-in zoom-in-95 duration-500 w-full max-w-sm rounded-2xl border border-white/[0.08] bg-[#0d0d12] p-8 text-center shadow-[0_24px_64px_rgba(0,0,0,0.5)]">
-          <div className="relative mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-violet-500/10">
-            <Gift className="h-8 w-8 text-violet-400" />
-            <div className="absolute inset-0 animate-ping rounded-full border-2 border-violet-400/30" />
-          </div>
-          <p className="mt-5 text-[16px] font-bold text-white/90">
-            You have a gift waiting!
-          </p>
-          <p className="mt-2 text-[13px] text-white/50">
-            Sign in to claim your credits…
-          </p>
-        </div>
-      )}
-
       {/* ---- Success ---- */}
       {status === "success" && (
         <div
@@ -377,7 +364,7 @@ function RedeemPageContent() {
           </p>
 
           <p className="mx-auto mt-4 max-w-[280px] text-[13px] leading-relaxed text-white/45">
-            Ready to use — they expire in 3 months. Go create something amazing.
+            Ready to use, they expire in 3 months. Go create something amazing.
           </p>
 
           {/* CTA */}

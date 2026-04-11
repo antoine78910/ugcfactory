@@ -49,8 +49,8 @@ export {
 export type { LinkToAdVideoModelId, LinkToAdSeedanceSpeed };
 
 export const LINK_TO_AD_DEFAULT_VIDEO_MODEL: LinkToAdVideoModelId = "seedance";
-/** Default Link to Ad clip length (UI + pipeline when not persisted). Product default: 30s (two 15s parts). */
-export const LINK_TO_AD_DEFAULT_VIDEO_DURATION_SEC = 30;
+/** Default Link to Ad clip length (UI + pipeline when not persisted). 30s is gated in UI (“Soon”). */
+export const LINK_TO_AD_DEFAULT_VIDEO_DURATION_SEC = 15;
 
 export function creditsLinkToAdVideoFromImage(
   model: LinkToAdVideoModelId,
