@@ -239,6 +239,15 @@ export default function AdminPage() {
   const [creditError, setCreditError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  // Create token form
+  const [createLabel, setCreateLabel] = useState("");
+  const [createAmount, setCreateAmount] = useState("100");
+  const [createMaxUses, setCreateMaxUses] = useState("1");
+  const [createExpiry, setCreateExpiry] = useState("30");
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [newLink, setNewLink] = useState<string | null>(null);
+
   const perPage = 50;
   const creditLogPerPage = 50;
 
@@ -339,6 +348,36 @@ export default function AdminPage() {
       /* ignore */
     }
   }, []);
+
+  const createToken = useCallback(async () => {
+    setCreating(true);
+    setCreateError(null);
+    setNewLink(null);
+    try {
+      const amount = Math.round(Number(createAmount) || 0);
+      const maxUses = createMaxUses === "" ? null : Math.max(1, Math.round(Number(createMaxUses) || 1));
+      const expiresInDays = createExpiry === "" ? null : Math.max(1, Math.round(Number(createExpiry) || 30));
+      const body: Record<string, unknown> = { amount };
+      if (createLabel.trim()) body.label = createLabel.trim();
+      if (maxUses !== null) body.maxUses = maxUses;
+      if (expiresInDays !== null) body.expiresInDays = expiresInDays;
+      const r = await fetch("/api/credits/redeem-tokens", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const d = (await r.json()) as { token?: { url: string }; error?: string };
+      if (!r.ok || !d.token) throw new Error(d.error ?? "Failed to create token");
+      setNewLink(d.token.url);
+      await navigator.clipboard.writeText(d.token.url).catch(() => {});
+      void fetchCreditRedeems();
+    } catch (e) {
+      setCreateError(e instanceof Error ? e.message : "Error");
+    } finally {
+      setCreating(false);
+    }
+  }, [createAmount, createLabel, createMaxUses, createExpiry, fetchCreditRedeems]);
 
   const uniqueKinds = useMemo(() => {
     if (!stats?.kindBreakdown) return [];
@@ -516,6 +555,87 @@ export default function AdminPage() {
           </div>
         ) : tab === "credits" ? (
           <div className="mt-6 space-y-8">
+            {/* ── Create token form ── */}
+            <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-5">
+              <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold text-white/90">
+                <Gift className="h-4 w-4 text-violet-400" />
+                Create a gift link
+              </h2>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Label</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Welcome gift"
+                    value={createLabel}
+                    onChange={(e) => setCreateLabel(e.target.value)}
+                    className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-xs text-white placeholder-white/30 outline-none focus:border-violet-500/60"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Credits</label>
+                  <input
+                    type="number"
+                    min={1}
+                    placeholder="100"
+                    value={createAmount}
+                    onChange={(e) => setCreateAmount(e.target.value)}
+                    className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-xs text-white placeholder-white/30 outline-none focus:border-violet-500/60"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Max uses</label>
+                  <input
+                    type="number"
+                    min={1}
+                    placeholder="1"
+                    value={createMaxUses}
+                    onChange={(e) => setCreateMaxUses(e.target.value)}
+                    className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-xs text-white placeholder-white/30 outline-none focus:border-violet-500/60"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Expires (days)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    placeholder="30"
+                    value={createExpiry}
+                    onChange={(e) => setCreateExpiry(e.target.value)}
+                    className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-xs text-white placeholder-white/30 outline-none focus:border-violet-500/60"
+                  />
+                </div>
+              </div>
+              <div className="mt-4 flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => void createToken()}
+                  disabled={creating || !createAmount}
+                  className="flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-violet-500 disabled:opacity-50"
+                >
+                  {creating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Gift className="h-3.5 w-3.5" />}
+                  {creating ? "Creating…" : "Generate link"}
+                </button>
+                {newLink && (
+                  <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2">
+                    <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-emerald-300">{newLink}</span>
+                    <button
+                      type="button"
+                      onClick={() => { void navigator.clipboard.writeText(newLink); setCopiedId("new"); window.setTimeout(() => setCopiedId(null), 2000); }}
+                      className="shrink-0 text-emerald-400 hover:text-white"
+                      title="Copy"
+                    >
+                      {copiedId === "new" ? <span className="text-[10px]">Copied!</span> : <Copy className="h-3.5 w-3.5" />}
+                    </button>
+                  </div>
+                )}
+                {createError && (
+                  <span className="text-[11px] text-red-400">{createError}</span>
+                )}
+              </div>
+            </div>
+
+            {/* ── Token list ── */}
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-sm font-semibold text-white/80">Gift &amp; promo tokens</h2>
               <button
