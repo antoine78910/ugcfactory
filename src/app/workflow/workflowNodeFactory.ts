@@ -12,6 +12,8 @@ export type WorkflowDragNodeKind = AdAssetNodeType["data"]["kind"];
 
 export type BuildAdAssetNodeOptions = {
   label?: string;
+  /** Initial prompt on the node (e.g. template pipelines). */
+  prompt?: string;
   /** width/height — when set, card preview uses this exact shape. */
   intrinsicAspect?: number;
   referencePreviewUrl?: string;
@@ -69,6 +71,8 @@ export function buildAdAssetNode(
     label: options?.label ?? labels[kind],
     ...genDefaults,
   };
+
+  if (options?.prompt !== undefined) data.prompt = options.prompt;
 
   if (options?.intrinsicAspect != null && Number.isFinite(options.intrinsicAspect) && options.intrinsicAspect > 0) {
     data.intrinsicAspect = options.intrinsicAspect;

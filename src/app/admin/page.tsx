@@ -7,7 +7,9 @@ import {
   ArrowLeft,
   ChevronLeft,
   ChevronRight,
+  Copy,
   ExternalLink,
+  Gift,
   Image as ImageIcon,
   Loader2,
   Search,
@@ -18,7 +20,40 @@ import {
 import { cn } from "@/lib/utils";
 import { ledgerTicksToDisplayCredits } from "@/lib/creditLedgerTicks";
 
-type Tab = "generations" | "runs";
+type Tab = "generations" | "runs" | "credits";
+
+type CreditRedeemTokenRow = {
+  id: string;
+  secret: string;
+  label: string | null;
+  amount: number;
+  max_uses: number | null;
+  used_count: number;
+  expires_at: string | null;
+  created_at: string;
+  active: boolean;
+};
+
+type CreditRedeemLogRow = {
+  id: string;
+  user_id: string;
+  email: string;
+  credits: number;
+  redeemed_at: string;
+  token_id: string;
+  token_label: string | null;
+  token_secret_prefix: string | null;
+  token_offer_amount: number | null;
+};
+
+type CreditRedeemStats = {
+  tokensTotal: number;
+  tokensActive: number;
+  tokensExhausted: number;
+  redemptionsTotal: number;
+  creditsIssuedViaLinks: number;
+  creditsOnLogPage: number;
+};
 
 type GenerationRow = {
   id: string;
@@ -194,7 +229,18 @@ export default function AdminPage() {
   const [expandedGenId, setExpandedGenId] = useState<string | null>(null);
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
 
+  // Credit redeem audit
+  const [creditTokens, setCreditTokens] = useState<CreditRedeemTokenRow[]>([]);
+  const [creditLogs, setCreditLogs] = useState<CreditRedeemLogRow[]>([]);
+  const [creditStats, setCreditStats] = useState<CreditRedeemStats | null>(null);
+  const [creditLogTotal, setCreditLogTotal] = useState(0);
+  const [creditLogPage, setCreditLogPage] = useState(1);
+  const [creditLoading, setCreditLoading] = useState(false);
+  const [creditError, setCreditError] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
   const perPage = 50;
+  const creditLogPerPage = 50;
 
   useEffect(() => {
     fetch("/api/admin/stats")
@@ -244,13 +290,55 @@ export default function AdminPage() {
     }
   }, [runPage, runSearch]);
 
+  const fetchCreditRedeems = useCallback(async () => {
+    setCreditLoading(true);
+    setCreditError(null);
+    try {
+      const params = new URLSearchParams({
+        log_page: String(creditLogPage),
+        log_per_page: String(creditLogPerPage),
+      });
+      const r = await fetch(`/api/admin/credit-redeems?${params}`);
+      const d = (await r.json()) as {
+        error?: string;
+        tokens?: CreditRedeemTokenRow[];
+        logs?: CreditRedeemLogRow[];
+        stats?: CreditRedeemStats;
+        logTotal?: number;
+      };
+      if (!r.ok) throw new Error(d.error ?? `HTTP ${r.status}`);
+      setCreditTokens(d.tokens ?? []);
+      setCreditLogs(d.logs ?? []);
+      setCreditStats(d.stats ?? null);
+      setCreditLogTotal(d.logTotal ?? 0);
+    } catch (e) {
+      setCreditError(e instanceof Error ? e.message : "Failed to load credit redeems");
+    } finally {
+      setCreditLoading(false);
+    }
+  }, [creditLogPage, creditLogPerPage]);
+
   useEffect(() => {
     if (tab === "generations") void fetchGenerations();
-    else void fetchRuns();
-  }, [tab, fetchGenerations, fetchRuns]);
+    else if (tab === "runs") void fetchRuns();
+    else void fetchCreditRedeems();
+  }, [tab, fetchGenerations, fetchRuns, fetchCreditRedeems]);
 
   const genTotalPages = Math.max(1, Math.ceil(genTotal / perPage));
   const runTotalPages = Math.max(1, Math.ceil(runTotal / perPage));
+  const creditLogTotalPages = Math.max(1, Math.ceil(creditLogTotal / creditLogPerPage));
+
+  const copyRedeemLink = useCallback(async (secret: string, rowId: string) => {
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const url = `${origin}/redeem?token=${encodeURIComponent(secret)}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedId(rowId);
+      window.setTimeout(() => setCopiedId(null), 2000);
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   const uniqueKinds = useMemo(() => {
     if (!stats?.kindBreakdown) return [];
@@ -285,7 +373,9 @@ export default function AdminPage() {
             </Link>
             <div>
               <h1 className="text-lg font-bold tracking-tight">Admin Dashboard</h1>
-              <p className="text-xs text-white/40">All user generations & projects</p>
+              <p className="text-xs text-white/40">
+                {tab === "credits" ? "Credit gift links & redemption audit" : "All user generations & projects"}
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -309,11 +399,34 @@ export default function AdminPage() {
             >
               Link to Ad Runs
             </button>
+            <button
+              type="button"
+              onClick={() => { setTab("credits"); setCreditLogPage(1); }}
+              className={cn(
+                "rounded-lg px-3 py-1.5 text-xs font-semibold transition",
+                tab === "credits" ? "bg-violet-500 text-white" : "bg-white/5 text-white/60 hover:bg-white/10",
+              )}
+            >
+              Credit links
+            </button>
           </div>
         </div>
 
         {/* Stats cards */}
-        {stats && (
+        {tab === "credits" && creditStats && (
+          <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard label="Redeem tokens" value={creditStats.tokensTotal} icon={Gift} accent="bg-fuchsia-500/20 text-fuchsia-300" />
+            <StatCard label="Active links" value={creditStats.tokensActive} icon={Zap} accent="bg-emerald-500/20 text-emerald-300" />
+            <StatCard label="Total redemptions" value={creditStats.redemptionsTotal} icon={Users} accent="bg-blue-500/20 text-blue-300" />
+            <StatCard
+              label="Credits issued (links)"
+              value={creditStats.creditsIssuedViaLinks}
+              icon={Activity}
+              accent="bg-amber-500/20 text-amber-300"
+            />
+          </div>
+        )}
+        {tab !== "credits" && stats && (
           <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard label="Total Generations" value={stats.totalGenerations} icon={Activity} accent="bg-violet-500/20 text-violet-300" />
             <StatCard label="Total Users" value={stats.totalUsers} icon={Users} accent="bg-blue-500/20 text-blue-300" />
@@ -323,6 +436,12 @@ export default function AdminPage() {
         )}
 
         {/* Kind breakdown chips */}
+        {tab === "credits" && creditError && (
+          <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+            {creditError}
+          </div>
+        )}
+
         {stats?.kindBreakdown && tab === "generations" && (
           <div className="mt-4 flex flex-wrap gap-2">
             {Object.entries(stats.kindBreakdown)
@@ -346,7 +465,7 @@ export default function AdminPage() {
         )}
 
         {/* Filters bar */}
-        <div className="mt-4 flex flex-wrap items-center gap-3">
+        <div className={cn("mt-4 flex flex-wrap items-center gap-3", tab === "credits" && "hidden")}>
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
             <input
@@ -390,7 +509,150 @@ export default function AdminPage() {
         </div>
 
         {/* Table */}
-        {loading && genRows.length === 0 && runRows.length === 0 ? (
+        {tab === "credits" && creditLoading && creditStats === null && !creditError ? (
+          <div className="mt-12 flex items-center justify-center gap-2 text-white/40">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            Loading credit links…
+          </div>
+        ) : tab === "credits" ? (
+          <div className="mt-6 space-y-8">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-sm font-semibold text-white/80">Gift &amp; promo tokens</h2>
+              <button
+                type="button"
+                onClick={() => void fetchCreditRedeems()}
+                disabled={creditLoading}
+                className="rounded-lg border border-white/15 bg-white/[0.04] px-3 py-1.5 text-[11px] font-semibold text-white/70 transition hover:bg-white/[0.08] disabled:opacity-50"
+              >
+                Refresh
+              </button>
+            </div>
+            <div className="overflow-x-auto rounded-xl border border-white/[0.08]">
+              <table className="w-full min-w-[900px] text-left text-xs">
+                <thead>
+                  <tr className="border-b border-white/10 text-[10px] uppercase tracking-wide text-white/40">
+                    <th className="px-3 py-2.5 font-semibold">Label</th>
+                    <th className="px-3 py-2.5 font-semibold">Credits</th>
+                    <th className="px-3 py-2.5 font-semibold">Uses</th>
+                    <th className="px-3 py-2.5 font-semibold">Status</th>
+                    <th className="px-3 py-2.5 font-semibold">Expires</th>
+                    <th className="px-3 py-2.5 font-semibold">Created</th>
+                    <th className="px-3 py-2.5 font-semibold">Secret (prefix)</th>
+                    <th className="px-3 py-2.5 font-semibold">Link</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {creditTokens.map((row) => (
+                    <tr key={row.id} className="border-b border-white/5 transition hover:bg-white/[0.02]">
+                      <td className="max-w-[180px] truncate px-3 py-2.5 text-white/70" title={row.label ?? ""}>
+                        {row.label?.trim() ? row.label : "—"}
+                      </td>
+                      <td className="px-3 py-2.5 tabular-nums font-semibold text-amber-200/90">{row.amount}</td>
+                      <td className="px-3 py-2.5 tabular-nums text-white/55">
+                        {row.used_count}
+                        {row.max_uses != null ? ` / ${row.max_uses}` : " / ∞"}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <span
+                          className={cn(
+                            "rounded-full border px-2 py-0.5 text-[10px] font-semibold",
+                            row.active
+                              ? "border-emerald-500/35 bg-emerald-500/15 text-emerald-200"
+                              : "border-white/15 bg-white/[0.05] text-white/45",
+                          )}
+                        >
+                          {row.active ? "Active" : "Inactive"}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 whitespace-nowrap text-white/45">
+                        {row.expires_at ? new Date(row.expires_at).toLocaleDateString() : "Never"}
+                      </td>
+                      <td className="px-3 py-2.5 whitespace-nowrap text-white/40">{relativeTime(row.created_at)}</td>
+                      <td className="px-3 py-2.5 font-mono text-[10px] text-white/35">{row.secret.slice(0, 10)}…</td>
+                      <td className="px-3 py-2.5">
+                        <button
+                          type="button"
+                          onClick={() => void copyRedeemLink(row.secret, row.id)}
+                          className="inline-flex items-center gap-1 rounded-md border border-violet-500/35 bg-violet-500/10 px-2 py-1 text-[10px] font-semibold text-violet-200 transition hover:bg-violet-500/20"
+                        >
+                          <Copy className="h-3 w-3" />
+                          {copiedId === row.id ? "Copied" : "Copy link"}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {creditTokens.length === 0 && !creditLoading && (
+                <p className="py-8 text-center text-sm text-white/30">No tokens yet — create one via POST /api/credits/redeem-tokens</p>
+              )}
+            </div>
+
+            <div>
+              <h2 className="mb-3 text-sm font-semibold text-white/80">Redemption audit log</h2>
+              <p className="mb-3 text-[11px] leading-relaxed text-white/40">
+                Every successful claim is logged with user email and token reference. Watch for unusual spikes or unknown emails.
+              </p>
+              <div className="overflow-x-auto rounded-xl border border-white/[0.08]">
+                <table className="w-full min-w-[720px] text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-white/10 text-[10px] uppercase tracking-wide text-white/40">
+                      <th className="px-3 py-2.5 font-semibold">When</th>
+                      <th className="px-3 py-2.5 font-semibold">User</th>
+                      <th className="px-3 py-2.5 font-semibold">Credits</th>
+                      <th className="px-3 py-2.5 font-semibold">Token label</th>
+                      <th className="px-3 py-2.5 font-semibold">Token id (prefix)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {creditLogs.map((row) => (
+                      <tr key={row.id} className="border-b border-white/5 transition hover:bg-white/[0.02]">
+                        <td className="whitespace-nowrap px-3 py-2.5 text-white/45">
+                          {new Date(row.redeemed_at).toLocaleString()}
+                        </td>
+                        <td className="max-w-[220px] truncate px-3 py-2.5 text-violet-200/90" title={row.email}>
+                          {row.email}
+                        </td>
+                        <td className="px-3 py-2.5 tabular-nums font-medium text-amber-200/90">{row.credits}</td>
+                        <td className="max-w-[160px] truncate px-3 py-2.5 text-white/55" title={row.token_label ?? ""}>
+                          {row.token_label?.trim() ? row.token_label : "—"}
+                        </td>
+                        <td className="px-3 py-2.5 font-mono text-[10px] text-white/35">{row.token_secret_prefix ?? "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {creditLogs.length === 0 && !creditLoading && (
+                  <p className="py-8 text-center text-sm text-white/30">No redemptions yet</p>
+                )}
+              </div>
+              <div className="mt-3 flex items-center justify-between px-1">
+                <p className="text-[11px] text-white/40">{creditLogTotal} events</p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={creditLogPage <= 1}
+                    onClick={() => setCreditLogPage((p) => p - 1)}
+                    className="flex h-7 w-7 items-center justify-center rounded-md border border-white/10 bg-white/5 text-white/50 transition hover:bg-white/10 disabled:opacity-30"
+                  >
+                    <ChevronLeft className="h-3.5 w-3.5" />
+                  </button>
+                  <span className="text-xs tabular-nums text-white/50">
+                    {creditLogPage} / {creditLogTotalPages}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={creditLogPage >= creditLogTotalPages}
+                    onClick={() => setCreditLogPage((p) => p + 1)}
+                    className="flex h-7 w-7 items-center justify-center rounded-md border border-white/10 bg-white/5 text-white/50 transition hover:bg-white/10 disabled:opacity-30"
+                  >
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : loading && genRows.length === 0 && runRows.length === 0 ? (
           <div className="mt-12 flex items-center justify-center gap-2 text-white/40">
             <Loader2 className="h-5 w-5 animate-spin" />
             Loading…

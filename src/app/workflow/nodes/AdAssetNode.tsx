@@ -24,6 +24,7 @@ import {
   isPlatformCreditBypassActive,
   useCreditsPlan,
 } from "@/app/_components/CreditsPlanContext";
+import { userMessageFromCaughtError } from "@/lib/generationUserMessage";
 import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
 
 import {
@@ -42,7 +43,6 @@ import {
   composeWorkflowPrompt,
   runWorkflowImageJob,
   runWorkflowVideoJob,
-  userMessageFromCaughtError,
   workflowImageChargeCredits,
   workflowVideoChargeCredits,
 } from "../workflowNodeRun";

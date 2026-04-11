@@ -2,10 +2,10 @@ import type { Edge, Node } from "@xyflow/react";
 
 import type { AdAssetNodeData } from "@/app/workflow/nodes/AdAssetNode";
 import type { StickyNoteNodeData } from "@/app/workflow/workflowStickyNoteTypes";
-import { userMessageFromCaughtError } from "@/lib/generationUserMessage";
 import { calculateVideoCredits } from "@/lib/linkToAd/generationCredits";
 import { studioImageCreditsChargedTotal } from "@/lib/pricing";
 import {
+  type AccountPlanId,
   canUseStudioImagePickerModel,
   canUseStudioVideoModel,
   canUseVeoApiModel,
@@ -252,7 +252,7 @@ function isSeedancePicker(id: string): boolean {
 }
 
 export type WorkflowRunImageParams = {
-  planId: string;
+  planId: AccountPlanId;
   personalApiKey?: string;
   prompt: string;
   model: string;
@@ -294,9 +294,13 @@ export async function runWorkflowImageJob(params: WorkflowRunImageParams): Promi
       imageUrls: params.referenceImageUrls?.length ? params.referenceImageUrls : undefined,
     }),
   });
-  const startJson = (await startRes.json()) as { data?: { rows?: { taskId?: string }[] }; error?: string };
+  const startJson = (await startRes.json()) as {
+    data?: { taskId?: string; rows?: { taskId?: string }[] };
+    error?: string;
+  };
   if (!startRes.ok) throw new Error(startJson.error || "Could not start image job");
-  const taskId = startJson.data?.rows?.[0]?.taskId?.trim();
+  const taskId =
+    (startJson.data?.taskId ?? startJson.data?.rows?.[0]?.taskId)?.trim() ?? "";
   if (!taskId) throw new Error("No task id from server");
 
   const imageUrl = await pollNanoBananaTask(taskId, params.personalApiKey);
@@ -304,7 +308,7 @@ export async function runWorkflowImageJob(params: WorkflowRunImageParams): Promi
 }
 
 export type WorkflowRunVideoParams = {
-  planId: string;
+  planId: AccountPlanId;
   personalApiKey?: string;
   piapiApiKey?: string;
   prompt: string;
@@ -453,5 +457,3 @@ export function workflowVideoChargeCredits(params: { model: string; resolution: 
     quality,
   });
 }
-
-export { userMessageFromCaughtError };
