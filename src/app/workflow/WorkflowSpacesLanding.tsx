@@ -45,6 +45,10 @@ export function WorkflowSpacesLanding() {
 
   useEffect(() => {
     const sb = createSupabaseBrowserClient();
+    if (!sb) {
+      setStorageScope(getWorkflowStorageScope(null));
+      return;
+    }
     void sb.auth.getSession().then(({ data }) => {
       setStorageScope(getWorkflowStorageScope(data.session?.user?.id ?? null));
     });

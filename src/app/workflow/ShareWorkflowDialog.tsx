@@ -52,6 +52,7 @@ export function ShareWorkflowDialog({ open, onOpenChange, spaceId, spaceName }: 
 
   useEffect(() => {
     const sb = createSupabaseBrowserClient();
+    if (!sb) return;
     sb.auth.getUser().then(({ data }) => {
       const u = data.user;
       setUserId(u?.id ?? null);

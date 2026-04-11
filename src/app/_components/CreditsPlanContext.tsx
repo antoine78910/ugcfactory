@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -289,6 +290,9 @@ const SUBSCRIPTION_TIERS = [
 
 const CreditsPlanContext = createContext<CreditsPlanContextValue | null>(null);
 
+/** Must match `readState` when `window` is undefined — avoids hydration mismatch from reading localStorage in useState. */
+const HYDRATION_SAFE_CREDITS_STATE: CreditsState = { planId: "free", current: 0, total: 0 };
+
 export function CreditsPlanProvider({
   children,
   userId,
@@ -297,11 +301,11 @@ export function CreditsPlanProvider({
   userId?: string | null;
 }) {
   const [resolvedUserId, setResolvedUserId] = useState<string | null>(userId ?? null);
-  const [state, setState] = useState<CreditsState>(() => readState(userId ?? null));
+  const [state, setState] = useState<CreditsState>(HYDRATION_SAFE_CREDITS_STATE);
   const [isUnlimited, setIsUnlimited] = useState(false);
 
-  // Re-read when userId becomes available (SSR hydration) or changes (login/logout).
-  useEffect(() => {
+  // Hydrate from localStorage after SSR markup (same default as server) to avoid Sidebar / banner mismatches.
+  useLayoutEffect(() => {
     setResolvedUserId(userId ?? null);
     setState(readState(userId ?? null));
   }, [userId]);
@@ -310,18 +314,15 @@ export function CreditsPlanProvider({
     let cancelled = false;
     let unsubscribe: (() => void) | undefined;
 
-    try {
-      const supabase = createSupabaseBrowserClient();
-      void supabase.auth.getUser().then(({ data }) => {
-        if (!cancelled) setResolvedUserId(data.user?.id ?? null);
-      });
-      const { data } = supabase.auth.onAuthStateChange((_event, session) => {
-        if (!cancelled) setResolvedUserId(session?.user?.id ?? null);
-      });
-      unsubscribe = () => data.subscription.unsubscribe();
-    } catch {
-      // Public pages without Supabase config can stay anonymous.
-    }
+    const supabase = createSupabaseBrowserClient();
+    if (!supabase) return;
+    void supabase.auth.getUser().then(({ data }) => {
+      if (!cancelled) setResolvedUserId(data.user?.id ?? null);
+    });
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!cancelled) setResolvedUserId(session?.user?.id ?? null);
+    });
+    unsubscribe = () => data.subscription.unsubscribe();
 
     return () => {
       cancelled = true;

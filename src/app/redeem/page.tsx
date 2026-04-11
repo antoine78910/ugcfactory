@@ -226,6 +226,11 @@ function RedeemPageContent() {
     }
 
     void (async () => {
+      if (!supabase) {
+        setErrorMsg("App configuration is incomplete. Please contact support.");
+        setStatus("error");
+        return;
+      }
       const { data: { user } } = await supabase.auth.getUser();
 
       if (!user) {

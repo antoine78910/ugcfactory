@@ -2236,6 +2236,10 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
 
   useEffect(() => {
     const sb = createSupabaseBrowserClient();
+    if (!sb) {
+      setStorageScope(getWorkflowStorageScope(null));
+      return;
+    }
     void sb.auth.getSession().then(({ data }) => {
       setStorageScope(getWorkflowStorageScope(data.session?.user?.id ?? null));
     });
@@ -2355,6 +2359,10 @@ export function WorkflowTemplatePreview({ templateId }: { templateId: string }) 
 
   useEffect(() => {
     const sb = createSupabaseBrowserClient();
+    if (!sb) {
+      setStorageScope(getWorkflowStorageScope(null));
+      return;
+    }
     void sb.auth.getSession().then(({ data }) => {
       setStorageScope(getWorkflowStorageScope(data.session?.user?.id ?? null));
     });

@@ -1045,8 +1045,10 @@ export default function LinkToAdUniverse({
 
   const [_userEmail, _setUserEmail] = useState<string | null>(null);
   useEffect(() => {
-    createSupabaseBrowserClient()
-      .auth.getUser()
+    const client = createSupabaseBrowserClient();
+    if (!client) return;
+    client.auth
+      .getUser()
       .then(({ data }) => _setUserEmail(data.user?.email ?? null))
       .catch(() => {});
   }, []);

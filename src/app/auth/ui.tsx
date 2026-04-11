@@ -11,15 +11,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { getAuthCallbackUrl } from "@/lib/supabase/authRedirect";
-import { hasPublicSupabaseConfig } from "@/lib/supabase/env";
 
 type AuthMode = "signin" | "signup";
 
-const HAS_SUPABASE_ENV = hasPublicSupabaseConfig();
-
 export default function AuthClient({ mode = "signin", redirectTo }: { mode?: AuthMode; redirectTo?: string }) {
   const router = useRouter();
-  const supabase = useMemo(() => (HAS_SUPABASE_ENV ? createSupabaseBrowserClient() : null), []);
+  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
 
   const [firstName, setFirstName] = useState("");
   const [email, setEmail] = useState("");
@@ -30,7 +27,7 @@ export default function AuthClient({ mode = "signin", redirectTo }: { mode?: Aut
     window.datafast?.(mode === "signup" ? "view_signup" : "view_signin");
   }, [mode]);
 
-  if (!HAS_SUPABASE_ENV) {
+  if (!supabase) {
     return (
       <div className="min-h-[100dvh] min-h-screen overflow-x-hidden bg-[#050507] text-white">
         <main className="mx-auto max-w-xl px-4 py-12 pb-[max(3rem,env(safe-area-inset-bottom))] pt-[max(3rem,env(safe-area-inset-top))] sm:px-5 sm:py-16">
@@ -47,7 +44,6 @@ export default function AuthClient({ mode = "signin", redirectTo }: { mode?: Aut
     );
   }
 
-  if (!supabase) return null;
   const client = supabase;
 
   async function onSignIn() {

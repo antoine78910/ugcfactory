@@ -166,6 +166,7 @@ function StudioShellInner({
   useEffect(() => {
     void (async () => {
       const supabase = createSupabaseBrowserClient();
+      if (!supabase) return;
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -176,7 +177,7 @@ function StudioShellInner({
   async function onSignOut() {
     try {
       const supabase = createSupabaseBrowserClient();
-      await supabase.auth.signOut();
+      if (supabase) await supabase.auth.signOut();
     } finally {
       window.location.href = "/auth";
     }

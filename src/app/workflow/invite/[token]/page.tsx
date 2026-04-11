@@ -44,6 +44,10 @@ export default function WorkflowInvitePage() {
   const [accepted, setAccepted] = useState<AcceptResult | null>(null);
 
   useEffect(() => {
+    if (!supabase) {
+      setUserId(null);
+      return;
+    }
     supabase.auth.getUser().then(({ data }) => {
       setUserId(data.user?.id ?? null);
     });

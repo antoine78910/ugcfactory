@@ -17,6 +17,7 @@ export default function ClarityInit() {
 
       try {
         const supabase = createSupabaseBrowserClient();
+        if (!supabase) return;
         const {
           data: { user },
         } = await supabase.auth.getUser();

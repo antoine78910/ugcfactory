@@ -58,6 +58,9 @@ async function uploadViaNextApi(file: File): Promise<string> {
 
 async function uploadViaSupabaseDirect(file: File): Promise<string> {
   const supabase = createSupabaseBrowserClient();
+  if (!supabase) {
+    throw new Error("File upload is unavailable: Supabase is not configured.");
+  }
   const { data: userData, error: userErr } = await supabase.auth.getUser();
   if (userErr || !userData.user) throw new Error("Sign in to upload files.");
 
