@@ -20,6 +20,7 @@ import {
   type StudioImageKiePickerModelId,
 } from "@/lib/studioImageModels";
 import type { KieVeoAspectRatio, KieVeoModel } from "@/lib/kie";
+import { pollKlingVideo } from "@/lib/studioKlingClientPoll";
 
 export function stripStickyHtmlToText(html: string): string {
   const h = html.trim();
@@ -157,29 +158,6 @@ async function completeStudioGenerationTask(taskId: string, resultUrl: string): 
   } catch {
     /* non-fatal */
   }
-}
-
-async function pollKlingVideo(taskId: string, personalApiKey?: string, piapiApiKey?: string): Promise<string> {
-  const p = personalApiKey ? `&personalApiKey=${encodeURIComponent(personalApiKey)}` : "";
-  const pi = piapiApiKey ? `&piapiApiKey=${encodeURIComponent(piapiApiKey)}` : "";
-  const keyParam = `${p}${pi}`;
-  for (let i = 0; i < 120; i++) {
-    const res = await fetch(`/api/kling/status?taskId=${encodeURIComponent(taskId)}${keyParam}`, { cache: "no-store" });
-    const json = (await res.json()) as {
-      data?: { status?: string; response?: string[]; error_message?: string | null };
-      error?: string;
-    };
-    if (!res.ok) throw new Error(json.error || "Video status failed");
-    const st = json.data?.status;
-    if (st === "SUCCESS") {
-      const u = json.data?.response?.[0];
-      if (!u) throw new Error("No video URL");
-      return u;
-    }
-    if (st === "FAILED") throw new Error(json.data?.error_message || "Video generation failed");
-    await new Promise((r) => setTimeout(r, 4000));
-  }
-  throw new Error("Video generation timed out");
 }
 
 async function pollVeoVideo(taskId: string, personalApiKey?: string): Promise<string> {
@@ -378,7 +356,7 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
 
   const isKling30 = modelId === "kling-3.0/video";
   const isKling26 = modelId === "kling-2.6/video";
-  const isSora2Pro = modelId === "openai/sora-2-pro";
+  const isSoraPicker = modelId === "openai/sora-2" || modelId === "openai/sora-2-pro";
   const isSeedanceI2V = isSeedancePicker(modelId);
 
   const genRes = await fetch("/api/kling/generate", {
@@ -403,9 +381,13 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
               : params.aspectRatio === "16:9"
                 ? "16:9"
                 : "9:16"
-            : undefined,
+            : isSoraPicker
+              ? params.aspectRatio === "16:9"
+                ? "16:9"
+                : "9:16"
+              : undefined,
       sound: modelId === "kling-3.0/video" || modelId === "kling-2.6/video" ? true : undefined,
-      mode: isKling30 || isKling26 || isSora2Pro ? quality : undefined,
+      mode: isKling30 || isKling26 || isSoraPicker ? quality : undefined,
       multiShots: isKling30 ? false : undefined,
       personalApiKey: pKey,
       piapiApiKey: piKey,

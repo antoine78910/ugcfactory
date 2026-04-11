@@ -14,6 +14,7 @@ import {
 import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { getUserPlan } from "@/lib/supabase/getUserPlan";
+import { isKieServableReferenceImageUrl } from "@/lib/kieSoraReferenceImage";
 
 type KlingAspectRatio = "16:9" | "9:16" | "1:1";
 type KlingMode = "std" | "pro";
@@ -133,8 +134,9 @@ export async function POST(req: Request) {
   }
 
   const rawModel = (body.marketModel ?? "kling-3.0/video").trim() || "kling-3.0/video";
-  const imageUrl = (body.imageUrl ?? "").trim();
-  const model = resolveKieModelName(rawModel, Boolean(imageUrl));
+  const imageUrlRaw = (body.imageUrl ?? "").trim();
+  const hasKieReferenceImage = isKieServableReferenceImageUrl(imageUrlRaw);
+  const model = resolveKieModelName(rawModel, hasKieReferenceImage);
   const prompt = (body.prompt ?? "").trim();
   if (!prompt) {
     return NextResponse.json({ error: "Missing `prompt`." }, { status: 400 });
@@ -180,8 +182,8 @@ export async function POST(req: Request) {
         multi_prompt: [],
       };
 
-      if (imageUrl) {
-        input.image_urls = [imageUrl];
+      if (hasKieReferenceImage) {
+        input.image_urls = [imageUrlRaw];
         // KIE docs: when first-frame image is provided, aspect_ratio is invalid.
       } else {
         if (body.aspectRatio) input.aspect_ratio = body.aspectRatio;
@@ -192,26 +194,28 @@ export async function POST(req: Request) {
         sound: body.sound ?? false,
         duration: String(body.duration ?? 5),
       };
-      if (imageUrl) {
-        input.image_urls = [imageUrl];
+      if (hasKieReferenceImage) {
+        input.image_urls = [imageUrlRaw];
       } else if (body.aspectRatio) {
         input.aspect_ratio = body.aspectRatio;
       }
     } else if (isSora2(model) || isSora2Pro(model)) {
       const nFrames = String(body.duration ?? 10);
       const soraAspect = body.aspectRatio === "9:16" ? "portrait" : "landscape";
+      const soraSize = (body.mode ?? "pro") === "pro" ? "high" : "standard";
       input = {
         prompt,
         n_frames: nFrames,
         aspect_ratio: soraAspect,
+        size: soraSize,
         upload_method: "s3",
         remove_watermark: true,
       };
-      if (imageUrl) {
-        input.image_urls = [imageUrl];
+      if (hasKieReferenceImage) {
+        input.image_urls = [imageUrlRaw];
       }
     } else if (model.startsWith("bytedance/seedance")) {
-      if (!imageUrl) {
+      if (!hasKieReferenceImage) {
         return NextResponse.json(
           { error: "Seedance requires `imageUrl` (image-to-video)." },
           { status: 400 },
@@ -226,15 +230,15 @@ export async function POST(req: Request) {
       const duration = Number(body.duration ?? 10);
       const seedanceAspectRatio =
         body.aspectRatio === "1:1" ? ("4:3" as const) : (body.aspectRatio ?? "9:16");
-      let piapiImageUrl = imageUrl;
+      let piapiImageUrl = imageUrlRaw;
       try {
-        piapiImageUrl = await mirrorImageUrlForPiapiSeedance(imageUrl, user.id);
+        piapiImageUrl = await mirrorImageUrlForPiapiSeedance(imageUrlRaw, user.id);
       } catch (mirrorErr) {
         logGenerationFailure("kling/generate/mirror-seedance-image", mirrorErr, {
           model,
           imageHost: (() => {
             try {
-              return new URL(imageUrl).hostname;
+              return new URL(imageUrlRaw).hostname;
             } catch {
               return "invalid";
             }

@@ -70,6 +70,7 @@ export type StudioGenerationRow = {
   label: string;
   /** Picker / backend model id (e.g. `pro`, `kling-3.0/video`, Topaz model id). */
   model?: string;
+  /** KIE / PiAPI / WaveSpeed task id (history + client repair). */
   external_task_id: string;
   provider: string;
   result_urls: string[] | null;
@@ -167,6 +168,8 @@ export function studioGenerationRowToHistoryItem(row: StudioGenerationRow): Stud
   const modelExtra = modelFieldsFromRow(row);
   const aspectExtra = aspectFromRow(row);
   const baseIds = { studioGenerationId: row.id };
+  const extId = String(row.external_task_id ?? "").trim();
+  const taskExtra = extId ? { externalTaskId: extId } : {};
   if (hasUrls || isReady) {
     return {
       id: row.id,
@@ -178,6 +181,7 @@ export function studioGenerationRowToHistoryItem(row: StudioGenerationRow): Stud
       studioGenerationKind: row.kind,
       inputUrls: inputUrlsOrUndef,
       ...baseIds,
+      ...taskExtra,
       ...modelExtra,
       ...aspectExtra,
     };
@@ -194,6 +198,7 @@ export function studioGenerationRowToHistoryItem(row: StudioGenerationRow): Stud
       studioGenerationKind: row.kind,
       inputUrls: inputUrlsOrUndef,
       ...baseIds,
+      ...taskExtra,
       ...modelExtra,
       ...aspectExtra,
     };
@@ -207,6 +212,7 @@ export function studioGenerationRowToHistoryItem(row: StudioGenerationRow): Stud
     studioGenerationKind: row.kind,
     inputUrls: inputUrlsOrUndef,
     ...baseIds,
+    ...taskExtra,
     ...modelExtra,
     ...aspectExtra,
   };

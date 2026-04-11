@@ -37,6 +37,13 @@ import {
 } from "@/app/_components/CreditsPlanContext";
 import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
 import { mergeStudioHistoryWithServer } from "@/lib/mergeStudioHistoryWithLocal";
+import {
+  mergeServerHistoryWithMotionPending,
+  patchMotionPendingJob,
+  readMotionPendingJobs,
+  removeMotionPendingJob,
+  upsertMotionPendingJob,
+} from "@/lib/motionControlPendingSession";
 import { registerStudioGenerationClient } from "@/lib/registerStudioGenerationClient";
 import { completeStudioTask, pollKlingVideo } from "@/lib/studioKlingClientPoll";
 import StudioVideoPanel from "@/app/_components/StudioVideoPanel";
@@ -1077,30 +1084,69 @@ export default function AppBrandWizard() {
         : setMotionControlHistoryItems;
 
   useEffect(() => {
+    const ac = new AbortController();
     void (async () => {
-      const res = await fetch(`/api/studio/generations?kind=${encodeURIComponent(historyKindsKey)}`, {
-        cache: "no-store",
-      });
-      if (res.status === 401) {
+      try {
+        const res = await fetch(`/api/studio/generations?kind=${encodeURIComponent(historyKindsKey)}`, {
+          cache: "no-store",
+          signal: ac.signal,
+        });
+        if (ac.signal.aborted) return;
+        if (res.status === 401) {
+          setMotionServerHistory(false);
+          setActiveHistoryItems([]);
+          return;
+        }
+        if (!res.ok) {
+          setMotionServerHistory(false);
+          return;
+        }
+        const json = (await res.json()) as { data?: StudioHistoryItem[]; refundHints?: RefundHint[] };
+        if (ac.signal.aborted) return;
+        setMotionServerHistory(true);
+        const serverList = json.data ?? [];
+        const pendingMotion = readMotionPendingJobs();
+        const withPendingMotion =
+          historyKindsKey === "motion_control"
+            ? mergeServerHistoryWithMotionPending(serverList, pendingMotion)
+            : serverList;
+        setActiveHistoryItems((prev) => mergeStudioHistoryWithServer(withPendingMotion, prev));
+
+        if (historyKindsKey === "motion_control") {
+          for (const p of pendingMotion) {
+            const onServer = serverList.some(
+              (i) =>
+                (Boolean(i.externalTaskId?.trim()) && i.externalTaskId === p.taskId) ||
+                (Boolean(p.rowId?.trim()) && i.id === p.rowId),
+            );
+            if (onServer) continue;
+            void registerStudioGenerationClient({
+              kind: p.kind,
+              label: p.label,
+              taskId: p.taskId,
+              provider: p.provider,
+              model: p.model,
+              creditsCharged: p.creditsCharged,
+              personalApiKey: getPersonalApiKey() ?? undefined,
+              inputUrls: p.inputUrls,
+            }).then((rowId) => {
+              if (rowId) patchMotionPendingJob(p.taskId, { rowId });
+            });
+          }
+        }
+
+        const hints = json.refundHints ?? [];
+        if (hints.length) {
+          applyRefundHints(hints);
+          toast.message("Credits refunded", { description: "A studio generation failed after charge." });
+        }
+      } catch (e) {
+        if (e instanceof DOMException && e.name === "AbortError") return;
         setMotionServerHistory(false);
-        setActiveHistoryItems([]);
-        return;
-      }
-      if (!res.ok) {
-        setMotionServerHistory(false);
-        setActiveHistoryItems([]);
-        return;
-      }
-      const json = (await res.json()) as { data?: StudioHistoryItem[]; refundHints?: RefundHint[] };
-      setMotionServerHistory(true);
-      setActiveHistoryItems((prev) => mergeStudioHistoryWithServer(json.data ?? [], prev));
-      const hints = json.refundHints ?? [];
-      if (hints.length) {
-        applyRefundHints(hints);
-        toast.message("Credits refunded", { description: "A studio generation failed after charge." });
       }
     })();
-  }, [applyRefundHints, historyKindsKey, setActiveHistoryItems]);
+    return () => ac.abort();
+  }, [applyRefundHints, getPersonalApiKey, historyKindsKey, setActiveHistoryItems]);
 
   useEffect(() => {
     if (motionServerHistory !== true) return;
@@ -1118,7 +1164,12 @@ export default function AppBrandWizard() {
         if (!res.ok) return;
         const json = (await res.json()) as { data?: StudioHistoryItem[]; refundHints?: RefundHint[] };
         if (Array.isArray(json.data)) {
-          setActiveHistoryItems((prev) => mergeStudioHistoryWithServer(json.data ?? [], prev));
+          const serverList = json.data;
+          const withPendingMotion =
+            historyKindsKey === "motion_control"
+              ? mergeServerHistoryWithMotionPending(serverList, readMotionPendingJobs())
+              : serverList;
+          setActiveHistoryItems((prev) => mergeStudioHistoryWithServer(withPendingMotion, prev));
         }
         const hints = json.refundHints ?? [];
         if (hints.length) {
@@ -3668,7 +3719,9 @@ export default function AppBrandWizard() {
                             <div>
                               <Label className="text-xs text-white/45">Scene control mode</Label>
                               <p className="mt-0.5 text-[10px] leading-snug text-white/35">
-                                Choose the background source: reference motion video or character image.
+                                Background source for the output: <span className="text-white/55">Video</span> uses the
+                                motion clip&apos;s scene (orientation follows the clip, Kling default).{" "}
+                                <span className="text-white/55">Image</span> uses your character still as the backdrop.
                               </p>
                               <Select
                                 value={motionSceneBackground}
@@ -3843,6 +3896,7 @@ export default function AppBrandWizard() {
                           }
                           setMotionBusy(true);
                           void (async () => {
+                            let motionPendingTaskId: string | null = null;
                             try {
                               if (isVoiceChange) {
                                 setVoiceChangePreparing(true);
@@ -3996,7 +4050,6 @@ export default function AppBrandWizard() {
                                         videoUrl: videoHttps,
                                         prompt: motionPrompt.trim() || undefined,
                                         quality: motionQuality,
-                                        characterOrientation: "image",
                                         backgroundSource: bgSource,
                                         personalApiKey: getPersonalApiKey(),
                                       }),
@@ -4017,6 +4070,24 @@ export default function AppBrandWizard() {
                                   ? `wavespeed:heygen_translate:${adCloneOutputLanguage}`
                                   : `kling:motion_control:${motionQuality}:${motionSceneBackground}`;
                               const motionInputUrls = [videoHttps].filter(Boolean);
+                              if (!isTranslate && appSection === "motion_control") {
+                                motionPendingTaskId = json.taskId;
+                                upsertMotionPendingJob({
+                                  taskId: json.taskId,
+                                  label: historyLabel,
+                                  model,
+                                  kind: generationKind,
+                                  provider,
+                                  inputUrls: motionInputUrls.length > 0 ? motionInputUrls : undefined,
+                                  creditsCharged: platformChargeMotion,
+                                  startedAt: Date.now(),
+                                });
+                                setMotionControlHistoryItems((prev) =>
+                                  prev.map((i) =>
+                                    i.id === jobId ? { ...i, externalTaskId: json.taskId } : i,
+                                  ),
+                                );
+                              }
                               const rowId = await registerStudioGenerationClient({
                                 kind: generationKind,
                                 label: historyLabel,
@@ -4028,6 +4099,9 @@ export default function AppBrandWizard() {
                                 inputUrls: motionInputUrls.length > 0 ? motionInputUrls : undefined,
                               });
                               if (rowId) {
+                                if (!isTranslate && appSection === "motion_control") {
+                                  patchMotionPendingJob(json.taskId, { rowId });
+                                }
                                 (isTranslate ? setTranslateHistoryItems : setMotionControlHistoryItems)((prev) =>
                                   prev.map((i) =>
                                     i.id === jobId
@@ -4050,6 +4124,7 @@ export default function AppBrandWizard() {
                                 const pKey = getPersonalApiKey() ?? undefined;
                                 const url = await pollKlingVideo(json.taskId, pKey);
                                 void completeStudioTask(json.taskId, url);
+                                removeMotionPendingJob(json.taskId);
                                 setMotionControlHistoryItems((prev) =>
                                   prev.map((i) => {
                                     const match =
@@ -4071,6 +4146,7 @@ export default function AppBrandWizard() {
                                 toast.success("Motion control ready");
                               }
                             } catch (err) {
+                              if (motionPendingTaskId) removeMotionPendingJob(motionPendingTaskId);
                               const msg =
                                 err instanceof Error
                                   ? err.message || "Unknown error"

@@ -21,22 +21,33 @@ type Body = {
   imageUrl: string;
   /** Public HTTPS URL of motion reference video (after upload). */
   videoUrl: string;
-  /** UI: 720p | 1080p → API std | pro (Kling motion-control docs). */
+  /** UI: 720p | 1080p | std | pro — KIE OpenAPI uses `std` (720p) and `pro` (1080p). */
   quality?: string;
   /** Background from motion clip vs character still (Kie `background_source`). */
   backgroundSource?: BackgroundSource;
-  /** Character orientation source (Kie `character_orientation`). */
+  /** Character orientation (Kie `character_orientation`). Omit to let the server pair with `background_source`. */
   characterOrientation?: CharacterOrientation;
   prompt?: string;
   personalApiKey?: string;
 };
 
-/** Kie motion-control example uses `720p`; schema text references std/pro — we send resolution strings. */
-function motionModeFromQuality(q: string | undefined): string {
+/** KIE `mode`: std = 720p, pro = 1080p (see docs.kie.ai motion-control-v3). */
+function motionModeFromQuality(q: string | undefined): "std" | "pro" {
   const s = (q ?? "720p").toLowerCase();
-  if (s === "1080p" || s === "pro") return "1080p";
-  if (s === "std") return "std";
-  return "720p";
+  if (s === "1080p" || s === "pro") return "pro";
+  return "std";
+}
+
+/**
+ * KIE default for `character_orientation` is `video` (recommended).
+ * When the background comes from the still (`input_image`), use `image` so pose/backdrop stay consistent unless the client overrides.
+ */
+function resolveCharacterOrientation(
+  requested: CharacterOrientation | undefined,
+  backgroundSource: BackgroundSource,
+): CharacterOrientation {
+  if (requested === "video" || requested === "image") return requested;
+  return backgroundSource === "input_image" ? "image" : "video";
 }
 
 export async function POST(req: Request) {
@@ -73,8 +84,12 @@ export async function POST(req: Request) {
 
   const backgroundSource: BackgroundSource =
     body.backgroundSource === "input_image" ? "input_image" : "input_video";
-  const characterOrientation: CharacterOrientation =
-    body.characterOrientation === "video" ? "video" : "image";
+  const characterOrientation = resolveCharacterOrientation(
+    body.characterOrientation === "video" || body.characterOrientation === "image"
+      ? body.characterOrientation
+      : undefined,
+    backgroundSource,
+  );
 
   const mode = motionModeFromQuality(body.quality);
   const prompt = (body.prompt ?? "").trim();

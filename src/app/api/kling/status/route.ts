@@ -27,10 +27,13 @@ export async function GET(req: Request) {
       if (mapped.status === "FAILED" && mapped.error_message) {
         logGenerationFailure("kling/status", mapped.error_message, { taskId, provider: "piapi" });
       }
+      const urls = (mapped.response ?? []).map((u) => String(u).trim()).filter(Boolean);
+      const statusOut =
+        mapped.status === "SUCCESS" && urls.length === 0 ? "IN_PROGRESS" : mapped.status;
       return NextResponse.json({
         data: {
-          status: mapped.status,
-          response: mapped.response,
+          status: statusOut,
+          response: urls,
           error_message: mapped.error_message
             ? userFacingProviderErrorOrDefault(mapped.error_message)
             : mapped.error_message,
@@ -44,6 +47,18 @@ export async function GET(req: Request) {
 
     // Normalize to the old shape the UI already understands.
     if (kieRecordStateIsSuccess(data.state)) {
+      // Match server poll (`kieImageTaskPollOutcome`): success without a URL yet stays in progress
+      // so motion-control / Kling client polling does not throw "No video URL" or stick on empty.
+      if (urls.length === 0) {
+        return NextResponse.json({
+          data: {
+            status: "IN_PROGRESS",
+            response: [],
+            error_message: null,
+            raw: data,
+          },
+        });
+      }
       return NextResponse.json({
         data: {
           status: "SUCCESS",

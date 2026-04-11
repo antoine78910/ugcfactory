@@ -1534,6 +1534,7 @@ export default function StudioVideoPanel({
               prompt: snap.prompt,
               imageUrl: snap.startUrl ?? undefined,
               duration: Number(snap.duration),
+              aspectRatio: snap.aspect as "16:9" | "9:16" | "1:1",
               mode:
                 snap.modelId === "openai/sora-2-pro" || snap.modelId === "openai/sora-2"
                   ? snap.klingMode
@@ -2007,8 +2008,9 @@ export default function StudioVideoPanel({
                 <div>
                   <Label className="text-xs text-white/45">Scene control</Label>
                   <p className="mt-0.5 text-[10px] leading-snug text-white/35">
-                    Background driven by the motion clip vs the character still ({" "}
-                    <code className="text-white/45">background_source</code>).
+                    Video uses the clip&apos;s scene; Image uses your character still as the backdrop (
+                    <code className="text-white/45">background_source</code>
+                    ). Kling orientation is paired with this choice on the server.
                   </p>
                   <Select
                     value={editSceneBackground}

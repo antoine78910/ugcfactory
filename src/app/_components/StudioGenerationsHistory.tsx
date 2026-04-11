@@ -49,6 +49,8 @@ export type StudioHistoryItem = {
    * Used to hide a stale “processing” server row when the client already has a ready item with media.
    */
   studioGenerationId?: string;
+  /** Provider task id (KIE / PiAPI) — used to restore in-flight rows after reload. */
+  externalTaskId?: string;
 };
 
 function formatHistoryDate(ts: number): string {

@@ -36,9 +36,12 @@ export async function pollKlingVideo(
     if (!res.ok) throw new Error(json.error || "Kling status failed");
     const st = json.data?.status;
     if (st === "SUCCESS") {
-      const u = json.data?.response?.[0];
-      if (!u) throw new Error("No video URL");
-      return u;
+      const list = json.data?.response ?? [];
+      const u = list.map((x) => String(x).trim()).find((s) => s.length > 0);
+      if (u) return u;
+      // Rare race: success before URLs are present; keep polling (aligned with kling/status IN_PROGRESS).
+      await new Promise((r) => setTimeout(r, 4000));
+      continue;
     }
     if (st === "FAILED") throw new Error(json.data?.error_message || "Kling failed");
     await new Promise((r) => setTimeout(r, 4000));

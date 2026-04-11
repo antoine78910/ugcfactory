@@ -70,48 +70,106 @@ export async function POST(req: Request) {
     : [];
   const aspectRatio = String(body.aspectRatio ?? "").trim();
 
-  const payload = isFailed && taskIds.length === 0
-    ? [{
-        user_id: user.id,
-        kind,
-        status: "failed" as const,
-        label,
-        ...(model ? { model } : {}),
-        external_task_id: `failed-${Date.now()}`,
-        provider,
-        credits_charged: 0,
-        uses_personal_api: usesPersonalApi,
-        ...(errorMessage ? { error_message: errorMessage } : {}),
-        ...(inputUrls.length > 0 ? { input_urls: inputUrls } : {}),
-        ...(aspectRatio ? { aspect_ratio: aspectRatio } : {}),
-      }]
-    : taskIds.map((externalTaskId, i) => ({
-        user_id: user.id,
-        kind,
-        status: (isFailed ? "failed" : "processing") as "processing" | "failed",
-        label,
-        ...(model ? { model } : {}),
-        external_task_id: externalTaskId,
-        provider,
-        credits_charged: isFailed ? 0 : baseCharge + (i === 0 ? remainder : 0),
-        uses_personal_api: usesPersonalApi,
-        ...(isFailed && errorMessage ? { error_message: errorMessage } : {}),
-        ...(inputUrls.length > 0 ? { input_urls: inputUrls } : {}),
-        ...(aspectRatio ? { aspect_ratio: aspectRatio } : {}),
-      }));
-
-  const { data, error } = await supabase.from("studio_generations").insert(payload).select("id, external_task_id");
-  if (error) {
-    serverLog("studio_generations_register_failed", { kind, count: n, message: error.message });
-    return NextResponse.json({ error: error.message }, { status: 502 });
+  if (isFailed && taskIds.length === 0) {
+    const single = {
+      user_id: user.id,
+      kind,
+      status: "failed" as const,
+      label,
+      ...(model ? { model } : {}),
+      external_task_id: `failed-${Date.now()}`,
+      provider,
+      credits_charged: 0,
+      uses_personal_api: usesPersonalApi,
+      ...(errorMessage ? { error_message: errorMessage } : {}),
+      ...(inputUrls.length > 0 ? { input_urls: inputUrls } : {}),
+      ...(aspectRatio ? { aspect_ratio: aspectRatio } : {}),
+    };
+    const { data, error } = await supabase.from("studio_generations").insert(single).select("id, external_task_id");
+    if (error) {
+      serverLog("studio_generations_register_failed", { kind, count: 1, message: error.message });
+      return NextResponse.json({ error: error.message }, { status: 502 });
+    }
+    const row = Array.isArray(data) ? data[0] : data;
+    serverLog("studio_generations_register_ok", { kind, rows: 1, provider });
+    return NextResponse.json({
+      data: {
+        rows: row ? [{ id: String(row.id), taskId: String(row.external_task_id) }] : [],
+      },
+    });
   }
 
-  const rows = Array.isArray(data) ? data : [];
+  type InsertRow = {
+    user_id: string;
+    kind: string;
+    status: "processing" | "failed";
+    label: string;
+    model?: string;
+    external_task_id: string;
+    provider: string;
+    credits_charged: number;
+    uses_personal_api: boolean;
+    error_message?: string;
+    input_urls?: string[];
+    aspect_ratio?: string;
+  };
+
+  const rowsOut: { id: string; taskId: string }[] = [];
+  const toInsert: InsertRow[] = [];
+
+  for (let i = 0; i < taskIds.length; i++) {
+    const externalTaskId = taskIds[i]!;
+    const { data: existing, error: selErr } = await supabase
+      .from("studio_generations")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("external_task_id", externalTaskId)
+      .maybeSingle();
+    if (selErr) {
+      serverLog("studio_generations_register_lookup_failed", { message: selErr.message });
+      return NextResponse.json({ error: selErr.message }, { status: 502 });
+    }
+    if (existing?.id) {
+      rowsOut.push({ id: String(existing.id), taskId: externalTaskId });
+      continue;
+    }
+    toInsert.push({
+      user_id: user.id,
+      kind,
+      status: (isFailed ? "failed" : "processing") as "processing" | "failed",
+      label,
+      ...(model ? { model } : {}),
+      external_task_id: externalTaskId,
+      provider,
+      credits_charged: isFailed ? 0 : baseCharge + (i === 0 ? remainder : 0),
+      uses_personal_api: usesPersonalApi,
+      ...(isFailed && errorMessage ? { error_message: errorMessage } : {}),
+      ...(inputUrls.length > 0 ? { input_urls: inputUrls } : {}),
+      ...(aspectRatio ? { aspect_ratio: aspectRatio } : {}),
+    });
+  }
+
+  if (toInsert.length > 0) {
+    const { data, error } = await supabase.from("studio_generations").insert(toInsert).select("id, external_task_id");
+    if (error) {
+      serverLog("studio_generations_register_failed", { kind, count: toInsert.length, message: error.message });
+      return NextResponse.json({ error: error.message }, { status: 502 });
+    }
+    const inserted = Array.isArray(data) ? data : [];
+    for (const r of inserted) {
+      rowsOut.push({ id: String(r.id), taskId: String(r.external_task_id) });
+    }
+  }
+
+  const idByTaskId = new Map(rowsOut.map((r) => [r.taskId, r.id] as const));
+  const rows = taskIds
+    .map((tid) => {
+      const id = idByTaskId.get(tid);
+      return id ? { id, taskId: tid } : null;
+    })
+    .filter((x): x is { id: string; taskId: string } => x != null);
+
   serverLog("studio_generations_register_ok", { kind, rows: rows.length, provider });
-  return NextResponse.json({
-    data: {
-      rows: rows.map((r) => ({ id: String(r.id), taskId: String(r.external_task_id) })),
-    },
-  });
+  return NextResponse.json({ data: { rows } });
 }
 

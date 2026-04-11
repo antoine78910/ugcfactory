@@ -17,7 +17,15 @@ export function mergeStudioHistoryWithServer(
       .filter(Boolean),
   );
   const serverFiltered = serverItems.filter((s) => {
-    if (shieldedServerIds.has(s.id)) return false;
+    /**
+     * Only hide a server row when the client already shows “ready” **and** the server copy is still a
+     * stale “generating” shell for the same row. Dropping every server row whose id matched used to
+     * fight the poll/GET merge and made Translate / Motion history flicker (videos vanish/reappear).
+     */
+    if (shieldedServerIds.has(s.id)) {
+      const serverStaleGenerating = s.status === "generating" && !s.mediaUrl?.trim();
+      if (serverStaleGenerating) return false;
+    }
     const stuckGenerating = s.status === "generating" && !s.mediaUrl?.trim();
     if (
       stuckGenerating &&

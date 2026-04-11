@@ -1,20 +1,30 @@
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
 /**
  * Registers a processing row in `studio_generations`. Returns the new row id, or null on failure.
+ * Retries a few times so a brief network blip does not drop in-flight jobs from history after reload.
  */
 export async function registerStudioGenerationClient(body: Record<string, unknown>): Promise<string | null> {
-  try {
-    const res = await fetch("/api/studio/generations/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) return null;
-    const json = (await res.json()) as { data?: { rows?: { id: string }[] } };
-    const id = json.data?.rows?.[0]?.id;
-    return typeof id === "string" && id.trim() ? id.trim() : null;
-  } catch {
-    return null;
+  const delaysMs = [0, 400, 1200];
+  for (let attempt = 0; attempt < delaysMs.length; attempt++) {
+    if (delaysMs[attempt]! > 0) await sleep(delaysMs[attempt]!);
+    try {
+      const res = await fetch("/api/studio/generations/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) continue;
+      const json = (await res.json()) as { data?: { rows?: { id: string }[] } };
+      const id = json.data?.rows?.[0]?.id;
+      if (typeof id === "string" && id.trim()) return id.trim();
+    } catch {
+      /* retry */
+    }
   }
+  return null;
 }
 
 /**
