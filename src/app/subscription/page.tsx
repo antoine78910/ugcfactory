@@ -57,7 +57,7 @@ const PLANS: PlanDef[] = [
   {
     id: "starter",
     name: "Starter",
-    description: "Learn the workflow and launch your first campaigns.",
+    description: "Learn the workflow and launch your first campaigns.", // workflow shown via PlanCardDescription
     monthly: SUBSCRIPTIONS[0].price_usd,
     credits: SUBSCRIPTIONS[0].credits_per_month,
     usage: {
@@ -108,11 +108,34 @@ const PLANS: PlanDef[] = [
 
 function SubscriptionPlanPriceSkeleton() {
   return (
-    <div className="space-y-1.5" aria-hidden>
-      <div className="h-11 w-[min(100%,14rem)] animate-pulse rounded-lg bg-white/12 md:h-12" />
-      <div className="h-3.5 w-52 max-w-full animate-pulse rounded bg-white/10" />
+    <div className="space-y-1" aria-hidden>
+      <div className="h-10 w-[min(100%,14rem)] animate-pulse rounded-lg bg-white/12 md:h-11" />
+      <div className="h-3 w-48 max-w-full animate-pulse rounded bg-white/10" />
     </div>
   );
+}
+
+function PlanCardDescription({ plan }: { plan: PlanDef }) {
+  if (plan.id === "starter") {
+    return (
+      <p className="mt-1 min-h-0 text-sm leading-snug text-white/48">
+        Learn the{" "}
+        <span className="inline-flex items-center gap-1 align-baseline">
+          <span
+            className="pointer-events-none cursor-default select-none text-white/32 line-through decoration-white/20"
+            aria-disabled="true"
+          >
+            workflow
+          </span>
+          <span className="rounded border border-white/12 bg-white/[0.05] px-1.5 py-0 text-[9px] font-bold uppercase tracking-wide text-white/45">
+            Soon
+          </span>
+        </span>{" "}
+        and launch your first campaigns.
+      </p>
+    );
+  }
+  return <p className="mt-1 min-h-0 text-sm leading-snug text-white/48">{plan.description}</p>;
 }
 
 export default function SubscriptionPage() {
@@ -526,7 +549,7 @@ export default function SubscriptionPage() {
                           : "border-white/10 bg-white/[0.03] hover:border-violet-500/20 hover:bg-white/[0.045]",
                     )}
                   >
-                    <div className="mb-3 flex min-h-[2.75rem] flex-wrap items-start gap-1.5">
+                    <div className="mb-2 flex min-h-[2.25rem] flex-wrap items-start gap-1.5">
                       {isCurrentPlanCard ? (
                         <span className="rounded-full border border-emerald-400/50 bg-emerald-500/20 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-100">
                           Current plan
@@ -544,12 +567,12 @@ export default function SubscriptionPage() {
                       ) : null}
                     </div>
 
-                    <div className="min-h-[6.75rem]">
-                      <h2 className="text-xl font-bold text-white">{plan.name}</h2>
-                      <p className="mt-2 min-h-[4.25rem] text-sm leading-relaxed text-white/48">{plan.description}</p>
+                    <div className="min-h-0">
+                      <h2 className="text-xl font-bold leading-tight text-white">{plan.name}</h2>
+                      <PlanCardDescription plan={plan} />
                     </div>
 
-                    <div className="mt-4 min-h-[6.25rem]">
+                    <div className="mt-2 min-h-0">
                       {billingPricesReady && priceLabels ? (
                         <>
                           <div className="flex flex-wrap items-baseline gap-x-1 gap-y-0">
@@ -558,9 +581,9 @@ export default function SubscriptionPage() {
                             </span>
                             <span className="text-sm font-semibold leading-none text-white/55 md:text-base">/mo</span>
                           </div>
-                          <p className="mt-1 text-xs leading-tight text-white/38">{priceLabels.sub}</p>
+                          <p className="mt-0.5 text-xs leading-tight text-white/38">{priceLabels.sub}</p>
                           {billing === "yearly" ? (
-                            <p className="mt-1.5 inline-flex items-center rounded-md border border-emerald-400/35 bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold leading-tight text-emerald-200">
+                            <p className="mt-1 inline-flex items-center rounded-md border border-emerald-400/35 bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold leading-tight text-emerald-200">
                               Save 30% on yearly billing
                             </p>
                           ) : null}
@@ -575,27 +598,40 @@ export default function SubscriptionPage() {
                       disabled={
                         Boolean(checkoutLoading) ||
                         exactPlanAndBilling ||
-                        isLowerTier ||
-                        (isSameTier && serverSubBilling === "pending")
+                        (isSameTier && serverSubBilling === "pending") ||
+                        Boolean(downgradePreviewLoading && pendingDowngradePlanId === plan.id)
                       }
-                      onClick={() => void startSubscriptionCheckout(plan.id)}
+                      onClick={() => {
+                        if (isLowerTier) {
+                          void openDowngradeDialog(plan.id);
+                          return;
+                        }
+                        void startSubscriptionCheckout(plan.id);
+                      }}
                       className={cn(
-                        "mt-4 h-12 w-full shrink-0 rounded-xl text-sm font-bold transition-all",
-                        exactPlanAndBilling || isLowerTier
+                        "mt-3 h-11 w-full shrink-0 rounded-xl text-sm font-bold transition-all",
+                        exactPlanAndBilling
                           ? "cursor-not-allowed border border-white/10 bg-white/[0.06] text-white/40 shadow-none hover:bg-white/[0.06]"
-                          : plan.highlight
-                            ? "border border-violet-200/35 bg-violet-400 text-black shadow-[0_6px_0_0_rgba(76,29,149,0.9)] hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9)]"
-                            : "border border-white/15 bg-white/10 text-white hover:bg-white/15",
+                          : isLowerTier
+                            ? "border border-amber-400/40 bg-amber-500/15 text-amber-100 hover:bg-amber-500/25"
+                            : plan.highlight
+                              ? "border border-violet-200/35 bg-violet-400 text-black shadow-[0_6px_0_0_rgba(76,29,149,0.9)] hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9)]"
+                              : "border border-white/15 bg-white/10 text-white hover:bg-white/15",
                       )}
                     >
                       {checkoutLoading === plan.id ? (
                         "Redirecting…"
+                      ) : downgradePreviewLoading && pendingDowngradePlanId === plan.id ? (
+                        "Loading…"
                       ) : isSameTier && serverSubBilling === "pending" ? (
                         "Loading…"
                       ) : exactPlanAndBilling ? (
                         "Current plan"
                       ) : isLowerTier ? (
-                        "Below current plan"
+                        <span className="inline-flex items-center justify-center gap-2">
+                          Downgrade
+                          <ArrowRight className="h-4 w-4" aria-hidden />
+                        </span>
                       ) : isSameTier && billing === "yearly" && serverSubBilling !== "yearly" ? (
                         <span className="inline-flex items-center justify-center gap-2">
                           Switch to yearly
@@ -614,7 +650,7 @@ export default function SubscriptionPage() {
                       )}
                     </Button>
 
-                    <ul className="mt-6 flex min-h-0 flex-1 flex-col space-y-2 border-t border-white/10 pt-6 text-left text-xs text-white/72">
+                    <ul className="mt-4 flex min-h-0 flex-1 flex-col space-y-2 border-t border-white/10 pt-4 text-left text-xs text-white/72">
                       <li className="flex items-start gap-2.5">
                         <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-violet-500/20 text-violet-200">
                           <Coins className="h-3 w-3" aria-hidden />
