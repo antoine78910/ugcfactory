@@ -57,7 +57,7 @@ const PLANS: PlanDef[] = [
   {
     id: "starter",
     name: "Starter",
-    description: "Learn the workflow and launch your first campaigns.", // workflow shown via PlanCardDescription
+    description: "Learn the workflow and launch your first campaigns.",
     monthly: SUBSCRIPTIONS[0].price_usd,
     credits: SUBSCRIPTIONS[0].credits_per_month,
     usage: {
@@ -116,25 +116,6 @@ function SubscriptionPlanPriceSkeleton() {
 }
 
 function PlanCardDescription({ plan }: { plan: PlanDef }) {
-  if (plan.id === "starter") {
-    return (
-      <p className="mt-1 min-h-0 text-sm leading-snug text-white/48">
-        Learn the{" "}
-        <span className="inline-flex items-center gap-1 align-baseline">
-          <span
-            className="pointer-events-none cursor-default select-none text-white/32 line-through decoration-white/20"
-            aria-disabled="true"
-          >
-            workflow
-          </span>
-          <span className="rounded border border-white/12 bg-white/[0.05] px-1.5 py-0 text-[9px] font-bold uppercase tracking-wide text-white/45">
-            Soon
-          </span>
-        </span>{" "}
-        and launch your first campaigns.
-      </p>
-    );
-  }
   return <p className="mt-1 min-h-0 text-sm leading-snug text-white/48">{plan.description}</p>;
 }
 

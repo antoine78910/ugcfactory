@@ -3,6 +3,7 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import type { StripeDisplayPricesPayload } from "@/lib/billing/stripeDisplayTypes";
+import { compactEurCurrencyFormat } from "@/lib/billing/formatMoney";
 import { buildUsdStripeDisplayPricesFallback } from "@/lib/billing/stripeDisplayFallback";
 import {
   billingCheckoutCurrencyFromRequest,
@@ -38,7 +39,19 @@ function moneyFromUnitAmount(
 ): { amount: number; formatted: string } | null {
   if (unitAmount == null || !Number.isFinite(unitAmount)) return null;
   const amount = unitAmount / 100;
-  return { amount, formatted: nf.format(amount) };
+  let formatted = nf.format(amount);
+  if (nf.resolvedOptions().currency === "EUR") {
+    formatted = compactEurCurrencyFormat(formatted);
+  }
+  return { amount, formatted };
+}
+
+function formatWithNf(nf: Intl.NumberFormat, value: number): string {
+  let s = nf.format(value);
+  if (nf.resolvedOptions().currency === "EUR") {
+    s = compactEurCurrencyFormat(s);
+  }
+  return s;
 }
 
 function collectStripeJobs(currency: StripeDisplayPricesPayload["currency"]) {
@@ -105,13 +118,13 @@ export async function GET(req: Request) {
         cur.yearly = {
           ...m,
           perMonthAmount,
-          perMonthFormatted: nf.format(perMonthAmount),
+          perMonthFormatted: formatWithNf(nf, perMonthAmount),
         };
       } else if (m) {
         cur.yearly = {
           ...m,
           perMonthAmount: m.amount / 12,
-          perMonthFormatted: nf.format(m.amount / 12),
+          perMonthFormatted: formatWithNf(nf, m.amount / 12),
         };
       }
       subscriptions[j.planId] = cur;

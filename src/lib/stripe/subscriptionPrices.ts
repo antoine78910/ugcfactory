@@ -4,6 +4,7 @@
  */
 
 import type { BillingCheckoutCurrency } from "@/lib/geo/billingRegion";
+import { firstStripePriceId } from "@/lib/stripe/stripePriceEnv";
 
 export const SUBSCRIPTION_PLAN_IDS = ["starter", "growth", "pro", "scale"] as const;
 export type SubscriptionPlanId = (typeof SUBSCRIPTION_PLAN_IDS)[number];
@@ -22,21 +23,54 @@ export function getMonthlySubscriptionPriceId(
   planId: SubscriptionPlanId,
   currency: BillingCheckoutCurrency = "usd",
 ): string | null {
-  const mapUsd: Record<SubscriptionPlanId, string | undefined> = {
-    starter: process.env.STRIPE_PRICE_SUBSCRIPTION_STARTER,
-    growth: process.env.STRIPE_PRICE_SUBSCRIPTION_GROWTH,
-    pro: process.env.STRIPE_PRICE_SUBSCRIPTION_PRO,
-    scale: process.env.STRIPE_PRICE_SUBSCRIPTION_SCALE,
+  if (currency === "eur") {
+    const eur: Record<SubscriptionPlanId, string | null> = {
+      starter: firstStripePriceId(
+        process.env.STRIPE_PRICE_EUR_SUBSCRIPTION_STARTER,
+        process.env.NEXT_PUBLIC_STRIPE_PRICE_EUR_SUBSCRIPTION_STARTER,
+        process.env.STRIPE_PRICE_SUBSCRIPTION_STARTER_EUR,
+        process.env.NEXT_PUBLIC_STRIPE_PRICE_SUBSCRIPTION_STARTER_EUR,
+      ),
+      growth: firstStripePriceId(
+        process.env.STRIPE_PRICE_EUR_SUBSCRIPTION_GROWTH,
+        process.env.NEXT_PUBLIC_STRIPE_PRICE_EUR_SUBSCRIPTION_GROWTH,
+        process.env.STRIPE_PRICE_SUBSCRIPTION_GROWTH_EUR,
+        process.env.NEXT_PUBLIC_STRIPE_PRICE_SUBSCRIPTION_GROWTH_EUR,
+      ),
+      pro: firstStripePriceId(
+        process.env.STRIPE_PRICE_EUR_SUBSCRIPTION_PRO,
+        process.env.NEXT_PUBLIC_STRIPE_PRICE_EUR_SUBSCRIPTION_PRO,
+        process.env.STRIPE_PRICE_SUBSCRIPTION_PRO_EUR,
+        process.env.NEXT_PUBLIC_STRIPE_PRICE_SUBSCRIPTION_PRO_EUR,
+      ),
+      scale: firstStripePriceId(
+        process.env.STRIPE_PRICE_EUR_SUBSCRIPTION_SCALE,
+        process.env.NEXT_PUBLIC_STRIPE_PRICE_EUR_SUBSCRIPTION_SCALE,
+        process.env.STRIPE_PRICE_SUBSCRIPTION_SCALE_EUR,
+        process.env.NEXT_PUBLIC_STRIPE_PRICE_SUBSCRIPTION_SCALE_EUR,
+      ),
+    };
+    return eur[planId];
+  }
+  const usd: Record<SubscriptionPlanId, string | null> = {
+    starter: firstStripePriceId(
+      process.env.STRIPE_PRICE_SUBSCRIPTION_STARTER,
+      process.env.NEXT_PUBLIC_STRIPE_PRICE_SUBSCRIPTION_STARTER,
+    ),
+    growth: firstStripePriceId(
+      process.env.STRIPE_PRICE_SUBSCRIPTION_GROWTH,
+      process.env.NEXT_PUBLIC_STRIPE_PRICE_SUBSCRIPTION_GROWTH,
+    ),
+    pro: firstStripePriceId(
+      process.env.STRIPE_PRICE_SUBSCRIPTION_PRO,
+      process.env.NEXT_PUBLIC_STRIPE_PRICE_SUBSCRIPTION_PRO,
+    ),
+    scale: firstStripePriceId(
+      process.env.STRIPE_PRICE_SUBSCRIPTION_SCALE,
+      process.env.NEXT_PUBLIC_STRIPE_PRICE_SUBSCRIPTION_SCALE,
+    ),
   };
-  const mapEur: Record<SubscriptionPlanId, string | undefined> = {
-    starter: process.env.STRIPE_PRICE_EUR_SUBSCRIPTION_STARTER,
-    growth: process.env.STRIPE_PRICE_EUR_SUBSCRIPTION_GROWTH,
-    pro: process.env.STRIPE_PRICE_EUR_SUBSCRIPTION_PRO,
-    scale: process.env.STRIPE_PRICE_EUR_SUBSCRIPTION_SCALE,
-  };
-  const map = currency === "eur" ? mapEur : mapUsd;
-  const v = map[planId]?.trim();
-  return v && v.startsWith("price_") ? v : null;
+  return usd[planId];
 }
 
 /** Yearly prices — optional; create in Stripe and set env when ready. */
@@ -44,21 +78,54 @@ export function getYearlySubscriptionPriceId(
   planId: SubscriptionPlanId,
   currency: BillingCheckoutCurrency = "usd",
 ): string | null {
-  const mapUsd: Record<SubscriptionPlanId, string | undefined> = {
-    starter: process.env.STRIPE_PRICE_SUBSCRIPTION_STARTER_YEARLY,
-    growth: process.env.STRIPE_PRICE_SUBSCRIPTION_GROWTH_YEARLY,
-    pro: process.env.STRIPE_PRICE_SUBSCRIPTION_PRO_YEARLY,
-    scale: process.env.STRIPE_PRICE_SUBSCRIPTION_SCALE_YEARLY,
+  if (currency === "eur") {
+    const eur: Record<SubscriptionPlanId, string | null> = {
+      starter: firstStripePriceId(
+        process.env.STRIPE_PRICE_EUR_SUBSCRIPTION_STARTER_YEARLY,
+        process.env.NEXT_PUBLIC_STRIPE_PRICE_EUR_SUBSCRIPTION_STARTER_YEARLY,
+        process.env.STRIPE_PRICE_SUBSCRIPTION_STARTER_YEARLY_EUR,
+        process.env.NEXT_PUBLIC_STRIPE_PRICE_SUBSCRIPTION_STARTER_YEARLY_EUR,
+      ),
+      growth: firstStripePriceId(
+        process.env.STRIPE_PRICE_EUR_SUBSCRIPTION_GROWTH_YEARLY,
+        process.env.NEXT_PUBLIC_STRIPE_PRICE_EUR_SUBSCRIPTION_GROWTH_YEARLY,
+        process.env.STRIPE_PRICE_SUBSCRIPTION_GROWTH_YEARLY_EUR,
+        process.env.NEXT_PUBLIC_STRIPE_PRICE_SUBSCRIPTION_GROWTH_YEARLY_EUR,
+      ),
+      pro: firstStripePriceId(
+        process.env.STRIPE_PRICE_EUR_SUBSCRIPTION_PRO_YEARLY,
+        process.env.NEXT_PUBLIC_STRIPE_PRICE_EUR_SUBSCRIPTION_PRO_YEARLY,
+        process.env.STRIPE_PRICE_SUBSCRIPTION_PRO_YEARLY_EUR,
+        process.env.NEXT_PUBLIC_STRIPE_PRICE_SUBSCRIPTION_PRO_YEARLY_EUR,
+      ),
+      scale: firstStripePriceId(
+        process.env.STRIPE_PRICE_EUR_SUBSCRIPTION_SCALE_YEARLY,
+        process.env.NEXT_PUBLIC_STRIPE_PRICE_EUR_SUBSCRIPTION_SCALE_YEARLY,
+        process.env.STRIPE_PRICE_SUBSCRIPTION_SCALE_YEARLY_EUR,
+        process.env.NEXT_PUBLIC_STRIPE_PRICE_SUBSCRIPTION_SCALE_YEARLY_EUR,
+      ),
+    };
+    return eur[planId];
+  }
+  const usd: Record<SubscriptionPlanId, string | null> = {
+    starter: firstStripePriceId(
+      process.env.STRIPE_PRICE_SUBSCRIPTION_STARTER_YEARLY,
+      process.env.NEXT_PUBLIC_STRIPE_PRICE_SUBSCRIPTION_STARTER_YEARLY,
+    ),
+    growth: firstStripePriceId(
+      process.env.STRIPE_PRICE_SUBSCRIPTION_GROWTH_YEARLY,
+      process.env.NEXT_PUBLIC_STRIPE_PRICE_SUBSCRIPTION_GROWTH_YEARLY,
+    ),
+    pro: firstStripePriceId(
+      process.env.STRIPE_PRICE_SUBSCRIPTION_PRO_YEARLY,
+      process.env.NEXT_PUBLIC_STRIPE_PRICE_SUBSCRIPTION_PRO_YEARLY,
+    ),
+    scale: firstStripePriceId(
+      process.env.STRIPE_PRICE_SUBSCRIPTION_SCALE_YEARLY,
+      process.env.NEXT_PUBLIC_STRIPE_PRICE_SUBSCRIPTION_SCALE_YEARLY,
+    ),
   };
-  const mapEur: Record<SubscriptionPlanId, string | undefined> = {
-    starter: process.env.STRIPE_PRICE_EUR_SUBSCRIPTION_STARTER_YEARLY,
-    growth: process.env.STRIPE_PRICE_EUR_SUBSCRIPTION_GROWTH_YEARLY,
-    pro: process.env.STRIPE_PRICE_EUR_SUBSCRIPTION_PRO_YEARLY,
-    scale: process.env.STRIPE_PRICE_EUR_SUBSCRIPTION_SCALE_YEARLY,
-  };
-  const map = currency === "eur" ? mapEur : mapUsd;
-  const v = map[planId]?.trim();
-  return v && v.startsWith("price_") ? v : null;
+  return usd[planId];
 }
 
 export function getSubscriptionStripePriceId(

@@ -6,7 +6,7 @@ import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import { parseAccountPlan, type AccountPlanId } from "@/lib/subscriptionModelAccess";
 import { getPlanFromPriceId } from "@/lib/stripe/subscriptionPrices";
-import { isAllowedUser } from "@/lib/allowedUsers";
+import { isAllowedUser, isPersonalApiUser } from "@/lib/allowedUsers";
 import { getUserCreditBalance } from "@/lib/creditGrants";
 
 export type MeSubscriptionResponse = {
@@ -47,6 +47,26 @@ export async function GET() {
   }
 
   const userId = auth.user.id;
+
+  // Personal-API accounts use real DB credits but auto-enable their own provider keys.
+  if (isPersonalApiUser(auth.user.email)) {
+    const admin = createSupabaseServiceClient();
+    let creditBalance = 0;
+    if (admin) {
+      try {
+        const bal = await getUserCreditBalance(admin, userId);
+        creditBalance = bal.balance;
+      } catch { /* non-critical */ }
+    }
+    return NextResponse.json({
+      planId: "scale" as AccountPlanId,
+      billing: null,
+      userId,
+      unlimited: true,
+      autoEnablePersonalApi: true,
+      creditBalance,
+    } satisfies MeSubscriptionResponse);
+  }
 
   // Helper: attach credit balance to any response
   async function withCreditBalance(base: MeSubscriptionResponse): Promise<MeSubscriptionResponse> {
