@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, DollarSign, HelpCircle, LogOut, Settings, User } from "lucide-react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 type Props = {
   email: string;
@@ -18,7 +18,6 @@ export default function SidebarAccountMenu({
   planLabel = "Free",
   collapsed = false,
 }: Props) {
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -27,15 +26,16 @@ export default function SidebarAccountMenu({
     function onDoc(e: MouseEvent) {
       if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
     }
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
+    // Use click (bubble) so the same gesture activates Link navigation before the menu unmounts.
+    document.addEventListener("click", onDoc);
+    return () => document.removeEventListener("click", onDoc);
   }, [open]);
 
   const display = email.trim() || "…";
   const truncated = display.length > 24 ? `${display.slice(0, 21)}…` : display;
 
   return (
-    <div className="relative" ref={rootRef}>
+    <div className="relative z-[500] isolate" ref={rootRef}>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -74,46 +74,37 @@ export default function SidebarAccountMenu({
           className={
             collapsed
               ? /* Open to the right of the narrow rail (`left-full`); avoids overflow clip + keeps the panel on-screen. */
-                "absolute bottom-full left-full z-[100] mb-2 ml-1 w-[min(calc(100vw-1rem),14rem)] overflow-hidden rounded-xl border border-white/10 bg-[#0a0a0f] py-1 shadow-[0_-12px_48px_rgba(0,0,0,0.65)]"
-              : "absolute bottom-full left-0 right-0 z-[100] mb-2 overflow-hidden rounded-xl border border-white/10 bg-[#0a0a0f] py-1 shadow-[0_-12px_48px_rgba(0,0,0,0.65)]"
+                "absolute bottom-full left-full z-[6000] mb-2 ml-1 w-[min(calc(100vw-1rem),14rem)] overflow-hidden rounded-xl border border-white/10 bg-[#0a0a0f] py-1 shadow-[0_-12px_48px_rgba(0,0,0,0.65)]"
+              : "absolute bottom-full left-0 right-0 z-[6000] mb-2 overflow-hidden rounded-xl border border-white/10 bg-[#0a0a0f] py-1 shadow-[0_-12px_48px_rgba(0,0,0,0.65)]"
           }
         >
-          <button
-            type="button"
+          <Link
+            href="/credits"
             role="menuitem"
             className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm text-white/90 transition-colors hover:bg-white/[0.06]"
-            onClick={() => {
-              setOpen(false);
-              router.push("/credits");
-            }}
+            onClick={() => setOpen(false)}
           >
             <DollarSign className="h-4 w-4 shrink-0 text-white/70" strokeWidth={1.75} />
             Credits
-          </button>
-          <button
-            type="button"
+          </Link>
+          <Link
+            href="/subscription"
             role="menuitem"
             className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm text-white/90 transition-colors hover:bg-white/[0.06]"
-            onClick={() => {
-              setOpen(false);
-              router.push("/subscription");
-            }}
+            onClick={() => setOpen(false)}
           >
             <Settings className="h-4 w-4 shrink-0 text-white/70" strokeWidth={1.75} />
             Subscription
-          </button>
-          <button
-            type="button"
+          </Link>
+          <Link
+            href="/support"
             role="menuitem"
             className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm text-white/90 transition-colors hover:bg-white/[0.06]"
-            onClick={() => {
-              setOpen(false);
-              router.push("/support");
-            }}
+            onClick={() => setOpen(false)}
           >
             <HelpCircle className="h-4 w-4 shrink-0 text-white/70" strokeWidth={1.75} />
             Support
-          </button>
+          </Link>
           <div className="my-1 border-t border-white/10" role="separator" />
           <button
             type="button"

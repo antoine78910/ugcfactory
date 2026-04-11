@@ -10,7 +10,6 @@
  */
 const ALLOWED_USER_EMAILS = new Set<string>([
   "anto.delbos@gmail.com",
-  "paulyaniskacou@gmail.com",
 ]);
 
 /**

@@ -195,7 +195,7 @@ function StudioShellInner({
       >
         <aside
           className={cn(
-            "sticky top-0 z-20 flex h-screen flex-col overflow-visible border-r border-white/10 bg-[#06070d] py-4",
+            "sticky top-0 z-30 flex h-screen flex-col overflow-visible border-r border-white/10 bg-[#06070d] py-4",
             "select-none",
             navCollapsed ? "px-1.5" : "px-3",
           )}

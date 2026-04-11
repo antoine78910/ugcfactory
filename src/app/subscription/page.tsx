@@ -108,9 +108,9 @@ const PLANS: PlanDef[] = [
 
 function SubscriptionPlanPriceSkeleton() {
   return (
-    <div className="space-y-2" aria-hidden>
-      <div className="h-12 w-[min(100%,14rem)] animate-pulse rounded-lg bg-white/12 md:h-14" />
-      <div className="h-4 w-56 max-w-full animate-pulse rounded bg-white/10" />
+    <div className="space-y-1.5" aria-hidden>
+      <div className="h-11 w-[min(100%,14rem)] animate-pulse rounded-lg bg-white/12 md:h-12" />
+      <div className="h-3.5 w-52 max-w-full animate-pulse rounded bg-white/10" />
     </div>
   );
 }
@@ -549,18 +549,18 @@ export default function SubscriptionPage() {
                       <p className="mt-2 min-h-[4.25rem] text-sm leading-relaxed text-white/48">{plan.description}</p>
                     </div>
 
-                    <div className="mt-6 min-h-[9.25rem]">
+                    <div className="mt-4 min-h-[6.25rem]">
                       {billingPricesReady && priceLabels ? (
                         <>
-                          <div className="flex flex-wrap items-baseline gap-1">
+                          <div className="flex flex-wrap items-baseline gap-x-1 gap-y-0">
                             <span className="text-4xl font-extrabold tabular-nums leading-none text-white md:text-5xl">
                               {priceLabels.mainLabel}
                             </span>
-                            <span className="text-sm font-semibold text-white/55 md:text-base">/mo</span>
+                            <span className="text-sm font-semibold leading-none text-white/55 md:text-base">/mo</span>
                           </div>
-                          <p className="mt-2 text-xs leading-snug text-white/38">{priceLabels.sub}</p>
+                          <p className="mt-1 text-xs leading-tight text-white/38">{priceLabels.sub}</p>
                           {billing === "yearly" ? (
-                            <p className="mt-2 inline-flex items-center rounded-md border border-emerald-400/35 bg-emerald-500/15 px-2 py-1 text-[11px] font-semibold text-emerald-200">
+                            <p className="mt-1.5 inline-flex items-center rounded-md border border-emerald-400/35 bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold leading-tight text-emerald-200">
                               Save 30% on yearly billing
                             </p>
                           ) : null}
@@ -580,7 +580,7 @@ export default function SubscriptionPage() {
                       }
                       onClick={() => void startSubscriptionCheckout(plan.id)}
                       className={cn(
-                        "mt-6 h-12 w-full shrink-0 rounded-xl text-sm font-bold transition-all",
+                        "mt-4 h-12 w-full shrink-0 rounded-xl text-sm font-bold transition-all",
                         exactPlanAndBilling || isLowerTier
                           ? "cursor-not-allowed border border-white/10 bg-white/[0.06] text-white/40 shadow-none hover:bg-white/[0.06]"
                           : plan.highlight
