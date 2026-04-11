@@ -10,24 +10,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { getAuthCallbackUrl } from "@/lib/supabase/authRedirect";
 
 type AuthMode = "signin" | "signup";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const HAS_SUPABASE_ENV = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
-const APP_REDIRECT_BASE =
-  (process.env.NEXT_PUBLIC_APP_URL && process.env.NEXT_PUBLIC_APP_URL.trim()) ||
-  "https://app.youry.io";
-const AUTH_CALLBACK_FALLBACK = `${APP_REDIRECT_BASE.replace(/\/+$/, "")}/auth/callback`;
 
-function getAuthCallbackUrl() {
-  if (process.env.NEXT_PUBLIC_APP_URL && process.env.NEXT_PUBLIC_APP_URL.trim()) return AUTH_CALLBACK_FALLBACK;
-  if (typeof window !== "undefined" && window.location?.origin) return `${window.location.origin}/auth/callback`;
-  return AUTH_CALLBACK_FALLBACK;
-}
-
-export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
+export default function AuthClient({ mode = "signin", redirectTo }: { mode?: AuthMode; redirectTo?: string }) {
   const router = useRouter();
   const supabase = useMemo(() => (HAS_SUPABASE_ENV ? createSupabaseBrowserClient() : null), []);
 
@@ -69,7 +60,7 @@ export default function AuthClient({ mode = "signin" }: { mode?: AuthMode }) {
       if (error) throw error;
       window.datafast?.("signin");
       toast.success("Signed in");
-      router.push("/");
+      router.push(redirectTo || "/");
       router.refresh();
     } catch (err) {
       toast.error("Sign in error", {

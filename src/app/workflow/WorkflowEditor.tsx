@@ -60,6 +60,7 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type CSSProperties,
   type DragEvent,
 } from "react";
 
@@ -92,6 +93,8 @@ import {
 } from "./workflowSpacesStorage";
 import { buildTemplateProject, getWorkflowTemplateMeta } from "./workflowTemplates";
 import { WorkflowNodePatchProvider } from "./workflowNodePatchContext";
+import { ShareWorkflowDialog } from "./ShareWorkflowDialog";
+import { WorkflowInviteWelcome } from "./WorkflowInviteWelcome";
 import {
   suggestAutoConnectAfterNodeDrag,
   WORKFLOW_CONNECTION_RADIUS,
@@ -124,6 +127,14 @@ import {
 import type { StickyNoteNodeData } from "./workflowStickyNoteTypes";
 
 const nodeTypes = { adAsset: AdAssetNode, workflowGroup: WorkflowGroupNode, stickyNote: StickyNoteNode };
+
+/** Vertically centered on the canvas; React Flow’s `center-left` adds a −15px Y offset meant for default margin, which misaligns when margin is 0. */
+const WORKFLOW_LEFT_TOOLS_PANEL_STYLE: CSSProperties = {
+  top: "50%",
+  left: "1rem",
+  transform: "translateY(-50%)",
+  margin: 0,
+};
 
 type Tool = "select" | "pan" | "stickyPlace" | "cutTarget";
 
@@ -751,7 +762,11 @@ function WorkflowReactFlowChrome({
           color="rgba(228, 222, 255, 0.42)"
           className="workflow-flow-dot-glow"
         />
-        <Panel position="top-left" className="!m-0 !mt-5 !ml-4 z-10 flex !w-auto">
+        <Panel
+          position="top-left"
+          className="z-10 flex !w-auto"
+          style={WORKFLOW_LEFT_TOOLS_PANEL_STYLE}
+        >
           <div
             role="toolbar"
             aria-label="View-only canvas"
@@ -788,7 +803,11 @@ function WorkflowReactFlowChrome({
         className="workflow-flow-dot-glow"
       />
 
-      <Panel position="top-left" className="!m-0 !mt-5 !ml-4 z-10 flex !w-auto">
+      <Panel
+        position="top-left"
+        className="z-10 flex !w-auto"
+        style={WORKFLOW_LEFT_TOOLS_PANEL_STYLE}
+      >
         <div
           role="toolbar"
           aria-label="Canvas tools"
@@ -2210,6 +2229,7 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
   const [workflowProject, setWorkflowProject] = useState<WorkflowProjectStateV1>(() => defaultWorkflowProject());
   const [workflowHydrated, setWorkflowHydrated] = useState(false);
   const [spaceName, setSpaceName] = useState("Untitled workflow");
+  const [shareOpen, setShareOpen] = useState(false);
   useEffect(() => {
     const idx = loadSpacesIndex().spaces;
     if (!idx.some((s) => s.id === resolvedSpaceId)) {
@@ -2265,6 +2285,7 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
         <div className="flex shrink-0 items-center gap-2">
           <button
             type="button"
+            onClick={() => setShareOpen(true)}
             className="inline-flex h-9 items-center gap-2 rounded-full border border-violet-400/35 bg-white px-3.5 text-[13px] font-semibold text-zinc-900 shadow-sm transition hover:bg-white/95"
           >
             <Share2 className="h-3.5 w-3.5" />
@@ -2272,6 +2293,14 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
           </button>
         </div>
       </header>
+
+      <ShareWorkflowDialog
+        open={shareOpen}
+        onOpenChange={setShareOpen}
+        spaceId={resolvedSpaceId}
+        spaceName={spaceName}
+      />
+      <WorkflowInviteWelcome spaceId={resolvedSpaceId} />
 
       <div className="relative z-10 flex min-h-0 min-w-0 flex-1">
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-[#06070d]">
