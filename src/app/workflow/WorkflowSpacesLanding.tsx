@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 
 import { WorkflowAmbientLayer } from "./WorkflowAmbientLayer";
 import { createSpace, deleteSpace, loadSpacesIndex, type WorkflowSpaceMeta } from "./workflowSpacesStorage";
+import { WORKFLOW_TEMPLATE_LIST } from "./workflowTemplates";
 
 type TabId = "my" | "shared" | "templates";
 
@@ -32,7 +33,6 @@ export function WorkflowSpacesLanding() {
   const [hydrated, setHydrated] = useState(false);
   const [tab, setTab] = useState<TabId>("my");
   const [query, setQuery] = useState("");
-  const [landingWaveKey, setLandingWaveKey] = useState(0);
 
   const refresh = useCallback(() => {
     setSpaces(loadSpacesIndex().spaces);
@@ -43,29 +43,36 @@ export function WorkflowSpacesLanding() {
     setHydrated(true);
   }, [refresh]);
 
-  useEffect(() => {
-    setLandingWaveKey((k) => k + 1);
-  }, []);
-
-  const filtered = useMemo(() => {
+  const filteredSpaces = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (tab === "shared" || tab === "templates") return [];
     let list = spaces;
     if (!q) return list;
     return list.filter((s) => s.name.toLowerCase().includes(q));
-  }, [spaces, tab, query]);
+  }, [spaces, query]);
+
+  const filteredTemplates = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return WORKFLOW_TEMPLATE_LIST;
+    return WORKFLOW_TEMPLATE_LIST.filter(
+      (t) => t.name.toLowerCase().includes(q) || t.blurb.toLowerCase().includes(q),
+    );
+  }, [query]);
 
   const onNewSpace = () => {
-    setLandingWaveKey((k) => k + 1);
     const meta = createSpace();
-    router.push(`/workflow/space/${meta.id}`);
+    router.push(`/workflow/space/${encodeURIComponent(meta.id)}`);
   };
 
   const openSpace = (id: string) => {
-    router.push(`/workflow/space/${id}`);
+    router.push(`/workflow/space/${encodeURIComponent(id)}`);
+  };
+
+  const openTemplate = (id: string) => {
+    router.push(`/workflow/template/${encodeURIComponent(id)}`);
   };
 
   const removeSpace = (e: MouseEvent, id: string) => {
+    e.preventDefault();
     e.stopPropagation();
     deleteSpace(id);
     refresh();
@@ -73,7 +80,8 @@ export function WorkflowSpacesLanding() {
 
   return (
     <div className="relative min-h-[100dvh] overflow-hidden bg-[#06070d] text-white">
-      <WorkflowAmbientLayer waveKey={landingWaveKey} dots="labs" className="z-0" />
+      {/* Dots only on the canvas (`WorkflowEditor`); keep import so the symbol is always defined for bundlers/HMR */}
+      <WorkflowAmbientLayer dots={false} />
       <div className="pointer-events-none absolute left-1/2 top-0 z-[1] h-[380px] w-[min(100%,920px)] -translate-x-1/2 rounded-full bg-violet-600/11 blur-[100px]" />
       <div className="pointer-events-none absolute right-0 top-[120px] z-[1] h-[320px] w-[480px] rounded-full bg-violet-600/12 blur-[90px]" />
 
@@ -81,10 +89,10 @@ export function WorkflowSpacesLanding() {
         <div className="overflow-hidden rounded-[22px] border border-white/[0.08] bg-gradient-to-br from-violet-950/80 via-[#0c0d12] to-violet-950/45 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.45)] sm:p-10">
           <div className="flex flex-col gap-8 lg:flex-row lg:items-center lg:justify-between">
             <div className="max-w-xl">
-              <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Spaces</h1>
+              <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Workflow</h1>
               <p className="mt-2 text-lg font-semibold text-white/80">Start from scratch</p>
               <p className="mt-2 text-sm leading-relaxed text-white/45">
-                Create a new space and start collaborating
+                Create a new workflow and start collaborating
               </p>
               <button
                 type="button"
@@ -92,7 +100,7 @@ export function WorkflowSpacesLanding() {
                 className="mt-6 inline-flex items-center gap-2 rounded-full border border-violet-400/40 bg-white px-5 py-2.5 text-[14px] font-semibold text-zinc-900 shadow-[0_8px_32px_rgba(139,92,246,0.2)] transition hover:border-violet-300/50 hover:bg-white hover:shadow-[0_10px_36px_rgba(139,92,246,0.25)]"
               >
                 <Plus className="h-4 w-4" strokeWidth={2.5} />
-                New space
+                New workflow
               </button>
             </div>
 
@@ -138,7 +146,7 @@ export function WorkflowSpacesLanding() {
           <div className="flex flex-wrap items-center gap-1 rounded-full border border-white/[0.08] bg-[#0b0912]/60 p-1">
             {(
               [
-                { id: "my" as const, label: "My spaces", icon: Layers },
+                { id: "my" as const, label: "My workflows", icon: Layers },
                 { id: "shared" as const, label: "Shared", icon: Users },
                 { id: "templates" as const, label: "Templates", icon: LayoutTemplate },
               ] as const
@@ -166,48 +174,85 @@ export function WorkflowSpacesLanding() {
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search spaces…"
+              placeholder={tab === "templates" ? "Search templates…" : "Search workflows…"}
               className="w-full rounded-full border border-white/[0.1] bg-[#0b0912]/90 py-2.5 pl-10 pr-4 text-[13px] text-white placeholder:text-white/35 outline-none ring-violet-500/0 transition focus:border-violet-500/35 focus:ring-2 focus:ring-violet-500/25"
             />
           </div>
         </div>
 
         {!hydrated ? (
-          <p className="mt-10 text-center text-sm text-white/40">Loading spaces…</p>
+          <p className="mt-10 text-center text-sm text-white/40">Loading workflows…</p>
         ) : tab === "shared" ? (
-          <p className="mt-12 text-center text-sm text-white/45">No shared spaces yet.</p>
+          <p className="mt-12 text-center text-sm text-white/45">No shared workflows yet.</p>
         ) : tab === "templates" ? (
-          <p className="mt-12 text-center text-sm text-white/45">Templates will appear here.</p>
-        ) : filtered.length === 0 ? (
+          filteredTemplates.length === 0 ? (
+            <p className="mt-12 text-center text-sm text-white/45">No templates match your search.</p>
+          ) : (
+            <ul className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {filteredTemplates.map((t) => (
+                <li key={t.id}>
+                  <div
+                    role="link"
+                    tabIndex={0}
+                    onClick={() => openTemplate(t.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        openTemplate(t.id);
+                      }
+                    }}
+                    className="flex w-full cursor-pointer flex-col overflow-hidden rounded-2xl border border-white/[0.1] bg-[#0b0912]/90 text-left shadow-[0_12px_40px_rgba(0,0,0,0.35)] outline-none transition hover:border-violet-400/30 hover:bg-[#0b0912] hover:shadow-[0_12px_40px_rgba(139,92,246,0.08)] focus-visible:ring-2 focus-visible:ring-violet-500/50"
+                  >
+                    <div className="aspect-[16/10] w-full bg-gradient-to-br from-violet-900/35 via-[#1a1a22] to-violet-950/40" />
+                    <div className="p-4">
+                      <p className="font-semibold text-white">{t.name}</p>
+                      <p className="mt-2 text-[13px] leading-relaxed text-white/45">{t.blurb}</p>
+                      <p className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-violet-300/70">
+                        View preview
+                      </p>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )
+        ) : filteredSpaces.length === 0 ? (
           <div className="mt-12 rounded-2xl border border-dashed border-white/15 bg-white/[0.02] px-6 py-14 text-center">
             <p className="text-sm text-white/55">
-              {query.trim() ? "No spaces match your search." : "No spaces yet — create your first one above."}
+              {query.trim() ? "No workflows match your search." : "No workflows yet — create your first one above."}
             </p>
           </div>
         ) : (
           <ul className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {filtered.map((s) => (
-              <li key={s.id}>
-                <button
-                  type="button"
+            {filteredSpaces.map((s) => (
+              <li key={s.id} className="group relative">
+                <div
+                  role="link"
+                  tabIndex={0}
                   onClick={() => openSpace(s.id)}
-                  className="group flex w-full flex-col overflow-hidden rounded-2xl border border-white/[0.1] bg-[#0b0912]/90 text-left shadow-[0_12px_40px_rgba(0,0,0,0.35)] transition hover:border-violet-400/30 hover:bg-[#0b0912] hover:shadow-[0_12px_40px_rgba(139,92,246,0.08)]"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      openSpace(s.id);
+                    }
+                  }}
+                  className="flex w-full cursor-pointer flex-col overflow-hidden rounded-2xl border border-white/[0.1] bg-[#0b0912]/90 text-left shadow-[0_12px_40px_rgba(0,0,0,0.35)] outline-none transition hover:border-violet-400/30 hover:bg-[#0b0912] hover:shadow-[0_12px_40px_rgba(139,92,246,0.08)] focus-visible:ring-2 focus-visible:ring-violet-500/50"
                 >
                   <div className="aspect-[16/10] w-full bg-gradient-to-br from-violet-900/30 via-[#1a1a22] to-violet-950/35" />
-                  <div className="flex items-start justify-between gap-2 p-4">
+                  <div className="flex items-start gap-2 p-4 pr-[4.5rem]">
                     <div className="min-w-0">
                       <p className="truncate font-semibold text-white">{s.name}</p>
                       <p className="mt-1 text-[12px] text-white/40">Edited {formatTimeAgo(s.updatedAt)}</p>
                     </div>
-                    <button
-                      type="button"
-                      title="Delete space"
-                      onClick={(e) => removeSpace(e, s.id)}
-                      className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-semibold text-white/35 opacity-0 transition hover:bg-red-500/15 hover:text-red-300 group-hover:opacity-100"
-                    >
-                      Delete
-                    </button>
                   </div>
+                </div>
+                <button
+                  type="button"
+                  title="Delete workflow"
+                  onClick={(e) => removeSpace(e, s.id)}
+                  className="pointer-events-none absolute bottom-4 right-4 z-10 rounded-lg px-2 py-1 text-[11px] font-semibold text-white/35 opacity-0 transition hover:bg-red-500/15 hover:text-red-300 group-hover:pointer-events-auto group-hover:opacity-100"
+                >
+                  Delete
                 </button>
               </li>
             ))}

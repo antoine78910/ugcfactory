@@ -1,5 +1,6 @@
 import type { WorkflowProjectStateV1 } from "./workflowProjectStorage";
 import { defaultWorkflowProject, loadWorkflowProjectRaw, saveWorkflowProjectRaw } from "./workflowProjectStorage";
+import { cloneTemplateProjectForNewSpace, getWorkflowTemplateMeta } from "./workflowTemplates";
 
 const INDEX_KEY = "youry-workflow-spaces-index-v1";
 const LEGACY_SINGLE_KEY = "youry-workflow-project-v1";
@@ -26,7 +27,7 @@ function parseIndex(raw: string | null): IndexV1 {
       v: 1,
       spaces: p.spaces.map((s, i) => ({
         id: typeof s?.id === "string" ? s.id : `s-${i}`,
-        name: typeof s?.name === "string" && s.name.trim() ? s.name.trim() : "Untitled space",
+        name: typeof s?.name === "string" && s.name.trim() ? s.name.trim() : "Untitled workflow",
         updatedAt: typeof s?.updatedAt === "number" ? s.updatedAt : Date.now(),
       })),
     };
@@ -57,7 +58,7 @@ export function loadSpacesIndex(): IndexV1 {
           } as WorkflowProjectStateV1);
           idx = {
             v: 1,
-            spaces: [{ id, name: "Untitled space", updatedAt: Date.now() }],
+            spaces: [{ id, name: "Untitled workflow", updatedAt: Date.now() }],
           };
           localStorage.setItem(INDEX_KEY, JSON.stringify(idx));
           localStorage.removeItem(LEGACY_SINGLE_KEY);
@@ -79,7 +80,7 @@ export function saveSpacesIndex(index: IndexV1) {
   }
 }
 
-export function createSpace(name = "Untitled space"): WorkflowSpaceMeta {
+export function createSpace(name = "Untitled workflow"): WorkflowSpaceMeta {
   const id = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `s-${Date.now()}`;
   const meta: WorkflowSpaceMeta = { id, name, updatedAt: Date.now() };
   const index = loadSpacesIndex();
@@ -122,4 +123,15 @@ export function loadProjectForSpace(spaceId: string): WorkflowProjectStateV1 {
 export function saveProjectForSpace(spaceId: string, state: WorkflowProjectStateV1) {
   saveWorkflowProjectRaw(spaceId, state);
   touchSpaceUpdated(spaceId);
+}
+
+/** Creates a new space and copies the template project into it. */
+export function createSpaceFromTemplate(templateId: string): WorkflowSpaceMeta | null {
+  const project = cloneTemplateProjectForNewSpace(templateId);
+  if (!project) return null;
+  const metaTpl = getWorkflowTemplateMeta(templateId);
+  const meta = createSpace(metaTpl?.name ? `${metaTpl.name} (copy)` : "From template");
+  saveWorkflowProjectRaw(meta.id, project);
+  touchSpaceUpdated(meta.id);
+  return meta;
 }

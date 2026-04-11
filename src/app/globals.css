@@ -310,73 +310,143 @@
   accent-color: rgb(139 92 246);
 }
 
-/* Workflow: labs dots flash in sync with entrance wave */
-@keyframes workflow-ambient-labs-dots-in {
+/* Workflow canvas: second Background layer — a bit brighter dots in the middle of the viewport only */
+.workflow-flow svg.react-flow__background.workflow-flow-dot-glow {
+  opacity: 1;
+  mask-image: radial-gradient(ellipse 54% 50% at 50% 46%, #000 0%, transparent 98%);
+  -webkit-mask-image: radial-gradient(ellipse 54% 50% at 50% 46%, #000 0%, transparent 98%);
+}
+
+/* Sticky note placement tool: custom cursor on empty canvas (asset: public/workflow/sticky-note-cursor.png). */
+.workflow-flow.workflow-sticky-place-mode .react-flow__pane {
+  cursor:
+    url("/workflow/sticky-note-cursor.png") 6 4,
+    crosshair !important;
+}
+
+/* Cut tool: scissors on canvas; open scissors when hovering a connection. */
+.workflow-flow.workflow-cut-target-mode .react-flow__pane {
+  cursor:
+    url("/workflow/scissors-cursor-closed.svg") 12 12,
+    crosshair !important;
+}
+
+.workflow-flow.workflow-cut-target-mode .react-flow__edge {
+  cursor:
+    url("/workflow/scissors-cursor-open.svg") 12 12,
+    pointer !important;
+}
+
+.workflow-flow.workflow-cut-target-mode .react-flow__edge:hover {
+  filter: drop-shadow(0 0 8px rgba(167, 139, 250, 0.65));
+}
+
+.workflow-flow.workflow-cut-target-mode .react-flow__edge:hover path {
+  stroke: rgba(221, 214, 254, 0.95) !important;
+  stroke-width: 3.25px !important;
+}
+
+/* One-shot snip overlay — pivot ≈ blade crossing in 24×24 icon space. */
+.workflow-cut-fx-root {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 96px;
+  height: 96px;
+  margin-left: -48px;
+  margin-top: -48px;
+  pointer-events: none;
+  z-index: 400;
+}
+
+.workflow-cut-fx-svg {
+  overflow: visible;
+  filter: drop-shadow(0 3px 10px rgba(0, 0, 0, 0.55)) drop-shadow(0 0 14px rgba(167, 139, 250, 0.35));
+}
+
+/* Upper handle + blades (Lucide scissors top half). */
+.workflow-cut-fx-half-a {
+  transform-origin: 12.5px 11.5px;
+  animation: workflow-cut-snip-a 0.58s cubic-bezier(0.32, 1.08, 0.45, 1) forwards;
+}
+
+/* Lower handle + blade. */
+.workflow-cut-fx-half-b {
+  transform-origin: 12.5px 11.5px;
+  animation: workflow-cut-snip-b 0.58s cubic-bezier(0.32, 1.08, 0.45, 1) forwards;
+}
+
+@keyframes workflow-cut-snip-a {
   0% {
-    opacity: 0.35;
-    filter: brightness(1.85) contrast(1.05);
-  }
-  45% {
+    transform: rotate(-36deg);
     opacity: 1;
-    filter: brightness(1.2) contrast(1.02);
+  }
+  42% {
+    transform: rotate(2deg) scale(1.05);
+    opacity: 1;
+  }
+  52% {
+    transform: rotate(-1deg) scale(1);
+    opacity: 1;
   }
   100% {
-    opacity: 1;
-    filter: brightness(1) contrast(1);
-  }
-}
-
-.workflow-ambient-labs-dots {
-  animation: workflow-ambient-labs-dots-in 1.15s cubic-bezier(0.2, 0.88, 0.28, 1) forwards;
-}
-
-@keyframes workflow-ambient-vignette-in {
-  0% {
-    opacity: 0.55;
-    filter: brightness(1.35);
-  }
-  100% {
-    opacity: 1;
-    filter: brightness(1);
-  }
-}
-
-.workflow-ambient-vignette-pulse {
-  animation: workflow-ambient-vignette-in 0.95s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-}
-
-/* Workflow canvas / landing: wave rings from center toward edges */
-.workflow-ambient-wave-ring {
-  left: 50%;
-  top: 50%;
-  width: 180vmin;
-  height: 180vmin;
-  margin-left: -90vmin;
-  margin-top: -90vmin;
-  border: 1px solid rgba(233, 213, 255, 0.42);
-  box-shadow:
-    0 0 50px rgba(196, 181, 253, 0.35),
-    0 0 100px rgba(139, 92, 246, 0.2),
-    inset 0 0 40px rgba(255, 255, 255, 0.04);
-  animation: workflow-ambient-wave-expand 1.85s cubic-bezier(0.14, 0.82, 0.22, 1) forwards;
-}
-.workflow-ambient-wave-ring--delay-1 {
-  animation-delay: 0.12s;
-}
-.workflow-ambient-wave-ring--delay-2 {
-  animation-delay: 0.24s;
-}
-.workflow-ambient-wave-ring--delay-3 {
-  animation-delay: 0.36s;
-}
-
-@keyframes workflow-ambient-wave-expand {
-  0% {
-    transform: scale(0.02);
-    opacity: 0.75;
-  }
-  100% {
-    transform: scale(1);
+    transform: rotate(0deg) scale(0.65);
     opacity: 0;
+  }
+}
+
+@keyframes workflow-cut-snip-b {
+  0% {
+    transform: rotate(36deg);
+    opacity: 1;
+  }
+  42% {
+    transform: rotate(-2deg) scale(1.05);
+    opacity: 1;
+  }
+  52% {
+    transform: rotate(1deg) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: rotate(0deg) scale(0.65);
+    opacity: 0;
+  }
+}
+
+/* Workflow template preview: nodes are view-only; pan/zoom still work on the pane. */
+.workflow-template-readonly .react-flow__node {
+  pointer-events: none;
+}
+
+/* Image / video generator — Run in progress: luminous violet perimeter */
+.workflow-generator-glow-wrap {
+  border-radius: 1rem;
+  padding: 2px;
+  background: linear-gradient(
+    115deg,
+    rgba(91, 33, 182, 0.55),
+    rgba(167, 139, 250, 0.95),
+    rgba(196, 181, 253, 0.75),
+    rgba(124, 58, 237, 0.65),
+    rgba(167, 139, 250, 0.9),
+    rgba(91, 33, 182, 0.5)
+  );
+  background-size: 320% 320%;
+  animation: workflow-generator-border-flow 2.4s ease infinite;
+  box-shadow:
+    0 0 20px rgba(139, 92, 246, 0.45),
+    0 0 42px rgba(167, 139, 250, 0.22);
+}
+
+@keyframes workflow-generator-border-flow {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
   }
 }

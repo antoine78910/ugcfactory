@@ -1020,8 +1020,10 @@ export function calculateVideoCreditsForModel(opts: VideoCreditOptions): number 
       return calculateKling26VideoCredits(d, quality, audio);
 
     case "bytedance/seedance-2-preview":
+    case "bytedance/seedance-2.0-pro":
       return Math.max(1, calculateKling30VideoCredits(d, "pro", true));
     case "bytedance/seedance-2-fast-preview":
+    case "bytedance/seedance-1.5-pro":
       return Math.max(1, Math.ceil(calculateKling30VideoCredits(d, "pro", true) * 0.82));
 
     default:

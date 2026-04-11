@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { RedeemTokenGuard } from "@/app/_components/RedeemTokenGuard";
 
 export default async function AppLayout({
   children,
@@ -13,6 +14,11 @@ export default async function AppLayout({
 
   if (!user) redirect("/auth");
 
-  return children;
+  return (
+    <>
+      <RedeemTokenGuard />
+      {children}
+    </>
+  );
 }
 

@@ -90,7 +90,7 @@ export function starterNodeForKind(kind: WorkflowStarterKind): AdAssetNodeType {
         id,
         type: "adAsset",
         position,
-        data: { kind: "variation", label: "Assistant", ...genDefaults("variation") },
+        data: { kind: "assistant", label: "Assistant", ...genDefaults("assistant") },
       };
     default:
       return {
@@ -138,7 +138,7 @@ export function WorkflowOnboarding({ onChoose, onSkip }: Props) {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1], delay: 0.05 }}
       >
-        <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl md:text-4xl">Your space is ready</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl md:text-4xl">Your workflow is ready</h1>
         <p className="mx-auto mt-3 max-w-md text-sm text-white/45 sm:text-base">
           Choose your first node and start creating
         </p>

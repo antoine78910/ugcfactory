@@ -3,9 +3,13 @@
 import { createContext, useContext, type ReactNode } from "react";
 
 import type { AdAssetNodeData } from "./nodes/AdAssetNode";
+import type { StickyNoteNodeData } from "./workflowStickyNoteTypes";
 import type { WorkflowGroupNodeData } from "./nodes/WorkflowGroupNode";
 
-type PatchFn = (nodeId: string, patch: Partial<AdAssetNodeData & WorkflowGroupNodeData>) => void;
+type PatchFn = (
+  nodeId: string,
+  patch: Partial<AdAssetNodeData & WorkflowGroupNodeData & StickyNoteNodeData>,
+) => void;
 
 const WorkflowNodePatchContext = createContext<PatchFn | null>(null);
 

@@ -5,8 +5,8 @@ import StudioShell from "@/app/_components/StudioShell";
 import { WorkflowEditor } from "../../WorkflowEditor";
 
 export const metadata: Metadata = {
-  title: "Workflow space | Youry",
-  description: "Plan nodes, pages, and lab folders in your workflow space.",
+  title: "Workflow | Youry",
+  description: "Plan nodes, pages, and branches in your workflow.",
 };
 
 export default async function WorkflowSpacePage({

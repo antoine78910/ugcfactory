@@ -68,6 +68,8 @@ type VideoModelId =
   | "openai/sora-2-pro"
   | "bytedance/seedance-2-preview"
   | "bytedance/seedance-2-fast-preview"
+  | "bytedance/seedance-1.5-pro"
+  | "bytedance/seedance-2.0-pro"
   | "veo3_fast"
   | "veo3";
 
@@ -80,6 +82,8 @@ const MODEL_OPTIONS: { id: VideoModelId; label: string; family: VideoFamily }[] 
   { id: "openai/sora-2-pro", label: "Sora 2 Pro", family: "sora" },
   { id: "bytedance/seedance-2-preview", label: "Seedance 2 Preview", family: "kie" },
   { id: "bytedance/seedance-2-fast-preview", label: "Seedance 2 Turbo Preview", family: "kie" },
+  { id: "bytedance/seedance-1.5-pro", label: "Seedance 1.5 Pro", family: "kie" },
+  { id: "bytedance/seedance-2.0-pro", label: "Seedance 2.0 Pro", family: "kie" },
   { id: "veo3_fast", label: "Veo 3.1 Fast", family: "veo" },
   { id: "veo3", label: "Veo 3.1", family: "veo" },
 ];
@@ -185,6 +189,24 @@ const VIDEO_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
     searchText: "seedance turbo fast preview provider",
   },
   {
+    id: "bytedance/seedance-1.5-pro",
+    label: "Seedance 1.5 Pro",
+    subtitle: "Provider · image → video · fast lane",
+    icon: "seedance",
+    resolution: "1080p",
+    durationRange: "5–15s",
+    searchText: "seedance 1.5 pro piapi",
+  },
+  {
+    id: "bytedance/seedance-2.0-pro",
+    label: "Seedance 2.0 Pro",
+    subtitle: "Provider · image → video",
+    icon: "seedance",
+    resolution: "1080p",
+    durationRange: "5–15s",
+    searchText: "seedance 2.0 pro piapi",
+  },
+  {
     id: "veo3_fast",
     label: "Veo 3.1 Fast",
     subtitle: `Veo 3.1 · Fast · ${VEO_3_1_FAST.credits} credits / video`,
@@ -209,7 +231,9 @@ const VIDEO_EDIT_PICKER_ACCESS_ORDER = [...STUDIO_VIDEO_EDIT_PICKER_IDS];
 const VIDEO_MODEL_ACCESS_ORDER: VideoModelId[] = [
   "kling-2.6/video",
   "bytedance/seedance-2-fast-preview",
+  "bytedance/seedance-1.5-pro",
   "bytedance/seedance-2-preview",
+  "bytedance/seedance-2.0-pro",
   "veo3_fast",
   "kling-3.0/video",
   "veo3",
@@ -229,6 +253,8 @@ function getDurationChoices(modelId: VideoModelId): string[] {
       return ["10", "15"];
     case "bytedance/seedance-2-preview":
     case "bytedance/seedance-2-fast-preview":
+    case "bytedance/seedance-1.5-pro":
+    case "bytedance/seedance-2.0-pro":
       return ["5", "10", "15"];
     default:
       return ["5", "10"];
@@ -250,6 +276,10 @@ function modelHasAudio(id: VideoModelId): boolean {
 
 function modelHasMultiShot(id: VideoModelId): boolean {
   return id === "kling-3.0/video";
+}
+
+function isStudioSeedanceImageToVideoModelId(id: VideoModelId): boolean {
+  return id.startsWith("bytedance/seedance");
 }
 
 async function uploadStudioMediaFile(file: File, kind: UploadFileKind): Promise<string> {
@@ -1715,9 +1745,7 @@ export default function StudioVideoPanel({
         const isKling30 = snap.modelId === "kling-3.0/video";
         const isKling26 = snap.modelId === "kling-2.6/video";
         const isSora2Pro = snap.modelId === "openai/sora-2-pro";
-        const isSeedancePreview =
-          snap.modelId === "bytedance/seedance-2-preview" ||
-          snap.modelId === "bytedance/seedance-2-fast-preview";
+        const isSeedanceImageToVideo = isStudioSeedanceImageToVideoModelId(snap.modelId);
         const res = await fetch("/api/kling/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1730,7 +1758,7 @@ export default function StudioVideoPanel({
             aspectRatio:
               (isKling30 || isKling26) && !snap.startUrl
                 ? snap.aspect
-                : isSeedancePreview && snap.startUrl
+                : isSeedanceImageToVideo && snap.startUrl
                   ? snap.aspect
                   : undefined,
             sound: modelHasAudio(snap.modelId) ? snap.soundOn : undefined,
@@ -2247,9 +2275,7 @@ export default function StudioVideoPanel({
                     </Select>
                   </div>
                   {((modelId === "kling-3.0/video" || modelId === "kling-2.6/video") && !startUrl) ||
-                  ((modelId === "bytedance/seedance-2-preview" ||
-                    modelId === "bytedance/seedance-2-fast-preview") &&
-                    Boolean(startUrl)) ? (
+                  (isStudioSeedanceImageToVideoModelId(modelId) && Boolean(startUrl)) ? (
                     <div>
                       <Label className="text-xs text-white/45">Aspect ratio</Label>
                       <Select value={aspect} onValueChange={setAspect}>
