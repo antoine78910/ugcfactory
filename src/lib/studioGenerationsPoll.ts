@@ -11,6 +11,7 @@ import {
   getWaveSpeedPrediction,
   submitWaveSpeedHeygenVideoTranslate,
 } from "@/lib/wavespeed";
+import { walkJsonForHttpsUrls } from "@/lib/walkJsonForHttpsUrls";
 import {
   parseWaveSpeedMotionTranslateChainTaskId,
   WAVESPEED_CHAIN_PROVIDER,
@@ -137,7 +138,16 @@ export async function pollStudioGenerationRow(
     try {
       const pred = await getWaveSpeedPrediction(row.external_task_id);
       const predStatus = String(pred.status ?? "").toLowerCase();
-      if (predStatus === "completed") out = { kind: "success", urls: pred.outputs ?? [] };
+      const waveDone =
+        predStatus === "completed" ||
+        predStatus === "complete" ||
+        predStatus === "success" ||
+        predStatus === "succeeded" ||
+        predStatus === "done" ||
+        predStatus === "finished";
+      const waveUrls = (pred.outputs ?? []).map((u) => String(u).trim()).filter(Boolean);
+      if (waveDone && waveUrls.length > 0) out = { kind: "success", urls: waveUrls };
+      else if (waveDone && waveUrls.length === 0) out = { kind: "processing" };
       else if (predStatus === "failed") out = { kind: "fail", message: pred.error ?? "Translation failed" };
       else out = { kind: "processing" };
     } catch (err) {
@@ -174,7 +184,10 @@ export async function pollStudioGenerationRow(
     const veoData = await kieVeoRecordInfo(row.external_task_id, kieKey);
     const flag = veoData.successFlag;
     if (flag === 1) {
-      const urls = veoData.response?.resultUrls ?? [];
+      let urls = [...(veoData.response?.resultUrls ?? [])].map((u) => String(u).trim()).filter(Boolean);
+      if (urls.length === 0) {
+        urls = walkJsonForHttpsUrls(veoData);
+      }
       out = urls.length > 0
         ? { kind: "success", urls }
         : { kind: "fail", message: "Veo completed but returned no video URL." };

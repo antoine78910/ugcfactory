@@ -1,4 +1,5 @@
 import { requireEnv } from "@/lib/env";
+import { walkJsonForHttpsUrls } from "@/lib/walkJsonForHttpsUrls";
 
 const API_BASE = "https://api.kie.ai";
 
@@ -99,11 +100,14 @@ export function kieRecordStateIsSuccess(state: string | undefined): boolean {
   const s = String(state ?? "").toLowerCase().trim();
   return (
     s === "success" ||
+    s === "successful" ||
     s === "completed" ||
     s === "complete" ||
     s === "succeed" ||
     s === "done" ||
-    s === "finished"
+    s === "finished" ||
+    s === "ok" ||
+    s === "ready"
   );
 }
 
@@ -121,6 +125,82 @@ export function kieRecordStateIsFail(state: string | undefined): boolean {
 type KieMarketRecordInfoResponse =
   | { code: 200; message: string; data: KieMarketRecordInfo }
   | { code: number; message: string; data?: unknown };
+
+function jsonStringifySafe(v: unknown): string | undefined {
+  try {
+    return typeof v === "string" ? v : JSON.stringify(v);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * KIE Market `recordInfo` payloads differ by model (Kling, etc.): `resultJson` may be missing,
+ * live under `result` / `data`, or use snake_case. Normalize before polling logic runs.
+ */
+export function normalizeKieMarketRecordData(raw: Record<string, unknown>): KieMarketRecordInfo {
+  const state = String(raw.state ?? raw.status ?? "").trim() || "unknown";
+
+  let resultJson: string | undefined;
+  const rj = raw.resultJson ?? raw.result_json;
+  if (typeof rj === "string" && rj.trim()) {
+    resultJson = rj.trim();
+  } else if (rj !== null && typeof rj === "object") {
+    resultJson = jsonStringifySafe(rj);
+  }
+
+  if (!resultJson?.trim()) {
+    const nested = raw.result ?? raw.output ?? raw.outputs ?? raw.response ?? raw.data;
+    if (typeof nested === "string" && nested.trim()) {
+      resultJson = nested.trim();
+    } else if (nested !== null && typeof nested === "object") {
+      resultJson = jsonStringifySafe(nested);
+    }
+  }
+
+  if (!resultJson?.trim()) {
+    const bag: Record<string, unknown> = {};
+    for (const k of [
+      "result",
+      "output",
+      "outputs",
+      "response",
+      "data",
+      "videoUrl",
+      "video_url",
+      "url",
+      "downloadUrl",
+      "download_url",
+      "fileUrl",
+      "file_url",
+      "mediaUrl",
+      "media_url",
+    ]) {
+      if (raw[k] !== undefined) bag[k] = raw[k];
+    }
+    if (Object.keys(bag).length > 0) {
+      resultJson = jsonStringifySafe(bag);
+    }
+  }
+
+  const failMsg =
+    (typeof raw.failMsg === "string" && raw.failMsg.trim()) ||
+    (typeof raw.fail_msg === "string" && raw.fail_msg.trim()) ||
+    (typeof raw.message === "string" && raw.message.trim() && kieRecordStateIsFail(state)
+      ? raw.message.trim()
+      : undefined) ||
+    (typeof raw.error === "string" && raw.error.trim() ? raw.error.trim() : undefined);
+
+  const failCode =
+    typeof raw.failCode === "string"
+      ? raw.failCode
+      : typeof raw.fail_code === "string"
+        ? raw.fail_code
+        : undefined;
+
+  const base = { ...raw, state, resultJson, failMsg, failCode } as KieMarketRecordInfo;
+  return base;
+}
 
 export async function kieMarketRecordInfo(taskId: string, overrideApiKey?: string) {
   const apiKey = overrideApiKey || getKieApiKey();
@@ -168,9 +248,7 @@ export async function kieMarketRecordInfo(taskId: string, overrideApiKey?: strin
 
     if (okData) {
       const raw = (json as Extract<KieMarketRecordInfoResponse, { code: 200 }>).data;
-      const d = raw as Record<string, unknown>;
-      const mergedState = String(d.state ?? d.status ?? "").trim() || "unknown";
-      return { ...(raw as object), state: mergedState } as KieMarketRecordInfo;
+      return normalizeKieMarketRecordData(raw as Record<string, unknown>);
     }
 
     const retryableHttp = !res.ok && (res.status === 429 || res.status === 502 || res.status === 503 || res.status === 504);
@@ -195,10 +273,27 @@ export function parseResultUrls(resultJson: string | undefined): string[] {
   if (!resultJson) return [];
   try {
     const parsed = JSON.parse(resultJson) as Record<string, unknown>;
+    const data = (parsed.data as Record<string, unknown> | undefined) ?? undefined;
+    const resultObj = (parsed.result as Record<string, unknown> | undefined) ?? undefined;
     const arrays = [
       parsed.resultUrls,
       parsed.result_urls,
-      (parsed.data as Record<string, unknown> | undefined)?.resultUrls,
+      parsed.resultList,
+      parsed.outputList,
+      parsed.videoList,
+      parsed.mediaUrls,
+      parsed.media_urls,
+      parsed.files,
+      data?.resultUrls,
+      data?.result_urls,
+      data?.urls,
+      data?.outputs,
+      resultObj?.urls,
+      resultObj?.resultUrls,
+      parsed.outputUrls,
+      parsed.output_urls,
+      parsed.videoUrls,
+      parsed.video_urls,
       parsed.imageUrls,
       parsed.images,
       parsed.urls,
@@ -213,6 +308,16 @@ export function parseResultUrls(resultJson: string | undefined): string[] {
       parsed.resultImageUrl,
       parsed.resultUrl,
       parsed.result_url,
+      parsed.outputUrl,
+      parsed.output_url,
+      parsed.videoUrl,
+      parsed.video_url,
+      data?.resultUrl,
+      data?.videoUrl,
+      data?.url,
+      resultObj?.url,
+      resultObj?.videoUrl,
+      resultObj?.video_url,
       parsed.image_url,
       parsed.imageUrl,
       parsed.url,
@@ -225,25 +330,35 @@ export function parseResultUrls(resultJson: string | undefined): string[] {
 }
 
 /** Fallback when `resultUrls` is missing — walk JSON for https URLs (image/video). */
-export function parseKieResultMediaUrls(resultJson: string | undefined): string[] {
-  const direct = parseResultUrls(resultJson);
+export function parseKieResultMediaUrls(
+  resultJson: string | Record<string, unknown> | undefined | null,
+): string[] {
+  if (resultJson == null) return [];
+  const asString =
+    typeof resultJson === "string"
+      ? resultJson
+      : (() => {
+          try {
+            return JSON.stringify(resultJson);
+          } catch {
+            return "";
+          }
+        })();
+  const direct = parseResultUrls(asString || undefined);
   if (direct.length > 0) return direct;
-  if (!resultJson) return [];
+  if (!asString) return [];
   try {
-    const o = JSON.parse(resultJson) as unknown;
-    const out: string[] = [];
-    function walk(x: unknown): void {
-      if (typeof x === "string") {
-        if (/^https?:\/\//i.test(x)) out.push(x);
-        else if (x.startsWith("//")) out.push(`https:${x}`);
-      }
-      else if (Array.isArray(x)) for (const i of x) walk(i);
-      else if (x && typeof x === "object") for (const v of Object.values(x)) walk(v);
-    }
-    walk(o);
-    return [...new Set(out)];
+    const o = JSON.parse(asString) as unknown;
+    return walkJsonForHttpsUrls(o);
   } catch {
     return [];
   }
+}
+
+/** Use after {@link normalizeKieMarketRecordData}: structured fields + full-record walk. */
+export function extractKieMediaUrls(data: KieMarketRecordInfo): string[] {
+  const fromJson = parseKieResultMediaUrls(data.resultJson);
+  if (fromJson.length > 0) return fromJson;
+  return walkJsonForHttpsUrls(data as unknown as Record<string, unknown>);
 }
 

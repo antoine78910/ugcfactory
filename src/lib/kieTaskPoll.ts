@@ -1,8 +1,8 @@
 import type { KieMarketRecordInfo } from "@/lib/kieMarket";
 import {
+  extractKieMediaUrls,
   kieRecordStateIsFail,
   kieRecordStateIsSuccess,
-  parseKieResultMediaUrls,
 } from "@/lib/kieMarket";
 
 export type KiePollOutcome =
@@ -16,7 +16,7 @@ export function kieImageTaskPollOutcome(data: KieMarketRecordInfo): KiePollOutco
     return { kind: "fail", message: data.failMsg ?? "Task failed" };
   }
   if (kieRecordStateIsSuccess(st)) {
-    const urls = parseKieResultMediaUrls(data.resultJson);
+    const urls = extractKieMediaUrls(data);
     if (urls.length === 0) {
       return { kind: "processing" };
     }

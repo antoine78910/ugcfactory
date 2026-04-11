@@ -22,7 +22,8 @@ export function isStudioVideoTabKindQuery(requestedKinds: string[]): boolean {
   return requestedKinds.length === 1 && requestedKinds[0] === "studio_video";
 }
 
-const LEGACY_TRANSLATE_LABEL_PREFIX = "traduction";
+/** Legacy translate rows stored as `motion_control` (FR + EN UI labels). */
+const LEGACY_TRANSLATE_LABEL_PREFIXES = ["traduction", "translation"] as const;
 
 /**
  * True only for **product** Link to Ad job titles (e.g. `Link to Ad · Angle 1 · image`),
@@ -60,7 +61,8 @@ export function filterLegacyLinkToAdFromTabRows(
       // Before `studio_translate_video`, Translate jobs were stored as `motion_control`.
       // Hide those legacy rows in the Motion Control tab.
       const provider = String(r.provider ?? "").toLowerCase();
-      if (provider === "wavespeed" || lab.startsWith(LEGACY_TRANSLATE_LABEL_PREFIX)) return false;
+      if (provider === "wavespeed") return false;
+      if (LEGACY_TRANSLATE_LABEL_PREFIXES.some((p) => lab.startsWith(p))) return false;
     }
     return true;
   });

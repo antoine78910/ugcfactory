@@ -36,7 +36,9 @@ import {
   getPersonalElevenLabsApiKey,
 } from "@/app/_components/CreditsPlanContext";
 import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
+import { mergeStudioHistoryWithServer } from "@/lib/mergeStudioHistoryWithLocal";
 import { registerStudioGenerationClient } from "@/lib/registerStudioGenerationClient";
+import { completeStudioTask, pollKlingVideo } from "@/lib/studioKlingClientPoll";
 import StudioVideoPanel from "@/app/_components/StudioVideoPanel";
 import {
   packshotUrlsForGpt,
@@ -121,7 +123,6 @@ type Quiz = {
 
 type NanoModel = "nano" | "pro";
 type TranslateToolMode = "video_translate" | "voice_change";
-type VoiceToolMode = "voice_change" | "create_voice";
 type VoiceChangeUploadKind = "audio" | "video";
 type ElevenVoiceOption = {
   voiceId: string;
@@ -379,15 +380,6 @@ function translateModeFromPathname(pathname: string): TranslateToolMode | null {
   const segs = stripped.split("/").filter(Boolean);
   if (segs[0] !== "translate") return null;
   return "video_translate";
-}
-
-/** Derive the voice sub-mode from the pathname (e.g. "/app/voice/create"). */
-function voiceModeFromPathname(pathname: string): VoiceToolMode | null {
-  const stripped = pathname.replace(/^\/app\/?/, "");
-  const segs = stripped.split("/").filter(Boolean);
-  if (segs[0] !== "voice") return null;
-  if (segs[1] === "create") return "create_voice";
-  return "voice_change";
 }
 
 /** Build a path-based URL for a section, preserving ?project= if provided. */
@@ -820,10 +812,6 @@ export default function AppBrandWizard() {
     if (typeof window === "undefined") return "video_translate";
     return translateModeFromPathname(window.location.pathname) ?? "video_translate";
   });
-  const [voiceToolMode, setVoiceToolMode] = useState<VoiceToolMode>(() => {
-    if (typeof window === "undefined") return "voice_change";
-    return voiceModeFromPathname(window.location.pathname) ?? "voice_change";
-  });
   const [voiceHistoryItems, setVoiceHistoryItems] = useState<StudioHistoryItem[]>([]);
   const [elevenVoices, setElevenVoices] = useState<ElevenVoiceOption[]>([]);
   const [elevenVoicesLoading, setElevenVoicesLoading] = useState(false);
@@ -848,7 +836,8 @@ export default function AppBrandWizard() {
   /** Language filter for the ElevenLabs voice picker (e.g. "en", "fr", "es"). Empty = all. */
   const [voiceChangeLangFilter, setVoiceChangeLangFilter] = useState<string>("");
   const [voiceChangeVoiceTab, setVoiceChangeVoiceTab] = useState<"all" | "favorites">("all");
-  const [motionHistoryItems, setMotionHistoryItems] = useState<StudioHistoryItem[]>([]);
+  const [motionControlHistoryItems, setMotionControlHistoryItems] = useState<StudioHistoryItem[]>([]);
+  const [translateHistoryItems, setTranslateHistoryItems] = useState<StudioHistoryItem[]>([]);
   const [motionServerHistory, setMotionServerHistory] = useState<boolean | null>(null);
   type MotionBilling =
     | { open: false }
@@ -980,16 +969,17 @@ export default function AppBrandWizard() {
     () => elevenVoices.find((voice) => voice.voiceId === elevenVoiceId) ?? null,
     [elevenVoiceId, elevenVoices],
   );
+  /** Translate / HeyGen outputs only — not Kling motion-control jobs (separate history state). */
   const readyTranslateVideos = useMemo(
     () =>
-      [...motionHistoryItems, ...voiceHistoryItems].filter(
+      translateHistoryItems.filter(
         (item) =>
           item.status === "ready" &&
           Boolean(item.mediaUrl?.trim()) &&
           item.kind !== "audio" &&
           (item.kind === "video" || item.kind === "motion" || isProbablyVideoUrl(item.mediaUrl)),
       ),
-    [motionHistoryItems, voiceHistoryItems],
+    [translateHistoryItems],
   );
 
   const isVoiceFrenchish = useCallback((voice: ElevenVoiceOption): boolean => {
@@ -1079,25 +1069,12 @@ export default function AppBrandWizard() {
     return deduped.sort((a, b) => a.localeCompare(b));
   }, []);
 
-  const mergeServerHistoryWithLocalPending = useCallback(
-    (serverItems: StudioHistoryItem[], prevItems: StudioHistoryItem[]): StudioHistoryItem[] => {
-      const serverIds = new Set(serverItems.map((i) => i.id));
-      const now = Date.now();
-      const optimisticKeepMs = 5 * 60 * 1000;
-      const keepLocal = prevItems.filter(
-        (i) =>
-          !serverIds.has(i.id) &&
-          now - i.createdAt < optimisticKeepMs &&
-          (i.status === "generating" || i.status === "ready" || i.status === "failed"),
-      );
-      return [...serverItems, ...keepLocal].sort((a, b) => b.createdAt - a.createdAt);
-    },
-    [],
-  );
-
-
-  const isVoiceSection = appSection === "voice";
-  const setActiveHistoryItems = isVoiceSection ? setVoiceHistoryItems : setMotionHistoryItems;
+  const setActiveHistoryItems =
+    appSection === "voice"
+      ? setVoiceHistoryItems
+      : appSection === "ad_clone"
+        ? setTranslateHistoryItems
+        : setMotionControlHistoryItems;
 
   useEffect(() => {
     void (async () => {
@@ -1116,9 +1093,7 @@ export default function AppBrandWizard() {
       }
       const json = (await res.json()) as { data?: StudioHistoryItem[]; refundHints?: RefundHint[] };
       setMotionServerHistory(true);
-      setActiveHistoryItems((prev) =>
-        mergeServerHistoryWithLocalPending(json.data ?? [], prev),
-      );
+      setActiveHistoryItems((prev) => mergeStudioHistoryWithServer(json.data ?? [], prev));
       const hints = json.refundHints ?? [];
       if (hints.length) {
         applyRefundHints(hints);
@@ -1143,9 +1118,7 @@ export default function AppBrandWizard() {
         if (!res.ok) return;
         const json = (await res.json()) as { data?: StudioHistoryItem[]; refundHints?: RefundHint[] };
         if (Array.isArray(json.data)) {
-          setActiveHistoryItems((prev) =>
-            mergeServerHistoryWithLocalPending(json.data ?? [], prev),
-          );
+          setActiveHistoryItems((prev) => mergeStudioHistoryWithServer(json.data ?? [], prev));
         }
         const hints = json.refundHints ?? [];
         if (hints.length) {
@@ -1158,7 +1131,7 @@ export default function AppBrandWizard() {
     tick();
     const id = window.setInterval(tick, 4000);
     return () => window.clearInterval(id);
-  }, [applyRefundHints, historyKindsKey, mergeServerHistoryWithLocalPending, motionServerHistory, setActiveHistoryItems]);
+  }, [applyRefundHints, historyKindsKey, motionServerHistory, setActiveHistoryItems]);
 
   useEffect(() => {
     return () => {
@@ -1896,7 +1869,6 @@ export default function AppBrandWizard() {
         return [{ ...item, kind: "video" as const }, ...prev];
       });
       setAppSectionNav("voice");
-      setVoiceToolMode("voice_change");
       setVoiceChangeUploadFile(null);
       setVoiceChangeHistoryUrl(item.mediaUrl);
       setVoiceChangeUploadKind("video");
@@ -1918,8 +1890,6 @@ export default function AppBrandWizard() {
 
     const tm = translateModeFromPathname(pathname);
     if (tm) setTranslateToolMode(tm);
-    const vm = voiceModeFromPathname(pathname);
-    if (vm) setVoiceToolMode(vm);
   }, [pathname]);
 
   /** Browser back/forward: re-derive section from the new URL. */
@@ -1929,8 +1899,6 @@ export default function AppBrandWizard() {
       setAppSection((prev) => (prev === sec ? prev : sec));
       const tm = translateModeFromPathname(window.location.pathname);
       if (tm) setTranslateToolMode(tm);
-      const vm = voiceModeFromPathname(window.location.pathname);
-      if (vm) setVoiceToolMode(vm);
     };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
@@ -1999,15 +1967,13 @@ export default function AppBrandWizard() {
     if (typeof window === "undefined") return;
     if (!pathname.startsWith("/app")) return;
 
-    const voiceExtra =
-      appSection === "voice" && voiceToolMode === "create_voice" ? "create" : undefined;
     const projectId = runId || searchParams.get("project") || null;
-    const wantPath = sectionToPath(appSection, projectId, voiceExtra);
+    const wantPath = sectionToPath(appSection, projectId);
     const cur = window.location.pathname + window.location.search;
     if (cur !== wantPath) {
       window.history.replaceState(null, "", wantPath);
     }
-  }, [runId, appSection, pathname, voiceToolMode, searchParams]);
+  }, [runId, appSection, pathname, searchParams]);
 
   async function onExtract() {
     const url = storeUrl.trim();
@@ -3134,39 +3100,24 @@ export default function AppBrandWizard() {
                             <div className="grid grid-cols-2 gap-2">
                               <button
                                 type="button"
-                                onClick={() => { setVoiceToolMode("voice_change"); setAppSectionNav("voice"); }}
-                                className={cn(
-                                  "rounded-xl border px-3 py-2 text-xs font-semibold transition",
-                                  voiceToolMode === "voice_change"
-                                    ? "border-violet-400/40 bg-violet-500/15 text-white"
-                                    : "border-white/10 bg-black/20 text-white/60 hover:bg-white/[0.04]",
-                                )}
+                                onClick={() => { setAppSectionNav("voice"); }}
+                                className="rounded-xl border border-violet-400/40 bg-violet-500/15 px-3 py-2 text-xs font-semibold text-white transition hover:bg-violet-500/20"
                               >
                                 Voice Change
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => { setVoiceToolMode("create_voice"); setAppSectionNav("voice", "create"); }}
-                                className={cn(
-                                  "rounded-xl border px-3 py-2 text-xs font-semibold transition",
-                                  voiceToolMode === "create_voice"
-                                    ? "border-violet-400/40 bg-violet-500/15 text-white"
-                                    : "border-white/10 bg-black/20 text-white/60 hover:bg-white/[0.04]",
-                                )}
+                              <div
+                                className="pointer-events-none flex min-h-[2.25rem] select-none items-center rounded-xl border border-white/[0.07] bg-white/[0.02] px-3 py-2 shadow-none"
+                                title="Create Voice — coming soon"
+                                aria-disabled="true"
                               >
-                                Create Voice
-                              </button>
-                            </div>
-                            {voiceToolMode === "create_voice" ? (
-                              <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-white/15 bg-white/[0.02] px-4 py-10 text-center">
-                                <Sparkles className="h-8 w-8 text-violet-400/60" />
-                                <p className="text-sm font-semibold text-white/80">Create Voice</p>
-                                <p className="max-w-xs text-xs leading-relaxed text-white/45">
-                                  Clone your own voice or create a custom AI voice from a sample recording. Coming soon.
-                                </p>
+                                <span className="flex min-w-0 w-full items-center justify-between gap-2">
+                                  <span className="truncate text-xs font-semibold text-white/32">Create Voice</span>
+                                  <span className="shrink-0 rounded-md border border-white/10 bg-white/[0.05] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white/38">
+                                    Soon
+                                  </span>
+                                </span>
                               </div>
-                            ) : null}
-                            {voiceToolMode === "voice_change" ? (
+                            </div>
                             <>
                             <input
                               ref={voiceChangeInputRef}
@@ -3265,7 +3216,6 @@ export default function AppBrandWizard() {
                               </div>
                             ) : null}
                             </>
-                            ) : null}
                           </div>
                         ) : (
                         <div className={cn("grid gap-2", appSection === "ad_clone" ? "grid-cols-1" : "grid-cols-2")}>
@@ -3863,7 +3813,11 @@ export default function AppBrandWizard() {
                               : "Motion control";
                           const bgSource =
                             motionSceneBackground === "video" ? "input_video" : "input_image";
-                          const setHistoryTarget = isVoiceChange ? setVoiceHistoryItems : setMotionHistoryItems;
+                          const setHistoryTarget = isVoiceChange
+                            ? setVoiceHistoryItems
+                            : isTranslate
+                              ? setTranslateHistoryItems
+                              : setMotionControlHistoryItems;
                           setHistoryTarget((prev) => [
                             {
                               id: jobId,
@@ -3974,6 +3928,7 @@ export default function AppBrandWizard() {
                                       ? {
                                           ...i,
                                           id: json.rowId!,
+                                          studioGenerationId: json.rowId!,
                                           mediaUrl: json.mediaUrl,
                                           kind: resultIsVideo ? "video" : "audio",
                                           status: "ready",
@@ -4073,17 +4028,48 @@ export default function AppBrandWizard() {
                                 inputUrls: motionInputUrls.length > 0 ? motionInputUrls : undefined,
                               });
                               if (rowId) {
-                                setMotionHistoryItems((prev) =>
+                                (isTranslate ? setTranslateHistoryItems : setMotionControlHistoryItems)((prev) =>
                                   prev.map((i) =>
                                     i.id === jobId
-                                      ? { ...i, id: rowId, studioGenerationKind: generationKind }
+                                      ? {
+                                          ...i,
+                                          id: rowId,
+                                          studioGenerationId: rowId,
+                                          studioGenerationKind: generationKind,
+                                        }
                                       : i,
                                   ),
                                 );
                               }
-                              toast.message(
-                                appSection === "ad_clone" ? "Translation started" : "Motion control started",
-                              );
+                              if (appSection === "ad_clone") {
+                                toast.message("Translation started");
+                              } else {
+                                toast.message("Motion control started", {
+                                  description: "Polling provider…",
+                                });
+                                const pKey = getPersonalApiKey() ?? undefined;
+                                const url = await pollKlingVideo(json.taskId, pKey);
+                                void completeStudioTask(json.taskId, url);
+                                setMotionControlHistoryItems((prev) =>
+                                  prev.map((i) => {
+                                    const match =
+                                      (rowId != null &&
+                                        (i.id === rowId || i.studioGenerationId === rowId)) ||
+                                      (rowId == null && i.id === jobId);
+                                    if (!match || i.status !== "generating") return i;
+                                    return {
+                                      ...i,
+                                      id: rowId ?? i.id,
+                                      studioGenerationId: rowId ?? i.studioGenerationId,
+                                      studioGenerationKind: generationKind,
+                                      status: "ready",
+                                      mediaUrl: url,
+                                      model,
+                                    };
+                                  }),
+                                );
+                                toast.success("Motion control ready");
+                              }
                             } catch (err) {
                               const msg =
                                 err instanceof Error
@@ -4093,7 +4079,11 @@ export default function AppBrandWizard() {
                                     : "Unknown error";
                               refundPlatformCredits(platformChargeMotion, grantCredits, creditsRef);
                               toast.error(msg);
-                              (isVoiceChange ? setVoiceHistoryItems : setMotionHistoryItems)((prev) =>
+                              (isVoiceChange
+                                ? setVoiceHistoryItems
+                                : isTranslate
+                                  ? setTranslateHistoryItems
+                                  : setMotionControlHistoryItems)((prev) =>
                                 prev.map((i) =>
                                   i.id === jobId && i.status === "generating"
                                     ? {
@@ -4151,14 +4141,24 @@ export default function AppBrandWizard() {
                         hasOutput
                         output={
                           <StudioGenerationsHistory
-                            items={appSection === "voice" ? voiceHistoryItems : motionHistoryItems}
+                            items={
+                              appSection === "voice"
+                                ? voiceHistoryItems
+                                : appSection === "ad_clone"
+                                  ? translateHistoryItems
+                                  : motionControlHistoryItems
+                            }
                             empty={<StudioEmptyExamples variant="motion" />}
                             mediaLabel={appSection === "voice" ? "Voice" : appSection === "ad_clone" ? "Translation" : "Motion"}
-                            onItemDeleted={(id) =>
-                              appSection === "voice"
-                                ? setVoiceHistoryItems((prev) => prev.filter((i) => i.id !== id))
-                                : setMotionHistoryItems((prev) => prev.filter((i) => i.id !== id))
-                            }
+                            onItemDeleted={(id) => {
+                              if (appSection === "voice") {
+                                setVoiceHistoryItems((prev) => prev.filter((i) => i.id !== id));
+                              } else if (appSection === "ad_clone") {
+                                setTranslateHistoryItems((prev) => prev.filter((i) => i.id !== id));
+                              } else {
+                                setMotionControlHistoryItems((prev) => prev.filter((i) => i.id !== id));
+                              }
+                            }}
                             onChangeVoice={handleChangeVoiceFromHistory}
                           />
                         }

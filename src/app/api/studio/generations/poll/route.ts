@@ -41,8 +41,11 @@ type Body = {
 
 const LIBRARY_KINDS = STUDIO_LIBRARY_KINDS;
 
-/** Avoid Vercel timeouts when many jobs are in flight (each row may download+re-upload media). */
-const MAX_ROWS_TO_POLL_PER_REQUEST = 8;
+/**
+ * Cap per request to stay under serverless limits. Too low starves newer jobs when many rows are
+ * in-flight (always ordering by oldest `created_at` first).
+ */
+const MAX_ROWS_TO_POLL_PER_REQUEST = 28;
 
 const ALLOWED_POLL_KINDS = new Set<string>(LIBRARY_KINDS);
 const POLL_KIND_DEFAULT = "avatar";

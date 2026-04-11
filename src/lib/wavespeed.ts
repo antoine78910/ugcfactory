@@ -1,3 +1,5 @@
+import { walkJsonForHttpsUrls } from "@/lib/walkJsonForHttpsUrls";
+
 const WAVESPEED_API_BASE = "https://api.wavespeed.ai/api/v3";
 export const WAVESPEED_HEYGEN_VIDEO_TRANSLATE_MODEL = "heygen/video-translate";
 const WAVESPEED_MEDIA_UPLOAD_ENDPOINT = `${WAVESPEED_API_BASE}/media/upload/binary`;
@@ -35,13 +37,14 @@ async function readWaveSpeedJson(res: Response, fallbackMessage: string): Promis
     throw new Error(error);
   }
 
-  // WaveSpeed v3 wraps the payload in a `data` field:
-  // { "code": 200, "message": "success", "data": { "id": "...", ... } }
-  // Unwrap it so callers read fields directly.
-  const inner = json?.data;
-  return (inner !== null && typeof inner === "object" && !Array.isArray(inner)
-    ? (inner as Record<string, unknown>)
-    : json) ?? {};
+  // WaveSpeed v3 wraps the payload in `data`, but some fields (e.g. `outputs`) may sit on the envelope.
+  const root = json ?? {};
+  const inner = root.data;
+  const innerObj =
+    inner !== null && typeof inner === "object" && !Array.isArray(inner)
+      ? (inner as Record<string, unknown>)
+      : {};
+  return { ...root, ...innerObj };
 }
 
 async function fetchWaveSpeedJson(
@@ -58,13 +61,62 @@ async function fetchWaveSpeedJson(
   return readWaveSpeedJson(res, fallbackMessage);
 }
 
+/**
+ * WaveSpeed v3 payloads vary by model: some use `outputs[]`, others a single `output` / `result` URL string
+ * or nested `data`. Missing URLs here kept rows stuck “processing” with empty history previews.
+ */
+function extractWaveSpeedOutputUrls(json: Record<string, unknown>): string[] {
+  const out: string[] = [];
+  const push = (s: unknown) => {
+    if (typeof s === "string" && s.trim()) out.push(s.trim());
+  };
+  const data = json.data;
+  const inner = data !== null && typeof data === "object" && !Array.isArray(data) ? (data as Record<string, unknown>) : null;
+
+  const arrays = [
+    json.outputs,
+    json.output_urls,
+    json.result_urls,
+    inner?.outputs,
+    inner?.output_urls,
+    inner?.result_urls,
+  ];
+  for (const arr of arrays) {
+    if (!Array.isArray(arr)) continue;
+    for (const x of arr) push(x);
+  }
+
+  const singles = [
+    json.output,
+    json.result,
+    json.result_url,
+    json.resultUrl,
+    json.video,
+    json.video_url,
+    json.videoUrl,
+    json.url,
+    inner?.output,
+    inner?.result,
+    inner?.result_url,
+    inner?.resultUrl,
+    inner?.video,
+    inner?.video_url,
+    inner?.url,
+  ];
+  for (const s of singles) push(s);
+
+  return [...new Set(out)];
+}
+
 function parsePrediction(json: Record<string, unknown>): WaveSpeedPrediction {
+  let urls = extractWaveSpeedOutputUrls(json);
+  if (urls.length === 0) {
+    urls = walkJsonForHttpsUrls(json);
+  }
   return {
     id: typeof json.id === "string" ? json.id : undefined,
     status: typeof json.status === "string" ? json.status : undefined,
-    outputs: Array.isArray(json.outputs)
-      ? json.outputs.filter((x): x is string => typeof x === "string")
-      : [],
+    outputs: urls,
     error: typeof json.error === "string" ? json.error : undefined,
   };
 }

@@ -2,10 +2,10 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import {
+  extractKieMediaUrls,
   kieMarketRecordInfo,
   kieRecordStateIsFail,
   kieRecordStateIsSuccess,
-  parseKieResultMediaUrls,
 } from "@/lib/kieMarket";
 import { isPiapiTaskId, piapiGenericTaskStatusToLegacy, piapiGetTask } from "@/lib/piapiSeedance";
 import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
@@ -40,7 +40,7 @@ export async function GET(req: Request) {
     }
 
     const data = await kieMarketRecordInfo(taskId, personalKey);
-    const urls = parseKieResultMediaUrls(data.resultJson);
+    const urls = extractKieMediaUrls(data);
 
     // Normalize to the old shape the UI already understands.
     if (kieRecordStateIsSuccess(data.state)) {

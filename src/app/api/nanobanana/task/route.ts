@@ -2,19 +2,16 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import {
+  extractKieMediaUrls,
   kieMarketRecordInfo,
   kieRecordStateIsFail,
   kieRecordStateIsSuccess,
-  parseKieResultMediaUrls,
+  type KieMarketRecordInfo,
 } from "@/lib/kieMarket";
 import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
 
-function normalizeKieTaskToNanoShape(data: {
-  state: string;
-  resultJson?: string;
-  failMsg?: string;
-}) {
-  const urls = parseKieResultMediaUrls(data.resultJson);
+function normalizeKieTaskToNanoShape(data: KieMarketRecordInfo) {
+  const urls = extractKieMediaUrls(data);
   if (kieRecordStateIsSuccess(data.state)) {
     if (urls.length === 0) {
       return {

@@ -10,7 +10,7 @@ export type AppSection =
   | "projects";
 
 export type TranslateToolMode = "video_translate" | "voice_change";
-export type VoiceToolMode = "voice_change" | "create_voice";
+export type VoiceToolMode = "voice_change";
 
 export const SECTION_TO_SLUG: Record<AppSection, string> = {
   link_to_ad: "link-to-ad",
@@ -60,7 +60,6 @@ export function voiceModeFromPathname(pathname: string): VoiceToolMode | null {
   const stripped = pathname.replace(/^\/app\/?/, "");
   const segs = stripped.split("/").filter(Boolean);
   if (segs[0] !== "voice") return null;
-  if (segs[1] === "create") return "create_voice";
   return "voice_change";
 }
 

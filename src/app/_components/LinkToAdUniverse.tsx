@@ -1185,7 +1185,7 @@ export default function LinkToAdUniverse({
   const scriptProvider = "claude" as const;
 
   const [videoDuration, setVideoDuration] = useState<number>(10);
-  /** Seedance 2 speed selection (provider-specific). */
+  /** Video generation speed tier (Fast vs Normal) for the Link to Ad Seedance pipeline. */
   const [ltaSeedanceSpeed, setLtaSeedanceSpeed] = useState<LinkToAdSeedanceSpeed>("fast");
   /** After Generate from URL (or when a saved run is loaded), duration is fixed for this session. */
   const [ltaVideoDurationLocked, setLtaVideoDurationLocked] = useState(false);
@@ -1829,6 +1829,8 @@ export default function LinkToAdUniverse({
   const nanoThreeGeneratingFromDb = useRef(false);
   /** Prevents the resume effect from firing more than once per hydration. */
   const nanoThreeResumeAttemptedRef = useRef(false);
+  /** After `choosePreviewImage`, persist once `latestSnapRef` reflects the new product order. */
+  const persistAfterProductPreviewPickRef = useRef(false);
 
   useEffect(() => {
     const idx = nanoBananaSelectedImageIndex;
@@ -1909,6 +1911,23 @@ export default function LinkToAdUniverse({
     ltaSeedanceSpeed,
     videoDuration,
   ]);
+
+  useEffect(() => {
+    if (!persistAfterProductPreviewPickRef.current) return;
+    persistAfterProductPreviewPickRef.current = false;
+    const pageUrl = storeUrl.trim();
+    const base = latestSnapRef.current;
+    if (!pageUrl || !universeRunId || !lastExtractedJson || !base) return;
+    const triple = buildPersistTriplePatchingActive();
+    void persistUniverse(
+      universeRunId,
+      pageUrl,
+      extractedTitle,
+      lastExtractedJson,
+      snapshotWithPersistTriple(base, triple),
+      packshotsForSave(),
+    );
+  }, [productOnlyImageUrls, neutralUploadUrl, universeRunId, storeUrl, extractedTitle, lastExtractedJson]);
 
   const quality = useMemo(() => confidenceToQuality(confidence ?? undefined), [confidence]);
   const fullNanoPromptsTriple = useMemo((): [string, string, string] => {
@@ -2128,11 +2147,34 @@ export default function LinkToAdUniverse({
     () => aiScrapedCandidateUrls.filter((u) => u !== (resolvedPreviewUrl || "").trim()),
     [aiScrapedCandidateUrls, resolvedPreviewUrl],
   );
-  const choosePreviewImage = useCallback((url: string) => {
-    setNeutralUploadUrl(url);
-    setShowAiImagePicker(false);
-    setImgError(false);
-  }, []);
+  const choosePreviewImage = useCallback(
+    (url: string) => {
+      const picked = (url || "").trim();
+      if (!picked) return;
+      const resolvedPicked = resolveMaybeRelativeUrl(picked);
+      if (!resolvedPicked) return;
+      setProductOnlyImageUrls((prev) => {
+        const idx = prev.findIndex((u) => {
+          const r = resolveMaybeRelativeUrl(u);
+          return (r && r === resolvedPicked) || u === picked;
+        });
+        const reorder = idx > 0;
+        const prepend = idx === -1;
+        persistAfterProductPreviewPickRef.current = reorder || prepend || Boolean(neutralUploadUrl);
+        if (reorder) {
+          const next = [...prev];
+          const [item] = next.splice(idx, 1);
+          return [item, ...next];
+        }
+        if (prepend) return [picked, ...prev];
+        return prev;
+      });
+      setNeutralUploadUrl(null);
+      setShowAiImagePicker(false);
+      setImgError(false);
+    },
+    [neutralUploadUrl, resolveMaybeRelativeUrl],
+  );
 
   const isAlgorithmChosenPreview = useMemo(() => {
     const cur = (resolvedPreviewUrl || "").trim();
@@ -3108,6 +3150,9 @@ export default function LinkToAdUniverse({
     // Loader + status bar from first click (before find-by-url, which had no isWorking).
     setIsWorking(true);
     setStage("scanning");
+    // Lock duration + video generation tier for this run as soon as Generate is clicked.
+    // `hydrateFromRun` may clear this when resuming a saved project that has no scripts yet.
+    setLtaVideoDurationLocked(true);
 
     if (tryHydrateFromSavedRun) {
       try {
@@ -3132,9 +3177,7 @@ export default function LinkToAdUniverse({
       }
     }
 
-    // New scan / fresh pipeline: duration is fixed after this point (wallet failure unlocks below).
-    setLtaVideoDurationLocked(true);
-
+    // New scan / fresh pipeline: wallet failure unlocks below (lock already set at scan start).
     const walletNow = creditsBalanceRef.current;
     if (walletNow < ltaGenerateCredits) {
       setIsWorking(false);
@@ -4948,24 +4991,31 @@ export default function LinkToAdUniverse({
                     </div>
                   </div>
                   <div className="space-y-1">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Seedance</p>
-                    <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] p-1">
-                      {(["normal", "fast"] as const).map((tier) => (
-                        <button
-                          key={tier}
-                          type="button"
-                          onClick={() => setLtaSeedanceSpeed(tier)}
-                          className={cn(
-                            "rounded-md px-3 py-1.5 text-xs font-semibold transition",
-                            ltaSeedanceSpeed === tier
-                              ? "bg-violet-500/15 text-white border border-violet-400/60"
-                              : "bg-black/20 text-white/65 hover:border-white/20 border border-white/10",
-                          )}
-                        >
-                          {tier === "normal" ? "Normal" : "Fast"}
-                        </button>
-                      ))}
-                    </div>
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Video generation</p>
+                    {ltaVideoDurationLocked ? (
+                      <p className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/80">
+                        {ltaSeedanceSpeed === "fast" ? "Fast" : "Normal"}{" "}
+                        <span className="font-normal text-white/45">(locked for this run)</span>
+                      </p>
+                    ) : (
+                      <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] p-1">
+                        {(["normal", "fast"] as const).map((tier) => (
+                          <button
+                            key={tier}
+                            type="button"
+                            onClick={() => setLtaSeedanceSpeed(tier)}
+                            className={cn(
+                              "rounded-md px-3 py-1.5 text-xs font-semibold transition",
+                              ltaSeedanceSpeed === tier
+                                ? "border border-violet-400/60 bg-violet-500/15 text-white"
+                                : "border border-white/10 bg-black/20 text-white/65 hover:border-white/20",
+                            )}
+                          >
+                            {tier === "normal" ? "Normal" : "Fast"}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div>
@@ -5170,7 +5220,7 @@ export default function LinkToAdUniverse({
         ) : null}
         {/* Duration + product preview: tight vertical spacing (avoid empty flex gap when URL row is hidden). */}
         <div className="flex flex-col gap-3">
-        {/* Duration: locked once scripts exist / generation started so prompts stay aligned. Seedance tier stays user-editable. */}
+        {/* Duration + video generation speed: locked once scripts exist or a new run pipeline starts (same flag). */}
         <div className="flex flex-wrap items-center gap-4">
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Duration</p>
@@ -5213,25 +5263,32 @@ export default function LinkToAdUniverse({
             )}
           </div>
           <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Seedance</p>
-            <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] p-1">
-              {(["normal", "fast"] as const).map((tier) => (
-                <button
-                  key={tier}
-                  type="button"
-                  disabled={isWorking}
-                  onClick={() => setLtaSeedanceSpeed(tier)}
-                  className={cn(
-                    "rounded-md px-3 py-1.5 text-xs font-semibold transition",
-                    ltaSeedanceSpeed === tier
-                      ? "bg-violet-500/15 text-white border border-violet-400/60"
-                      : "bg-black/20 text-white/65 hover:border-white/20 border border-white/10",
-                  )}
-                >
-                  {tier === "fast" ? "Fast" : "Normal"}
-                </button>
-              ))}
-            </div>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Video generation</p>
+            {ltaVideoDurationLocked ? (
+              <p className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/80">
+                {ltaSeedanceSpeed === "fast" ? "Fast" : "Normal"}{" "}
+                <span className="font-normal text-white/45">(locked for this run)</span>
+              </p>
+            ) : (
+              <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] p-1">
+                {(["normal", "fast"] as const).map((tier) => (
+                  <button
+                    key={tier}
+                    type="button"
+                    disabled={isWorking}
+                    onClick={() => setLtaSeedanceSpeed(tier)}
+                    className={cn(
+                      "rounded-md px-3 py-1.5 text-xs font-semibold transition",
+                      ltaSeedanceSpeed === tier
+                        ? "border border-violet-400/60 bg-violet-500/15 text-white"
+                        : "border border-white/10 bg-black/20 text-white/65 hover:border-white/20",
+                    )}
+                  >
+                    {tier === "fast" ? "Fast" : "Normal"}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 

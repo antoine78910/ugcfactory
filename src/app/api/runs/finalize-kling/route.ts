@@ -5,10 +5,10 @@ export const maxDuration = 300;
 import { NextResponse } from "next/server";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import {
+  extractKieMediaUrls,
   kieMarketRecordInfo,
   kieRecordStateIsFail,
   kieRecordStateIsSuccess,
-  parseKieResultMediaUrls,
 } from "@/lib/kieMarket";
 import { isPiapiTaskId, piapiGetSeedanceTask, piapiTaskStatusToLegacy } from "@/lib/piapiSeedance";
 import {
@@ -98,7 +98,7 @@ export async function POST(req: Request) {
       } else {
         const data = await kieMarketRecordInfo(taskId);
         if (kieRecordStateIsSuccess(data.state)) {
-          const urls = parseKieResultMediaUrls(data.resultJson);
+          const urls = extractKieMediaUrls(data);
           vUrl = urls[0] ?? "";
           done = true;
         } else if (kieRecordStateIsFail(data.state)) {

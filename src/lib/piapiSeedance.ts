@@ -1,4 +1,5 @@
 import { requireEnv } from "@/lib/env";
+import { walkJsonForHttpsUrls } from "@/lib/walkJsonForHttpsUrls";
 
 const PIAPI_BASE = "https://api.piapi.ai";
 const PIAPI_TASK_PREFIX = "piapi:";
@@ -143,7 +144,13 @@ export function piapiTaskStatusToLegacy(
   task: PiapiSeedanceTask,
 ): { status: "SUCCESS" | "FAILED" | "IN_PROGRESS"; response: string[]; error_message: string | null } {
   const st = String(task.status ?? "").toLowerCase();
-  const video = typeof task.output?.video === "string" ? task.output.video.trim() : "";
+  let video = typeof task.output?.video === "string" ? task.output.video.trim() : "";
+
+  if ((st === "success" || st === "completed") && !video) {
+    const walked = walkJsonForHttpsUrls({ output: task.output, logs: task.logs });
+    const pick = firstVideoLikeUrl(walked);
+    if (pick) video = pick;
+  }
 
   if ((st === "success" || st === "completed") && video) {
     return { status: "SUCCESS", response: [video], error_message: null };
@@ -174,16 +181,27 @@ function firstUrlFromUnknown(x: unknown): string | null {
   return null;
 }
 
+function firstVideoLikeUrl(urls: string[]): string | null {
+  const videoish = urls.find((u) => /\.(mp4|webm|mov|m3u8)(\?|$)/i.test(u));
+  return (videoish ?? urls[0] ?? null) || null;
+}
+
 export function piapiGenericTaskStatusToLegacy(
   task: PiapiGenericTask,
 ): { status: "SUCCESS" | "FAILED" | "IN_PROGRESS"; response: string[]; error_message: string | null } {
   const st = String(task.status ?? "").toLowerCase();
   const output = task.output ?? {};
-  const video =
+  let video =
     firstUrlFromUnknown((output as Record<string, unknown>).video) ??
     firstUrlFromUnknown((output as Record<string, unknown>).video_url) ??
     firstUrlFromUnknown((output as Record<string, unknown>).video_urls) ??
     firstUrlFromUnknown(output);
+
+  if ((st === "success" || st === "completed") && !video) {
+    const walked = walkJsonForHttpsUrls({ output, logs: task.logs });
+    const pick = firstVideoLikeUrl(walked);
+    if (pick) video = pick;
+  }
 
   if ((st === "success" || st === "completed") && video) {
     return { status: "SUCCESS", response: [video], error_message: null };
