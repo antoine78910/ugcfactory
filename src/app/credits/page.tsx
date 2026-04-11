@@ -241,7 +241,7 @@ export default function CreditsPage() {
                           <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/40">
                             Credits
                           </p>
-                          <p className="mt-1 text-2xl font-extrabold tabular-nums tracking-tight text-white sm:text-3xl">
+                          <p className="mt-1 font-mono text-2xl font-extrabold tabular-nums tracking-tight text-white sm:text-3xl">
                             {p.credits.toLocaleString()}
                           </p>
                         </div>
@@ -260,12 +260,14 @@ export default function CreditsPage() {
 
                       <div className="mt-2 flex min-h-[2.25rem] items-baseline gap-2">
                         {billingPricesReady ? (
-                          <span className="text-3xl font-extrabold tabular-nums text-white">{p.price}</span>
+                          <span className="font-sans text-3xl font-extrabold tabular-nums tracking-tight text-white">
+                            {p.price}
+                          </span>
                         ) : (
                           <CreditPackPriceSkeleton />
                         )}
                         {billingPricesReady && displayPrices && oldPrice != null && oldPrice > p.priceUsd ? (
-                          <span className="text-sm font-semibold text-white/45 line-through">
+                          <span className="font-sans text-sm font-semibold tabular-nums tracking-tight text-white/45 line-through">
                             {formatMoneyAmount(oldPrice, displayPrices.currency)}
                           </span>
                         ) : null}

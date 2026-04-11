@@ -2,7 +2,9 @@
  * One-time credit pack Stripe Price IDs.
  * Keys match `PACK_UI` keys on `/credits` (same order as `CREDIT_PACKS` in `@/lib/pricing`).
  *
- * EUR env: STRIPE_PRICE_EUR_CREDITS_GROWTH → pack `growth` (450 cr). STRIPE_PRICE_EUR_CREDITS_BOOST → `most-popular` (1000 cr). Use the same Scale→Launch price order as in Stripe / USD env (Growth = 3rd EUR id, Boost = 4th).
+ * **EUR only:** Stripe EU products are often created in an order where env names `_GROWTH` / `_BOOST`
+ * do not match USD. Pack `growth` (450 cr) reads `STRIPE_PRICE_EUR_CREDITS_BOOST*`; pack
+ * `most-popular` (1000 cr) reads `STRIPE_PRICE_EUR_CREDITS_GROWTH*`. USD mapping is unchanged.
  */
 
 import type { BillingCheckoutCurrency } from "@/lib/geo/billingRegion";
@@ -29,16 +31,16 @@ export function getCreditPackStripePriceId(
         process.env.NEXT_PUBLIC_STRIPE_PRICE_CREDITS_LAUNCH_EUR,
       ),
       growth: firstStripePriceId(
-        process.env.STRIPE_PRICE_EUR_CREDITS_GROWTH,
-        process.env.NEXT_PUBLIC_STRIPE_PRICE_EUR_CREDITS_GROWTH,
-        process.env.STRIPE_PRICE_CREDITS_GROWTH_EUR,
-        process.env.NEXT_PUBLIC_STRIPE_PRICE_CREDITS_GROWTH_EUR,
-      ),
-      "most-popular": firstStripePriceId(
         process.env.STRIPE_PRICE_EUR_CREDITS_BOOST,
         process.env.NEXT_PUBLIC_STRIPE_PRICE_EUR_CREDITS_BOOST,
         process.env.STRIPE_PRICE_CREDITS_BOOST_EUR,
         process.env.NEXT_PUBLIC_STRIPE_PRICE_CREDITS_BOOST_EUR,
+      ),
+      "most-popular": firstStripePriceId(
+        process.env.STRIPE_PRICE_EUR_CREDITS_GROWTH,
+        process.env.NEXT_PUBLIC_STRIPE_PRICE_EUR_CREDITS_GROWTH,
+        process.env.STRIPE_PRICE_CREDITS_GROWTH_EUR,
+        process.env.NEXT_PUBLIC_STRIPE_PRICE_CREDITS_GROWTH_EUR,
       ),
       pro: firstStripePriceId(
         process.env.STRIPE_PRICE_EUR_CREDITS_PRO,

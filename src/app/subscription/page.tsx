@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Check, Coins, CreditCard, Sparkles, X } from "lucide-react";
+import { ArrowRight, Check, Coins, CreditCard, X } from "lucide-react";
 import { toast } from "sonner";
 import StudioShell from "@/app/_components/StudioShell";
 import type { SubscriptionDowngradePreview } from "@/app/_components/SubscriptionDowngradeDialog";
@@ -118,6 +118,24 @@ function SubscriptionPlanPriceSkeleton() {
 
 function PlanCardDescription({ plan }: { plan: PlanDef }) {
   return <p className="mt-1 min-h-0 text-sm leading-snug text-white/48">{plan.description}</p>;
+}
+
+/** Minimal violet pill on the Yearly billing toggle only. */
+function YearlyToggleSaveBadge({ className }: { className?: string }) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "pointer-events-none absolute z-10 inline-flex items-center justify-center whitespace-nowrap rounded-full",
+        "border border-violet-300/50 bg-violet-500/35 px-2.5 py-1",
+        "text-[11px] font-bold tabular-nums tracking-wide text-white",
+        "shadow-[0_0_14px_rgba(139,92,246,0.45)]",
+        className,
+      )}
+    >
+      −30%
+    </span>
+  );
 }
 
 export default function SubscriptionPage() {
@@ -464,34 +482,21 @@ export default function SubscriptionPage() {
                   type="button"
                   onClick={() => setBilling("yearly")}
                   className={cn(
-                    "rounded-full px-4 py-2 text-sm font-semibold transition-all duration-200",
+                    "relative rounded-full px-6 py-2.5 pr-8 text-sm font-semibold transition-all duration-200",
                     billing === "yearly"
                       ? "bg-violet-500 text-white shadow-[0_4px_20px_rgba(139,92,246,0.35)]"
                       : "text-white/45 hover:text-white/75",
                   )}
                 >
-                  <span className="inline-flex items-center gap-2">
-                    Yearly
-                    <span className="rounded-full border border-emerald-300/45 bg-emerald-400/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-100 shadow-[0_0_16px_rgba(16,185,129,0.28)]">
-                      Save 30%
-                    </span>
-                  </span>
+                  Yearly
+                  <YearlyToggleSaveBadge className="-right-1 -top-2.5" />
                 </button>
               </div>
             </div>
           </header>
 
           <section>
-            <div className="mb-8 flex flex-col items-center gap-2 text-center">
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1">
-                <Sparkles className="h-3.5 w-3.5 text-violet-300" aria-hidden />
-                <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/50">
-                  Compare plans
-                </span>
-              </div>
-            </div>
-
-            <div className={cn("mx-auto grid max-w-6xl items-stretch gap-5 pt-3", planGridClass)}>
+            <div className={cn("mx-auto grid max-w-6xl items-stretch gap-5 pt-2", planGridClass)}>
               {PLANS.map((plan) => {
                 const priceLabels = priceFor(plan);
                 const planIdx = subscriptionPlanSortIndex(plan.id as SubscriptionPlanId);
@@ -515,9 +520,6 @@ export default function SubscriptionPage() {
                       billing === "monthly"));
 
                 const isCurrentPlanCard = isSameTier;
-                const showYearlySavingsBadge =
-                  billing === "yearly" &&
-                  !(isSameTier && serverBillResolved === "yearly");
 
                 return (
                   <div
@@ -542,11 +544,6 @@ export default function SubscriptionPage() {
                           {plan.badge}
                         </span>
                       ) : null}
-                      {showYearlySavingsBadge ? (
-                        <span className="rounded-full border border-emerald-300/45 bg-emerald-400/20 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-100">
-                          Save 30%
-                        </span>
-                      ) : null}
                     </div>
 
                     <div className="min-h-0">
@@ -564,11 +561,6 @@ export default function SubscriptionPage() {
                             <span className="text-sm font-semibold leading-none text-white/55 md:text-base">/mo</span>
                           </div>
                           <p className="mt-0.5 text-xs leading-tight text-white/38">{priceLabels.sub}</p>
-                          {billing === "yearly" ? (
-                            <p className="mt-1 inline-flex items-center rounded-md border border-emerald-400/35 bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold leading-tight text-emerald-200">
-                              Save 30% on yearly billing
-                            </p>
-                          ) : null}
                         </>
                       ) : (
                         <SubscriptionPlanPriceSkeleton />

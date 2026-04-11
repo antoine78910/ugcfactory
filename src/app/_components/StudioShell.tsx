@@ -29,6 +29,8 @@ import { cn } from "@/lib/utils";
 import { isStudioShellPath } from "@/lib/studioPaths";
 
 const SIDEBAR_COLLAPSED_LS = "youry-studio-sidebar-collapsed";
+/** Remember CREATE tab highlight on /subscription, /credits, etc. (not under /app). */
+const LAST_STUDIO_NAV_SECTION_LS = "youry-last-studio-nav-section";
 
 export type StudioNavSection =
   | "link_to_ad"
@@ -57,6 +59,17 @@ const SLUG_TO_SECTION: Record<string, StudioNavSection> = Object.fromEntries(
   Object.entries(SECTION_TO_SLUG).map(([k, v]) => [v, k]),
 ) as Record<string, StudioNavSection>;
 
+function readStoredStudioNavSection(): StudioNavSection {
+  if (typeof window === "undefined") return "link_to_ad";
+  try {
+    const raw = localStorage.getItem(LAST_STUDIO_NAV_SECTION_LS);
+    if (raw && raw in SECTION_TO_SLUG) return raw as StudioNavSection;
+  } catch {
+    /* ignore */
+  }
+  return "link_to_ad";
+}
+
 type Props = {
   children: React.ReactNode;
   studioSection?: StudioNavSection;
@@ -66,7 +79,15 @@ type Props = {
 
 type CreateNavEntry =
   | { kind: "route"; id: StudioNavSection; label: string; icon: LucideIcon }
-  | { kind: "custom-link"; id: string; href: string; label: string; icon: LucideIcon };
+  | {
+      kind: "custom-link";
+      id: string;
+      href: string;
+      label: string;
+      icon: LucideIcon;
+      /** Grayed, no navigation, “Soon” pill */
+      soon?: boolean;
+    };
 
 const CREATE_NAV: CreateNavEntry[] = [
   { kind: "route", id: "link_to_ad", label: "Link to Ad", icon: Link2 },
@@ -76,6 +97,7 @@ const CREATE_NAV: CreateNavEntry[] = [
     href: "/workflow",
     label: "Workflow",
     icon: GitBranch,
+    soon: true,
   },
   { kind: "route", id: "avatar", label: "Avatar", icon: UserRound },
   { kind: "route", id: "ad_clone", label: "Translate", icon: Languages },
@@ -128,6 +150,9 @@ function StudioShellInner({
   const [email, setEmail] = useState("");
   const { planDisplayName } = useCreditsPlan();
   const [navCollapsed, setNavCollapsed] = useState(false);
+  /** Last studio CREATE section; kept when visiting subscription / credits so the sidebar doesn’t jump to Link to Ad. */
+  const [persistedStudioSection, setPersistedStudioSection] =
+    useState<StudioNavSection>("link_to_ad");
   const supabase = useSupabaseBrowserClient();
 
   useEffect(() => {
@@ -153,11 +178,30 @@ function StudioShellInner({
   // If parent provides section state, always trust it (prevents wrong highlights if pathname is stale).
   const controlled = Boolean(onStudioSectionChange && studioSection !== undefined);
 
+  useEffect(() => {
+    setPersistedStudioSection(readStoredStudioNavSection());
+  }, []);
+
+  useEffect(() => {
+    if (!isStudioShell) return;
+    const stripped = pathname.replace(/^\/app\/?/, "");
+    const firstSeg = stripped.split("/").filter(Boolean)[0] ?? "";
+    // Workflow uses its own nav row; don’t reset remembered CREATE tab to Link to Ad.
+    if (firstSeg === "workflow") return;
+    const s = sectionFromPathname(pathname);
+    setPersistedStudioSection(s);
+    try {
+      localStorage.setItem(LAST_STUDIO_NAV_SECTION_LS, s);
+    } catch {
+      /* ignore */
+    }
+  }, [isStudioShell, pathname]);
+
   const activeSection: StudioNavSection = useMemo(() => {
     if (controlled && studioSection) return studioSection;
     if (isStudioShell) return sectionFromPathname(pathname);
-    return "link_to_ad";
-  }, [controlled, studioSection, isStudioShell, pathname]);
+    return persistedStudioSection;
+  }, [controlled, studioSection, isStudioShell, pathname, persistedStudioSection]);
 
   const onWorkflowRoute = useMemo(() => {
     const p = pathname.replace(/^\/app(?=\/|$)/, "") || pathname;
@@ -294,7 +338,37 @@ function StudioShellInner({
                 {CREATE_NAV.map((entry) => {
                   const NavIcon = entry.icon;
                   if (entry.kind === "custom-link") {
-                    const { href, label, id: linkId } = entry;
+                    const { href, label, id: linkId, soon } = entry;
+                    if (soon) {
+                      return (
+                        <div
+                          key={linkId}
+                          className={cn(
+                            "pointer-events-none block w-full min-w-0 select-none rounded-lg border border-white/[0.07] bg-white/[0.02] px-4 py-3 text-left text-[15px] font-semibold leading-snug text-white/32 shadow-none",
+                            navCollapsed && "px-2.5 py-3.5",
+                          )}
+                          title={`${label} — coming soon`}
+                          aria-disabled="true"
+                        >
+                          <span
+                            className={cn(
+                              "flex min-w-0 items-center gap-2",
+                              navCollapsed && "justify-center",
+                            )}
+                          >
+                            <NavIcon className="h-5 w-5 shrink-0 text-white/22" aria-hidden />
+                            <span className={cn("min-w-0 flex-1 truncate", navCollapsed && "sr-only")}>
+                              {label}
+                            </span>
+                            {!navCollapsed ? (
+                              <span className="shrink-0 rounded-md border border-white/10 bg-white/[0.05] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white/38">
+                                Soon
+                              </span>
+                            ) : null}
+                          </span>
+                        </div>
+                      );
+                    }
                     const active =
                       pathname === href ||
                       pathname.startsWith(`${href}/`) ||
