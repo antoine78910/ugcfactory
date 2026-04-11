@@ -2,7 +2,7 @@
  * One-time credit pack Stripe Price IDs.
  * Keys match `PACK_UI` keys on `/credits` (same order as `CREDIT_PACKS` in `@/lib/pricing`).
  *
- * Env names match UI tiers (see CREDIT_PACKS in pricing.ts). Growth = 450 cr, Boost = 1000 cr — their EUR Stripe prices differ (~60 vs ~120 EUR); do not swap those two IDs across env vars.
+ * EUR env: STRIPE_PRICE_EUR_CREDITS_GROWTH → pack `growth` (450 cr). STRIPE_PRICE_EUR_CREDITS_BOOST → `most-popular` (1000 cr). Use the same Scale→Launch price order as in Stripe / USD env (Growth = 3rd EUR id, Boost = 4th).
  */
 
 import type { BillingCheckoutCurrency } from "@/lib/geo/billingRegion";
