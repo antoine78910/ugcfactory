@@ -8,6 +8,10 @@ import StudioShell from "@/app/_components/StudioShell";
 import { consumeCheckoutQueryParams, useCreditsPlan } from "@/app/_components/CreditsPlanContext";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import {
+  upToEstimateAiImagesFromCredits,
+  upToEstimateAiVideosFromCredits,
+} from "@/lib/billing/creditUsageEstimates";
 import { CREDIT_PACKS } from "@/lib/pricing";
 import type { StripeDisplayPricesPayload } from "@/lib/billing/stripeDisplayTypes";
 import { formatMoneyAmount } from "@/lib/billing/formatMoney";
@@ -121,19 +125,6 @@ export default function CreditsPage() {
     });
   }, [displayPrices]);
 
-  // UI-only estimates for the pack marketing lines.
-  // As requested: Sora 2 videos use 5 credits each; Nanobanana images use 0.5 credits each.
-  const CREDITS_PER_SORA2_VIDEO = 5;
-  const CREDITS_PER_NANOBANANA_IMAGE = 0.5;
-
-  function upToAiImagesFromCredits(credits: number) {
-    return Math.max(1, Math.floor(credits / CREDITS_PER_NANOBANANA_IMAGE));
-  }
-
-  function upToAiVideosFromCredits(credits: number) {
-    return Math.max(1, Math.floor(credits / CREDITS_PER_SORA2_VIDEO));
-  }
-
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const c = params.get("checkout");
@@ -217,6 +208,8 @@ export default function CreditsPage() {
                 const topRow = packIndex < 3;
 
                 const oldPrice = savePercent ? Math.round(p.priceUsd / (1 - Number(savePercent) / 100)) : null;
+                const maxImages = upToEstimateAiImagesFromCredits(p.credits);
+                const maxVideos = upToEstimateAiVideosFromCredits(p.credits);
 
                 return (
                   <div
@@ -257,11 +250,11 @@ export default function CreditsPage() {
                       <div className="space-y-1">
                         <div className="flex items-center gap-2 text-[12px] font-medium text-white/55">
                           <CheckCircle2 className="h-4 w-4 shrink-0 text-violet-200/70" aria-hidden />
-                          Up to 1200 AI images (Nanobanana)
+                          Up to {maxImages.toLocaleString()} AI images (Nanobanana)
                         </div>
                         <div className="flex items-center gap-2 text-[12px] font-medium text-white/55">
                           <CheckCircle2 className="h-4 w-4 shrink-0 text-violet-200/70" aria-hidden />
-                          Up to 120 AI videos (Sora 2)
+                          Up to {maxVideos.toLocaleString()} AI videos (Sora 2)
                         </div>
                       </div>
 

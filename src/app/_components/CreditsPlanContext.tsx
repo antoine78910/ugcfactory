@@ -10,6 +10,10 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import {
+  upToEstimateAiImagesFromCredits,
+  upToEstimateAiVideosFromCredits,
+} from "@/lib/billing/creditUsageEstimates";
 import { CREDIT_PACKS, SUBSCRIPTIONS } from "@/lib/pricing";
 import {
   CREDIT_PACK_KEYS,
@@ -254,7 +258,11 @@ const SUBSCRIPTION_TIERS = [
     name: "Starter",
     monthly: SUBSCRIPTIONS[0].price_usd,
     credits: SUBSCRIPTIONS[0].credits_per_month,
-    usage: { linkToAd: "4", images: "125", videos: "24" },
+    usage: {
+      linkToAd: "4",
+      images: String(upToEstimateAiImagesFromCredits(SUBSCRIPTIONS[0].credits_per_month)),
+      videos: String(upToEstimateAiVideosFromCredits(SUBSCRIPTIONS[0].credits_per_month)),
+    },
     cardBorder: "border-white/10",
     btnClass: "bg-white text-black hover:bg-white/90",
   },
@@ -263,7 +271,11 @@ const SUBSCRIPTION_TIERS = [
     name: "Growth",
     monthly: SUBSCRIPTIONS[1].price_usd,
     credits: SUBSCRIPTIONS[1].credits_per_month,
-    usage: { linkToAd: "10", images: "300", videos: "60" },
+    usage: {
+      linkToAd: "10",
+      images: String(upToEstimateAiImagesFromCredits(SUBSCRIPTIONS[1].credits_per_month)),
+      videos: String(upToEstimateAiVideosFromCredits(SUBSCRIPTIONS[1].credits_per_month)),
+    },
     cardBorder: "border-sky-400/35",
     btnClass: "bg-sky-400 text-white hover:bg-sky-300",
     popular: true,
@@ -273,7 +285,11 @@ const SUBSCRIPTION_TIERS = [
     name: "Pro",
     monthly: SUBSCRIPTIONS[2].price_usd,
     credits: SUBSCRIPTIONS[2].credits_per_month,
-    usage: { linkToAd: "24", images: "700", videos: "140" },
+    usage: {
+      linkToAd: "24",
+      images: String(upToEstimateAiImagesFromCredits(SUBSCRIPTIONS[2].credits_per_month)),
+      videos: String(upToEstimateAiVideosFromCredits(SUBSCRIPTIONS[2].credits_per_month)),
+    },
     cardBorder: "border-white/10",
     btnClass: "bg-white text-black hover:bg-white/90",
   },
@@ -282,7 +298,11 @@ const SUBSCRIPTION_TIERS = [
     name: "Scale",
     monthly: SUBSCRIPTIONS[3].price_usd,
     credits: SUBSCRIPTIONS[3].credits_per_month,
-    usage: { linkToAd: "55", images: "1600", videos: "320" },
+    usage: {
+      linkToAd: "55",
+      images: String(upToEstimateAiImagesFromCredits(SUBSCRIPTIONS[3].credits_per_month)),
+      videos: String(upToEstimateAiVideosFromCredits(SUBSCRIPTIONS[3].credits_per_month)),
+    },
     cardBorder: "border-violet-500/40",
     btnClass: "bg-violet-500 text-white hover:bg-violet-400",
   },

@@ -22,6 +22,10 @@ import {
 } from "@/lib/stripe/subscriptionPrices";
 import { openStripeBillingPortal } from "@/lib/stripe/openBillingPortalClient";
 import type { StripeDisplayPricesPayload } from "@/lib/billing/stripeDisplayTypes";
+import {
+  upToEstimateAiImagesFromCredits,
+  upToEstimateAiVideosFromCredits,
+} from "@/lib/billing/creditUsageEstimates";
 import { formatMoneyAmount } from "@/lib/billing/formatMoney";
 import { buildUsdStripeDisplayPricesFallback } from "@/lib/billing/stripeDisplayFallback";
 
@@ -42,15 +46,12 @@ type PlanDef = {
   highlight?: boolean;
 };
 
-const CREDITS_PER_NANOBANANA_IMAGE = 0.5;
-const CREDITS_PER_SORA2_VIDEO = 5;
-
 function upToAiImagesFromMonthlyCredits(creditsPerMonth: number): string {
-  return String(Math.max(1, Math.floor(creditsPerMonth / CREDITS_PER_NANOBANANA_IMAGE)));
+  return String(upToEstimateAiImagesFromCredits(creditsPerMonth));
 }
 
 function upToAiVideosFromMonthlyCredits(creditsPerMonth: number): string {
-  return String(Math.max(1, Math.floor(creditsPerMonth / CREDITS_PER_SORA2_VIDEO)));
+  return String(upToEstimateAiVideosFromCredits(creditsPerMonth));
 }
 
 const PLANS: PlanDef[] = [
@@ -640,8 +641,12 @@ export default function SubscriptionPage() {
                           <span className="font-semibold text-white">{plan.credits.toLocaleString()} credits</span>
                         </span>
                       </li>
-                      <li className="pl-1 text-white/50">Up to 1200 AI images (Nanobanana)</li>
-                      <li className="pl-1 text-white/50">Up to 120 AI videos (Sora 2)</li>
+                      <li className="pl-1 text-white/50">
+                        Up to {Number(plan.usage.images).toLocaleString()} AI images (Nanobanana)
+                      </li>
+                      <li className="pl-1 text-white/50">
+                        Up to {Number(plan.usage.videos).toLocaleString()} AI videos (Sora 2)
+                      </li>
                       <li className="pt-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-white/45">
                         Included models
                       </li>
