@@ -24,6 +24,8 @@ function isExcludedFromStudioRewrite(pathname: string): boolean {
     "dashboard",
     "admin",
     "apitest",
+    /** Gift / promo credit links — must not rewrite or `[...sections]` swallows `/redeem` and shows Link to Ad. */
+    "redeem",
     /** Top-level `src/app/workflow/*` — must not rewrite to `/app/workflow` or `[...sections]` treats it as unknown and shows Link to Ad. */
     "workflow",
   ]).has(first);
