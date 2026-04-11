@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect } from "react";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { useSupabaseBrowserClient } from "@/lib/supabase/BrowserSupabaseProvider";
 
 const CLARITY_PROJECT_ID = process.env.NEXT_PUBLIC_CLARITY_PROJECT_ID ?? "";
 
 export default function ClarityInit() {
+  const supabase = useSupabaseBrowserClient();
+
   useEffect(() => {
     if (!CLARITY_PROJECT_ID) return;
     let cancelled = false;
@@ -16,7 +18,6 @@ export default function ClarityInit() {
       Clarity.init(CLARITY_PROJECT_ID);
 
       try {
-        const supabase = createSupabaseBrowserClient();
         if (!supabase) return;
         const {
           data: { user },
@@ -43,7 +44,7 @@ export default function ClarityInit() {
       cancelled = true;
       window.clearTimeout(tid);
     };
-  }, []);
+  }, [supabase]);
 
   return null;
 }

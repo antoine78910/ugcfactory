@@ -92,7 +92,7 @@ import {
   normalizeUgcScriptVideoDurationSec,
 } from "@/lib/ugcAiScriptBrief";
 import { parseUgcI2v30sParts } from "@/lib/ugcI2vParse";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { useSupabaseBrowserClient } from "@/lib/supabase/BrowserSupabaseProvider";
 import { LINK_TO_AD_LOADING_MESSAGES } from "@/lib/linkToAd/loadingMessageLoops";
 import { assertStudioImageUpload, STUDIO_IMAGE_FILE_ACCEPT } from "@/lib/studioUploadValidation";
 import {
@@ -1042,16 +1042,16 @@ export default function LinkToAdUniverse({
 }: LinkToAdUniverseProps) {
   const reduceMotion = useReducedMotion();
   const { planId, current: creditsBalance, spendCredits, grantCredits } = useCreditsPlan();
+  const supabaseClient = useSupabaseBrowserClient();
 
   const [_userEmail, _setUserEmail] = useState<string | null>(null);
   useEffect(() => {
-    const client = createSupabaseBrowserClient();
-    if (!client) return;
-    client.auth
+    if (!supabaseClient) return;
+    supabaseClient.auth
       .getUser()
       .then(({ data }) => _setUserEmail(data.user?.email ?? null))
       .catch(() => {});
-  }, []);
+  }, [supabaseClient]);
   // 30s Link-to-Ad is enabled for testing (renders as two chained 15s clips).
   const _30sUnlocked = true;
   const DEMO_EMAILS = new Set(["anto.delbos@gmail.com", "app@youry.com"]);

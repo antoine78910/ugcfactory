@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Check,
   ExternalLink,
@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { useSupabaseBrowserClient } from "@/lib/supabase/BrowserSupabaseProvider";
 import { storeInviteWelcome } from "../../WorkflowInviteWelcome";
 
 type InviteInfo = {
@@ -36,7 +36,7 @@ export default function WorkflowInvitePage() {
   const router = useRouter();
   const token = typeof params.token === "string" ? params.token : "";
 
-  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+  const supabase = useSupabaseBrowserClient();
   const [userId, setUserId] = useState<string | null | undefined>(undefined);
   const [info, setInfo] = useState<InviteInfo | null>(null);
   const [error, setError] = useState<string | null>(null);

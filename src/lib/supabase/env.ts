@@ -27,7 +27,24 @@ export function getSupabaseUrl(): string {
 }
 
 export function getSupabaseAnonKeyOptional(): string | undefined {
-  return getEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY");
+  const raw = getEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY");
+  if (!raw) return undefined;
+  let k = raw;
+  if (
+    (k.startsWith('"') && k.endsWith('"')) ||
+    (k.startsWith("'") && k.endsWith("'"))
+  ) {
+    k = k.slice(1, -1).trim();
+  }
+  return k.length > 0 ? k : undefined;
+}
+
+/** URL + anon key from build/runtime env (no network). */
+export function readSupabaseBrowserConfigFromEnv(): { url: string; key: string } | null {
+  const url = getSupabaseUrlOptional();
+  const key = getSupabaseAnonKeyOptional();
+  if (!url || !key) return null;
+  return { url, key };
 }
 
 export function getSupabaseAnonKey(): string {
@@ -35,6 +52,6 @@ export function getSupabaseAnonKey(): string {
 }
 
 export function hasPublicSupabaseConfig(): boolean {
-  return Boolean(getSupabaseUrlOptional() && getSupabaseAnonKeyOptional());
+  return readSupabaseBrowserConfigFromEnv() !== null;
 }
 

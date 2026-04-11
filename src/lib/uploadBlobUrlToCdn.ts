@@ -1,4 +1,4 @@
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { waitForSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
   assertStudioUploadForKind,
   inferStudioUploadKind,
@@ -57,7 +57,7 @@ async function uploadViaNextApi(file: File): Promise<string> {
 }
 
 async function uploadViaSupabaseDirect(file: File): Promise<string> {
-  const supabase = createSupabaseBrowserClient();
+  const supabase = await waitForSupabaseBrowserClient();
   if (!supabase) {
     throw new Error("File upload is unavailable: Supabase is not configured.");
   }

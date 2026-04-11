@@ -2,21 +2,25 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import {
+  useBrowserSupabaseReady,
+  useSupabaseBrowserClient,
+} from "@/lib/supabase/BrowserSupabaseProvider";
 import { getAuthCallbackUrl } from "@/lib/supabase/authRedirect";
 
 type AuthMode = "signin" | "signup";
 
 export default function AuthClient({ mode = "signin", redirectTo }: { mode?: AuthMode; redirectTo?: string }) {
   const router = useRouter();
-  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+  const supabaseReady = useBrowserSupabaseReady();
+  const supabase = useSupabaseBrowserClient();
 
   const [firstName, setFirstName] = useState("");
   const [email, setEmail] = useState("");
@@ -27,6 +31,14 @@ export default function AuthClient({ mode = "signin", redirectTo }: { mode?: Aut
     window.datafast?.(mode === "signup" ? "view_signup" : "view_signin");
   }, [mode]);
 
+  if (!supabaseReady) {
+    return (
+      <div className="flex min-h-[100dvh] min-h-screen items-center justify-center bg-[#050507] text-white">
+        <Loader2 className="h-10 w-10 animate-spin text-violet-400" aria-label="Loading" />
+      </div>
+    );
+  }
+
   if (!supabase) {
     return (
       <div className="min-h-[100dvh] min-h-screen overflow-x-hidden bg-[#050507] text-white">
@@ -34,9 +46,10 @@ export default function AuthClient({ mode = "signin", redirectTo }: { mode?: Aut
           <div className="rounded-2xl border border-amber-400/40 bg-amber-500/5 p-6 text-sm text-white/80">
             <p className="font-semibold text-amber-300">Missing Supabase config</p>
             <p className="mt-3">
-              Define <code className="rounded bg-white/10 px-1">NEXT_PUBLIC_SUPABASE_URL</code> (or{" "}
+              Set <code className="rounded bg-white/10 px-1">NEXT_PUBLIC_SUPABASE_URL</code> (or{" "}
               <code className="rounded bg-white/10 px-1">NEXT_PUBLIC_SUPABASE_CUSTOM_DOMAIN</code>) and{" "}
-              <code className="rounded bg-white/10 px-1">NEXT_PUBLIC_SUPABASE_ANON_KEY</code> in Vercel, then redeploy.
+              <code className="rounded bg-white/10 px-1">NEXT_PUBLIC_SUPABASE_ANON_KEY</code> for all environments in
+              Vercel, then trigger a new deployment so the values are applied.
             </p>
           </div>
         </main>

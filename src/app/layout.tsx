@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
 import { CreditsPlanProvider } from "@/app/_components/CreditsPlanContext";
+import { BrowserSupabaseProvider } from "@/lib/supabase/BrowserSupabaseProvider";
 import { Toaster } from "@/components/ui/sonner";
 import HeyoInit from "@/app/_components/HeyoInit";
 import ClarityInit from "@/app/_components/ClarityInit";
@@ -70,11 +71,13 @@ export default function RootLayout({
           src={`https://www.linkjolt.io/api/tracking.js?id=${LINKJOLT_MERCHANT_ID}`}
           strategy="afterInteractive"
         />
-        <CreditsPlanProvider>
-          <HeyoInit />
-          <ClarityInit />
-          {children}
-        </CreditsPlanProvider>
+        <BrowserSupabaseProvider>
+          <CreditsPlanProvider>
+            <HeyoInit />
+            <ClarityInit />
+            {children}
+          </CreditsPlanProvider>
+        </BrowserSupabaseProvider>
         <Toaster richColors />
       </body>
     </html>

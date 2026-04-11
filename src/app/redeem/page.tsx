@@ -1,10 +1,13 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Gift, Loader2, Sparkles, XCircle } from "lucide-react";
 import Link from "next/link";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import {
+  useBrowserSupabaseReady,
+  useSupabaseBrowserClient,
+} from "@/lib/supabase/BrowserSupabaseProvider";
 import { dispatchAuthoritativeCreditBalance } from "@/app/_components/CreditsPlanContext";
 
 type Status = "loading" | "success" | "error" | "no-token" | "auth-redirect";
@@ -200,7 +203,8 @@ function RedeemPageContent() {
   const params = useSearchParams();
   const token = params.get("token")?.trim() ?? "";
 
-  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+  const supabase = useSupabaseBrowserClient();
+  const supabaseReady = useBrowserSupabaseReady();
   const [status, setStatus] = useState<Status>("loading");
   const [credited, setCredited] = useState(0);
   const [errorMsg, setErrorMsg] = useState("");
@@ -215,8 +219,14 @@ function RedeemPageContent() {
       setStatus("no-token");
       return;
     }
-    if (attempted.current) return;
-    attempted.current = true;
+
+    if (!supabaseReady) return;
+
+    if (supabase === null) {
+      setErrorMsg("App configuration is incomplete. Please contact support.");
+      setStatus("error");
+      return;
+    }
 
     if (pending) sessionStorage.removeItem("redeem_token_pending");
 
@@ -225,12 +235,10 @@ function RedeemPageContent() {
       return;
     }
 
+    if (attempted.current) return;
+    attempted.current = true;
+
     void (async () => {
-      if (!supabase) {
-        setErrorMsg("App configuration is incomplete. Please contact support.");
-        setStatus("error");
-        return;
-      }
       const { data: { user } } = await supabase.auth.getUser();
 
       if (!user) {
@@ -275,7 +283,7 @@ function RedeemPageContent() {
         setStatus("error");
       }
     })();
-  }, [token, supabase, router]);
+  }, [token, supabase, supabaseReady, router]);
 
   // Stagger the success card entrance
   useEffect(() => {

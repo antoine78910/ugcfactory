@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "reac
 
 import { cn } from "@/lib/utils";
 
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { useSupabaseBrowserClient } from "@/lib/supabase/BrowserSupabaseProvider";
 
 import { WorkflowAmbientLayer } from "./WorkflowAmbientLayer";
 import {
@@ -37,6 +37,7 @@ function formatTimeAgo(ts: number): string {
 
 export function WorkflowSpacesLanding() {
   const router = useRouter();
+  const sb = useSupabaseBrowserClient();
   const [storageScope, setStorageScope] = useState<string | null>(null);
   const [spaces, setSpaces] = useState<WorkflowSpaceMeta[]>([]);
   const [hydrated, setHydrated] = useState(false);
@@ -44,7 +45,6 @@ export function WorkflowSpacesLanding() {
   const [query, setQuery] = useState("");
 
   useEffect(() => {
-    const sb = createSupabaseBrowserClient();
     if (!sb) {
       setStorageScope(getWorkflowStorageScope(null));
       return;
@@ -56,7 +56,7 @@ export function WorkflowSpacesLanding() {
       setStorageScope(getWorkflowStorageScope(session?.user?.id ?? null));
     });
     return () => sub.subscription.unsubscribe();
-  }, []);
+  }, [sb]);
 
   const refresh = useCallback((scope: string) => {
     setSpaces(loadSpacesIndex(scope).spaces);

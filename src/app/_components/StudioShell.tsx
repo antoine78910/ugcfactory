@@ -19,7 +19,7 @@ import {
   Joystick,
   Languages,
 } from "lucide-react";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { useSupabaseBrowserClient } from "@/lib/supabase/BrowserSupabaseProvider";
 import SidebarAccountMenu from "@/app/_components/SidebarAccountMenu";
 import CreditLowBanner from "@/app/_components/CreditLowBanner";
 import StudioGenerationsBackgroundPoll from "@/app/_components/StudioGenerationsBackgroundPoll";
@@ -128,6 +128,7 @@ function StudioShellInner({
   const [email, setEmail] = useState("");
   const { planDisplayName } = useCreditsPlan();
   const [navCollapsed, setNavCollapsed] = useState(false);
+  const supabase = useSupabaseBrowserClient();
 
   useEffect(() => {
     try {
@@ -165,18 +166,16 @@ function StudioShellInner({
 
   useEffect(() => {
     void (async () => {
-      const supabase = createSupabaseBrowserClient();
       if (!supabase) return;
       const {
         data: { user },
       } = await supabase.auth.getUser();
       setEmail(user?.email ?? "");
     })();
-  }, []);
+  }, [supabase]);
 
   async function onSignOut() {
     try {
-      const supabase = createSupabaseBrowserClient();
       if (supabase) await supabase.auth.signOut();
     } finally {
       window.location.href = "/auth";

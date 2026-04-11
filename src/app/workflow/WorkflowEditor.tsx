@@ -66,7 +66,7 @@ import {
 
 import { AvatarPickerDialog } from "@/app/_components/AvatarPickerDialog";
 import { loadAvatarUrls } from "@/lib/avatarLibrary";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { useSupabaseBrowserClient } from "@/lib/supabase/BrowserSupabaseProvider";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -2226,6 +2226,7 @@ function normalizeWorkflowSpaceId(raw: string): string {
 
 export function WorkflowEditor({ spaceId }: { spaceId: string }) {
   const router = useRouter();
+  const sb = useSupabaseBrowserClient();
   const resolvedSpaceId = useMemo(() => normalizeWorkflowSpaceId(spaceId), [spaceId]);
 
   const [storageScope, setStorageScope] = useState<string | null>(null);
@@ -2235,7 +2236,6 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
   const [shareOpen, setShareOpen] = useState(false);
 
   useEffect(() => {
-    const sb = createSupabaseBrowserClient();
     if (!sb) {
       setStorageScope(getWorkflowStorageScope(null));
       return;
@@ -2247,7 +2247,7 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
       setStorageScope(getWorkflowStorageScope(session?.user?.id ?? null));
     });
     return () => sub.subscription.unsubscribe();
-  }, []);
+  }, [sb]);
 
   useEffect(() => {
     if (storageScope === null) return;
@@ -2350,6 +2350,7 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
 
 export function WorkflowTemplatePreview({ templateId }: { templateId: string }) {
   const router = useRouter();
+  const sb = useSupabaseBrowserClient();
   const resolvedId = useMemo(() => normalizeWorkflowSpaceId(templateId), [templateId]);
   const [storageScope, setStorageScope] = useState<string | null>(null);
   const [project, setProject] = useState<WorkflowProjectStateV1>(
@@ -2358,7 +2359,6 @@ export function WorkflowTemplatePreview({ templateId }: { templateId: string }) 
   const [useBusy, setUseBusy] = useState(false);
 
   useEffect(() => {
-    const sb = createSupabaseBrowserClient();
     if (!sb) {
       setStorageScope(getWorkflowStorageScope(null));
       return;
@@ -2370,7 +2370,7 @@ export function WorkflowTemplatePreview({ templateId }: { templateId: string }) 
       setStorageScope(getWorkflowStorageScope(session?.user?.id ?? null));
     });
     return () => sub.subscription.unsubscribe();
-  }, []);
+  }, [sb]);
 
   useEffect(() => {
     const p = buildTemplateProject(resolvedId);

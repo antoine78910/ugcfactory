@@ -16,7 +16,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { useSupabaseBrowserClient } from "@/lib/supabase/BrowserSupabaseProvider";
 
 type Permission = "viewer" | "editor";
 
@@ -37,6 +37,7 @@ type Props = {
 };
 
 export function ShareWorkflowDialog({ open, onOpenChange, spaceId, spaceName }: Props) {
+  const sb = useSupabaseBrowserClient();
   const [permission, setPermission] = useState<Permission>("viewer");
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
@@ -51,7 +52,6 @@ export function ShareWorkflowDialog({ open, onOpenChange, spaceId, spaceName }: 
   const [collabFetchError, setCollabFetchError] = useState<"signin" | "other" | null>(null);
 
   useEffect(() => {
-    const sb = createSupabaseBrowserClient();
     if (!sb) return;
     sb.auth.getUser().then(({ data }) => {
       const u = data.user;
@@ -61,7 +61,7 @@ export function ShareWorkflowDialog({ open, onOpenChange, spaceId, spaceName }: 
         typeof u?.user_metadata?.first_name === "string" ? u.user_metadata.first_name.trim() : "";
       setSessionName(fn || null);
     });
-  }, []);
+  }, [sb]);
 
   const isOwner = useMemo(() => Boolean(userId && yourRole === "owner"), [userId, yourRole]);
 

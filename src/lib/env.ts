@@ -1,6 +1,8 @@
 export function getEnv(name: string): string | undefined {
   const v = process.env[name];
-  return v && v.length > 0 ? v : undefined;
+  if (v == null) return undefined;
+  const t = typeof v === "string" ? v.trim() : String(v).trim();
+  return t.length > 0 ? t : undefined;
 }
 
 export function requireEnv(name: string): string {

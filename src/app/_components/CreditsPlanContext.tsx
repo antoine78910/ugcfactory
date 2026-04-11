@@ -20,7 +20,7 @@ import {
   type SubscriptionPlanId,
   isSubscriptionPlanId,
 } from "@/lib/stripe/subscriptionPrices";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { useSupabaseBrowserClient } from "@/lib/supabase/BrowserSupabaseProvider";
 import { displayCreditsToLedgerTicks } from "@/lib/creditLedgerTicks";
 
 // ---------------------------------------------------------------------------
@@ -303,6 +303,7 @@ export function CreditsPlanProvider({
   const [resolvedUserId, setResolvedUserId] = useState<string | null>(userId ?? null);
   const [state, setState] = useState<CreditsState>(HYDRATION_SAFE_CREDITS_STATE);
   const [isUnlimited, setIsUnlimited] = useState(false);
+  const supabase = useSupabaseBrowserClient();
 
   // Hydrate from localStorage after SSR markup (same default as server) to avoid Sidebar / banner mismatches.
   useLayoutEffect(() => {
@@ -311,24 +312,21 @@ export function CreditsPlanProvider({
   }, [userId]);
 
   useEffect(() => {
-    let cancelled = false;
-    let unsubscribe: (() => void) | undefined;
-
-    const supabase = createSupabaseBrowserClient();
     if (!supabase) return;
+    let cancelled = false;
     void supabase.auth.getUser().then(({ data }) => {
       if (!cancelled) setResolvedUserId(data.user?.id ?? null);
     });
     const { data } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!cancelled) setResolvedUserId(session?.user?.id ?? null);
     });
-    unsubscribe = () => data.subscription.unsubscribe();
+    const unsubscribe = () => data.subscription.unsubscribe();
 
     return () => {
       cancelled = true;
-      unsubscribe?.();
+      unsubscribe();
     };
-  }, []);
+  }, [supabase]);
 
   const activeUserId = resolvedUserId ?? null;
 
