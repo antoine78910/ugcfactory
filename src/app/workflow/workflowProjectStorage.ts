@@ -60,12 +60,17 @@ function parseProject(raw: string | null): WorkflowProjectStateV1 | null {
   }
 }
 
+/** Per-user / per-guest isolation: pass scope from `getWorkflowStorageScope`. */
+export function workflowSpaceStorageKey(scope: string, spaceId: string): string {
+  return `youry-workflow-space-v2:${scope}:${spaceId}`;
+}
+
 /** @internal — use `loadProjectForSpace` from workflowSpacesStorage in app code. */
-export function loadWorkflowProjectRaw(spaceId: string): WorkflowProjectStateV1 {
+export function loadWorkflowProjectRaw(scope: string, spaceId: string): WorkflowProjectStateV1 {
   const def = defaultWorkflowProject();
   if (typeof window === "undefined") return def;
   try {
-    const key = `youry-workflow-space-v1:${spaceId}`;
+    const key = workflowSpaceStorageKey(scope, spaceId);
     const parsed = parseProject(localStorage.getItem(key));
     if (!parsed) return def;
     return parsed;
@@ -75,10 +80,10 @@ export function loadWorkflowProjectRaw(spaceId: string): WorkflowProjectStateV1 
 }
 
 /** @internal */
-export function saveWorkflowProjectRaw(spaceId: string, state: WorkflowProjectStateV1) {
+export function saveWorkflowProjectRaw(scope: string, spaceId: string, state: WorkflowProjectStateV1) {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(`youry-workflow-space-v1:${spaceId}`, JSON.stringify(state));
+    localStorage.setItem(workflowSpaceStorageKey(scope, spaceId), JSON.stringify(state));
   } catch {
     /* quota */
   }

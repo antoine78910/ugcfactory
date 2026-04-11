@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Gift, Loader2, Sparkles, XCircle } from "lucide-react";
 import Link from "next/link";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { dispatchAuthoritativeCreditBalance } from "@/app/_components/CreditsPlanContext";
 
 type Status = "loading" | "success" | "error" | "no-token" | "auth-redirect";
 
@@ -253,8 +254,12 @@ function RedeemPageContent() {
         if (res.ok && json.success) {
           setCredited(json.credited ?? 0);
           setStatus("success");
-          if (typeof window !== "undefined") {
-            window.dispatchEvent(new Event("ugc-credits-storage"));
+          if (
+            typeof json.balance === "number" &&
+            Number.isFinite(json.balance) &&
+            json.balance >= 0
+          ) {
+            dispatchAuthoritativeCreditBalance(json.balance);
           }
         } else {
           setErrorMsg(json.error ?? "Redemption failed");

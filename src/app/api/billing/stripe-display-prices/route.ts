@@ -3,12 +3,12 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import type { StripeDisplayPricesPayload } from "@/lib/billing/stripeDisplayTypes";
+import { buildUsdStripeDisplayPricesFallback } from "@/lib/billing/stripeDisplayFallback";
 import {
   billingCheckoutCurrencyFromRequest,
   getBillingCountryFromHeaders,
 } from "@/lib/geo/billingRegion";
 import { CREDIT_PACK_KEYS, getCreditPackStripePriceId } from "@/lib/stripe/creditPackPrices";
-import { CREDIT_PACKS, SUBSCRIPTIONS } from "@/lib/pricing";
 import {
   SUBSCRIPTION_PLAN_IDS,
   getSubscriptionStripePriceId,
@@ -41,39 +41,6 @@ function moneyFromUnitAmount(
   return { amount, formatted: nf.format(amount) };
 }
 
-/** Static USD fallback when Stripe is unavailable (no secret or fetch error). */
-function usdFallbackPayload(country: string | null): StripeDisplayPricesPayload {
-  const nf = intlCurrency("usd");
-  const creditPacks: StripeDisplayPricesPayload["creditPacks"] = {};
-  CREDIT_PACK_KEYS.forEach((key, i) => {
-    const row = CREDIT_PACKS[i];
-    if (!row) return;
-    const m = moneyFromUnitAmount(Math.round(row.price_usd * 100), nf);
-    if (m) creditPacks[key] = m;
-  });
-  const subscriptions: StripeDisplayPricesPayload["subscriptions"] = {};
-  SUBSCRIPTION_PLAN_IDS.forEach((planId, i) => {
-    const row = SUBSCRIPTIONS[i];
-    if (!row) return;
-    const monthly = moneyFromUnitAmount(Math.round(row.price_usd * 100), nf);
-    const yAmount = row.price_usd * 8.4;
-    const yearly = moneyFromUnitAmount(Math.round(yAmount * 100), nf);
-    const perMonthAmount = row.price_usd * 0.7;
-    subscriptions[planId] = {
-      monthly,
-      yearly:
-        yearly && monthly
-          ? {
-              ...yearly,
-              perMonthAmount,
-              perMonthFormatted: nf.format(perMonthAmount),
-            }
-          : null,
-    };
-  });
-  return { currency: "usd", country, creditPacks, subscriptions };
-}
-
 function collectStripeJobs(currency: StripeDisplayPricesPayload["currency"]) {
   type Job = { kind: "pack"; key: (typeof CREDIT_PACK_KEYS)[number]; id: string } | {
     kind: "sub";
@@ -101,7 +68,7 @@ export async function GET(req: Request) {
 
   const secret = process.env.STRIPE_SECRET_KEY?.trim();
   if (!secret) {
-    return NextResponse.json(usdFallbackPayload(country));
+    return NextResponse.json(buildUsdStripeDisplayPricesFallback(country));
   }
 
   const stripe = new Stripe(secret, { apiVersion: "2026-02-25.clover" });
@@ -112,7 +79,7 @@ export async function GET(req: Request) {
     jobs = collectStripeJobs(currency);
   }
   if (jobs.length === 0) {
-    return NextResponse.json(usdFallbackPayload(country));
+    return NextResponse.json(buildUsdStripeDisplayPricesFallback(country));
   }
 
   const nf = intlCurrency(currency);
@@ -159,6 +126,6 @@ export async function GET(req: Request) {
     return NextResponse.json(payload);
   } catch (e) {
     console.error("[billing/stripe-display-prices]", e);
-    return NextResponse.json(usdFallbackPayload(country));
+    return NextResponse.json(buildUsdStripeDisplayPricesFallback(country));
   }
 }

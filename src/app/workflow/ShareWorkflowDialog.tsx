@@ -46,32 +46,48 @@ export function ShareWorkflowDialog({ open, onOpenChange, spaceId, spaceName }: 
   const [loadingCollabs, setLoadingCollabs] = useState(false);
   const [permDropdownOpen, setPermDropdownOpen] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
+  const [sessionEmail, setSessionEmail] = useState<string | null>(null);
+  const [sessionName, setSessionName] = useState<string | null>(null);
+  const [collabFetchError, setCollabFetchError] = useState<"signin" | "other" | null>(null);
 
   useEffect(() => {
     const sb = createSupabaseBrowserClient();
     sb.auth.getUser().then(({ data }) => {
-      setUserId(data.user?.id ?? null);
+      const u = data.user;
+      setUserId(u?.id ?? null);
+      setSessionEmail(u?.email ?? null);
+      const fn =
+        typeof u?.user_metadata?.first_name === "string" ? u.user_metadata.first_name.trim() : "";
+      setSessionName(fn || null);
     });
   }, []);
 
-  const isOwner = useMemo(() => {
-    if (!userId) return false;
-    if (yourRole === "owner") return true;
-    if (collaborators.length === 0) return true;
-    return false;
-  }, [userId, yourRole, collaborators]);
+  const isOwner = useMemo(() => Boolean(userId && yourRole === "owner"), [userId, yourRole]);
 
   const fetchCollaborators = useCallback(async () => {
     setLoadingCollabs(true);
+    setCollabFetchError(null);
     try {
       const res = await fetch(`/api/workflow/collaborators?spaceId=${encodeURIComponent(spaceId)}`);
-      if (res.ok) {
-        const data = await res.json();
-        setCollaborators(data.collaborators ?? []);
-        setYourRole(data.yourRole ?? null);
+      if (res.status === 401) {
+        setCollaborators([]);
+        setYourRole(null);
+        setCollabFetchError("signin");
+        return;
       }
+      if (!res.ok) {
+        setCollaborators([]);
+        setYourRole(null);
+        setCollabFetchError("other");
+        return;
+      }
+      const data = await res.json();
+      setCollaborators(data.collaborators ?? []);
+      setYourRole(data.yourRole ?? null);
     } catch {
-      /* ignore */
+      setCollaborators([]);
+      setYourRole(null);
+      setCollabFetchError("other");
     } finally {
       setLoadingCollabs(false);
     }
@@ -109,10 +125,10 @@ export function ShareWorkflowDialog({ open, onOpenChange, spaceId, spaceName }: 
   }, [spaceId, permission]);
 
   useEffect(() => {
-    if (open && isOwner && !inviteUrl) {
+    if (open && isOwner && !loadingCollabs && !inviteUrl) {
       generateLink();
     }
-  }, [open, isOwner, permission, inviteUrl, generateLink]);
+  }, [open, isOwner, loadingCollabs, permission, inviteUrl, generateLink]);
 
   const handlePermissionChange = useCallback(
     (p: Permission) => {
@@ -196,12 +212,21 @@ export function ShareWorkflowDialog({ open, onOpenChange, spaceId, spaceName }: 
             </Dialog.Close>
           </div>
 
-          <p className="mb-5 text-[13px] leading-relaxed text-white/50">
+          <p className="mb-2 text-[13px] leading-relaxed text-white/50">
             To collaborate in a space, you can use shared projects with a Teams plan or invite
             others with an invite link.
           </p>
+          <p className="mb-5 text-[12px] text-white/40">
+            Workspace: <span className="font-medium text-white/70">{spaceName}</span>
+          </p>
 
-          {isOwner ? (
+          {collabFetchError === "signin" ? (
+            <p className="mb-6 rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-[13px] text-amber-100/90">
+              Sign in to share this workspace and manage who has access.
+            </p>
+          ) : null}
+
+          {userId && isOwner ? (
             <div className="mb-6 flex items-center gap-2">
               <div className="flex min-w-0 flex-1 items-center gap-0 rounded-full border border-white/12 bg-white/[0.04]">
                 <div className="min-w-0 flex-1 truncate px-4 py-2.5 text-[13px] text-white/55">
@@ -271,11 +296,11 @@ export function ShareWorkflowDialog({ open, onOpenChange, spaceId, spaceName }: 
                 {copied ? "Copied!" : "Copy invite link"}
               </button>
             </div>
-          ) : (
+          ) : userId ? (
             <p className="mb-6 rounded-xl border border-white/8 bg-white/[0.02] px-4 py-3 text-[13px] text-white/45">
               Only the space owner can generate invite links.
             </p>
-          )}
+          ) : null}
 
           <div className="mb-3 text-[13px] font-semibold text-white/65">People with access</div>
 
@@ -283,11 +308,13 @@ export function ShareWorkflowDialog({ open, onOpenChange, spaceId, spaceName }: 
             <div className="flex items-center justify-center py-6">
               <Loader2 className="h-5 w-5 animate-spin text-white/30" />
             </div>
-          ) : collaborators.length === 0 ? (
+          ) : collabFetchError === "signin" ? null : collaborators.length === 0 ? (
             <div className="rounded-xl border border-white/8 bg-white/[0.02] px-4 py-4 text-[13px] text-white/40">
-              {isOwner
-                ? "No collaborators yet — share the invite link to add people."
-                : "Only you have access to this space."}
+              {collabFetchError === "other"
+                ? "Could not load people with access. Try again."
+                : isOwner
+                  ? "Loading your access… If this persists, refresh the page."
+                  : "No collaborators listed yet."}
             </div>
           ) : (
             <div className="max-h-[min(35vh,280px)] overflow-y-auto rounded-xl border border-white/8 bg-white/[0.02]">
@@ -295,6 +322,8 @@ export function ShareWorkflowDialog({ open, onOpenChange, spaceId, spaceName }: 
                 <CollaboratorRow
                   key={c.id}
                   collab={c}
+                  sessionFallbackName={c.isYou ? sessionName : null}
+                  sessionFallbackEmail={c.isYou ? sessionEmail : null}
                   isOwner={isOwner}
                   onChangeRole={(role) => updateCollabRole(c.userId, role)}
                   onRemove={() => removeCollab(c.userId)}
@@ -310,17 +339,26 @@ export function ShareWorkflowDialog({ open, onOpenChange, spaceId, spaceName }: 
 
 function CollaboratorRow({
   collab,
+  sessionFallbackName,
+  sessionFallbackEmail,
   isOwner,
   onChangeRole,
   onRemove,
 }: {
   collab: Collaborator;
+  sessionFallbackName: string | null;
+  sessionFallbackEmail: string | null;
   isOwner: boolean;
   onChangeRole: (role: Permission) => void;
   onRemove: () => void;
 }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const displayName = collab.name || collab.email?.split("@")[0] || "User";
+  const email = collab.email ?? sessionFallbackEmail;
+  const displayName =
+    collab.name?.trim() ||
+    sessionFallbackName?.trim() ||
+    email?.split("@")[0] ||
+    "User";
   const initials = displayName.slice(0, 2).toUpperCase();
 
   return (
@@ -335,8 +373,8 @@ function CollaboratorRow({
             <span className="shrink-0 text-[11px] text-white/35">(you)</span>
           )}
         </div>
-        {collab.email ? (
-          <div className="truncate text-[12px] text-white/40">{collab.email}</div>
+        {email ? (
+          <div className="truncate text-[12px] text-white/40">{email}</div>
         ) : null}
       </div>
 

@@ -10,8 +10,8 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { CREDIT_PACKS } from "@/lib/pricing";
 import type { StripeDisplayPricesPayload } from "@/lib/billing/stripeDisplayTypes";
-import { formatMoneyAmount, inferClientBillingCurrency } from "@/lib/billing/formatMoney";
-import type { BillingCheckoutCurrency } from "@/lib/geo/billingRegion";
+import { formatMoneyAmount } from "@/lib/billing/formatMoney";
+import { buildUsdStripeDisplayPricesFallback } from "@/lib/billing/stripeDisplayFallback";
 
 function defaultPackPriceUsd(priceUsd: number): string {
   return formatMoneyAmount(priceUsd, "usd");
@@ -74,37 +74,52 @@ const defaultCreditPacks: CreditPack[] = PACK_UI.map((meta, i) => {
   };
 });
 
+function CreditPackPriceSkeleton() {
+  return (
+    <span
+      className="inline-block h-9 w-[5.5rem] animate-pulse rounded-md bg-white/12 align-middle sm:w-24"
+      aria-hidden
+    />
+  );
+}
+
 export default function CreditsPage() {
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const { planDisplayName } = useCreditsPlan();
   const [displayPrices, setDisplayPrices] = useState<StripeDisplayPricesPayload | null>(null);
-  const [clientCurrencyHint, setClientCurrencyHint] = useState<BillingCheckoutCurrency | null>(null);
-
-  useEffect(() => {
-    setClientCurrencyHint(inferClientBillingCurrency());
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    void (async () => {
       try {
         const res = await fetch("/api/billing/stripe-display-prices", { cache: "no-store" });
-        if (!res.ok) return;
-        const data = (await res.json()) as StripeDisplayPricesPayload;
-        if (!cancelled) setDisplayPrices(data);
-      } catch { /* fall back to formatted defaults */ }
+        if (cancelled) return;
+        if (res.ok) {
+          const data = (await res.json()) as StripeDisplayPricesPayload;
+          setDisplayPrices(data);
+          return;
+        }
+        setDisplayPrices(buildUsdStripeDisplayPricesFallback(null));
+      } catch {
+        if (!cancelled) setDisplayPrices(buildUsdStripeDisplayPricesFallback(null));
+      }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
+  const billingPricesReady = displayPrices !== null;
+
   const creditPacks: CreditPack[] = useMemo(() => {
-    const cur = displayPrices?.currency ?? clientCurrencyHint ?? "usd";
+    if (!displayPrices) return defaultCreditPacks;
+    const cur = displayPrices.currency;
     return defaultCreditPacks.map((p) => {
-      const sp = displayPrices?.creditPacks[p.key as keyof StripeDisplayPricesPayload["creditPacks"]];
+      const sp = displayPrices.creditPacks[p.key as keyof StripeDisplayPricesPayload["creditPacks"]];
       if (sp) return { ...p, price: sp.formatted, priceUsd: sp.amount };
       return { ...p, price: formatMoneyAmount(p.priceUsd, cur) };
     });
-  }, [displayPrices, clientCurrencyHint]);
+  }, [displayPrices]);
 
   // UI-only estimates for the pack marketing lines.
   // As requested: Sora 2 videos use 5 credits each; Nanobanana images use 0.5 credits each.
@@ -167,8 +182,6 @@ export default function CreditsPage() {
       setCheckoutLoading(null);
     }
   }
-
-  const displayCur = displayPrices?.currency ?? clientCurrencyHint ?? "usd";
 
   return (
     <StudioShell>
@@ -252,11 +265,15 @@ export default function CreditsPage() {
                         </div>
                       </div>
 
-                      <div className="mt-2 flex items-baseline gap-2">
-                        <span className="text-3xl font-extrabold tabular-nums text-white">{p.price}</span>
-                        {oldPrice != null && oldPrice > p.priceUsd ? (
+                      <div className="mt-2 flex min-h-[2.25rem] items-baseline gap-2">
+                        {billingPricesReady ? (
+                          <span className="text-3xl font-extrabold tabular-nums text-white">{p.price}</span>
+                        ) : (
+                          <CreditPackPriceSkeleton />
+                        )}
+                        {billingPricesReady && displayPrices && oldPrice != null && oldPrice > p.priceUsd ? (
                           <span className="text-sm font-semibold text-white/45 line-through">
-                            {formatMoneyAmount(oldPrice, displayCur)}
+                            {formatMoneyAmount(oldPrice, displayPrices.currency)}
                           </span>
                         ) : null}
                       </div>

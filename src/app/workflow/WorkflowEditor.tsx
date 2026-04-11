@@ -66,6 +66,7 @@ import {
 
 import { AvatarPickerDialog } from "@/app/_components/AvatarPickerDialog";
 import { loadAvatarUrls } from "@/lib/avatarLibrary";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -87,6 +88,7 @@ import {
 } from "./workflowProjectStorage";
 import {
   createSpaceFromTemplate,
+  getWorkflowStorageScope,
   loadProjectForSpace,
   loadSpacesIndex,
   saveProjectForSpace,
@@ -2226,26 +2228,41 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
   const router = useRouter();
   const resolvedSpaceId = useMemo(() => normalizeWorkflowSpaceId(spaceId), [spaceId]);
 
+  const [storageScope, setStorageScope] = useState<string | null>(null);
   const [workflowProject, setWorkflowProject] = useState<WorkflowProjectStateV1>(() => defaultWorkflowProject());
   const [workflowHydrated, setWorkflowHydrated] = useState(false);
   const [spaceName, setSpaceName] = useState("Untitled workflow");
   const [shareOpen, setShareOpen] = useState(false);
+
   useEffect(() => {
-    const idx = loadSpacesIndex().spaces;
+    const sb = createSupabaseBrowserClient();
+    void sb.auth.getSession().then(({ data }) => {
+      setStorageScope(getWorkflowStorageScope(data.session?.user?.id ?? null));
+    });
+    const { data: sub } = sb.auth.onAuthStateChange((_event, session) => {
+      setStorageScope(getWorkflowStorageScope(session?.user?.id ?? null));
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (storageScope === null) return;
+    setWorkflowHydrated(false);
+    const idx = loadSpacesIndex(storageScope).spaces;
     if (!idx.some((s) => s.id === resolvedSpaceId)) {
       router.replace("/workflow");
       return;
     }
     const meta = idx.find((s) => s.id === resolvedSpaceId);
     if (meta) setSpaceName(meta.name);
-    setWorkflowProject(loadProjectForSpace(resolvedSpaceId));
+    setWorkflowProject(loadProjectForSpace(storageScope, resolvedSpaceId));
     setWorkflowHydrated(true);
-  }, [resolvedSpaceId, router]);
+  }, [resolvedSpaceId, router, storageScope]);
 
   useEffect(() => {
-    if (!workflowHydrated) return;
-    saveProjectForSpace(resolvedSpaceId, workflowProject);
-  }, [workflowHydrated, resolvedSpaceId, workflowProject]);
+    if (!workflowHydrated || storageScope === null) return;
+    saveProjectForSpace(storageScope, resolvedSpaceId, workflowProject);
+  }, [workflowHydrated, storageScope, resolvedSpaceId, workflowProject]);
 
   const showOnboarding = workflowHydrated && shouldShowWorkflowOnboarding(workflowProject);
 
@@ -2330,10 +2347,22 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
 export function WorkflowTemplatePreview({ templateId }: { templateId: string }) {
   const router = useRouter();
   const resolvedId = useMemo(() => normalizeWorkflowSpaceId(templateId), [templateId]);
+  const [storageScope, setStorageScope] = useState<string | null>(null);
   const [project, setProject] = useState<WorkflowProjectStateV1>(
     () => buildTemplateProject(resolvedId) ?? defaultWorkflowProject(),
   );
   const [useBusy, setUseBusy] = useState(false);
+
+  useEffect(() => {
+    const sb = createSupabaseBrowserClient();
+    void sb.auth.getSession().then(({ data }) => {
+      setStorageScope(getWorkflowStorageScope(data.session?.user?.id ?? null));
+    });
+    const { data: sub } = sb.auth.onAuthStateChange((_event, session) => {
+      setStorageScope(getWorkflowStorageScope(session?.user?.id ?? null));
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
 
   useEffect(() => {
     const p = buildTemplateProject(resolvedId);
@@ -2348,15 +2377,19 @@ export function WorkflowTemplatePreview({ templateId }: { templateId: string }) 
   const title = templateMeta?.name ?? "Template";
 
   const onUseTemplate = useCallback(() => {
+    if (storageScope === null) {
+      toast.error("Still loading your session. Try again in a moment.");
+      return;
+    }
     setUseBusy(true);
-    const meta = createSpaceFromTemplate(resolvedId);
+    const meta = createSpaceFromTemplate(storageScope, resolvedId);
     if (!meta) {
       toast.error("Could not create a workflow from this template.");
       setUseBusy(false);
       return;
     }
     router.push(`/workflow/space/${encodeURIComponent(meta.id)}`);
-  }, [resolvedId, router]);
+  }, [resolvedId, router, storageScope]);
 
   return (
     <div className="relative flex min-h-[100dvh] min-w-0 flex-col overflow-hidden bg-[#06070d] text-white">

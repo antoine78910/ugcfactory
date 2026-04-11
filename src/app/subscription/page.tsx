@@ -22,8 +22,8 @@ import {
 } from "@/lib/stripe/subscriptionPrices";
 import { openStripeBillingPortal } from "@/lib/stripe/openBillingPortalClient";
 import type { StripeDisplayPricesPayload } from "@/lib/billing/stripeDisplayTypes";
-import { formatMoneyAmount, inferClientBillingCurrency } from "@/lib/billing/formatMoney";
-import type { BillingCheckoutCurrency } from "@/lib/geo/billingRegion";
+import { formatMoneyAmount } from "@/lib/billing/formatMoney";
+import { buildUsdStripeDisplayPricesFallback } from "@/lib/billing/stripeDisplayFallback";
 
 type Billing = "monthly" | "yearly";
 const BILLING_PORTAL_URL =
@@ -106,6 +106,15 @@ const PLANS: PlanDef[] = [
   },
 ];
 
+function SubscriptionPlanPriceSkeleton() {
+  return (
+    <div className="space-y-2" aria-hidden>
+      <div className="h-12 w-[min(100%,14rem)] animate-pulse rounded-lg bg-white/12 md:h-14" />
+      <div className="h-4 w-56 max-w-full animate-pulse rounded bg-white/10" />
+    </div>
+  );
+}
+
 export default function SubscriptionPage() {
   const [billing, setBilling] = useState<Billing>("monthly");
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
@@ -115,8 +124,6 @@ export default function SubscriptionPage() {
   );
   const { planId, planDisplayName } = useCreditsPlan();
   const [displayPrices, setDisplayPrices] = useState<StripeDisplayPricesPayload | null>(null);
-  /** After mount only — avoids SSR/client mismatch when inferring from navigator. */
-  const [clientCurrencyHint, setClientCurrencyHint] = useState<BillingCheckoutCurrency | null>(null);
 
   const [upgradeDialogOpen, setUpgradeDialogOpen] = useState(false);
   const [upgradePreview, setUpgradePreview] = useState<SubscriptionUpgradePreview | null>(null);
@@ -322,20 +329,24 @@ export default function SubscriptionPage() {
   }, []);
 
   useEffect(() => {
-    setClientCurrencyHint(inferClientBillingCurrency());
-  }, []);
-
-  useEffect(() => {
     let cancelled = false;
-    (async () => {
+    void (async () => {
       try {
         const res = await fetch("/api/billing/stripe-display-prices", { cache: "no-store" });
-        if (!res.ok) return;
-        const data = (await res.json()) as StripeDisplayPricesPayload;
-        if (!cancelled) setDisplayPrices(data);
-      } catch { /* fall back to formatted defaults */ }
+        if (cancelled) return;
+        if (res.ok) {
+          const data = (await res.json()) as StripeDisplayPricesPayload;
+          setDisplayPrices(data);
+          return;
+        }
+        setDisplayPrices(buildUsdStripeDisplayPricesFallback(null));
+      } catch {
+        if (!cancelled) setDisplayPrices(buildUsdStripeDisplayPricesFallback(null));
+      }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   async function startSubscriptionCheckout(planIdCheckout: string) {
@@ -365,9 +376,10 @@ export default function SubscriptionPage() {
     }
   }
 
-  function priceFor(plan: PlanDef) {
-    const cur = displayPrices?.currency ?? clientCurrencyHint ?? "usd";
-    const sp = displayPrices?.subscriptions[plan.id as SubscriptionPlanId];
+  function priceFor(plan: PlanDef): { mainLabel: string; sub: string } | null {
+    if (!displayPrices) return null;
+    const cur = displayPrices.currency;
+    const sp = displayPrices.subscriptions[plan.id as SubscriptionPlanId];
     if (billing === "monthly") {
       const formatted = sp?.monthly?.formatted;
       return {
@@ -389,6 +401,8 @@ export default function SubscriptionPage() {
       sub: `Billed yearly (${formatMoneyAmount(yearlyTotal, cur)}/yr).`,
     };
   }
+
+  const billingPricesReady = displayPrices !== null;
 
   function isModelIncluded(planIdRaw: string, row: (typeof SUBSCRIPTION_MODEL_MATRIX_ROWS)[number]): boolean {
     const planId = (planIdRaw === "free" ? "free" : planIdRaw) as AccountPlanId;
@@ -472,9 +486,9 @@ export default function SubscriptionPage() {
               </div>
             </div>
 
-            <div className={cn("mx-auto grid max-w-6xl gap-5 pt-3", planGridClass)}>
+            <div className={cn("mx-auto grid max-w-6xl items-stretch gap-5 pt-3", planGridClass)}>
               {PLANS.map((plan) => {
-                const { mainLabel, sub } = priceFor(plan);
+                const priceLabels = priceFor(plan);
                 const planIdx = subscriptionPlanSortIndex(plan.id as SubscriptionPlanId);
                 const currentIdx = isSubscribed
                   ? subscriptionPlanSortIndex(planId as SubscriptionPlanId)
@@ -504,7 +518,7 @@ export default function SubscriptionPage() {
                   <div
                     key={plan.id}
                     className={cn(
-                      "relative flex flex-col rounded-2xl border p-6 transition-all duration-300",
+                      "relative flex h-full min-h-0 flex-col rounded-2xl border p-6 transition-all duration-300",
                       isCurrentPlanCard
                         ? "border-emerald-400/45 bg-gradient-to-b from-emerald-600/[0.14] via-[#0b0914] to-[#06070d] shadow-[0_0_40px_rgba(16,185,129,0.12)]"
                         : plan.highlight
@@ -512,7 +526,7 @@ export default function SubscriptionPage() {
                           : "border-white/10 bg-white/[0.03] hover:border-violet-500/20 hover:bg-white/[0.045]",
                     )}
                   >
-                    <div className="mb-3 flex flex-wrap items-center gap-1.5">
+                    <div className="mb-3 flex min-h-[2.75rem] flex-wrap items-start gap-1.5">
                       {isCurrentPlanCard ? (
                         <span className="rounded-full border border-emerald-400/50 bg-emerald-500/20 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-100">
                           Current plan
@@ -530,24 +544,30 @@ export default function SubscriptionPage() {
                       ) : null}
                     </div>
 
-                    <div>
+                    <div className="min-h-[6.75rem]">
                       <h2 className="text-xl font-bold text-white">{plan.name}</h2>
-                      <p className="mt-2 min-h-[2.75rem] text-sm leading-relaxed text-white/48">{plan.description}</p>
+                      <p className="mt-2 min-h-[4.25rem] text-sm leading-relaxed text-white/48">{plan.description}</p>
                     </div>
 
-                    <div className="mt-6">
-                      <div className="flex flex-wrap items-baseline gap-1">
-                        <span className="text-4xl font-extrabold tabular-nums leading-none text-white md:text-5xl">
-                          {mainLabel}
-                        </span>
-                        <span className="text-sm font-semibold text-white/55 md:text-base">/mo</span>
-                      </div>
-                      <p className="mt-2 text-xs leading-snug text-white/38">{sub}</p>
-                      {billing === "yearly" ? (
-                        <p className="mt-2 inline-flex items-center rounded-md border border-emerald-400/35 bg-emerald-500/15 px-2 py-1 text-[11px] font-semibold text-emerald-200">
-                          Save 30% on yearly billing
-                        </p>
-                      ) : null}
+                    <div className="mt-6 min-h-[9.25rem]">
+                      {billingPricesReady && priceLabels ? (
+                        <>
+                          <div className="flex flex-wrap items-baseline gap-1">
+                            <span className="text-4xl font-extrabold tabular-nums leading-none text-white md:text-5xl">
+                              {priceLabels.mainLabel}
+                            </span>
+                            <span className="text-sm font-semibold text-white/55 md:text-base">/mo</span>
+                          </div>
+                          <p className="mt-2 text-xs leading-snug text-white/38">{priceLabels.sub}</p>
+                          {billing === "yearly" ? (
+                            <p className="mt-2 inline-flex items-center rounded-md border border-emerald-400/35 bg-emerald-500/15 px-2 py-1 text-[11px] font-semibold text-emerald-200">
+                              Save 30% on yearly billing
+                            </p>
+                          ) : null}
+                        </>
+                      ) : (
+                        <SubscriptionPlanPriceSkeleton />
+                      )}
                     </div>
 
                     <Button
@@ -560,7 +580,7 @@ export default function SubscriptionPage() {
                       }
                       onClick={() => void startSubscriptionCheckout(plan.id)}
                       className={cn(
-                        "mt-6 h-12 w-full rounded-xl text-sm font-bold transition-all",
+                        "mt-6 h-12 w-full shrink-0 rounded-xl text-sm font-bold transition-all",
                         exactPlanAndBilling || isLowerTier
                           ? "cursor-not-allowed border border-white/10 bg-white/[0.06] text-white/40 shadow-none hover:bg-white/[0.06]"
                           : plan.highlight
@@ -594,7 +614,7 @@ export default function SubscriptionPage() {
                       )}
                     </Button>
 
-                    <ul className="mt-6 space-y-2 border-t border-white/10 pt-6 text-left text-xs text-white/72">
+                    <ul className="mt-6 flex min-h-0 flex-1 flex-col space-y-2 border-t border-white/10 pt-6 text-left text-xs text-white/72">
                       <li className="flex items-start gap-2.5">
                         <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-violet-500/20 text-violet-200">
                           <Coins className="h-3 w-3" aria-hidden />

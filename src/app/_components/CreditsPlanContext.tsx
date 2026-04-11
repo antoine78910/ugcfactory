@@ -46,6 +46,22 @@ const LS_PIAPI_PERSONAL_ENABLED = "ugc_piapi_personal_api_enabled";
 const LS_ELEVENLABS_PERSONAL_KEY = "ugc_elevenlabs_personal_api_key";
 const LS_ELEVENLABS_PERSONAL_ENABLED = "ugc_elevenlabs_personal_api_enabled";
 
+/** Dispatched after server-side credit grants (e.g. redeem) with the new ledger balance. */
+export const UGC_CREDITS_BALANCE_EVENT = "ugc-credits-balance";
+
+export type UgcCreditsBalanceEventDetail = { balance: number };
+
+/** Notify `CreditsPlanProvider` to apply an authoritative balance without a full page reload. */
+export function dispatchAuthoritativeCreditBalance(balance: number) {
+  if (typeof window === "undefined") return;
+  if (typeof balance !== "number" || !Number.isFinite(balance) || balance < 0) return;
+  window.dispatchEvent(
+    new CustomEvent<UgcCreditsBalanceEventDetail>(UGC_CREDITS_BALANCE_EVENT, {
+      detail: { balance },
+    }),
+  );
+}
+
 function lsGet(key: string): string | null {
   try {
     return localStorage.getItem(key);
@@ -408,19 +424,44 @@ export function CreditsPlanProvider({
     setState(readState(activeUserId));
   }, [activeUserId]);
 
+  /** Apply ledger balance from the server (redeem, webhooks, etc.) so UI updates without reload. */
+  const applyAuthoritativeServerBalance = useCallback(
+    (balance: number) => {
+      if (isUnlimited) return;
+      if (typeof balance !== "number" || !Number.isFinite(balance) || balance < 0) return;
+      const prev = readState(activeUserId);
+      lsSet(LS_CREDITS, String(balance));
+      if (prev.planId === "free") {
+        lsSet(LS_CAP, String(balance));
+      }
+      if (activeUserId) lsSet(LS_OWNER, activeUserId);
+      setState(readState(activeUserId));
+    },
+    [activeUserId, isUnlimited],
+  );
+
   useEffect(() => {
     syncFromStorage();
     const onStorage = (e: StorageEvent) => {
       if (e.key === LS_CREDITS || e.key === LS_PLAN || e.key === LS_CAP) syncFromStorage();
     };
     const onLocal = () => syncFromStorage();
+    const onBalance = (e: Event) => {
+      const ce = e as CustomEvent<UgcCreditsBalanceEventDetail>;
+      const b = ce.detail?.balance;
+      if (typeof b === "number" && Number.isFinite(b) && b >= 0) {
+        applyAuthoritativeServerBalance(b);
+      }
+    };
     window.addEventListener("storage", onStorage);
     window.addEventListener("ugc-credits-storage", onLocal);
+    window.addEventListener(UGC_CREDITS_BALANCE_EVENT, onBalance);
     return () => {
       window.removeEventListener("storage", onStorage);
       window.removeEventListener("ugc-credits-storage", onLocal);
+      window.removeEventListener(UGC_CREDITS_BALANCE_EVENT, onBalance);
     };
-  }, [syncFromStorage]);
+  }, [syncFromStorage, applyAuthoritativeServerBalance]);
 
   const commit = useCallback(
     (next: CreditsState) => {

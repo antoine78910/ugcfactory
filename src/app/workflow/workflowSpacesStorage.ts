@@ -1,9 +1,19 @@
 import type { WorkflowProjectStateV1 } from "./workflowProjectStorage";
-import { defaultWorkflowProject, loadWorkflowProjectRaw, saveWorkflowProjectRaw } from "./workflowProjectStorage";
+import {
+  defaultWorkflowProject,
+  loadWorkflowProjectRaw,
+  saveWorkflowProjectRaw,
+  workflowSpaceStorageKey,
+} from "./workflowProjectStorage";
 import { cloneTemplateProjectForNewSpace, getWorkflowTemplateMeta } from "./workflowTemplates";
 
-const INDEX_KEY = "youry-workflow-spaces-index-v1";
+/** Legacy keys (pre per-user isolation). */
+const INDEX_KEY_V1 = "youry-workflow-spaces-index-v1";
 const LEGACY_SINGLE_KEY = "youry-workflow-project-v1";
+
+function indexKeyV2(scope: string): string {
+  return `youry-workflow-spaces-index-v2:${scope}`;
+}
 
 export type WorkflowSpaceMeta = {
   id: string;
@@ -36,9 +46,28 @@ function parseIndex(raw: string | null): IndexV1 {
   }
 }
 
-export function loadSpacesIndex(): IndexV1 {
-  if (typeof window === "undefined") return defaultIndex();
-  let idx = parseIndex(localStorage.getItem(INDEX_KEY));
+/**
+ * Stable storage partition: one Supabase user id → one workflow library.
+ * Not logged in → `guest` (still isolated from any logged-in account on the same device).
+ */
+export function getWorkflowStorageScope(userId: string | null | undefined): string {
+  const id = typeof userId === "string" ? userId.trim() : "";
+  return id ? `u:${id}` : "guest";
+}
+
+/**
+ * If this scope has no v2 data yet, move legacy unscoped index + space payloads into it once,
+ * then remove legacy keys so they are not reused by another account.
+ */
+function maybeMigrateLegacyUnscopedIntoScope(scope: string) {
+  if (typeof window === "undefined") return;
+
+  const v2Key = indexKeyV2(scope);
+  const existingV2 = parseIndex(localStorage.getItem(v2Key));
+  if (existingV2.spaces.length > 0) return;
+
+  let idx = parseIndex(localStorage.getItem(INDEX_KEY_V1));
+
   if (idx.spaces.length === 0) {
     const legacy = localStorage.getItem(LEGACY_SINGLE_KEY);
     if (legacy) {
@@ -51,87 +80,124 @@ export function loadSpacesIndex(): IndexV1 {
             const pg = p as { nodes?: unknown };
             return Array.isArray(pg?.nodes) && pg.nodes.length > 0;
           });
-          saveWorkflowProjectRaw(id, {
+          const project: WorkflowProjectStateV1 = {
             ...parsed,
             v: 1,
             onboardingDismissed: Boolean(parsed.onboardingDismissed) || hasNodes,
-          } as WorkflowProjectStateV1);
+          } as WorkflowProjectStateV1;
+          saveWorkflowProjectRaw(scope, id, project);
           idx = {
             v: 1,
             spaces: [{ id, name: "Untitled workflow", updatedAt: Date.now() }],
           };
-          localStorage.setItem(INDEX_KEY, JSON.stringify(idx));
-          localStorage.removeItem(LEGACY_SINGLE_KEY);
         }
       } catch {
-        /* ignore broken legacy */
+        /* ignore */
       }
     }
   }
-  return idx;
-}
 
-export function saveSpacesIndex(index: IndexV1) {
-  if (typeof window === "undefined") return;
+  if (idx.spaces.length === 0) return;
+
+  for (const s of idx.spaces) {
+    const legacySpaceKey = `youry-workflow-space-v1:${s.id}`;
+    const raw = localStorage.getItem(legacySpaceKey);
+    if (raw) {
+      try {
+        localStorage.setItem(workflowSpaceStorageKey(scope, s.id), raw);
+      } catch {
+        /* quota */
+      }
+      try {
+        localStorage.removeItem(legacySpaceKey);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
   try {
-    localStorage.setItem(INDEX_KEY, JSON.stringify(index));
+    localStorage.setItem(v2Key, JSON.stringify(idx));
+    localStorage.removeItem(INDEX_KEY_V1);
+    localStorage.removeItem(LEGACY_SINGLE_KEY);
   } catch {
     /* quota */
   }
 }
 
-export function createSpace(name = "Untitled workflow"): WorkflowSpaceMeta {
+export function loadSpacesIndex(scope: string): IndexV1 {
+  if (typeof window === "undefined") return defaultIndex();
+  maybeMigrateLegacyUnscopedIntoScope(scope);
+  return parseIndex(localStorage.getItem(indexKeyV2(scope)));
+}
+
+export function saveSpacesIndex(scope: string, index: IndexV1) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(indexKeyV2(scope), JSON.stringify(index));
+  } catch {
+    /* quota */
+  }
+}
+
+export function createSpace(scope: string, name = "Untitled workflow"): WorkflowSpaceMeta {
   const id = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `s-${Date.now()}`;
   const meta: WorkflowSpaceMeta = { id, name, updatedAt: Date.now() };
-  const index = loadSpacesIndex();
+  const index = loadSpacesIndex(scope);
   index.spaces = [{ ...meta }, ...index.spaces];
-  saveSpacesIndex(index);
+  saveSpacesIndex(scope, index);
   const fresh = defaultWorkflowProject();
-  saveWorkflowProjectRaw(id, { ...fresh, onboardingDismissed: false });
+  saveWorkflowProjectRaw(scope, id, { ...fresh, onboardingDismissed: false });
   return meta;
 }
 
-export function updateSpaceMeta(id: string, patch: Partial<Pick<WorkflowSpaceMeta, "name" | "updatedAt">>) {
-  const index = loadSpacesIndex();
-  index.spaces = index.spaces.map((s) => (s.id === id ? { ...s, ...patch, updatedAt: patch.updatedAt ?? Date.now() } : s));
-  saveSpacesIndex(index);
+export function updateSpaceMeta(
+  scope: string,
+  id: string,
+  patch: Partial<Pick<WorkflowSpaceMeta, "name" | "updatedAt">>,
+) {
+  const index = loadSpacesIndex(scope);
+  index.spaces = index.spaces.map((s) =>
+    s.id === id ? { ...s, ...patch, updatedAt: patch.updatedAt ?? Date.now() } : s,
+  );
+  saveSpacesIndex(scope, index);
 }
 
-export function touchSpaceUpdated(id: string) {
-  updateSpaceMeta(id, { updatedAt: Date.now() });
+export function touchSpaceUpdated(scope: string, id: string) {
+  updateSpaceMeta(scope, id, { updatedAt: Date.now() });
 }
 
-export function deleteSpace(id: string) {
-  const index = loadSpacesIndex();
+export function deleteSpace(scope: string, id: string) {
+  const index = loadSpacesIndex(scope);
   index.spaces = index.spaces.filter((s) => s.id !== id);
-  saveSpacesIndex(index);
+  saveSpacesIndex(scope, index);
   try {
-    localStorage.removeItem(storageKeyForSpace(id));
+    localStorage.removeItem(storageKeyForSpace(scope, id));
   } catch {
     /* ignore */
   }
 }
 
-export function storageKeyForSpace(spaceId: string) {
-  return `youry-workflow-space-v1:${spaceId}`;
+export function storageKeyForSpace(scope: string, spaceId: string) {
+  return workflowSpaceStorageKey(scope, spaceId);
 }
 
-export function loadProjectForSpace(spaceId: string): WorkflowProjectStateV1 {
-  return loadWorkflowProjectRaw(spaceId);
+export function loadProjectForSpace(scope: string, spaceId: string): WorkflowProjectStateV1 {
+  return loadWorkflowProjectRaw(scope, spaceId);
 }
 
-export function saveProjectForSpace(spaceId: string, state: WorkflowProjectStateV1) {
-  saveWorkflowProjectRaw(spaceId, state);
-  touchSpaceUpdated(spaceId);
+export function saveProjectForSpace(scope: string, spaceId: string, state: WorkflowProjectStateV1) {
+  saveWorkflowProjectRaw(scope, spaceId, state);
+  touchSpaceUpdated(scope, spaceId);
 }
 
 /** Creates a new space and copies the template project into it. */
-export function createSpaceFromTemplate(templateId: string): WorkflowSpaceMeta | null {
+export function createSpaceFromTemplate(scope: string, templateId: string): WorkflowSpaceMeta | null {
   const project = cloneTemplateProjectForNewSpace(templateId);
   if (!project) return null;
   const metaTpl = getWorkflowTemplateMeta(templateId);
-  const meta = createSpace(metaTpl?.name ? `${metaTpl.name} (copy)` : "From template");
-  saveWorkflowProjectRaw(meta.id, project);
-  touchSpaceUpdated(meta.id);
+  const meta = createSpace(scope, metaTpl?.name ? `${metaTpl.name} (copy)` : "From template");
+  saveWorkflowProjectRaw(scope, meta.id, project);
+  touchSpaceUpdated(scope, meta.id);
   return meta;
 }

@@ -6,8 +6,16 @@ import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "reac
 
 import { cn } from "@/lib/utils";
 
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+
 import { WorkflowAmbientLayer } from "./WorkflowAmbientLayer";
-import { createSpace, deleteSpace, loadSpacesIndex, type WorkflowSpaceMeta } from "./workflowSpacesStorage";
+import {
+  createSpace,
+  deleteSpace,
+  getWorkflowStorageScope,
+  loadSpacesIndex,
+  type WorkflowSpaceMeta,
+} from "./workflowSpacesStorage";
 import { WORKFLOW_TEMPLATE_LIST } from "./workflowTemplates";
 
 type TabId = "my" | "shared" | "templates";
@@ -29,19 +37,32 @@ function formatTimeAgo(ts: number): string {
 
 export function WorkflowSpacesLanding() {
   const router = useRouter();
+  const [storageScope, setStorageScope] = useState<string | null>(null);
   const [spaces, setSpaces] = useState<WorkflowSpaceMeta[]>([]);
   const [hydrated, setHydrated] = useState(false);
   const [tab, setTab] = useState<TabId>("my");
   const [query, setQuery] = useState("");
 
-  const refresh = useCallback(() => {
-    setSpaces(loadSpacesIndex().spaces);
+  useEffect(() => {
+    const sb = createSupabaseBrowserClient();
+    void sb.auth.getSession().then(({ data }) => {
+      setStorageScope(getWorkflowStorageScope(data.session?.user?.id ?? null));
+    });
+    const { data: sub } = sb.auth.onAuthStateChange((_event, session) => {
+      setStorageScope(getWorkflowStorageScope(session?.user?.id ?? null));
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  const refresh = useCallback((scope: string) => {
+    setSpaces(loadSpacesIndex(scope).spaces);
   }, []);
 
   useEffect(() => {
-    refresh();
+    if (storageScope === null) return;
+    refresh(storageScope);
     setHydrated(true);
-  }, [refresh]);
+  }, [storageScope, refresh]);
 
   const filteredSpaces = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -59,7 +80,8 @@ export function WorkflowSpacesLanding() {
   }, [query]);
 
   const onNewSpace = () => {
-    const meta = createSpace();
+    if (storageScope === null) return;
+    const meta = createSpace(storageScope);
     router.push(`/workflow/space/${encodeURIComponent(meta.id)}`);
   };
 
@@ -74,8 +96,9 @@ export function WorkflowSpacesLanding() {
   const removeSpace = (e: MouseEvent, id: string) => {
     e.preventDefault();
     e.stopPropagation();
-    deleteSpace(id);
-    refresh();
+    if (storageScope === null) return;
+    deleteSpace(storageScope, id);
+    refresh(storageScope);
   };
 
   return (
@@ -180,7 +203,7 @@ export function WorkflowSpacesLanding() {
           </div>
         </div>
 
-        {!hydrated ? (
+        {!hydrated || storageScope === null ? (
           <p className="mt-10 text-center text-sm text-white/40">Loading workflows…</p>
         ) : tab === "shared" ? (
           <p className="mt-12 text-center text-sm text-white/45">No shared workflows yet.</p>

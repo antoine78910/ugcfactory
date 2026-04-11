@@ -24,7 +24,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "DB not configured" }, { status: 503 });
   }
 
-  const { data: self } = await admin
+  let { data: self } = await admin
     .from("workflow_space_collaborators")
     .select("role")
     .eq("space_id", spaceId)
@@ -32,7 +32,28 @@ export async function GET(req: Request) {
     .maybeSingle();
 
   if (!self) {
-    return NextResponse.json({ error: "You are not a member of this space" }, { status: 403 });
+    const { count, error: countErr } = await admin
+      .from("workflow_space_collaborators")
+      .select("*", { count: "exact", head: true })
+      .eq("space_id", spaceId);
+
+    if (countErr) {
+      return NextResponse.json({ error: "Could not load collaborators" }, { status: 500 });
+    }
+
+    if (count === 0) {
+      const { error: insertErr } = await admin.from("workflow_space_collaborators").insert({
+        space_id: spaceId,
+        user_id: auth.user.id,
+        role: "owner",
+      });
+      if (insertErr) {
+        return NextResponse.json({ error: "Could not register workspace owner" }, { status: 500 });
+      }
+      self = { role: "owner" as const };
+    } else {
+      return NextResponse.json({ error: "You are not a member of this space" }, { status: 403 });
+    }
   }
 
   const { data: collabs } = await admin
@@ -42,7 +63,7 @@ export async function GET(req: Request) {
     .order("created_at", { ascending: true });
 
   if (!collabs) {
-    return NextResponse.json({ collaborators: [] });
+    return NextResponse.json({ collaborators: [], yourRole: self.role, spaceId });
   }
 
   const userIds = collabs.map((c) => c.user_id);
@@ -67,7 +88,17 @@ export async function GET(req: Request) {
     };
   });
 
-  return NextResponse.json({ collaborators: result, yourRole: self.role });
+  result.sort((a, b) => {
+    if (a.role === "owner" && b.role !== "owner") return -1;
+    if (b.role === "owner" && a.role !== "owner") return 1;
+    return 0;
+  });
+
+  return NextResponse.json({
+    collaborators: result,
+    yourRole: self.role,
+    spaceId,
+  });
 }
 
 /**
