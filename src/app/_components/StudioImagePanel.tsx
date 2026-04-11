@@ -325,6 +325,7 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
               model: json.model?.trim() || KIE_TOPAZ_IMAGE_UPSCALE_MODEL,
               creditsCharged: platformCharge,
               personalApiKey: pKey,
+              aspectRatio: aspect,
             }),
           });
           const regJson = (await regRes.json()) as {
@@ -346,6 +347,7 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
               studioGenerationKind: "studio_upscale",
               model: json.model?.trim() || KIE_TOPAZ_IMAGE_UPSCALE_MODEL,
               modelLabel: "Topaz image upscale",
+              aspectRatio: aspect,
             };
             return [row, ...prev.filter((i) => i.id !== rowId)];
           });
@@ -359,7 +361,7 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
         }
       })();
     },
-    [serverHistory, spendCredits, grantCredits],
+    [serverHistory, spendCredits, grantCredits, aspect],
   );
 
   useEffect(() => {
@@ -534,6 +536,7 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
             studioGenerationKind: "studio_image",
             model: opts.model,
             modelLabel: studioImagePickerDisplayLabel(opts.model),
+            aspectRatio: opts.aspect,
           }));
           const drop = new Set(rowIds);
           return [...gens, ...prev.filter((i) => !drop.has(i.id))];

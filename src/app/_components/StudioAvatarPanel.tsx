@@ -328,6 +328,7 @@ export default function StudioAvatarPanel({
               status: "generating",
               label,
               createdAt: startedAt,
+              aspectRatio: "3:4",
             },
             ...prev.filter((i) => i.id !== id),
           ];

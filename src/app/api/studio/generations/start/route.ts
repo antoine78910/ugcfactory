@@ -123,6 +123,7 @@ export async function POST(req: Request) {
   const inputUrls = Array.isArray(body.imageUrls)
     ? body.imageUrls.filter((u): u is string => typeof u === "string" && u.trim().length > 0)
     : [];
+  const aspectRatioStored = (body.aspectRatio ?? "").trim() || "3:4";
 
   const rowsPayload = taskIds.map((external_task_id, i) => ({
     user_id: user.id,
@@ -133,6 +134,7 @@ export async function POST(req: Request) {
     provider: "kie-market",
     credits_charged: baseCharge + (i === 0 ? remainder : 0),
     uses_personal_api: usesPersonalApi,
+    aspect_ratio: aspectRatioStored,
     ...(inputUrls.length > 0 ? { input_urls: inputUrls } : {}),
   }));
 

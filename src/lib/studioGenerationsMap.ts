@@ -78,6 +78,8 @@ export type StudioGenerationRow = {
   credits_charged: number;
   uses_personal_api: boolean;
   credits_refund_hint_sent?: boolean;
+  /** Display hint from Studio UI (e.g. 16:9, 9:16). Optional until migration applied. */
+  aspect_ratio?: string | null;
 };
 
 /**
@@ -122,6 +124,11 @@ function modelFieldsFromRow(row: StudioGenerationRow): { model?: string; modelLa
   return { model: raw, ...(modelLabel ? { modelLabel } : {}) };
 }
 
+function aspectFromRow(row: StudioGenerationRow): { aspectRatio?: string } {
+  const ar = typeof row.aspect_ratio === "string" ? row.aspect_ratio.trim() : "";
+  return ar ? { aspectRatio: ar } : {};
+}
+
 function rowKindToMediaKind(kind: string, resultUrls: string[], label: string): StudioHistoryItem["kind"] {
   if (kind === "motion_control") {
     const u = resultUrls[0] ?? "";
@@ -158,6 +165,8 @@ export function studioGenerationRowToHistoryItem(row: StudioGenerationRow): Stud
   const isFailed = ["failed", "error", "errored", "cancelled", "canceled"].includes(status);
   const inputUrlsOrUndef = inputUrls.length > 0 ? inputUrls : undefined;
   const modelExtra = modelFieldsFromRow(row);
+  const aspectExtra = aspectFromRow(row);
+  const baseIds = { studioGenerationId: row.id };
   if (hasUrls || isReady) {
     return {
       id: row.id,
@@ -168,7 +177,9 @@ export function studioGenerationRowToHistoryItem(row: StudioGenerationRow): Stud
       createdAt,
       studioGenerationKind: row.kind,
       inputUrls: inputUrlsOrUndef,
+      ...baseIds,
       ...modelExtra,
+      ...aspectExtra,
     };
   }
   if (hasError || isFailed) {
@@ -182,7 +193,9 @@ export function studioGenerationRowToHistoryItem(row: StudioGenerationRow): Stud
       createdAt,
       studioGenerationKind: row.kind,
       inputUrls: inputUrlsOrUndef,
+      ...baseIds,
       ...modelExtra,
+      ...aspectExtra,
     };
   }
   return {
@@ -193,6 +206,8 @@ export function studioGenerationRowToHistoryItem(row: StudioGenerationRow): Stud
     createdAt,
     studioGenerationKind: row.kind,
     inputUrls: inputUrlsOrUndef,
+    ...baseIds,
     ...modelExtra,
+    ...aspectExtra,
   };
 }

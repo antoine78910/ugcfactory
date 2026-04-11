@@ -17,6 +17,7 @@ import { proxiedMediaSrc } from "@/lib/mediaProxyUrl";
 import { isStudioSeedreamImagePickerId, studioImageModelSupportsResolutionPicker } from "@/lib/studioImageModels";
 import { formatDisplayCredits } from "@/lib/creditLedgerTicks";
 import { studioImageCreditsChargedTotal, VOICE_CHANGE_CREDITS_FLAT } from "@/lib/pricing";
+import { studioHistoryAspectRatioCssValue } from "@/lib/studioHistoryAspect";
 
 export type StudioHistoryMediaKind = "image" | "video" | "motion" | "audio";
 
@@ -41,6 +42,8 @@ export type StudioHistoryItem = {
   model?: string;
   /** Human-readable model name for UI (optional). */
   modelLabel?: string;
+  /** Aspect chosen in Studio (e.g. 16:9, 9:16, 3:4) — drives history thumbnail frame. */
+  aspectRatio?: string;
   /**
    * Supabase `studio_generations.id` from `/api/studio/generations/register`.
    * Used to hide a stale “processing” server row when the client already has a ready item with media.
@@ -463,9 +466,12 @@ export function StudioGenerationsHistory({
                   >
                     <div
                       className={cn(
-                        "group/media relative overflow-hidden rounded-xl border border-white/[0.12] bg-[#12121a] shadow-[0_12px_40px_rgba(0,0,0,0.45)]",
-                        view === "grid" ? "aspect-[9/16] w-full" : "aspect-[9/16] w-full sm:w-44 sm:shrink-0",
+                        "group/media relative w-full overflow-hidden rounded-xl border border-white/[0.12] bg-[#12121a] shadow-[0_12px_40px_rgba(0,0,0,0.45)]",
+                        view === "list" && "sm:w-44 sm:shrink-0",
                       )}
+                      style={{
+                        aspectRatio: studioHistoryAspectRatioCssValue(item.aspectRatio, item.kind),
+                      }}
                     >
                       {onItemDeleted ? (
                         <button

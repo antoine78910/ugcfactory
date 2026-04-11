@@ -319,6 +319,7 @@ export default function StudioUpscalePanel() {
         createdAt: startedAt,
         model: isImage ? KIE_TOPAZ_IMAGE_UPSCALE_MODEL : KIE_TOPAZ_VIDEO_UPSCALE_MODEL,
         modelLabel: isImage ? "Topaz image upscale" : "Topaz video upscale",
+        aspectRatio: isImage ? "1:1" : videoAspectPreset,
       },
       ...prev,
     ]);
@@ -349,6 +350,7 @@ export default function StudioUpscalePanel() {
           creditsCharged: platformCharge,
           personalApiKey: upPKey,
           inputUrls: inputUrl ? [inputUrl] : undefined,
+          aspectRatio: isImage ? "1:1" : videoAspectPreset,
         });
         if (rowId) {
           setHistoryItems((prev) =>

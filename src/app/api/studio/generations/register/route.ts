@@ -17,6 +17,8 @@ type Body = {
   personalApiKey?: string;
   piapiApiKey?: string;
   inputUrls?: string[];
+  /** Stored for history thumbnail framing (e.g. 16:9, 9:16). */
+  aspectRatio?: string;
   /** Register a row that already failed (no taskId needed). */
   status?: "processing" | "failed";
   errorMessage?: string;
@@ -66,6 +68,7 @@ export async function POST(req: Request) {
   const inputUrls = Array.isArray(body.inputUrls)
     ? body.inputUrls.filter((u): u is string => typeof u === "string" && u.trim().length > 0)
     : [];
+  const aspectRatio = String(body.aspectRatio ?? "").trim();
 
   const payload = isFailed && taskIds.length === 0
     ? [{
@@ -80,6 +83,7 @@ export async function POST(req: Request) {
         uses_personal_api: usesPersonalApi,
         ...(errorMessage ? { error_message: errorMessage } : {}),
         ...(inputUrls.length > 0 ? { input_urls: inputUrls } : {}),
+        ...(aspectRatio ? { aspect_ratio: aspectRatio } : {}),
       }]
     : taskIds.map((externalTaskId, i) => ({
         user_id: user.id,
@@ -93,6 +97,7 @@ export async function POST(req: Request) {
         uses_personal_api: usesPersonalApi,
         ...(isFailed && errorMessage ? { error_message: errorMessage } : {}),
         ...(inputUrls.length > 0 ? { input_urls: inputUrls } : {}),
+        ...(aspectRatio ? { aspect_ratio: aspectRatio } : {}),
       }));
 
   const { data, error } = await supabase.from("studio_generations").insert(payload).select("id, external_task_id");

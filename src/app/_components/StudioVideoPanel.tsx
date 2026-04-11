@@ -30,6 +30,7 @@ import {
   isPersonalApiActive,
   isPlatformCreditBypassActive,
 } from "@/app/_components/CreditsPlanContext";
+import { mergeStudioHistoryWithServer } from "@/lib/mergeStudioHistoryWithLocal";
 import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
 import { calculateVideoCredits } from "@/lib/linkToAd/generationCredits";
 import {
@@ -549,6 +550,15 @@ function FrameSlot({
   );
 }
 
+/** Aspect label for history thumbnails (Veo “Auto” → 16:9 display default). */
+function videoHistoryAspectLabel(family: string, aspect: string, veoAspect: string): string {
+  if (family === "veo") {
+    if (veoAspect === "16:9" || veoAspect === "9:16") return veoAspect;
+    return "16:9";
+  }
+  return aspect;
+}
+
 async function registerStudioTask(params: {
   kind: "studio_video";
   label: string;
@@ -559,6 +569,7 @@ async function registerStudioTask(params: {
   creditsCharged: number;
   personalApiKey?: string;
   inputUrls?: string[];
+  aspectRatio?: string;
 }): Promise<string | undefined> {
   try {
     const res = await fetch("/api/studio/generations/register", {
@@ -688,70 +699,9 @@ export default function StudioVideoPanel({
   const [wideVideoPreview, setWideVideoPreview] = useState(false);
   const [historyItems, setHistoryItems] = useState<StudioHistoryItem[]>([]);
 
-  /**
-   * Merge server history with locally-pending / optimistic items.
-   * - "generating"/"failed" client-only items: kept for 5 min (optimistic insertion window).
-   * - "ready" items with a URL that are NOT already represented in the server list (by URL):
-   *   kept for 24 h so a video survives even if the DB write was silently dropped.
-   *   URL-based dedup prevents showing the same video twice once the server catches up.
-   */
   const mergeServerWithLocal = useCallback(
-    (serverItems: StudioHistoryItem[], prev: StudioHistoryItem[]): StudioHistoryItem[] => {
-      /** Hide server rows still “processing” when this browser already has a ready copy with the same DB row id. */
-      const shieldedServerIds = new Set(
-        prev
-          .filter((i) => i.status === "ready" && i.mediaUrl?.trim() && i.studioGenerationId)
-          .map((i) => String(i.studioGenerationId).trim())
-          .filter(Boolean),
-      );
-      const serverFiltered = serverItems.filter((s) => {
-        if (shieldedServerIds.has(s.id)) return false;
-        // Legacy: localStorage items from before `studioGenerationId` could still hide a stuck server row
-        // when a ready copy (same label, nearby time) already exists in the merged list.
-        const stuckGenerating = s.status === "generating" && !s.mediaUrl?.trim();
-        if (
-          stuckGenerating &&
-          prev.some(
-            (p) =>
-              p.status === "ready" &&
-              Boolean(p.mediaUrl?.trim()) &&
-              (p.label || "").trim() === (s.label || "").trim() &&
-              Math.abs(p.createdAt - s.createdAt) < 30 * 60 * 1000,
-          )
-        ) {
-          return false;
-        }
-        return true;
-      });
-
-      const serverIds = new Set(serverFiltered.map((i) => i.id));
-      const serverMediaUrls = new Set(
-        serverFiltered.flatMap((i) => (i.mediaUrl?.trim() ? [i.mediaUrl.trim()] : [])),
-      );
-      const now = Date.now();
-      const KEEP_MS = 5 * 60 * 1000;
-      const KEEP_READY_MS = 24 * 60 * 60 * 1000;
-      const kept = prev.filter((i) => {
-        if (serverIds.has(i.id)) return false;
-        // "ready" items with a URL survive 24 h unless the server already holds the same
-        // video URL (prevents duplicates once registerStudioTask / server poll catches up).
-        if (
-          i.status === "ready" &&
-          i.mediaUrl?.trim() &&
-          !serverMediaUrls.has(i.mediaUrl.trim()) &&
-          now - i.createdAt < KEEP_READY_MS
-        ) {
-          return true;
-        }
-        // Optimistic generating/failed items: 5 min window.
-        return (
-          now - i.createdAt < KEEP_MS &&
-          (i.status === "generating" || i.status === "failed")
-        );
-      });
-      if (!kept.length) return serverFiltered;
-      return [...kept, ...serverFiltered].sort((a, b) => b.createdAt - a.createdAt);
-    },
+    (serverItems: StudioHistoryItem[], prev: StudioHistoryItem[]) =>
+      mergeStudioHistoryWithServer(serverItems, prev),
     [],
   );
 
@@ -1395,6 +1345,7 @@ export default function StudioVideoPanel({
         createdAt: startedAt,
         model: motionEdit ? "motion_control" : editPickerId,
         modelLabel: motionEdit ? "Motion control" : studioVideoEditPickerDisplayLabel(editPickerId),
+        aspectRatio: aspect,
       },
       ...prev,
     ]);
@@ -1440,6 +1391,7 @@ export default function StudioVideoPanel({
             creditsCharged: platformChargeEdit,
             personalApiKey: editPKey,
             inputUrls: [snap.editMotionImageUrl, snap.editMotionVideoUrl].filter(Boolean) as string[],
+            aspectRatio: aspect,
           });
           if (studioGenId) {
             setHistoryItems((prev) =>
@@ -1466,6 +1418,7 @@ export default function StudioVideoPanel({
                 model: "motion_control",
                 modelLabel: "Motion control",
                 studioGenerationId: studioGenId,
+                aspectRatio: aspect,
               },
               ...rest,
             ];
@@ -1499,6 +1452,7 @@ export default function StudioVideoPanel({
           creditsCharged: platformChargeEdit,
           personalApiKey: editPKey,
           inputUrls: [snap.editVideoUrl, ...(snap.editElementUrls || [])].filter(Boolean) as string[],
+          aspectRatio: aspect,
         });
         if (studioGenId) {
           setHistoryItems((prev) =>
@@ -1525,6 +1479,7 @@ export default function StudioVideoPanel({
               model: snap.editPickerId,
               modelLabel: studioVideoEditPickerDisplayLabel(snap.editPickerId),
               studioGenerationId: studioGenId,
+              aspectRatio: aspect,
             },
             ...rest,
           ];
@@ -1579,6 +1534,7 @@ export default function StudioVideoPanel({
       creditsRef.current = Math.max(0, creditsRef.current - credits);
     }
     const startedAt = Date.now();
+    const historyAspect = videoHistoryAspectLabel(meta.family, aspect, veoAspect);
     setHistoryItems((prev) => [
       {
         id: jobId,
@@ -1589,6 +1545,7 @@ export default function StudioVideoPanel({
         createdAt: startedAt,
         model: modelId,
         modelLabel: studioVideoDisplayLabel(modelId),
+        aspectRatio: historyAspect,
       },
       ...prev,
     ]);
@@ -1606,6 +1563,7 @@ export default function StudioVideoPanel({
       klingMode,
       soundOn,
       multiShot,
+      historyAspect,
     };
 
     void (async () => {
@@ -1640,6 +1598,7 @@ export default function StudioVideoPanel({
             creditsCharged: platformChargeCreate,
             personalApiKey: pKey,
             inputUrls: snap.startUrl ? [snap.startUrl] : undefined,
+            aspectRatio: snap.historyAspect,
           });
           if (studioGenId) {
             setHistoryItems((prev) =>
@@ -1669,6 +1628,7 @@ export default function StudioVideoPanel({
                 model: snap.modelId,
                 modelLabel: studioVideoDisplayLabel(snap.modelId),
                 studioGenerationId: studioGenId,
+                aspectRatio: snap.historyAspect,
               },
               ...rest,
             ];
@@ -1708,6 +1668,7 @@ export default function StudioVideoPanel({
             creditsCharged: platformChargeCreate,
             personalApiKey: pKey,
             inputUrls: urls.length ? urls : undefined,
+            aspectRatio: snap.historyAspect,
           });
           if (studioGenId) {
             setHistoryItems((prev) =>
@@ -1734,6 +1695,7 @@ export default function StudioVideoPanel({
                 model: snap.modelId,
                 modelLabel: studioVideoDisplayLabel(snap.modelId),
                 studioGenerationId: studioGenId,
+                aspectRatio: snap.historyAspect,
               },
               ...rest,
             ];
@@ -1779,6 +1741,7 @@ export default function StudioVideoPanel({
           creditsCharged: platformChargeCreate,
           personalApiKey: pKey,
           inputUrls: snap.startUrl ? [snap.startUrl] : undefined,
+          aspectRatio: snap.historyAspect,
         });
         if (studioGenId) {
           setHistoryItems((prev) =>
@@ -1805,6 +1768,7 @@ export default function StudioVideoPanel({
               model: snap.modelId,
               modelLabel: studioVideoDisplayLabel(snap.modelId),
               studioGenerationId: studioGenId,
+              aspectRatio: snap.historyAspect,
             },
             ...rest,
           ];
