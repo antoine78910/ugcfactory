@@ -11,12 +11,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { getAuthCallbackUrl } from "@/lib/supabase/authRedirect";
+import { hasPublicSupabaseConfig } from "@/lib/supabase/env";
 
 type AuthMode = "signin" | "signup";
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const HAS_SUPABASE_ENV = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
+const HAS_SUPABASE_ENV = hasPublicSupabaseConfig();
 
 export default function AuthClient({ mode = "signin", redirectTo }: { mode?: AuthMode; redirectTo?: string }) {
   const router = useRouter();
@@ -38,7 +37,8 @@ export default function AuthClient({ mode = "signin", redirectTo }: { mode?: Aut
           <div className="rounded-2xl border border-amber-400/40 bg-amber-500/5 p-6 text-sm text-white/80">
             <p className="font-semibold text-amber-300">Missing Supabase config</p>
             <p className="mt-3">
-              Define <code className="rounded bg-white/10 px-1">NEXT_PUBLIC_SUPABASE_URL</code> and{" "}
+              Define <code className="rounded bg-white/10 px-1">NEXT_PUBLIC_SUPABASE_URL</code> (or{" "}
+              <code className="rounded bg-white/10 px-1">NEXT_PUBLIC_SUPABASE_CUSTOM_DOMAIN</code>) and{" "}
               <code className="rounded bg-white/10 px-1">NEXT_PUBLIC_SUPABASE_ANON_KEY</code> in Vercel, then redeploy.
             </p>
           </div>

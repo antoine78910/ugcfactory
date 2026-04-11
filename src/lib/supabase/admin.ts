@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { getEnv } from "@/lib/env";
+import { getSupabaseUrlOptional } from "@/lib/supabase/env";
 
 /**
  * Server-only Supabase client with service role key.
@@ -7,7 +8,7 @@ import { getEnv } from "@/lib/env";
  * Only available when SUPABASE_SERVICE_ROLE_KEY is set.
  */
 export function createSupabaseServiceClient() {
-  const url = getEnv("NEXT_PUBLIC_SUPABASE_URL");
+  const url = getSupabaseUrlOptional();
   const serviceRoleKey = getEnv("SUPABASE_SERVICE_ROLE_KEY");
   if (!url || !serviceRoleKey) return null;
   return createClient(url, serviceRoleKey);

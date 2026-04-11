@@ -6,13 +6,12 @@
  * Using `NEXT_PUBLIC_APP_URL` here while the user is on another host (e.g. localhost
  * with prod env, or a preview URL) breaks `exchangeCodeForSession`.
  *
- * **Google consent UI:** If users still see `*.supabase.co` as the app, that comes from
- * Google’s OAuth screen (redirect_uri is always Supabase’s `/auth/v1/callback`). To show
- * “Youry” prominently: Supabase → Authentication → Providers → Google → add **your**
- * Google Cloud OAuth Client ID + secret; then Google Cloud Console → OAuth consent screen
- * set **App name** to “Youry”, **Application home page** to https://youry.io or
- * https://app.youry.io, and keep the authorized redirect URI
- * `https://<project-ref>.supabase.co/auth/v1/callback` as Supabase documents.
+ * **Google consent “Access the application …” host:** Google shows the hostname of
+ * Supabase’s OAuth `redirect_uri` (`…/auth/v1/callback`). To show **youry.io** instead of
+ * `*.supabase.co`, add a **Custom Domain** in Supabase (Project Settings → Custom Domains),
+ * set `NEXT_PUBLIC_SUPABASE_CUSTOM_DOMAIN` (or point `NEXT_PUBLIC_SUPABASE_URL` at that host),
+ * add the matching redirect URI in Google Cloud (e.g. `https://api.youry.io/auth/v1/callback`),
+ * and redeploy. Also set OAuth consent **App name** to “Youry” in Google Cloud.
  */
 export function getAuthCallbackUrl(): string {
   if (typeof window !== "undefined") {

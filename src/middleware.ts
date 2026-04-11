@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import { getSupabaseAnonKeyOptional, getSupabaseUrlOptional } from "@/lib/supabase/env";
 
 const APP_HOST = "app.youry.io";
 const MAIN_HOSTS = new Set(["youry.io", "www.youry.io"]);
@@ -111,8 +112,8 @@ export async function middleware(req: NextRequest) {
 
   // Refresh the Supabase session on every request so Server Components always
   // receive a valid access token (tokens expire after ~1 hour without this).
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const supabaseUrl = getSupabaseUrlOptional();
+  const supabaseAnonKey = getSupabaseAnonKeyOptional();
   if (supabaseUrl && supabaseAnonKey) {
     let response = NextResponse.next({ request: req });
     try {

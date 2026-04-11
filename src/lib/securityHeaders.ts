@@ -3,6 +3,26 @@
  * Third-party cookies (Heyo, Datafast, Linkjolt) cannot be removed from our code — only vendors can migrate to first-party / CHIPS.
  */
 
+/** Allow fetch/WS to Supabase when using a custom host (OAuth + REST), not only *.supabase.co. */
+function supabaseNonDefaultConnectOrigins(): string {
+  const candidates = [
+    process.env.NEXT_PUBLIC_SUPABASE_CUSTOM_DOMAIN?.trim(),
+    process.env.NEXT_PUBLIC_SUPABASE_URL?.trim(),
+  ].filter(Boolean) as string[];
+  const extras = new Set<string>();
+  for (const raw of candidates) {
+    if (raw.includes("supabase.co")) continue;
+    try {
+      const u = new URL(raw);
+      extras.add(u.origin);
+      extras.add(`wss://${u.host}`);
+    } catch {
+      /* ignore */
+    }
+  }
+  return [...extras].join(" ");
+}
+
 const CSP_PARTS_BASE = [
   "default-src 'self'",
   "base-uri 'self'",
@@ -14,7 +34,11 @@ const CSP_PARTS_BASE = [
   "img-src 'self' data: blob: https:",
   "media-src 'self' data: blob: https:",
   "font-src 'self' data: https://fonts.gstatic.com",
-  "connect-src 'self' https://datafa.st https://*.datafa.st https://www.linkjolt.io https://linkjolt.io https://heyo.so https://*.heyo.so https://cdn.heyo.so https://*.supabase.co wss://*.supabase.co https://api.stripe.com https://*.stripe.com https://m.stripe.network https://q.stripe.com https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://*.ingest.de.sentry.io https://*.sentry.io https://cdn.jsdelivr.net https://www.clarity.ms https://scripts.clarity.ms https://a.clarity.ms https://accounts.google.com",
+  // *.supabase.co default; append custom / vanity API host when set (see supabaseNonDefaultConnectOrigins).
+  `connect-src 'self' https://datafa.st https://*.datafa.st https://www.linkjolt.io https://linkjolt.io https://heyo.so https://*.heyo.so https://cdn.heyo.so https://*.supabase.co wss://*.supabase.co ${supabaseNonDefaultConnectOrigins()} https://api.stripe.com https://*.stripe.com https://m.stripe.network https://q.stripe.com https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://*.ingest.de.sentry.io https://*.sentry.io https://cdn.jsdelivr.net https://www.clarity.ms https://scripts.clarity.ms https://a.clarity.ms https://accounts.google.com`.replace(
+    /\s+/g,
+    " ",
+  ),
   "frame-src 'self' https://heyo.so https://*.heyo.so https://cdn.heyo.so https://js.stripe.com https://hooks.stripe.com https://*.stripe.com https://accounts.google.com https://*.gstatic.com",
   "object-src 'none'",
   "worker-src 'self' blob:",
