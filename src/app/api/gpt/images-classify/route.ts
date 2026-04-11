@@ -16,12 +16,17 @@ type Body = {
   provider?: "gpt" | "claude";
 };
 
+function isPngUrl(u: string): boolean {
+  return /\.png(?:\?|$)/i.test(u);
+}
+
 function scoreUrl(u: string, meta?: ImageMetaEntry) {
   const s = u.toLowerCase();
   let score = 0;
 
   // ── Format signals ──
   if (/\.(png|jpg|jpeg|webp)(\?|$)/.test(s)) score += 2;
+  if (isPngUrl(s)) score += 3;
   if (s.endsWith(".svg")) score -= 5;
   if (/\.(gif|ico)(\?|$)/.test(s)) score -= 3;
 
@@ -39,7 +44,7 @@ function scoreUrl(u: string, meta?: ImageMetaEntry) {
   if (s.includes("shopifycdn") || s.includes("bigcommerce") || s.includes("woocommerce")) score += 2;
 
   // ── Negative URL patterns (non-product) ──
-  if (s.includes("icon") || s.includes("logo") || s.includes("sprite") || s.includes("favicon")) score -= 5;
+  if (s.includes("icon") || s.includes("logo") || s.includes("sprite") || s.includes("favicon")) score -= 8;
   if (s.includes("banner") || s.includes("promo") || s.includes("announcement")) score -= 3;
   if (s.includes("social") || s.includes("facebook") || s.includes("instagram") || s.includes("twitter") || s.includes("pinterest") || s.includes("tiktok") || s.includes("youtube")) score -= 4;
   if (s.includes("payment") || s.includes("visa") || s.includes("mastercard") || s.includes("paypal") || s.includes("stripe") || s.includes("klarna") || s.includes("afterpay")) score -= 5;
@@ -68,10 +73,13 @@ function scoreUrl(u: string, meta?: ImageMetaEntry) {
       if (area >= 250_000) score += 1;      // >= ~500x500
       if (area <= 3_600) score -= 3;        // <= ~60x60
       if (meta.w <= 50 || meta.h <= 50) score -= 3;
+      if (meta.w >= 350 && meta.h >= 350) score += 2;
+      if (meta.w <= 120 || meta.h <= 120) score -= 4;
     }
 
     if (meta.source === "json-ld") score += 5;
     if (meta.source === "product-context") score += 4;
+    if (meta.source === "srcset") score += 1;
     if (meta.source === "og") score += 2;
   }
 
@@ -96,11 +104,15 @@ export async function POST(req: Request) {
     }
   }
 
-  const ranked = [...urls]
+  const scored = [...urls]
     .map((u) => ({ u, s: scoreUrl(u, metaMap.get(u)) }))
-    .sort((a, b) => b.s - a.s)
-    .map((x) => x.u)
-    .slice(0, 16);
+    .sort((a, b) => b.s - a.s);
+
+  const ranked = scored.map((x) => x.u).slice(0, 20);
+  const productish = scored.filter((x) => x.s >= 3).map((x) => x.u);
+  const pngProductish = productish.filter((u) => isPngUrl(u));
+  const candidateUrls = [...new Set([...pngProductish, ...productish])].slice(0, 30);
+  const modelInputUrls = (candidateUrls.length ? candidateUrls : ranked).slice(0, 16);
 
   const developer = [
     "You are classifying e-commerce images.",
@@ -121,7 +133,7 @@ export async function POST(req: Request) {
   const provider: "gpt" | "claude" = body?.provider === "gpt" ? "gpt" : "claude";
 
   try {
-    const cacheKey = makeCacheKey({ v: 3, pageUrl: body.pageUrl, ranked, provider });
+    const cacheKey = makeCacheKey({ v: 4, pageUrl: body.pageUrl, ranked: modelInputUrls, provider });
     try {
       const { data: hit } = await supabase
         .from("gpt_cache")
@@ -136,8 +148,8 @@ export async function POST(req: Request) {
 
     const text =
       provider === "claude"
-        ? await claudeMessagesTextWithImages({ system: developer, user: userText, imageUrls: ranked, maxTokens: 1200 })
-        : (await openaiResponsesTextWithImages({ developer, userText, imageUrls: ranked })).text;
+        ? await claudeMessagesTextWithImages({ system: developer, user: userText, imageUrls: modelInputUrls, maxTokens: 1200 })
+        : (await openaiResponsesTextWithImages({ developer, userText, imageUrls: modelInputUrls })).text;
 
     const cleaned = text.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
     let parsed: unknown;
@@ -161,7 +173,7 @@ export async function POST(req: Request) {
       const obj = item as { url?: unknown; reason?: unknown };
       const rawU = typeof obj?.url === "string" ? obj.url : typeof item === "string" ? item : "";
       if (!rawU.trim()) continue;
-      const matched = matchUrlToCandidates(rawU, ranked, body.pageUrl);
+      const matched = matchUrlToCandidates(rawU, modelInputUrls, body.pageUrl);
       if (matched) {
         productOnlyUrls.push({
           url: matched,
@@ -170,9 +182,9 @@ export async function POST(req: Request) {
       }
     }
 
-    if (productOnlyUrls.length === 0 && rawProductOnly.length > 0 && ranked.length > 0) {
+    if (productOnlyUrls.length === 0 && rawProductOnly.length > 0 && modelInputUrls.length > 0) {
       productOnlyUrls.push({
-        url: ranked[0],
+        url: modelInputUrls[0],
         reason: "Model URL did not match the page; using the top-ranked image from extraction.",
       });
     }
@@ -185,7 +197,8 @@ export async function POST(req: Request) {
     }
 
     const data = {
-      ranked,
+      ranked: modelInputUrls,
+      candidateUrls,
       productOnlyUrls,
       otherUrls,
       confidence: String(p.confidence ?? "low"),

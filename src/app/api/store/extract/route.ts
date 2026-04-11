@@ -57,6 +57,14 @@ function uniqMetaKeepOrder(items: ImageMeta[]): ImageMeta[] {
 const JUNK_URL_RE =
   /(?:tracking|pixel|beacon|spacer|blank|transparent|spinner|loader|placeholder)\b/i;
 const JUNK_EXT_RE = /\.(gif|svg|ico)(?:\?|$)/i;
+const NON_PRODUCT_RE =
+  /(?:logo|icon|favicon|sprite|badge|seal|social|instagram|facebook|tiktok|youtube|pinterest|payment|visa|mastercard|paypal|klarna|trustpilot|review|rating|star)\b/i;
+
+function looksLikeNonProductImage(u: string, alt?: string): boolean {
+  if (NON_PRODUCT_RE.test(u)) return true;
+  if (alt && NON_PRODUCT_RE.test(alt.toLowerCase())) return true;
+  return false;
+}
 
 function looksLikeJunkImage(u: string, w?: number, h?: number): boolean {
   if (w != null && h != null && w <= 3 && h <= 3) return true;
@@ -230,8 +238,22 @@ export async function POST(req: Request) {
   // picture/source srcset
   $("source").each((_, el) => {
     const ss = $(el).attr("srcset") || $(el).attr("data-srcset");
+    const inProductContext = (() => {
+      const parentChain = $(el).parents().toArray().slice(0, 6);
+      return parentChain.some((p) => {
+        const cls = $(p).attr("class") ?? "";
+        const id = $(p).attr("id") ?? "";
+        return /product|gallery|carousel|slider|main-image|hero-image|featured|swiper|pdp|detail/i.test(cls) ||
+          /product|gallery|carousel|slider|main-image|hero-image|featured|swiper|pdp|detail/i.test(id);
+      });
+    })();
     for (const u of parseSrcsetUrls(ss, url)) {
-      generalBucket.push({ url: u, source: "source" });
+      if (looksLikeNonProductImage(u)) continue;
+      if (inProductContext && /\.png(?:\?|$)/i.test(u)) {
+        productContextBucket.push({ url: u, source: "source-product-context" });
+      } else {
+        generalBucket.push({ url: u, source: "source" });
+      }
     }
   });
 
@@ -252,6 +274,7 @@ export async function POST(req: Request) {
     const h = parseIntMaybe($el.attr("height"));
 
     if (looksLikeJunkImage(u, w, h)) return;
+    if (looksLikeNonProductImage(u, alt || undefined)) return;
 
     const meta: ImageMeta = { url: u, alt: alt || undefined, w, h, source: "img" };
 
@@ -274,7 +297,7 @@ export async function POST(req: Request) {
     // Also collect srcset variants
     const srcset = $el.attr("srcset") || $el.attr("data-srcset");
     for (const ssUrl of parseSrcsetUrls(srcset, url)) {
-      if (!looksLikeJunkImage(ssUrl, w, h)) {
+      if (!looksLikeJunkImage(ssUrl, w, h) && !looksLikeNonProductImage(ssUrl, alt || undefined)) {
         generalBucket.push({ url: ssUrl, alt: alt || undefined, w, h, source: "srcset" });
       }
     }

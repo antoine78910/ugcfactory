@@ -81,7 +81,7 @@ const defaultCreditPacks: CreditPack[] = PACK_UI.map((meta, i) => {
 function CreditPackPriceSkeleton() {
   return (
     <span
-      className="inline-block h-9 w-[5.5rem] animate-pulse rounded-md bg-white/12 align-middle sm:w-24"
+      className="inline-block h-10 w-[min(100%,14rem)] animate-pulse rounded-lg bg-white/12 align-middle md:h-11"
       aria-hidden
     />
   );
@@ -258,16 +258,16 @@ export default function CreditsPage() {
                         </div>
                       </div>
 
-                      <div className="mt-2 flex min-h-[2.25rem] items-baseline gap-2">
+                      <div className="mt-2 flex min-h-[2.5rem] flex-wrap items-baseline gap-x-2 gap-y-0">
                         {billingPricesReady ? (
-                          <span className="font-sans text-3xl font-extrabold tabular-nums tracking-tight text-white">
+                          <span className="text-4xl font-extrabold tabular-nums leading-none text-white md:text-5xl">
                             {p.price}
                           </span>
                         ) : (
                           <CreditPackPriceSkeleton />
                         )}
                         {billingPricesReady && displayPrices && oldPrice != null && oldPrice > p.priceUsd ? (
-                          <span className="font-sans text-sm font-semibold tabular-nums tracking-tight text-white/45 line-through">
+                          <span className="text-sm font-semibold leading-none text-white/45 line-through md:text-base">
                             {formatMoneyAmount(oldPrice, displayPrices.currency)}
                           </span>
                         ) : null}

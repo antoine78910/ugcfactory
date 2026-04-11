@@ -140,6 +140,7 @@ export async function runInitialPipeline(
       error?: unknown;
       data?: {
         productOnlyUrls?: unknown;
+        candidateUrls?: unknown;
         confidence?: unknown;
         otherUrls?: unknown;
       };
@@ -153,8 +154,15 @@ export async function runInitialPipeline(
       : [];
 
     const validCandidates = candidatesRaw.map((c) => normalizeCandidate(c)).filter((x) => x.url.length > 0);
+    const candidateUrlsRaw: unknown[] = Array.isArray(classifyJson.data?.candidateUrls)
+      ? (classifyJson.data!.candidateUrls as unknown[])
+      : [];
+    const candidateUrls = candidateUrlsRaw
+      .filter((x): x is string => typeof x === "string")
+      .map((u) => u.trim())
+      .filter((u) => u.length > 0);
 
-    const firstCandidate = validCandidates[0];
+    const firstCandidate = validCandidates[0] ?? (candidateUrls[0] ? { url: candidateUrls[0], reason: undefined } : undefined);
     const cleanUrl = firstCandidate?.url ?? null;
     const reason = firstCandidate?.reason;
     const urlsOnly = validCandidates.map((c) => c.url).filter((x) => x.length > 0);
@@ -185,7 +193,10 @@ export async function runInitialPipeline(
     const summaryJson = (await summaryRes.json()) as { data?: string };
     const summaryStr = String(summaryJson?.data ?? "");
 
-    const combinedProductCandidates = dedupeHttpsProductUrls(url, [...prefillTail, ...urlsOnly]);
+    const combinedProductCandidates = dedupeHttpsProductUrls(
+      url,
+      [...prefillTail, ...(urlsOnly.length ? urlsOnly : candidateUrls)],
+    );
     const gptImages = productUrlsForGpt({
       pageUrl: url,
       neutralUploadUrl: effectiveNeutral,
@@ -193,7 +204,10 @@ export async function runInitialPipeline(
       fallbackUrl: firstOther?.trim() || images[0] || null,
     });
 
-    const snapshotProductOnly = dedupeHttpsProductUrls(url, [...userPrefill, ...urlsOnly]);
+    const snapshotProductOnly = dedupeHttpsProductUrls(
+      url,
+      [...userPrefill, ...(candidateUrls.length ? candidateUrls : urlsOnly)],
+    );
 
     const snapAfterSummary: LinkToAdUniverseSnapshotV1 = {
       v: 1,

@@ -1166,6 +1166,7 @@ export default function LinkToAdUniverse({
   const [isUploadingPersonaPhotos, setIsUploadingPersonaPhotos] = useState(false);
   const personaPhotoInputRef = useRef<HTMLInputElement>(null);
   const [imgError, setImgError] = useState(false);
+  const [showAiImagePicker, setShowAiImagePicker] = useState(false);
   const [brandFaviconFailed, setBrandFaviconFailed] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
   /** File input on the Store URL step (optional product photos before scan). */
@@ -2100,6 +2101,38 @@ export default function LinkToAdUniverse({
   const resolvedCleanCandidateUrl = useMemo(() => resolveMaybeRelativeUrl(cleanCandidate?.url), [cleanCandidate?.url, resolveMaybeRelativeUrl]);
   const resolvedFallbackImageUrl = useMemo(() => resolveMaybeRelativeUrl(fallbackImageUrl), [fallbackImageUrl, resolveMaybeRelativeUrl]);
   const resolvedNeutralUploadUrl = useMemo(() => resolveMaybeRelativeUrl(neutralUploadUrl), [neutralUploadUrl, resolveMaybeRelativeUrl]);
+  const resolvedUserPhotoUrlSet = useMemo(() => {
+    const set = new Set<string>();
+    for (const u of userPhotoUrls) {
+      const r = resolveMaybeRelativeUrl(u);
+      if (r) set.add(r);
+    }
+    return set;
+  }, [resolveMaybeRelativeUrl, userPhotoUrls]);
+  const aiScrapedCandidateUrls = useMemo(() => {
+    const out: string[] = [];
+    const seen = new Set<string>();
+    const push = (raw: string | null | undefined) => {
+      const r = resolveMaybeRelativeUrl(raw);
+      if (!r || seen.has(r)) return;
+      if (resolvedUserPhotoUrlSet.has(r)) return;
+      seen.add(r);
+      out.push(r);
+    };
+    push(cleanCandidate?.url);
+    for (const u of productOnlyImageUrls) push(u);
+    push(fallbackImageUrl);
+    return out;
+  }, [cleanCandidate?.url, fallbackImageUrl, productOnlyImageUrls, resolveMaybeRelativeUrl, resolvedUserPhotoUrlSet]);
+  const aiAlternativeUrls = useMemo(
+    () => aiScrapedCandidateUrls.filter((u) => u !== (resolvedPreviewUrl || "").trim()),
+    [aiScrapedCandidateUrls, resolvedPreviewUrl],
+  );
+  const choosePreviewImage = useCallback((url: string) => {
+    setNeutralUploadUrl(url);
+    setShowAiImagePicker(false);
+    setImgError(false);
+  }, []);
 
   const isAlgorithmChosenPreview = useMemo(() => {
     const cur = (resolvedPreviewUrl || "").trim();
@@ -2134,6 +2167,10 @@ export default function LinkToAdUniverse({
   useEffect(() => {
     setImgError(false);
   }, [resolvedPreviewUrl]);
+  useEffect(() => {
+    if (aiAlternativeUrls.length > 0) return;
+    setShowAiImagePicker(false);
+  }, [aiAlternativeUrls.length]);
 
   useEffect(() => {
     if (!nanoImageLightboxUrl) return;
@@ -5033,6 +5070,35 @@ export default function LinkToAdUniverse({
           </div>
         ) : (
         <>
+        {!showBrandHeaderInsteadOfUrl && recentLinkToAdRuns.length > 0 ? (
+          <div className="mb-4">
+            <div className="rounded-lg border border-violet-500/15 bg-violet-500/[0.05] px-2.5 py-2">
+              <p className="text-[9px] font-semibold uppercase tracking-wide text-violet-200/85">Recent projects</p>
+              <p className="mt-0.5 text-[9px] leading-snug text-white/40">
+                Tap a project to continue where you left off, or enter a new URL below.
+              </p>
+              <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-3">
+                <LinkToAdRecentRunsToggle
+                  compact
+                  hidePreviousLtaGenerations={hidePreviousLtaGenerations}
+                  onToggle={toggleHidePreviousLtaGenerations}
+                  reduceMotion={reduceMotion ?? false}
+                />
+                <div className="min-w-0 flex-1">
+                  <LinkToAdRecentRunsChips
+                    compact
+                    recentLinkToAdRuns={recentLinkToAdRuns}
+                    hidePreviousLtaGenerations={hidePreviousLtaGenerations}
+                    activeRunIdProp={activeRunIdProp}
+                    universeRunId={universeRunId}
+                    onSelectRun={handleSwitchRecentRun}
+                    reduceMotion={reduceMotion ?? false}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
         <div className="space-y-2">
           <LinkToAdUniverseStepper currentStep={universeCurrentStep} />
         </div>
@@ -5102,6 +5168,8 @@ export default function LinkToAdUniverse({
             )}
           </div>
         ) : null}
+        {/* Duration + product preview: tight vertical spacing (avoid empty flex gap when URL row is hidden). */}
+        <div className="flex flex-col gap-3">
         {/* Duration: locked once scripts exist / generation started so prompts stay aligned. Seedance tier stays user-editable. */}
         <div className="flex flex-wrap items-center gap-4">
           <div className="space-y-1">
@@ -5167,39 +5235,8 @@ export default function LinkToAdUniverse({
           </div>
         </div>
 
-        {/* Recent projects pinned to bottom (non-idle header). */}
-        <div className="mt-6">
-          {!showBrandHeaderInsteadOfUrl && recentLinkToAdRuns.length > 0 ? (
-            <div className="rounded-lg border border-violet-500/15 bg-violet-500/[0.05] px-2.5 py-2">
-              <p className="text-[9px] font-semibold uppercase tracking-wide text-violet-200/85">Recent projects</p>
-              <p className="mt-0.5 text-[9px] leading-snug text-white/40">
-                Tap a project to continue where you left off, or enter a new URL below.
-              </p>
-              <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-3">
-                <LinkToAdRecentRunsToggle
-                  compact
-                  hidePreviousLtaGenerations={hidePreviousLtaGenerations}
-                  onToggle={toggleHidePreviousLtaGenerations}
-                  reduceMotion={reduceMotion ?? false}
-                />
-                <div className="min-w-0 flex-1">
-                  <LinkToAdRecentRunsChips
-                    compact
-                    recentLinkToAdRuns={recentLinkToAdRuns}
-                    hidePreviousLtaGenerations={hidePreviousLtaGenerations}
-                    activeRunIdProp={activeRunIdProp}
-                    universeRunId={universeRunId}
-                    onSelectRun={handleSwitchRecentRun}
-                    reduceMotion={reduceMotion ?? false}
-                  />
-                </div>
-              </div>
-            </div>
-          ) : null}
-        </div>
-
-        <div className="space-y-3">
-          {!showBrandHeaderInsteadOfUrl ? (
+        {!showBrandHeaderInsteadOfUrl ? (
+          <div className="space-y-3">
             <div>
               <Label className="text-base font-medium text-white/80">Store URL</Label>
               {!isWorking ? (
@@ -5324,8 +5361,8 @@ export default function LinkToAdUniverse({
               {/* Product photos + avatar are shown only after brief + scripts are generated (next step),
                   to keep the URL step focused and avoid accidental generation triggers. */}
             </div>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
 
         {(resolvedPreviewUrl || summaryText.trim() || (isWorking && storeUrl.trim())) && !scriptsText.trim() ? (
           <div className="mx-auto w-full max-w-xl">
@@ -5451,27 +5488,69 @@ export default function LinkToAdUniverse({
                       <span className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
                         Product photos ({productOnlyImageUrls.length})
                       </span>
-                      <button
-                        type="button"
-                        disabled={isWorking || isUploadingAdditionalPhotos}
-                        className="flex items-center gap-1 rounded-md bg-white/5 px-2 py-1 text-[10px] font-medium text-white/60 transition hover:bg-white/10 hover:text-white/80"
-                        onClick={() => photoInputRef.current?.click()}
-                      >
-                        <ImagePlus className="h-3 w-3" />
-                        Add photo
-                      </button>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {isAlgorithmChosenPreview ? (
+                          <span className="rounded-md border border-violet-400/35 bg-violet-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-violet-100">
+                            Picked by AI
+                          </span>
+                        ) : null}
+                        {aiAlternativeUrls.length > 0 ? (
+                          <button
+                            type="button"
+                            onClick={() => setShowAiImagePicker((v) => !v)}
+                            className="rounded-md border border-white/12 bg-white/[0.04] px-2 py-1 text-[10px] font-semibold text-white/70 transition hover:border-violet-400/35 hover:text-white"
+                          >
+                            {showAiImagePicker ? "Close" : `Change (${aiAlternativeUrls.length})`}
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
+                          disabled={isWorking || isUploadingAdditionalPhotos}
+                          className="flex items-center gap-1 rounded-md bg-white/5 px-2 py-1 text-[10px] font-medium text-white/60 transition hover:bg-white/10 hover:text-white/80"
+                          onClick={() => photoInputRef.current?.click()}
+                        >
+                          <ImagePlus className="h-3 w-3" />
+                          Add photo
+                        </button>
+                      </div>
                     </div>
+                    {showAiImagePicker && aiAlternativeUrls.length > 0 ? (
+                      <div className="rounded-lg border border-violet-400/20 bg-violet-500/[0.06] p-2">
+                        <p className="text-[10px] font-medium text-violet-100/90">Choose another detected product image</p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {aiAlternativeUrls.map((u, i) => (
+                            <button
+                              key={`${u}-${i}-ai-switch`}
+                              type="button"
+                              onClick={() => choosePreviewImage(u)}
+                              className="group relative h-14 w-14 overflow-hidden rounded-md border border-white/15 bg-[#050507] transition hover:border-violet-400/50"
+                              title="Use this image"
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={u} alt={`AI candidate ${i + 1}`} className="h-full w-full object-cover" loading="lazy" />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
                     <div className="flex flex-wrap gap-2">
                       <LinkToAdPendingProductThumbnails items={pendingProductUploads} />
                       {productOnlyImageUrls.map((url, i) => (
-                        <div key={`${url}-${i}`} className="group/photo relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-[#050507]">
+                        <div
+                          key={`${url}-${i}`}
+                          className={cn(
+                            "group/photo relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border bg-[#050507]",
+                            resolveMaybeRelativeUrl(url) === resolvedPreviewUrl ? "border-violet-400/70 ring-1 ring-violet-400/35" : "border-white/10",
+                          )}
+                        >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
                             src={url}
                             alt={`Product ${i + 1}`}
-                            className="h-full w-full object-cover"
+                            className="h-full w-full cursor-pointer object-cover"
                             loading="lazy"
                             referrerPolicy="no-referrer"
+                            onClick={() => choosePreviewImage(url)}
                           />
                           <button
                             type="button"
@@ -5532,6 +5611,7 @@ export default function LinkToAdUniverse({
             </div>
           </div>
         ) : null}
+        </div>
 
         {selectedAngleIndex === null &&
         (summaryText.trim() ||
@@ -5638,27 +5718,69 @@ export default function LinkToAdUniverse({
                       <span className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
                         Product photos ({productOnlyImageUrls.length})
                       </span>
-                      <button
-                        type="button"
-                        disabled={isWorking}
-                        className="flex items-center gap-1 rounded-md bg-white/5 px-2 py-1 text-[10px] font-medium text-white/60 transition hover:bg-white/10 hover:text-white/80"
-                        onClick={() => photoInputRef.current?.click()}
-                      >
-                        <ImagePlus className="h-3 w-3" />
-                        Add photo
-                      </button>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {isAlgorithmChosenPreview ? (
+                          <span className="rounded-md border border-violet-400/35 bg-violet-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-violet-100">
+                            Picked by AI
+                          </span>
+                        ) : null}
+                        {aiAlternativeUrls.length > 0 ? (
+                          <button
+                            type="button"
+                            onClick={() => setShowAiImagePicker((v) => !v)}
+                            className="rounded-md border border-white/12 bg-white/[0.04] px-2 py-1 text-[10px] font-semibold text-white/70 transition hover:border-violet-400/35 hover:text-white"
+                          >
+                            {showAiImagePicker ? "Close" : `Change (${aiAlternativeUrls.length})`}
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
+                          disabled={isWorking}
+                          className="flex items-center gap-1 rounded-md bg-white/5 px-2 py-1 text-[10px] font-medium text-white/60 transition hover:bg-white/10 hover:text-white/80"
+                          onClick={() => photoInputRef.current?.click()}
+                        >
+                          <ImagePlus className="h-3 w-3" />
+                          Add photo
+                        </button>
+                      </div>
                     </div>
+                    {showAiImagePicker && aiAlternativeUrls.length > 0 ? (
+                      <div className="rounded-lg border border-violet-400/20 bg-violet-500/[0.06] p-2">
+                        <p className="text-[10px] font-medium text-violet-100/90">Choose another detected product image</p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {aiAlternativeUrls.map((u, i) => (
+                            <button
+                              key={`${u}-${i}-ai-switch-2`}
+                              type="button"
+                              onClick={() => choosePreviewImage(u)}
+                              className="group relative h-14 w-14 overflow-hidden rounded-md border border-white/15 bg-[#050507] transition hover:border-violet-400/50"
+                              title="Use this image"
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={u} alt={`AI candidate ${i + 1}`} className="h-full w-full object-cover" loading="lazy" />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
                     <div className="flex flex-wrap gap-2">
                       <LinkToAdPendingProductThumbnails items={pendingProductUploads} />
                       {productOnlyImageUrls.map((url, i) => (
-                        <div key={`${url}-${i}`} className="group/photo relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-[#050507]">
+                        <div
+                          key={`${url}-${i}`}
+                          className={cn(
+                            "group/photo relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border bg-[#050507]",
+                            resolveMaybeRelativeUrl(url) === resolvedPreviewUrl ? "border-violet-400/70 ring-1 ring-violet-400/35" : "border-white/10",
+                          )}
+                        >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
                             src={url}
                             alt={`Product ${i + 1}`}
-                            className="h-full w-full object-cover"
+                            className="h-full w-full cursor-pointer object-cover"
                             loading="lazy"
                             referrerPolicy="no-referrer"
+                            onClick={() => choosePreviewImage(url)}
                           />
                           <button
                             type="button"
@@ -5995,30 +6117,69 @@ export default function LinkToAdUniverse({
                     <span className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
                       Product photos ({productOnlyImageUrls.length})
                     </span>
-                    <button
-                      type="button"
-                      disabled={isWorking || isUploadingAdditionalPhotos}
-                      className="flex items-center gap-1 rounded-md bg-white/5 px-2 py-1 text-[10px] font-medium text-white/60 transition hover:bg-white/10 hover:text-white/80 disabled:opacity-50"
-                      onClick={() => photoInputRef.current?.click()}
-                    >
-                      <ImagePlus className="h-3 w-3" />
-                      Add photo
-                    </button>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {isAlgorithmChosenPreview ? (
+                        <span className="rounded-md border border-violet-400/35 bg-violet-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-violet-100">
+                          Picked by AI
+                        </span>
+                      ) : null}
+                      {aiAlternativeUrls.length > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => setShowAiImagePicker((v) => !v)}
+                          className="rounded-md border border-white/12 bg-white/[0.04] px-2 py-1 text-[10px] font-semibold text-white/70 transition hover:border-violet-400/35 hover:text-white"
+                        >
+                          {showAiImagePicker ? "Close" : `Change (${aiAlternativeUrls.length})`}
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        disabled={isWorking || isUploadingAdditionalPhotos}
+                        className="flex items-center gap-1 rounded-md bg-white/5 px-2 py-1 text-[10px] font-medium text-white/60 transition hover:bg-white/10 hover:text-white/80 disabled:opacity-50"
+                        onClick={() => photoInputRef.current?.click()}
+                      >
+                        <ImagePlus className="h-3 w-3" />
+                        Add photo
+                      </button>
+                    </div>
                   </div>
+                  {showAiImagePicker && aiAlternativeUrls.length > 0 ? (
+                    <div className="mt-2 rounded-lg border border-violet-400/20 bg-violet-500/[0.06] p-2">
+                      <p className="text-[10px] font-medium text-violet-100/90">Choose another detected product image</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {aiAlternativeUrls.map((u, i) => (
+                          <button
+                            key={`${u}-${i}-ai-switch-3`}
+                            type="button"
+                            onClick={() => choosePreviewImage(u)}
+                            className="group relative h-14 w-14 overflow-hidden rounded-md border border-white/15 bg-[#050507] transition hover:border-violet-400/50"
+                            title="Use this image"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={u} alt={`AI candidate ${i + 1}`} className="h-full w-full object-cover" loading="lazy" />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                   <div className="mt-3 flex flex-wrap gap-2">
                     <LinkToAdPendingProductThumbnails items={pendingProductUploads} />
                     {productOnlyImageUrls.map((url, i) => (
                       <div
                         key={`${url}-${i}-side`}
-                        className="group/photo2 relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-[#050507]"
+                        className={cn(
+                          "group/photo2 relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border bg-[#050507]",
+                          resolveMaybeRelativeUrl(url) === resolvedPreviewUrl ? "border-violet-400/70 ring-1 ring-violet-400/35" : "border-white/10",
+                        )}
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={url}
                           alt={`Product ${i + 1}`}
-                          className="h-full w-full object-cover"
+                          className="h-full w-full cursor-pointer object-cover"
                           loading="lazy"
                           referrerPolicy="no-referrer"
+                          onClick={() => choosePreviewImage(url)}
                         />
                         <button
                           type="button"
