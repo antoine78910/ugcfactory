@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, Coins } from "lucide-react";
 import { toast } from "sonner";
@@ -187,20 +186,6 @@ export default function CreditsPage() {
 
         <div className="relative mx-auto max-w-6xl space-y-14 px-5 py-10 md:px-8 md:py-12">
           <header className="mx-auto max-w-2xl text-center">
-            <Link
-              href="/app/link-to-ad"
-              className="mx-auto mb-6 inline-flex justify-center transition-opacity hover:opacity-90"
-              title="Youry home"
-            >
-              <Image
-                src="/youry-logo.png"
-                alt="Youry"
-                width={174}
-                height={52}
-                className="h-8 w-auto md:h-9"
-                priority
-              />
-            </Link>
             <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-violet-400/90">Credits</p>
             <h1 className="mt-3 bg-gradient-to-b from-white via-white to-white/55 bg-clip-text text-3xl font-bold tracking-tight text-transparent sm:text-4xl md:text-[2.75rem] md:leading-[1.08]">
               Top up and keep creating

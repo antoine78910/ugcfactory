@@ -27,6 +27,7 @@ import {
   topazVideoUpscaleCredits,
 } from "@/lib/pricing";
 import { registerStudioGenerationClient } from "@/lib/registerStudioGenerationClient";
+import { mergeStudioHistoryWithServer } from "@/lib/mergeStudioHistoryWithLocal";
 import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
 import { userMessageFromCaughtError } from "@/lib/generationUserMessage";
 import { uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
@@ -74,7 +75,7 @@ const IMAGE_TIER_TICKS = ["2K", "4K", "8K"] as const;
 const UPSCALE_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
   {
     id: "upscale/video",
-    label: "Topaz Video Upscale",
+    label: "Video upscale",
     icon: "google",
     resolution: "Up to 4x",
     durationRange: "1s–10min",
@@ -82,7 +83,7 @@ const UPSCALE_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
   },
   {
     id: "upscale/image",
-    label: "Topaz Image Upscale",
+    label: "Image upscale",
     icon: "google",
     resolution: "High-res image output",
     durationRange: "Single image",
@@ -200,7 +201,9 @@ export default function StudioUpscalePanel() {
         });
         if (!res.ok) return;
         const json = (await res.json()) as { data?: StudioHistoryItem[]; refundHints?: RefundHint[] };
-        if (Array.isArray(json.data)) setHistoryItems(json.data);
+        if (Array.isArray(json.data)) {
+          setHistoryItems((prev) => mergeStudioHistoryWithServer(json.data ?? [], prev));
+        }
         const hints = json.refundHints ?? [];
         if (hints.length) {
           applyRefundHints(hints, grantCreditsRef.current, creditsRef);
@@ -302,8 +305,8 @@ export default function StudioUpscalePanel() {
     }
 
     const label = isImage
-      ? `Topaz Image ${topazImageUpscaleKieFactorToTierLabel(imageUpscaleTier)}`
-      : `Topaz ${videoUpscaleFactor}×`;
+      ? `Image upscale · ${topazImageUpscaleKieFactorToTierLabel(imageUpscaleTier)}`
+      : `Video upscale · ${videoUpscaleFactor}×`;
 
     if (!creditBypass) {
       spendCredits(credits);
@@ -318,7 +321,7 @@ export default function StudioUpscalePanel() {
         label,
         createdAt: startedAt,
         model: isImage ? KIE_TOPAZ_IMAGE_UPSCALE_MODEL : KIE_TOPAZ_VIDEO_UPSCALE_MODEL,
-        modelLabel: isImage ? "Topaz image upscale" : "Topaz video upscale",
+        modelLabel: isImage ? "Image upscale" : "Video upscale",
         aspectRatio: isImage ? "1:1" : videoAspectPreset,
       },
       ...prev,
@@ -352,12 +355,23 @@ export default function StudioUpscalePanel() {
           inputUrls: inputUrl ? [inputUrl] : undefined,
           aspectRatio: isImage ? "1:1" : videoAspectPreset,
         });
-        if (rowId) {
-          setHistoryItems((prev) =>
-            prev.map((i) =>
-              i.id === jobId ? { ...i, id: rowId, studioGenerationKind: "studio_upscale" } : i,
-            ),
-          );
+        setHistoryItems((prev) =>
+          prev.map((i) =>
+            i.id === jobId
+              ? {
+                  ...i,
+                  ...(rowId ? { id: rowId } : {}),
+                  externalTaskId: json.taskId,
+                  studioGenerationKind: "studio_upscale",
+                }
+              : i,
+          ),
+        );
+        if (!rowId) {
+          toast.warning("Could not save job to library", {
+            description:
+              "Upscale may still be running on the provider. Reload in a minute or run the studio_generations aspect_ratio migration in Supabase.",
+          });
         }
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Error";
@@ -472,7 +486,7 @@ export default function StudioUpscalePanel() {
                         <img
                           src={previewSrc}
                           alt="Source for upscale"
-                          className="absolute inset-0 z-[1] h-full w-full bg-black object-cover"
+                          className="absolute inset-0 z-[1] h-full w-full bg-black object-contain"
                         />
                         <UploadBusyOverlay active={busy} className="rounded-xl" />
                       </>
@@ -597,22 +611,9 @@ export default function StudioUpscalePanel() {
                 </div>
               </div>
             )}
-            {previewSrc && upscalePickerId === "upscale/image" ? (
-              <div className="relative mt-1 w-full max-w-md space-y-1.5">
-                <div className="relative overflow-hidden rounded-xl border border-white/10 bg-black">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={previewSrc}
-                    alt="Source for upscale"
-                    className="max-h-[min(40vh,320px)] w-full bg-black object-contain lg:max-h-[min(52vh,420px)]"
-                  />
-                  <UploadBusyOverlay active={busy} className="rounded-xl" />
-                </div>
-              </div>
-            ) : null}
             {upscalePickerId === "upscale/image" ? (
               <StudioUpscaleDiscreteSlider
-                label="Output tier (Topaz)"
+                label="Output tier"
                 value={imageUpscaleTier}
                 options={IMAGE_TIER_OPTIONS}
                 tickLabels={IMAGE_TIER_TICKS}

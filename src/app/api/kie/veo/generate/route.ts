@@ -3,6 +3,7 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import {
   kieVeoGenerate,
+  normalizeKieVeoModel,
   type KieVeoAspectRatio,
   type KieVeoGenerationType,
   type KieVeoModel,
@@ -17,8 +18,7 @@ type Body = {
   accountPlan?: string;
   personalApiKey?: string;
   prompt: string;
-  /** @deprecated `veo3_fast` is accepted but mapped to `veo3`. */
-  model?: KieVeoModel | "veo3_fast";
+  model?: KieVeoModel | string;
   aspectRatio?: KieVeoAspectRatio;
   generationType?: KieVeoGenerationType;
   imageUrls?: string[];
@@ -44,11 +44,16 @@ export async function POST(req: Request) {
       ? [body.imageUrl]
       : [];
 
-  const generationType: KieVeoGenerationType =
+  let generationType: KieVeoGenerationType =
     body?.generationType ??
     (normalizedImageUrls.length > 0 ? "FIRST_AND_LAST_FRAMES_2_VIDEO" : "TEXT_2_VIDEO");
 
-  const veoModel = body?.model === "veo3_fast" ? "veo3" : (body?.model ?? "veo3");
+  const veoModel = normalizeKieVeoModel(body?.model);
+  // REFERENCE_2_VIDEO is Fast-only per KIE; coerce otherwise.
+  if (generationType === "REFERENCE_2_VIDEO" && veoModel !== "veo3_fast") {
+    generationType =
+      normalizedImageUrls.length > 0 ? "FIRST_AND_LAST_FRAMES_2_VIDEO" : "TEXT_2_VIDEO";
+  }
   const personalKey =
     body && hasPersonalApiKey(body.personalApiKey) ? body.personalApiKey.trim() : undefined;
   if (!personalKey) {

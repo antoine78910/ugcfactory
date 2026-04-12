@@ -1,15 +1,11 @@
 export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
-import type {
-  KieVeoAspectRatio,
-  KieVeoGenerationType,
-  KieVeoModel,
-} from "@/lib/kie";
+import { normalizeKieVeoModel, type KieVeoAspectRatio, type KieVeoGenerationType } from "@/lib/kie";
 
 type Body = {
   prompt?: string;
-  model?: KieVeoModel | "veo3_fast";
+  model?: string;
   aspectRatio?: KieVeoAspectRatio;
   generationType?: KieVeoGenerationType;
   imageUrls?: string[];
@@ -36,7 +32,7 @@ export async function POST(req: Request) {
     product: "veo3.1",
     endpoint: "/api/v1/veo/generate",
     prompt: body?.prompt ?? "",
-    model: body?.model === "veo3_fast" ? "veo3" : (body?.model ?? "veo3"),
+    model: normalizeKieVeoModel(body?.model),
     aspect_ratio: body?.aspectRatio ?? "16:9",
     generationType,
     imageUrls: normalizedImageUrls.length > 0 ? normalizedImageUrls : undefined,

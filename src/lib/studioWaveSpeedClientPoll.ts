@@ -26,15 +26,31 @@ export function pickFirstWaveTranslateVideoUrl(outputs: string[] | undefined): s
   return videoish ?? list[0];
 }
 
+const POLL_INTERVAL_MS = 4000;
+const POLL_MAX_ROUNDS = 120;
+const STATUS_FETCH_TIMEOUT_MS = 45_000;
+
+async function fetchPredictionWithTimeout(taskId: string): Promise<Response> {
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), STATUS_FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(`/api/wavespeed/prediction?taskId=${encodeURIComponent(taskId)}`, {
+      cache: "no-store",
+      signal: ac.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function pollWaveSpeedVideoTranslate(taskId: string): Promise<string> {
   const id = taskId.trim();
   if (!id) throw new Error("Missing translation task id.");
 
-  for (let i = 0; i < 120; i++) {
-    const res = await fetch(`/api/wavespeed/prediction?taskId=${encodeURIComponent(id)}`, {
-      cache: "no-store",
-    });
-    const json = (await res.json()) as {
+  for (let i = 0; i < POLL_MAX_ROUNDS; i++) {
+    const res = await fetchPredictionWithTimeout(id);
+    const text = await res.text();
+    let json: {
       data?: {
         status?: string;
         outputs?: string[];
@@ -45,11 +61,23 @@ export async function pollWaveSpeedVideoTranslate(taskId: string): Promise<strin
       };
       error?: string;
     };
-    if (!res.ok) throw new Error(json.error || "Translation status failed");
+    try {
+      json = text.trim() ? (JSON.parse(text) as typeof json) : {};
+    } catch {
+      const snippet = text.slice(0, 200).replace(/\s+/g, " ");
+      throw new Error(
+        res.ok
+          ? `Invalid translation status JSON: ${snippet}`
+          : `Translation status error (HTTP ${res.status}): ${snippet}`,
+      );
+    }
+    if (!res.ok) {
+      throw new Error(json.error?.trim() || `Translation status failed (HTTP ${res.status}).`);
+    }
 
     const d = json.data;
     if (d?.failed) {
-      throw new Error(d.error?.trim() || "Translation failed");
+      throw new Error(d.error?.trim() || "Translation failed.");
     }
     if (d?.done) {
       const u = pickFirstWaveTranslateVideoUrl(d.outputs);
@@ -57,12 +85,12 @@ export async function pollWaveSpeedVideoTranslate(taskId: string): Promise<strin
       throw new Error("Translation completed but returned no video URL.");
     }
     if (waveTranslateStatusIsSuccess(d?.status) && d?.waitingForOutputs) {
-      await new Promise((r) => setTimeout(r, 4000));
+      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
       continue;
     }
-    await new Promise((r) => setTimeout(r, 4000));
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
   }
-  throw new Error("Translation timeout");
+  throw new Error("Translation timed out. Please try again.");
 }
 
 export { completeStudioTask };

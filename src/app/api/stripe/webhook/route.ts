@@ -33,20 +33,12 @@ import {
   addPackCredits as addPackCreditsLedger,
 } from "@/lib/creditGrants";
 import { brevoUpsertContact, brevoTrackEvent } from "@/lib/brevo";
+import {
+  stripeSubscriptionPeriodEndDate,
+  stripeSubscriptionPeriodEndIso,
+} from "@/lib/stripeSubscriptionPeriodEnd";
 
-/** Safely convert a Stripe Unix-second timestamp to an ISO string; returns null on invalid input. */
-function safePeriodEndIso(raw: unknown): string | null {
-  if (typeof raw !== "number" || raw <= 0 || !Number.isFinite(raw)) return null;
-  const d = new Date(raw * 1000);
-  return Number.isFinite(d.getTime()) ? d.toISOString() : null;
-}
-
-/** Same as safePeriodEndIso but returns a Date (fallback: 30 days from now). */
-function safePeriodEndDate(raw: unknown): Date {
-  if (typeof raw === "number" && raw > 0 && Number.isFinite(raw)) {
-    const d = new Date(raw * 1000);
-    if (Number.isFinite(d.getTime())) return d;
-  }
+function subscriptionPeriodEndFallbackDate(): Date {
   return new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 }
 
@@ -184,7 +176,8 @@ export async function POST(req: Request) {
           }
 
           if (isSubscriptionPlanId(planId)) {
-            const periodEnd = safePeriodEndDate((sub as any).current_period_end);
+            const periodEnd =
+              stripeSubscriptionPeriodEndDate(sub) ?? subscriptionPeriodEndFallbackDate();
             const periodEndIso = periodEnd.toISOString();
             await admin.from("user_subscriptions").upsert({
               user_id: userId,
@@ -265,7 +258,8 @@ export async function POST(req: Request) {
         let renewalPeriodEnd: Date;
         try {
           liveSub = await stripe.subscriptions.retrieve(subId);
-          renewalPeriodEnd = safePeriodEndDate((liveSub as any).current_period_end);
+          renewalPeriodEnd =
+            stripeSubscriptionPeriodEndDate(liveSub) ?? subscriptionPeriodEndFallbackDate();
         } catch {
           renewalPeriodEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
         }
@@ -332,7 +326,7 @@ export async function POST(req: Request) {
           .maybeSingle();
 
         if (existing) {
-          const updatedEndIso = safePeriodEndIso((session as any).current_period_end);
+          const updatedEndIso = stripeSubscriptionPeriodEndIso(session);
           await admin.from("user_subscriptions").update({
             status: session.status,
             ...(updatedEndIso ? { current_period_end: updatedEndIso } : {}),
@@ -355,7 +349,7 @@ export async function POST(req: Request) {
               if (match) planId = match.planId;
             }
             if (email) {
-              const accessEnds = safePeriodEndIso((sub as any).current_period_end);
+              const accessEnds = stripeSubscriptionPeriodEndIso(sub) ?? null;
               await brevoEmitCancelSubscription({
                 email,
                 planId: typeof planId === "string" ? planId : "unknown",

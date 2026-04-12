@@ -53,10 +53,21 @@ export function mergeStudioHistoryWithServer(
     serverFilteredWithAspect.flatMap((i) => (i.mediaUrl?.trim() ? [i.mediaUrl.trim()] : [])),
   );
   const now = Date.now();
-  const KEEP_MS = 5 * 60 * 1000;
+  /** Local-only optimistic rows (no provider task / DB row yet). */
+  const KEEP_EPHEMERAL_MS = 5 * 60 * 1000;
+  /**
+   * PiAPI Seedance / KIE Market video jobs often exceed 5 minutes; dropping the optimistic row
+   * before the server list includes the same `studio_generations` id made the card vanish while the
+   * provider was still processing (see merge with `studioGenerationId` / `externalTaskId`).
+   */
+  const KEEP_REGISTERED_GENERATING_MS = 60 * 60 * 1000;
   const KEEP_READY_MS = 24 * 60 * 60 * 1000;
   const kept = prev.filter((i) => {
     if (serverIds.has(i.id)) return false;
+    const sg = i.studioGenerationId?.trim();
+    if (sg && serverIds.has(sg)) {
+      return false;
+    }
     if (
       i.status === "ready" &&
       i.mediaUrl?.trim() &&
@@ -65,7 +76,17 @@ export function mergeStudioHistoryWithServer(
     ) {
       return true;
     }
-    return now - i.createdAt < KEEP_MS && (i.status === "generating" || i.status === "failed");
+    if (i.status === "failed") {
+      return now - i.createdAt < KEEP_EPHEMERAL_MS;
+    }
+    if (i.status === "generating") {
+      const linked =
+        Boolean(sg) ||
+        Boolean(i.externalTaskId?.trim());
+      const maxAge = linked ? KEEP_REGISTERED_GENERATING_MS : KEEP_EPHEMERAL_MS;
+      return now - i.createdAt < maxAge;
+    }
+    return false;
   });
   if (!kept.length) return serverFilteredWithAspect;
   return [...kept, ...serverFilteredWithAspect].sort((a, b) => b.createdAt - a.createdAt);

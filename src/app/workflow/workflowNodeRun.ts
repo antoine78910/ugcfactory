@@ -19,8 +19,8 @@ import {
   studioImageModelSupportsResolutionPicker,
   type StudioImageKiePickerModelId,
 } from "@/lib/studioImageModels";
-import type { KieVeoAspectRatio, KieVeoModel } from "@/lib/kie";
-import { pollKlingVideo } from "@/lib/studioKlingClientPoll";
+import { normalizeKieVeoModel, type KieVeoAspectRatio } from "@/lib/kie";
+import { pollKlingVideo, pollVeoVideo } from "@/lib/studioKlingClientPoll";
 
 export function stripStickyHtmlToText(html: string): string {
   const h = html.trim();
@@ -103,13 +103,24 @@ export function mapWorkflowImageResolutionToStudio(res: string): "1K" | "2K" | "
   return "1K";
 }
 
+const WORKFLOW_STATUS_FETCH_TIMEOUT_MS = 45_000;
+
 async function pollNanoBananaTask(taskId: string, personalApiKey?: string): Promise<string> {
   const keyParam = personalApiKey ? `&personalApiKey=${encodeURIComponent(personalApiKey)}` : "";
   for (let i = 0; i < 120; i++) {
-    const res = await fetch(`/api/nanobanana/task?taskId=${encodeURIComponent(taskId)}${keyParam}`, {
-      cache: "no-store",
-    });
-    const json = (await res.json()) as {
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), WORKFLOW_STATUS_FETCH_TIMEOUT_MS);
+    let res: Response;
+    try {
+      res = await fetch(`/api/nanobanana/task?taskId=${encodeURIComponent(taskId)}${keyParam}`, {
+        cache: "no-store",
+        signal: ac.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+    const text = await res.text();
+    let json: {
       data?: {
         successFlag?: number;
         errorMessage?: string | null;
@@ -117,7 +128,15 @@ async function pollNanoBananaTask(taskId: string, personalApiKey?: string): Prom
       };
       error?: string;
     };
-    if (!res.ok) throw new Error(json.error || "Image status failed");
+    try {
+      json = text.trim() ? (JSON.parse(text) as typeof json) : {};
+    } catch {
+      const snippet = text.slice(0, 200).replace(/\s+/g, " ");
+      throw new Error(
+        res.ok ? `Invalid image task JSON: ${snippet}` : `Image status error (HTTP ${res.status}): ${snippet}`,
+      );
+    }
+    if (!res.ok) throw new Error(json.error?.trim() || `Image status failed (HTTP ${res.status}).`);
     const d = json.data;
     if (!d) throw new Error("No task data");
     if (d.successFlag === 1) {
@@ -125,10 +144,10 @@ async function pollNanoBananaTask(taskId: string, personalApiKey?: string): Prom
       if (!u?.trim()) throw new Error("No image URL from provider");
       return u.trim();
     }
-    if (d.successFlag === -1) throw new Error(d.errorMessage || "Image generation failed");
+    if (d.successFlag === -1) throw new Error(d.errorMessage?.trim() || "Image generation failed.");
     await new Promise((r) => setTimeout(r, 2000));
   }
-  throw new Error("Image generation timed out");
+  throw new Error("Image generation timed out. Please try again.");
 }
 
 async function registerStudioVideoTask(params: {
@@ -160,32 +179,6 @@ async function completeStudioGenerationTask(taskId: string, resultUrl: string): 
   }
 }
 
-async function pollVeoVideo(taskId: string, personalApiKey?: string): Promise<string> {
-  const keyParam = personalApiKey ? `&personalApiKey=${encodeURIComponent(personalApiKey)}` : "";
-  for (let i = 0; i < 120; i++) {
-    const res = await fetch(`/api/kie/veo/status?taskId=${encodeURIComponent(taskId)}${keyParam}`, {
-      cache: "no-store",
-    });
-    const json = (await res.json()) as {
-      data?: { successFlag?: number; errorMessage?: string | null; response?: { resultUrls?: string[] } };
-      error?: string;
-    };
-    if (!res.ok) throw new Error(json.error || "Veo status failed");
-    const d = json.data;
-    if (!d) throw new Error("No data");
-    if (d.successFlag === 1) {
-      const u = d.response?.resultUrls?.[0];
-      if (!u) throw new Error("No video URL");
-      return u;
-    }
-    if (d.successFlag === 2 || d.successFlag === 3) {
-      throw new Error(d.errorMessage || "Veo generation failed");
-    }
-    await new Promise((r) => setTimeout(r, 4000));
-  }
-  throw new Error("Veo generation timed out");
-}
-
 function workflowVideoDefaultDuration(modelId: string): number {
   switch (modelId) {
     case "kling-3.0/video":
@@ -200,6 +193,10 @@ function workflowVideoDefaultDuration(modelId: string): number {
     case "bytedance/seedance-2":
     case "bytedance/seedance-2-fast":
       return 10;
+    case "veo3_lite":
+    case "veo3_fast":
+    case "veo3":
+      return 8;
     default:
       return 5;
   }
@@ -222,7 +219,7 @@ export function resolveWorkflowVideoModelId(raw: string): string {
 }
 
 function isVeoPicker(id: string): boolean {
-  return id === "veo3" || id === "veo3_fast";
+  return id === "veo3_lite" || id === "veo3_fast" || id === "veo3";
 }
 
 function isSeedancePicker(id: string): boolean {
@@ -321,7 +318,7 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
   }
 
   if (isVeoPicker(modelId)) {
-    const veoModel: KieVeoModel = "veo3";
+    const veoModel = normalizeKieVeoModel(modelId);
     if (!pKey && !canUseVeoApiModel(params.planId, veoModel)) {
       throw new Error(veoUpgradeMessage(params.planId, veoModel) ?? "Subscription upgrade required for Veo.");
     }
@@ -334,7 +331,7 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
         prompt: params.prompt,
         model: veoModel,
         aspectRatio: veoAspect,
-        generationType: startUrl ? "REFERENCE_2_VIDEO" : "TEXT_2_VIDEO",
+        generationType: startUrl ? "FIRST_AND_LAST_FRAMES_2_VIDEO" : "TEXT_2_VIDEO",
         imageUrls: startUrl ? [startUrl] : undefined,
         personalApiKey: pKey,
       }),

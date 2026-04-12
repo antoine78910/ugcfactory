@@ -8,6 +8,18 @@ Single index of **official documentation URLs** and where **in-app credits / USD
 - **Public snapshot:** `GET /api/pricing` — `src/app/api/pricing/route.ts`.
 - **Studio billing call sites:** `calculateVideoCreditsForModel`, `calculateImageCredits*`, etc. from `pricing.ts`.
 
+## Studio job persistence (`studio_generations`)
+
+Server writes use **only** these insert paths:
+
+| Flow | Route / code | Notes |
+| ---- | ------------ | ----- |
+| Studio Image (KIE) | `POST /api/studio/generations/start` | Inserts rows **without** `model` (picker id is not stored on the row today). |
+| Video (Kling / Veo / PiAPI), motion control, translate repair, workflow, Topaz image upscale, Link-to-Ad, motion/translate pending repair | `POST /api/studio/generations/register` | Persists optional `model` (picker / provider id) when present; **retries without `model`** if the DB has no `studio_generations.model` column (same pattern as `aspect_ratio`). |
+| Voice change (ElevenLabs) | `POST /api/elevenlabs/speech-to-speech` | Direct insert, no `model` field. |
+
+Apply `supabase/studio_generations.sql` + `studio_generations_aspect_ratio.sql` on new environments so optional columns exist; the app avoids sending `model` until the column is present everywhere you care about.
+
 ## Text-to-video vs image-to-video (KIE)
 
 Several pickers use **one UI id**; the backend resolves to **two KIE `model` strings** depending on reference image presence.
@@ -40,7 +52,11 @@ Several pickers use **one UI id**; the backend resolves to **two KIE `model` str
 | Kling 3.0    | [motion-control-v3](https://docs.kie.ai/market/kling/motion-control-v3) |
 | Kling 2.6    | [motion-control](https://docs.kie.ai/market/kling/motion-control) |
 
+**Request shape:** KIE expects `input.mode` as **`720p` or `1080p`** (not `std` / `pro`). Studio labels the control **Background source** for both families: Kling 3.0 sends `background_source` (`input_video` / `input_image`); Kling 2.6 maps the same choice to `character_orientation` (`video` / `image`) because that API has no `background_source` field (`image` orientation: reference clip **≤10s** per provider docs).
+
 **Credits:** `MOTION_CONTROL_CREDITS_PER_SECOND` and `calculateMotionControlCreditsFromDuration` in `src/lib/pricing.ts`.
+
+**API:** `POST /api/kling/motion-control` — body `motionFamily`: `kling-3.0` (default) or `kling-2.6`.
 
 ---
 
@@ -57,9 +73,13 @@ Several pickers use **one UI id**; the backend resolves to **two KIE `model` str
 
 **Credits:** `IMAGE_MODEL` and related helpers in `src/lib/pricing.ts`; image picker routing in `src/lib/studioImageModels.ts` (and API routes under `src/app/api/studio/`).
 
+**Studio picker hints:** `src/lib/studioImagePickerCapabilities.ts` (aspect / resolution row text per model).
+
 ---
 
 ## Video — KIE Market
+
+**Task status (all Market jobs):** [Get task details / `recordInfo`](https://docs.kie.ai/market/common/get-task-detail) — JSON envelope uses **`code`** + **`msg`** (not `message`). Terminal codes (e.g. **422** `recordInfo is null`, **501** generation failed, **500** server error) must surface to the client; implementation: `kieMarketRecordInfo` in `src/lib/kieMarket.ts`, proxied by `GET /api/kling/status`.
 
 | Model / flow | Docs |
 | ------------ | ---- |
@@ -70,9 +90,11 @@ Several pickers use **one UI id**; the backend resolves to **two KIE `model` str
 | Sora 2 image-to-video | [sora-2-image-to-video](https://docs.kie.ai/market/sora2/sora-2-image-to-video) |
 | Sora 2 Pro text-to-video | [sora-2-pro-text-to-video](https://docs.kie.ai/market/sora2/sora-2-pro-text-to-video) |
 | Sora 2 Pro image-to-video | [sora-2-pro-image-to-video](https://docs.kie.ai/market/sora2/sora-2-pro-image-to-video) |
-| Veo 3.1 (quality only in product) | [generate-veo-3-video](https://docs.kie.ai/veo3-api/generate-veo-3-video) |
+| Veo 3.1 (`veo3` Quality, `veo3_fast` Fast, `veo3_lite` Lite — same credits for text- and image-to-video per tier) | [generate-veo-3-video](https://docs.kie.ai/veo3-api/generate-veo-3-video) |
 
-**Implementation:** `src/app/api/kling/generate/route.ts`, `src/lib/kie.ts` (Veo), `kieVideoModelResolver.ts`.
+**Implementation:** `src/app/api/kie/veo/generate/route.ts`, `src/lib/kie.ts` (Veo payload), `src/lib/pricing.ts` (`VEO_3_1_*`, `calculateVeo31Credits`). Kling Market: `src/app/api/kling/generate/route.ts`, `src/lib/kieMarket.ts`, `kieVideoModelResolver.ts`.
+
+**Studio UI (duration / aspect / quality per picker):** `src/lib/studioVideoModelCapabilities.ts` — keep in sync with `validateStudioVideoJobDuration` and the generate route.
 
 ---
 

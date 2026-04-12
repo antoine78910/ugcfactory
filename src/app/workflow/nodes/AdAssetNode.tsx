@@ -124,7 +124,9 @@ const VIDEO_MODELS: { value: string; label: string }[] = [
   { value: "bytedance/seedance-2-fast-preview", label: "Seedance 2 Fast Preview" },
   { value: "bytedance/seedance-2", label: "Seedance 2" },
   { value: "bytedance/seedance-2-fast", label: "Seedance 2 Fast" },
-  { value: "veo3", label: "Veo 3.1" },
+  { value: "veo3_lite", label: "Veo 3.1 Lite" },
+  { value: "veo3_fast", label: "Veo 3.1 Fast" },
+  { value: "veo3", label: "Veo 3.1 Quality" },
 ];
 
 const VARIATION_MODELS: { value: string; label: string }[] = [

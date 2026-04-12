@@ -49,6 +49,7 @@ import {
   type StudioImageKiePickerModelId,
 } from "@/lib/studioImageModels";
 import { STUDIO_IMAGE_TAB_KINDS } from "@/lib/studioGenerationKinds";
+import { studioImagePickerCardHints } from "@/lib/studioImagePickerCapabilities";
 import { clipboardImageFiles } from "@/lib/clipboardImage";
 import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
 import { uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
@@ -80,40 +81,35 @@ const IMAGE_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
     label: "NanoBanana Pro",
     icon: "google",
     exclusive: true,
-    resolution: "",
-    durationRange: "",
+    ...studioImagePickerCardHints("pro"),
     searchText: "nanobanana pro nano banana pro google",
   },
   {
     id: "nano",
     label: "NanoBanana 2",
     icon: "google",
-    resolution: "",
-    durationRange: "",
+    ...studioImagePickerCardHints("nano"),
     searchText: "nanobanana 2 standard google",
   },
   {
     id: "seedream_45",
     label: "Seedream 4.5",
     icon: "google",
-    resolution: "",
-    durationRange: "",
+    ...studioImagePickerCardHints("seedream_45"),
     searchText: "seedream 4.5 text to image image to image",
   },
   {
     id: "seedream_50_lite",
     label: "Seedream 5.0 Lite",
     icon: "google",
-    resolution: "",
-    durationRange: "",
+    ...studioImagePickerCardHints("seedream_50_lite"),
     searchText: "seedream 5.0 lite text to image image to image",
   },
   {
     id: "google_nano_banana",
     label: "Google Nano Banana",
     icon: "google",
-    resolution: "",
-    durationRange: "",
+    ...studioImagePickerCardHints("google_nano_banana"),
     searchText: "google nano banana text to image image to image",
   },
 ];

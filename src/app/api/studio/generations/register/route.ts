@@ -70,13 +70,24 @@ export async function POST(req: Request) {
     : [];
   const aspectRatio = String(body.aspectRatio ?? "").trim();
 
+  /** Older Supabase DBs without `studio_generations.aspect_ratio` reject inserts — retry without it (see `supabase/studio_generations_aspect_ratio.sql`). */
+  function isMissingAspectRatioColumnError(message: string): boolean {
+    const m = message.toLowerCase();
+    return m.includes("aspect_ratio") && (m.includes("column") || m.includes("schema cache"));
+  }
+
+  /** Same pattern as aspect_ratio — `studio_generations.sql` / `schema.sql` include `model`; very old DBs may not. */
+  function isMissingModelColumnError(message: string): boolean {
+    const m = message.toLowerCase();
+    return m.includes("model") && (m.includes("column") || m.includes("schema cache"));
+  }
+
   if (isFailed && taskIds.length === 0) {
     const single = {
       user_id: user.id,
       kind,
       status: "failed" as const,
       label,
-      ...(model ? { model } : {}),
       external_task_id: `failed-${Date.now()}`,
       provider,
       credits_charged: 0,
@@ -84,8 +95,29 @@ export async function POST(req: Request) {
       ...(errorMessage ? { error_message: errorMessage } : {}),
       ...(inputUrls.length > 0 ? { input_urls: inputUrls } : {}),
       ...(aspectRatio ? { aspect_ratio: aspectRatio } : {}),
+      ...(model ? { model } : {}),
     };
-    const { data, error } = await supabase.from("studio_generations").insert(single).select("id, external_task_id");
+    let insertFailedPayload: Record<string, unknown> = { ...single };
+    let { data, error } = await supabase
+      .from("studio_generations")
+      .insert(insertFailedPayload as typeof single)
+      .select("id, external_task_id");
+    if (error && isMissingAspectRatioColumnError(error.message) && "aspect_ratio" in insertFailedPayload) {
+      const { aspect_ratio: _ar, ...rest } = insertFailedPayload;
+      insertFailedPayload = rest;
+      ({ data, error } = await supabase
+        .from("studio_generations")
+        .insert(insertFailedPayload as typeof single)
+        .select("id, external_task_id"));
+    }
+    if (error && isMissingModelColumnError(error.message) && "model" in insertFailedPayload) {
+      const { model: _m, ...rest } = insertFailedPayload;
+      insertFailedPayload = rest;
+      ({ data, error } = await supabase
+        .from("studio_generations")
+        .insert(insertFailedPayload as typeof single)
+        .select("id, external_task_id"));
+    }
     if (error) {
       serverLog("studio_generations_register_failed", { kind, count: 1, message: error.message });
       return NextResponse.json({ error: error.message }, { status: 502 });
@@ -104,7 +136,6 @@ export async function POST(req: Request) {
     kind: string;
     status: "processing" | "failed";
     label: string;
-    model?: string;
     external_task_id: string;
     provider: string;
     credits_charged: number;
@@ -112,6 +143,7 @@ export async function POST(req: Request) {
     error_message?: string;
     input_urls?: string[];
     aspect_ratio?: string;
+    model?: string;
   };
 
   const rowsOut: { id: string; taskId: string }[] = [];
@@ -138,7 +170,6 @@ export async function POST(req: Request) {
       kind,
       status: (isFailed ? "failed" : "processing") as "processing" | "failed",
       label,
-      ...(model ? { model } : {}),
       external_task_id: externalTaskId,
       provider,
       credits_charged: isFailed ? 0 : baseCharge + (i === 0 ? remainder : 0),
@@ -146,11 +177,21 @@ export async function POST(req: Request) {
       ...(isFailed && errorMessage ? { error_message: errorMessage } : {}),
       ...(inputUrls.length > 0 ? { input_urls: inputUrls } : {}),
       ...(aspectRatio ? { aspect_ratio: aspectRatio } : {}),
+      ...(model ? { model } : {}),
     });
   }
 
   if (toInsert.length > 0) {
-    const { data, error } = await supabase.from("studio_generations").insert(toInsert).select("id, external_task_id");
+    let batch: InsertRow[] = toInsert;
+    let { data, error } = await supabase.from("studio_generations").insert(batch).select("id, external_task_id");
+    if (error && isMissingAspectRatioColumnError(error.message)) {
+      batch = batch.map(({ aspect_ratio: _a, ...row }) => row);
+      ({ data, error } = await supabase.from("studio_generations").insert(batch).select("id, external_task_id"));
+    }
+    if (error && isMissingModelColumnError(error.message)) {
+      batch = batch.map(({ model: _m, ...row }) => row);
+      ({ data, error } = await supabase.from("studio_generations").insert(batch).select("id, external_task_id"));
+    }
     if (error) {
       serverLog("studio_generations_register_failed", { kind, count: toInsert.length, message: error.message });
       return NextResponse.json({ error: error.message }, { status: 502 });

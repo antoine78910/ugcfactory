@@ -97,3 +97,19 @@ export function isCreditsOrSubscriptionPath(pathname: string): boolean {
   const first = stripped.split("/").filter(Boolean)[0] ?? "";
   return first === "credits" || first === "subscription";
 }
+
+/**
+ * Whether the pathname is the in-browser studio wizard (or legacy `/app/*`).
+ * Use before syncing `history.replaceState` / pushState to public URLs without `/app`.
+ */
+export function isBrowserStudioWizardPath(pathname: string): boolean {
+  if (pathname.startsWith("/app/") || pathname === "/app") return true;
+  return isStudioShellPath(pathname);
+}
+
+/** Strip a leading `/app` segment for comparisons (legacy URLs or dev without rewrite). */
+export function pathnameWithoutLegacyAppPrefix(pathname: string): string {
+  if (pathname === "/app" || pathname === "/app/") return "/";
+  if (pathname.startsWith("/app/")) return pathname.slice(4) || "/";
+  return pathname;
+}

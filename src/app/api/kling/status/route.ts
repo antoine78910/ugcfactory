@@ -50,6 +50,25 @@ export async function GET(req: Request) {
       // Match server poll (`kieImageTaskPollOutcome`): success without a URL yet stays in progress
       // so motion-control / Kling client polling does not throw "No video URL" or stick on empty.
       if (urls.length === 0) {
+        // #region agent log
+        fetch("http://127.0.0.1:7533/ingest/f9d4b1f9-c49b-46df-876a-08c4cd510df2", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "b39d28" },
+          body: JSON.stringify({
+            sessionId: "b39d28",
+            hypothesisId: "H-kling-success-empty-urls",
+            location: "kling/status/route.ts:success-no-urls",
+            message: "KIE state success but extractKieMediaUrls empty",
+            data: {
+              model: String(data.model ?? ""),
+              state: String(data.state ?? ""),
+              resultJsonLen: String(data.resultJson ?? "").length,
+              resultJsonHead: String(data.resultJson ?? "").slice(0, 160),
+            },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion
         return NextResponse.json({
           data: {
             status: "IN_PROGRESS",
@@ -76,6 +95,24 @@ export async function GET(req: Request) {
           status: "FAILED",
           response: [],
           error_message: userFacingProviderErrorOrDefault(rawFail),
+          raw: data,
+        },
+      });
+    }
+    // Sora / KIE sometimes return failMsg (e.g. "internal error") while state is still "generating" or unknown.
+    const failMsgOnly = (data.failMsg ?? "").trim();
+    if (failMsgOnly && urls.length === 0 && !kieRecordStateIsSuccess(data.state)) {
+      logGenerationFailure("kling/status", failMsgOnly, {
+        taskId,
+        provider: "kie-market",
+        state: data.state,
+        hint: "failMsg_without_terminal_state",
+      });
+      return NextResponse.json({
+        data: {
+          status: "FAILED",
+          response: [],
+          error_message: userFacingProviderErrorOrDefault(failMsgOnly),
           raw: data,
         },
       });

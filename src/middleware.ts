@@ -8,7 +8,12 @@ const MAIN_HOSTS = new Set(["youry.io", "www.youry.io"]);
 
 function isStudioHost(hostHeader: string): boolean {
   const host = hostHeader.split(":")[0].toLowerCase();
-  return host === APP_HOST || host === "localhost" || host.startsWith("127.0.0.1");
+  return (
+    host === APP_HOST ||
+    host === "localhost" ||
+    host.startsWith("127.0.0.1") ||
+    host.endsWith(".vercel.app")
+  );
 }
 
 /** Routes that have their own `src/app/<name>` pages — do not rewrite to `/app/*`. */

@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Download, FolderOpen, Info, LayoutGrid, List, Loader2, Mic, Sparkles, Trash2, Volume2, Wand2, X } from "lucide-react";
-import { CreditCostBadge } from "@/app/_components/CreditCostBadge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -16,7 +15,7 @@ import { isStudioGenerationRowId } from "@/lib/studioGenerationRowId";
 import { proxiedMediaSrc } from "@/lib/mediaProxyUrl";
 import { isStudioSeedreamImagePickerId, studioImageModelSupportsResolutionPicker } from "@/lib/studioImageModels";
 import { formatDisplayCredits } from "@/lib/creditLedgerTicks";
-import { studioImageCreditsChargedTotal, VOICE_CHANGE_CREDITS_FLAT } from "@/lib/pricing";
+import { studioImageCreditsChargedTotal } from "@/lib/pricing";
 import { studioHistoryAspectRatioCssValue } from "@/lib/studioHistoryAspect";
 
 export type StudioHistoryMediaKind = "image" | "video" | "motion" | "audio";
@@ -172,10 +171,11 @@ export function StudioGenerationsHistory({
     sourceId: string;
     url: string;
     poster?: string;
-    kind: "image" | "video" | "audio";
+    kind: "image" | "video" | "audio" | "motion";
     prompt: string;
     inputUrls?: string[];
     modelLabel?: string;
+    studioGenerationKind?: string;
   } | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editPrompt, setEditPrompt] = useState("");
@@ -347,7 +347,9 @@ export function StudioGenerationsHistory({
   const lightboxPosterUrl = lightboxItem?.poster ? proxiedMediaSrc(lightboxItem.poster) : undefined;
   const isLightboxVideo = Boolean(
     lightboxItem &&
-      (lightboxItem.kind === "video" || isProbablyVideoUrl(lightboxItem.url)) &&
+      (lightboxItem.kind === "video" ||
+        lightboxItem.kind === "motion" ||
+        isProbablyVideoUrl(lightboxItem.url)) &&
       !isProbablyAudioUrl(lightboxItem.url),
   );
 
@@ -577,10 +579,11 @@ export function StudioGenerationsHistory({
                               sourceId: item.id,
                               url: item.mediaUrl!,
                               poster: item.posterUrl,
-                              kind: "video",
+                              kind: item.kind === "motion" ? "motion" : "video",
                               prompt: item.label || "",
                               inputUrls: item.inputUrls,
                               modelLabel: item.modelLabel,
+                              studioGenerationKind: item.studioGenerationKind,
                             });
                           }}
                         />
@@ -600,6 +603,7 @@ export function StudioGenerationsHistory({
                                 prompt: item.label || "",
                                 inputUrls: item.inputUrls,
                                 modelLabel: item.modelLabel,
+                                studioGenerationKind: item.studioGenerationKind,
                               });
                             }}
                             className="block h-full w-full"
@@ -708,7 +712,9 @@ export function StudioGenerationsHistory({
                     <source src={lightboxMediaUrl} />
                   </audio>
                 </div>
-              ) : lightboxItem.kind === "video" || isProbablyVideoUrl(lightboxItem.url) ? (
+              ) : lightboxItem.kind === "video" ||
+                lightboxItem.kind === "motion" ||
+                isProbablyVideoUrl(lightboxItem.url) ? (
                 // eslint-disable-next-line jsx-a11y/media-has-caption
                 <video
                   ref={lightboxVideoRef}
@@ -764,10 +770,6 @@ export function StudioGenerationsHistory({
                   >
                     <Mic className="h-4 w-4 shrink-0 text-violet-300 transition-transform duration-200 group-hover/cv:scale-110" aria-hidden />
                     Change Voice
-                    <CreditCostBadge
-                      amount={VOICE_CHANGE_CREDITS_FLAT}
-                      className="ml-auto bg-violet-500/20 text-violet-200/90"
-                    />
                   </button>
                 ) : null}
 
@@ -806,34 +808,49 @@ export function StudioGenerationsHistory({
                   <div className="mb-2 text-sm font-semibold text-white/90">
                     {lightboxItem.inputUrls.length === 1 ? "Input" : "Inputs"}
                   </div>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-3">
                     {lightboxItem.inputUrls.map((inputUrl, idx) => {
-                      const isVideo = /\.(mp4|mov|webm|mkv|m4v)/i.test(inputUrl);
+                      const inputIsVideo = isProbablyVideoUrl(inputUrl);
+                      const displaySrc = proxiedMediaSrc(inputUrl);
+                      const motionTwoInputs =
+                        lightboxItem.studioGenerationKind === "motion_control" &&
+                        lightboxItem.inputUrls!.length === 2;
+                      const caption = motionTwoInputs
+                        ? inputIsVideo
+                          ? "Motion reference"
+                          : "Character image"
+                        : null;
                       return (
-                        <a
-                          key={idx}
-                          href={inputUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className="group/input relative block overflow-hidden rounded-lg border border-white/10 bg-black/40 transition hover:border-white/25"
-                        >
-                          {isVideo ? (
-                            <video
-                              src={inputUrl}
-                              muted
-                              playsInline
-                              preload="metadata"
-                              className="h-20 w-20 object-cover"
-                            />
-                          ) : (
-                            <img
-                              src={inputUrl}
-                              alt={`Input ${idx + 1}`}
-                              className="h-20 w-20 object-cover"
-                            />
-                          )}
-                        </a>
+                        <div key={idx} className="flex flex-col items-center gap-1">
+                          <a
+                            href={inputUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="group/input relative block overflow-hidden rounded-lg border border-white/10 bg-black/40 transition hover:border-white/25"
+                          >
+                            {inputIsVideo ? (
+                              <video
+                                src={displaySrc}
+                                muted
+                                playsInline
+                                preload="metadata"
+                                className="h-20 w-20 object-cover"
+                              />
+                            ) : (
+                              <img
+                                src={displaySrc}
+                                alt={caption ?? `Input ${idx + 1}`}
+                                className="h-20 w-20 object-cover"
+                              />
+                            )}
+                          </a>
+                          {caption ? (
+                            <span className="max-w-[5.5rem] text-center text-[10px] font-medium uppercase tracking-wide text-white/45">
+                              {caption}
+                            </span>
+                          ) : null}
+                        </div>
                       );
                     })}
                   </div>
@@ -848,7 +865,7 @@ export function StudioGenerationsHistory({
                   <div className="rounded-xl border border-white/10 bg-[#14141c]/80 p-3">
                     <div className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-white/90">
                       <Wand2 className="h-4 w-4 text-violet-300" aria-hidden />
-                      Topaz image upscale
+                      Image upscale
                     </div>
                     <p className="mb-2 text-[11px] leading-snug text-white/45">
                       Sharper, higher-resolution output. Billing follows the selected scale (2K / 4K / 8K tier).

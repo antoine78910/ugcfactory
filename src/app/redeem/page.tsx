@@ -369,7 +369,7 @@ function RedeemPageContent() {
 
           {/* CTA */}
           <Link
-            href="/app"
+            href="/"
             className="group relative mt-8 inline-flex items-center gap-2 overflow-hidden rounded-full bg-gradient-to-r from-violet-600 to-fuchsia-600 px-8 py-3 text-[14px] font-semibold text-white shadow-[0_4px_24px_rgba(139,92,246,0.35)] transition-all hover:shadow-[0_4px_32px_rgba(139,92,246,0.5)] hover:brightness-110"
           >
             <span className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/10 to-white/0 opacity-0 transition-opacity group-hover:opacity-100" />

@@ -860,21 +860,61 @@ export function calculateSoraCredits(durationSec: number): number {
 }
 
 // ---------------------------------------------------------------------------
-// Video — Veo 3.1 (fixed per-video tiers)
+// Video — Veo 3.1 (KIE Market: per-video by `model` + t2v / i2v same credits)
+// https://docs.kie.ai/veo3-api/generate-veo-3-video — `veo3` | `veo3_fast` | `veo3_lite`
 // ---------------------------------------------------------------------------
 
-/**
- * Google Veo 3.1 (KIE) — product uses the **quality** tier only (Fast variant removed from the app).
- */
+const _VEO_3_1_LITE_BASE = makeSora2ProTier({
+  model: "veo_3_1_lite",
+  our_price_usd: 0.15,
+  fal_list_price_usd: 0.4,
+});
+/** Text- or image-to-video, Lite. */
+export const VEO_3_1_LITE: VideoTierPricing = {
+  ..._VEO_3_1_LITE_BASE,
+  credits: 30,
+};
+
+const _VEO_3_1_FAST_BASE = makeSora2ProTier({
+  model: "veo_3_1_fast",
+  our_price_usd: 0.3,
+  fal_list_price_usd: 1.2,
+});
+/** Text- or image-to-video, Fast. */
+export const VEO_3_1_FAST: VideoTierPricing = {
+  ..._VEO_3_1_FAST_BASE,
+  credits: 60,
+};
+
 const _VEO_3_1_QUALITY_BASE = makeSora2ProTier({
   model: "veo_3_1_quality",
   our_price_usd: 1.25,
   fal_list_price_usd: 3.2,
 });
+/** Text- or image-to-video, Quality (flagship). */
 export const VEO_3_1_QUALITY: VideoTierPricing = {
   ..._VEO_3_1_QUALITY_BASE,
   credits: 250,
 };
+
+export type Veo31KieModelId = "veo3" | "veo3_fast" | "veo3_lite";
+
+export function normalizeVeo31KieModel(raw: string | undefined): Veo31KieModelId {
+  const m = (raw ?? "veo3_lite").trim();
+  if (m === "veo3_fast" || m === "veo3_lite") return m;
+  return "veo3";
+}
+
+export function calculateVeo31Credits(kieModel: string | undefined): number {
+  switch (normalizeVeo31KieModel(kieModel)) {
+    case "veo3_lite":
+      return VEO_3_1_LITE.credits;
+    case "veo3_fast":
+      return VEO_3_1_FAST.credits;
+    default:
+      return VEO_3_1_QUALITY.credits;
+  }
+}
 
 /** Sora 2 Pro: quality controlled by kling `mode` (std => Standard, pro => High). */
 export function calculateSora2ProCredits(durationSec: number, quality: string | undefined): number {
@@ -986,11 +1026,12 @@ export function calculateVideoCreditsForModel(opts: VideoCreditOptions): number 
   const quality = opts.quality;
 
   switch (opts.modelId) {
-    case "veo3":
-      return VEO_3_1_QUALITY.credits;
-    /** @deprecated Legacy client id; bill as quality. */
+    case "veo3_lite":
+      return calculateVeo31Credits("veo3_lite");
     case "veo3_fast":
-      return VEO_3_1_QUALITY.credits;
+      return calculateVeo31Credits("veo3_fast");
+    case "veo3":
+      return calculateVeo31Credits("veo3");
     case "openai/sora-2":
     case "sora-2-image-to-video":
     case "sora-2-text-to-video":
@@ -1056,8 +1097,8 @@ export function normalizeMotionControlQuality(quality: string | undefined): "720
 
 /** Motion control fixed per-second billing. */
 export const MOTION_CONTROL_CREDITS_PER_SECOND = {
-  "720p": 3,
-  "1080p": 4,
+  "720p": 0.85,
+  "1080p": 1.3,
 } as const;
 
 /** WaveSpeed / HeyGen video translate provider price from public docs. */
@@ -1066,7 +1107,7 @@ export const WAVESPEED_HEYGEN_TRANSLATE_COST_USD_PER_SECOND = 0.0375;
 export const WAVESPEED_HEYGEN_TRANSLATE_CREDITS_PER_SECOND = 1;
 
 /**
- * Motion control (Kling 3.0 MC): fixed credits/s by quality tier.
+ * Motion control (Kling 2.6 / 3.0): fixed credits/s by quality tier.
  * (No separate audio toggle in UI — priced by 720p/1080p only.)
  */
 export function calculateMotionControlCreditsFromDuration(

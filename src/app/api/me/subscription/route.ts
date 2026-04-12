@@ -8,6 +8,7 @@ import { parseAccountPlan, type AccountPlanId } from "@/lib/subscriptionModelAcc
 import { getPlanFromPriceId } from "@/lib/stripe/subscriptionPrices";
 import { isAllowedUser, isPersonalApiUser } from "@/lib/allowedUsers";
 import { getUserCreditBalance } from "@/lib/creditGrants";
+import { stripeSubscriptionPeriodEndIso } from "@/lib/stripeSubscriptionPeriodEnd";
 
 export type MeSubscriptionResponse = {
   planId: AccountPlanId;
@@ -116,6 +117,7 @@ export async function GET() {
             if (!match) continue;
 
             const { planId, billing } = match;
+            const periodEndIso = stripeSubscriptionPeriodEndIso(sub);
 
             // Sync DB with the live Stripe data
             try {
@@ -129,9 +131,7 @@ export async function GET() {
                     plan_id: planId,
                     billing,
                     status: sub.status,
-                    current_period_end: new Date(
-                      (sub as any).current_period_end * 1000,
-                    ).toISOString(),
+                    ...(periodEndIso ? { current_period_end: periodEndIso } : {}),
                   },
                   { onConflict: "user_id" },
                 );

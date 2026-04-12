@@ -26,7 +26,11 @@ import StudioGenerationsBackgroundPoll from "@/app/_components/StudioGenerations
 import { useCreditsPlan } from "@/app/_components/CreditsPlanContext";
 import SidebarCreditsBar from "@/app/_components/SidebarCreditsBar";
 import { cn } from "@/lib/utils";
-import { isCreditsOrSubscriptionPath, isStudioShellPath } from "@/lib/studioPaths";
+import {
+  isCreditsOrSubscriptionPath,
+  isStudioShellPath,
+  pathnameWithoutLegacyAppPrefix,
+} from "@/lib/studioPaths";
 
 const SIDEBAR_COLLAPSED_LS = "youry-studio-sidebar-collapsed";
 /** Last studio section for deep links back; CREATE highlight is cleared on /credits and /subscription. */
@@ -116,7 +120,7 @@ const PROJECTS_NAV: { id: StudioNavSection; label: string; icon: LucideIcon } = 
 
 function sectionHref(section: StudioNavSection, projectId: string | null | undefined): string {
   const slug = SECTION_TO_SLUG[section] ?? "link-to-ad";
-  let href = `/app/${slug}`;
+  let href = `/${slug}`;
   if (projectId) href += `?project=${encodeURIComponent(projectId)}`;
   return href;
 }
@@ -253,20 +257,20 @@ function StudioShellInner({
           >
             {navCollapsed ? (
               <div
-                className="group relative mx-auto h-8 w-full min-w-0 shrink-0 px-0.5"
-                title="Hover logo to expand menu"
+                className="group relative mx-auto flex h-8 w-full min-w-0 shrink-0 items-center justify-center px-0.5"
+                title="Hover icon to expand menu"
               >
                 <Link
-                  href="/app/link-to-ad"
-                  className="relative z-0 block h-8 w-full min-w-0"
+                  href="/link-to-ad"
+                  className="relative z-0 flex h-8 w-8 shrink-0 items-center justify-center"
                   title="Youry home"
                 >
                   <Image
-                    src="/youry-logo.png"
+                    src="/icon.png"
                     alt="Youry"
-                    width={174}
-                    height={52}
-                    className="h-8 w-auto max-w-full object-contain object-left"
+                    width={32}
+                    height={32}
+                    className="h-8 w-8 rounded-lg object-contain"
                     priority
                   />
                 </Link>
@@ -290,7 +294,7 @@ function StudioShellInner({
             ) : (
               <div className="flex w-full min-w-0 items-center justify-between gap-2">
                 <Link
-                  href="/app/link-to-ad"
+                  href="/link-to-ad"
                   className="inline-block min-w-0 shrink"
                   title="Youry home"
                 >
@@ -370,11 +374,8 @@ function StudioShellInner({
                         </div>
                       );
                     }
-                    const active =
-                      pathname === href ||
-                      pathname.startsWith(`${href}/`) ||
-                      pathname === `/app${href}` ||
-                      pathname.startsWith(`/app${href}/`);
+                    const pathNorm = pathnameWithoutLegacyAppPrefix(pathname);
+                    const active = pathNorm === href || pathNorm.startsWith(`${href}/`);
                     const content = (
                       <span className={cn("flex min-w-0 items-center gap-2.5", navCollapsed && "justify-center")}>
                         <NavIcon

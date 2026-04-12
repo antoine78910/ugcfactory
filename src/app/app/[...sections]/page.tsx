@@ -24,9 +24,10 @@ import StudioImagePanel from "@/app/_components/StudioImagePanel";
 import StudioUpscalePanel from "@/app/_components/StudioUpscalePanel";
 import StudioShell from "@/app/_components/StudioShell";
 import {
-  StudioSingleModelCard,
+  StudioModelPicker,
   studioSelectContentClass,
   studioSelectItemClass,
+  type StudioModelPickerItem,
 } from "@/app/_components/StudioModelPicker";
 import {
   useCreditsPlan,
@@ -75,6 +76,7 @@ import {
   universeHasPendingKlingTask,
 } from "@/lib/linkToAdUniverse";
 import { motionControlUpgradeMessage } from "@/lib/subscriptionModelAccess";
+import { motionControlBackgroundSourceDescription } from "@/lib/motionControlBackgroundSource";
 import { clipboardImageFiles } from "@/lib/clipboardImage";
 import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
 import { AvatarInputCornerBadge } from "@/app/_components/AvatarInputCornerBadge";
@@ -90,6 +92,7 @@ import {
 import { uploadBlobUrlToCdn, uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
 import { proxiedMediaSrc } from "@/lib/mediaProxyUrl";
 import { cn } from "@/lib/utils";
+import { isBrowserStudioWizardPath } from "@/lib/studioPaths";
 import { WAVESPEED_PROVIDER } from "@/lib/wavespeedChain";
 import {
   calculateWaveSpeedVideoTranslateCredits,
@@ -103,6 +106,26 @@ import {
   STUDIO_GENERATION_KIND_STUDIO_TRANSLATE_VIDEO,
   STUDIO_GENERATION_KIND_VOICE_CHANGE,
 } from "@/lib/studioGenerationKinds";
+
+/** Query param for GET `/api/studio/generations` when the Voice tab is active. */
+const VOICE_HISTORY_API_KINDS = `${STUDIO_GENERATION_KIND_VOICE_CHANGE},studio_audio`;
+
+/**
+ * Voice history must only show voice jobs. Previously, "Change voice" copied a motion (or other)
+ * row into `voiceHistoryItems`; merge kept it for up to 24h because the server never returns that id
+ * for the voice kind filter.
+ */
+function mergeVoiceHistoryWithServer(
+  serverItems: StudioHistoryItem[],
+  prev: StudioHistoryItem[],
+): StudioHistoryItem[] {
+  const merged = mergeStudioHistoryWithServer(serverItems, prev);
+  return merged.filter((i) => {
+    const k = i.studioGenerationKind?.trim();
+    if (!k) return true;
+    return k === STUDIO_GENERATION_KIND_VOICE_CHANGE || k === "studio_audio";
+  });
+}
 
 type WizardStep = "url" | "analysis" | "quiz" | "image" | "video";
 type AppSection =
@@ -386,7 +409,7 @@ const VOICE_CHANGE_UPLOAD_ACCEPT = [
   STUDIO_VIDEO_FILE_ACCEPT,
 ].join(",");
 
-/** Derive the active section from the browser pathname (e.g. "/app/link-to-ad"). */
+/** Derive the active section from the browser pathname (e.g. "/link-to-ad" or legacy "/app/..."). */
 export function sectionFromPathname(pathname: string): AppSection {
   const stripped = pathname.replace(/^\/app\/?/, "");
   const first = stripped.split("/").filter(Boolean)[0] ?? "";
@@ -394,7 +417,7 @@ export function sectionFromPathname(pathname: string): AppSection {
   return SLUG_TO_SECTION[first] ?? "link_to_ad";
 }
 
-/** Derive the translate sub-mode from the pathname (e.g. "/app/translate/voice-change"). */
+/** Derive the translate sub-mode from the pathname (e.g. "/translate/voice-change"). */
 function translateModeFromPathname(pathname: string): TranslateToolMode | null {
   const stripped = pathname.replace(/^\/app\/?/, "");
   const segs = stripped.split("/").filter(Boolean);
@@ -402,10 +425,10 @@ function translateModeFromPathname(pathname: string): TranslateToolMode | null {
   return "video_translate";
 }
 
-/** Build a path-based URL for a section, preserving ?project= if provided. */
+/** Build a public (no `/app`) path for a section; middleware rewrites on the app host. */
 function sectionToPath(section: AppSection, projectId?: string | null, extra?: string): string {
   const slug = SECTION_TO_SLUG[section] ?? "link-to-ad";
-  let path = `/app/${slug}`;
+  let path = `/${slug}`;
   if (extra) path += `/${extra}`;
   if (projectId) path += `?project=${encodeURIComponent(projectId)}`;
   return path;
@@ -683,12 +706,33 @@ function ProjectVideoCard({ src, onFullscreen }: { src: string; onFullscreen: ()
   );
 }
 
+const MOTION_CONTROL_KLING_MODEL_ITEMS: StudioModelPickerItem[] = [
+  {
+    id: "kling-3.0",
+    label: "Kling 3.0 Motion Control",
+    icon: "kling",
+    resolution: "720p / 1080p",
+    durationRange: "3–30s (clip)",
+    searchText: "kling 3 motion control v3",
+  },
+  {
+    id: "kling-2.6",
+    label: "Kling 2.6 Motion Control",
+    icon: "kling",
+    resolution: "720p / 1080p",
+    durationRange: "3–30s (clip)",
+    searchText: "kling 2.6 motion control",
+  },
+];
+
 export default function AppBrandWizard() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
   const [step, setStep] = useState<WizardStep>("url");
-  const [appSection, setAppSection] = useState<AppSection>(() => sectionFromPathname(typeof window !== "undefined" ? window.location.pathname : "/app/link-to-ad"));
+  const [appSection, setAppSection] = useState<AppSection>(() =>
+    sectionFromPathname(typeof window !== "undefined" ? window.location.pathname : "/link-to-ad"),
+  );
 
   const [savedRuns, setSavedRuns] = useState<
     Array<{
@@ -824,6 +868,7 @@ export default function AppBrandWizard() {
   const [avatarUrls, setAvatarUrls] = useState<string[]>([]);
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   const [motionQuality, setMotionQuality] = useState<string>("720p");
+  const [motionKlingFamily, setMotionKlingFamily] = useState<"kling-3.0" | "kling-2.6">("kling-3.0");
   const [motionPrompt, setMotionPrompt] = useState<string>("");
   const [adCloneOutputLanguage, setAdCloneOutputLanguage] = useState<string>(
     DEFAULT_WAVESPEED_HEYGEN_TRANSLATE_LANGUAGE,
@@ -864,7 +909,9 @@ export default function AppBrandWizard() {
     | { open: true; reason: "plan" }
     | { open: true; reason: "credits"; required: number };
   const [motionBilling, setMotionBilling] = useState<MotionBilling>({ open: false });
-  const [motionSceneBackground, setMotionSceneBackground] = useState<"video" | "image">("video");
+  const [motionBackgroundSource, setMotionBackgroundSource] = useState<"input_video" | "input_image">(
+    "input_video",
+  );
   const [motionBusy, setMotionBusy] = useState(false);
   const motionVideoInputRef = useRef<HTMLInputElement>(null);
   const voiceChangeInputRef = useRef<HTMLInputElement>(null);
@@ -956,7 +1003,7 @@ export default function AppBrandWizard() {
     appSection === "ad_clone"
       ? STUDIO_GENERATION_KIND_STUDIO_TRANSLATE_VIDEO
       : appSection === "voice"
-        ? `${STUDIO_GENERATION_KIND_VOICE_CHANGE},studio_audio`
+        ? VOICE_HISTORY_API_KINDS
         : "motion_control";
   const motionVideoPreviewSrc = useMemo(
     () => proxiedMediaSrc(motionVideoUploadedUrl || motionVideoRefBlobUrl),
@@ -988,6 +1035,10 @@ export default function AppBrandWizard() {
   const selectedElevenVoice = useMemo(
     () => elevenVoices.find((voice) => voice.voiceId === elevenVoiceId) ?? null,
     [elevenVoiceId, elevenVoices],
+  );
+  const motionBackgroundSourceHelp = useMemo(
+    () => motionControlBackgroundSourceDescription(motionKlingFamily),
+    [motionKlingFamily],
   );
   /** Translate / HeyGen outputs only — not Kling motion-control jobs (separate history state). */
   const readyTranslateVideos = useMemo(
@@ -1134,7 +1185,11 @@ export default function AppBrandWizard() {
             : historyKindsKey === STUDIO_GENERATION_KIND_STUDIO_TRANSLATE_VIDEO
               ? mergeServerHistoryWithTranslatePending(serverList, readTranslatePendingJobs())
               : serverList;
-        setActiveHistoryItems((prev) => mergeStudioHistoryWithServer(withPendingMotion, prev));
+        const mergeHistory =
+          historyKindsKey === VOICE_HISTORY_API_KINDS
+            ? mergeVoiceHistoryWithServer
+            : mergeStudioHistoryWithServer;
+        setActiveHistoryItems((prev) => mergeHistory(withPendingMotion, prev));
 
         if (historyKindsKey === "motion_control") {
           for (const p of pendingMotion) {
@@ -1226,7 +1281,11 @@ export default function AppBrandWizard() {
               : historyKindsKey === STUDIO_GENERATION_KIND_STUDIO_TRANSLATE_VIDEO
                 ? mergeServerHistoryWithTranslatePending(serverList, readTranslatePendingJobs())
                 : serverList;
-          setActiveHistoryItems((prev) => mergeStudioHistoryWithServer(withPending, prev));
+          const mergeHistory =
+            historyKindsKey === VOICE_HISTORY_API_KINDS
+              ? mergeVoiceHistoryWithServer
+              : mergeStudioHistoryWithServer;
+          setActiveHistoryItems((prev) => mergeHistory(withPending, prev));
         }
         const hints = json.refundHints ?? [];
         if (hints.length) {
@@ -2049,10 +2108,6 @@ export default function AppBrandWizard() {
   const handleChangeVoiceFromHistory = useCallback(
     (item: StudioHistoryItem) => {
       if (!item.mediaUrl) return;
-      setVoiceHistoryItems((prev) => {
-        if (prev.some((i) => i.mediaUrl === item.mediaUrl)) return prev;
-        return [{ ...item, kind: "video" as const }, ...prev];
-      });
       setAppSectionNav("voice");
       setVoiceChangeUploadFile(null);
       setVoiceChangeHistoryUrl(item.mediaUrl);
@@ -2150,7 +2205,7 @@ export default function AppBrandWizard() {
   /** Keep the browser URL in sync with appSection + runId (path-based). */
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (!pathname.startsWith("/app")) return;
+    if (!isBrowserStudioWizardPath(pathname)) return;
 
     const projectId = runId || searchParams.get("project") || null;
     const wantPath = sectionToPath(appSection, projectId);
@@ -3835,14 +3890,20 @@ export default function AppBrandWizard() {
                           )
                         ) : (
                           <div className="space-y-2">
-                            <div className="flex items-center">
-                              <StudioSingleModelCard
-                                hideMeta
-                                label="Kling 3.0 Motion Control"
-                                icon="kling"
-                                resolution="1080p"
-                                durationRange="3s–30s"
-                              />
+                            <div>
+                              <Label className="text-xs text-white/45">Model</Label>
+                              <div className="mt-2">
+                                <StudioModelPicker
+                                  value={motionKlingFamily}
+                                  onChange={(v) => setMotionKlingFamily(v as "kling-3.0" | "kling-2.6")}
+                                  items={MOTION_CONTROL_KLING_MODEL_ITEMS}
+                                  featuredTitle="Motion control models"
+                                  triggerVariant="bar"
+                                  panelMode="dropdown"
+                                  hideMeta
+                                />
+                              </div>
+                              <p className="mt-1 text-[10px] leading-snug text-white/35">{motionBackgroundSourceHelp}</p>
                             </div>
                             {!isPersonalApiActive() && motionControlUpgradeMessage(planId) ? (
                               <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-2.5 py-1.5 text-[11px] leading-snug text-amber-100/90">
@@ -3851,25 +3912,22 @@ export default function AppBrandWizard() {
                             ) : null}
 
                             <div>
-                              <Label className="text-xs text-white/45">Scene control mode</Label>
-                              <p className="mt-0.5 text-[10px] leading-snug text-white/35">
-                                Background source for the output: <span className="text-white/55">Video</span> uses the
-                                motion clip&apos;s scene (orientation follows the clip, Kling default).{" "}
-                                <span className="text-white/55">Image</span> uses your character still as the backdrop.
-                              </p>
+                              <Label className="text-xs text-white/45">Background source</Label>
                               <Select
-                                value={motionSceneBackground}
-                                onValueChange={(v) => setMotionSceneBackground(v as "video" | "image")}
+                                value={motionBackgroundSource}
+                                onValueChange={(v) =>
+                                  setMotionBackgroundSource(v as "input_video" | "input_image")
+                                }
                               >
                                 <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent position="popper" className={studioSelectContentClass}>
-                                  <SelectItem value="video" className={studioSelectItemClass}>
-                                    Video
+                                  <SelectItem value="input_video" className={studioSelectItemClass}>
+                                    Video background (motion clip)
                                   </SelectItem>
-                                  <SelectItem value="image" className={studioSelectItemClass}>
-                                    Image
+                                  <SelectItem value="input_image" className={studioSelectItemClass}>
+                                    Image background (character still)
                                   </SelectItem>
                                 </SelectContent>
                               </Select>
@@ -3877,9 +3935,6 @@ export default function AppBrandWizard() {
 
                             <div>
                               <Label className="text-xs text-white/45">Quality</Label>
-                              <p className="mt-0.5 text-[10px] leading-snug text-white/35">
-                                720p and 1080p use different credit costs (shown on Generate).
-                              </p>
                               <Select value={motionQuality} onValueChange={setMotionQuality}>
                                 <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
                                   <SelectValue placeholder="Quality" />
@@ -3980,6 +4035,18 @@ export default function AppBrandWizard() {
                               toast.error("Reference video must be between 3 and 30 seconds.");
                               return;
                             }
+                            if (
+                              appSection === "motion_control" &&
+                              motionKlingFamily === "kling-2.6" &&
+                              motionBackgroundSource === "input_image" &&
+                              motionVideoDetectedDuration != null &&
+                              motionVideoDetectedDuration > 10
+                            ) {
+                              toast.error(
+                                "Kling 2.6 Image scene: reference video must be 10 seconds or shorter.",
+                              );
+                              return;
+                            }
                           }
                           if (!motionCreditBypass && creditsRef.current < motionCredits) {
                             setMotionBilling({ open: true, reason: "credits", required: motionCredits });
@@ -3998,8 +4065,7 @@ export default function AppBrandWizard() {
                             : isTranslate
                               ? `Translation (${adCloneOutputLanguage})`
                               : "Motion control";
-                          const bgSource =
-                            motionSceneBackground === "video" ? "input_video" : "input_image";
+                          const bgSource = motionBackgroundSource;
                           const setHistoryTarget = isVoiceChange
                             ? setVoiceHistoryItems
                             : isTranslate
@@ -4151,6 +4217,47 @@ export default function AppBrandWizard() {
                                       "video/mp4",
                                       { kind: "video" },
                                     );
+
+                              let characterImageHttps = "";
+                              if (appSection === "motion_control" && motionCharacterImageUrl) {
+                                characterImageHttps = await uploadBlobUrlToCdn(
+                                  motionCharacterImageUrl,
+                                  "motion-character.jpg",
+                                  "image/jpeg",
+                                  { kind: "image" },
+                                ).catch(async () => {
+                                  if (motionCharacterFile)
+                                    return uploadFileToCdn(motionCharacterFile, { kind: "image" });
+                                  if (/^https?:\/\//i.test(motionCharacterImageUrl))
+                                    return motionCharacterImageUrl;
+                                  if (motionCharacterImageUrl.startsWith("/")) {
+                                    return `${window.location.origin}${motionCharacterImageUrl}`;
+                                  }
+                                  throw new Error("Could not prepare character image");
+                                });
+                              }
+
+                              const motionInputUrls =
+                                appSection === "motion_control"
+                                  ? [characterImageHttps, videoHttps].filter(
+                                      (u) => typeof u === "string" && u.trim().length > 0,
+                                    )
+                                  : [videoHttps].filter(Boolean);
+
+                              if (appSection === "motion_control") {
+                                setMotionControlHistoryItems((prev) =>
+                                  prev.map((i) =>
+                                    i.id === jobId
+                                      ? {
+                                          ...i,
+                                          inputUrls:
+                                            motionInputUrls.length > 0 ? motionInputUrls : undefined,
+                                        }
+                                      : i,
+                                  ),
+                                );
+                              }
+
                               const res =
                                 appSection === "ad_clone"
                                   ? await fetch("/api/wavespeed/video-translate", {
@@ -4166,22 +4273,8 @@ export default function AppBrandWizard() {
                                       headers: { "Content-Type": "application/json" },
                                       body: JSON.stringify({
                                         accountPlan: planId,
-                                        imageUrl: motionCharacterImageUrl
-                                          ? await uploadBlobUrlToCdn(
-                                              motionCharacterImageUrl,
-                                              "motion-character.jpg",
-                                              "image/jpeg",
-                                              { kind: "image" },
-                                            ).catch(async () => {
-                                              if (motionCharacterFile)
-                                                return uploadFileToCdn(motionCharacterFile, { kind: "image" });
-                                              if (/^https?:\/\//i.test(motionCharacterImageUrl)) return motionCharacterImageUrl;
-                                              if (motionCharacterImageUrl.startsWith("/")) {
-                                                return `${window.location.origin}${motionCharacterImageUrl}`;
-                                              }
-                                              throw new Error("Could not prepare character image");
-                                            })
-                                          : "",
+                                        motionFamily: motionKlingFamily,
+                                        imageUrl: characterImageHttps,
                                         videoUrl: videoHttps,
                                         prompt: motionPrompt.trim() || undefined,
                                         quality: motionQuality,
@@ -4216,8 +4309,7 @@ export default function AppBrandWizard() {
                               const model =
                                 appSection === "ad_clone"
                                   ? `wavespeed:heygen_translate:${adCloneOutputLanguage}`
-                                  : `kling:motion_control:${motionQuality}:${motionSceneBackground}`;
-                              const motionInputUrls = [videoHttps].filter(Boolean);
+                                  : `kling:motion_control:${motionKlingFamily}:${motionQuality}:${motionBackgroundSource}`;
                               if (isTranslate) {
                                 translatePendingTaskId = providerTaskId;
                                 // Patch externalTaskId on the optimistic item; localStorage saved below after rowId
@@ -4337,6 +4429,8 @@ export default function AppBrandWizard() {
                                       status: "ready",
                                       mediaUrl: url,
                                       model,
+                                      inputUrls:
+                                        motionInputUrls.length > 0 ? motionInputUrls : i.inputUrls,
                                     };
                                   }),
                                 );

@@ -1,9 +1,24 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AtSign, CirclePlus, Expand, ImageIcon, Shrink, Sparkles, VideoIcon } from "lucide-react";
+import {
+  AtSign,
+  CirclePlus,
+  Clock,
+  Expand,
+  HelpCircle,
+  ImageIcon,
+  Shrink,
+  Sparkles,
+  Trash2,
+  Upload,
+  VideoIcon,
+  X,
+} from "lucide-react";
+import { Dialog } from "radix-ui";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -31,7 +46,7 @@ import {
   isPlatformCreditBypassActive,
 } from "@/app/_components/CreditsPlanContext";
 import { mergeStudioHistoryWithServer } from "@/lib/mergeStudioHistoryWithLocal";
-import { completeStudioTask, pollKlingVideo } from "@/lib/studioKlingClientPoll";
+import { completeStudioTask, pollKlingVideo, pollVeoVideo } from "@/lib/studioKlingClientPoll";
 import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
 import { calculateVideoCredits } from "@/lib/linkToAd/generationCredits";
 import { calculateStudioVideoEditCredits } from "@/lib/pricing";
@@ -52,8 +67,51 @@ import { readStudioHistoryLocal, writeStudioHistoryLocal } from "@/lib/studioHis
 import { uploadFileToCdn, type UploadFileKind } from "@/lib/uploadBlobUrlToCdn";
 import { cn } from "@/lib/utils";
 import { STUDIO_VIDEO_TAB_KINDS } from "@/lib/studioGenerationKinds";
+import {
+  studioVideoDurationRangeLabel,
+  studioVideoDurationSecOptions,
+  studioVideoIsSeedance2ProPickerId,
+  studioVideoIsSeedancePickerId,
+  studioVideoShowsAspectRatioCreate,
+  studioVideoSupportsMultiShot,
+  studioVideoSupportsNativeAudio,
+  studioVideoSupportsQualityPicker,
+  STUDIO_VEO_DURATION_HINT,
+} from "@/lib/studioVideoModelCapabilities";
 
 const LS_STUDIO_VIDEO_HISTORY = "ugc_studio_video_history_v1";
+
+/** Kling 3.0 multi-shot: per-shot duration — Market API integer 1–12s each (see Kling 3.0 docs). */
+const KLING_MULTI_SHOT_SEC_MIN = 1;
+const KLING_MULTI_SHOT_SEC_MAX = 12;
+const KLING_MULTI_MAX_SHOTS = 5;
+
+const KLING_SHOT_DURATION_OPTIONS = Array.from(
+  { length: KLING_MULTI_SHOT_SEC_MAX - KLING_MULTI_SHOT_SEC_MIN + 1 },
+  (_, i) => String(KLING_MULTI_SHOT_SEC_MIN + i),
+);
+
+type KlingShotRow = { id: string; prompt: string; durationSec: number };
+type KlingElementDraft = { id: string; name: string; description: string; urls: string[] };
+
+const KLING_ELEMENT_MEDIA_MAX_BYTES = 10 * 1024 * 1024;
+const KLING_ELEMENT_MEDIA_MIN_PX = 300;
+
+async function imageFileMeetsMinDimensions(file: File, minW: number, minH: number): Promise<boolean> {
+  if (!file.type.startsWith("image/")) return true;
+  const url = URL.createObjectURL(file);
+  try {
+    return await new Promise<boolean>((resolve) => {
+      const img = new Image();
+      img.onload = () =>
+        resolve(img.naturalWidth >= minW && img.naturalHeight >= minH);
+      img.onerror = () => resolve(false);
+      img.src = url;
+    });
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
 
 const STUDIO_VIDEO_LIBRARY_KIND_PARAM = STUDIO_VIDEO_TAB_KINDS.join(",");
 
@@ -68,6 +126,8 @@ type VideoModelId =
   | "bytedance/seedance-2-fast-preview"
   | "bytedance/seedance-2"
   | "bytedance/seedance-2-fast"
+  | "veo3_lite"
+  | "veo3_fast"
   | "veo3";
 
 type VideoFamily = "kie" | "veo" | "sora";
@@ -81,7 +141,9 @@ const MODEL_OPTIONS: { id: VideoModelId; label: string; family: VideoFamily }[] 
   { id: "bytedance/seedance-2-fast-preview", label: "Seedance 2 Fast Preview", family: "kie" },
   { id: "bytedance/seedance-2", label: "Seedance 2", family: "kie" },
   { id: "bytedance/seedance-2-fast", label: "Seedance 2 Fast", family: "kie" },
-  { id: "veo3", label: "Veo 3.1", family: "veo" },
+  { id: "veo3_lite", label: "Veo 3.1 Lite", family: "veo" },
+  { id: "veo3_fast", label: "Veo 3.1 Fast", family: "veo" },
+  { id: "veo3", label: "Veo 3.1 Quality", family: "veo" },
 ];
 
 const VIDEO_EDIT_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
@@ -107,7 +169,7 @@ const VIDEO_EDIT_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
     label: "Kling 3.0 Motion Control",
     icon: "kling",
     resolution: "720p / 1080p",
-    durationRange: "3–30s",
+    durationRange: "3–30s (clip)",
     searchText: "motion control",
   },
   {
@@ -115,7 +177,7 @@ const VIDEO_EDIT_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
     label: "Kling 3.0 Motion Control",
     icon: "kling",
     resolution: "720p / 1080p",
-    durationRange: "3–30s",
+    durationRange: "3–30s (clip)",
     searchText: "kling 3 motion",
   },
   {
@@ -135,74 +197,92 @@ const VIDEO_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
     icon: "kling",
     exclusive: true,
     hasAudio: true,
-    resolution: "1080p",
-    durationRange: "3–15s",
+    resolution: "720p / 1080p",
+    durationRange: studioVideoDurationRangeLabel("kling-3.0/video"),
   },
   {
     id: "kling-2.6/video",
     label: "Kling 2.6",
     icon: "kling",
     hasAudio: true,
-    resolution: "1080p",
-    durationRange: "5–10s",
+    resolution: "720p / 1080p",
+    durationRange: studioVideoDurationRangeLabel("kling-2.6/video"),
   },
   {
     id: "openai/sora-2",
     label: "Sora 2",
     icon: "sora",
-    resolution: "1080p",
-    durationRange: "10–15s",
+    resolution: "Standard / stable",
+    durationRange: studioVideoDurationRangeLabel("openai/sora-2"),
   },
   {
     id: "openai/sora-2-pro",
     label: "Sora 2 Pro",
     icon: "sora",
-    resolution: "1080p",
-    durationRange: "10–15s",
+    resolution: "Standard / high",
+    durationRange: studioVideoDurationRangeLabel("openai/sora-2-pro"),
   },
   {
     id: "bytedance/seedance-2-preview",
     label: "Seedance 2 Preview",
-    subtitle: "Standard preview pipeline; requires a start image.",
+    subtitle: "Early access, longer wait",
     icon: "seedance",
     newBadge: true,
-    resolution: "1080p",
-    durationRange: "5–15s",
+    resolution: "9:16 / 16:9 / 1:1",
+    durationRange: studioVideoDurationRangeLabel("bytedance/seedance-2-preview"),
     searchText: "seedance preview provider bytedance",
   },
   {
     id: "bytedance/seedance-2-fast-preview",
     label: "Seedance 2 Fast Preview",
-    subtitle: "Faster preview tier; requires a start image.",
+    subtitle: "Fast, lower cost",
     icon: "seedance",
-    resolution: "1080p",
-    durationRange: "5–15s",
+    resolution: "9:16 / 16:9 / 1:1",
+    durationRange: studioVideoDurationRangeLabel("bytedance/seedance-2-fast-preview"),
     searchText: "seedance fast preview provider",
   },
   {
     id: "bytedance/seedance-2",
     label: "Seedance 2",
-    subtitle: "Pro quality (PiAPI seedance-2). Text or image; 4–15s.",
+    subtitle: "Pro, higher quality",
     icon: "seedance",
-    resolution: "1080p",
-    durationRange: "4–15s",
+    resolution: "9:16 / 16:9 / 1:1",
+    durationRange: studioVideoDurationRangeLabel("bytedance/seedance-2"),
     searchText: "seedance 2 pro piapi",
   },
   {
     id: "bytedance/seedance-2-fast",
     label: "Seedance 2 Fast",
-    subtitle: "Lower cost (PiAPI seedance-2-fast). Text or image; 4–15s.",
+    subtitle: "Fast, lower cost",
     icon: "seedance",
-    resolution: "1080p",
-    durationRange: "4–15s",
+    resolution: "9:16 / 16:9 / 1:1",
+    durationRange: studioVideoDurationRangeLabel("bytedance/seedance-2-fast"),
     searchText: "seedance 2 fast piapi",
   },
   {
-    id: "veo3",
-    label: "Veo 3.1",
+    id: "veo3_lite",
+    label: "Veo 3.1 Lite",
+    subtitle: "Lowest cost",
     icon: "veo",
-    resolution: "1080p",
-    durationRange: "5–10s",
+    resolution: "9:16 / 16:9 / Auto",
+    durationRange: studioVideoDurationRangeLabel("veo3_lite"),
+    searchText: "veo google lite",
+  },
+  {
+    id: "veo3_fast",
+    label: "Veo 3.1 Fast",
+    icon: "veo",
+    resolution: "9:16 / 16:9 / Auto",
+    durationRange: studioVideoDurationRangeLabel("veo3_fast"),
+    searchText: "veo google fast",
+  },
+  {
+    id: "veo3",
+    label: "Veo 3.1 Quality",
+    icon: "veo",
+    resolution: "9:16 / 16:9 / Auto",
+    durationRange: studioVideoDurationRangeLabel("veo3"),
+    searchText: "veo google quality flagship",
   },
 ];
 
@@ -217,56 +297,12 @@ const VIDEO_MODEL_ACCESS_ORDER: VideoModelId[] = [
   "bytedance/seedance-2-preview",
   "bytedance/seedance-2",
   "kling-3.0/video",
+  "veo3_lite",
+  "veo3_fast",
   "veo3",
   "openai/sora-2",
   "openai/sora-2-pro",
 ];
-
-function getDurationChoices(modelId: VideoModelId): string[] {
-  switch (modelId) {
-    case "kling-3.0/video":
-      return ["5", "10", "12", "15"];
-    case "kling-2.6/video":
-      return ["5", "10"];
-    case "openai/sora-2":
-      return ["10", "15"];
-    case "openai/sora-2-pro":
-      return ["10", "15"];
-    case "bytedance/seedance-2":
-    case "bytedance/seedance-2-fast":
-      return ["4", "5", "10", "15"];
-    case "bytedance/seedance-2-preview":
-    case "bytedance/seedance-2-fast-preview":
-      return ["5", "10", "15"];
-    default:
-      return ["5", "10"];
-  }
-}
-
-function modelHasQuality(id: VideoModelId): boolean {
-  return (
-    id === "kling-3.0/video" ||
-    id === "kling-2.6/video" ||
-    id === "openai/sora-2" ||
-    id === "openai/sora-2-pro"
-  );
-}
-
-function modelHasAudio(id: VideoModelId): boolean {
-  return id === "kling-3.0/video" || id === "kling-2.6/video";
-}
-
-function modelHasMultiShot(id: VideoModelId): boolean {
-  return id === "kling-3.0/video";
-}
-
-function isStudioSeedancePickerId(id: VideoModelId): boolean {
-  return id.startsWith("bytedance/seedance");
-}
-
-function isStudioSeedance2ProModelId(id: VideoModelId): boolean {
-  return id === "bytedance/seedance-2" || id === "bytedance/seedance-2-fast";
-}
 
 async function uploadStudioMediaFile(file: File, kind: UploadFileKind): Promise<string> {
   return uploadFileToCdn(file, { kind });
@@ -578,30 +614,6 @@ async function registerStudioTask(params: {
   }
 }
 
-async function pollVeoVideo(taskId: string, personalApiKey?: string): Promise<string> {
-  const keyParam = personalApiKey ? `&personalApiKey=${encodeURIComponent(personalApiKey)}` : "";
-  for (let i = 0; i < 120; i++) {
-    const res = await fetch(`/api/kie/veo/status?taskId=${encodeURIComponent(taskId)}${keyParam}`, { cache: "no-store" });
-    const json = (await res.json()) as {
-      data?: { successFlag?: number; errorMessage?: string | null; response?: { resultUrls?: string[] } };
-      error?: string;
-    };
-    if (!res.ok) throw new Error(json.error || "Veo status failed");
-    const d = json.data;
-    if (!d) throw new Error("No data");
-    if (d.successFlag === 1) {
-      const u = d.response?.resultUrls?.[0];
-      if (!u) throw new Error("No video URL");
-      return u;
-    }
-    if (d.successFlag === 2 || d.successFlag === 3) {
-      throw new Error(d.errorMessage || "Veo generation failed");
-    }
-    await new Promise((r) => setTimeout(r, 4000));
-  }
-  throw new Error("Veo timeout");
-}
-
 export default function StudioVideoPanel({
   onChangeVoice,
 }: {
@@ -617,6 +629,17 @@ export default function StudioVideoPanel({
   const [endUrl, setEndUrl] = useState<string | null>(null);
   const [prompt, setPrompt] = useState("");
   const [multiShot, setMultiShot] = useState(false);
+  /** Kling 3.0 multi-shot: per-shot prompts via provider `multi_prompt`. */
+  const [klingShots, setKlingShots] = useState<KlingShotRow[]>([
+    { id: "shot-1", prompt: "", durationSec: 3 },
+  ]);
+  const [klingElementDrafts, setKlingElementDrafts] = useState<KlingElementDraft[]>([]);
+  const [klingElementsModalOpen, setKlingElementsModalOpen] = useState(false);
+  /** Working row for the Create element dialog (add or edit). */
+  const [klingElementForm, setKlingElementForm] = useState<KlingElementDraft | null>(null);
+  const [klingElementUploadBusy, setKlingElementUploadBusy] = useState(false);
+  const klingElementFileRef = useRef<HTMLInputElement>(null);
+  const klingElementUploadRowIdRef = useRef<string | null>(null);
   const [soundOn, setSoundOn] = useState(true);
   /** Set to `true` to lock UI to a single model (e.g. maintenance). */
   const HIDE_VIDEO_MODEL_PICKER = false;
@@ -778,19 +801,35 @@ export default function StudioVideoPanel({
     meta.family === "sora" ||
     modelId === "kling-3.0/video" ||
     modelId === "kling-2.6/video" ||
-    isStudioSeedance2ProModelId(modelId);
-  const durationChoices = getDurationChoices(modelId);
+    studioVideoIsSeedance2ProPickerId(modelId);
+  const durationChoices = studioVideoDurationSecOptions(modelId);
+
+  const klingCustomMulti = modelId === "kling-3.0/video" && multiShot;
+  const klingMultiTotalSec = useMemo(
+    () => klingShots.reduce((a, s) => a + s.durationSec, 0),
+    [klingShots],
+  );
+  const billingDurationSec = klingCustomMulti ? klingMultiTotalSec : Number(duration);
 
   const credits = useMemo(
     () =>
       calculateVideoCredits({
         modelId,
-        duration: Number(duration),
+        duration: billingDurationSec,
         audio: soundOn,
         quality: klingMode,
       }),
-    [modelId, duration, soundOn, klingMode],
+    [modelId, billingDurationSec, soundOn, klingMode],
   );
+
+  useEffect(() => {
+    if (!klingCustomMulti) return;
+    setEndUrl(null);
+    setEndFramePreviewBlob((prev) => {
+      if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
+      return null;
+    });
+  }, [klingCustomMulti]);
 
   const motionEdit = isMotionEditPicker(editPickerId);
   const editCredits = useMemo(
@@ -808,7 +847,7 @@ export default function StudioVideoPanel({
   useEffect(() => {
     if (!HIDE_VIDEO_MODEL_PICKER) return;
     if (modelId !== FORCED_VIDEO_MODEL_ID) setModelId(FORCED_VIDEO_MODEL_ID);
-    const choices = getDurationChoices(FORCED_VIDEO_MODEL_ID);
+    const choices = studioVideoDurationSecOptions(FORCED_VIDEO_MODEL_ID);
     if (!choices.includes(duration)) setDuration(choices[0] ?? "10");
   }, [HIDE_VIDEO_MODEL_PICKER, modelId, duration]);
 
@@ -821,7 +860,7 @@ export default function StudioVideoPanel({
     const next = VIDEO_MODEL_ACCESS_ORDER.find((id) => canUseStudioVideoModel(planId, id));
     if (!next) return;
     setModelId(next);
-    const choices = getDurationChoices(next);
+    const choices = studioVideoDurationSecOptions(next);
     setDuration(choices[0] ?? "5");
   }, [planId, modelId]);
 
@@ -917,6 +956,124 @@ export default function StudioVideoPanel({
       }
     };
     input.click();
+  }, []);
+
+  const pickKlingElementImage = useCallback((rowId: string) => {
+    klingElementUploadRowIdRef.current = rowId;
+    klingElementFileRef.current?.click();
+  }, []);
+
+  const handleKlingElementsModalOpenChange = useCallback((open: boolean) => {
+    setKlingElementsModalOpen(open);
+    if (!open) setKlingElementForm(null);
+  }, []);
+
+  const openKlingElementsModal = useCallback(() => {
+    if (klingElementDrafts.length >= 3) {
+      setKlingElementForm(null);
+    } else {
+      setKlingElementForm({
+        id: crypto.randomUUID(),
+        name: `element_${klingElementDrafts.length + 1}`,
+        description: "",
+        urls: [],
+      });
+    }
+    setKlingElementsModalOpen(true);
+  }, [klingElementDrafts.length]);
+
+  const editKlingElementInModal = useCallback((el: KlingElementDraft) => {
+    setKlingElementForm({ ...el, urls: [...el.urls] });
+    setKlingElementsModalOpen(true);
+  }, []);
+
+  const removeKlingElementDraft = useCallback((id: string) => {
+    setKlingElementDrafts((prev) => prev.filter((d) => d.id !== id));
+    setKlingElementForm((form) => (form?.id === id ? null : form));
+  }, []);
+
+  const saveKlingElementForm = useCallback(() => {
+    if (!klingElementForm) return;
+    const name = klingElementForm.name.trim();
+    const desc = klingElementForm.description.trim();
+    if (!name) {
+      toast.error("Name required", { description: "Enter an element name." });
+      return;
+    }
+    if (!desc) {
+      toast.error("Description required", { description: "Enter an element description." });
+      return;
+    }
+    const urlCount = klingElementForm.urls.length;
+    if (urlCount < 2 || urlCount > 4) {
+      toast.error("Media required", {
+        description: "Add 2–4 reference images (provider requirement).",
+      });
+      return;
+    }
+    const id = klingElementForm.id;
+    const isEdit = klingElementDrafts.some((d) => d.id === id);
+    if (!isEdit && klingElementDrafts.length >= 3) {
+      toast.error("Maximum 3 elements", { description: "Remove an element to add another." });
+      return;
+    }
+    const committed: KlingElementDraft = { ...klingElementForm, name, description: desc };
+    const next = isEdit
+      ? klingElementDrafts.map((d) => (d.id === id ? committed : d))
+      : [...klingElementDrafts, committed];
+    setKlingElementDrafts(next);
+    toast.success(isEdit ? "Element updated" : "Element saved");
+    if (next.length >= 3) {
+      setKlingElementsModalOpen(false);
+      setKlingElementForm(null);
+    } else {
+      setKlingElementForm({
+        id: crypto.randomUUID(),
+        name: `element_${next.length + 1}`,
+        description: "",
+        urls: [],
+      });
+    }
+  }, [klingElementForm, klingElementDrafts]);
+
+  const onKlingElementFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    const rowId = klingElementUploadRowIdRef.current;
+    e.target.value = "";
+    if (!file || !rowId) return;
+    if (file.size > KLING_ELEMENT_MEDIA_MAX_BYTES) {
+      toast.error("File too large", { description: "Each image must be 10MB or less." });
+      klingElementUploadRowIdRef.current = null;
+      return;
+    }
+    const dimsOk = await imageFileMeetsMinDimensions(
+      file,
+      KLING_ELEMENT_MEDIA_MIN_PX,
+      KLING_ELEMENT_MEDIA_MIN_PX,
+    );
+    if (!dimsOk) {
+      toast.error("Image too small", {
+        description: `Use images at least ${KLING_ELEMENT_MEDIA_MIN_PX}×${KLING_ELEMENT_MEDIA_MIN_PX}px.`,
+      });
+      klingElementUploadRowIdRef.current = null;
+      return;
+    }
+    setKlingElementUploadBusy(true);
+    try {
+      const u = await uploadStudioMediaFile(file, "image");
+      setKlingElementForm((prev) => {
+        if (!prev || prev.id !== rowId || prev.urls.length >= 4) return prev;
+        return { ...prev, urls: [...prev.urls, u] };
+      });
+      toast.success("Image added");
+    } catch (err) {
+      toast.error("Upload failed", {
+        description: userMessageFromCaughtError(err, "Use JPEG, PNG, WebP, or GIF."),
+      });
+    } finally {
+      setKlingElementUploadBusy(false);
+      klingElementUploadRowIdRef.current = null;
+    }
   }, []);
 
   const applyAvatarToStartFrame = useCallback((avatarUrl: string) => {
@@ -1312,6 +1469,7 @@ export default function StudioVideoPanel({
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               accountPlan: snap.planId,
+              motionFamily: "kling-3.0",
               imageUrl: snap.editMotionImageUrl,
               videoUrl: snap.editMotionVideoUrl,
               quality: snap.editKlingMode === "pro" ? "1080p" : "720p",
@@ -1332,11 +1490,17 @@ export default function StudioVideoPanel({
             inputUrls: [snap.editMotionImageUrl, snap.editMotionVideoUrl].filter(Boolean) as string[],
             aspectRatio: aspect,
           });
-          if (studioGenId) {
-            setHistoryItems((prev) =>
-              prev.map((i) => (i.id === jobId ? { ...i, studioGenerationId: studioGenId } : i)),
-            );
-          }
+          setHistoryItems((prev) =>
+            prev.map((i) =>
+              i.id === jobId
+                ? {
+                    ...i,
+                    externalTaskId: json.taskId,
+                    ...(studioGenId ? { studioGenerationId: studioGenId } : {}),
+                  }
+                : i,
+            ),
+          );
           toast.message("Motion control started", { description: "Polling…" });
           const url = await pollKlingVideo(json.taskId, editPKey, getPersonalPiapiApiKey() ?? undefined);
           void completeStudioTask(json.taskId, url);
@@ -1393,11 +1557,17 @@ export default function StudioVideoPanel({
           inputUrls: [snap.editVideoUrl, ...(snap.editElementUrls || [])].filter(Boolean) as string[],
           aspectRatio: aspect,
         });
-        if (studioGenId) {
-          setHistoryItems((prev) =>
-            prev.map((i) => (i.id === jobId ? { ...i, studioGenerationId: studioGenId } : i)),
-          );
-        }
+        setHistoryItems((prev) =>
+          prev.map((i) =>
+            i.id === jobId
+              ? {
+                  ...i,
+                  externalTaskId: json.taskId,
+                  ...(studioGenId ? { studioGenerationId: studioGenId } : {}),
+                }
+              : i,
+          ),
+        );
         toast.message("Edit started", { description: "Polling provider…" });
         const url = await pollKlingVideo(json.taskId, editPKey, getPersonalPiapiApiKey() ?? undefined);
         void completeStudioTask(json.taskId, url);
@@ -1445,17 +1615,59 @@ export default function StudioVideoPanel({
   };
 
   const generate = () => {
-    const p = prompt.trim();
-    if (!p) {
-      toast.error("Describe your video.");
-      return;
+    const klingCustom = modelId === "kling-3.0/video" && multiShot;
+
+    let label: string;
+    let promptForJob: string;
+
+    if (klingCustom) {
+      if (endUrl) {
+        toast.error("Multi-shot uses the start frame only. Clear the end frame.");
+        return;
+      }
+      if (klingShots.some((s) => !s.prompt.trim())) {
+        toast.error("Add a prompt for every shot.");
+        return;
+      }
+      for (let i = 0; i < klingShots.length; i++) {
+        const sec = klingShots[i]!.durationSec;
+        if (
+          !Number.isInteger(sec) ||
+          sec < KLING_MULTI_SHOT_SEC_MIN ||
+          sec > KLING_MULTI_SHOT_SEC_MAX
+        ) {
+          toast.error(
+            `Shot ${i + 1}: duration must be ${KLING_MULTI_SHOT_SEC_MIN}–${KLING_MULTI_SHOT_SEC_MAX} seconds (Kling 3.0 API).`,
+          );
+          return;
+        }
+      }
+      const total = klingShots.reduce((a, s) => a + s.durationSec, 0);
+      if (total < 3 || total > 15) {
+        toast.error(`Shot lengths must sum to 3–15 seconds (currently ${total}s).`);
+        return;
+      }
+      promptForJob = klingShots[0]!.prompt.trim();
+      label = klingShots
+        .map((s) => s.prompt.trim())
+        .join(" · ")
+        .slice(0, 140);
+    } else {
+      const p = prompt.trim();
+      if (!p) {
+        toast.error("Describe your video.");
+        return;
+      }
+      promptForJob = p;
+      label = p;
     }
+
     if (
       meta.family === "kie" &&
       modelId !== "kling-3.0/video" &&
       modelId !== "kling-2.6/video" &&
       !startUrl &&
-      !isStudioSeedance2ProModelId(modelId)
+      !studioVideoIsSeedance2ProPickerId(modelId)
     ) {
       toast.error("Add a start frame image for this model.");
       return;
@@ -1471,8 +1683,24 @@ export default function StudioVideoPanel({
       return;
     }
 
+    const klingElementsPayloadEarly =
+      klingCustom && klingElementDrafts.length
+        ? klingElementDrafts
+            .filter((r) => r.name.trim() && r.urls.length >= 2)
+            .map((r) => ({
+              name: r.name.trim(),
+              description: r.description.trim() || r.name.trim(),
+              element_input_urls: r.urls.slice(0, 4),
+            }))
+        : undefined;
+    if (klingCustom && klingElementsPayloadEarly?.length && !startUrl?.trim()) {
+      toast.error("Add a start frame image when using Elements (@references).", {
+        description: "Kling 3.0 requires image_urls[0] for element references.",
+      });
+      return;
+    }
+
     const jobId = crypto.randomUUID();
-    const label = p;
     const platformChargeCreate = creditBypassCreate ? 0 : credits;
     if (!creditBypassCreate) {
       spendCredits(credits);
@@ -1495,11 +1723,13 @@ export default function StudioVideoPanel({
       ...prev,
     ]);
 
+    const klingElementsPayload = klingElementsPayloadEarly;
+
     const snap = {
       family: meta.family,
       modelId,
       planId,
-      prompt: p,
+      prompt: promptForJob,
       startUrl,
       endUrl,
       duration,
@@ -1508,6 +1738,9 @@ export default function StudioVideoPanel({
       klingMode,
       soundOn,
       multiShot,
+      multiShotCustom: klingCustom,
+      klingShots: klingCustom ? klingShots.map((s) => ({ ...s })) : undefined,
+      klingElementsPayload,
       historyAspect,
     };
 
@@ -1546,11 +1779,17 @@ export default function StudioVideoPanel({
             inputUrls: snap.startUrl ? [snap.startUrl] : undefined,
             aspectRatio: snap.historyAspect,
           });
-          if (studioGenId) {
-            setHistoryItems((prev) =>
-              prev.map((i) => (i.id === jobId ? { ...i, studioGenerationId: studioGenId } : i)),
-            );
-          }
+          setHistoryItems((prev) =>
+            prev.map((i) =>
+              i.id === jobId
+                ? {
+                    ...i,
+                    externalTaskId: json.taskId,
+                    ...(studioGenId ? { studioGenerationId: studioGenId } : {}),
+                  }
+                : i,
+            ),
+          );
           toast.message(
             snap.modelId === "openai/sora-2-pro" ? "Sora 2 Pro started" : "Sora 2 started",
             { description: "Rendering…" },
@@ -1585,10 +1824,8 @@ export default function StudioVideoPanel({
 
         if (snap.family === "veo") {
           const urls = [snap.startUrl, snap.endUrl].filter(Boolean) as string[];
-          let generationType: "TEXT_2_VIDEO" | "FIRST_AND_LAST_FRAMES_2_VIDEO" | "REFERENCE_2_VIDEO" =
-            "TEXT_2_VIDEO";
-          if (urls.length >= 2) generationType = "FIRST_AND_LAST_FRAMES_2_VIDEO";
-          else if (urls.length === 1) generationType = "REFERENCE_2_VIDEO";
+          const generationType: "TEXT_2_VIDEO" | "FIRST_AND_LAST_FRAMES_2_VIDEO" =
+            urls.length > 0 ? "FIRST_AND_LAST_FRAMES_2_VIDEO" : "TEXT_2_VIDEO";
 
           const res = await fetch("/api/kie/veo/generate", {
             method: "POST",
@@ -1596,7 +1833,7 @@ export default function StudioVideoPanel({
             body: JSON.stringify({
               accountPlan: snap.planId,
               prompt: snap.prompt,
-              model: "veo3",
+              model: snap.modelId,
               aspectRatio: snap.veoAspect,
               generationType,
               imageUrls: urls.length ? urls : undefined,
@@ -1616,11 +1853,17 @@ export default function StudioVideoPanel({
             inputUrls: urls.length ? urls : undefined,
             aspectRatio: snap.historyAspect,
           });
-          if (studioGenId) {
-            setHistoryItems((prev) =>
-              prev.map((i) => (i.id === jobId ? { ...i, studioGenerationId: studioGenId } : i)),
-            );
-          }
+          setHistoryItems((prev) =>
+            prev.map((i) =>
+              i.id === jobId
+                ? {
+                    ...i,
+                    externalTaskId: json.taskId,
+                    ...(studioGenId ? { studioGenerationId: studioGenId } : {}),
+                  }
+                : i,
+            ),
+          );
           toast.message("Veo started", { description: "Rendering…" });
           const url = await pollVeoVideo(json.taskId, pKey);
           void completeStudioTask(json.taskId, url);
@@ -1653,28 +1896,46 @@ export default function StudioVideoPanel({
         const isKling30 = snap.modelId === "kling-3.0/video";
         const isKling26 = snap.modelId === "kling-2.6/video";
         const isSora2Pro = snap.modelId === "openai/sora-2-pro";
+        const kling30MultiActive =
+          isKling30 &&
+          snap.multiShotCustom === true &&
+          Array.isArray(snap.klingShots) &&
+          snap.klingShots.length > 0;
+        const klingDurationSec = kling30MultiActive
+          ? snap.klingShots!.reduce((a, s) => a + s.durationSec, 0)
+          : Number(snap.duration);
+        const klingGenerateBody: Record<string, unknown> = {
+          accountPlan: snap.planId,
+          marketModel: snap.modelId,
+          prompt: snap.prompt,
+          imageUrl: snap.startUrl ?? undefined,
+          duration: klingDurationSec,
+          aspectRatio:
+            (isKling30 || isKling26) && !snap.startUrl
+              ? snap.aspect
+              : studioVideoIsSeedancePickerId(snap.modelId) &&
+                  (Boolean(snap.startUrl) || studioVideoIsSeedance2ProPickerId(snap.modelId))
+                ? snap.aspect
+                : undefined,
+          sound: studioVideoSupportsNativeAudio(snap.modelId) ? snap.soundOn : undefined,
+          mode: isKling30 || isKling26 || isSora2Pro ? snap.klingMode : undefined,
+          personalApiKey: pKey,
+          piapiApiKey: piKey,
+        };
+        if (kling30MultiActive) {
+          klingGenerateBody.multiShots = true;
+          klingGenerateBody.multiPrompt = snap.klingShots!.map((s) => ({
+            prompt: s.prompt.trim(),
+            duration: Math.round(Number(s.durationSec)),
+          }));
+          if (snap.klingElementsPayload?.length) {
+            klingGenerateBody.klingElements = snap.klingElementsPayload;
+          }
+        }
         const res = await fetch("/api/kling/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            accountPlan: snap.planId,
-            marketModel: snap.modelId,
-            prompt: snap.prompt,
-            imageUrl: snap.startUrl ?? undefined,
-            duration: Number(snap.duration),
-            aspectRatio:
-              (isKling30 || isKling26) && !snap.startUrl
-                ? snap.aspect
-                : isStudioSeedancePickerId(snap.modelId) &&
-                    (Boolean(snap.startUrl) || isStudioSeedance2ProModelId(snap.modelId))
-                  ? snap.aspect
-                  : undefined,
-            sound: modelHasAudio(snap.modelId) ? snap.soundOn : undefined,
-            mode: isKling30 || isKling26 || isSora2Pro ? snap.klingMode : undefined,
-            multiShots: isKling30 ? snap.multiShot : undefined,
-            personalApiKey: pKey,
-            piapiApiKey: piKey,
-          }),
+          body: JSON.stringify(klingGenerateBody),
         });
         const json = (await res.json()) as { taskId?: string; provider?: string; error?: string };
         if (!res.ok || !json.taskId) throw new Error(json.error || "Video task failed");
@@ -1689,11 +1950,17 @@ export default function StudioVideoPanel({
           inputUrls: snap.startUrl ? [snap.startUrl] : undefined,
           aspectRatio: snap.historyAspect,
         });
-        if (studioGenId) {
-          setHistoryItems((prev) =>
-            prev.map((i) => (i.id === jobId ? { ...i, studioGenerationId: studioGenId } : i)),
-          );
-        }
+        setHistoryItems((prev) =>
+          prev.map((i) =>
+            i.id === jobId
+              ? {
+                  ...i,
+                  externalTaskId: json.taskId,
+                  ...(studioGenId ? { studioGenerationId: studioGenId } : {}),
+                }
+              : i,
+          ),
+        );
         toast.message("Generation started", { description: "Polling provider…" });
         const url = await pollKlingVideo(json.taskId, pKey, piKey);
         void completeStudioTask(json.taskId, url);
@@ -1991,7 +2258,10 @@ export default function StudioVideoPanel({
 
               {motionEdit ? (
                 <div>
-                  <Label className="text-xs text-white/45">Scene control</Label>
+                  <Label className="text-xs text-white/45">Background source</Label>
+                  <p className="mt-0.5 text-[10px] leading-snug text-white/35">
+                    Kling 3.0 Motion Control — KIE <span className="text-white/55">background_source</span>.
+                  </p>
                   <Select
                     value={editSceneBackground}
                     onValueChange={(v) =>
@@ -2003,10 +2273,10 @@ export default function StudioVideoPanel({
                     </SelectTrigger>
                     <SelectContent position="popper" className={studioSelectContentClass}>
                       <SelectItem value="input_video" className={studioSelectItemClass}>
-                        Video
+                        Video background (motion clip)
                       </SelectItem>
                       <SelectItem value="input_image" className={studioSelectItemClass}>
-                        Image
+                        Image background (character still)
                       </SelectItem>
                     </SelectContent>
                   </Select>
@@ -2061,7 +2331,7 @@ export default function StudioVideoPanel({
                   url={endUrl}
                   previewUrl={endFramePreviewBlob}
                   uploading={frameUploadBusy && frameUploadSlot === "end"}
-                  disabled={frameUploadBusy}
+                  disabled={frameUploadBusy || klingCustomMulti}
                   onPick={() => pickFrame("end")}
                   onAvatarBadgeClick={() => {
                     setAvatarPickTarget("create_end");
@@ -2076,13 +2346,19 @@ export default function StudioVideoPanel({
                   }}
                 />
               </div>
-              <Textarea
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder="Describe your video, like 'A woman walking through a neon-lit city'."
-                className="mt-4 min-h-[120px] w-full resize-none border-white/10 bg-[#0a0a0d] px-3 py-3 text-sm text-white placeholder:text-white/35 focus-visible:ring-0"
-                rows={4}
-              />
+              {klingCustomMulti ? (
+                <p className="mt-3 text-[10px] leading-snug text-white/38">
+                  Multi-shot: define each scene below in Parameters. Start frame only — end frame is disabled.
+                </p>
+              ) : (
+                <Textarea
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  placeholder="Describe your video, like 'A woman walking through a neon-lit city'."
+                  className="mt-4 min-h-[120px] w-full resize-none border-white/10 bg-[#0a0a0d] px-3 py-3 text-sm text-white placeholder:text-white/35 focus-visible:ring-0"
+                  rows={4}
+                />
+              )}
             </div>
 
             <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Parameters</p>
@@ -2102,75 +2378,214 @@ export default function StudioVideoPanel({
                     onChange={(v) => {
                       const next = v as VideoModelId;
                       setModelId(next);
-                      const choices = getDurationChoices(next);
-                      if (!choices.includes(duration)) setDuration(choices[0]);
+                      const choices = studioVideoDurationSecOptions(next);
+                      if (choices.length && !choices.includes(duration)) setDuration(choices[0]!);
                     }}
                     featuredTitle="Video models"
                   />
                 </div>
               )}
 
-              {modelHasMultiShot(modelId) ? (
-                <div className="flex items-center justify-between gap-3">
-                  <Label className="text-xs text-white/45">Multi-shot</Label>
-                  <button
-                    type="button"
-                    onClick={() => setMultiShot((m) => !m)}
-                    className={`relative h-7 w-12 shrink-0 rounded-full border transition ${
-                      multiShot
-                        ? "border-violet-400/50 bg-violet-500/40"
-                        : "border-white/15 bg-white/10"
-                    } disabled:opacity-40`}
-                    aria-pressed={multiShot}
-                  >
-                    <span
-                      className={`absolute top-0.5 h-6 w-6 rounded-full bg-white transition-all ${
-                        multiShot ? "left-5" : "left-0.5"
-                      }`}
-                    />
-                  </button>
+              {studioVideoSupportsMultiShot(modelId) ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <Label className="text-xs text-white/45">Multi-shot</Label>
+                      <button
+                        type="button"
+                        title="Create several shots and combine them into one video (max 15s total)"
+                        aria-label="Create several shots and combine them into one video (max 15s total)"
+                        className="inline-flex shrink-0 cursor-help rounded p-0.5 text-white/35 transition hover:text-white/55 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/45"
+                      >
+                        <HelpCircle className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setMultiShot((m) => !m)}
+                      className={cn(
+                        "relative h-7 w-12 shrink-0 rounded-full border transition",
+                        multiShot
+                          ? "border-violet-400/55 bg-violet-500/45"
+                          : "border-white/15 bg-white/10",
+                      )}
+                      aria-pressed={multiShot}
+                      aria-label="Toggle multi-shot"
+                    >
+                      <span
+                        className={cn(
+                          "absolute top-0.5 h-6 w-6 rounded-full bg-white shadow-sm transition-all",
+                          multiShot ? "left-5" : "left-0.5",
+                        )}
+                      />
+                    </button>
+                  </div>
+                  {multiShot ? (
+                    <div className="space-y-2">
+                      <div className="max-h-[min(50vh,22rem)] space-y-2 overflow-y-auto pr-0.5 studio-params-scroll">
+                        {klingShots.map((row, idx) => (
+                          <div
+                            key={row.id}
+                            className="rounded-xl border border-white/10 bg-black/25 p-2.5 space-y-2"
+                          >
+                            <div className="text-[11px] font-medium text-violet-300/85">
+                              Shot {idx + 1}
+                            </div>
+                            <Textarea
+                              value={row.prompt}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                setKlingShots((prev) =>
+                                  prev.map((s) => (s.id === row.id ? { ...s, prompt: v } : s)),
+                                );
+                              }}
+                              placeholder={
+                                idx === 0
+                                  ? "Describe the first scene you imagine, with details."
+                                  : `Describe scene ${idx + 1}…`
+                              }
+                              maxLength={500}
+                              rows={3}
+                              className="min-h-[72px] w-full resize-none border-white/10 bg-[#0a0a0d] px-2.5 py-2 text-xs text-white placeholder:text-white/35 focus-visible:ring-0"
+                            />
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex items-center gap-1.5 text-white/45">
+                                <Clock className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                                <Select
+                                  value={String(row.durationSec)}
+                                  onValueChange={(v) => {
+                                    const n = Number(v);
+                                    setKlingShots((prev) =>
+                                      prev.map((s) =>
+                                        s.id === row.id ? { ...s, durationSec: n } : s,
+                                      ),
+                                    );
+                                  }}
+                                >
+                                  <SelectTrigger className="h-8 w-[4.5rem] rounded-lg border-white/12 bg-[#0a0a0d] text-xs text-white">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent position="popper" className={studioSelectContentClass}>
+                                    {KLING_SHOT_DURATION_OPTIONS.map((d) => (
+                                      <SelectItem key={d} value={d} className={studioSelectItemClass}>
+                                        {d}s
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 gap-1 rounded-full border-white/15 bg-black/30 px-2.5 text-[11px] text-white/80 hover:bg-white/[0.06]"
+                                  onClick={openKlingElementsModal}
+                                >
+                                  <AtSign className="h-3 w-3" aria-hidden />
+                                  Elements
+                                </Button>
+                                {klingShots.length > 1 ? (
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 shrink-0 text-white/45 hover:bg-white/[0.06] hover:text-rose-300"
+                                    aria-label={`Remove shot ${idx + 1}`}
+                                    onClick={() =>
+                                      setKlingShots((prev) => prev.filter((s) => s.id !== row.id))
+                                    }
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                ) : null}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-9 w-full gap-1.5 rounded-xl border-dashed border-white/20 bg-transparent text-xs text-white/70 hover:bg-white/[0.04]"
+                        disabled={klingShots.length >= KLING_MULTI_MAX_SHOTS}
+                        onClick={() =>
+                          setKlingShots((prev) => [
+                            ...prev,
+                            {
+                              id: crypto.randomUUID(),
+                              prompt: "",
+                              durationSec: 3,
+                            },
+                          ])
+                        }
+                      >
+                        <CirclePlus className="h-4 w-4" />
+                        Add shot
+                      </Button>
+                      <p
+                        className={cn(
+                          "text-[11px] tabular-nums",
+                          klingMultiTotalSec >= 3 && klingMultiTotalSec <= 15
+                            ? "text-emerald-300/90"
+                            : "text-amber-200/90",
+                        )}
+                      >
+                            Total {klingMultiTotalSec}s — each shot 1–12s; sum must be 3–15s (Kling 3.0 API).
+                      </p>
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
 
               {meta.family === "veo" ? (
-                <div>
-                  <Label className="text-xs text-white/45">Aspect ratio</Label>
-                  <Select value={veoAspect} onValueChange={(v) => setVeoAspect(v as typeof veoAspect)}>
-                    <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent position="popper" className={studioSelectContentClass}>
-                      <SelectItem value="9:16" className={studioSelectItemClass}>
-                        9:16
-                      </SelectItem>
-                      <SelectItem value="16:9" className={studioSelectItemClass}>
-                        16:9
-                      </SelectItem>
-                      <SelectItem value="Auto" className={studioSelectItemClass}>
-                        Auto
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              ) : (
                 <>
                   <div>
                     <Label className="text-xs text-white/45">Duration</Label>
-                    <Select value={duration} onValueChange={setDuration}>
+                    <p className="mt-2 rounded-xl border border-white/10 bg-[#0a0a0d] px-3 py-3 text-sm text-white/75 leading-snug">
+                      {STUDIO_VEO_DURATION_HINT}
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-white/45">Aspect ratio</Label>
+                    <Select value={veoAspect} onValueChange={(v) => setVeoAspect(v as typeof veoAspect)}>
                       <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent position="popper" className={studioSelectContentClass}>
-                        {durationChoices.map((d) => (
-                          <SelectItem key={d} value={d} className={studioSelectItemClass}>
-                            {d}s
-                          </SelectItem>
-                        ))}
+                        <SelectItem value="9:16" className={studioSelectItemClass}>
+                          9:16
+                        </SelectItem>
+                        <SelectItem value="16:9" className={studioSelectItemClass}>
+                          16:9
+                        </SelectItem>
+                        <SelectItem value="Auto" className={studioSelectItemClass}>
+                          Auto
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
-                  {((modelId === "kling-3.0/video" || modelId === "kling-2.6/video") && !startUrl) ||
-                  isStudioSeedancePickerId(modelId) ? (
+                </>
+              ) : (
+                <>
+                  {!(modelId === "kling-3.0/video" && multiShot) ? (
+                    <div>
+                      <Label className="text-xs text-white/45">Duration</Label>
+                      <Select value={duration} onValueChange={setDuration}>
+                        <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent position="popper" className={studioSelectContentClass}>
+                          {durationChoices.map((d) => (
+                            <SelectItem key={d} value={d} className={studioSelectItemClass}>
+                              {d}s
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : null}
+                  {studioVideoShowsAspectRatioCreate(modelId, Boolean(startUrl)) ? (
                     <div>
                       <Label className="text-xs text-white/45">Aspect ratio</Label>
                       <Select value={aspect} onValueChange={setAspect}>
@@ -2191,7 +2606,7 @@ export default function StudioVideoPanel({
                       </Select>
                     </div>
                   ) : null}
-                  {modelHasQuality(modelId) ? (
+                  {studioVideoSupportsQualityPicker(modelId) ? (
                     <div>
                       <Label className="text-xs text-white/45">Quality</Label>
                       <Select value={klingMode} onValueChange={(v) => setKlingMode(v as "std" | "pro")}>
@@ -2234,7 +2649,7 @@ export default function StudioVideoPanel({
                 </>
               )}
 
-              {modelHasAudio(modelId) ? (
+              {studioVideoSupportsNativeAudio(modelId) ? (
                 <div>
                   <Label className="text-xs text-white/45">Audio</Label>
                   <button
@@ -2265,6 +2680,210 @@ export default function StudioVideoPanel({
           {outputHistoryColumn}
         </div>
       )}
+
+      <input
+        ref={klingElementFileRef}
+        type="file"
+        accept={STUDIO_IMAGE_FILE_ACCEPT}
+        className="hidden"
+        onChange={onKlingElementFileChange}
+      />
+      <Dialog.Root open={klingElementsModalOpen} onOpenChange={handleKlingElementsModalOpenChange}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-[220] bg-black/70 backdrop-blur-[3px] transition-opacity duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-[221] w-[min(92vw,420px)] max-h-[min(85vh,640px)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-white/[0.08] bg-gradient-to-b from-[#14141a] to-[#0a0a0e] p-0 shadow-[0_24px_80px_rgba(0,0,0,0.65),inset_0_1px_0_rgba(255,255,255,0.04)] outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-[0.98] data-[state=open]:zoom-in-[0.98] data-[state=closed]:slide-out-to-bottom-1 data-[state=open]:slide-in-from-bottom-1 data-[state=open]:duration-200 data-[state=closed]:duration-150">
+            <div className="flex items-start justify-between gap-3 border-b border-white/[0.06] px-5 py-4">
+              <Dialog.Title className="pr-2 text-[17px] font-semibold tracking-tight text-white">
+                Create element
+              </Dialog.Title>
+              <Dialog.Close asChild>
+                <button
+                  type="button"
+                  className="shrink-0 rounded-lg p-1.5 text-white/45 transition hover:bg-white/[0.06] hover:text-white"
+                  aria-label="Close"
+                >
+                  <X className="h-4 w-4" aria-hidden />
+                </button>
+              </Dialog.Close>
+            </div>
+
+            <div className="space-y-4 px-5 py-4">
+              <Dialog.Description className="text-xs leading-relaxed text-white/45">
+                Use <span className="text-white/65">@element_name</span> in a shot prompt. Each element needs 2–4
+                reference images. Up to 3 elements.
+              </Dialog.Description>
+
+              {klingElementDrafts.length > 0 ? (
+                <div className="space-y-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-white/35">
+                    Saved elements
+                  </p>
+                  <ul className="space-y-2">
+                    {klingElementDrafts.map((el) => (
+                      <li
+                        key={el.id}
+                        className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-black/30 px-3 py-2.5"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-xs font-medium text-white/90">@{el.name.trim() || "—"}</p>
+                          <p className="truncate text-[10px] text-white/40">
+                            {el.description.trim() ? el.description.trim() : "No description"} · {el.urls.length}{" "}
+                            image{el.urls.length === 1 ? "" : "s"}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 gap-1">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2 text-[11px] text-white/70 hover:bg-white/[0.06]"
+                            onClick={() => editKlingElementInModal(el)}
+                          >
+                            Edit
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2 text-[11px] text-rose-300/90 hover:bg-white/[0.06] hover:text-rose-200"
+                            onClick={() => removeKlingElementDraft(el.id)}
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
+              {!klingElementForm && klingElementDrafts.length >= 3 ? (
+                <p className="text-xs text-white/50">
+                  Remove an element above to add a new one.
+                </p>
+              ) : null}
+
+              {!klingElementForm && klingElementDrafts.length < 3 ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-10 w-full rounded-xl border-white/15 bg-transparent text-sm text-white/80 hover:bg-white/[0.04]"
+                  onClick={() =>
+                    setKlingElementForm({
+                      id: crypto.randomUUID(),
+                      name: `element_${klingElementDrafts.length + 1}`,
+                      description: "",
+                      urls: [],
+                    })
+                  }
+                >
+                  Add element
+                </Button>
+              ) : null}
+
+              {klingElementForm ? (
+                <div className="space-y-3 rounded-xl border border-white/[0.06] bg-white/[0.02] p-3.5">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="kling-element-name" className="text-xs text-white/65">
+                      Name <span className="text-rose-400" aria-hidden="true">*</span>
+                    </Label>
+                    <Input
+                      id="kling-element-name"
+                      value={klingElementForm.name}
+                      onChange={(e) =>
+                        setKlingElementForm((f) => (f ? { ...f, name: e.target.value } : f))
+                      }
+                      placeholder="Enter element name"
+                      className="h-10 border-white/10 bg-[#0a0a0d] text-sm text-white placeholder:text-white/35"
+                      autoComplete="off"
+                      aria-required
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="kling-element-desc" className="text-xs text-white/65">
+                      Description <span className="text-rose-400" aria-hidden="true">*</span>
+                    </Label>
+                    <Textarea
+                      id="kling-element-desc"
+                      value={klingElementForm.description}
+                      onChange={(e) =>
+                        setKlingElementForm((f) => (f ? { ...f, description: e.target.value } : f))
+                      }
+                      placeholder="Enter element description"
+                      rows={4}
+                      className="min-h-[100px] w-full resize-none border-white/10 bg-[#0a0a0d] text-sm text-white placeholder:text-white/35 focus-visible:ring-0"
+                      aria-required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs text-white/65">
+                      Media <span className="text-rose-400" aria-hidden="true">*</span>
+                    </Label>
+                    <div className="flex flex-wrap gap-2">
+                      {klingElementForm.urls.map((u, ui) => (
+                        <button
+                          key={`${klingElementForm.id}-img-${ui}`}
+                          type="button"
+                          className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-white/10"
+                          onClick={() =>
+                            setKlingElementForm((f) =>
+                              f ? { ...f, urls: f.urls.filter((_, j) => j !== ui) } : f,
+                            )
+                          }
+                          title="Remove image"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={u} alt="" className="h-full w-full object-cover" />
+                        </button>
+                      ))}
+                      {klingElementForm.urls.length < 4 ? (
+                        <button
+                          type="button"
+                          disabled={klingElementUploadBusy}
+                          onClick={() => pickKlingElementImage(klingElementForm.id)}
+                          className="flex min-h-[120px] min-w-[min(100%,280px)] flex-1 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/20 bg-[#0c0c10] px-4 py-6 text-white/45 transition hover:border-violet-400/35 hover:bg-white/[0.02] hover:text-white/65 disabled:opacity-50"
+                        >
+                          <Upload className="h-8 w-8 opacity-70" strokeWidth={1.5} aria-hidden />
+                          <span className="text-center text-sm font-medium text-white/70">
+                            Click to upload images
+                          </span>
+                        </button>
+                      ) : null}
+                    </div>
+                    <p className="text-[10px] leading-snug text-white/40">
+                      Images: JPEG, PNG, WebP, or GIF — at least {KLING_ELEMENT_MEDIA_MIN_PX}×
+                      {KLING_ELEMENT_MEDIA_MIN_PX}px, max {Math.round(KLING_ELEMENT_MEDIA_MAX_BYTES / (1024 * 1024))}MB
+                      each.
+                    </p>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="flex flex-col-reverse gap-2 border-t border-white/[0.06] bg-[#0c0c10]/95 px-5 py-4 sm:flex-row sm:justify-end sm:gap-3">
+              <Dialog.Close asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-10 rounded-xl border-white/[0.12] bg-transparent text-white/75 hover:bg-white/[0.05]"
+                >
+                  Cancel
+                </Button>
+              </Dialog.Close>
+              {klingElementForm ? (
+                <Button
+                  type="button"
+                  disabled={klingElementUploadBusy}
+                  onClick={() => saveKlingElementForm()}
+                  className="h-10 rounded-xl border border-violet-400/35 bg-violet-500 text-white shadow-[0_0_20px_rgba(139,92,246,0.18)] hover:bg-violet-400"
+                >
+                  Save
+                </Button>
+              ) : null}
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
 
       <StudioBillingDialog
         open={billing.open}

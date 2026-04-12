@@ -151,8 +151,16 @@ export async function POST(req: Request) {
     const items = listRows.map(studioGenerationRowToHistoryItem);
     return NextResponse.json({ data: items, refundHints });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error.";
+    const message =
+      err instanceof Error
+        ? err.message
+        : typeof err === "object" &&
+            err !== null &&
+            "message" in err &&
+            typeof (err as { message: unknown }).message === "string"
+          ? (err as { message: string }).message
+          : String(err ?? "Unknown error.");
     serverLog("studio_generations_poll_error", { message: message.slice(0, 240) });
-    return NextResponse.json({ error: message }, { status: 502 });
+    return NextResponse.json({ error: message.slice(0, 500) }, { status: 502 });
   }
 }

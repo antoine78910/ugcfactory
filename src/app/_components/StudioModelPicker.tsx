@@ -293,6 +293,8 @@ export function StudioModelPicker({
       if (!el) return;
       const r = el.getBoundingClientRect();
       const gap = 8;
+      const edge = 12;
+      const bottomMargin = 16;
       const vw = window.innerWidth;
       const vh = window.innerHeight;
       const maxPanel = Math.min(352, vw - 24);
@@ -306,22 +308,46 @@ export function StudioModelPicker({
 
       let left: number;
       let top: number;
+      let placementBesideTrigger: boolean;
 
       if (panelMode === "dropdown" && canOpenRight && align === "end") {
         left = r.right + gap;
         top = r.top;
+        placementBesideTrigger = true;
       } else if (panelMode === "dropdown" && canOpenLeft && align === "start") {
         left = r.left - gap - w;
         top = r.top;
+        placementBesideTrigger = true;
       } else {
         // Vertical fallback: open below trigger.
         left = align === "end" ? r.right - w : r.left;
         top = r.bottom + gap;
+        placementBesideTrigger = false;
       }
 
-      left = Math.max(12, Math.min(left, vw - w - 12));
-      top = Math.max(12, Math.min(top, vh - 16));
-      const maxHeight = Math.min(vh - top - 16, vh * 0.72, 448);
+      left = Math.max(edge, Math.min(left, vw - w - edge));
+
+      /** Taller list when there is room (Image / Video pickers in the sidebar). */
+      const heightCap = Math.min(520, Math.round(vh * 0.82));
+      let maxHeight: number;
+
+      if (placementBesideTrigger) {
+        // Align top with trigger by default, but move the panel *up* when needed so we keep
+        // a comfortable height instead of a short strip that forces heavy inner scrolling.
+        top = Math.max(edge, Math.min(top, vh - bottomMargin - heightCap));
+        maxHeight = Math.min(vh - top - bottomMargin, heightCap);
+      } else {
+        top = Math.max(edge, top);
+        maxHeight = Math.min(vh - top - bottomMargin, heightCap);
+        const minComfort = 260;
+        if (maxHeight < minComfort && r.top > edge + minComfort + gap) {
+          const h = Math.min(heightCap, r.top - gap - edge);
+          top = r.top - gap - h;
+          top = Math.max(edge, top);
+          maxHeight = Math.min(r.top - gap - top, heightCap, vh - top - bottomMargin);
+        }
+      }
+
       setDropdownLayout({ top, left, width: w, maxHeight });
     };
     measure();

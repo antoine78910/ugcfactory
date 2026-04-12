@@ -11,9 +11,12 @@ import {
 import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { getUserPlan } from "@/lib/supabase/getUserPlan";
+import { normalizeMotionControlQuality } from "@/lib/pricing";
 
+/** Kling 3.0 `background_source`. For Kling 2.6 the UI uses the same labels; API maps to `character_orientation`. */
 type BackgroundSource = "input_video" | "input_image";
 type CharacterOrientation = "video" | "image";
+type MotionFamily = "kling-3.0" | "kling-2.6";
 
 type Body = {
   accountPlan?: string;
@@ -21,21 +24,22 @@ type Body = {
   imageUrl: string;
   /** Public HTTPS URL of motion reference video (after upload). */
   videoUrl: string;
-  /** UI: 720p | 1080p | std | pro — KIE OpenAPI uses `std` (720p) and `pro` (1080p). */
+  /** UI: 720p | 1080p | std | pro — KIE expects `720p` / `1080p` (not std/pro). */
   quality?: string;
-  /** Background from motion clip vs character still (Kie `background_source`). */
+  /** `kling-3.0` (default) or `kling-2.6` — see docs.kie.ai motion-control vs motion-control-v3. */
+  motionFamily?: string;
+  /** Background from motion clip vs character still (`background_source` on 3.0 only). */
   backgroundSource?: BackgroundSource;
-  /** Character orientation (Kie `character_orientation`). Omit to let the server pair with `background_source`. */
+  /** Character orientation (Kie `character_orientation`). On 3.0, paired with `background_source` when omitted. */
   characterOrientation?: CharacterOrientation;
   prompt?: string;
   personalApiKey?: string;
 };
 
-/** KIE `mode`: std = 720p, pro = 1080p (see docs.kie.ai motion-control-v3). */
-function motionModeFromQuality(q: string | undefined): "std" | "pro" {
-  const s = (q ?? "720p").toLowerCase();
-  if (s === "1080p" || s === "pro") return "pro";
-  return "std";
+function parseMotionFamily(raw: string | undefined): MotionFamily {
+  const t = (raw ?? "kling-3.0").trim().toLowerCase();
+  if (t === "kling-2.6" || t === "2.6" || t.includes("kling-2.6")) return "kling-2.6";
+  return "kling-3.0";
 }
 
 /**
@@ -84,35 +88,50 @@ export async function POST(req: Request) {
 
   const backgroundSource: BackgroundSource =
     body.backgroundSource === "input_image" ? "input_image" : "input_video";
-  const characterOrientation = resolveCharacterOrientation(
-    body.characterOrientation === "video" || body.characterOrientation === "image"
-      ? body.characterOrientation
-      : undefined,
-    backgroundSource,
-  );
-
-  const mode = motionModeFromQuality(body.quality);
+  const family = parseMotionFamily(body.motionFamily);
+  const mode = normalizeMotionControlQuality(body.quality);
   const prompt = (body.prompt ?? "").trim();
 
   try {
-    const input: Record<string, unknown> = {
-      input_urls: [imageUrl],
-      video_urls: [videoUrl],
-      mode,
-      character_orientation: characterOrientation,
-      background_source: backgroundSource,
-    };
-    if (prompt) input.prompt = prompt.slice(0, 2500);
+    let kieModel: string;
+    let input: Record<string, unknown>;
 
-    const taskId = await kieMarketCreateTask(
-      { model: "kling-3.0/motion-control", input },
-      personalKey,
-    );
+    if (family === "kling-2.6") {
+      // Kling 2.6: no `background_source` — map scene choice to `character_orientation` only.
+      const character_orientation: CharacterOrientation =
+        backgroundSource === "input_image" ? "image" : "video";
+      input = {
+        input_urls: [imageUrl],
+        video_urls: [videoUrl],
+        mode,
+        character_orientation,
+      };
+      if (prompt) input.prompt = prompt.slice(0, 2500);
+      kieModel = "kling-2.6/motion-control";
+    } else {
+      const characterOrientation = resolveCharacterOrientation(
+        body.characterOrientation === "video" || body.characterOrientation === "image"
+          ? body.characterOrientation
+          : undefined,
+        backgroundSource,
+      );
+      input = {
+        input_urls: [imageUrl],
+        video_urls: [videoUrl],
+        mode,
+        character_orientation: characterOrientation,
+        background_source: backgroundSource,
+      };
+      if (prompt) input.prompt = prompt.slice(0, 2500);
+      kieModel = "kling-3.0/motion-control";
+    }
+
+    const taskId = await kieMarketCreateTask({ model: kieModel, input }, personalKey);
 
     return NextResponse.json({
       taskId,
       provider: "kie-market",
-      model: "kling-3.0/motion-control",
+      model: kieModel,
     });
   } catch (err) {
     logGenerationFailure("kling/motion-control", err);

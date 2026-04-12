@@ -49,6 +49,8 @@ const VIDEO_MIN_RANK: Record<string, number> = {
   "bytedance/seedance-2": 2,
   "bytedance/seedance-2-fast": 2,
   "kling-3.0/video": 2,
+  veo3_lite: 2,
+  veo3_fast: 2,
   veo3: 2,
   // Starter should include Sora 2
   "openai/sora-2": 1,
@@ -68,8 +70,8 @@ const VIDEO_EDIT_PICKER_MIN_RANK: Record<string, number> = {
 /** Veo checkout body uses these keys; map to same gates as studio ids. */
 const VEO_BODY_MODEL_MIN_RANK: Record<string, number> = {
   veo3: VIDEO_MIN_RANK.veo3,
-  /** @deprecated Mapped to veo3 in API; same gate. */
-  veo3_fast: VIDEO_MIN_RANK.veo3,
+  veo3_fast: VIDEO_MIN_RANK.veo3_fast,
+  veo3_lite: VIDEO_MIN_RANK.veo3_lite,
 };
 
 export function canUseStudioImageModel(planId: AccountPlanId, model: "nano" | "pro"): boolean {
@@ -110,7 +112,7 @@ export function canUseStudioVideoEditPicker(planId: AccountPlanId, editPickerId:
 }
 
 export function canUseVeoApiModel(planId: AccountPlanId, veoModel: string | undefined): boolean {
-  const key = (veoModel ?? "veo3").trim();
+  const key = (veoModel ?? "veo3_lite").trim();
   const min = VEO_BODY_MODEL_MIN_RANK[key];
   if (min === undefined) return false;
   return planRank(planId) >= min;
@@ -152,7 +154,7 @@ export function minPlanForStudioVideoEditPicker(editPickerId: string): AccountPl
 }
 
 export function minPlanForVeo(veoModel: string | undefined): AccountPlanId {
-  const key = (veoModel ?? "veo3").trim();
+  const key = (veoModel ?? "veo3_lite").trim();
   const min = VEO_BODY_MODEL_MIN_RANK[key];
   if (min === undefined) return "scale";
   return planIdAtMinRank(min);
@@ -185,7 +187,9 @@ const STUDIO_VIDEO_LABELS: Record<string, string> = {
   "bytedance/seedance-2-fast-preview": "Seedance 2 Fast Preview",
   "bytedance/seedance-2": "Seedance 2",
   "bytedance/seedance-2-fast": "Seedance 2 Fast",
-  veo3: "Veo 3.1",
+  veo3_lite: "Veo 3.1 Lite",
+  veo3_fast: "Veo 3.1 Fast",
+  veo3: "Veo 3.1 Quality",
 };
 
 const STUDIO_VIDEO_EDIT_PICKER_LABELS: Record<string, string> = {
@@ -204,6 +208,8 @@ export const STUDIO_VIDEO_IDS_ORDERED: readonly string[] = [
   "bytedance/seedance-2-preview",
   "bytedance/seedance-2",
   "kling-3.0/video",
+  "veo3_lite",
+  "veo3_fast",
   "veo3",
   "openai/sora-2",
   "openai/sora-2-pro",
@@ -355,7 +361,9 @@ export const SUBSCRIPTION_MODEL_MATRIX_ROWS: SubscriptionModelMatrixRow[] = [
     label: "Kling 3.0",
     tiers: tierBools(VIDEO_MIN_RANK["kling-3.0/video"]),
   },
-  { label: "Veo 3.1", tiers: tierBools(VIDEO_MIN_RANK.veo3) },
+  { label: "Veo 3.1 Lite", tiers: tierBools(VIDEO_MIN_RANK.veo3_lite) },
+  { label: "Veo 3.1 Fast", tiers: tierBools(VIDEO_MIN_RANK.veo3_fast) },
+  { label: "Veo 3.1 Quality", tiers: tierBools(VIDEO_MIN_RANK.veo3) },
   {
     label: "Sora 2",
     tiers: tierBools(VIDEO_MIN_RANK["openai/sora-2"]),
