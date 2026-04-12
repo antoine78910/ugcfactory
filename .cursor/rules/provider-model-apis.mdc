@@ -1,0 +1,15 @@
+---
+description: Official provider docs index + where credits/prices live (KIE, PiAPI Seedance, WaveSpeed).
+globs: src/lib/pricing.ts,src/app/api/kling/**/*.ts,src/lib/kie*.ts,src/lib/piapiSeedance.ts,src/lib/wavespeed*.ts,src/app/_components/StudioVideoPanel.tsx
+alwaysApply: false
+---
+
+# Provider APIs and pricing
+
+When adding or changing a **studio model**, **credits**, or **provider integration**:
+
+1. Read **`docs/PROVIDER_MODEL_API_INDEX.md`** for the canonical list of **official doc URLs** (KIE Market, Veo, PiAPI Seedance, WaveSpeed HeyGen translate, Topaz).
+2. **Credit math and USD assumptions** live in **`src/lib/pricing.ts`**. Update tiers there when provider list prices change; keep `GET /api/pricing` in sync if you expose new rows (`src/app/api/pricing/route.ts`).
+3. **Kling / Sora split (text vs image video):** use **`resolveKieVideoPickerToMarketModel`** from **`src/lib/kieVideoModelResolver.ts`** (wired in **`src/app/api/kling/generate/route.ts`**). Do not duplicate that switch in multiple files.
+
+English UI copy only (see repo `AGENTS.md`).
