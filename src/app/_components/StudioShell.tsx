@@ -121,6 +121,8 @@ const PROJECTS_NAV: { id: StudioNavSection; label: string; icon: LucideIcon } = 
 function sectionHref(section: StudioNavSection, projectId: string | null | undefined): string {
   const slug = SECTION_TO_SLUG[section] ?? "link-to-ad";
   let href = `/${slug}`;
+  /** My Projects always opens the brands dashboard, not a deep-linked run. */
+  if (section === "projects") return href;
   if (projectId) href += `?project=${encodeURIComponent(projectId)}`;
   return href;
 }

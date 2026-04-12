@@ -2147,6 +2147,27 @@ export default function LinkToAdUniverse({
     () => aiScrapedCandidateUrls.filter((u) => u !== (resolvedPreviewUrl || "").trim()),
     [aiScrapedCandidateUrls, resolvedPreviewUrl],
   );
+
+  /** Thumbnail strip: active preview (AI pick / neutral / chosen) plus user-uploaded product photos only — not every scraped packshot. */
+  const productPhotosStripUrls = useMemo(() => {
+    const out: string[] = [];
+    const seen = new Set<string>();
+    const add = (raw: string | null | undefined) => {
+      const r = resolveMaybeRelativeUrl(raw);
+      if (!r || seen.has(r)) return;
+      seen.add(r);
+      out.push((raw || "").trim());
+    };
+    if (resolvedPreviewUrl) add(resolvedPreviewUrl);
+    for (const u of productOnlyImageUrls) {
+      const r = resolveMaybeRelativeUrl(u);
+      if (!r || seen.has(r)) continue;
+      const isUserProduct = userPhotoUrls.some((uu) => resolveMaybeRelativeUrl(uu) === r);
+      if (isUserProduct) add(u);
+    }
+    return out;
+  }, [productOnlyImageUrls, userPhotoUrls, resolvedPreviewUrl, resolveMaybeRelativeUrl]);
+
   const choosePreviewImage = useCallback(
     (url: string) => {
       const picked = (url || "").trim();
@@ -5366,19 +5387,26 @@ export default function LinkToAdUniverse({
                 </div>
               ) : null}
               <div className="relative mt-2 flex flex-col gap-3 sm:flex-row sm:items-stretch">
-                <Input
-                  value={storeUrl}
-                  onChange={(e) => setStoreUrl(e.target.value)}
-                  placeholder="https://..."
-                  disabled={isWorking}
-                  className="h-14 min-h-[3.5rem] min-w-0 flex-1 rounded-xl border-white/10 bg-white/[0.03] px-4 text-lg text-white placeholder:text-white/35 disabled:cursor-wait disabled:opacity-60"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      handleGenerateFromUrl();
-                    }
-                  }}
-                />
+                <div className="relative min-w-0 flex-1">
+                  <Input
+                    value={storeUrl}
+                    onChange={(e) => setStoreUrl(e.target.value)}
+                    placeholder="https://..."
+                    disabled={isWorking}
+                    className="relative z-0 h-14 min-h-[3.5rem] w-full rounded-xl border-white/10 bg-white/[0.03] pl-4 pr-4 text-lg text-white placeholder:text-white/35 disabled:cursor-wait disabled:opacity-60"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleGenerateFromUrl();
+                      }
+                    }}
+                  />
+                  {/* Fade long URLs into the field edge so text does not hard-stop before Generate */}
+                  <div
+                    className="pointer-events-none absolute inset-y-px right-px z-10 w-12 rounded-r-[11px] bg-gradient-to-l from-[#101014] via-[#101014]/55 to-transparent backdrop-blur-[2px] sm:w-16 sm:via-[#101014]/45"
+                    aria-hidden
+                  />
+                </div>
                 <Button
                   type="button"
                   disabled={isWorking || !storeUrl.trim()}
@@ -5542,7 +5570,7 @@ export default function LinkToAdUniverse({
                   <div className="mt-4 space-y-2">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
-                        Product photos ({productOnlyImageUrls.length})
+                        Product photos ({productPhotosStripUrls.length})
                       </span>
                       <div className="flex flex-wrap items-center gap-1.5">
                         {isAlgorithmChosenPreview ? (
@@ -5591,7 +5619,7 @@ export default function LinkToAdUniverse({
                     ) : null}
                     <div className="flex flex-wrap gap-2">
                       <LinkToAdPendingProductThumbnails items={pendingProductUploads} />
-                      {productOnlyImageUrls.map((url, i) => (
+                      {productPhotosStripUrls.map((url, i) => (
                         <div
                           key={`${url}-${i}`}
                           className={cn(
@@ -5772,7 +5800,7 @@ export default function LinkToAdUniverse({
                   <div className="mt-4 space-y-2">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
-                        Product photos ({productOnlyImageUrls.length})
+                        Product photos ({productPhotosStripUrls.length})
                       </span>
                       <div className="flex flex-wrap items-center gap-1.5">
                         {isAlgorithmChosenPreview ? (
@@ -5821,7 +5849,7 @@ export default function LinkToAdUniverse({
                     ) : null}
                     <div className="flex flex-wrap gap-2">
                       <LinkToAdPendingProductThumbnails items={pendingProductUploads} />
-                      {productOnlyImageUrls.map((url, i) => (
+                      {productPhotosStripUrls.map((url, i) => (
                         <div
                           key={`${url}-${i}`}
                           className={cn(
@@ -6171,7 +6199,7 @@ export default function LinkToAdUniverse({
               <div className="rounded-xl border border-white/10 bg-white/5 p-3 sm:p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
-                      Product photos ({productOnlyImageUrls.length})
+                      Product photos ({productPhotosStripUrls.length})
                     </span>
                     <div className="flex flex-wrap items-center gap-1.5">
                       {isAlgorithmChosenPreview ? (
@@ -6220,7 +6248,7 @@ export default function LinkToAdUniverse({
                   ) : null}
                   <div className="mt-3 flex flex-wrap gap-2">
                     <LinkToAdPendingProductThumbnails items={pendingProductUploads} />
-                    {productOnlyImageUrls.map((url, i) => (
+                    {productPhotosStripUrls.map((url, i) => (
                       <div
                         key={`${url}-${i}-side`}
                         className={cn(

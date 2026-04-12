@@ -773,8 +773,6 @@ export default function AppBrandWizard() {
   const [isLoadingRuns, setIsLoadingRuns] = useState(false);
   /** While set, ignore pathname→section sync so a stale URL cannot overwrite a sidebar click. */
   const pendingSectionNavRef = useRef<AppSection | null>(null);
-  /** Previous sidebar section — used so we only auto-open the first brand when *entering* My Projects, not after "Back to brands". */
-  const prevAppSectionRef = useRef<AppSection | null>(null);
 
   const [storeUrl, setStoreUrl] = useState("");
   const [isExtracting, setIsExtracting] = useState(false);
@@ -1786,15 +1784,6 @@ export default function AppBrandWizard() {
     }
   }, [projects, selectedProjectNormalizedUrl]);
 
-  useEffect(() => {
-    const prev = prevAppSectionRef.current;
-    if (appSection === "projects" && prev !== "projects" && !selectedProjectNormalizedUrl) {
-      const first = projects[0]?.normalizedUrl ?? null;
-      if (first) setSelectedProjectNormalizedUrl(first);
-    }
-    prevAppSectionRef.current = appSection;
-  }, [appSection, projects, selectedProjectNormalizedUrl]);
-
   function resetForNewProject() {
     setStep("url");
     setRunId(null);
@@ -2088,18 +2077,23 @@ export default function AppBrandWizard() {
     else if (typeof localStorage !== "undefined") localStorage.removeItem(UGC_CURRENT_RUN_KEY);
   }, [runId]);
 
-  const setAppSectionNav = useCallback(
-    (s: AppSection, extra?: string) => {
-      pendingSectionNavRef.current = s;
-      setAppSection(s);
-      const projectId = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("project") : null;
-      const newPath = sectionToPath(s, projectId, extra);
-      if (typeof window !== "undefined" && window.location.pathname + window.location.search !== newPath) {
-        window.history.pushState(null, "", newPath);
-      }
-    },
-    [],
-  );
+  const setAppSectionNav = useCallback((s: AppSection, extra?: string) => {
+    pendingSectionNavRef.current = s;
+    setAppSection(s);
+    if (s === "projects") {
+      setSelectedProjectNormalizedUrl(null);
+    }
+    const projectId =
+      s === "projects"
+        ? null
+        : typeof window !== "undefined"
+          ? new URLSearchParams(window.location.search).get("project")
+          : null;
+    const newPath = sectionToPath(s, projectId, extra);
+    if (typeof window !== "undefined" && window.location.pathname + window.location.search !== newPath) {
+      window.history.pushState(null, "", newPath);
+    }
+  }, []);
 
   /**
    * Called when the user clicks "Change Voice" on a video in ANY history panel.
@@ -2207,7 +2201,8 @@ export default function AppBrandWizard() {
     if (typeof window === "undefined") return;
     if (!isBrowserStudioWizardPath(pathname)) return;
 
-    const projectId = runId || searchParams.get("project") || null;
+    const projectId =
+      appSection === "projects" ? null : runId || searchParams.get("project") || null;
     const wantPath = sectionToPath(appSection, projectId);
     const cur = window.location.pathname + window.location.search;
     if (cur !== wantPath) {
