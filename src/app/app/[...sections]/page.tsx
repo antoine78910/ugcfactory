@@ -1120,11 +1120,19 @@ export default function AppBrandWizard() {
         const serverList = json.data ?? [];
         const pendingMotion = readMotionPendingJobs();
         const pendingTranslate = readTranslatePendingJobs();
+        // Clean up localStorage entries already confirmed by server
+        if (historyKindsKey === STUDIO_GENERATION_KIND_STUDIO_TRANSLATE_VIDEO) {
+          for (const item of serverList) {
+            if ((item.status === "ready" || item.status === "failed") && item.externalTaskId?.trim()) {
+              removeTranslatePendingJob(item.externalTaskId.trim());
+            }
+          }
+        }
         const withPendingMotion =
           historyKindsKey === "motion_control"
             ? mergeServerHistoryWithMotionPending(serverList, pendingMotion)
             : historyKindsKey === STUDIO_GENERATION_KIND_STUDIO_TRANSLATE_VIDEO
-              ? mergeServerHistoryWithTranslatePending(serverList, pendingTranslate)
+              ? mergeServerHistoryWithTranslatePending(serverList, readTranslatePendingJobs())
               : serverList;
         setActiveHistoryItems((prev) => mergeStudioHistoryWithServer(withPendingMotion, prev));
 
@@ -1204,6 +1212,14 @@ export default function AppBrandWizard() {
         const json = (await res.json()) as { data?: StudioHistoryItem[]; refundHints?: RefundHint[] };
         if (Array.isArray(json.data)) {
           const serverList = json.data;
+          // Clean up localStorage when server confirms translate is done
+          if (historyKindsKey === STUDIO_GENERATION_KIND_STUDIO_TRANSLATE_VIDEO) {
+            for (const item of serverList) {
+              if ((item.status === "ready" || item.status === "failed") && item.externalTaskId?.trim()) {
+                removeTranslatePendingJob(item.externalTaskId.trim());
+              }
+            }
+          }
           const withPending =
             historyKindsKey === "motion_control"
               ? mergeServerHistoryWithMotionPending(serverList, readMotionPendingJobs())
@@ -1224,6 +1240,83 @@ export default function AppBrandWizard() {
     const id = window.setInterval(tick, 4000);
     return () => window.clearInterval(id);
   }, [applyRefundHints, historyKindsKey, motionServerHistory, setActiveHistoryItems]);
+
+  /**
+   * Client-side poller for translate jobs that were in-progress when the page was reloaded.
+   * Reads localStorage pending jobs and polls WaveSpeed every 2s until completion or failure.
+   * This runs independently of the server-side poll so the user sees updates faster after reload.
+   */
+  useEffect(() => {
+    if (appSection !== "ad_clone") return;
+    const pending = readTranslatePendingJobs();
+    if (pending.length === 0) return;
+
+    let alive = true;
+    const active = [...pending]; // mutable copy, items removed when resolved
+
+    void (async () => {
+      while (alive && active.length > 0) {
+        await new Promise<void>((r) => setTimeout(r, 2000));
+        if (!alive) return;
+
+        for (let i = active.length - 1; i >= 0; i--) {
+          const job = active[i]!;
+          try {
+            const res = await fetch(
+              `/api/wavespeed/prediction?taskId=${encodeURIComponent(job.taskId)}`,
+              { cache: "no-store" },
+            );
+            if (!res.ok) continue;
+            const json = (await res.json()) as {
+              data?: {
+                done?: boolean;
+                failed?: boolean;
+                outputs?: string[];
+                error?: string | null;
+                status?: string;
+              };
+            };
+            const d = json.data;
+            if (d?.done) {
+              const url = pickFirstWaveTranslateVideoUrl(d.outputs);
+              if (url) {
+                active.splice(i, 1);
+                removeTranslatePendingJob(job.taskId);
+                void completeStudioTask(job.taskId, url);
+                setTranslateHistoryItems((prev) =>
+                  prev.map((item) =>
+                    item.externalTaskId === job.taskId ||
+                    (job.rowId != null && item.studioGenerationId === job.rowId)
+                      ? { ...item, status: "ready" as const, mediaUrl: url }
+                      : item,
+                  ),
+                );
+              }
+            } else if (d?.failed) {
+              active.splice(i, 1);
+              removeTranslatePendingJob(job.taskId);
+              const errMsg = typeof d.error === "string" && d.error.trim() ? d.error.trim() : "Translation failed";
+              setTranslateHistoryItems((prev) =>
+                prev.map((item) =>
+                  item.externalTaskId === job.taskId ||
+                  (job.rowId != null && item.studioGenerationId === job.rowId)
+                    ? { ...item, status: "failed" as const, errorMessage: errMsg }
+                    : item,
+                ),
+              );
+            }
+          } catch {
+            /* transient network error — keep retrying */
+          }
+        }
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appSection]);
 
   useEffect(() => {
     return () => {
@@ -3915,7 +4008,7 @@ export default function AppBrandWizard() {
                           setHistoryTarget((prev) => [
                             {
                               id: jobId,
-                              kind: isVoiceChange ? "audio" : "motion",
+                              kind: isVoiceChange ? "audio" : isTranslate ? "video" : "motion",
                               status: "generating",
                               label: historyLabel,
                               posterUrl: poster,
@@ -4127,16 +4220,7 @@ export default function AppBrandWizard() {
                               const motionInputUrls = [videoHttps].filter(Boolean);
                               if (isTranslate) {
                                 translatePendingTaskId = providerTaskId;
-                                upsertTranslatePendingJob({
-                                  taskId: providerTaskId,
-                                  label: historyLabel,
-                                  model,
-                                  language: adCloneOutputLanguage,
-                                  provider,
-                                  inputUrls: motionInputUrls.length > 0 ? motionInputUrls : undefined,
-                                  creditsCharged: platformChargeMotion,
-                                  startedAt: Date.now(),
-                                });
+                                // Patch externalTaskId on the optimistic item; localStorage saved below after rowId
                                 setTranslateHistoryItems((prev) =>
                                   prev.map((i) =>
                                     i.id === jobId ? { ...i, externalTaskId: providerTaskId } : i,
@@ -4170,10 +4254,23 @@ export default function AppBrandWizard() {
                                 personalApiKey: getPersonalApiKey() ?? undefined,
                                 inputUrls: motionInputUrls.length > 0 ? motionInputUrls : undefined,
                               });
+                              if (isTranslate) {
+                                // Save to localStorage now that we have rowId — same id as Supabase/React,
+                                // so mergeStudioHistoryWithServer will correctly deduplicate.
+                                upsertTranslatePendingJob({
+                                  taskId: providerTaskId,
+                                  rowId: rowId ?? undefined,
+                                  label: historyLabel,
+                                  model,
+                                  language: adCloneOutputLanguage,
+                                  provider,
+                                  inputUrls: motionInputUrls.length > 0 ? motionInputUrls : undefined,
+                                  creditsCharged: platformChargeMotion,
+                                  startedAt: startedAt,
+                                });
+                              }
                               if (rowId) {
-                                if (isTranslate) {
-                                  patchTranslatePendingJob(providerTaskId, { rowId });
-                                } else if (appSection === "motion_control") {
+                                if (!isTranslate && appSection === "motion_control") {
                                   patchMotionPendingJob(providerTaskId, { rowId });
                                 }
                                 (isTranslate ? setTranslateHistoryItems : setMotionControlHistoryItems)((prev) =>
