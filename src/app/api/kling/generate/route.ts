@@ -4,7 +4,8 @@ export const maxDuration = 60;
 import { NextResponse } from "next/server";
 import { kieMarketCreateTask } from "@/lib/kieMarket";
 import { mirrorImageUrlForPiapiSeedance } from "@/lib/mirrorImageUrlForPiapi";
-import { encodePiapiTaskId, piapiCreateSeedanceTask } from "@/lib/piapiSeedance";
+import { resolveKieVideoPickerToMarketModel } from "@/lib/kieVideoModelResolver";
+import { encodePiapiTaskId, piapiCreateSeedanceTask, type PiapiSeedanceTaskType } from "@/lib/piapiSeedance";
 import { hasPersonalApiKey } from "@/lib/personalApiBypass";
 import {
   canUseStudioVideoModel,
@@ -37,23 +38,6 @@ type Body = {
   personalApiKey?: string;
   piapiApiKey?: string;
 };
-
-/**
- * KIE requires separate model names for text-to-video vs image-to-video.
- * Client still sends picker ids; resolve here from presence of an image.
- */
-function resolveKieModelName(pickerModel: string, hasImage: boolean): string {
-  switch (pickerModel) {
-    case "kling-2.6/video":
-      return hasImage ? "kling-2.6/image-to-video" : "kling-2.6/text-to-video";
-    case "openai/sora-2":
-      return hasImage ? "sora-2-image-to-video" : "sora-2-text-to-video";
-    case "openai/sora-2-pro":
-      return hasImage ? "sora-2-pro-image-to-video" : "sora-2-pro-text-to-video";
-    default:
-      return pickerModel;
-  }
-}
 
 function isKling26(model: string): boolean {
   return (
@@ -105,15 +89,16 @@ function validateDurationForModel(model: string, duration: number | undefined) {
     }
     return;
   }
-  if (model === "bytedance/seedance-1.5-pro") {
-    if (duration !== 5 && duration !== 10 && duration !== 15) {
-      throw new Error("Invalid duration for Seedance 1.5 Pro. Must be 5, 10, or 15.");
+  if (model === "bytedance/seedance-2" || model === "bytedance/seedance-2-fast") {
+    const d = Number(duration);
+    if (!Number.isFinite(d) || d < 4 || d > 15 || Math.round(d) !== d) {
+      throw new Error("Invalid duration for Seedance 2. Must be an integer from 4 to 15 seconds.");
     }
     return;
   }
-  if (model.startsWith("bytedance/seedance-2")) {
+  if (model === "bytedance/seedance-2-preview" || model === "bytedance/seedance-2-fast-preview") {
     if (duration !== 5 && duration !== 10 && duration !== 15) {
-      throw new Error("Invalid duration for Seedance 2. Must be 5, 10, or 15.");
+      throw new Error("Invalid duration for Seedance 2 Preview. Must be 5, 10, or 15.");
     }
     return;
   }
@@ -136,7 +121,7 @@ export async function POST(req: Request) {
   const rawModel = (body.marketModel ?? "kling-3.0/video").trim() || "kling-3.0/video";
   const imageUrlRaw = (body.imageUrl ?? "").trim();
   const hasKieReferenceImage = isKieServableReferenceImageUrl(imageUrlRaw);
-  const model = resolveKieModelName(rawModel, hasKieReferenceImage);
+  const model = resolveKieVideoPickerToMarketModel(rawModel, hasKieReferenceImage);
   const prompt = (body.prompt ?? "").trim();
   if (!prompt) {
     return NextResponse.json({ error: "Missing `prompt`." }, { status: 400 });
@@ -214,45 +199,52 @@ export async function POST(req: Request) {
       if (hasKieReferenceImage) {
         input.image_urls = [imageUrlRaw];
       }
-    } else if (model.startsWith("bytedance/seedance")) {
-      if (!hasKieReferenceImage) {
+    } else if (rawModel.startsWith("bytedance/seedance")) {
+      const SEEDANCE_TASK: Record<string, PiapiSeedanceTaskType> = {
+        "bytedance/seedance-2": "seedance-2",
+        "bytedance/seedance-2-fast": "seedance-2-fast",
+        "bytedance/seedance-2-preview": "seedance-2-preview",
+        "bytedance/seedance-2-fast-preview": "seedance-2-fast-preview",
+      };
+      const taskType = SEEDANCE_TASK[rawModel];
+      if (!taskType) {
+        return NextResponse.json({ error: `Unsupported Seedance model: ${rawModel}` }, { status: 400 });
+      }
+      const preview = taskType === "seedance-2-preview" || taskType === "seedance-2-fast-preview";
+      if (preview && !hasKieReferenceImage) {
         return NextResponse.json(
-          { error: "Seedance requires `imageUrl` (image-to-video)." },
+          { error: "This Seedance preview model requires `imageUrl` (image-to-video)." },
           { status: 400 },
         );
-      }
-      let taskType: "seedance-2-preview" | "seedance-2-fast-preview";
-      if (model === "bytedance/seedance-2-fast-preview" || model === "bytedance/seedance-1.5-pro") {
-        taskType = "seedance-2-fast-preview";
-      } else {
-        taskType = "seedance-2-preview";
       }
       const duration = Number(body.duration ?? 10);
       const seedanceAspectRatio =
         body.aspectRatio === "1:1" ? ("4:3" as const) : (body.aspectRatio ?? "9:16");
-      let piapiImageUrl = imageUrlRaw;
-      try {
-        piapiImageUrl = await mirrorImageUrlForPiapiSeedance(imageUrlRaw, user.id);
-      } catch (mirrorErr) {
-        logGenerationFailure("kling/generate/mirror-seedance-image", mirrorErr, {
-          model,
-          imageHost: (() => {
-            try {
-              return new URL(imageUrlRaw).hostname;
-            } catch {
-              return "invalid";
-            }
-          })(),
-        });
-        return NextResponse.json(
-          {
-            error:
-              mirrorErr instanceof Error
-                ? mirrorErr.message
-                : "Could not prepare the reference image for the video provider.",
-          },
-          { status: 502 },
-        );
+      let piapiImageUrl: string | undefined;
+      if (hasKieReferenceImage) {
+        try {
+          piapiImageUrl = await mirrorImageUrlForPiapiSeedance(imageUrlRaw, user.id);
+        } catch (mirrorErr) {
+          logGenerationFailure("kling/generate/mirror-seedance-image", mirrorErr, {
+            model,
+            imageHost: (() => {
+              try {
+                return new URL(imageUrlRaw).hostname;
+              } catch {
+                return "invalid";
+              }
+            })(),
+          });
+          return NextResponse.json(
+            {
+              error:
+                mirrorErr instanceof Error
+                  ? mirrorErr.message
+                  : "Could not prepare the reference image for the video provider.",
+            },
+            { status: 502 },
+          );
+        }
       }
       const rawTaskId = await piapiCreateSeedanceTask({
         taskType,

@@ -22,10 +22,20 @@ export function isPiapiTaskId(taskId: string): boolean {
   return taskId.trim().startsWith(PIAPI_TASK_PREFIX);
 }
 
-/** PiAPI unified task `task_type` for Seedance 2 Preview (see https://piapi.ai/docs/seedance-api/seedance-2-preview). */
+/**
+ * PiAPI unified task `task_type` values.
+ * - Preview: https://piapi.ai/docs/seedance-api/seedance-2-preview
+ * - Seedance 2: https://piapi.ai/docs/seedance-api/seedance-2
+ */
 export type PiapiSeedanceTaskType =
   | "seedance-2-preview"
-  | "seedance-2-fast-preview";
+  | "seedance-2-fast-preview"
+  | "seedance-2"
+  | "seedance-2-fast";
+
+function isSeedance2ProTaskType(t: PiapiSeedanceTaskType): boolean {
+  return t === "seedance-2" || t === "seedance-2-fast";
+}
 
 export async function piapiCreateSeedanceTask(opts: {
   taskType: PiapiSeedanceTaskType;
@@ -36,7 +46,10 @@ export async function piapiCreateSeedanceTask(opts: {
   overrideApiKey?: string;
 }): Promise<string> {
   const apiKey = opts.overrideApiKey?.trim() || getPiApiKey();
-  const duration = Math.min(15, Math.max(5, Math.round(Number(opts.duration)) || 5));
+  const pro = isSeedance2ProTaskType(opts.taskType);
+  const duration = pro
+    ? Math.min(15, Math.max(4, Math.round(Number(opts.duration)) || 5))
+    : Math.min(15, Math.max(5, Math.round(Number(opts.duration)) || 5));
 
   const prompt = opts.imageUrl
     ? `@image1 ${opts.prompt}`
@@ -47,6 +60,9 @@ export async function piapiCreateSeedanceTask(opts: {
     duration,
     aspect_ratio: opts.aspectRatio ?? "9:16",
   };
+  if (pro) {
+    input.mode = opts.imageUrl ? "first_last_frames" : "text_to_video";
+  }
   if (opts.imageUrl) {
     input.image_urls = [opts.imageUrl];
   }

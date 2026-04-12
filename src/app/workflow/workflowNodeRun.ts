@@ -197,8 +197,8 @@ function workflowVideoDefaultDuration(modelId: string): number {
       return 10;
     case "bytedance/seedance-2-preview":
     case "bytedance/seedance-2-fast-preview":
-    case "bytedance/seedance-1.5-pro":
-    case "bytedance/seedance-2.0-pro":
+    case "bytedance/seedance-2":
+    case "bytedance/seedance-2-fast":
       return 10;
     default:
       return 5;
@@ -221,7 +221,7 @@ export function resolveWorkflowVideoModelId(raw: string): string {
   return t;
 }
 
-function isVeoPicker(id: string): id is KieVeoModel {
+function isVeoPicker(id: string): boolean {
   return id === "veo3" || id === "veo3_fast";
 }
 
@@ -311,12 +311,17 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
     quality,
   });
 
-  if (isSeedancePicker(modelId) && !startUrl) {
+  if (
+    isSeedancePicker(modelId) &&
+    !startUrl &&
+    modelId !== "bytedance/seedance-2" &&
+    modelId !== "bytedance/seedance-2-fast"
+  ) {
     throw new Error("This model needs a reference image. Connect an image module or set a reference on the node.");
   }
 
   if (isVeoPicker(modelId)) {
-    const veoModel: KieVeoModel = modelId;
+    const veoModel: KieVeoModel = "veo3";
     if (!pKey && !canUseVeoApiModel(params.planId, veoModel)) {
       throw new Error(veoUpgradeMessage(params.planId, veoModel) ?? "Subscription upgrade required for Veo.");
     }

@@ -9,7 +9,7 @@ import type {
 
 type Body = {
   prompt?: string;
-  model?: KieVeoModel;
+  model?: KieVeoModel | "veo3_fast";
   aspectRatio?: KieVeoAspectRatio;
   generationType?: KieVeoGenerationType;
   imageUrls?: string[];
@@ -36,7 +36,7 @@ export async function POST(req: Request) {
     product: "veo3.1",
     endpoint: "/api/v1/veo/generate",
     prompt: body?.prompt ?? "",
-    model: body?.model ?? "veo3_fast",
+    model: body?.model === "veo3_fast" ? "veo3" : (body?.model ?? "veo3"),
     aspect_ratio: body?.aspectRatio ?? "16:9",
     generationType,
     imageUrls: normalizedImageUrls.length > 0 ? normalizedImageUrls : undefined,

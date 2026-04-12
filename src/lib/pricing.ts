@@ -864,21 +864,8 @@ export function calculateSoraCredits(durationSec: number): number {
 // ---------------------------------------------------------------------------
 
 /**
- * Google Veo 3.1 (Fal) — **Fast** vs **Quality** are separate products (different Credits/Gen on sheet).
- * We use Fal’s **Credits / Gen** column per tier (not the generic Sora retail÷$0.07 formula).
- * - Fast (e.g. text/image-to-video Fast): 60 cr · $0.30 our price
- * - Quality (e.g. text/image-to-video Quality): 250 cr · $1.25 our price
+ * Google Veo 3.1 (KIE) — product uses the **quality** tier only (Fast variant removed from the app).
  */
-const _VEO_3_1_FAST_BASE = makeSora2ProTier({
-  model: "veo_3_1_fast",
-  our_price_usd: 0.3,
-  fal_list_price_usd: 1.2,
-});
-export const VEO_3_1_FAST: VideoTierPricing = {
-  ..._VEO_3_1_FAST_BASE,
-  credits: 60,
-};
-
 const _VEO_3_1_QUALITY_BASE = makeSora2ProTier({
   model: "veo_3_1_quality",
   our_price_usd: 1.25,
@@ -1001,8 +988,9 @@ export function calculateVideoCreditsForModel(opts: VideoCreditOptions): number 
   switch (opts.modelId) {
     case "veo3":
       return VEO_3_1_QUALITY.credits;
+    /** @deprecated Legacy client id; bill as quality. */
     case "veo3_fast":
-      return VEO_3_1_FAST.credits;
+      return VEO_3_1_QUALITY.credits;
     case "openai/sora-2":
     case "sora-2-image-to-video":
     case "sora-2-text-to-video":
@@ -1020,10 +1008,10 @@ export function calculateVideoCreditsForModel(opts: VideoCreditOptions): number 
       return calculateKling26VideoCredits(d, quality, audio);
 
     case "bytedance/seedance-2-preview":
-    case "bytedance/seedance-2.0-pro":
+    case "bytedance/seedance-2":
       return Math.max(1, calculateKling30VideoCredits(d, "pro", true));
     case "bytedance/seedance-2-fast-preview":
-    case "bytedance/seedance-1.5-pro":
+    case "bytedance/seedance-2-fast":
       return Math.max(1, Math.ceil(calculateKling30VideoCredits(d, "pro", true) * 0.82));
 
     default:

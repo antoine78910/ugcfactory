@@ -34,11 +34,7 @@ import { mergeStudioHistoryWithServer } from "@/lib/mergeStudioHistoryWithLocal"
 import { completeStudioTask, pollKlingVideo } from "@/lib/studioKlingClientPoll";
 import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
 import { calculateVideoCredits } from "@/lib/linkToAd/generationCredits";
-import {
-  calculateStudioVideoEditCredits,
-  VEO_3_1_FAST,
-  VEO_3_1_QUALITY,
-} from "@/lib/pricing";
+import { calculateStudioVideoEditCredits } from "@/lib/pricing";
 import {
   canUseStudioVideoEditPicker,
   canUseStudioVideoModel,
@@ -70,9 +66,8 @@ type VideoModelId =
   | "openai/sora-2-pro"
   | "bytedance/seedance-2-preview"
   | "bytedance/seedance-2-fast-preview"
-  | "bytedance/seedance-1.5-pro"
-  | "bytedance/seedance-2.0-pro"
-  | "veo3_fast"
+  | "bytedance/seedance-2"
+  | "bytedance/seedance-2-fast"
   | "veo3";
 
 type VideoFamily = "kie" | "veo" | "sora";
@@ -83,10 +78,9 @@ const MODEL_OPTIONS: { id: VideoModelId; label: string; family: VideoFamily }[] 
   { id: "openai/sora-2", label: "Sora 2", family: "sora" },
   { id: "openai/sora-2-pro", label: "Sora 2 Pro", family: "sora" },
   { id: "bytedance/seedance-2-preview", label: "Seedance 2 Preview", family: "kie" },
-  { id: "bytedance/seedance-2-fast-preview", label: "Seedance 2 Turbo Preview", family: "kie" },
-  { id: "bytedance/seedance-1.5-pro", label: "Seedance 1.5 Pro", family: "kie" },
-  { id: "bytedance/seedance-2.0-pro", label: "Seedance 2.0 Pro", family: "kie" },
-  { id: "veo3_fast", label: "Veo 3.1 Fast", family: "veo" },
+  { id: "bytedance/seedance-2-fast-preview", label: "Seedance 2 Fast Preview", family: "kie" },
+  { id: "bytedance/seedance-2", label: "Seedance 2", family: "kie" },
+  { id: "bytedance/seedance-2-fast", label: "Seedance 2 Fast", family: "kie" },
   { id: "veo3", label: "Veo 3.1", family: "veo" },
 ];
 
@@ -94,7 +88,6 @@ const VIDEO_EDIT_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
   {
     id: "studio-edit/kling-omni",
     label: "Kling 3.0 Omni Edit",
-    subtitle: "Edit videos with text prompts",
     icon: "kling",
     exclusive: true,
     resolution: "720p / 1080p",
@@ -104,7 +97,6 @@ const VIDEO_EDIT_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
   {
     id: "studio-edit/kling-o1",
     label: "Kling O1 Video Edit",
-    subtitle: "Generate with elements and references",
     icon: "kling",
     resolution: "720p / 1080p",
     durationRange: "3–10s",
@@ -113,7 +105,6 @@ const VIDEO_EDIT_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
   {
     id: "studio-edit/motion",
     label: "Kling 3.0 Motion Control",
-    subtitle: "Control motion with video references",
     icon: "kling",
     resolution: "720p / 1080p",
     durationRange: "3–30s",
@@ -122,7 +113,6 @@ const VIDEO_EDIT_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
   {
     id: "studio-edit/motion-v3",
     label: "Kling 3.0 Motion Control",
-    subtitle: "Transfer motion from video to image",
     icon: "kling",
     resolution: "720p / 1080p",
     durationRange: "3–30s",
@@ -131,7 +121,6 @@ const VIDEO_EDIT_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
   {
     id: "studio-edit/grok",
     label: "Grok Imagine Edit",
-    subtitle: "Edit videos with text prompts",
     icon: "grok",
     resolution: "720p / 1080p",
     durationRange: "3–10s",
@@ -174,7 +163,7 @@ const VIDEO_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
   {
     id: "bytedance/seedance-2-preview",
     label: "Seedance 2 Preview",
-    subtitle: "Provider · image → video",
+    subtitle: "Standard preview pipeline; requires a start image.",
     icon: "seedance",
     newBadge: true,
     resolution: "1080p",
@@ -183,43 +172,34 @@ const VIDEO_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
   },
   {
     id: "bytedance/seedance-2-fast-preview",
-    label: "Seedance 2 Turbo Preview",
-    subtitle: "Provider · faster preview",
+    label: "Seedance 2 Fast Preview",
+    subtitle: "Faster preview tier; requires a start image.",
     icon: "seedance",
     resolution: "1080p",
     durationRange: "5–15s",
-    searchText: "seedance turbo fast preview provider",
+    searchText: "seedance fast preview provider",
   },
   {
-    id: "bytedance/seedance-1.5-pro",
-    label: "Seedance 1.5 Pro",
-    subtitle: "Provider · image → video · fast lane",
+    id: "bytedance/seedance-2",
+    label: "Seedance 2",
+    subtitle: "Pro quality (PiAPI seedance-2). Text or image; 4–15s.",
     icon: "seedance",
     resolution: "1080p",
-    durationRange: "5–15s",
-    searchText: "seedance 1.5 pro piapi",
+    durationRange: "4–15s",
+    searchText: "seedance 2 pro piapi",
   },
   {
-    id: "bytedance/seedance-2.0-pro",
-    label: "Seedance 2.0 Pro",
-    subtitle: "Provider · image → video",
+    id: "bytedance/seedance-2-fast",
+    label: "Seedance 2 Fast",
+    subtitle: "Lower cost (PiAPI seedance-2-fast). Text or image; 4–15s.",
     icon: "seedance",
     resolution: "1080p",
-    durationRange: "5–15s",
-    searchText: "seedance 2.0 pro piapi",
-  },
-  {
-    id: "veo3_fast",
-    label: "Veo 3.1 Fast",
-    subtitle: `Veo 3.1 · Fast · ${VEO_3_1_FAST.credits} credits / video`,
-    icon: "veo",
-    resolution: "1080p",
-    durationRange: "5–10s",
+    durationRange: "4–15s",
+    searchText: "seedance 2 fast piapi",
   },
   {
     id: "veo3",
     label: "Veo 3.1",
-    subtitle: `Veo 3.1 · Quality · ${VEO_3_1_QUALITY.credits} credits / video`,
     icon: "veo",
     resolution: "1080p",
     durationRange: "5–10s",
@@ -233,10 +213,9 @@ const VIDEO_EDIT_PICKER_ACCESS_ORDER = [...STUDIO_VIDEO_EDIT_PICKER_IDS];
 const VIDEO_MODEL_ACCESS_ORDER: VideoModelId[] = [
   "kling-2.6/video",
   "bytedance/seedance-2-fast-preview",
-  "bytedance/seedance-1.5-pro",
+  "bytedance/seedance-2-fast",
   "bytedance/seedance-2-preview",
-  "bytedance/seedance-2.0-pro",
-  "veo3_fast",
+  "bytedance/seedance-2",
   "kling-3.0/video",
   "veo3",
   "openai/sora-2",
@@ -253,10 +232,11 @@ function getDurationChoices(modelId: VideoModelId): string[] {
       return ["10", "15"];
     case "openai/sora-2-pro":
       return ["10", "15"];
+    case "bytedance/seedance-2":
+    case "bytedance/seedance-2-fast":
+      return ["4", "5", "10", "15"];
     case "bytedance/seedance-2-preview":
     case "bytedance/seedance-2-fast-preview":
-    case "bytedance/seedance-1.5-pro":
-    case "bytedance/seedance-2.0-pro":
       return ["5", "10", "15"];
     default:
       return ["5", "10"];
@@ -280,8 +260,12 @@ function modelHasMultiShot(id: VideoModelId): boolean {
   return id === "kling-3.0/video";
 }
 
-function isStudioSeedanceImageToVideoModelId(id: VideoModelId): boolean {
+function isStudioSeedancePickerId(id: VideoModelId): boolean {
   return id.startsWith("bytedance/seedance");
+}
+
+function isStudioSeedance2ProModelId(id: VideoModelId): boolean {
+  return id === "bytedance/seedance-2" || id === "bytedance/seedance-2-fast";
 }
 
 async function uploadStudioMediaFile(file: File, kind: UploadFileKind): Promise<string> {
@@ -788,12 +772,13 @@ export default function StudioVideoPanel({
   >("create_start");
 
   const meta = MODEL_OPTIONS.find((m) => m.id === modelId)!;
-  /** Seedance / non-Kling KIE models need a start image; Veo, Sora, Kling 2.6/3.0 text-to-video do not. */
+  /** Preview Seedance models need a start image; Seedance 2 / Fast support text-only. */
   const startFrameOptional =
     meta.family === "veo" ||
     meta.family === "sora" ||
     modelId === "kling-3.0/video" ||
-    modelId === "kling-2.6/video";
+    modelId === "kling-2.6/video" ||
+    isStudioSeedance2ProModelId(modelId);
   const durationChoices = getDurationChoices(modelId);
 
   const credits = useMemo(
@@ -1465,7 +1450,13 @@ export default function StudioVideoPanel({
       toast.error("Describe your video.");
       return;
     }
-    if (meta.family === "kie" && modelId !== "kling-3.0/video" && modelId !== "kling-2.6/video" && !startUrl) {
+    if (
+      meta.family === "kie" &&
+      modelId !== "kling-3.0/video" &&
+      modelId !== "kling-2.6/video" &&
+      !startUrl &&
+      !isStudioSeedance2ProModelId(modelId)
+    ) {
       toast.error("Add a start frame image for this model.");
       return;
     }
@@ -1605,7 +1596,7 @@ export default function StudioVideoPanel({
             body: JSON.stringify({
               accountPlan: snap.planId,
               prompt: snap.prompt,
-              model: snap.modelId === "veo3" ? "veo3" : "veo3_fast",
+              model: "veo3",
               aspectRatio: snap.veoAspect,
               generationType,
               imageUrls: urls.length ? urls : undefined,
@@ -1662,7 +1653,6 @@ export default function StudioVideoPanel({
         const isKling30 = snap.modelId === "kling-3.0/video";
         const isKling26 = snap.modelId === "kling-2.6/video";
         const isSora2Pro = snap.modelId === "openai/sora-2-pro";
-        const isSeedanceImageToVideo = isStudioSeedanceImageToVideoModelId(snap.modelId);
         const res = await fetch("/api/kling/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1675,7 +1665,8 @@ export default function StudioVideoPanel({
             aspectRatio:
               (isKling30 || isKling26) && !snap.startUrl
                 ? snap.aspect
-                : isSeedanceImageToVideo && snap.startUrl
+                : isStudioSeedancePickerId(snap.modelId) &&
+                    (Boolean(snap.startUrl) || isStudioSeedance2ProModelId(snap.modelId))
                   ? snap.aspect
                   : undefined,
             sound: modelHasAudio(snap.modelId) ? snap.soundOn : undefined,
@@ -1909,9 +1900,6 @@ export default function StudioVideoPanel({
                       rows={4}
                     />
                   </div>
-                  <p className="text-[10px] leading-snug text-white/35">
-                    Describe background and scene details. Motion is controlled by your reference video.
-                  </p>
                 </div>
               ) : (
                 <div>
@@ -1982,9 +1970,6 @@ export default function StudioVideoPanel({
               {!editAutoSettings ? (
                 <div>
                   <Label className="text-xs text-white/45">Quality</Label>
-                  <p className="mt-0.5 text-[10px] leading-snug text-white/35">
-                    Select the mode you want — credits update accordingly.
-                  </p>
                   <Select
                     value={editKlingMode}
                     onValueChange={(v) => setEditKlingMode(v as "std" | "pro")}
@@ -2007,11 +1992,6 @@ export default function StudioVideoPanel({
               {motionEdit ? (
                 <div>
                   <Label className="text-xs text-white/45">Scene control</Label>
-                  <p className="mt-0.5 text-[10px] leading-snug text-white/35">
-                    Video uses the clip&apos;s scene; Image uses your character still as the backdrop (
-                    <code className="text-white/45">background_source</code>
-                    ). Kling orientation is paired with this choice on the server.
-                  </p>
                   <Select
                     value={editSceneBackground}
                     onValueChange={(v) =>
@@ -2103,11 +2083,6 @@ export default function StudioVideoPanel({
                 className="mt-4 min-h-[120px] w-full resize-none border-white/10 bg-[#0a0a0d] px-3 py-3 text-sm text-white placeholder:text-white/35 focus-visible:ring-0"
                 rows={4}
               />
-              <div className="mt-3 flex flex-wrap gap-2">
-                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/60">
-                  ✨ Studio
-                </span>
-              </div>
             </div>
 
             <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Parameters</p>
@@ -2195,7 +2170,7 @@ export default function StudioVideoPanel({
                     </Select>
                   </div>
                   {((modelId === "kling-3.0/video" || modelId === "kling-2.6/video") && !startUrl) ||
-                  (isStudioSeedanceImageToVideoModelId(modelId) && Boolean(startUrl)) ? (
+                  isStudioSeedancePickerId(modelId) ? (
                     <div>
                       <Label className="text-xs text-white/45">Aspect ratio</Label>
                       <Select value={aspect} onValueChange={setAspect}>
@@ -2219,15 +2194,6 @@ export default function StudioVideoPanel({
                   {modelHasQuality(modelId) ? (
                     <div>
                       <Label className="text-xs text-white/45">Quality</Label>
-                      <p className="mt-0.5 text-[10px] leading-snug text-white/35">
-                        {modelId === "openai/sora-2"
-                          ? "Standard or Stable (stable uses the higher quality tier — credits update accordingly)."
-                          : modelId === "openai/sora-2-pro"
-                            ? "Standard or High (Pro). Credits match the Sora 2 Pro sheet."
-                            : modelId === "kling-2.6/video"
-                              ? "Pick a mode — credits update accordingly."
-                              : "Pick a mode — credits update accordingly."}
-                      </p>
                       <Select value={klingMode} onValueChange={(v) => setKlingMode(v as "std" | "pro")}>
                         <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
                           <SelectValue />

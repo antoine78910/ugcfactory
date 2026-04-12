@@ -26,10 +26,10 @@ import StudioGenerationsBackgroundPoll from "@/app/_components/StudioGenerations
 import { useCreditsPlan } from "@/app/_components/CreditsPlanContext";
 import SidebarCreditsBar from "@/app/_components/SidebarCreditsBar";
 import { cn } from "@/lib/utils";
-import { isStudioShellPath } from "@/lib/studioPaths";
+import { isCreditsOrSubscriptionPath, isStudioShellPath } from "@/lib/studioPaths";
 
 const SIDEBAR_COLLAPSED_LS = "youry-studio-sidebar-collapsed";
-/** Remember CREATE tab highlight on /subscription, /credits, etc. (not under /app). */
+/** Last studio section for deep links back; CREATE highlight is cleared on /credits and /subscription. */
 const LAST_STUDIO_NAV_SECTION_LS = "youry-last-studio-nav-section";
 
 export type StudioNavSection =
@@ -150,7 +150,7 @@ function StudioShellInner({
   const [email, setEmail] = useState("");
   const { planDisplayName } = useCreditsPlan();
   const [navCollapsed, setNavCollapsed] = useState(false);
-  /** Last studio CREATE section; kept when visiting subscription / credits so the sidebar doesn’t jump to Link to Ad. */
+  /** Last studio CREATE section when leaving the studio (e.g. credits page); not used as active highlight on /credits or /subscription. */
   const [persistedStudioSection, setPersistedStudioSection] =
     useState<StudioNavSection>("link_to_ad");
   const supabase = useSupabaseBrowserClient();
@@ -197,9 +197,10 @@ function StudioShellInner({
     }
   }, [isStudioShell, pathname]);
 
-  const activeSection: StudioNavSection = useMemo(() => {
+  const activeSection: StudioNavSection | null = useMemo(() => {
     if (controlled && studioSection) return studioSection;
     if (isStudioShell) return sectionFromPathname(pathname);
+    if (isCreditsOrSubscriptionPath(pathname)) return null;
     return persistedStudioSection;
   }, [controlled, studioSection, isStudioShell, pathname, persistedStudioSection]);
 

@@ -121,10 +121,9 @@ const VIDEO_MODELS: { value: string; label: string }[] = [
   { value: "openai/sora-2", label: "Sora 2" },
   { value: "openai/sora-2-pro", label: "Sora 2 Pro" },
   { value: "bytedance/seedance-2-preview", label: "Seedance 2 Preview" },
-  { value: "bytedance/seedance-2-fast-preview", label: "Seedance 2 Turbo" },
-  { value: "bytedance/seedance-1.5-pro", label: "Seedance 1.5 Pro" },
-  { value: "bytedance/seedance-2.0-pro", label: "Seedance 2.0 Pro" },
-  { value: "veo3_fast", label: "Veo 3.1 Fast" },
+  { value: "bytedance/seedance-2-fast-preview", label: "Seedance 2 Fast Preview" },
+  { value: "bytedance/seedance-2", label: "Seedance 2" },
+  { value: "bytedance/seedance-2-fast", label: "Seedance 2 Fast" },
   { value: "veo3", label: "Veo 3.1" },
 ];
 

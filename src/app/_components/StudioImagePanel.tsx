@@ -29,7 +29,6 @@ import { formatDisplayCredits } from "@/lib/creditLedgerTicks";
 import {
   KIE_TOPAZ_IMAGE_UPSCALE_MODEL,
   studioImageCreditsChargedTotal,
-  studioImageCreditsPerOutput,
   topazImageUpscaleCredits,
   topazImageUpscaleKieFactorToTierLabel,
 } from "@/lib/pricing";
@@ -81,43 +80,40 @@ const IMAGE_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
     label: "NanoBanana Pro",
     icon: "google",
     exclusive: true,
-    resolution: "3 cr (1K/2K) · 4 cr (4K)",
-    durationRange: "Max 4 images",
+    resolution: "",
+    durationRange: "",
     searchText: "nanobanana pro nano banana pro google",
   },
   {
     id: "nano",
     label: "NanoBanana 2",
     icon: "google",
-    resolution: "1 / 2 / 3 cr (1K / 2K / 4K)",
-    durationRange: "Max 4 images",
+    resolution: "",
+    durationRange: "",
     searchText: "nanobanana 2 standard google",
   },
   {
     id: "seedream_45",
     label: "Seedream 4.5",
     icon: "google",
-    subtitle: "Auto text-to-image / image-to-image",
-    resolution: "1 crédit / image",
-    durationRange: "Auto",
+    resolution: "",
+    durationRange: "",
     searchText: "seedream 4.5 text to image image to image",
   },
   {
     id: "seedream_50_lite",
     label: "Seedream 5.0 Lite",
     icon: "google",
-    subtitle: "Auto text-to-image / image-to-image",
-    resolution: "1 crédit / image",
-    durationRange: "Auto",
+    resolution: "",
+    durationRange: "",
     searchText: "seedream 5.0 lite text to image image to image",
   },
   {
     id: "google_nano_banana",
     label: "Google Nano Banana",
     icon: "google",
-    subtitle: "Auto text-to-image / image-to-image",
-    resolution: "0.5 crédit / image",
-    durationRange: "Auto",
+    resolution: "",
+    durationRange: "",
     searchText: "google nano banana text to image image to image",
   },
 ];
@@ -422,14 +418,6 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
     setModel("nano");
   }, [planId, model]);
 
-  const perImageCredits = useMemo(
-    () =>
-      studioImageCreditsPerOutput({
-        studioModel: model,
-        resolution,
-      }),
-    [model, resolution],
-  );
   const totalCredits = useMemo(
     () =>
       studioImageCreditsChargedTotal({
@@ -696,11 +684,6 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
             className="mt-4 min-h-[120px] w-full resize-none border-white/10 bg-[#0a0a0d] px-3 py-3 text-sm text-white placeholder:text-white/35 focus-visible:ring-0"
             rows={4}
           />
-          <div className="mt-3 flex flex-wrap gap-2">
-            <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/60">
-              ✨ Studio
-            </span>
-          </div>
         </div>
 
         <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Parameters</p>
@@ -749,17 +732,6 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
           {studioImageModelSupportsResolutionPicker(model) ? (
             <div>
               <Label className="text-xs text-white/45">Quality (resolution)</Label>
-              <p className="mt-0.5 text-[10px] leading-snug text-white/35">
-                {model === "pro" ? (
-                  <>
-                    1K/2K: 3 credits · 4K: 4 credits ({perImageCredits} credits per image at this quality).
-                  </>
-                ) : (
-                  <>
-                    1K: 1 cr · 2K: 2 cr · 4K: 3 cr ({perImageCredits} credits per image).
-                  </>
-                )}
-              </p>
               <Select value={resolution} onValueChange={(v) => setResolution(v as (typeof PRO_RESOLUTIONS)[number])}>
                 <SelectTrigger className="mt-2 h-12 w-full rounded-xl border-white/15 bg-[#0a0a0d] text-white">
                   <SelectValue />
@@ -777,9 +749,6 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
 
           <div>
             <Label className="text-xs text-white/45">Images (same prompt)</Label>
-            <p className="mt-0.5 text-[10px] leading-snug text-white/35">
-              Pro: one job per image. NanoBanana 2: up to 4 parallel jobs.
-            </p>
             <Select
               value={String(numImages)}
               onValueChange={(v) => setNumImages(Math.min(4, Math.max(1, Number(v) || 1)))}

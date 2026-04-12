@@ -7,7 +7,7 @@ function getKieApiKey() {
   return getEnv("KIE_API_KEY") ?? requireEnv("VEO3_API_KEY");
 }
 
-export type KieVeoModel = "veo3" | "veo3_fast";
+export type KieVeoModel = "veo3";
 export type KieVeoAspectRatio = "16:9" | "9:16" | "Auto";
 export type KieVeoGenerationType =
   | "TEXT_2_VIDEO"

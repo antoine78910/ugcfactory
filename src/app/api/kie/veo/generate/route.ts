@@ -17,7 +17,8 @@ type Body = {
   accountPlan?: string;
   personalApiKey?: string;
   prompt: string;
-  model?: KieVeoModel;
+  /** @deprecated `veo3_fast` is accepted but mapped to `veo3`. */
+  model?: KieVeoModel | "veo3_fast";
   aspectRatio?: KieVeoAspectRatio;
   generationType?: KieVeoGenerationType;
   imageUrls?: string[];
@@ -47,7 +48,7 @@ export async function POST(req: Request) {
     body?.generationType ??
     (normalizedImageUrls.length > 0 ? "FIRST_AND_LAST_FRAMES_2_VIDEO" : "TEXT_2_VIDEO");
 
-  const veoModel = body?.model ?? "veo3_fast";
+  const veoModel = body?.model === "veo3_fast" ? "veo3" : (body?.model ?? "veo3");
   const personalKey =
     body && hasPersonalApiKey(body.personalApiKey) ? body.personalApiKey.trim() : undefined;
   if (!personalKey) {
@@ -82,7 +83,7 @@ export async function POST(req: Request) {
       taskId,
       provider: "kie-veo",
       generationType,
-      model: body?.model ?? "veo3_fast",
+      model: veoModel,
       aspect_ratio: body?.aspectRatio ?? "16:9",
       imageCount: normalizedImageUrls.length,
     });

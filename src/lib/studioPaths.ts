@@ -90,3 +90,10 @@ export function isStudioShellPath(pathname: string): boolean {
   if (first === "workflow") return true;
   return first in SLUG_TO_SECTION;
 }
+
+/** Credits / subscription pages use StudioShell but no CREATE row should look selected. */
+export function isCreditsOrSubscriptionPath(pathname: string): boolean {
+  const stripped = pathname.replace(/^\/app\/?/, "");
+  const first = stripped.split("/").filter(Boolean)[0] ?? "";
+  return first === "credits" || first === "subscription";
+}

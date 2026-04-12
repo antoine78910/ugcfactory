@@ -18,7 +18,6 @@ import {
   SORA_2_PRO_HIGH_15S,
   SORA_2_PRO_STANDARD_10S,
   SORA_2_PRO_STANDARD_15S,
-  VEO_3_1_FAST,
   VEO_3_1_QUALITY,
   SUBSCRIPTIONS,
   TOPAZ_IMAGE_UPSCALER,
@@ -62,8 +61,7 @@ export async function GET() {
         },
       },
       veo_3_1: {
-        formula: "per video: Fal Credits/Gen column (Fast vs Quality differ; see credits on each tier)",
-        fast: VEO_3_1_FAST,
+        formula: "per video: quality tier only (see credits on tier object)",
         quality: VEO_3_1_QUALITY,
       },
       example_12s_credits_kling_3_1080p_audio: calculateVideoCreditsFromDuration(12),

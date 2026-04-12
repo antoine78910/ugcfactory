@@ -45,7 +45,13 @@ import {
   upsertMotionPendingJob,
 } from "@/lib/motionControlPendingSession";
 import { registerStudioGenerationClient } from "@/lib/registerStudioGenerationClient";
-import { completeStudioTask, pollKlingVideo } from "@/lib/studioKlingClientPoll";
+import { pollKlingVideo } from "@/lib/studioKlingClientPoll";
+import {
+  completeStudioTask,
+  pickFirstWaveTranslateVideoUrl,
+  pollWaveSpeedVideoTranslate,
+  waveTranslateStatusIsSuccess,
+} from "@/lib/studioWaveSpeedClientPoll";
 import StudioVideoPanel from "@/app/_components/StudioVideoPanel";
 import {
   packshotUrlsForGpt,
@@ -4054,10 +4060,23 @@ export default function AppBrandWizard() {
                                         personalApiKey: getPersonalApiKey(),
                                       }),
                                     });
-                              const json = (await res.json()) as { taskId?: string; error?: string };
-                              if (!res.ok || !json.taskId) {
+                              const json = (await res.json()) as {
+                                taskId?: string;
+                                status?: string;
+                                outputs?: string[];
+                                error?: string;
+                              };
+                              if (!res.ok) {
                                 throw new Error(
-                                  json.error || (appSection === "ad_clone" ? "Translation failed" : "Motion control failed"),
+                                  json.error ||
+                                    (appSection === "ad_clone" ? "Translation failed" : "Motion control failed"),
+                                );
+                              }
+                              const providerTaskId = String(json.taskId ?? "").trim();
+                              if (!providerTaskId) {
+                                throw new Error(
+                                  json.error ||
+                                    (appSection === "ad_clone" ? "Translation failed" : "Motion control failed"),
                                 );
                               }
                               const provider = appSection === "ad_clone" ? WAVESPEED_PROVIDER : "kie-market";
@@ -4071,9 +4090,9 @@ export default function AppBrandWizard() {
                                   : `kling:motion_control:${motionQuality}:${motionSceneBackground}`;
                               const motionInputUrls = [videoHttps].filter(Boolean);
                               if (!isTranslate && appSection === "motion_control") {
-                                motionPendingTaskId = json.taskId;
+                                motionPendingTaskId = providerTaskId;
                                 upsertMotionPendingJob({
-                                  taskId: json.taskId,
+                                  taskId: providerTaskId,
                                   label: historyLabel,
                                   model,
                                   kind: generationKind,
@@ -4084,14 +4103,14 @@ export default function AppBrandWizard() {
                                 });
                                 setMotionControlHistoryItems((prev) =>
                                   prev.map((i) =>
-                                    i.id === jobId ? { ...i, externalTaskId: json.taskId } : i,
+                                    i.id === jobId ? { ...i, externalTaskId: providerTaskId } : i,
                                   ),
                                 );
                               }
                               const rowId = await registerStudioGenerationClient({
                                 kind: generationKind,
                                 label: historyLabel,
-                                taskId: json.taskId,
+                                taskId: providerTaskId,
                                 provider,
                                 model,
                                 creditsCharged: platformChargeMotion,
@@ -4100,7 +4119,7 @@ export default function AppBrandWizard() {
                               });
                               if (rowId) {
                                 if (!isTranslate && appSection === "motion_control") {
-                                  patchMotionPendingJob(json.taskId, { rowId });
+                                  patchMotionPendingJob(providerTaskId, { rowId });
                                 }
                                 (isTranslate ? setTranslateHistoryItems : setMotionControlHistoryItems)((prev) =>
                                   prev.map((i) =>
@@ -4116,15 +4135,40 @@ export default function AppBrandWizard() {
                                 );
                               }
                               if (appSection === "ad_clone") {
-                                toast.message("Translation started");
+                                toast.message("Translation started", { description: "Polling provider…" });
+                                const earlyUrl = waveTranslateStatusIsSuccess(json.status)
+                                  ? pickFirstWaveTranslateVideoUrl(json.outputs)
+                                  : undefined;
+                                const url =
+                                  earlyUrl ?? (await pollWaveSpeedVideoTranslate(providerTaskId));
+                                void completeStudioTask(providerTaskId, url);
+                                setTranslateHistoryItems((prev) =>
+                                  prev.map((i) => {
+                                    const match =
+                                      (rowId != null &&
+                                        (i.id === rowId || i.studioGenerationId === rowId)) ||
+                                      (rowId == null && i.id === jobId);
+                                    if (!match || i.status !== "generating") return i;
+                                    return {
+                                      ...i,
+                                      id: rowId ?? i.id,
+                                      studioGenerationId: rowId ?? i.studioGenerationId,
+                                      studioGenerationKind: generationKind,
+                                      status: "ready",
+                                      mediaUrl: url,
+                                      model,
+                                    };
+                                  }),
+                                );
+                                toast.success("Translation ready");
                               } else {
                                 toast.message("Motion control started", {
                                   description: "Polling provider…",
                                 });
                                 const pKey = getPersonalApiKey() ?? undefined;
-                                const url = await pollKlingVideo(json.taskId, pKey);
-                                void completeStudioTask(json.taskId, url);
-                                removeMotionPendingJob(json.taskId);
+                                const url = await pollKlingVideo(providerTaskId, pKey);
+                                void completeStudioTask(providerTaskId, url);
+                                removeMotionPendingJob(providerTaskId);
                                 setMotionControlHistoryItems((prev) =>
                                   prev.map((i) => {
                                     const match =
