@@ -44,6 +44,13 @@ import {
   removeMotionPendingJob,
   upsertMotionPendingJob,
 } from "@/lib/motionControlPendingSession";
+import {
+  mergeServerHistoryWithTranslatePending,
+  patchTranslatePendingJob,
+  readTranslatePendingJobs,
+  removeTranslatePendingJob,
+  upsertTranslatePendingJob,
+} from "@/lib/translatePendingSession";
 import { registerStudioGenerationClient } from "@/lib/registerStudioGenerationClient";
 import { pollKlingVideo } from "@/lib/studioKlingClientPoll";
 import {
@@ -947,7 +954,7 @@ export default function AppBrandWizard() {
   const MOTION_VIDEO_MAX_BYTES = 100 * 1024 * 1024; // 100 MB
   const historyKindsKey =
     appSection === "ad_clone"
-      ? `${STUDIO_GENERATION_KIND_STUDIO_TRANSLATE_VIDEO},studio_video`
+      ? STUDIO_GENERATION_KIND_STUDIO_TRANSLATE_VIDEO
       : appSection === "voice"
         ? `${STUDIO_GENERATION_KIND_VOICE_CHANGE},studio_audio`
         : "motion_control";
@@ -1112,10 +1119,13 @@ export default function AppBrandWizard() {
         setMotionServerHistory(true);
         const serverList = json.data ?? [];
         const pendingMotion = readMotionPendingJobs();
+        const pendingTranslate = readTranslatePendingJobs();
         const withPendingMotion =
           historyKindsKey === "motion_control"
             ? mergeServerHistoryWithMotionPending(serverList, pendingMotion)
-            : serverList;
+            : historyKindsKey === STUDIO_GENERATION_KIND_STUDIO_TRANSLATE_VIDEO
+              ? mergeServerHistoryWithTranslatePending(serverList, pendingTranslate)
+              : serverList;
         setActiveHistoryItems((prev) => mergeStudioHistoryWithServer(withPendingMotion, prev));
 
         if (historyKindsKey === "motion_control") {
@@ -1137,6 +1147,29 @@ export default function AppBrandWizard() {
               inputUrls: p.inputUrls,
             }).then((rowId) => {
               if (rowId) patchMotionPendingJob(p.taskId, { rowId });
+            });
+          }
+        }
+
+        if (historyKindsKey === STUDIO_GENERATION_KIND_STUDIO_TRANSLATE_VIDEO) {
+          for (const p of pendingTranslate) {
+            const onServer = serverList.some(
+              (i) =>
+                (Boolean(i.externalTaskId?.trim()) && i.externalTaskId === p.taskId) ||
+                (Boolean(p.rowId?.trim()) && i.id === p.rowId),
+            );
+            if (onServer) continue;
+            // Row missing from Supabase — re-register so server poll can pick it up
+            void registerStudioGenerationClient({
+              kind: STUDIO_GENERATION_KIND_STUDIO_TRANSLATE_VIDEO,
+              label: p.label,
+              taskId: p.taskId,
+              provider: p.provider,
+              model: p.model,
+              creditsCharged: p.creditsCharged,
+              inputUrls: p.inputUrls,
+            }).then((rowId) => {
+              if (rowId) patchTranslatePendingJob(p.taskId, { rowId });
             });
           }
         }
@@ -1171,11 +1204,13 @@ export default function AppBrandWizard() {
         const json = (await res.json()) as { data?: StudioHistoryItem[]; refundHints?: RefundHint[] };
         if (Array.isArray(json.data)) {
           const serverList = json.data;
-          const withPendingMotion =
+          const withPending =
             historyKindsKey === "motion_control"
               ? mergeServerHistoryWithMotionPending(serverList, readMotionPendingJobs())
-              : serverList;
-          setActiveHistoryItems((prev) => mergeStudioHistoryWithServer(withPendingMotion, prev));
+              : historyKindsKey === STUDIO_GENERATION_KIND_STUDIO_TRANSLATE_VIDEO
+                ? mergeServerHistoryWithTranslatePending(serverList, readTranslatePendingJobs())
+                : serverList;
+          setActiveHistoryItems((prev) => mergeStudioHistoryWithServer(withPending, prev));
         }
         const hints = json.refundHints ?? [];
         if (hints.length) {
@@ -3903,6 +3938,7 @@ export default function AppBrandWizard() {
                           setMotionBusy(true);
                           void (async () => {
                             let motionPendingTaskId: string | null = null;
+                            let translatePendingTaskId: string | null = null;
                             try {
                               if (isVoiceChange) {
                                 setVoiceChangePreparing(true);
@@ -4089,7 +4125,24 @@ export default function AppBrandWizard() {
                                   ? `wavespeed:heygen_translate:${adCloneOutputLanguage}`
                                   : `kling:motion_control:${motionQuality}:${motionSceneBackground}`;
                               const motionInputUrls = [videoHttps].filter(Boolean);
-                              if (!isTranslate && appSection === "motion_control") {
+                              if (isTranslate) {
+                                translatePendingTaskId = providerTaskId;
+                                upsertTranslatePendingJob({
+                                  taskId: providerTaskId,
+                                  label: historyLabel,
+                                  model,
+                                  language: adCloneOutputLanguage,
+                                  provider,
+                                  inputUrls: motionInputUrls.length > 0 ? motionInputUrls : undefined,
+                                  creditsCharged: platformChargeMotion,
+                                  startedAt: Date.now(),
+                                });
+                                setTranslateHistoryItems((prev) =>
+                                  prev.map((i) =>
+                                    i.id === jobId ? { ...i, externalTaskId: providerTaskId } : i,
+                                  ),
+                                );
+                              } else if (appSection === "motion_control") {
                                 motionPendingTaskId = providerTaskId;
                                 upsertMotionPendingJob({
                                   taskId: providerTaskId,
@@ -4118,7 +4171,9 @@ export default function AppBrandWizard() {
                                 inputUrls: motionInputUrls.length > 0 ? motionInputUrls : undefined,
                               });
                               if (rowId) {
-                                if (!isTranslate && appSection === "motion_control") {
+                                if (isTranslate) {
+                                  patchTranslatePendingJob(providerTaskId, { rowId });
+                                } else if (appSection === "motion_control") {
                                   patchMotionPendingJob(providerTaskId, { rowId });
                                 }
                                 (isTranslate ? setTranslateHistoryItems : setMotionControlHistoryItems)((prev) =>
@@ -4141,7 +4196,8 @@ export default function AppBrandWizard() {
                                   : undefined;
                                 const url =
                                   earlyUrl ?? (await pollWaveSpeedVideoTranslate(providerTaskId));
-                                void completeStudioTask(providerTaskId, url);
+                                await completeStudioTask(providerTaskId, url);
+                                removeTranslatePendingJob(providerTaskId);
                                 setTranslateHistoryItems((prev) =>
                                   prev.map((i) => {
                                     const match =
@@ -4191,6 +4247,7 @@ export default function AppBrandWizard() {
                               }
                             } catch (err) {
                               if (motionPendingTaskId) removeMotionPendingJob(motionPendingTaskId);
+                              if (translatePendingTaskId) removeTranslatePendingJob(translatePendingTaskId);
                               const msg =
                                 err instanceof Error
                                   ? err.message || "Unknown error"
