@@ -23,6 +23,21 @@ function supabaseNonDefaultConnectOrigins(): string {
   return [...extras].join(" ");
 }
 
+/**
+ * Marketing (`www.youry.io`) uses absolute links to the studio host; Next.js prefetches those
+ * routes, which counts as connect-src to another origin (not covered by 'self').
+ */
+function studioAppConnectOrigins(): string {
+  const raw =
+    process.env.NEXT_PUBLIC_STUDIO_APP_ORIGIN?.trim() || "https://app.youry.io";
+  try {
+    const u = new URL(raw);
+    return `${u.origin} wss://${u.host}`;
+  } catch {
+    return "https://app.youry.io wss://app.youry.io";
+  }
+}
+
 const CSP_PARTS_BASE = [
   "default-src 'self'",
   "base-uri 'self'",
@@ -36,7 +51,7 @@ const CSP_PARTS_BASE = [
   "font-src 'self' data: https://fonts.gstatic.com",
   // *.supabase.co default; append custom / vanity API host when set (see supabaseNonDefaultConnectOrigins).
   // Clarity load-balances collect across *.clarity.ms (a–z) + c.bing.com — see Microsoft Learn "Clarity CSP".
-  `connect-src 'self' https://datafa.st https://*.datafa.st https://www.linkjolt.io https://linkjolt.io https://heyo.so https://*.heyo.so https://cdn.heyo.so wss://heyo.so wss://*.heyo.so https://*.supabase.co wss://*.supabase.co ${supabaseNonDefaultConnectOrigins()} https://api.stripe.com https://*.stripe.com https://m.stripe.network https://q.stripe.com https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://*.ingest.de.sentry.io https://*.sentry.io https://cdn.jsdelivr.net https://*.clarity.ms https://c.bing.com https://accounts.google.com`.replace(
+  `connect-src 'self' https://datafa.st https://*.datafa.st https://www.linkjolt.io https://linkjolt.io https://heyo.so https://*.heyo.so https://cdn.heyo.so wss://heyo.so wss://*.heyo.so ${studioAppConnectOrigins()} https://*.supabase.co wss://*.supabase.co ${supabaseNonDefaultConnectOrigins()} https://api.stripe.com https://*.stripe.com https://m.stripe.network https://q.stripe.com https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://*.ingest.de.sentry.io https://*.sentry.io https://cdn.jsdelivr.net https://*.clarity.ms https://c.bing.com https://accounts.google.com`.replace(
     /\s+/g,
     " ",
   ),
