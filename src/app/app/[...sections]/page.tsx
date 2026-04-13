@@ -5380,7 +5380,7 @@ export default function AppBrandWizard() {
         onPick={(url) => {
           setMotionCharacterFile(null);
           setMotionCharacterImageUrl(url);
-          toast.success("Character image selected", { description: "Picked from your avatar library." });
+          toast.success("Character image selected", { description: "Picked from your saved avatars." });
         }}
       />
     </>

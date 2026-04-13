@@ -80,16 +80,16 @@ const defaultCreditPacks: CreditPack[] = PACK_UI.map((meta, i) => {
 
 function CreditPackPriceSkeleton() {
   return (
-    <div className="space-y-3" aria-hidden>
-      <div className="h-12 w-[min(100%,12rem)] animate-pulse rounded-lg bg-violet-500/20 md:h-14" />
-      <div className="h-7 w-[min(100%,9rem)] animate-pulse rounded-lg bg-white/12" />
-      <div className="h-3 w-48 max-w-full animate-pulse rounded bg-white/10" />
+    <div className="space-y-2" aria-hidden>
+      <div className="h-10 w-[min(100%,11rem)] animate-pulse rounded-lg bg-violet-500/20 md:h-11" />
+      <div className="h-6 w-[min(100%,8rem)] animate-pulse rounded-lg bg-white/12" />
+      <div className="h-2.5 w-40 max-w-full animate-pulse rounded bg-white/10" />
     </div>
   );
 }
 
 function PackCardDescription({ text }: { text: string }) {
-  return <p className="mt-1 min-h-0 text-sm leading-snug text-white/48">{text}</p>;
+  return <p className="mt-0.5 min-h-0 text-xs leading-snug text-white/48">{text}</p>;
 }
 
 export default function CreditsPage() {
@@ -184,13 +184,13 @@ export default function CreditsPage() {
         <div className="pointer-events-none absolute left-1/2 top-0 h-[480px] w-[960px] -translate-x-1/2 rounded-full bg-violet-600/14 blur-[130px]" />
         <div className="pointer-events-none absolute -left-24 top-1/4 h-64 w-64 rounded-full bg-indigo-600/10 blur-[90px]" />
 
-        <div className="relative mx-auto max-w-6xl space-y-14 px-5 py-10 md:px-8 md:py-12">
+        <div className="relative mx-auto max-w-6xl space-y-8 px-5 py-7 md:px-8 md:py-9">
           <header className="mx-auto max-w-2xl text-center">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-violet-400/90">Credits</p>
-            <h1 className="mt-3 bg-gradient-to-b from-white via-white to-white/55 bg-clip-text text-3xl font-bold tracking-tight text-transparent sm:text-4xl md:text-[2.75rem] md:leading-[1.08]">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-400/90">Credits</p>
+            <h1 className="mt-2 bg-gradient-to-b from-white via-white to-white/55 bg-clip-text text-2xl font-bold tracking-tight text-transparent sm:text-3xl md:text-[2.25rem] md:leading-[1.1]">
               Top up and keep creating
             </h1>
-            <p className="mt-4 text-xs text-white/38">
+            <p className="mt-2.5 text-[11px] text-white/38">
               One-off packs work with any plan. Prefer monthly credits?{" "}
               <Link
                 href="/subscription"
@@ -202,7 +202,7 @@ export default function CreditsPage() {
           </header>
 
           <section>
-            <div className="mx-auto grid w-full max-w-6xl grid-cols-1 gap-5 pt-2 sm:px-0 md:grid-cols-6 md:gap-5">
+            <div className="mx-auto grid w-full max-w-6xl grid-cols-1 gap-3.5 sm:px-0 md:grid-cols-6 md:gap-4">
               {creditPacks.map((p, packIndex) => {
                 const featured = p.key === "most-popular";
                 const value = p.badge === "Best value";
@@ -220,14 +220,14 @@ export default function CreditsPage() {
                   <div
                     key={p.key}
                     className={cn(
-                      "relative flex h-full min-h-0 min-w-0 w-full flex-col rounded-2xl border p-6 transition-all duration-300",
+                      "relative flex h-full min-h-0 min-w-0 w-full flex-col rounded-xl border p-4 transition-all duration-300 md:p-5",
                       topRow ? "md:col-span-2" : "md:col-span-3",
                       featured || value
-                        ? "border-violet-400/40 bg-gradient-to-b from-violet-600/[0.18] via-[#0b0914] to-[#06070d] shadow-[0_0_48px_rgba(139,92,246,0.14),0_8px_0_0_rgba(76,29,149,0.4)]"
+                        ? "border-violet-400/40 bg-gradient-to-b from-violet-600/[0.18] via-[#0b0914] to-[#06070d] shadow-[0_0_32px_rgba(139,92,246,0.12),0_5px_0_0_rgba(76,29,149,0.45)]"
                         : "border-white/10 bg-white/[0.03] hover:border-violet-500/20 hover:bg-white/[0.045]",
                     )}
                   >
-                    <div className="mb-2 flex min-h-[2.25rem] flex-wrap items-start gap-1.5">
+                    <div className="mb-1.5 flex min-h-0 flex-wrap items-start gap-1">
                       {p.badge ? (
                         <span
                           className={cn(
@@ -253,56 +253,67 @@ export default function CreditsPage() {
                     </div>
 
                     <div className="min-h-0">
-                      <h2 className="text-xl font-bold leading-tight text-white">{p.name}</h2>
+                      <h2 className="text-lg font-bold leading-tight text-white">{p.name}</h2>
                       <PackCardDescription text={p.description} />
                     </div>
 
-                    <div className="mt-3 min-h-0">
-                      {billingPricesReady ? (
-                        <>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-500/25 text-violet-200 md:h-11 md:w-11">
-                              <Coins className="h-5 w-5 md:h-[1.35rem] md:w-[1.35rem]" aria-hidden />
-                            </span>
-                            <div className="min-w-0">
-                              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-violet-300/80">
-                                Credits
-                              </p>
-                              <p className="text-3xl font-extrabold tabular-nums leading-[1.1] tracking-tight text-white md:text-4xl">
-                                {p.credits.toLocaleString()}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="mt-4 border-t border-white/[0.08] pt-3">
-                            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/40">
-                              Price
-                            </p>
-                            <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0">
-                              <span className="text-xl font-bold tabular-nums leading-none text-white/90 md:text-2xl">
-                                {p.price}
+                    <div className="mt-2 flex min-h-0 flex-1 flex-col gap-2">
+                      <div className="flex min-h-0 flex-1 flex-col">
+                        {billingPricesReady ? (
+                          <>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-500/25 text-violet-200">
+                                <Coins className="h-[1.15rem] w-[1.15rem]" aria-hidden />
                               </span>
-                              {displayPrices && oldPrice != null && oldPrice > p.priceUsd ? (
-                                <span className="text-sm font-medium line-through text-white/30">
-                                  {formatMoneyAmount(oldPrice, displayPrices.currency)}
-                                </span>
-                              ) : null}
+                              <div className="min-w-0">
+                                <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-violet-300/80">
+                                  Credits
+                                </p>
+                                <p className="text-2xl font-extrabold tabular-nums leading-[1.1] tracking-tight text-white md:text-3xl">
+                                  {p.credits.toLocaleString()}
+                                </p>
+                              </div>
                             </div>
-                            <p className="mt-1 text-[11px] leading-tight text-white/35">One-time purchase</p>
-                          </div>
-                        </>
-                      ) : (
-                        <CreditPackPriceSkeleton />
-                      )}
-                    </div>
+                            <ul className="mt-1.5 space-y-0.5 text-left text-[10px] leading-snug text-white/55">
+                              <li>Up to {maxImages.toLocaleString()} AI images (Nanobanana)</li>
+                              <li>Up to {maxVideos.toLocaleString()} AI videos (Sora 2)</li>
+                            </ul>
+                            <div className="mt-2.5 border-t border-white/[0.08] pt-2">
+                              <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-white/40">
+                                Price
+                              </p>
+                              <div className="mt-0.5 flex flex-wrap items-baseline gap-x-1.5 gap-y-0">
+                                <span className="text-lg font-bold tabular-nums leading-none text-white/90 md:text-xl">
+                                  {p.price}
+                                </span>
+                                {displayPrices && oldPrice != null && oldPrice > p.priceUsd ? (
+                                  <span className="text-xs font-medium line-through text-white/30">
+                                    {formatMoneyAmount(oldPrice, displayPrices.currency)}
+                                  </span>
+                                ) : null}
+                              </div>
+                              <p className="mt-0.5 text-[10px] leading-tight text-white/35">One-time purchase</p>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <CreditPackPriceSkeleton />
+                            <ul className="mt-2 space-y-0.5 text-left text-[10px] leading-snug text-white/55">
+                              <li>Up to {maxImages.toLocaleString()} AI images (Nanobanana)</li>
+                              <li>Up to {maxVideos.toLocaleString()} AI videos (Sora 2)</li>
+                            </ul>
+                          </>
+                        )}
+                      </div>
 
-                    <Button
-                      type="button"
-                      disabled={Boolean(checkoutLoading)}
-                      onClick={() => void buyPack(p.key)}
-                      className={cn(
-                        "mt-3 h-11 w-full shrink-0 rounded-xl text-sm font-bold transition-all",
+                      <Button
+                        type="button"
+                        disabled={Boolean(checkoutLoading)}
+                        onClick={() => void buyPack(p.key)}
+                        className={cn(
+                          "h-9 w-full shrink-0 rounded-lg text-xs font-bold transition-all",
                         featured || value
-                          ? "border border-violet-200/35 bg-violet-400 text-black shadow-[0_6px_0_0_rgba(76,29,149,0.9)] hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9)]"
+                          ? "border border-violet-200/35 bg-violet-400 text-black shadow-[0_4px_0_0_rgba(76,29,149,0.9)] hover:bg-violet-300 hover:shadow-[0_5px_0_0_rgba(76,29,149,0.9)]"
                           : "border border-white/15 bg-white/10 text-white hover:bg-white/15",
                       )}
                     >
@@ -311,26 +322,18 @@ export default function CreditsPage() {
                       ) : (
                         <span className="inline-flex items-center gap-2">
                           Buy now
-                          <ArrowRight className="h-4 w-4" aria-hidden />
+                          <ArrowRight className="h-3.5 w-3.5" aria-hidden />
                         </span>
                       )}
-                    </Button>
-
-                    <ul className="mt-4 flex min-h-0 flex-1 flex-col space-y-2 border-t border-white/10 pt-4 text-left text-xs text-white/72">
-                      <li className="text-white/55">
-                        Up to {maxImages.toLocaleString()} AI images (Nanobanana)
-                      </li>
-                      <li className="text-white/55">
-                        Up to {maxVideos.toLocaleString()} AI videos (Sora 2)
-                      </li>
-                    </ul>
+                      </Button>
+                    </div>
                   </div>
                 );
               })}
             </div>
           </section>
 
-          <p className="pb-4 text-center text-[11px] text-white/28">
+          <p className="pb-2 text-center text-[10px] text-white/28">
             Secure checkout with Stripe. Credits are applied when payment succeeds.
             <br />
             Pack credits expire 3 months after purchase if unused.

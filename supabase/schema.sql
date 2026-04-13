@@ -117,11 +117,14 @@ create table if not exists public.studio_generations (
   model text not null default '',
   result_urls text[],
   input_urls text[],
+  aspect_ratio text,
   error_message text,
   credits_charged int not null default 0,
   uses_personal_api boolean not null default false,
   credits_refund_hint_sent boolean not null default false
 );
+
+alter table public.studio_generations add column if not exists aspect_ratio text;
 
 create index if not exists studio_generations_user_kind_created_idx
   on public.studio_generations (user_id, kind, created_at desc);

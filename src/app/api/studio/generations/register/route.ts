@@ -4,6 +4,10 @@ import { NextResponse } from "next/server";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { displayCreditsToLedgerTicks } from "@/lib/creditLedgerTicks";
 import { serverLog } from "@/lib/serverLog";
+import {
+  isMissingAspectRatioColumnError,
+  isMissingModelColumnError,
+} from "@/lib/studioGenerationsSchemaCompat";
 
 type Body = {
   kind?: string;
@@ -69,18 +73,6 @@ export async function POST(req: Request) {
     ? body.inputUrls.filter((u): u is string => typeof u === "string" && u.trim().length > 0)
     : [];
   const aspectRatio = String(body.aspectRatio ?? "").trim();
-
-  /** Older Supabase DBs without `studio_generations.aspect_ratio` reject inserts — retry without it (see `supabase/studio_generations_aspect_ratio.sql`). */
-  function isMissingAspectRatioColumnError(message: string): boolean {
-    const m = message.toLowerCase();
-    return m.includes("aspect_ratio") && (m.includes("column") || m.includes("schema cache"));
-  }
-
-  /** Same pattern as aspect_ratio — `studio_generations.sql` / `schema.sql` include `model`; very old DBs may not. */
-  function isMissingModelColumnError(message: string): boolean {
-    const m = message.toLowerCase();
-    return m.includes("model") && (m.includes("column") || m.includes("schema cache"));
-  }
 
   if (isFailed && taskIds.length === 0) {
     const single = {

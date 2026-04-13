@@ -7,7 +7,7 @@ type Props = {
   /** When the slot already has a top-right label (e.g. “Optional”), place the badge on the left. */
   align?: "left" | "right";
   className?: string;
-  /** Opens avatar library picker; click is isolated from the parent drop zone. */
+  /** Opens saved-avatar picker; click is isolated from the parent drop zone. */
   onClick?: () => void;
   disabled?: boolean;
 };
@@ -15,7 +15,7 @@ type Props = {
 const iconClass = "h-3.5 w-3.5 shrink-0";
 
 /**
- * Compact avatar-library hint on image drop zones (Motion Control character, Studio frames, etc.).
+ * Compact saved-avatar hint on image drop zones (Motion Control character, Studio frames, etc.).
  */
 export function AvatarInputCornerBadge({ align = "right", className, onClick, disabled }: Props) {
   const position = cn(
@@ -35,8 +35,8 @@ export function AvatarInputCornerBadge({ align = "right", className, onClick, di
           !disabled && "hover:border-violet-400/45 hover:bg-[#12121a]/95",
           disabled && "cursor-not-allowed opacity-45",
         )}
-        title="Pick avatar from library"
-        aria-label="Pick avatar from library"
+        title="Pick a saved avatar"
+        aria-label="Pick a saved avatar"
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();

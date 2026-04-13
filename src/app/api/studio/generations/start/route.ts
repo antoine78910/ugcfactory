@@ -16,6 +16,7 @@ import { displayCreditsToLedgerTicks } from "@/lib/creditLedgerTicks";
 import { studioImageCreditsChargedTotal } from "@/lib/pricing";
 import { isStudioImageKiePickerModelId } from "@/lib/studioImageModels";
 import { getUserPlan } from "@/lib/supabase/getUserPlan";
+import { isMissingAspectRatioColumnError } from "@/lib/studioGenerationsSchemaCompat";
 
 /** Calculate credits server-side; never trust the client-provided value. */
 function computeImageCredits(model: string, resolution: string, numImages: number): number {
@@ -138,7 +139,18 @@ export async function POST(req: Request) {
     ...(inputUrls.length > 0 ? { input_urls: inputUrls } : {}),
   }));
 
-  const { data: inserted, error: insErr } = await supabase.from("studio_generations").insert(rowsPayload).select("*");
+  let { data: inserted, error: insErr } = await supabase
+    .from("studio_generations")
+    .insert(rowsPayload)
+    .select("*");
+
+  if (insErr && isMissingAspectRatioColumnError(insErr.message)) {
+    const withoutAspect = rowsPayload.map(({ aspect_ratio: _ar, ...row }) => row);
+    ({ data: inserted, error: insErr } = await supabase
+      .from("studio_generations")
+      .insert(withoutAspect)
+      .select("*"));
+  }
 
   if (insErr) {
     logGenerationFailure("studio/generations/start", insErr, { kind, step: "insert" });

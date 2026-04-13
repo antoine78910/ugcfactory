@@ -391,7 +391,7 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
     writeStudioHistoryLocal(LS_STUDIO_IMAGE_HISTORY, historyItems);
   }, [serverHistory, historyItems]);
 
-  // Avatar library picker is intentionally kept only in the Video tab (single place in the app).
+  // Saved-avatar picker is intentionally kept only in the Video tab (single place in the app).
 
   const aspectOptions = useMemo(() => {
     if (model === "nano") return NANO_BANANA_2_ASPECT_RATIOS;

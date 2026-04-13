@@ -2127,7 +2127,7 @@ export default function StudioVideoPanel({
                     hint="Duration: 3–30 secs"
                     onDurationSec={setEditMotionDurationSec}
                   />
-                  {/* Avatar library is accessible via the corner badge on the image input. */}
+                  {/* Saved avatars: corner badge on the image input. */}
                 </div>
               ) : (
                 <>
@@ -2151,7 +2151,7 @@ export default function StudioVideoPanel({
                     pendingPreviewUrl={elementUploadPreviewBlob}
                     pendingUploading={editUploadBusy && Boolean(elementUploadPreviewBlob)}
                   />
-                  {/* Avatar library is accessible via the corner badge on the image input(s). */}
+                  {/* Saved avatars: corner badge on the image input(s). */}
                 </>
               )}
               {motionEdit ? (

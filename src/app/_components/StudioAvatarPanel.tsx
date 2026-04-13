@@ -12,13 +12,13 @@ import {
   getPersonalApiKey,
   isPlatformCreditBypassActive,
 } from "@/app/_components/CreditsPlanContext";
+import { userMessageFromCaughtError } from "@/lib/generationUserMessage";
 import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
 import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
 import { StudioOutputPane } from "@/app/_components/StudioEmptyExamples";
 import { StudioGenerationsHistory } from "@/app/_components/StudioGenerationsHistory";
 import type { StudioHistoryItem } from "@/app/_components/StudioGenerationsHistory";
 import { studioImageCreditsPerOutput, type StudioImageOutputResolution } from "@/lib/pricing";
-import { AvatarPickerDialog } from "@/app/_components/AvatarPickerDialog";
 
 const LS_AVATAR_HISTORY = "ugc_studio_avatar_history_v1";
 
@@ -196,8 +196,6 @@ export default function StudioAvatarPanel({
   const [outputResolution, setOutputResolution] = useState<StudioImageOutputResolution>("1K");
   const [busy, setBusy] = useState(false);
   const [historyItems, setHistoryItems] = useState<StudioHistoryItem[]>([]);
-  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
-  const [avatarLibraryOpen, setAvatarLibraryOpen] = useState(false);
   /** null = unknown; true = Supabase + server poll; false = guest / local only */
   const [serverHistory, setServerHistory] = useState<boolean | null>(null);
 
@@ -205,10 +203,6 @@ export default function StudioAvatarPanel({
   const [billing, setBilling] = useState<Bill>({ open: false });
 
   const credits = studioImageCreditsPerOutput({ studioModel: "nano", resolution: outputResolution });
-  const avatarLibraryUrls = historyItems
-    .filter((item) => item.status === "ready" && item.kind === "image" && typeof item.mediaUrl === "string")
-    .map((item) => item.mediaUrl!.trim())
-    .filter((url, idx, arr) => url.length > 0 && arr.indexOf(url) === idx);
 
   const set = useCallback((key: keyof AvatarParams, value: string) => {
     setParams((prev) => ({ ...prev, [key]: value }));
@@ -337,7 +331,10 @@ export default function StudioAvatarPanel({
           description: "You can leave this page — it will finish on the server.",
         });
       } catch (e) {
-        const msg = "Something went wrong while generating. Please try again.";
+        const msg = userMessageFromCaughtError(
+          e,
+          "Something went wrong while generating. Please try again.",
+        );
         refundPlatformCredits(platformCharge, grantCredits, creditsRef);
         toast.error(msg);
       } finally {
@@ -415,14 +412,6 @@ export default function StudioAvatarPanel({
               Generate avatar
               <span className="rounded-md bg-white/15 px-1.5 py-0.5 text-xs tabular-nums">{credits}</span>
             </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setAvatarLibraryOpen(true)}
-              className="h-10 rounded-xl border border-white/15 bg-white/5 px-4 text-sm font-semibold text-white hover:bg-white/10"
-            >
-              Avatar library
-            </Button>
           </div>
         </div>
 
@@ -444,23 +433,6 @@ export default function StudioAvatarPanel({
         </div>
       </div>
 
-      {lightboxUrl ? (
-        <div
-          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/88 p-4 backdrop-blur-[2px]"
-          onClick={() => setLightboxUrl(null)}
-          role="dialog"
-          aria-modal="true"
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={lightboxUrl}
-            alt="Avatar full view"
-            className="max-h-[92vh] max-w-[min(100%,900px)] rounded-xl border border-violet-500/20 object-contain shadow-[0_0_60px_rgba(139,92,246,0.15)]"
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
-      ) : null}
-
       {billing.open ? (
         <StudioBillingDialog
           open
@@ -474,13 +446,6 @@ export default function StudioAvatarPanel({
           }}
         />
       ) : null}
-      <AvatarPickerDialog
-        open={avatarLibraryOpen}
-        onOpenChange={setAvatarLibraryOpen}
-        avatarUrls={avatarLibraryUrls}
-        onPick={(url) => setLightboxUrl(url)}
-        title="Avatar library"
-      />
     </>
   );
 }

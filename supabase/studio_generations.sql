@@ -26,6 +26,7 @@ alter table public.studio_generations add column if not exists started_at timest
 alter table public.studio_generations add column if not exists completed_at timestamptz;
 alter table public.studio_generations add column if not exists model text not null default '';
 alter table public.studio_generations add column if not exists input_urls text[];
+alter table public.studio_generations add column if not exists aspect_ratio text;
 
 create index if not exists studio_generations_user_kind_created_idx
   on public.studio_generations (user_id, kind, created_at desc);

@@ -2912,8 +2912,8 @@ export default function LinkToAdUniverse({
   }
 
   /**
-   * URLs for NanoBanana / GPT product vision: packshots only (not avatar refs).
-   * Avatars belong in `avatarImageUrls`, not as the primary product reference.
+   * Product reference URLs for Nano Banana (same priority as {@link buildProductCandidatesForGeneration}):
+   * latest user uploads, then classified packshots. Avatars stay in `avatarImageUrls`, not here.
    */
   function buildProductPackshotCandidatesForNano(): string[] {
     const out: string[] = [];
@@ -2924,6 +2924,7 @@ export default function LinkToAdUniverse({
       seen.add(t);
       out.push(t);
     };
+    for (let i = userPhotoUrls.length - 1; i >= 0; i--) push(userPhotoUrls[i]);
     for (let i = productOnlyImageUrls.length - 1; i >= 0; i--) push(productOnlyImageUrls[i]);
     if (cleanCandidate?.url) push(cleanCandidate.url);
     return out;
@@ -3847,7 +3848,11 @@ export default function LinkToAdUniverse({
     const signature = `script:${fnv1aHash(script)}|imgs:${nanoRefs.join(",")}|avatars:${avatarRefs.join(",")}|provider:${scriptProvider}`;
 
     let promptsText = nanoBananaPromptsRaw;
-    const signatureMatches = promptsText.trim().length > 0 && nanoBananaPromptsSignatureRef.current === signature;
+    /** Paid "Regenerate 3 images" must always rebuild prompts from current product + persona + script. */
+    const signatureMatches =
+      !force &&
+      promptsText.trim().length > 0 &&
+      nanoBananaPromptsSignatureRef.current === signature;
 
     let prompts: [string, string, string];
     if (!signatureMatches) {

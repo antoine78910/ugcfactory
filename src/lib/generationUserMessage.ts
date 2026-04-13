@@ -84,9 +84,29 @@ export function userFacingProviderErrorOrDefault(raw: string | null | undefined,
   return u || fallback;
 }
 
+function messageForLog(err: unknown): { message: string; stack?: string } {
+  if (err instanceof Error) {
+    return { message: err.message, stack: err.stack };
+  }
+  if (err && typeof err === "object") {
+    const o = err as Record<string, unknown>;
+    const parts = [o.message, o.details, o.hint, o.code].filter(
+      (x): x is string => typeof x === "string" && x.trim().length > 0,
+    );
+    if (parts.length > 0) {
+      return { message: parts.join(" | ") };
+    }
+    try {
+      return { message: JSON.stringify(err) };
+    } catch {
+      /* fall through */
+    }
+  }
+  return { message: String(err) };
+}
+
 export function logGenerationFailure(scope: string, err: unknown, meta?: Record<string, unknown>): void {
-  const message = err instanceof Error ? err.message : String(err);
-  const stack = err instanceof Error ? err.stack : undefined;
+  const { message, stack } = messageForLog(err);
   console.error(`[generation-failure] ${scope}`, { ...meta, message, stack });
 }
 
