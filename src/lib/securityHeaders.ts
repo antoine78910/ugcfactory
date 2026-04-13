@@ -35,7 +35,8 @@ const CSP_PARTS_BASE = [
   "media-src 'self' data: blob: https:",
   "font-src 'self' data: https://fonts.gstatic.com",
   // *.supabase.co default; append custom / vanity API host when set (see supabaseNonDefaultConnectOrigins).
-  `connect-src 'self' https://datafa.st https://*.datafa.st https://www.linkjolt.io https://linkjolt.io https://heyo.so https://*.heyo.so https://cdn.heyo.so https://*.supabase.co wss://*.supabase.co ${supabaseNonDefaultConnectOrigins()} https://api.stripe.com https://*.stripe.com https://m.stripe.network https://q.stripe.com https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://*.ingest.de.sentry.io https://*.sentry.io https://cdn.jsdelivr.net https://www.clarity.ms https://scripts.clarity.ms https://a.clarity.ms https://accounts.google.com`.replace(
+  // Clarity load-balances collect across *.clarity.ms (a–z) + c.bing.com — see Microsoft Learn "Clarity CSP".
+  `connect-src 'self' https://datafa.st https://*.datafa.st https://www.linkjolt.io https://linkjolt.io https://heyo.so https://*.heyo.so https://cdn.heyo.so wss://heyo.so wss://*.heyo.so https://*.supabase.co wss://*.supabase.co ${supabaseNonDefaultConnectOrigins()} https://api.stripe.com https://*.stripe.com https://m.stripe.network https://q.stripe.com https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://*.ingest.de.sentry.io https://*.sentry.io https://cdn.jsdelivr.net https://*.clarity.ms https://c.bing.com https://accounts.google.com`.replace(
     /\s+/g,
     " ",
   ),
