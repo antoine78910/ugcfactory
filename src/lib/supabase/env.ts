@@ -1,5 +1,10 @@
 import { getEnv, requireEnv } from "@/lib/env";
 
+function truthyEnv(v: string | undefined): boolean {
+  const t = (v ?? "").trim().toLowerCase();
+  return t === "1" || t === "true" || t === "yes";
+}
+
 /**
  * Public Supabase API base URL used by browser + server clients.
  *
@@ -8,11 +13,28 @@ import { getEnv, requireEnv } from "@/lib/env";
  * consent screen shows your domain instead of `*.supabase.co`.
  *
  * Otherwise falls back to `NEXT_PUBLIC_SUPABASE_URL` (the default `*.supabase.co` URL).
+ *
+ * Local dev: if both custom domain and `NEXT_PUBLIC_SUPABASE_URL` are set, we prefer the
+ * direct `*.supabase.co` URL in development so a copied production env still works when
+ * the custom host does not resolve locally (DNS). Set
+ * `NEXT_PUBLIC_SUPABASE_USE_CUSTOM_DOMAIN_IN_DEV=true` to force the custom host in dev.
+ * Set `NEXT_PUBLIC_SUPABASE_USE_DIRECT_URL=true` to always ignore the custom domain.
  */
 export function getSupabaseUrlOptional(): string | undefined {
   const custom = process.env.NEXT_PUBLIC_SUPABASE_CUSTOM_DOMAIN?.trim();
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
-  const url = custom || base;
+
+  if (truthyEnv(process.env.NEXT_PUBLIC_SUPABASE_USE_DIRECT_URL) && base) {
+    return base.replace(/\/+$/, "");
+  }
+
+  const devPreferDirect =
+    process.env.NODE_ENV === "development" &&
+    Boolean(base) &&
+    Boolean(custom) &&
+    !truthyEnv(process.env.NEXT_PUBLIC_SUPABASE_USE_CUSTOM_DOMAIN_IN_DEV);
+
+  const url = devPreferDirect ? base : custom || base;
   return url ? url.replace(/\/+$/, "") : undefined;
 }
 

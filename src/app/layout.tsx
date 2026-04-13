@@ -67,6 +67,14 @@ export default function RootLayout({
           data-website-id={DATAFAST_WEBSITE_ID}
           data-domain={DATAFAST_DOMAIN}
         />
+        {/* Route LinkJolt click pings same-origin so credentialed fetch wrappers (extensions, etc.) do not break CORS on linkjolt.io (wildcard ACAO + credentials). */}
+        <Script
+          id="linkjolt-click-proxy-shim"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `(function(){var p="/api/linkjolt/track-click",n="linkjolt.io/api/track/click";function r(u){var s=typeof u==="string"?u:u&&u.url;return!!(s&&s.indexOf(n)!==-1);}if(typeof navigator!=="undefined"&&navigator.sendBeacon){var b=navigator.sendBeacon.bind(navigator);navigator.sendBeacon=function(u,d){if(r(u))return b(p,d);return b(u,d);};}if(typeof fetch==="function"){var f=window.fetch;window.fetch=function(i,init){var u=typeof i==="string"?i:i&&i.url;if(r(u)){init=Object.assign({},init||{});init.credentials="omit";return f(p,init);}return f(i,init);};}})();`,
+          }}
+        />
         <Script
           id="linkjolt"
           src={`https://www.linkjolt.io/api/tracking.js?id=${LINKJOLT_MERCHANT_ID}`}

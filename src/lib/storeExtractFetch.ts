@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { serverLog } from "@/lib/serverLog";
 
+const PLAYWRIGHT_ENABLED = process.env.PLAYWRIGHT_FALLBACK !== "false";
+
 /** Headers closer to a real browser; some CDNs block bare fetch. */
 export const STORE_EXTRACT_BROWSER_HEADERS: HeadersInit = {
   "User-Agent":
@@ -37,10 +39,44 @@ const FETCH_TIMEOUT_MS = 22_000;
 const RETRY_DELAY_MS = [0, 2800, 6500] as const;
 
 /**
+ * Try fetching store HTML via Playwright (headless Chromium).
+ * Returns the rendered HTML string, or null if Playwright is not available / times out.
+ * Requires `playwright` package to be installed and `npx playwright install chromium` to have been run.
+ */
+export async function fetchStorePageHtmlPlaywright(pageUrl: string): Promise<string | null> {
+  if (!PLAYWRIGHT_ENABLED) return null;
+  try {
+    // Dynamic import so the server doesn't crash when playwright is not installed
+    const { chromium } = await import("playwright");
+    const browser = await chromium.launch({ headless: true, timeout: 12_000 });
+    try {
+      const context = await browser.newContext({
+        userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        locale: "en-US",
+        extraHTTPHeaders: {
+          "Accept-Language": "en-US,en;q=0.9",
+        },
+      });
+      const page = await context.newPage();
+      await page.goto(pageUrl, { waitUntil: "domcontentloaded", timeout: 22_000 });
+      // Brief pause for JS-rendered images to populate
+      await page.waitForTimeout(1_800);
+      const html = await page.content();
+      return html;
+    } finally {
+      await browser.close();
+    }
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Download store HTML for extraction. Retries 429/503 a few times; maps anti-bot pages to a clear API error.
+ * On anti-bot detection, automatically attempts a Playwright headless fallback before giving up.
  */
 export async function fetchStorePageHtmlForExtract(pageUrl: string): Promise<
-  { ok: true; html: string } | { ok: false; response: NextResponse }
+  { ok: true; html: string; usedPlaywright?: boolean } | { ok: false; response: NextResponse }
 > {
   for (let attempt = 0; attempt < 3; attempt++) {
     if (attempt > 0) {
@@ -96,6 +132,13 @@ export async function fetchStorePageHtmlForExtract(pageUrl: string): Promise<
     if (res.ok) {
       if (looksLikeAntiBotChallengeHtml(text)) {
         serverLog("store_extract_anti_bot_body", { url: pageUrl.slice(0, 160), status: res.status });
+        // Try Playwright before giving up
+        const pwHtml = await fetchStorePageHtmlPlaywright(pageUrl);
+        if (pwHtml && !looksLikeAntiBotChallengeHtml(pwHtml)) {
+          serverLog("store_extract_playwright_success", { url: pageUrl.slice(0, 160) });
+          return { ok: true, html: pwHtml, usedPlaywright: true };
+        }
+        serverLog("store_extract_playwright_failed", { url: pageUrl.slice(0, 160) });
         return {
           ok: false,
           response: NextResponse.json(
@@ -122,6 +165,11 @@ export async function fetchStorePageHtmlForExtract(pageUrl: string): Promise<
 
     if (looksLikeAntiBotChallengeHtml(text)) {
       serverLog("store_extract_anti_bot_error_page", { status: res.status, url: pageUrl.slice(0, 160) });
+      const pwHtml = await fetchStorePageHtmlPlaywright(pageUrl);
+      if (pwHtml && !looksLikeAntiBotChallengeHtml(pwHtml)) {
+        serverLog("store_extract_playwright_success", { url: pageUrl.slice(0, 160) });
+        return { ok: true, html: pwHtml, usedPlaywright: true };
+      }
       return {
         ok: false,
         response: NextResponse.json(
