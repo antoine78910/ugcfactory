@@ -12,6 +12,7 @@
 /** Unlimited credits + admin bypass. Credits are hardcoded, not from DB. */
 const ALLOWED_USER_EMAILS = new Set<string>([
   "anto.delbos@gmail.com",
+  "paulyaniskacou@gmail.com",
 ]);
 
 /**
@@ -19,9 +20,7 @@ const ALLOWED_USER_EMAILS = new Set<string>([
  * through the account's own provider API keys (KIE + PiAPI).
  * Credits are unique per account (from user_credit_grants ledger).
  */
-const PERSONAL_API_USER_EMAILS = new Set<string>([
-  "paulyaniskacou@gmail.com",
-]);
+const PERSONAL_API_USER_EMAILS = new Set<string>([]);
 
 /**
  * Returns true when this email is permitted to access the application.

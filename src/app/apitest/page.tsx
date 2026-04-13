@@ -46,9 +46,15 @@ export default function ApiTestPage() {
   }
 
   function savePersonalApiKey(v: string) {
+    const key = v.trim();
     setPersonalApiKey(v);
-    if (v.trim()) localStorage.setItem(PERSONAL_API_KEY_LS, v.trim());
-    else localStorage.removeItem(PERSONAL_API_KEY_LS);
+    if (key) {
+      localStorage.setItem(PERSONAL_API_KEY_LS, key);
+      localStorage.setItem(PERSONAL_API_ENABLED_LS, "1");
+      setPersonalApiEnabled(true);
+      return;
+    }
+    localStorage.removeItem(PERSONAL_API_KEY_LS);
   }
 
   function togglePiapi() {
@@ -62,9 +68,15 @@ export default function ApiTestPage() {
   }
 
   function savePiapiKey(v: string) {
+    const key = v.trim();
     setPiapiKey(v);
-    if (v.trim()) localStorage.setItem(PIAPI_PERSONAL_API_KEY_LS, v.trim());
-    else localStorage.removeItem(PIAPI_PERSONAL_API_KEY_LS);
+    if (key) {
+      localStorage.setItem(PIAPI_PERSONAL_API_KEY_LS, key);
+      localStorage.setItem(PIAPI_PERSONAL_API_ENABLED_LS, "1");
+      setPiapiEnabled(true);
+      return;
+    }
+    localStorage.removeItem(PIAPI_PERSONAL_API_KEY_LS);
   }
 
   function toggleEleven() {
@@ -78,9 +90,15 @@ export default function ApiTestPage() {
   }
 
   function saveElevenKey(v: string) {
+    const key = v.trim();
     setElevenKey(v);
-    if (v.trim()) localStorage.setItem(ELEVENLABS_PERSONAL_API_KEY_LS, v.trim());
-    else localStorage.removeItem(ELEVENLABS_PERSONAL_API_KEY_LS);
+    if (key) {
+      localStorage.setItem(ELEVENLABS_PERSONAL_API_KEY_LS, key);
+      localStorage.setItem(ELEVENLABS_PERSONAL_API_ENABLED_LS, "1");
+      setElevenEnabled(true);
+      return;
+    }
+    localStorage.removeItem(ELEVENLABS_PERSONAL_API_KEY_LS);
   }
 
   return (
