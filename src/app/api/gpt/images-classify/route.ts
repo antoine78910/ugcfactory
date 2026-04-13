@@ -17,13 +17,15 @@ type Body = {
   provider?: "gpt" | "claude";
 };
 
-/** Scored image from the 4-criteria Claude/GPT response. */
+/** Scored image from vision JSON (5 criteria when model follows the schema). */
 export type ScoredImage = {
   url: string;
   product_visibility: number;
   image_quality: number;
   background_clean: number;
   ugc_suitability: number;
+  /** Full pack + readable label text (critical for pouches/sachets). Omitted in old cache → derived in parser. */
+  packaging_readability?: number;
   composite: number;
   reason?: string;
 };
@@ -50,6 +52,12 @@ function scoreUrl(u: string, meta?: ImageMetaEntry) {
   if (s.includes("zoom") || s.includes("large") || s.includes("full")) score += 2;
   if (s.includes("detail") || s.includes("pdp")) score += 2;
   if (s.includes("swatch") || s.includes("variant")) score += 1;
+  // Flexible pouch / sachet imagery (often needs full-pack + legible text)
+  if (
+    /sachet|pouch|doypack|flow-?pack|stick-?pack|flexible|resealable|zip-?lock|stand-?up|gusset|foil-?pack/i.test(s)
+  ) {
+    score += 2;
+  }
 
   // ── CDN hints ──
   if (s.includes("cdn.shopify.com")) score += 3;
@@ -75,7 +83,13 @@ function scoreUrl(u: string, meta?: ImageMetaEntry) {
   if (meta) {
     const alt = (meta.alt ?? "").toLowerCase();
     if (alt) {
-      if (/product|item|bottle|box|package|tube|jar|serum|cream|shoe|sneaker|dress|shirt|watch|bag/.test(alt)) score += 3;
+      if (
+        /product|item|bottle|box|package|tube|jar|serum|cream|shoe|sneaker|dress|shirt|watch|bag|pouch|sachet|doypack|stick\s*pack|supplement|powder|gummies/i.test(
+          alt,
+        )
+      ) {
+        score += 3;
+      }
       if (/logo|icon|badge|arrow|close|menu|avatar|profile|flag|payment|social/.test(alt)) score -= 4;
     }
 
@@ -98,13 +112,20 @@ function scoreUrl(u: string, meta?: ImageMetaEntry) {
   return score;
 }
 
-/** composite = visibility×0.4 + quality×0.25 + background×0.2 + ugc×0.15 */
-function compositeScore(s: { product_visibility: number; image_quality: number; background_clean: number; ugc_suitability: number }): number {
+/** Weighted composite; packaging_readability matters for pouches/sachets and label fidelity. */
+function compositeScore(s: {
+  product_visibility: number;
+  image_quality: number;
+  background_clean: number;
+  ugc_suitability: number;
+  packaging_readability: number;
+}): number {
   return (
-    s.product_visibility * 0.4 +
-    s.image_quality * 0.25 +
-    s.background_clean * 0.2 +
-    s.ugc_suitability * 0.15
+    s.product_visibility * 0.3 +
+    s.image_quality * 0.2 +
+    s.background_clean * 0.14 +
+    s.ugc_suitability * 0.12 +
+    s.packaging_readability * 0.24
   );
 }
 
@@ -151,14 +172,26 @@ function buildHeuristicClassifyPayload(
   }
   const note =
     "Vision scoring skipped (provider error). Using the best-ranked image from URL heuristics instead.";
+  const pv = 5;
+  const iq = 5;
+  const bc = 5;
+  const us = 5;
+  const pr = 5;
   const scored: ScoredImage[] = [
     {
       url: primary,
-      product_visibility: 5,
-      image_quality: 5,
-      background_clean: 5,
-      ugc_suitability: 5,
-      composite: 5,
+      product_visibility: pv,
+      image_quality: iq,
+      background_clean: bc,
+      ugc_suitability: us,
+      packaging_readability: pr,
+      composite: compositeScore({
+        product_visibility: pv,
+        image_quality: iq,
+        background_clean: bc,
+        ugc_suitability: us,
+        packaging_readability: pr,
+      }),
       reason: note,
     },
   ];
@@ -226,7 +259,7 @@ export async function POST(req: Request) {
   const provider: "gpt" | "claude" = body?.provider === "gpt" ? "gpt" : "claude";
 
   try {
-    const cacheKey = makeCacheKey({ v: 5, pageUrl: body.pageUrl, ranked: modelInputUrls, provider });
+    const cacheKey = makeCacheKey({ v: 6, pageUrl: body.pageUrl, ranked: modelInputUrls, provider });
     try {
       const { data: hit } = await supabase
         .from("gpt_cache")
@@ -253,16 +286,17 @@ export async function POST(req: Request) {
     const userText = [
       `Product page: ${body.pageUrl}`,
       "",
-      `Score each of the ${modelInputUrls.length} images shown using these 4 criteria (integer 0–10 each):`,
+      `Score each of the ${modelInputUrls.length} images shown using these 5 criteria (integer 0–10 each):`,
       "- product_visibility: Is the product clearly visible, well-lit and prominent? (10 = product fills frame perfectly)",
       "- image_quality: Resolution, sharpness, no blur/artifacts (10 = high-res studio quality)",
       "- background_clean: How clean/minimal is the background? (10 = pure white studio, 0 = cluttered scene)",
-      "- ugc_suitability: Would this image work as a reference for UGC creation? (10 = perfect packshot for UGC)",
+      "- ugc_suitability: Would this image work as a reference for UGC / image-generation models? (10 = ideal packshot)",
+      "- packaging_readability: For the PRIMARY sellable unit (bottle, box, pouch, sachet, bag, tub, etc.): is the entire pack visible in frame (not cropped to a corner), and is brand/product text sharp and readable? (10 = full pack + all key lettering legible). For flexible pouches/sachets/stand-up bags, heavily penalize tight crops that hide the bottom/top or cut off wording — those force AI to invent label copy. If the product is complex, note in \"reason\" when multiple angles would be needed.",
       "",
       "Return JSON:",
       "{",
       '  "images": [',
-      '    { "url": "<EXACT URL>", "product_visibility": 0-10, "image_quality": 0-10, "background_clean": 0-10, "ugc_suitability": 0-10, "reason": "<1 sentence>" }',
+      '    { "url": "<EXACT URL>", "product_visibility": 0-10, "image_quality": 0-10, "background_clean": 0-10, "ugc_suitability": 0-10, "packaging_readability": 0-10, "reason": "<1 sentence>" }',
       "  ],",
       '  "confidence": "low"|"medium"|"high"',
       "}",
@@ -318,6 +352,7 @@ export async function POST(req: Request) {
         image_quality?: unknown;
         background_clean?: unknown;
         ugc_suitability?: unknown;
+        packaging_readability?: unknown;
         reason?: unknown;
       };
       const rawUrl = typeof obj?.url === "string" ? obj.url : "";
@@ -334,6 +369,8 @@ export async function POST(req: Request) {
       const iq = toScore(obj.image_quality);
       const bc = toScore(obj.background_clean);
       const us = toScore(obj.ugc_suitability);
+      const hasPkg = obj.packaging_readability !== undefined && obj.packaging_readability !== null && String(obj.packaging_readability).trim() !== "";
+      const pr = hasPkg ? toScore(obj.packaging_readability) : Math.round(Math.min(10, Math.max(0, pv * 0.55 + us * 0.45)));
 
       scored.push({
         url: matched,
@@ -341,7 +378,14 @@ export async function POST(req: Request) {
         image_quality: iq,
         background_clean: bc,
         ugc_suitability: us,
-        composite: compositeScore({ product_visibility: pv, image_quality: iq, background_clean: bc, ugc_suitability: us }),
+        packaging_readability: pr,
+        composite: compositeScore({
+          product_visibility: pv,
+          image_quality: iq,
+          background_clean: bc,
+          ugc_suitability: us,
+          packaging_readability: pr,
+        }),
         reason: typeof obj?.reason === "string" ? obj.reason : undefined,
       });
     }
@@ -351,15 +395,29 @@ export async function POST(req: Request) {
 
     // If model returned nothing, fall back gracefully
     if (scored.length === 0 && modelInputUrls.length > 0) {
-      scored.push({
-        url: modelInputUrls[0],
-        product_visibility: 5,
-        image_quality: 5,
-        background_clean: 5,
-        ugc_suitability: 5,
-        composite: 5,
-        reason: "Model returned no scores; using top-ranked image from extraction.",
-      });
+      {
+        const pv0 = 5;
+        const iq0 = 5;
+        const bc0 = 5;
+        const us0 = 5;
+        const pr0 = 5;
+        scored.push({
+          url: modelInputUrls[0],
+          product_visibility: pv0,
+          image_quality: iq0,
+          background_clean: bc0,
+          ugc_suitability: us0,
+          packaging_readability: pr0,
+          composite: compositeScore({
+            product_visibility: pv0,
+            image_quality: iq0,
+            background_clean: bc0,
+            ugc_suitability: us0,
+            packaging_readability: pr0,
+          }),
+          reason: "Model returned no scores; using top-ranked image from extraction.",
+        });
+      }
     }
 
     // ── Step 6: backward-compatible output ──────────────────────────────
@@ -380,6 +438,29 @@ export async function POST(req: Request) {
     // Ensure at least one productOnlyUrl
     if (productOnlyUrls.length === 0 && scored.length > 0) {
       productOnlyUrls.push({ url: scored[0].url, reason: scored[0].reason });
+    }
+
+    // If the best frame still has weak packaging legibility, add extra high-ranked URLs so users/models can combine angles.
+    const best = scored[0];
+    const bestPkg = best?.packaging_readability;
+    if (
+      typeof bestPkg === "number" &&
+      bestPkg < 6 &&
+      scored.length > 1 &&
+      productOnlyUrls.length > 0 &&
+      productOnlyUrls.length < 5
+    ) {
+      const already = new Set(productOnlyUrls.map((x) => x.url));
+      for (const s of scored.slice(1)) {
+        if (productOnlyUrls.length >= 5) break;
+        if (already.has(s.url)) continue;
+        if (s.composite < 4.25) continue;
+        const extraReason =
+          s.reason?.trim() ||
+          "Additional reference — combine with the main image if label or pouch details are split across shots.";
+        productOnlyUrls.push({ url: s.url, reason: extraReason });
+        already.add(s.url);
+      }
     }
 
     const data = {

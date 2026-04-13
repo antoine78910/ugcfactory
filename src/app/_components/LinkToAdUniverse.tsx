@@ -592,7 +592,14 @@ function LinkToAdRecentRunsToggle({
 }) {
   const knob = compact ? 16 : 20;
   return (
-    <div className={cn("flex items-center", compact ? "gap-1.5" : "gap-2.5")}>
+    <div
+      className={cn("flex items-center", compact ? "gap-1.5" : "gap-2.5")}
+      title={
+        hidePreviousLtaGenerations
+          ? "Recent projects are hidden — click the switch to show them again"
+          : "Click to hide the recent projects strip"
+      }
+    >
       <button
         type="button"
         role="switch"
@@ -636,21 +643,33 @@ function LinkToAdRecentRunsToggle({
       <div className="flex min-w-0 flex-col items-start leading-tight">
         <span
           className={cn(
-            "font-semibold uppercase tracking-wide text-white/50",
+            "font-semibold uppercase tracking-wide text-white/60",
             compact ? "text-[8px]" : "text-[10px]",
           )}
         >
           Previous runs
         </span>
-        <span
-          className={cn(
-            "font-medium transition-colors duration-300",
-            compact ? "text-[9px]" : "text-[11px]",
-            hidePreviousLtaGenerations ? "text-white/35" : "text-violet-200/85",
-          )}
-        >
-          {hidePreviousLtaGenerations ? "Hidden" : "Visible"}
-        </span>
+        {hidePreviousLtaGenerations ? (
+          <span
+            className={cn(
+              "font-medium text-violet-200/95 transition-colors duration-300",
+              compact ? "text-[9px] leading-snug" : "text-[11px] leading-snug",
+            )}
+          >
+            <span className="text-white/80">Hidden</span>
+            <span className="text-white/45"> · </span>
+            <span className="text-violet-300/90">tap to show</span>
+          </span>
+        ) : (
+          <span
+            className={cn(
+              "font-medium text-violet-200/85 transition-colors duration-300",
+              compact ? "text-[9px]" : "text-[11px]",
+            )}
+          >
+            Visible
+          </span>
+        )}
       </div>
     </div>
   );
@@ -1029,6 +1048,10 @@ function LinkToAdFullSequencePlayer({
     </div>
   );
 }
+
+/** High-contrast corner tag on the 80×80 product preview (algorithm-chosen image). */
+const pickedByAiPreviewBadgeClass =
+  "pointer-events-none absolute left-0 top-0 z-20 inline-block w-max max-w-[min(100%,4.25rem)] rounded-br-md border-b border-r-2 border-white/55 bg-gradient-to-br from-violet-500 via-violet-600 to-violet-950 px-1.5 py-1 text-left text-[7px] font-extrabold uppercase leading-[1.12] tracking-[0.14em] text-white shadow-[0_3px_16px_rgba(0,0,0,0.75),inset_0_1px_0_rgba(255,255,255,0.35)] ring-1 ring-violet-100/40";
 
 export default function LinkToAdUniverse({
   resumeRunId,
@@ -2128,6 +2151,9 @@ export default function LinkToAdUniverse({
     }
     return set;
   }, [resolveMaybeRelativeUrl, userPhotoUrls]);
+  /** Change picker: only top-ranked scraped URLs (classify order is preserved in productOnlyImageUrls). */
+  const LINK_TO_AD_CHANGE_PICKER_MAX = 8;
+
   const aiScrapedCandidateUrls = useMemo(() => {
     const out: string[] = [];
     const seen = new Set<string>();
@@ -2138,15 +2164,15 @@ export default function LinkToAdUniverse({
       seen.add(r);
       out.push(r);
     };
-    push(cleanCandidate?.url);
     for (const u of productOnlyImageUrls) push(u);
+    push(cleanCandidate?.url);
     push(fallbackImageUrl);
     return out;
   }, [cleanCandidate?.url, fallbackImageUrl, productOnlyImageUrls, resolveMaybeRelativeUrl, resolvedUserPhotoUrlSet]);
-  const aiAlternativeUrls = useMemo(
-    () => aiScrapedCandidateUrls.filter((u) => u !== (resolvedPreviewUrl || "").trim()),
-    [aiScrapedCandidateUrls, resolvedPreviewUrl],
-  );
+  const aiAlternativeUrls = useMemo(() => {
+    const preview = (resolvedPreviewUrl || "").trim();
+    return aiScrapedCandidateUrls.filter((u) => u !== preview).slice(0, LINK_TO_AD_CHANGE_PICKER_MAX);
+  }, [aiScrapedCandidateUrls, resolvedPreviewUrl]);
 
   /** Thumbnail strip: active preview (AI pick / neutral / chosen) plus user-uploaded product photos only — not every scraped packshot. */
   const productPhotosStripUrls = useMemo(() => {
@@ -4890,25 +4916,28 @@ export default function LinkToAdUniverse({
               </Button>
             ) : null}
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
-            {showBrandHeaderInsteadOfUrl && recentLinkToAdRuns.length > 0 ? (
-              <LinkToAdRecentRunsToggle
-                hidePreviousLtaGenerations={hidePreviousLtaGenerations}
-                onToggle={toggleHidePreviousLtaGenerations}
-                reduceMotion={reduceMotion ?? false}
-              />
-            ) : null}
-            {hasBegunLinkToAdGeneration ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                onClick={() => confirmAndResetLinkToAdToStart()}
-                className="h-8 shrink-0 gap-1.5 rounded-xl border border-red-400/25 bg-red-500/10 px-2.5 text-xs font-semibold text-red-100/90 hover:border-red-400/45 hover:bg-red-500/20"
-              >
-                Cancel Link to Ad
-              </Button>
-            ) : null}
+          <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 sm:gap-3">
+            <div className="flex shrink-0 flex-nowrap items-center gap-2">
+              {showBrandHeaderInsteadOfUrl && recentLinkToAdRuns.length > 0 ? (
+                <LinkToAdRecentRunsToggle
+                  compact
+                  hidePreviousLtaGenerations={hidePreviousLtaGenerations}
+                  onToggle={toggleHidePreviousLtaGenerations}
+                  reduceMotion={reduceMotion ?? false}
+                />
+              ) : null}
+              {hasBegunLinkToAdGeneration ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => confirmAndResetLinkToAdToStart()}
+                  className="h-8 shrink-0 gap-1.5 rounded-xl border border-red-400/25 bg-red-500/10 px-2.5 text-xs font-semibold text-red-100/90 hover:border-red-400/45 hover:bg-red-500/20"
+                >
+                  Cancel Link to Ad
+                </Button>
+              ) : null}
+            </div>
             {stage === "error" ? (
               <div className="flex items-center gap-2 text-xs text-red-300/90">
                 <span className="rounded-full border border-red-400/30 bg-red-500/10 px-2 py-1">Error</span>
@@ -5499,6 +5528,13 @@ export default function LinkToAdUniverse({
                     )}
                   </div>
                   <div className="group relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-[#050507]">
+                    {resolvedPreviewUrl && !imgError && isAlgorithmChosenPreview ? (
+                      <span className={pickedByAiPreviewBadgeClass} aria-hidden>
+                        Picked by
+                        <br />
+                        AI
+                      </span>
+                    ) : null}
                     {resolvedPreviewUrl && !imgError ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
@@ -5578,11 +5614,6 @@ export default function LinkToAdUniverse({
                         Product photos ({productPhotosStripUrls.length})
                       </span>
                       <div className="flex flex-wrap items-center gap-1.5">
-                        {isAlgorithmChosenPreview ? (
-                          <span className="rounded-md border border-violet-400/35 bg-violet-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-violet-100">
-                            Picked by AI
-                          </span>
-                        ) : null}
                         {aiAlternativeUrls.length > 0 ? (
                           <button
                             type="button"
@@ -5605,7 +5636,9 @@ export default function LinkToAdUniverse({
                     </div>
                     {showAiImagePicker && aiAlternativeUrls.length > 0 ? (
                       <div className="rounded-lg border border-violet-400/20 bg-violet-500/[0.06] p-2">
-                        <p className="text-[10px] font-medium text-violet-100/90">Choose another detected product image</p>
+                        <p className="text-[10px] font-medium text-violet-100/90">
+                          Best alternatives (ranked) — not the full crawl list
+                        </p>
                         <div className="mt-2 flex flex-wrap gap-2">
                           {aiAlternativeUrls.map((u, i) => (
                             <button
@@ -5747,6 +5780,13 @@ export default function LinkToAdUniverse({
                       {/* Brand color intentionally hidden (not useful in Link to Ad UI). */}
                     </div>
                     <div className="group relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-[#050507]">
+                      {resolvedPreviewUrl && !imgError && isAlgorithmChosenPreview ? (
+                        <span className={pickedByAiPreviewBadgeClass} aria-hidden>
+                          Picked by
+                          <br />
+                          AI
+                        </span>
+                      ) : null}
                       {resolvedPreviewUrl && !imgError ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -5769,8 +5809,8 @@ export default function LinkToAdUniverse({
                           tabIndex={0}
                           aria-label="Open product image full size"
                           className={cn(
-                            "absolute top-1 z-20 flex h-7 w-7 items-center justify-center rounded-lg bg-black/60 text-white opacity-0 shadow transition-opacity hover:bg-black/70 hover:text-white/90 group-hover:opacity-100",
-                            isAlgorithmChosenPreview ? "left-1" : "right-1",
+                            "absolute z-20 flex h-7 w-7 items-center justify-center rounded-lg bg-black/60 text-white opacity-0 shadow transition-opacity hover:bg-black/70 hover:text-white/90 group-hover:opacity-100",
+                            isAlgorithmChosenPreview ? "left-1 top-8" : "right-1 top-1",
                           )}
                           onClick={(e) => {
                             e.preventDefault();
@@ -5808,11 +5848,6 @@ export default function LinkToAdUniverse({
                         Product photos ({productPhotosStripUrls.length})
                       </span>
                       <div className="flex flex-wrap items-center gap-1.5">
-                        {isAlgorithmChosenPreview ? (
-                          <span className="rounded-md border border-violet-400/35 bg-violet-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-violet-100">
-                            Picked by AI
-                          </span>
-                        ) : null}
                         {aiAlternativeUrls.length > 0 ? (
                           <button
                             type="button"
@@ -5835,7 +5870,9 @@ export default function LinkToAdUniverse({
                     </div>
                     {showAiImagePicker && aiAlternativeUrls.length > 0 ? (
                       <div className="rounded-lg border border-violet-400/20 bg-violet-500/[0.06] p-2">
-                        <p className="text-[10px] font-medium text-violet-100/90">Choose another detected product image</p>
+                        <p className="text-[10px] font-medium text-violet-100/90">
+                          Best alternatives (ranked) — not the full crawl list
+                        </p>
                         <div className="mt-2 flex flex-wrap gap-2">
                           {aiAlternativeUrls.map((u, i) => (
                             <button
@@ -6145,6 +6182,13 @@ export default function LinkToAdUniverse({
                     </div>
                   </div>
                   <div className="group relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-[#050507]">
+                    {resolvedPreviewUrl && !imgError && isAlgorithmChosenPreview ? (
+                      <span className={pickedByAiPreviewBadgeClass} aria-hidden>
+                        Picked by
+                        <br />
+                        AI
+                      </span>
+                    ) : null}
                     {resolvedPreviewUrl && !imgError ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
@@ -6167,8 +6211,8 @@ export default function LinkToAdUniverse({
                         tabIndex={0}
                         aria-label="Open product image full size"
                         className={cn(
-                          "absolute top-1 z-20 flex h-7 w-7 items-center justify-center rounded-lg bg-black/60 text-white opacity-0 shadow transition-opacity hover:bg-black/70 hover:text-white/90 group-hover:opacity-100",
-                          isAlgorithmChosenPreview ? "left-1" : "right-1",
+                          "absolute z-20 flex h-7 w-7 items-center justify-center rounded-lg bg-black/60 text-white opacity-0 shadow transition-opacity hover:bg-black/70 hover:text-white/90 group-hover:opacity-100",
+                          isAlgorithmChosenPreview ? "left-1 top-8" : "right-1 top-1",
                         )}
                         onClick={(e) => {
                           e.preventDefault();
@@ -6207,11 +6251,6 @@ export default function LinkToAdUniverse({
                       Product photos ({productPhotosStripUrls.length})
                     </span>
                     <div className="flex flex-wrap items-center gap-1.5">
-                      {isAlgorithmChosenPreview ? (
-                        <span className="rounded-md border border-violet-400/35 bg-violet-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-violet-100">
-                          Picked by AI
-                        </span>
-                      ) : null}
                       {aiAlternativeUrls.length > 0 ? (
                         <button
                           type="button"
@@ -6234,7 +6273,9 @@ export default function LinkToAdUniverse({
                   </div>
                   {showAiImagePicker && aiAlternativeUrls.length > 0 ? (
                     <div className="mt-2 rounded-lg border border-violet-400/20 bg-violet-500/[0.06] p-2">
-                      <p className="text-[10px] font-medium text-violet-100/90">Choose another detected product image</p>
+                      <p className="text-[10px] font-medium text-violet-100/90">
+                        Best alternatives (ranked) — not the full crawl list
+                      </p>
                       <div className="mt-2 flex flex-wrap gap-2">
                         {aiAlternativeUrls.map((u, i) => (
                           <button

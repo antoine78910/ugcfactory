@@ -592,6 +592,40 @@ function collectProjectRunImageUrls(run: {
   return ordered;
 }
 
+/**
+ * Images for the project dashboard "Images" column only — NanoBanana Pro outputs from Link to Ad
+ * (`extracted` universe). Excludes packshots, crawled product images, and classic wizard `generated_image_urls`.
+ */
+function collectProjectRunNanoBananaProImageUrls(run: { extracted?: unknown }): string[] {
+  const ordered: string[] = [];
+  const seen = new Set<string>();
+  const add = (url: string | null | undefined) => {
+    const t = typeof url === "string" ? url.trim() : "";
+    if (!t || seen.has(t)) return;
+    seen.add(t);
+    ordered.push(t);
+  };
+
+  const snap = readUniverseFromExtracted(run.extracted);
+  if (!snap) return ordered;
+
+  add(snap.nanoBananaImageUrl ?? null);
+  if (Array.isArray(snap.nanoBananaImageUrls)) {
+    for (const u of snap.nanoBananaImageUrls) add(u);
+  }
+  if (Array.isArray(snap.linkToAdPipelineByAngle)) {
+    for (const pipe of snap.linkToAdPipelineByAngle) {
+      if (!pipe) continue;
+      add(pipe.nanoBananaImageUrl ?? null);
+      if (Array.isArray(pipe.nanoBananaImageUrls)) {
+        for (const u of pipe.nanoBananaImageUrls) add(u);
+      }
+    }
+  }
+
+  return ordered;
+}
+
 function addVideosFromKlingSlots(set: Set<string>, slots: unknown) {
   if (!Array.isArray(slots)) return;
   for (const slot of slots) {
@@ -764,6 +798,7 @@ export default function AppBrandWizard() {
   const [branchingNormalizedUrl, setBranchingNormalizedUrl] = useState<string | null>(null);
   const [deleteProjectDialog, setDeleteProjectDialog] = useState<{
     storeUrl: string;
+    normalizedUrl: string;
     runIds: string[];
     label: string;
   } | null>(null);
@@ -1839,8 +1874,9 @@ export default function AppBrandWizard() {
     toast.success("Project saved");
   }
 
-  async function refreshMeAndRuns() {
-    setIsLoadingRuns(true);
+  async function refreshMeAndRuns(opts?: { silent?: boolean }) {
+    const silent = Boolean(opts?.silent);
+    if (!silent) setIsLoadingRuns(true);
     try {
       const res = await fetch("/api/runs/list", { method: "GET", cache: "no-store" });
       const json = (await res.json()) as { data?: any; error?: string };
@@ -1882,7 +1918,7 @@ export default function AppBrandWizard() {
       const message = err instanceof Error ? err.message : "Unknown error";
       toast.message("Runs unavailable", { description: message });
     } finally {
-      setIsLoadingRuns(false);
+      if (!silent) setIsLoadingRuns(false);
     }
   }
 
@@ -1951,17 +1987,30 @@ export default function AppBrandWizard() {
     }
   }
 
-  async function executeDeleteProject(storeUrl: string, runIdsInProject: string[]) {
+  async function executeDeleteProject(dlg: {
+    storeUrl: string;
+    normalizedUrl: string;
+    runIds: string[];
+  }) {
+    const { storeUrl, normalizedUrl, runIds: runIdsInProject } = dlg;
     setDeleteProjectLoading(true);
     try {
       const res = await fetch("/api/runs/delete-project", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ storeUrl }),
+        body: JSON.stringify({ storeUrl, runIds: runIdsInProject }),
       });
       const json = (await res.json()) as { deleted?: number; error?: string };
       if (!res.ok) throw new Error(json.error || "Delete failed");
-      toast.success(`Project deleted (${json.deleted ?? 0} run(s))`);
+
+      setSavedRuns((prev) => prev.filter((r) => !runIdsInProject.includes(r.id)));
+      if (selectedProjectNormalizedUrl === normalizedUrl) {
+        setSelectedProjectNormalizedUrl(null);
+      }
+      const typedStore = storeUrl.trim();
+      if (typedStore && normalizeUrl(typedStore) === normalizedUrl) {
+        setStoreUrl("");
+      }
       if (runId && runIdsInProject.includes(runId)) {
         setRunId(null);
         if (typeof localStorage !== "undefined") localStorage.removeItem(UGC_CURRENT_RUN_KEY);
@@ -1969,8 +2018,13 @@ export default function AppBrandWizard() {
       if (linkToAdResumeRunId && runIdsInProject.includes(linkToAdResumeRunId)) {
         setLinkToAdResumeRunId(null);
       }
+      if (linkToAdActiveRunId && runIdsInProject.includes(linkToAdActiveRunId)) {
+        setLinkToAdActiveRunId(null);
+      }
+
       setDeleteProjectDialog(null);
-      void refreshMeAndRuns();
+      toast.success(`Project deleted (${json.deleted ?? 0} run(s))`);
+      void refreshMeAndRuns({ silent: true });
     } catch (err) {
       toast.error("Deletion failed", {
         description: err instanceof Error ? err.message : "Unknown error",
@@ -3011,7 +3065,7 @@ export default function AppBrandWizard() {
                           const runIdsInProject = proj.runs.map((r) => r.id);
                           const projectRunMedia = proj.runs.map((run) => ({
                             run,
-                            images: collectProjectRunImageUrls(run),
+                            images: collectProjectRunNanoBananaProImageUrls(run),
                             videos: collectProjectRunVideoUrls(run),
                           }));
                           return (
@@ -3086,6 +3140,7 @@ export default function AppBrandWizard() {
                                     onClick={() =>
                                       setDeleteProjectDialog({
                                         storeUrl: proj.storeUrl,
+                                        normalizedUrl: proj.normalizedUrl,
                                         runIds: runIdsInProject,
                                         label: proj.title ? proj.title : proj.storeUrl,
                                       })
@@ -3162,7 +3217,8 @@ export default function AppBrandWizard() {
                                 <div>
                                   <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Images</p>
                                   <p className="mt-0.5 text-[11px] text-white/35">
-                                    Grouped by ad — packshots, NanoBanana frames, and wizard renders saved on each run.
+                                    Grouped by ad — NanoBanana Pro frames from each Link to Ad run (no product /
+                                    packshot images).
                                   </p>
                                   {projectRunMedia.every((x) => x.images.length === 0) ? (
                                     <p className="mt-2 text-xs text-white/40">No images on this brand yet.</p>
@@ -5278,7 +5334,7 @@ export default function AppBrandWizard() {
                 variant="destructive"
                 disabled={deleteProjectLoading}
                 onClick={() =>
-                  void executeDeleteProject(deleteProjectDialog.storeUrl, deleteProjectDialog.runIds)
+                  void executeDeleteProject(deleteProjectDialog)
                 }
               >
                 {deleteProjectLoading ? (

@@ -72,7 +72,7 @@ export default function RootLayout({
           id="linkjolt-click-proxy-shim"
           strategy="beforeInteractive"
           dangerouslySetInnerHTML={{
-            __html: `(function(){var p="/api/linkjolt/track-click",n="linkjolt.io/api/track/click";function r(u){var s=typeof u==="string"?u:u&&u.url;return!!(s&&s.indexOf(n)!==-1);}if(typeof navigator!=="undefined"&&navigator.sendBeacon){var b=navigator.sendBeacon.bind(navigator);navigator.sendBeacon=function(u,d){if(r(u))return b(p,d);return b(u,d);};}if(typeof fetch==="function"){var f=window.fetch;window.fetch=function(i,init){var u=typeof i==="string"?i:i&&i.url;if(r(u)){init=Object.assign({},init||{});init.credentials="omit";return f(p,init);}return f(i,init);};}})();`,
+            __html: `(function(){var p="/api/linkjolt/track-click",n="linkjolt.io/api/track/click";function r(u){var s=typeof u==="string"?u:u&&u.url;return!!(s&&s.indexOf(n)!==-1);}if(typeof navigator!=="undefined"&&navigator.sendBeacon){var b=navigator.sendBeacon.bind(navigator);navigator.sendBeacon=function(u,d){if(r(u))return b(p,d);return b(u,d);};}if(typeof fetch==="function"){var f=window.fetch;window.fetch=function(i,init){var u=typeof i==="string"?i:i&&i.url;if(r(u)){init=Object.assign({},init||{});init.credentials="omit";return f(p,init);}return f(i,init);};}if(typeof XMLHttpRequest!=="undefined"){var O=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(){var args=[].slice.call(arguments);if(r(String(args[1]||""))){try{this.withCredentials=false;}catch(e){}args[1]=p;}return O.apply(this,args);};}})();`,
           }}
         />
         <Script
