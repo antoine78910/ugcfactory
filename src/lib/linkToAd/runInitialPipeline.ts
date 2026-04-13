@@ -39,7 +39,14 @@ async function upsertViaApi(
 }
 
 export type InitialPipelineResult =
-  | { ok: true; runId: string; scriptsStepOk: boolean; scriptsError?: string }
+  | {
+      ok: true;
+      runId: string;
+      scriptsStepOk: boolean;
+      scriptsError?: string;
+      /** True when vision thinks packaging/label legibility is weak — user should add pouch/pack photos. */
+      suggestAdditionalProductPhotos?: boolean;
+    }
   | { ok: false; error: string; runId?: string };
 
 /** Checklist step 0–4 while the initial pipeline runs (real order, not simulated). */
@@ -143,6 +150,7 @@ export async function runInitialPipeline(
         candidateUrls?: unknown;
         confidence?: unknown;
         otherUrls?: unknown;
+        suggest_additional_product_photos?: unknown;
       };
     };
     if (typeof classifyJson.error === "string") {
@@ -180,6 +188,8 @@ export async function runInitialPipeline(
     const confidenceVal = classifyJson.data?.confidence;
     const confidenceStr =
       typeof confidenceVal === "string" ? confidenceVal : confidenceVal != null ? String(confidenceVal) : "low";
+    const suggestAdditionalProductPhotos =
+      classifyJson.data?.suggest_additional_product_photos === true;
 
     report(2);
     const summaryRes = await f("/api/gpt/brand-url-summary", {
@@ -308,6 +318,7 @@ export async function runInitialPipeline(
       runId: activeRunId,
       scriptsStepOk,
       ...(scriptsError ? { scriptsError } : {}),
+      ...(suggestAdditionalProductPhotos ? { suggestAdditionalProductPhotos: true } : {}),
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { studioAppPath } from "@/lib/studioAppOrigin";
 import styles from "./SeedanceGlowButton.module.css";
 
 type Props = {
@@ -12,7 +13,7 @@ function Letter({ children }: { children: string }) {
 }
 
 export function SeedanceGlowButton({
-  href = "/signup",
+  href = studioAppPath("/signup"),
   className,
   label = "Generate",
 }: Props) {
@@ -21,7 +22,7 @@ export function SeedanceGlowButton({
 
   return (
     <div className={styles.wrapper}>
-      <Link className={`${styles.btn} ${className ?? ""}`} href={href}>
+      <Link className={`${styles.btn} ${className ?? ""}`} href={href} prefetch={false}>
         <svg
           className={styles.btnSvg}
           xmlns="http://www.w3.org/2000/svg"

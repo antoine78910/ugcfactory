@@ -99,6 +99,9 @@ export async function middleware(req: NextRequest) {
    * Supabase PKCE stores `code_verifier` in a host-scoped cookie. If the user starts
    * Google OAuth on `www.youry.io/signin` but the callback hits `app.youry.io/auth/callback`,
    * `exchangeCodeForSession` fails (no verifier) and they bounce to /signin forever.
+   *
+   * Marketing pages must link with absolute URLs to the app host (`studioAppPath`); otherwise
+   * Next.js RSC prefetch to relative `/signin` hits this redirect and the browser blocks (CORS).
    */
   if (MAIN_HOSTS.has(host)) {
     const first = pathname.split("/").filter(Boolean)[0] ?? "";

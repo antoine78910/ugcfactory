@@ -2478,6 +2478,12 @@ export default function AppBrandWizard() {
           description: `${normalizedCandidates.length} candidate(s)`,
         });
       }
+      if (json.data?.suggest_additional_product_photos === true) {
+        toast.message("Add clearer packaging photos", {
+          description:
+            "Some images may hide label text. Upload a few shots of the full pouch or pack with readable wording for best results.",
+        });
+      }
     } catch (err) {
       toast.error("Image classify error", {
         description: err instanceof Error ? err.message : "Unknown error",

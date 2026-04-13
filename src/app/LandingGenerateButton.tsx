@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Poppins } from "next/font/google";
+import { studioAppPath } from "@/lib/studioAppOrigin";
 import styles from "./LandingGenerateButton.module.css";
 
 const poppins = Poppins({
@@ -17,7 +18,7 @@ export function LandingGenerateButton() {
   return (
     <div className={styles.root}>
       <div className={styles.btnWrapper}>
-        <Link href="/signup" className={`${styles.btn} ${poppins.className}`}>
+        <Link href={studioAppPath("/signup")} prefetch={false} className={`${styles.btn} ${poppins.className}`}>
           <svg
             className={styles.btnSvg}
             xmlns="http://www.w3.org/2000/svg"

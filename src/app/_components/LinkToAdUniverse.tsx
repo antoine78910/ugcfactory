@@ -1049,10 +1049,6 @@ function LinkToAdFullSequencePlayer({
   );
 }
 
-/** High-contrast corner tag on the 80×80 product preview (algorithm-chosen image). */
-const pickedByAiPreviewBadgeClass =
-  "pointer-events-none absolute left-0 top-0 z-20 inline-block w-max max-w-[min(100%,4.25rem)] rounded-br-md border-b border-r-2 border-white/55 bg-gradient-to-br from-violet-500 via-violet-600 to-violet-950 px-1.5 py-1 text-left text-[7px] font-extrabold uppercase leading-[1.12] tracking-[0.14em] text-white shadow-[0_3px_16px_rgba(0,0,0,0.75),inset_0_1px_0_rgba(255,255,255,0.35)] ring-1 ring-violet-100/40";
-
 export default function LinkToAdUniverse({
   resumeRunId,
   onResumeConsumed,
@@ -2152,7 +2148,7 @@ export default function LinkToAdUniverse({
     return set;
   }, [resolveMaybeRelativeUrl, userPhotoUrls]);
   /** Change picker: only top-ranked scraped URLs (classify order is preserved in productOnlyImageUrls). */
-  const LINK_TO_AD_CHANGE_PICKER_MAX = 8;
+  const LINK_TO_AD_CHANGE_PICKER_MAX = 5;
 
   const aiScrapedCandidateUrls = useMemo(() => {
     const out: string[] = [];
@@ -3346,6 +3342,12 @@ export default function LinkToAdUniverse({
       }
       setStage("ready");
       toast.success("Project saved");
+      if (pipeResult.suggestAdditionalProductPhotos) {
+        toast.message("Add clearer packaging photos", {
+          description:
+            "Listing images may hide part of the label. Use Add photo to upload 2–4 shots of the full pouch or pack with readable text.",
+        });
+      }
       if (pipeResult.scriptsStepOk) {
         toast.success("3 UGC scripts ready");
       } else if (pipeResult.scriptsError) {
@@ -5528,13 +5530,6 @@ export default function LinkToAdUniverse({
                     )}
                   </div>
                   <div className="group relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-[#050507]">
-                    {resolvedPreviewUrl && !imgError && isAlgorithmChosenPreview ? (
-                      <span className={pickedByAiPreviewBadgeClass} aria-hidden>
-                        Picked by
-                        <br />
-                        AI
-                      </span>
-                    ) : null}
                     {resolvedPreviewUrl && !imgError ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
@@ -5614,6 +5609,11 @@ export default function LinkToAdUniverse({
                         Product photos ({productPhotosStripUrls.length})
                       </span>
                       <div className="flex flex-wrap items-center gap-1.5">
+                        {isAlgorithmChosenPreview ? (
+                          <span className="rounded-md border border-violet-400/35 bg-violet-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-violet-100">
+                            Picked by AI
+                          </span>
+                        ) : null}
                         {aiAlternativeUrls.length > 0 ? (
                           <button
                             type="button"
@@ -5780,13 +5780,6 @@ export default function LinkToAdUniverse({
                       {/* Brand color intentionally hidden (not useful in Link to Ad UI). */}
                     </div>
                     <div className="group relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-[#050507]">
-                      {resolvedPreviewUrl && !imgError && isAlgorithmChosenPreview ? (
-                        <span className={pickedByAiPreviewBadgeClass} aria-hidden>
-                          Picked by
-                          <br />
-                          AI
-                        </span>
-                      ) : null}
                       {resolvedPreviewUrl && !imgError ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -5810,7 +5803,7 @@ export default function LinkToAdUniverse({
                           aria-label="Open product image full size"
                           className={cn(
                             "absolute z-20 flex h-7 w-7 items-center justify-center rounded-lg bg-black/60 text-white opacity-0 shadow transition-opacity hover:bg-black/70 hover:text-white/90 group-hover:opacity-100",
-                            isAlgorithmChosenPreview ? "left-1 top-8" : "right-1 top-1",
+                            isAlgorithmChosenPreview ? "left-1 top-1" : "right-1 top-1",
                           )}
                           onClick={(e) => {
                             e.preventDefault();
@@ -5848,6 +5841,11 @@ export default function LinkToAdUniverse({
                         Product photos ({productPhotosStripUrls.length})
                       </span>
                       <div className="flex flex-wrap items-center gap-1.5">
+                        {isAlgorithmChosenPreview ? (
+                          <span className="rounded-md border border-violet-400/35 bg-violet-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-violet-100">
+                            Picked by AI
+                          </span>
+                        ) : null}
                         {aiAlternativeUrls.length > 0 ? (
                           <button
                             type="button"
@@ -6182,13 +6180,6 @@ export default function LinkToAdUniverse({
                     </div>
                   </div>
                   <div className="group relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-[#050507]">
-                    {resolvedPreviewUrl && !imgError && isAlgorithmChosenPreview ? (
-                      <span className={pickedByAiPreviewBadgeClass} aria-hidden>
-                        Picked by
-                        <br />
-                        AI
-                      </span>
-                    ) : null}
                     {resolvedPreviewUrl && !imgError ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
@@ -6212,7 +6203,7 @@ export default function LinkToAdUniverse({
                         aria-label="Open product image full size"
                         className={cn(
                           "absolute z-20 flex h-7 w-7 items-center justify-center rounded-lg bg-black/60 text-white opacity-0 shadow transition-opacity hover:bg-black/70 hover:text-white/90 group-hover:opacity-100",
-                          isAlgorithmChosenPreview ? "left-1 top-8" : "right-1 top-1",
+                          isAlgorithmChosenPreview ? "left-1 top-1" : "right-1 top-1",
                         )}
                         onClick={(e) => {
                           e.preventDefault();
@@ -6251,6 +6242,11 @@ export default function LinkToAdUniverse({
                       Product photos ({productPhotosStripUrls.length})
                     </span>
                     <div className="flex flex-wrap items-center gap-1.5">
+                      {isAlgorithmChosenPreview ? (
+                        <span className="rounded-md border border-violet-400/35 bg-violet-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-violet-100">
+                          Picked by AI
+                        </span>
+                      ) : null}
                       {aiAlternativeUrls.length > 0 ? (
                         <button
                           type="button"

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useId } from "react";
+import { studioAppPath } from "@/lib/studioAppOrigin";
 import styles from "./LandingSeedanceTopButton.module.css";
 
 export function LandingSeedanceTopButton() {
@@ -12,7 +13,8 @@ export function LandingSeedanceTopButton() {
   return (
     <div className="mx-auto mb-2 flex w-full max-w-4xl justify-center px-3 sm:mb-3">
       <Link
-        href="/signup"
+        href={studioAppPath("/signup")}
+        prefetch={false}
         className={`group relative inline-flex overflow-hidden rounded-full bg-violet-600/35 p-px shadow-[0_0_24px_rgba(139,92,246,0.22)] ${styles.link}`}
       >
         <span className="absolute inset-0 rounded-full overflow-hidden">
