@@ -159,10 +159,7 @@ export default function CreditsPage() {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          packKey,
-          referral: window.linkjolt?.referral ?? "",
-        }),
+        body: JSON.stringify({ packKey }),
       });
       const data = (await res.json()) as { url?: string; error?: string };
       if (!res.ok) throw new Error(data.error || "Checkout failed");

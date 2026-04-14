@@ -207,7 +207,6 @@ export default function SubscriptionPage() {
         body: JSON.stringify({
           planId: pendingUpgradePlanId,
           billing,
-          referral: window.linkjolt?.referral ?? "",
         }),
       });
       const data = (await res.json()) as { url?: string; error?: string };
@@ -382,7 +381,6 @@ export default function SubscriptionPage() {
         body: JSON.stringify({
           planId: planIdCheckout,
           billing,
-          referral: window.linkjolt?.referral ?? "",
         }),
       });
       const data = (await res.json()) as { url?: string; error?: string };

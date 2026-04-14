@@ -3,8 +3,7 @@ import { NextResponse } from "next/server";
 export const runtime = "nodejs";
 
 /**
- * Optional client-side conversion ping from LinkJolt `window.linkjolt.trackPurchase`.
- * Primary attribution uses Stripe webhooks → LinkJolt; this avoids 404 if trackPurchase is used.
+ * Legacy no-op endpoint: accepts JSON POST and returns 204 (optional client pings).
  */
 export async function POST(req: Request) {
   const raw = await req.text();

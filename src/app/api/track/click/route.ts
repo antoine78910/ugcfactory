@@ -3,9 +3,7 @@ import { NextResponse } from "next/server";
 export const runtime = "nodejs";
 
 /**
- * LinkJolt `tracking.js` posts here (fetch + sendBeacon) to record affiliate clicks server-side.
- * Body: { trackingCode, affiliateId, clickId?, referrer, url, merchantId }
- * sendBeacon sends JSON as text/plain — we parse both JSON and raw text.
+ * Legacy no-op endpoint: accepts JSON POST and returns 204 (optional client pings).
  */
 export async function POST(req: Request) {
   const raw = await req.text();

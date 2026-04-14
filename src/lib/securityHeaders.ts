@@ -1,6 +1,6 @@
 /**
  * Response headers for Lighthouse “Best practices” / hardening.
- * Third-party cookies (Heyo, Datafast, Linkjolt) cannot be removed from our code — only vendors can migrate to first-party / CHIPS.
+ * Third-party cookies (Heyo, Datafast, etc.) cannot be removed from our code — only vendors can migrate to first-party / CHIPS.
  */
 
 /** Allow fetch/WS to Supabase when using a custom host (OAuth + REST), not only *.supabase.co. */
@@ -56,14 +56,14 @@ const CSP_PARTS_BASE = [
   "form-action 'self'",
   "frame-ancestors 'self'",
   // Next.js needs unsafe-inline for its runtime scripts; third-party widgets (heyo, stripe) also require it.
-  "script-src 'self' 'unsafe-inline' https://datafa.st https://www.dubcdn.com https://www.linkjolt.io https://linkjolt.io https://heyo.so https://*.heyo.so https://cdn.heyo.so https://js.stripe.com https://*.stripe.com https://browser.sentry-cdn.com https://www.clarity.ms https://scripts.clarity.ms https://accounts.google.com https://*.gstatic.com",
+  "script-src 'self' 'unsafe-inline' https://datafa.st https://www.dubcdn.com https://heyo.so https://*.heyo.so https://cdn.heyo.so https://js.stripe.com https://*.stripe.com https://browser.sentry-cdn.com https://www.clarity.ms https://scripts.clarity.ms https://accounts.google.com https://*.gstatic.com",
   "style-src 'self' 'unsafe-inline' https://heyo.so https://*.heyo.so https://cdn.heyo.so https://accounts.google.com https://*.gstatic.com",
   "img-src 'self' data: blob: https:",
   "media-src 'self' data: blob: https:",
   "font-src 'self' data: https://fonts.gstatic.com",
   // *.supabase.co default; append custom / vanity API host when set (see supabaseNonDefaultConnectOrigins).
   // Clarity load-balances collect across *.clarity.ms (a–z) + c.bing.com — see Microsoft Learn "Clarity CSP".
-  `connect-src 'self' https://datafa.st https://*.datafa.st https://api.dub.co https://www.dubcdn.com ${dubReferConnectOrigin()} https://www.linkjolt.io https://linkjolt.io https://heyo.so https://*.heyo.so https://cdn.heyo.so wss://heyo.so wss://*.heyo.so ${studioAppConnectOrigins()} https://*.supabase.co wss://*.supabase.co ${supabaseNonDefaultConnectOrigins()} https://api.stripe.com https://*.stripe.com https://m.stripe.network https://q.stripe.com https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://*.ingest.de.sentry.io https://*.sentry.io https://cdn.jsdelivr.net https://*.clarity.ms https://c.bing.com https://accounts.google.com`.replace(
+  `connect-src 'self' https://datafa.st https://*.datafa.st https://api.dub.co https://www.dubcdn.com ${dubReferConnectOrigin()} https://heyo.so https://*.heyo.so https://cdn.heyo.so wss://heyo.so wss://*.heyo.so ${studioAppConnectOrigins()} https://*.supabase.co wss://*.supabase.co ${supabaseNonDefaultConnectOrigins()} https://api.stripe.com https://*.stripe.com https://m.stripe.network https://q.stripe.com https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://*.ingest.de.sentry.io https://*.sentry.io https://cdn.jsdelivr.net https://*.clarity.ms https://c.bing.com https://accounts.google.com`.replace(
     /\s+/g,
     " ",
   ),

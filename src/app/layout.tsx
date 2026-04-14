@@ -40,8 +40,6 @@ export const viewport: Viewport = {
 const DATAFAST_WEBSITE_ID =
   process.env.NEXT_PUBLIC_DATAFAST_WEBSITE_ID ?? "dfid_CATofowr0YLBVK8sLAekT";
 const DATAFAST_DOMAIN = process.env.NEXT_PUBLIC_DATAFAST_DOMAIN ?? "youry.io";
-const LINKJOLT_MERCHANT_ID =
-  process.env.NEXT_PUBLIC_LINKJOLT_MERCHANT_ID ?? "NKdBH0Xt51wfjtEIZB5Zg";
 
 export default function RootLayout({
   children,
@@ -67,19 +65,6 @@ export default function RootLayout({
           strategy="lazyOnload"
           data-website-id={DATAFAST_WEBSITE_ID}
           data-domain={DATAFAST_DOMAIN}
-        />
-        {/* Route LinkJolt click pings same-origin so credentialed fetch wrappers (extensions, etc.) do not break CORS on linkjolt.io (wildcard ACAO + credentials). */}
-        <Script
-          id="linkjolt-click-proxy-shim"
-          strategy="beforeInteractive"
-          dangerouslySetInnerHTML={{
-            __html: `(function(){var p="/api/linkjolt/track-click",n="linkjolt.io/api/track/click";function r(u){var s=typeof u==="string"?u:u&&u.url;return!!(s&&s.indexOf(n)!==-1);}if(typeof navigator!=="undefined"&&navigator.sendBeacon){var b=navigator.sendBeacon.bind(navigator);navigator.sendBeacon=function(u,d){if(r(u))return b(p,d);return b(u,d);};}if(typeof fetch==="function"){var f=window.fetch;window.fetch=function(i,init){var u=typeof i==="string"?i:i&&i.url;if(r(u)){init=Object.assign({},init||{});init.credentials="omit";return f(p,init);}return f(i,init);};}if(typeof XMLHttpRequest!=="undefined"){var O=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(){var args=[].slice.call(arguments);if(r(String(args[1]||""))){try{this.withCredentials=false;}catch(e){}args[1]=p;}return O.apply(this,args);};}})();`,
-          }}
-        />
-        <Script
-          id="linkjolt"
-          src={`https://www.linkjolt.io/api/tracking.js?id=${LINKJOLT_MERCHANT_ID}`}
-          strategy="afterInteractive"
         />
         <BrowserSupabaseProvider>
           <CreditsPlanProvider>
