@@ -767,6 +767,20 @@ export default function AppBrandWizard() {
   const [appSection, setAppSection] = useState<AppSection>(() =>
     sectionFromPathname(typeof window !== "undefined" ? window.location.pathname : "/link-to-ad"),
   );
+  /**
+   * Keep heavy Studio feature panels mounted after first visit so local draft state
+   * (uploads, prompts, pickers) survives section switches.
+   */
+  const keepAlivePanelsRef = useRef({
+    avatar: false,
+    image: false,
+    video: false,
+    upscale: false,
+  });
+  if (appSection === "avatar") keepAlivePanelsRef.current.avatar = true;
+  if (appSection === "image") keepAlivePanelsRef.current.image = true;
+  if (appSection === "video") keepAlivePanelsRef.current.video = true;
+  if (appSection === "upscale") keepAlivePanelsRef.current.upscale = true;
 
   const [savedRuns, setSavedRuns] = useState<
     Array<{
@@ -4614,42 +4628,50 @@ export default function AppBrandWizard() {
               </div>
             ) : null}
 
-            {appSection === "avatar" ? (
-              <Card className="gap-2 border-white/10 bg-[#0b0912]/85 py-3 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
-                <CardHeader className="space-y-0 px-6 pb-0 pt-2">
-                  <CardTitle className="text-sm">Avatar Creator</CardTitle>
-                </CardHeader>
-                <CardContent className="px-6 pb-3 pt-0">
-                  <StudioAvatarPanel onChangeVoice={handleChangeVoiceFromHistory} />
-                </CardContent>
-              </Card>
+            {keepAlivePanelsRef.current.avatar ? (
+              <div className={appSection === "avatar" ? "contents" : "hidden"} aria-hidden={appSection !== "avatar"}>
+                <Card className="gap-2 border-white/10 bg-[#0b0912]/85 py-3 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
+                  <CardHeader className="space-y-0 px-6 pb-0 pt-2">
+                    <CardTitle className="text-sm">Avatar Creator</CardTitle>
+                  </CardHeader>
+                  <CardContent className="px-6 pb-3 pt-0">
+                    <StudioAvatarPanel onChangeVoice={handleChangeVoiceFromHistory} />
+                  </CardContent>
+                </Card>
+              </div>
             ) : null}
-            {appSection === "image" ? (
-              <Card className="gap-2 border-white/10 bg-[#0b0912]/85 py-3 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
-                <CardHeader className="space-y-0 px-6 pb-0 pt-2">
-                  <CardTitle className="text-sm">Image</CardTitle>
-                </CardHeader>
-                <CardContent className="px-6 pb-3 pt-0">
-                  <StudioImagePanel />
-                </CardContent>
-              </Card>
+            {keepAlivePanelsRef.current.image ? (
+              <div className={appSection === "image" ? "contents" : "hidden"} aria-hidden={appSection !== "image"}>
+                <Card className="gap-2 border-white/10 bg-[#0b0912]/85 py-3 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
+                  <CardHeader className="space-y-0 px-6 pb-0 pt-2">
+                    <CardTitle className="text-sm">Image</CardTitle>
+                  </CardHeader>
+                  <CardContent className="px-6 pb-3 pt-0">
+                    <StudioImagePanel />
+                  </CardContent>
+                </Card>
+              </div>
             ) : null}
-            {appSection === "video" ? (
-              <Card className="gap-2 border-white/10 bg-[#0b0912]/85 py-3 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
-                <CardContent className="px-6 pb-3 pt-2">
-                  <StudioVideoPanel onChangeVoice={handleChangeVoiceFromHistory} />
-                </CardContent>
-              </Card>
+            {keepAlivePanelsRef.current.video ? (
+              <div className={appSection === "video" ? "contents" : "hidden"} aria-hidden={appSection !== "video"}>
+                <Card className="gap-2 border-white/10 bg-[#0b0912]/85 py-3 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
+                  <CardContent className="px-6 pb-3 pt-2">
+                    <StudioVideoPanel onChangeVoice={handleChangeVoiceFromHistory} />
+                  </CardContent>
+                </Card>
+              </div>
             ) : null}
-            {appSection === "upscale" ? (
-              <Card className="min-h-0 gap-2 border-white/10 bg-[#0b0912]/85 py-3 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
-                <CardHeader className="space-y-0 px-6 pb-0 pt-2">
-                  <CardTitle className="text-sm">Upscale</CardTitle>
-                </CardHeader>
-                <CardContent className="min-h-0 px-6 pb-3 pt-0">
-                  <StudioUpscalePanel />
-                </CardContent>
-              </Card>
+            {keepAlivePanelsRef.current.upscale ? (
+              <div className={appSection === "upscale" ? "contents" : "hidden"} aria-hidden={appSection !== "upscale"}>
+                <Card className="min-h-0 gap-2 border-white/10 bg-[#0b0912]/85 py-3 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
+                  <CardHeader className="space-y-0 px-6 pb-0 pt-2">
+                    <CardTitle className="text-sm">Upscale</CardTitle>
+                  </CardHeader>
+                  <CardContent className="min-h-0 px-6 pb-3 pt-0">
+                    <StudioUpscalePanel />
+                  </CardContent>
+                </Card>
+              </div>
             ) : null}
             {linkToAdKeepAliveRef.current ? (
               <div
