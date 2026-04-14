@@ -1,16 +1,26 @@
-import { Dub } from "dub";
+import type { Dub } from "dub";
 
+/**
+ * Lazy-load the Dub SDK so `next build` / "Collecting page data" never evaluates
+ * the `dub` package at module init (avoids EBADF / fstat issues on Vercel + Turbopack).
+ */
 let dubClient: Dub | null | undefined;
 
-function getDubClient(): Dub | null {
+async function getDubClient(): Promise<Dub | null> {
   if (dubClient !== undefined) return dubClient;
   const token = process.env.DUB_API_KEY?.trim();
   if (!token) {
     dubClient = null;
     return null;
   }
-  dubClient = new Dub({ token });
-  return dubClient;
+  try {
+    const { Dub: DubClass } = await import("dub");
+    dubClient = new DubClass({ token });
+    return dubClient;
+  } catch {
+    dubClient = null;
+    return null;
+  }
 }
 
 export type DubLeadParams = {
@@ -31,7 +41,7 @@ export async function trackDubLeadServer(params: DubLeadParams): Promise<void> {
   const clickId = params.clickId.trim();
   if (!clickId) return;
 
-  const client = getDubClient();
+  const client = await getDubClient();
   if (!client) return;
 
   const externalId = params.customerExternalId.trim();

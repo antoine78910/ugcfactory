@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+
+/** Avoid static analysis / prerender touching OAuth redirect handler internals. */
+export const dynamic = "force-dynamic";
 import { createServerClient } from "@supabase/ssr";
 import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/supabase/env";
 import { brevoUpsertContact, brevoTrackEvent } from "@/lib/brevo";
