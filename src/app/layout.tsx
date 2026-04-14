@@ -8,6 +8,7 @@ import { Toaster } from "@/components/ui/sonner";
 import HeyoInit from "@/app/_components/HeyoInit";
 import ClarityInit from "@/app/_components/ClarityInit";
 import { RedeemTokenGuard } from "@/app/_components/RedeemTokenGuard";
+import { DubAnalyticsInit } from "@/app/_components/DubAnalyticsInit";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -89,6 +90,7 @@ export default function RootLayout({
           </CreditsPlanProvider>
         </BrowserSupabaseProvider>
         <Toaster richColors />
+        <DubAnalyticsInit />
       </body>
     </html>
   );

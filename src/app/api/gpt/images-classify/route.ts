@@ -36,25 +36,15 @@ function logImagesClassifySummary(
   pageUrl: string,
   scored: ScoredImage[],
   confidence: string,
-  meta: { cached?: boolean; degraded?: boolean; degradedExplain?: string },
+  meta: { cached?: boolean; degraded?: boolean },
 ) {
   const base = process.env.APP_URL?.trim() || process.env.NEXT_PUBLIC_APP_URL?.trim() || "http://localhost:3000";
   console.log(
     `[images-classify] POST ${base.replace(/\/$/, "")}/api/gpt/images-classify · page=${pageUrl.slice(0, 120)}${pageUrl.length > 120 ? "…" : ""}`,
   );
   if (meta.cached) console.log("[images-classify] (served from gpt_cache)");
-  if (meta.degraded) {
-    console.log(
-      "[images-classify] ⚠ DEGRADED — no reliable vision scores. Order = URL heuristics only (may miss the real packshot).",
-    );
-    if (meta.degradedExplain) {
-      console.log(`[images-classify]   Why: ${meta.degradedExplain}`);
-    }
-    console.log(
-      "[images-classify]   Tip: retry classify, switch GPT/Claude in settings, or check API quotas; vision must return JSON for real product scoring.",
-    );
-  }
-  console.log(`[images-classify] confidence=${confidence} · ${scored.length} image(s) in ranking`);
+  if (meta.degraded) console.log("[images-classify] (degraded / heuristic fallback)");
+  console.log(`[images-classify] confidence=${confidence} · ${scored.length} image(s) scored`);
   for (let i = 0; i < scored.length; i++) {
     const s = scored[i]!;
     const leg = s.label_fully_legible === undefined ? "?" : s.label_fully_legible ? "yes" : "NO";
@@ -99,26 +89,6 @@ function scoreUrl(u: string, meta?: ImageMetaEntry) {
   // ── CDN hints ──
   if (s.includes("cdn.shopify.com")) score += 3;
   if (s.includes("shopifycdn") || s.includes("bigcommerce") || s.includes("woocommerce")) score += 2;
-
-  // ── Filename / last path segment (Shopify /cdn/shop/files/ often uses opaque marketing slugs) ──
-  try {
-    const path = new URL(u).pathname;
-    const base = (path.split("/").pop() ?? "").split("?")[0]!.toLowerCase();
-    if (
-      /nouvelle|technolog|technology|announce|newsletter|promo|banner|badge|hero[_-]?only|placeholder|countdown|flash\s*sale|black\s*friday|soldes|bestseller|trust|guarantee|shipping\s*free|free\s*shipping/i.test(
-        base,
-      )
-    ) {
-      score -= 9;
-    }
-    if (/_\d{2,3}x\d{0,4}\.(png|jpg|jpeg|webp)(\?|$)/i.test(base)) {
-      const m = base.match(/_(\d{2,3})x/i);
-      const w = m ? parseInt(m[1]!, 10) : 999;
-      if (w > 0 && w < 400) score -= 5;
-    }
-  } catch {
-    /* ignore */
-  }
 
   // ── Negative URL patterns (non-product) ──
   if (s.includes("icon") || s.includes("logo") || s.includes("sprite") || s.includes("favicon")) score -= 8;
@@ -190,54 +160,6 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** Pull the first top-level `{ ... }` from model text (handles prose before/after JSON). */
-function extractFirstJsonObject(text: string): string | null {
-  const start = text.indexOf("{");
-  if (start === -1) return null;
-  let depth = 0;
-  let inString = false;
-  let escape = false;
-  for (let i = start; i < text.length; i++) {
-    const c = text[i]!;
-    if (escape) {
-      escape = false;
-      continue;
-    }
-    if (inString) {
-      if (c === "\\") escape = true;
-      else if (c === '"') inString = false;
-      continue;
-    }
-    if (c === '"') {
-      inString = true;
-      continue;
-    }
-    if (c === "{") depth++;
-    else if (c === "}") {
-      depth--;
-      if (depth === 0) return text.slice(start, i + 1);
-    }
-  }
-  return null;
-}
-
-function tryParseVisionJson(raw: string): { images?: unknown; confidence?: unknown } | null {
-  const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/gm, "").trim();
-  const tryOne = (s: string): { images?: unknown; confidence?: unknown } | null => {
-    try {
-      const p = JSON.parse(s) as { images?: unknown; confidence?: unknown };
-      return p && typeof p === "object" ? p : null;
-    } catch {
-      return null;
-    }
-  };
-  const extracted = extractFirstJsonObject(cleaned);
-  return tryOne(cleaned) ?? (extracted ? tryOne(extracted) : null);
-}
-
-const VISION_JSON_ONLY_TAIL =
-  "\n\nOUTPUT RULE: Reply with ONE raw JSON object only. No markdown code fences, no commentary before or after. First character must be { and last must be }.";
-
 /** True when retrying the vision call may help (provider outage, rate limits, transient network). */
 function isTransientVisionFailure(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err ?? "");
@@ -255,14 +177,12 @@ function isTransientVisionFailure(err: unknown): boolean {
 
 /**
  * When Claude/OpenAI vision fails, still return a valid classify payload so Link to Ad can continue.
- * Re-sorts by URL heuristics (not "first pre-filter wins") so marketing PNGs rank below real product paths.
+ * Uses the same URL ordering as the vision step (pre-filter + heuristics).
  */
 function buildHeuristicClassifyPayload(
   modelInputUrls: string[],
   candidateUrls: string[],
   preFiltered: PreFilteredImage[],
-  metaMap: Map<string, ImageMetaEntry>,
-  degradedDetail: string,
 ): {
   ranked: string[];
   candidateUrls: string[];
@@ -273,25 +193,21 @@ function buildHeuristicClassifyPayload(
   suggest_additional_product_photos: boolean;
   preFiltered: { url: string; width: number; height: number }[];
 } {
-  const pool = [...new Set([...modelInputUrls, ...candidateUrls])];
-  const sorted = [...pool].sort(
-    (a, b) => scoreUrl(b, metaMap.get(b)) - scoreUrl(a, metaMap.get(a)),
-  );
-  const primary = sorted[0] ?? preFiltered[0]?.url ?? candidateUrls[0] ?? "";
+  const primary =
+    modelInputUrls[0] ?? preFiltered[0]?.url ?? candidateUrls[0] ?? "";
   if (!primary) {
     throw new Error("No images left to use after preprocessing.");
   }
-  const noteBase = `No AI vision scores (${degradedDetail}). Ranking uses URL/filename heuristics only — verify thumbnails manually.`;
-
-  const scored: ScoredImage[] = sorted.slice(0, 8).map((url, idx) => {
-    const tier = Math.max(3, 8 - idx);
-    const pv = tier;
-    const iq = Math.max(3, tier - (idx > 2 ? 1 : 0));
-    const bc = Math.max(3, tier - (idx > 4 ? 1 : 0));
-    const us = Math.max(3, tier - 1);
-    const pr = Math.max(3, tier - (idx > 1 ? 1 : 0));
-    return {
-      url,
+  const note =
+    "Vision scoring skipped (provider error). Using the best-ranked image from URL heuristics instead.";
+  const pv = 5;
+  const iq = 5;
+  const bc = 5;
+  const us = 5;
+  const pr = 5;
+  const scored: ScoredImage[] = [
+    {
+      url: primary,
       product_visibility: pv,
       image_quality: iq,
       background_clean: bc,
@@ -305,20 +221,14 @@ function buildHeuristicClassifyPayload(
         ugc_suitability: us,
         packaging_readability: pr,
       }),
-      reason: idx === 0 ? noteBase : `${noteBase} (heuristic rank #${idx + 1})`,
-    };
-  });
-
-  const PACKSHOT_THRESHOLD = 5.0;
-  const productOnlyUrls = scored
-    .filter((s) => s.composite >= PACKSHOT_THRESHOLD)
-    .slice(0, 5)
-    .map((s) => ({ url: s.url, reason: s.reason }));
-  const inProduct = new Set(productOnlyUrls.map((p) => p.url));
-  const otherUrls = sorted.filter((u) => !inProduct.has(u)).slice(0, 25);
+      reason: note,
+    },
+  ];
+  const productOnlyUrls = [{ url: primary, reason: note }];
+  const otherUrls = candidateUrls.filter((u) => u !== primary).slice(0, 25);
 
   return {
-    ranked: sorted.slice(0, 12),
+    ranked: modelInputUrls.length > 0 ? modelInputUrls : [primary],
     candidateUrls,
     productOnlyUrls,
     otherUrls,
@@ -359,15 +269,11 @@ export async function POST(req: Request) {
   // ── Step 2: real-dimension filter + perceptual dedup ────────────────────
   const preFiltered = await preFilterImages(preFilterBatch);
 
-  const preFilteredSorted = [...preFiltered].sort(
-    (a, b) => scoreUrl(b.url, metaMap.get(b.url)) - scoreUrl(a.url, metaMap.get(a.url)),
-  );
-
   // ── Step 3: build model input list ──────────────────────────────────────
-  // Priority: pre-filter passers sorted by URL heuristics (not arbitrary fetch order),
+  // Priority: images that passed pre-filter (confirmed real dims + unique)
   // then high-scored images not in the pre-filter batch (unverified but heuristically strong)
   const modelInputUrls = [
-    ...preFilteredSorted.map((p) => p.url),
+    ...preFiltered.map((p) => p.url),
     ...initialScored
       .filter((x) => !preFilterAttempted.has(x.u))
       .map((x) => x.u),
@@ -383,7 +289,7 @@ export async function POST(req: Request) {
   const provider: "gpt" | "claude" = body?.provider === "gpt" ? "gpt" : "claude";
 
   try {
-    const cacheKey = makeCacheKey({ v: 8, pageUrl: body.pageUrl, ranked: modelInputUrls, provider });
+    const cacheKey = makeCacheKey({ v: 7, pageUrl: body.pageUrl, ranked: modelInputUrls, provider });
     try {
       const { data: hit } = await supabase
         .from("gpt_cache")
@@ -414,8 +320,6 @@ export async function POST(req: Request) {
       "You are a product image analyst for e-commerce UGC content creation.",
       "Analyze each image shown and return a structured JSON score.",
       "Return STRICT JSON only — no markdown, no explanation outside the JSON.",
-      "Score LOW (0–3) for images that do NOT show the sellable product (banners, icons, lifestyle without product, technology teasers, logos, UI chrome).",
-      "Score HIGH only when the actual product pack, bottle, jar, pouch, or device is clearly the subject.",
     ].join("\n");
 
     const userText = [
@@ -449,12 +353,7 @@ export async function POST(req: Request) {
       try {
         text =
           provider === "claude"
-            ? await claudeMessagesTextWithImages({
-                system,
-                user: userText,
-                imageUrls: modelInputUrls,
-                maxTokens: 4000,
-              })
+            ? await claudeMessagesTextWithImages({ system, user: userText, imageUrls: modelInputUrls, maxTokens: 1600 })
             : (await openaiResponsesTextWithImages({ developer: system, userText, imageUrls: modelInputUrls })).text;
         break;
       } catch (e) {
@@ -464,89 +363,30 @@ export async function POST(req: Request) {
           continue;
         }
         console.warn("[images-classify] vision provider failed:", e);
-        const explain =
-          e instanceof Error ? e.message.slice(0, 200) : "Vision request failed.";
-        const fallback = buildHeuristicClassifyPayload(
-          modelInputUrls,
-          candidateUrls,
-          preFiltered,
-          metaMap,
-          explain,
-        );
-        logImagesClassifySummary(body.pageUrl, fallback.scored, fallback.confidence, {
-          degraded: true,
-          degradedExplain: explain,
-        });
+        const fallback = buildHeuristicClassifyPayload(modelInputUrls, candidateUrls, preFiltered);
+        logImagesClassifySummary(body.pageUrl, fallback.scored, fallback.confidence, { degraded: true });
         return NextResponse.json({ data: fallback, degraded: true });
       }
     }
     if (!text.trim()) {
-      const explain = "Vision model returned an empty response.";
-      const fallback = buildHeuristicClassifyPayload(
-        modelInputUrls,
-        candidateUrls,
-        preFiltered,
-        metaMap,
-        explain,
-      );
-      logImagesClassifySummary(body.pageUrl, fallback.scored, fallback.confidence, {
-        degraded: true,
-        degradedExplain: explain,
-      });
+      const fallback = buildHeuristicClassifyPayload(modelInputUrls, candidateUrls, preFiltered);
+      logImagesClassifySummary(body.pageUrl, fallback.scored, fallback.confidence, { degraded: true });
       return NextResponse.json({ data: fallback, degraded: true });
     }
 
-    let visionPayload = tryParseVisionJson(text);
-    if (!visionPayload) {
-      console.warn(
-        "[images-classify] First model output was not valid JSON — retrying once with JSON-only instruction.",
-      );
-      try {
-        const textStrict =
-          provider === "claude"
-            ? await claudeMessagesTextWithImages({
-                system,
-                user: userText + VISION_JSON_ONLY_TAIL,
-                imageUrls: modelInputUrls,
-                maxTokens: 4000,
-              })
-            : (
-                await openaiResponsesTextWithImages({
-                  developer: system,
-                  userText: userText + VISION_JSON_ONLY_TAIL,
-                  imageUrls: modelInputUrls,
-                })
-              ).text;
-        if (textStrict.trim()) text = textStrict;
-        visionPayload = tryParseVisionJson(text);
-      } catch (e) {
-        console.warn("[images-classify] JSON-only retry vision call failed:", e);
-      }
-    }
-
-    if (!visionPayload) {
-      const oneLine = text.replace(/\s+/g, " ").trim();
-      const snippet = oneLine.slice(0, 320);
-      const explain = `Could not parse JSON from ${provider} vision output.`;
-      console.warn(
-        `[images-classify] ${explain} snippet="${snippet}${oneLine.length > 320 ? "…" : ""}"`,
-      );
-      const fallback = buildHeuristicClassifyPayload(
-        modelInputUrls,
-        candidateUrls,
-        preFiltered,
-        metaMap,
-        explain,
-      );
-      logImagesClassifySummary(body.pageUrl, fallback.scored, fallback.confidence, {
-        degraded: true,
-        degradedExplain: `${explain} Model snippet (truncated): ${snippet}${oneLine.length > 320 ? "…" : ""}`,
-      });
+    const cleaned = text.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(cleaned) as unknown;
+    } catch {
+      console.warn("[images-classify] model returned non-JSON; using heuristic fallback.");
+      const fallback = buildHeuristicClassifyPayload(modelInputUrls, candidateUrls, preFiltered);
+      logImagesClassifySummary(body.pageUrl, fallback.scored, fallback.confidence, { degraded: true });
       return NextResponse.json({ data: fallback, degraded: true });
     }
 
     // ── Step 5: parse scores + compute composite ─────────────────────────
-    const p = visionPayload;
+    const p = parsed as { images?: unknown; confidence?: unknown };
     const rawImages = Array.isArray(p.images) ? p.images : [];
 
     const scored: ScoredImage[] = [];
@@ -613,35 +453,32 @@ export async function POST(req: Request) {
       return lb - la;
     });
 
-    // If model returned nothing usable (URL mismatch etc.), prefer best URL heuristic — not modelInputUrls[0]
+    // If model returned nothing, fall back gracefully
     if (scored.length === 0 && modelInputUrls.length > 0) {
-      const sorted = [...modelInputUrls].sort(
-        (a, b) => scoreUrl(b, metaMap.get(b)) - scoreUrl(a, metaMap.get(a)),
-      );
-      const pick = sorted[0]!;
-      const pv0 = 5;
-      const iq0 = 5;
-      const bc0 = 5;
-      const us0 = 5;
-      const pr0 = 5;
-      scored.push({
-        url: pick,
-        product_visibility: pv0,
-        image_quality: iq0,
-        background_clean: bc0,
-        ugc_suitability: us0,
-        packaging_readability: pr0,
-        label_fully_legible: undefined,
-        composite: compositeScore({
+      {
+        const pv0 = 5;
+        const iq0 = 5;
+        const bc0 = 5;
+        const us0 = 5;
+        const pr0 = 5;
+        scored.push({
+          url: modelInputUrls[0],
           product_visibility: pv0,
           image_quality: iq0,
           background_clean: bc0,
           ugc_suitability: us0,
           packaging_readability: pr0,
-        }),
-        reason:
-          "Vision returned JSON but no image entries matched our URLs (or list was empty). Using best heuristic-ranked input URL.",
-      });
+          label_fully_legible: undefined,
+          composite: compositeScore({
+            product_visibility: pv0,
+            image_quality: iq0,
+            background_clean: bc0,
+            ugc_suitability: us0,
+            packaging_readability: pr0,
+          }),
+          reason: "Model returned no scores; using top-ranked image from extraction.",
+        });
+      }
     }
 
     // ── Step 6: backward-compatible output ──────────────────────────────

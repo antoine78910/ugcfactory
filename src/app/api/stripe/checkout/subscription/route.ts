@@ -5,6 +5,7 @@ import {
   getSubscriptionStripePriceId,
   isSubscriptionPlanId,
 } from "@/lib/stripe/subscriptionPrices";
+import { dubCheckoutSessionMetadata } from "@/lib/dub/stripeSessionMetadata";
 import { getDataFastStripeMetadata } from "@/lib/stripe/datafastMetadata";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 
@@ -79,6 +80,7 @@ export async function POST(req: Request) {
         user_id: auth.user.id,
         subscription_plan: planId,
         subscription_billing: billing,
+        ...dubCheckoutSessionMetadata(auth.user.id),
         ...datafastMeta,
       },
       ...(customerEmail ? { customer_email: customerEmail } : {}),

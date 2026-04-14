@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { billingCheckoutCurrencyFromRequest } from "@/lib/geo/billingRegion";
 import { getCreditPackStripePriceId, isCreditPackKey } from "@/lib/stripe/creditPackPrices";
+import { dubCheckoutSessionMetadata } from "@/lib/dub/stripeSessionMetadata";
 import { getDataFastStripeMetadata } from "@/lib/stripe/datafastMetadata";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 
@@ -65,7 +66,12 @@ export async function POST(req: Request) {
       success_url: `${base.replace(/\/$/, "")}/credits?checkout=success&pack=${encodeURIComponent(packKey)}`,
       cancel_url: `${base.replace(/\/$/, "")}/credits?checkout=cancel`,
       allow_promotion_codes: true,
-      metadata: { user_id: auth.user.id, credit_pack: packKey, ...datafastMeta },
+      metadata: {
+        user_id: auth.user.id,
+        credit_pack: packKey,
+        ...dubCheckoutSessionMetadata(auth.user.id),
+        ...datafastMeta,
+      },
       ...(customerEmail ? { customer_email: customerEmail } : {}),
       ...(referral ? { client_reference_id: referral } : {}),
     });

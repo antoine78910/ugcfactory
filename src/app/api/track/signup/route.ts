@@ -4,16 +4,20 @@ export const runtime = "nodejs";
  * POST /api/track/signup
  * Called client-side after a successful email/password signup.
  * Creates/updates the Brevo contact and fires the "signup" event.
- * Body: { email: string }
+ * Body: { email: string, userId?: string, firstName?: string, clickId?: string }
+ * Dub: `dub_id` cookie or `clickId` in body → server `track.lead` when `DUB_API_KEY` is set.
  */
 
+import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { brevoUpsertContact, brevoTrackEvent } from "@/lib/brevo";
+import { normalizeDubClickId } from "@/lib/dub/clickId";
+import { trackDubLeadServer } from "@/lib/dub/trackLeadServer";
 
 export async function POST(req: Request) {
-  let body: { email?: string } = {};
+  let body: { email?: string; userId?: string; firstName?: string; clickId?: string } = {};
   try {
-    body = (await req.json()) as { email?: string };
+    body = (await req.json()) as typeof body;
   } catch {
     return NextResponse.json({ ok: false }, { status: 400 });
   }
@@ -30,6 +34,25 @@ export async function POST(req: Request) {
   await brevoTrackEvent(email, "signup", {
     eventProperties: { source: "app", method: "email_password" },
   });
+
+  const cookieStore = await cookies();
+  const clickFromCookie = normalizeDubClickId(cookieStore.get("dub_id")?.value);
+  const clickFromBody = normalizeDubClickId(body.clickId);
+  const clickId = clickFromCookie || clickFromBody;
+
+  const userId = typeof body.userId === "string" ? body.userId.trim() : "";
+  const firstName = typeof body.firstName === "string" ? body.firstName.trim() : "";
+  const customerExternalId = userId || email;
+
+  if (clickId) {
+    void trackDubLeadServer({
+      clickId,
+      customerExternalId,
+      customerEmail: email,
+      customerName: firstName || undefined,
+      eventName: "Sign up",
+    });
+  }
 
   return NextResponse.json({ ok: true });
 }

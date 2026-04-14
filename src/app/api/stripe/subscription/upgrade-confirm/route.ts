@@ -5,6 +5,7 @@ import Stripe from "stripe";
 import { getUserCreditBalance } from "@/lib/creditGrants";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
+import { dubCheckoutSessionMetadata } from "@/lib/dub/stripeSessionMetadata";
 import { getDataFastStripeMetadata } from "@/lib/stripe/datafastMetadata";
 import { normalizeStripeCurrency } from "@/lib/geo/billingRegion";
 import {
@@ -140,6 +141,7 @@ export async function POST(req: Request) {
         subscription_plan: targetPlanId,
         subscription_billing: targetBilling,
         upgrade_from_subscription_id: row.stripe_subscription_id,
+        ...dubCheckoutSessionMetadata(auth.user.id),
         ...datafastMeta,
       },
       ...(referral ? { client_reference_id: referral } : {}),

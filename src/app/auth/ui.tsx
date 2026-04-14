@@ -103,7 +103,7 @@ export default function AuthClient({ mode = "signin", redirectTo }: { mode?: Aut
           : pending
             ? `/redeem?token=${encodeURIComponent(pending)}`
             : "";
-      const { error } = await client.auth.signUp({
+      const { data: signUpData, error } = await client.auth.signUp({
         email: email.trim(),
         password,
         options: {
@@ -113,10 +113,23 @@ export default function AuthClient({ mode = "signin", redirectTo }: { mode?: Aut
       });
       if (error) throw error;
       window.datafast?.("signup", { email: cleanEmail });
+      const dubClickFromCookie =
+        typeof document !== "undefined"
+          ? (() => {
+              const m = document.cookie.match(/(?:^|;\s*)dub_id=([^;]+)/);
+              return m?.[1] ? decodeURIComponent(m[1].trim()) : "";
+            })()
+          : "";
       fetch("/api/track/signup", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: cleanEmail }),
+        body: JSON.stringify({
+          email: cleanEmail,
+          userId: signUpData.user?.id ?? "",
+          firstName: cleanFirst,
+          ...(dubClickFromCookie ? { clickId: dubClickFromCookie } : {}),
+        }),
       }).catch(() => {});
       toast.success("Account created", { description: "Check your inbox to confirm your email." });
       router.push(`/auth/check-email?email=${encodeURIComponent(cleanEmail)}`);

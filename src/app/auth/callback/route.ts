@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/supabase/env";
 import { brevoUpsertContact, brevoTrackEvent } from "@/lib/brevo";
+import { normalizeDubClickId } from "@/lib/dub/clickId";
+import { trackDubLeadServer } from "@/lib/dub/trackLeadServer";
 
 /** Same-origin path + query only; prevents open redirects. */
 function resolveSafeNextRedirect(reqUrl: URL): URL {
@@ -147,6 +149,23 @@ export async function GET(req: NextRequest) {
             void brevoTrackEvent(email, "signup", {
               eventProperties: { source: "app", method: "oauth_or_magic_link" },
             });
+            const clickId = normalizeDubClickId(req.cookies.get("dub_id")?.value);
+            if (clickId && userData.user?.id) {
+              const meta = userData.user.user_metadata as { first_name?: string; full_name?: string } | null;
+              const name =
+                typeof meta?.first_name === "string" && meta.first_name.trim()
+                  ? meta.first_name.trim()
+                  : typeof meta?.full_name === "string"
+                    ? meta.full_name.trim()
+                    : undefined;
+              void trackDubLeadServer({
+                clickId,
+                customerExternalId: userData.user.id,
+                customerEmail: email,
+                customerName: name,
+                eventName: "Sign up",
+              });
+            }
           }
         }
       } catch {
