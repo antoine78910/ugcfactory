@@ -1,11 +1,12 @@
 import type { XYPosition } from "@xyflow/react";
 
 import type { AdAssetNodeData, AdAssetNodeType } from "./nodes/AdAssetNode";
+import type { ImageRefNodeData, ImageRefNodeType } from "./nodes/ImageRefNode";
 import type { StickyNoteNodeType } from "./workflowStickyNoteTypes";
 import { aspectRatioStringFromIntrinsic } from "./workflowMediaAspect";
 import { STICKY_NOTE_DEFAULT_DATA } from "./workflowStickyNoteTypes";
 
-/** Custom data transfer type for palette → canvas drag (values: `pick` | node kind | `sticky`). */
+/** Custom data transfer type for palette → canvas drag (values: `pick` | node kind | `sticky` | `imageRef`). */
 export const WORKFLOW_NODE_DND = "application/youry-workflow-node";
 
 export type WorkflowDragNodeKind = AdAssetNodeType["data"]["kind"];
@@ -71,6 +72,11 @@ export function buildAdAssetNode(
     label: options?.label ?? labels[kind],
     ...genDefaults,
   };
+  if (kind === "assistant") {
+    data.assistantModel = "claude-sonnet-4-5";
+    data.assistantMode = "input";
+    data.assistantOutput = "";
+  }
 
   if (options?.prompt !== undefined) data.prompt = options.prompt;
 
@@ -97,5 +103,29 @@ export function buildStickyNoteNode(position: XYPosition): StickyNoteNodeType {
     position,
     zIndex: 2,
     data: { ...STICKY_NOTE_DEFAULT_DATA },
+  };
+}
+
+export type BuildImageRefNodeOptions = {
+  label?: string;
+  imageUrl: string;
+  source: "upload" | "avatar";
+  mediaKind: "image" | "video";
+  intrinsicAspect?: number;
+};
+
+export function buildImageRefNode(position: XYPosition, options: BuildImageRefNodeOptions): ImageRefNodeType {
+  const data: ImageRefNodeData = {
+    label: options.label ?? (options.source === "avatar" ? "Avatar" : "Image"),
+    imageUrl: options.imageUrl,
+    source: options.source,
+    mediaKind: options.mediaKind,
+    intrinsicAspect: options.intrinsicAspect,
+  };
+  return {
+    id: crypto.randomUUID(),
+    type: "imageRef",
+    position,
+    data,
   };
 }

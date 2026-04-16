@@ -78,10 +78,11 @@ export async function POST(req: Request) {
   const customUgcIntent = body?.customUgcIntent?.trim() || "";
   const previousScriptsText = body?.previousScriptsText?.trim() || "";
   const provider: "gpt" | "claude" = body?.provider === "gpt" ? "gpt" : "claude";
+  const scriptLanguageName = "English";
 
   const developer = [
     "Follow EVERY rule and the exact output structure in the instructions below.",
-    "All spoken script lines must be in English.",
+    `All spoken script lines must be in ${scriptLanguageName}.`,
     `${durationRulesForUgcApi(videoDurationSeconds)} For word limits: count only HOOK, PROBLEM, SOLUTION, CTA lines (when PROBLEM exists).`,
     "Output plain text only, using the section headings exactly as specified (SCRIPT OPTION 1, VIDEO_METADATA, etc.).",
     generationMode === "custom_ugc"
@@ -114,7 +115,6 @@ export async function POST(req: Request) {
     previousScriptsText ? "Previous angles (do NOT repeat these; create 3 different angles):" : "",
     previousScriptsText ? previousScriptsText : "",
     "",
-    "Language: english",
     `Target video length (user selected in the app): ${String(videoDurationSeconds)} seconds.`,
     `You MUST respect the spoken-word cap for this exact length — shorter videos mean fewer words (see system rules). Do not write for a different duration.`,
     "",
@@ -131,7 +131,7 @@ export async function POST(req: Request) {
 
   try {
     const cacheKey = makeCacheKey({
-      v: 8,
+      v: 9,
       kind: "ugc_scripts_from_brief",
       provider,
       brandBrief,

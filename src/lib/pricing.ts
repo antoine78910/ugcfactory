@@ -38,38 +38,34 @@ export const STARTER_CREDIT_VALUE_USD = 29.99 / 250;
 // Link to Ad — Seedance normal (preview): video slice only (full URL Generate adds scan + 3× ref images)
 // ---------------------------------------------------------------------------
 
-/**
- * Credits for the **image→video** slice (Seedance normal): 15s → 79 · 30s → 144 (see `LINK_TO_AD_SEEDANCE_VIDEO_CREDITS_BY_DURATION_SEC`).
- * First URL “Generate” for 15s/30s normal uses this amount only (bundle — no extra scan/ref line items). Other durations / Fast still add scan + 3× Nano Pro.
- *
- * 30s is two chained 15s API calls; billed as one bundle (144 cr).
- */
+/** Link to Ad Priority = Normal (Seedance 2 Fast Preview). */
 export const LINK_TO_AD_SEEDANCE_VIDEO_CREDITS_BY_DURATION_SEC: Record<5 | 10 | 15 | 30, number> = {
-  5: 16,
-  10: 32,
-  15: 79,
-  30: 144,
+  5: 29,
+  10: 45,
+  15: 61,
+  30: 108,
 };
 
-/** Fast tier (~PiAPI $0.08/s vs $0.10/s): slightly lower credit burn than normal. */
-export const LINK_TO_AD_SEEDANCE_FAST_VIDEO_CREDITS_BY_DURATION_SEC: Record<5 | 10 | 15, number> = {
-  5: 13,
-  10: 26,
-  15: 42,
+/** Link to Ad Priority = VIP (Seedance 2 Fast Preview VIP). */
+export const LINK_TO_AD_SEEDANCE_VIP_VIDEO_CREDITS_BY_DURATION_SEC: Record<5 | 10 | 15 | 30, number> = {
+  5: 45,
+  10: 76,
+  15: 108,
+  30: 202,
 };
 
 /** Link to Ad image→video: PiAPI `task_type` maps to these ids for `/api/kling/generate`. */
-export type LinkToAdSeedanceSpeed = "normal" | "fast";
+export type LinkToAdSeedanceSpeed = "normal" | "vip";
 
 export function linkToAdSeedanceMarketModel(speed: LinkToAdSeedanceSpeed): string {
-  return speed === "fast" ? "bytedance/seedance-2-fast-preview" : "bytedance/seedance-2-preview";
+  return speed === "vip" ? "bytedance/seedance-2-fast-preview-vip" : "bytedance/seedance-2-fast-preview";
 }
 
 /** Link to Ad video: Seedance 2 Preview only (Kling disabled for this flow). */
 export const LINK_TO_AD_VIDEO_MODELS = {
   seedance: {
-    marketModelNormal: "bytedance/seedance-2-preview" as const,
-    marketModelFast: "bytedance/seedance-2-fast-preview" as const,
+    marketModelNormal: "bytedance/seedance-2-fast-preview" as const,
+    marketModelVip: "bytedance/seedance-2-fast-preview-vip" as const,
   },
 } as const;
 
@@ -87,12 +83,11 @@ export function linkToAdVideoCredits(
 ): number {
   void LINK_TO_AD_VIDEO_MODELS[model];
   const table =
-    seedanceSpeed === "fast"
-      ? LINK_TO_AD_SEEDANCE_FAST_VIDEO_CREDITS_BY_DURATION_SEC
+    seedanceSpeed === "vip"
+      ? LINK_TO_AD_SEEDANCE_VIP_VIDEO_CREDITS_BY_DURATION_SEC
       : LINK_TO_AD_SEEDANCE_VIDEO_CREDITS_BY_DURATION_SEC;
   const d = normalizeUgcScriptVideoDurationSec(durationSec);
-  if (d === 5 || d === 10 || d === 15) return table[d];
-  if (d === 30 && seedanceSpeed !== "fast") return LINK_TO_AD_SEEDANCE_VIDEO_CREDITS_BY_DURATION_SEC[30];
+  if (d === 5 || d === 10 || d === 15 || d === 30) return table[d];
 
   const ref15 = table[15];
   return Math.max(1, Math.ceil((d / 15) * ref15));

@@ -91,6 +91,8 @@ export function WorkflowGroupNode({ id, data, selected }: NodeProps<WorkflowGrou
           ...(areaFill ? { backgroundColor: areaFill } : {}),
           boxShadow: `inset 0 0 0 1px ${hexWithAlpha(border, "55") ?? "rgba(255,255,255,0.08)"}, inset 0 0 48px ${hexWithAlpha(border, "18") ?? "transparent"}`,
         }}
+        onMouseEnter={() => window.dispatchEvent(new CustomEvent("workflow:hover-node", { detail: { nodeId: id } }))}
+        onMouseLeave={() => window.dispatchEvent(new CustomEvent("workflow:unhover-node"))}
       >
         <div
           className="nodrag nopan flex items-start justify-between gap-2 rounded-t-[14px] border-b px-2.5 py-2"

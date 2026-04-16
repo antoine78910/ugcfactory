@@ -1205,7 +1205,10 @@ export default function LinkToAdUniverse({
 
   const [videoDuration, setVideoDuration] = useState<number>(10);
   /** Video generation speed tier (Fast vs Normal) for the Link to Ad Seedance pipeline. */
-  const [ltaSeedanceSpeed, setLtaSeedanceSpeed] = useState<LinkToAdSeedanceSpeed>("fast");
+  const [ltaSeedanceSpeed, setLtaSeedanceSpeed] = useState<LinkToAdSeedanceSpeed>("normal");
+  const seedancePriorityInfoText =
+    "VIP pricing is x2 credits per generation.\n\nPeak hours: From 09:00 to 15:00 GMT, Seedance Preview experiences high traffic. During this period, queue times may extend to several hours.\n\nCurrently outside peak hours: Normal is usually 5-60 min. VIP (fast) is usually 3-5 min.";
+  const linkToAdSeedancePreviewMaxPollMs = 12 * 60 * 60 * 1000;
   /** After Generate from URL (or when a saved run is loaded), duration is fixed for this session. */
   const [ltaVideoDurationLocked, setLtaVideoDurationLocked] = useState(false);
   const [customUgcTopic, setCustomUgcTopic] = useState("");
@@ -1303,6 +1306,9 @@ export default function LinkToAdUniverse({
   const [isVideoPromptLoading, setIsVideoPromptLoading] = useState(false);
   const [isKlingSubmitting, setIsKlingSubmitting] = useState(false);
   const [klingPollTaskId, setKlingPollTaskId] = useState<string | null>(null);
+  /** PiAPI queue hints (if provider exposes them on status payload). */
+  const [klingWaitEstimateSeconds, setKlingWaitEstimateSeconds] = useState<number | null>(null);
+  const [klingQueuePosition, setKlingQueuePosition] = useState<number | null>(null);
   /** Lightbox: full reference image (source is often 9:16; grid shows 3:4 crop). */
   const [nanoImageLightboxUrl, setNanoImageLightboxUrl] = useState<string | null>(null);
   const [productImageLightboxUrl, setProductImageLightboxUrl] = useState<string | null>(null);
@@ -1617,7 +1623,7 @@ export default function LinkToAdUniverse({
     setLtaFrozenCredits(null);
     setLtaVideoDurationLocked(false);
     setVideoDuration(10);
-    setLtaSeedanceSpeed("fast");
+    setLtaSeedanceSpeed("normal");
     latestSnapRef.current = null;
     prevAngleRef.current = null;
     nanoBananaPromptsSignatureRef.current = null;
@@ -2304,7 +2310,7 @@ export default function LinkToAdUniverse({
         title?: string | null;
         extracted?: unknown;
       },
-      opts?: { silent?: boolean; preserveVideoDuration?: boolean },
+      opts?: { silent?: boolean; preserveVideoDuration?: boolean; preserveScriptLanguage?: boolean },
     ) => {
       const snap = readUniverseFromExtracted(run.extracted);
       if (!snap) {
@@ -2375,7 +2381,7 @@ export default function LinkToAdUniverse({
       setNanoPollTaskId(null);
       setKlingPollTaskId(null);
       setKlingPollImageIndex(null);
-      if (snap.ltaSeedanceSpeed === "fast" || snap.ltaSeedanceSpeed === "normal") {
+      if (snap.ltaSeedanceSpeed === "vip" || snap.ltaSeedanceSpeed === "normal") {
         setLtaSeedanceSpeed(snap.ltaSeedanceSpeed);
       }
       if (!opts?.preserveVideoDuration) {
@@ -2386,6 +2392,7 @@ export default function LinkToAdUniverse({
         );
       }
       setLtaVideoDurationLocked(Boolean(snap.scriptsText.trim()));
+      // Script language is always English now.
       prevAngleRef.current = snap.selectedAngleIndex;
       setLastExtractedJson(cloneExtractedBase(run.extracted));
       setStage("ready");
@@ -2988,6 +2995,7 @@ export default function LinkToAdUniverse({
     }
 
     setLtaVideoDurationLocked(true);
+    // Script language is always English now.
     setIsWorking(true);
     setStage("writing_scripts");
     try {
@@ -3008,7 +3016,7 @@ export default function LinkToAdUniverse({
       if (!getRes.ok || !getJson.data) {
         throw new Error(getJson.error || "Could not reload project");
       }
-      hydrateFromRun(getJson.data, { silent: true, preserveVideoDuration: true });
+      hydrateFromRun(getJson.data, { silent: true, preserveVideoDuration: true, preserveScriptLanguage: true });
       setStage("ready");
       toast.success("3 UGC scripts ready");
       onRunsChanged?.();
@@ -3205,7 +3213,7 @@ export default function LinkToAdUniverse({
         if (findRes.ok && findJson.data) {
           const snap = readUniverseFromExtracted(findJson.data.extracted);
           if (snap) {
-            hydrateFromRun(findJson.data, { preserveVideoDuration: true });
+            hydrateFromRun(findJson.data, { preserveVideoDuration: true, preserveScriptLanguage: true });
             if (linkToAdFlowEpochRef.current !== epochAtStart) {
               setIsWorking(false);
               setLtaVideoDurationLocked(false);
@@ -3310,7 +3318,7 @@ export default function LinkToAdUniverse({
             error?: string;
           };
           if (getRes.ok && getJson.data) {
-            hydrateFromRun(getJson.data, { silent: true, preserveVideoDuration: true });
+            hydrateFromRun(getJson.data, { silent: true, preserveVideoDuration: true, preserveScriptLanguage: true });
             if (linkToAdFlowEpochRef.current !== epochAtStart) {
               setIsWorking(false);
               setLtaVideoDurationLocked(false);
@@ -3335,7 +3343,7 @@ export default function LinkToAdUniverse({
       if (!getRes.ok || !getJson.data) {
         throw new Error(getJson.error || "Could not reload project after pipeline");
       }
-      hydrateFromRun(getJson.data, { silent: true, preserveVideoDuration: true });
+      hydrateFromRun(getJson.data, { silent: true, preserveVideoDuration: true, preserveScriptLanguage: true });
       if (linkToAdFlowEpochRef.current !== epochAtStart) {
         setLtaVideoDurationLocked(false);
         return;
@@ -3493,7 +3501,7 @@ export default function LinkToAdUniverse({
           model: "pro",
           prompt,
           imageUrls: nanoRefs.length ? nanoRefs : [img],
-          resolution: "4K",
+          resolution: "2K",
           aspectRatio: "9:16",
           personalApiKey: getPersonalApiKey(),
         }),
@@ -3599,10 +3607,7 @@ export default function LinkToAdUniverse({
     throw new Error("Image generation timed out.");
   }
 
-  /**
-   * Run 3 NanoBanana Pro jobs one after another (same billing model as before: 3 distinct prompts ⇒ 3
-   * provider tasks; parallel did not reduce cost and was not faster enough for Link to Ad).
-   */
+  /** Run 3 NanoBanana Pro jobs in parallel and resolve each slot independently. */
   async function runNanoBananaProThreeSequential(
     imageUrls: string[],
     prompts: [string, string, string],
@@ -3617,15 +3622,10 @@ export default function LinkToAdUniverse({
       throw new Error("No product reference images.");
     }
     const urlsByPrompt: string[] = ["", "", ""];
-    let lastTaskId: string | null = null;
-    const taskIds: string[] = [];
-    for (let i = 0; i < 3; i++) {
-      if (i > 0) {
-        await new Promise((r) => setTimeout(r, 750));
-      }
+    const submitOne = async (i: 0 | 1 | 2): Promise<{ i: 0 | 1 | 2; taskId: string }> => {
       const prompt = prompts[i];
       lastNanoImagePromptRef.current = prompt;
-      lastNanoImagePromptIndexRef.current = i as 0 | 1 | 2;
+      lastNanoImagePromptIndexRef.current = i;
       const res = await fetchWithRetry(
         "/api/nanobanana/generate",
         {
@@ -3638,26 +3638,46 @@ export default function LinkToAdUniverse({
             model: "pro",
             prompt,
             imageUrls: imageUrls.length ? imageUrls : [],
-            resolution: "4K",
+            resolution: "2K",
             aspectRatio: "9:16",
             personalApiKey: getPersonalApiKey(),
           }),
         },
       );
       const json = (await res.json()) as { taskId?: string; error?: string };
-      if (!res.ok || !json.taskId) throw new Error(json.error || "Image generation failed");
-      lastTaskId = json.taskId;
-      taskIds.push(json.taskId);
+      if (!res.ok || !json.taskId) throw new Error(json.error || `Image generation failed for slot ${i + 1}`);
       void registerLinkToAdStudioImage(
         json.taskId,
         opts?.labelPrefix ? `${opts.labelPrefix} · ${i + 1}/3` : `Link to Ad · Nano ${i + 1}/3`,
       );
-      // Notify caller so it can persist the taskId before we start the long poll.
       opts?.onSlotSubmitted?.(json.taskId, i, [...urlsByPrompt]);
-      const urls = await pollNanoBananaTaskForUrls(json.taskId, signal);
-      urlsByPrompt[i] = urls[0] ?? "";
-      setNanoBananaImageUrls([...urlsByPrompt]);
-      setNanoBananaTaskId(lastTaskId);
+      return { i, taskId: json.taskId };
+    };
+
+    const submitted = await Promise.all([submitOne(0), submitOne(1), submitOne(2)]);
+    const taskIds: string[] = submitted.map((s) => s.taskId);
+    const lastTaskId: string | null = taskIds[2] ?? taskIds[taskIds.length - 1] ?? null;
+    const settled = await Promise.allSettled(
+      submitted.map(async ({ i, taskId }) => {
+        const urls = await pollNanoBananaTaskForUrls(taskId, signal);
+        const firstUrl = urls[0] ?? "";
+        return { i, taskId, firstUrl };
+      }),
+    );
+    const pollErrors: string[] = [];
+    for (const item of settled) {
+      if (item.status === "fulfilled") {
+        const { i, taskId, firstUrl } = item.value;
+        urlsByPrompt[i] = firstUrl;
+        setNanoBananaImageUrls([...urlsByPrompt]);
+        setNanoBananaTaskId(taskId);
+      } else {
+        const reason = item.reason instanceof Error ? item.reason.message : String(item.reason ?? "Unknown error");
+        pollErrors.push(reason);
+      }
+    }
+    if (!urlsByPrompt.some((u) => typeof u === "string" && u.trim().length > 0)) {
+      throw new Error(pollErrors[0] || "Image generation did not return any image URL.");
     }
     return { urlsByPrompt, lastTaskId, taskIds };
   }
@@ -3779,59 +3799,98 @@ export default function LinkToAdUniverse({
         }
       }
 
-      // Re-generate any still-missing slots (no extra credit charge — original payment already done).
-      for (let i = 0; i < 3; i++) {
-        if (partialUrls[i]?.trim()) continue;
-
-        const prompt = fullNanoPromptsTriple[i] ?? "";
-        if (!prompt.trim()) throw new Error(`Image prompt missing for slot ${i + 1}`);
-
-        const res = await fetchWithRetry("/api/nanobanana/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            linkToAd: true,
-            accountPlan: planId,
-            model: "pro",
-            prompt,
-            imageUrls: nanoRefs.length ? nanoRefs : [img],
-            resolution: "4K",
-            aspectRatio: "9:16",
-            personalApiKey: getPersonalApiKey(),
+      // Re-generate any still-missing slots in parallel (no extra credit charge — original payment already done).
+      const missingSlots = ([0, 1, 2] as const).filter((slotIdx) => !partialUrls[slotIdx]?.trim());
+      if (missingSlots.length > 0) {
+        const submitted = await Promise.all(
+          missingSlots.map(async (slotIdx) => {
+            const prompt = fullNanoPromptsTriple[slotIdx] ?? "";
+            if (!prompt.trim()) throw new Error(`Image prompt missing for slot ${slotIdx + 1}`);
+            const res = await fetchWithRetry("/api/nanobanana/generate", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                linkToAd: true,
+                accountPlan: planId,
+                model: "pro",
+                prompt,
+                imageUrls: nanoRefs.length ? nanoRefs : [img],
+                resolution: "2K",
+                aspectRatio: "9:16",
+                personalApiKey: getPersonalApiKey(),
+              }),
+            });
+            const json = (await res.json()) as { taskId?: string; error?: string };
+            if (!res.ok || !json.taskId) throw new Error(json.error ?? "Image generation failed");
+            return { slotIdx, taskId: json.taskId };
           }),
-        });
-        const json = (await res.json()) as { taskId?: string; error?: string };
-        if (!res.ok || !json.taskId) throw new Error(json.error ?? "Image generation failed");
+        );
 
-        setNanoBananaTaskId(json.taskId);
-        const base = latestSnapRef.current;
-        if (base && lastExtractedJson) {
-          const triple = buildPersistTriplePatchingActive({
-            nanoBananaTaskId: json.taskId,
-            nanoBananaImageUrls: [...partialUrls],
-            nanoThreeGenerating: true,
-          });
-          void persistUniverse(universeRunId, url, extractedTitle, lastExtractedJson, snapshotWithPersistTriple(base, triple), packshotsForSave());
+        const latestTask = submitted[submitted.length - 1]?.taskId ?? null;
+        if (latestTask) {
+          setNanoBananaTaskId(latestTask);
+          const base = latestSnapRef.current;
+          if (base && lastExtractedJson) {
+            const triple = buildPersistTriplePatchingActive({
+              nanoBananaTaskId: latestTask,
+              nanoBananaImageUrls: [...partialUrls],
+              nanoThreeGenerating: true,
+            });
+            void persistUniverse(
+              universeRunId,
+              url,
+              extractedTitle,
+              lastExtractedJson,
+              snapshotWithPersistTriple(base, triple),
+              packshotsForSave(),
+            );
+          }
         }
 
-        const generatedUrls = await pollNanoBananaTaskForUrls(json.taskId);
-        partialUrls[i] = generatedUrls[0] ?? "";
-        setNanoBananaImageUrls([...partialUrls]);
+        const settled = await Promise.allSettled(
+          submitted.map(async ({ slotIdx, taskId }) => {
+            const generatedUrls = await pollNanoBananaTaskForUrls(taskId);
+            return { slotIdx, taskId, firstUrl: generatedUrls[0] ?? "" };
+          }),
+        );
+        for (const item of settled) {
+          if (item.status !== "fulfilled") continue;
+          const { slotIdx, taskId, firstUrl } = item.value;
+          partialUrls[slotIdx] = firstUrl;
+          setNanoBananaTaskId(taskId);
+          setNanoBananaImageUrls([...partialUrls]);
+        }
       }
 
       if (!partialUrls[0] || !partialUrls[1] || !partialUrls[2]) {
         throw new Error("Could not recover all 3 images.");
       }
 
-      const storedUrls = await reuploadToStorage(partialUrls);
-      await persistNanoThreeGeneratedImages(url, fullNanoPromptsTriple as [string, string, string], storedUrls, nanoBananaTaskId);
-      toast.success("Génération d'images reprise avec succès");
+      setNanoBananaImageUrls([...partialUrls]);
+      setIsNanoAllImagesSubmitting(false);
+      toast.success("Image generation resumed");
+
+      void (async () => {
+        const finalUrls = await reuploadToStorage(partialUrls).catch(() => partialUrls);
+        setNanoBananaImageUrls([...finalUrls]);
+        const base = latestSnapRef.current;
+        if (base && lastExtractedJson) {
+          const triple = buildPersistTriplePatchingActive({
+            nanoBananaTaskId: nanoBananaTaskId,
+            nanoBananaImageUrls: finalUrls,
+            nanoThreeGenerating: false,
+          });
+          setPipelineByAngle(triple);
+          void persistUniverse(universeRunId, url, extractedTitle, lastExtractedJson, snapshotWithPersistTriple(base, triple), packshotsForSave(), {
+            generatedImageUrls: finalUrls,
+          });
+        }
+      })();
     } catch (e) {
-      toast.error("Reprise échouée", {
-        description: e instanceof Error ? e.message : "Veuillez régénérer les images.",
+      toast.error("Resume failed", {
+        description: e instanceof Error ? e.message : "Please regenerate the images.",
       });
       await clearGeneratingFlag();
-    } finally {
       setIsNanoAllImagesSubmitting(false);
     }
   }
@@ -3966,25 +4025,119 @@ export default function LinkToAdUniverse({
       nanoThreeAbortRef.current?.abort();
       const controller = new AbortController();
       nanoThreeAbortRef.current = controller;
-      const { urlsByPrompt, lastTaskId } = await runNanoBananaProThreeSequential(
+      const { urlsByPrompt, lastTaskId: firstLastTaskId } = await runNanoBananaProThreeSequential(
         nanoRefs,
         prompts as [string, string, string],
         { labelPrefix: `Link to Ad · Angle ${idx + 1}`, onSlotSubmitted },
         controller.signal,
       );
 
-      if (!urlsByPrompt[0] || !urlsByPrompt[1] || !urlsByPrompt[2]) {
-        throw new Error("Image generation did not produce 3 images.");
+      let lastTaskId = firstLastTaskId;
+      // Provider can complete only part of the batch; retry missing slots twice without re-charging.
+      for (let retryRound = 0; retryRound < 2; retryRound++) {
+        const missingSlots = ([0, 1, 2] as const).filter((slotIdx) => !String(urlsByPrompt[slotIdx] ?? "").trim());
+        if (missingSlots.length === 0) break;
+
+        const submitted = await Promise.all(
+          missingSlots.map(async (slotIdx) => {
+            const prompt = prompts[slotIdx]?.trim();
+            if (!prompt) return null;
+            const regenRes = await fetchWithRetry("/api/nanobanana/generate", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              signal: controller.signal,
+              body: JSON.stringify({
+                linkToAd: true,
+                accountPlan: planId,
+                model: "pro",
+                prompt,
+                imageUrls: nanoRefs.length ? nanoRefs : [],
+                resolution: "2K",
+                aspectRatio: "9:16",
+                personalApiKey: getPersonalApiKey(),
+              }),
+            });
+            const regenJson = (await regenRes.json()) as { taskId?: string; error?: string };
+            if (!regenRes.ok || !regenJson.taskId) return null;
+            return { slotIdx, taskId: regenJson.taskId };
+          }),
+        );
+
+        const validSubmissions = submitted.filter(
+          (x): x is { slotIdx: 0 | 1 | 2; taskId: string } => x !== null,
+        );
+        if (validSubmissions.length === 0) continue;
+
+        for (const { taskId, slotIdx } of validSubmissions) {
+          lastTaskId = taskId;
+          onSlotSubmitted(taskId, slotIdx, [...urlsByPrompt]);
+        }
+
+        const settled = await Promise.allSettled(
+          validSubmissions.map(async ({ slotIdx, taskId }) => {
+            const polled = await pollNanoBananaTaskForUrls(taskId, controller.signal);
+            return { slotIdx, taskId, firstUrl: polled[0] ?? "" };
+          }),
+        );
+        for (const item of settled) {
+          if (item.status !== "fulfilled") continue;
+          const { slotIdx, taskId, firstUrl } = item.value;
+          urlsByPrompt[slotIdx] = firstUrl;
+          setNanoBananaImageUrls([...urlsByPrompt]);
+          setNanoBananaTaskId(taskId);
+          lastTaskId = taskId;
+        }
       }
 
-      const storedUrls = await reuploadToStorage(urlsByPrompt);
-      setNanoBananaImageUrls([...storedUrls]);
+      // Show images immediately with the original CDN URLs (fast).
+      setNanoBananaImageUrls([...urlsByPrompt]);
+      setIsNanoAllImagesSubmitting(false);
 
-      await persistNanoThreeGeneratedImages(url, prompts as [string, string, string], storedUrls, lastTaskId);
-
-      toast.success("3 images generated");
+      const readyCount = urlsByPrompt.filter((u) => typeof u === "string" && u.trim().length > 0).length;
+      if (readyCount === 3) {
+        toast.success("3 images generated");
+      } else {
+        toast.warning("Partial image generation", {
+          description: `${readyCount}/3 image(s) were returned. You can regenerate to fill missing slots.`,
+        });
+      }
       if (shouldCharge || usingPrepaid) setLtaPrepaidThreeImagesRegen(false);
       setLtaFrozenCredits(null);
+
+      // Re-upload to Supabase storage in background (for persistence) without blocking the UI.
+      // Only update image URLs and persist to DB — never touch video/kling state since the user
+      // may have already selected an image and started video generation by the time this completes.
+      void (async () => {
+        try {
+          const storedUrls = await reuploadToStorage(urlsByPrompt);
+          setNanoBananaImageUrls([...storedUrls]);
+          const base = latestSnapRef.current;
+          if (base && lastExtractedJson) {
+            const triple = buildPersistTriplePatchingActive({
+              nanoBananaTaskId: lastTaskId,
+              nanoBananaImageUrls: storedUrls,
+              nanoThreeGenerating: false,
+            });
+            setPipelineByAngle(triple);
+            void persistUniverse(universeRunId, url, extractedTitle, lastExtractedJson, snapshotWithPersistTriple(base, triple), packshotsForSave(), {
+              generatedImageUrls: storedUrls,
+            });
+          }
+        } catch {
+          const base = latestSnapRef.current;
+          if (base && lastExtractedJson) {
+            const triple = buildPersistTriplePatchingActive({
+              nanoBananaTaskId: lastTaskId,
+              nanoBananaImageUrls: urlsByPrompt,
+              nanoThreeGenerating: false,
+            });
+            setPipelineByAngle(triple);
+            void persistUniverse(universeRunId, url, extractedTitle, lastExtractedJson, snapshotWithPersistTriple(base, triple), packshotsForSave(), {
+              generatedImageUrls: urlsByPrompt,
+            });
+          }
+        }
+      })();
     } catch (e) {
       if (e instanceof DOMException && e.name === "AbortError") return;
       if ((shouldCharge || usingPrepaid) && !isPlatformCreditBypassActive()) {
@@ -3996,14 +4149,12 @@ export default function LinkToAdUniverse({
       const errMsg = e instanceof Error ? e.message : "Unknown error";
       toast.error("Image generation", { description: errMsg });
       void registerLinkToAdStudioImageFailed(`Link to Ad · Angle ${idx + 1} · 3 images`, errMsg);
-      // Clear the generating flag so the user can retry cleanly.
       const base = latestSnapRef.current;
       if (base && lastExtractedJson) {
         const triple = buildPersistTriplePatchingActive({ nanoThreeGenerating: false });
         setPipelineByAngle(triple);
         void persistUniverse(universeRunId, url, extractedTitle, lastExtractedJson, snapshotWithPersistTriple(base, triple), packshotsForSave());
       }
-    } finally {
       setIsNanoAllImagesSubmitting(false);
     }
   }
@@ -4194,6 +4345,11 @@ export default function LinkToAdUniverse({
       toast.error("Angle script is missing.");
       return null;
     }
+    const idx = nanoBananaSelectedImageIndex;
+    if ((idx === 0 || idx === 1 || idx === 2) && !nanoBananaImageUrl?.trim()) {
+      const fallbackSelected = (nanoBananaImageUrls[idx] ?? "").trim();
+      if (fallbackSelected) setNanoBananaImageUrl(fallbackSelected);
+    }
     setIsVideoPromptLoading(true);
     try {
       videoPromptAbortRef.current?.abort();
@@ -4215,6 +4371,9 @@ export default function LinkToAdUniverse({
         part1?: string;
         part2?: string;
       };
+      if (res.status === 401) {
+        throw new Error("Session expired. Please sign in again.");
+      }
       if (!res.ok || !json.data) throw new Error(json.error || "Video prompt failed");
       const text = String(json.data);
       setUgcVideoPromptGpt(text);
@@ -4223,7 +4382,9 @@ export default function LinkToAdUniverse({
           ? String(json.part1)
           : text;
       hydrateVideoPromptFromStored(displayPrompt);
-      const idx = nanoBananaSelectedImageIndex;
+      // Keep the prompt panel visible even when prompt generation is triggered from retry actions.
+      setVideoStageMode(true);
+      setUserStartedVideoFromImage(true);
       if (idx === 0 || idx === 1 || idx === 2) {
         const p30 =
           normalizeUgcScriptVideoDurationSec(videoDuration) === 30 && json.part1 && json.part2
@@ -4231,6 +4392,13 @@ export default function LinkToAdUniverse({
             : { ugcVideoPrompt: text };
         patchKlingSlot(idx, p30);
       }
+      // Keep active render polling untouched while editing/regenerating prompts.
+      // Clearing poll state here can hide "generating" even though provider task is still running.
+      if (!klingPollTaskId) {
+        setKlingPollTaskId(null);
+        setKlingPollImageIndex(null);
+      }
+      setIsKlingSubmitting(false);
       const base = latestSnapRef.current;
       if (base && lastExtractedJson) {
         const nextSlots = klingByRef.map((s, i) => ({
@@ -4319,24 +4487,37 @@ export default function LinkToAdUniverse({
       klingAbortRef.current?.abort();
       const controller = new AbortController();
       klingAbortRef.current = controller;
-      const res = await fetch("/api/kling/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: controller.signal,
-        body: JSON.stringify({
-          linkToAd: true,
-          accountPlan: planId,
-          marketModel: linkToAdSeedanceMarketModel(ltaSeedanceSpeed),
-          prompt: klingPrompt,
-          imageUrl: img,
-          duration: apiDuration,
-          aspectRatio: "9:16",
-          personalApiKey: getPersonalApiKey(),
-          piapiApiKey: getPersonalPiapiApiKey(),
-        }),
-      });
-      const json = (await res.json()) as { taskId?: string; error?: string };
-      if (!res.ok || !json.taskId) throw new Error(json.error || "Video generation failed");
+      const generatePayload = {
+        linkToAd: true,
+        accountPlan: planId,
+        marketModel: linkToAdSeedanceMarketModel(ltaSeedanceSpeed),
+        prompt: klingPrompt,
+        imageUrl: img,
+        duration: apiDuration,
+        aspectRatio: "9:16",
+        personalApiKey: getPersonalApiKey(),
+        piapiApiKey: getPersonalPiapiApiKey(),
+      };
+      let json: { taskId?: string; error?: string } | undefined;
+      const MAX_GENERATE_ATTEMPTS = 2;
+      for (let attempt = 0; attempt < MAX_GENERATE_ATTEMPTS; attempt++) {
+        const res = await fetch("/api/kling/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: controller.signal,
+          body: JSON.stringify(generatePayload),
+        });
+        json = (await res.json()) as { taskId?: string; error?: string };
+        if (res.ok && json.taskId) break;
+        const isTimeout =
+          (json.error ?? "").toLowerCase().includes("timeout") ||
+          (json.error ?? "").toLowerCase().includes("aborted");
+        if (!isTimeout || attempt >= MAX_GENERATE_ATTEMPTS - 1) {
+          throw new Error(json.error || "Video generation failed");
+        }
+        toast.info("Video provider was slow — retrying automatically…");
+      }
+      if (!json?.taskId) throw new Error(json?.error || "Video generation failed");
       {
         const angLabel =
           selectedAngleIndex === 0 || selectedAngleIndex === 1 || selectedAngleIndex === 2
@@ -4470,6 +4651,10 @@ export default function LinkToAdUniverse({
     klingResumeAttemptedRef.current = false;
   }, [klingSlotSignature]);
 
+  // klingResumeAttemptedRef is already reset by the klingSlotSignature effect above.
+  // Do NOT reset it here when klingPollTaskId becomes null — that causes infinite
+  // resume loops when a task is permanently failed (slot still has taskId, no videoUrl).
+
   /**
    * Auto-resume 3-image NanoBanana generation when the user returns to the page mid-generation.
    * `nanoThreeGeneratingFromDb` is set by `applyPipelineFromSnapshot` when it reads `nanoThreeGenerating: true`
@@ -4539,21 +4724,61 @@ export default function LinkToAdUniverse({
     if (!klingPollTaskId || klingPollImageIndex === null) return;
     const taskId = klingPollTaskId;
     const slotIndex = klingPollImageIndex;
+    const pollStartedAtMs = Date.now();
     let cancelled = false;
     let interval: ReturnType<typeof setInterval> | null = null;
+    const isTransientPollError = (msg: string): boolean => {
+      const m = msg.toLowerCase();
+      return (
+        m.includes("network error while contacting") ||
+        m.includes("fetch failed") ||
+        m.includes("timeout") ||
+        m.includes("econn") ||
+        m.includes("eacces") ||
+        m.includes("poll failed")
+      );
+    };
 
     async function tick() {
       try {
+        if (Date.now() - pollStartedAtMs > linkToAdSeedancePreviewMaxPollMs) {
+          throw new Error("Seedance Preview generation is still processing after 12 hours.");
+        }
         const kKey = getPersonalApiKey();
         const kPiKey = getPersonalPiapiApiKey();
         const kParam = `${kKey ? `&personalApiKey=${encodeURIComponent(kKey)}` : ""}${kPiKey ? `&piapiApiKey=${encodeURIComponent(kPiKey)}` : ""}`;
         const res = await fetch(`/api/kling/status?taskId=${encodeURIComponent(taskId)}${kParam}`, { cache: "no-store" });
         const json = (await res.json()) as {
-          data?: { status?: string; response?: string[]; error_message?: string };
+          data?: {
+            status?: string;
+            response?: string[];
+            error_message?: string;
+            wait_estimate_seconds?: number | null;
+            queue_position?: number | null;
+          };
           error?: string;
         };
-        if (!res.ok || !json.data) throw new Error(json.error || "Poll failed");
+        if (!res.ok) {
+          const errMsg = json.error || `Poll failed (${res.status})`;
+          if (res.status === 502 || isTransientPollError(errMsg)) {
+            return;
+          }
+          throw new Error(errMsg);
+        }
+        if (!json.data) {
+          return;
+        }
         if (cancelled) return;
+        if (typeof json.data.wait_estimate_seconds === "number" && Number.isFinite(json.data.wait_estimate_seconds)) {
+          setKlingWaitEstimateSeconds(Math.max(0, Math.round(json.data.wait_estimate_seconds)));
+        } else {
+          setKlingWaitEstimateSeconds(null);
+        }
+        if (typeof json.data.queue_position === "number" && Number.isFinite(json.data.queue_position)) {
+          setKlingQueuePosition(Math.max(0, Math.round(json.data.queue_position)));
+        } else {
+          setKlingQueuePosition(null);
+        }
         const s = json.data.status ?? "IN_PROGRESS";
         if (s === "IN_PROGRESS") return;
         if (s === "SUCCESS") {
@@ -4620,12 +4845,15 @@ export default function LinkToAdUniverse({
             setPipelineByAngle([cloneAnglePipeline(tripleAfterKling[0]), cloneAnglePipeline(tripleAfterKling[1]), cloneAnglePipeline(tripleAfterKling[2])]);
           }
           const url0 = storeUrl.trim();
+          const canPersistVideo = Boolean(mergedSnapForPersist && lastExtractedJson && url0);
+          let didPersistVideo = false;
           if (mergedSnapForPersist && lastExtractedJson && url0) {
             try {
               await persistUniverse(universeRunId, url0, extractedTitle, lastExtractedJson, mergedSnapForPersist, packshotsForSave(), {
                 videoUrl: vUrl,
                 videoPrompt: lastKlingVideoPromptRef.current || undefined,
               });
+              didPersistVideo = true;
             } catch (e) {
               toast.error("Video save failed", {
                 description: e instanceof Error ? e.message : "Unknown error",
@@ -4636,17 +4864,21 @@ export default function LinkToAdUniverse({
             const p2 = kling30sPart2PromptRef.current;
             kling30sPart2PromptRef.current = null;
             kling30sNextClipIsPart2Ref.current = true;
-            toast.success("Part 1 saved — generating part 2…");
+            toast.success(didPersistVideo ? "Part 1 saved — generating part 2…" : "Part 1 ready — generating part 2…");
             void onGenerateKlingVideo(undefined, p2);
           } else {
             if (clipPart === 2) {
               kling30sNextClipIsPart2Ref.current = false;
             }
-            toast.success(
-              clipPart === 2 && normalizeUgcScriptVideoDurationSec(videoDuration) === 30
-                ? "Full 30s video saved (two clips)"
-                : "Video saved in the project",
-            );
+            if (didPersistVideo) {
+              toast.success(
+                clipPart === 2 && normalizeUgcScriptVideoDurationSec(videoDuration) === 30
+                  ? "Full 30s video saved (two clips)"
+                  : "Video saved in the project",
+              );
+            } else if (!canPersistVideo) {
+              toast.success("Video ready");
+            }
           }
           if (interval) clearInterval(interval);
           interval = null;
@@ -4656,7 +4888,16 @@ export default function LinkToAdUniverse({
       } catch (err) {
         if (cancelled) return;
         const errMsg = err instanceof Error ? err.message : "Unknown error";
+        if (isTransientPollError(errMsg)) {
+          return;
+        }
         toast.error("Video generation", { description: errMsg });
+        // Clear the failed taskId from the slot so the resume-effect doesn't re-trigger.
+        setKlingByRef((prev) =>
+          prev.map((s) =>
+            s.taskId === taskId ? { ...s, taskId: null } : s,
+          ) as typeof prev,
+        );
         klingPollAngleRef.current = null;
         klingPollSlotsRef.current = null;
         setKlingPollTaskId(null);
@@ -4674,6 +4915,12 @@ export default function LinkToAdUniverse({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- poll tick closes over latest snap/refs; avoid resetting interval on every render
   }, [klingPollTaskId, klingPollImageIndex]);
+
+  useEffect(() => {
+    if (klingPollTaskId) return;
+    setKlingWaitEstimateSeconds(null);
+    setKlingQueuePosition(null);
+  }, [klingPollTaskId]);
 
   const showAnglePicker = Boolean(scriptsText && angleLabels[0] && angleLabels[1] && angleLabels[2]);
   const showContinueScripts =
@@ -4714,26 +4961,38 @@ export default function LinkToAdUniverse({
 
   const nanoHasAnyReferenceImage = nanoImageSlots.some(Boolean);
   const nanoHasThreeImages = nanoImageSlots.every(Boolean);
+  const isNanoThreeActivelyGenerating = Boolean((nanoPollTaskId || isNanoAllImagesSubmitting) && !nanoHasThreeImages);
   const nanoShowReferenceStrip =
     Boolean(nanoBananaPromptsRaw.trim()) &&
-    (nanoHasAnyReferenceImage || Boolean(nanoPollTaskId) || isNanoAllImagesSubmitting);
+    (nanoHasAnyReferenceImage || isNanoThreeActivelyGenerating);
   /** Compact strip + video column (persists when switching reference image). */
   const showVideoStageLayout = Boolean(
     videoStageMode &&
       nanoBananaImageUrl?.trim() &&
-      nanoHasThreeImages &&
       Boolean(nanoBananaPromptsRaw.trim()),
   );
   /** Video prompt / render UI is relevant (loading, result, or user just kicked off generation). */
   const showVideoWorkPanel = Boolean(
-    nanoBananaImageUrl?.trim() &&
-      (userStartedVideoFromImage ||
-        ugcVideoPromptGpt.trim() ||
-        isVideoPromptLoading ||
-        isKlingSubmitting ||
-        klingPollTaskId ||
-        klingVideoUrl),
+    isVideoPromptLoading ||
+      userStartedVideoFromImage ||
+      ugcVideoPromptGpt.trim() ||
+      mergedVideoPromptDraft.trim() ||
+      isKlingSubmitting ||
+      klingPollTaskId ||
+      klingVideoUrl,
   );
+  const klingWaitHintText = useMemo(() => {
+    if (!klingPollTaskId) return "";
+    const parts: string[] = [];
+    if (typeof klingWaitEstimateSeconds === "number" && klingWaitEstimateSeconds > 0) {
+      const min = Math.max(1, Math.round(klingWaitEstimateSeconds / 60));
+      parts.push(`~${min} min`);
+    }
+    if (typeof klingQueuePosition === "number" && klingQueuePosition >= 0) {
+      parts.push(`queue #${klingQueuePosition}`);
+    }
+    return parts.length ? ` (${parts.join(" · ")})` : "";
+  }, [klingPollTaskId, klingQueuePosition, klingWaitEstimateSeconds]);
 
   const ltaGenerateCredits = useMemo(
     () => creditsLinkToAdFullPipeline(LINK_TO_AD_DEFAULT_VIDEO_MODEL, videoDuration, ltaSeedanceSpeed),
@@ -4763,7 +5022,7 @@ export default function LinkToAdUniverse({
     phase: string | null;
     message: string | null;
   } => {
-    if (nanoPollTaskId || isNanoAllImagesSubmitting) {
+    if (isNanoThreeActivelyGenerating) {
       return { phase: "nano_three", message: LINK_TO_AD_LOADING_MESSAGES.nano_three };
     }
     if (isNanoPromptsLoading) {
@@ -4799,8 +5058,7 @@ export default function LinkToAdUniverse({
     }
     return { phase: "working", message: LINK_TO_AD_LOADING_MESSAGES.working };
   }, [
-    nanoPollTaskId,
-    isNanoAllImagesSubmitting,
+    isNanoThreeActivelyGenerating,
     isNanoPromptsLoading,
     isNanoImageSubmitting,
     isVideoPromptLoading,
@@ -5007,7 +5265,7 @@ export default function LinkToAdUniverse({
                 <ChevronRight className="h-3.5 w-3.5 transition-transform [[open]>&]:rotate-90" aria-hidden />
                 Settings
                 <span className="ml-auto text-[10px] font-normal text-white/35">
-                  {videoDuration}s · {ltaSeedanceSpeed === "fast" ? "Fast" : "Normal"} · {generationMode === "custom_ugc" ? "Custom" : "Auto"}
+                  {videoDuration}s · English · {ltaSeedanceSpeed === "vip" ? "VIP" : "Normal"} · {generationMode === "custom_ugc" ? "Custom" : "Auto"}
                 </span>
               </summary>
               <div className="space-y-3 px-4 pb-3">
@@ -5047,15 +5305,29 @@ export default function LinkToAdUniverse({
                     </div>
                   </div>
                   <div className="space-y-1">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Video generation</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Priority</p>
+                      <div className="group relative">
+                        <button
+                          type="button"
+                          aria-label="Priority info"
+                          className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-white/20 text-[10px] font-bold text-white/55 transition hover:text-white/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/45"
+                        >
+                          ?
+                        </button>
+                        <div className="pointer-events-none absolute right-0 z-20 mt-1 hidden w-72 whitespace-pre-line rounded-lg border border-white/15 bg-[#111118] p-2.5 text-[10px] leading-snug text-white/80 shadow-xl group-hover:block group-focus-within:block">
+                          {seedancePriorityInfoText}
+                        </div>
+                      </div>
+                    </div>
                     {ltaVideoDurationLocked ? (
                       <p className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/80">
-                        {ltaSeedanceSpeed === "fast" ? "Fast" : "Normal"}{" "}
+                        {ltaSeedanceSpeed === "vip" ? "VIP" : "Normal"}{" "}
                         <span className="font-normal text-white/45">(locked for this run)</span>
                       </p>
                     ) : (
                       <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] p-1">
-                        {(["normal", "fast"] as const).map((tier) => (
+                        {(["normal", "vip"] as const).map((tier) => (
                           <button
                             key={tier}
                             type="button"
@@ -5067,7 +5339,7 @@ export default function LinkToAdUniverse({
                                 : "border border-white/10 bg-black/20 text-white/65 hover:border-white/20",
                             )}
                           >
-                            {tier === "normal" ? "Normal" : "Fast"}
+                            {tier === "normal" ? "Normal" : "VIP"}
                           </button>
                         ))}
                       </div>
@@ -5253,7 +5525,7 @@ export default function LinkToAdUniverse({
                   {universeLoadingState.message ? (
                     <StatusLineShimmer text={universeLoadingState.message} className="text-sm font-medium" />
                   ) : null}
-                  {(nanoPollTaskId || isNanoAllImagesSubmitting) ? (
+                  {isNanoThreeActivelyGenerating ? (
                     <span className="text-xs font-normal text-white/50">
                       This may take several minutes.
                     </span>
@@ -5318,16 +5590,30 @@ export default function LinkToAdUniverse({
               </div>
             )}
           </div>
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Video generation</p>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Priority</p>
+                      <div className="group relative">
+                        <button
+                          type="button"
+                          aria-label="Priority info"
+                          className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-white/20 text-[10px] font-bold text-white/55 transition hover:text-white/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/45"
+                        >
+                          ?
+                        </button>
+                        <div className="pointer-events-none absolute right-0 z-20 mt-1 hidden w-72 whitespace-pre-line rounded-lg border border-white/15 bg-[#111118] p-2.5 text-[10px] leading-snug text-white/80 shadow-xl group-hover:block group-focus-within:block">
+                          {seedancePriorityInfoText}
+                        </div>
+                      </div>
+                    </div>
             {ltaVideoDurationLocked ? (
               <p className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/80">
-                {ltaSeedanceSpeed === "fast" ? "Fast" : "Normal"}{" "}
+                {ltaSeedanceSpeed === "vip" ? "VIP" : "Normal"}{" "}
                 <span className="font-normal text-white/45">(locked for this run)</span>
               </p>
             ) : (
               <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] p-1">
-                {(["normal", "fast"] as const).map((tier) => (
+                {(["normal", "vip"] as const).map((tier) => (
                   <button
                     key={tier}
                     type="button"
@@ -5340,7 +5626,7 @@ export default function LinkToAdUniverse({
                         : "border border-white/10 bg-black/20 text-white/65 hover:border-white/20",
                     )}
                   >
-                    {tier === "fast" ? "Fast" : "Normal"}
+                    {tier === "vip" ? "VIP" : "Normal"}
                   </button>
                 ))}
               </div>
@@ -6824,7 +7110,7 @@ export default function LinkToAdUniverse({
                     </div>
                   ) : null}
 
-                  {nanoBananaPromptsRaw && nanoHasAnyReferenceImage ? (
+                  {nanoBananaPromptsRaw && nanoHasAnyReferenceImage && !isVideoPromptLoading && !isNanoAllImagesSubmitting && !nanoPollTaskId ? (
                     <div className="space-y-4">
                       <div>
                         <h3 className="text-lg font-semibold tracking-tight text-white sm:text-xl">
@@ -7190,10 +7476,10 @@ export default function LinkToAdUniverse({
                             </Button>
                           </>
                         ) : null}
-                        {nanoPollTaskId || isNanoAllImagesSubmitting ? (
+                        {isNanoThreeActivelyGenerating ? (
                           <NanoThreeImageGenerationGrid
                             urls={nanoImageSlots}
-                            busy={Boolean(nanoPollTaskId || isNanoAllImagesSubmitting)}
+                            busy={isNanoThreeActivelyGenerating}
                             captions={nanoImageCaptionSlots}
                           />
                         ) : null}
@@ -7206,9 +7492,7 @@ export default function LinkToAdUniverse({
                   <div className="flex min-w-0 flex-1 flex-col gap-6">
                     {showVideoWorkPanel ? (
                     <>
-                      {mergedVideoPromptDraft &&
-                      ugcVideoPromptGpt.trim() &&
-                      !showKlingVideoGeneratingUi ? (
+                      {(mergedVideoPromptDraft.trim() || ugcVideoPromptGpt.trim()) && !showKlingVideoGeneratingUi ? (
                         <div className="rounded-xl border border-violet-500/25 bg-violet-500/[0.06] px-2.5 pb-2 pt-1">
                           <p className="px-1 pb-1 text-[10px] font-bold uppercase tracking-wide text-violet-300/90">
                             Video prompt
@@ -7315,26 +7599,6 @@ export default function LinkToAdUniverse({
                               })}
                             </div>
                           )}
-                          <Button
-                            type="button"
-                            disabled={isKlingSubmitting || Boolean(klingPollTaskId) || !mergedVideoPromptDraft}
-                            onClick={() => void handleConfirmVideoGeneration()}
-                            className={`mt-3 h-9 w-full max-w-sm text-sm ${primaryBtnClass}`}
-                          >
-                            {isKlingSubmitting || klingPollTaskId ? (
-                              <span className="inline-flex items-center gap-2 text-sm font-semibold">
-                                <Loader2 className="h-4 w-4 animate-spin" /> Working…
-                              </span>
-                            ) : klingVideoUrl ? (
-                              <span className="inline-flex items-center gap-2 text-sm font-semibold">
-                                <RefreshCw className="h-4 w-4" /> Regenerate video
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-2 text-sm font-semibold">
-                                <Video className="h-4 w-4" /> Generate video
-                              </span>
-                            )}
-                          </Button>
                         </div>
                       ) : null}
                       <div className="rounded-xl border border-white/10 bg-black/20 p-4">
@@ -7364,12 +7628,12 @@ export default function LinkToAdUniverse({
                             posterUrl={nanoBananaImageUrl}
                             statusText={
                               isKlingSubmitting
-                                ? LINK_TO_AD_LOADING_MESSAGES.kling_starting
+                                ? `${LINK_TO_AD_LOADING_MESSAGES.kling_starting}${klingWaitHintText}`
                                 : normalizeUgcScriptVideoDurationSec(videoDuration) === 30 &&
                                     klingVideoUrl?.trim() &&
                                     !klingVideoUrlPart2?.trim()
-                                  ? "Rendering part 2 of 2 (30s)…"
-                                  : LINK_TO_AD_LOADING_MESSAGES.kling_rendering
+                                  ? `Rendering part 2 of 2 (30s)…${klingWaitHintText}`
+                                  : `${LINK_TO_AD_LOADING_MESSAGES.kling_rendering}${klingWaitHintText}`
                             }
                           />
                         ) : klingVideoUrl ? (

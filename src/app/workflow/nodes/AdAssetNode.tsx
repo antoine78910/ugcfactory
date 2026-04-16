@@ -10,8 +10,10 @@ import {
   Minus,
   Play,
   Plus,
+  RotateCcw,
   Settings,
   Sparkles,
+  Trash2,
   Wand2,
   X,
 } from "lucide-react";
@@ -38,7 +40,8 @@ import { cn } from "@/lib/utils";
 
 import { useWorkflowNodePatch } from "../workflowNodePatchContext";
 import {
-  collectLinkedImageUrl,
+  collectLinkedImageUrls,
+  collectLinkedImageUrlsForHandles,
   collectLinkedPromptTexts,
   composeWorkflowPrompt,
   runWorkflowImageJob,
@@ -68,6 +71,15 @@ export type AdAssetNodeData = {
   /** Last successful Run output (shown in preview; reference stays in data for i2i). */
   outputPreviewUrl?: string;
   outputMediaKind?: "image" | "video";
+  /** Assistant node model selector. */
+  assistantModel?: "claude-sonnet-4-5" | "gpt-5o";
+  /** Assistant node last response text. */
+  assistantOutput?: string;
+  /** Assistant tab state. */
+  assistantMode?: "input" | "output";
+  /** Video-specific selected start/end frames. */
+  videoStartImageUrl?: string;
+  videoEndImageUrl?: string;
 };
 
 export type AdAssetNodeType = Node<AdAssetNodeData, "adAsset">;
@@ -127,6 +139,11 @@ const VIDEO_MODELS: { value: string; label: string }[] = [
   { value: "veo3_lite", label: "Veo 3.1 Lite" },
   { value: "veo3_fast", label: "Veo 3.1 Fast" },
   { value: "veo3", label: "Veo 3.1 Quality" },
+];
+
+const ASSISTANT_MODELS: Array<{ value: "claude-sonnet-4-5" | "gpt-5o"; label: string }> = [
+  { value: "claude-sonnet-4-5", label: "Claude Sonnet 4.5" },
+  { value: "gpt-5o", label: "GPT 5o" },
 ];
 
 const VARIATION_MODELS: { value: string; label: string }[] = [
@@ -198,7 +215,7 @@ function outputFrameDimensions(ratio: string, intrinsicAspect?: number): { width
 
 export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) {
   const patch = useWorkflowNodePatch();
-  const { getNodes, getEdges } = useReactFlow();
+  const { getNodes, getEdges, setNodes, setEdges } = useReactFlow();
   const { planId, current: creditsBalance, spendCredits, grantCredits } = useCreditsPlan();
   const creditsRef = useRef(creditsBalance);
   creditsRef.current = creditsBalance;
@@ -215,6 +232,9 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [aspectMenuOpen, setAspectMenuOpen] = useState(false);
   const [promptFocused, setPromptFocused] = useState(false);
+  const [promptEditorOpen, setPromptEditorOpen] = useState(false);
+  const [titleEditing, setTitleEditing] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(data.label || cfg.title);
   const leaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const modelMenuOpenRef = useRef(false);
   const aspectMenuOpenRef = useRef(false);
@@ -229,8 +249,114 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     }
   };
 
-  useEffect(() => () => clearHoverLeaveTimer(), []);
+  const openInputCreatePicker = useCallback(
+    (
+      targetHandle: "text" | "references" | "startImage" | "endImage",
+      targetEl: HTMLElement,
+      opts?: { screenX?: number; screenY?: number; forceIntent?: "text-or-image" },
+    ) => {
+      const rect = targetEl.getBoundingClientRect();
+      window.dispatchEvent(
+        new CustomEvent("workflow:open-input-picker", {
+          detail: {
+            targetNodeId: id,
+            targetHandleId: targetHandle,
+            screenX: Math.round(opts?.screenX ?? rect.left + rect.width + 10),
+            screenY: Math.round(opts?.screenY ?? rect.top + rect.height / 2),
+            forceIntent: opts?.forceIntent,
+            usePointerFlow: Boolean(opts?.forceIntent),
+          },
+        }),
+      );
+    },
+    [id],
+  );
 
+  const handleInputBubblePointerDown = useCallback(
+    (
+      event: React.PointerEvent<HTMLButtonElement>,
+      targetHandle: "text" | "references" | "startImage" | "endImage",
+    ) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const el = event.currentTarget;
+      const startX = event.clientX;
+      const startY = event.clientY;
+      let moved = false;
+      let longPress = false;
+      const timer = window.setTimeout(() => {
+        longPress = true;
+      }, 280);
+
+      // Preview marker follows the pointer while you drag this bubble.
+      window.dispatchEvent(
+        new CustomEvent("workflow:input-bubble-preview", {
+          detail: {
+            targetNodeId: id,
+            targetHandleId: targetHandle,
+            screenX: Math.round(startX),
+            screenY: Math.round(startY),
+          },
+        }),
+      );
+
+      const cleanup = () => {
+        window.clearTimeout(timer);
+        window.removeEventListener("pointermove", onMove, true);
+        window.removeEventListener("pointerup", onUp, true);
+        window.removeEventListener("pointercancel", onCancel, true);
+
+        window.dispatchEvent(
+          new CustomEvent("workflow:input-bubble-preview", {
+            detail: { active: false },
+          }),
+        );
+      };
+      const onMove = (ev: PointerEvent) => {
+        if (Math.abs(ev.clientX - startX) > 4 || Math.abs(ev.clientY - startY) > 4) moved = true;
+        window.dispatchEvent(
+          new CustomEvent("workflow:input-bubble-preview", {
+            detail: {
+              targetNodeId: id,
+              targetHandleId: targetHandle,
+              screenX: Math.round(ev.clientX),
+              screenY: Math.round(ev.clientY),
+            },
+          }),
+        );
+      };
+      const onCancel = () => cleanup();
+      const onUp = (ev: PointerEvent) => {
+        cleanup();
+
+        // If you dragged the bubble, create the next node immediately.
+        // - text handle → create a Prompt text node (sticky)
+        // - image handles → create an Image generator node
+        if (longPress || moved) {
+          window.dispatchEvent(
+            new CustomEvent("workflow:input-bubble-drop", {
+              detail: {
+                targetNodeId: id,
+                targetHandleId: targetHandle,
+                screenX: Math.round(ev.clientX),
+                screenY: Math.round(ev.clientY),
+              },
+            }),
+          );
+          return;
+        }
+
+        // Simple click: keep the old behavior (open the picker).
+        if (!moved) openInputCreatePicker(targetHandle, el);
+      };
+      window.addEventListener("pointermove", onMove, true);
+      window.addEventListener("pointerup", onUp, true);
+      window.addEventListener("pointercancel", onCancel, true);
+    },
+    [openInputCreatePicker],
+  );
+
+  useEffect(() => () => clearHoverLeaveTimer(), []);
   modelMenuOpenRef.current = modelMenuOpen;
   aspectMenuOpenRef.current = aspectMenuOpen;
   settingsOpenRef.current = settingsOpen;
@@ -247,7 +373,9 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     aspectMenuOpen ||
     settingsOpen ||
     assistantOpen ||
-    promptFocused;
+    promptFocused ||
+    promptEditorOpen ||
+    titleEditing;
 
   const prompt = data.prompt ?? "";
   const defaultAspect = data.kind === "video" ? "9:16" : "1:1";
@@ -259,6 +387,17 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     setAssistantResult("");
     setAssistantLoading(false);
   };
+
+  useEffect(() => {
+    if (titleEditing) return;
+    setTitleDraft(data.label || cfg.title);
+  }, [cfg.title, data.label, titleEditing]);
+
+  const commitTitle = useCallback(() => {
+    const next = titleDraft.trim();
+    patch(id, { label: next || cfg.title });
+    setTitleEditing(false);
+  }, [cfg.title, id, patch, titleDraft]);
 
   const runPromptAssistant = async () => {
     const q = assistantDescribe.trim();
@@ -304,6 +443,12 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     return i < 0 ? 1 : i + 1;
   });
 
+  const displayTitle = useMemo(() => {
+    const base = (data.label || cfg.title).trim();
+    // Avoid double-numbering if the label already ends with " #<number>".
+    return /#\d+$/.test(base) ? base : `${base} #${displayIndex}`;
+  }, [cfg.title, data.label, displayIndex]);
+
   const frame = useMemo(
     () => outputFrameDimensions(aspectRatio, data.intrinsicAspect),
     [aspectRatio, data.intrinsicAspect],
@@ -342,12 +487,44 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
 
   const showQuantity =
     data.kind === "image" || data.kind === "variation" || data.kind === "assistant" || data.kind === "upscale";
+  const estimatedCredits =
+    data.kind === "image"
+      ? workflowImageChargeCredits({ model, resolution, quantity })
+      : data.kind === "video"
+        ? workflowVideoChargeCredits({ model, resolution })
+        : 0;
+  const assistantModel = data.assistantModel ?? "claude-sonnet-4-5";
+  const assistantMode = data.assistantMode ?? "input";
+  const assistantOutput = data.assistantOutput ?? "";
+  const linkedImageUrls = useMemo(() => collectLinkedImageUrls(getNodes(), getEdges(), id), [getEdges, getNodes, id]);
+  const linkedStartImageUrls = useMemo(
+    () => collectLinkedImageUrlsForHandles(getNodes(), getEdges(), id, ["startImage"]),
+    [getEdges, getNodes, id],
+  );
+  const linkedEndImageUrls = useMemo(
+    () => collectLinkedImageUrlsForHandles(getNodes(), getEdges(), id, ["endImage"]),
+    [getEdges, getNodes, id],
+  );
+  const availableVideoReferenceUrls = useMemo(() => {
+    const all = [...linkedImageUrls];
+    const ref = data.referencePreviewUrl?.trim();
+    if (data.referenceMediaKind === "image" && ref) all.unshift(ref);
+    return Array.from(new Set(all.filter(Boolean)));
+  }, [data.referenceMediaKind, data.referencePreviewUrl, linkedImageUrls]);
+  const selectedVideoStartImageUrl =
+    data.videoStartImageUrl?.trim() ||
+    linkedStartImageUrls[0] ||
+    availableVideoReferenceUrls[0] ||
+    data.referencePreviewUrl?.trim() ||
+    "";
+  const selectedVideoEndImageUrl =
+    data.videoEndImageUrl?.trim() ||
+    linkedEndImageUrls[0] ||
+    availableVideoReferenceUrls[1] ||
+    availableVideoReferenceUrls[0] ||
+    "";
 
   const onGenerate = useCallback(async () => {
-    if (data.kind !== "image" && data.kind !== "video") {
-      toast.message("Coming soon", { description: "Run is available for Image and Video generators." });
-      return;
-    }
     if (generating) return;
 
     const nodes = getNodes();
@@ -363,15 +540,61 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       return;
     }
 
+    if (data.kind === "assistant") {
+      setGenerating(true);
+      try {
+        const res = await fetch("/api/gpt/workflow-assistant-chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            prompt: effectivePrompt,
+            model: assistantModel,
+          }),
+        });
+        const json = (await res.json()) as { output?: string; error?: string };
+        if (!res.ok || !json.output?.trim()) {
+          throw new Error(json.error || "Assistant failed");
+        }
+        patch(id, {
+          assistantOutput: json.output.trim(),
+          assistantMode: "output",
+        });
+        toast.success("Assistant response ready");
+      } catch (e) {
+        toast.error("Assistant failed", {
+          description: e instanceof Error ? e.message : "Try again.",
+        });
+      } finally {
+        setGenerating(false);
+      }
+      return;
+    }
+
+    if (data.kind !== "image" && data.kind !== "video") {
+      toast.message("Coming soon", { description: "Run is available for Image and Video generators." });
+      return;
+    }
+
     const personalKey = getPersonalApiKey()?.trim() || undefined;
     const piapiKey = getPersonalPiapiApiKey()?.trim() || undefined;
     const creditBypass = isPlatformCreditBypassActive();
-    const linkedImageUrl = collectLinkedImageUrl(nodes, edges, id);
+    const linkedImageCandidates = collectLinkedImageUrlsForHandles(nodes, edges, id, [
+      "startImage",
+      "references",
+      "in",
+    ]);
+    const endImageCandidates = collectLinkedImageUrlsForHandles(nodes, edges, id, ["endImage"]);
+    const referenceImageCandidates = collectLinkedImageUrlsForHandles(nodes, edges, id, ["references", "in"]);
+    const linkedImageUrl = linkedImageCandidates[0];
     const refUrl = data.referencePreviewUrl?.trim();
     const refImageForImageGen =
       data.referenceMediaKind !== "video" && refUrl ? refUrl : undefined;
 
     if (data.kind === "image") {
+      const linkedImageReferences = collectLinkedImageUrlsForHandles(nodes, edges, id, ["references", "in"]);
+      const mergedImageReferences = Array.from(
+        new Set([...(refImageForImageGen ? [refImageForImageGen] : []), ...linkedImageReferences]),
+      );
       const charge = workflowImageChargeCredits({
         model,
         resolution,
@@ -396,7 +619,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           aspectRatio,
           resolution,
           quantity,
-          referenceImageUrls: refImageForImageGen ? [refImageForImageGen] : undefined,
+          referenceImageUrls: mergedImageReferences.length ? mergedImageReferences : undefined,
         });
         patch(id, {
           outputPreviewUrl: imageUrl,
@@ -434,9 +657,12 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         model,
         aspectRatio,
         resolution,
-        linkedImageUrl,
+        linkedImageUrl: data.videoStartImageUrl?.trim() || linkedImageUrl,
         referenceImageUrl:
-          data.referenceMediaKind === "image" ? data.referencePreviewUrl?.trim() : undefined,
+          data.videoStartImageUrl?.trim() ||
+          (data.referenceMediaKind === "image" ? data.referencePreviewUrl?.trim() : undefined),
+        endImageUrl: data.videoEndImageUrl?.trim() || endImageCandidates[0],
+        referenceImageUrls: referenceImageCandidates,
       });
       patch(id, {
         outputPreviewUrl: videoUrl,
@@ -454,6 +680,8 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     data.kind,
     data.referenceMediaKind,
     data.referencePreviewUrl,
+    data.videoStartImageUrl,
+    data.videoEndImageUrl,
     generating,
     getEdges,
     getNodes,
@@ -467,39 +695,301 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     planId,
     prompt,
     spendCredits,
+    assistantModel,
   ]);
+
+  if (data.kind === "assistant") {
+    const assistantCardWidth = Math.max(cardWidthPx, 520);
+    return (
+      <>
+        <WorkflowNodeContextToolbar nodeId={id} onRun={() => void onGenerate()} />
+        <div
+          className={cn(
+            "relative overflow-hidden rounded-2xl border border-white/[0.08] bg-[#121212]/98 px-3 pb-3 pt-2.5 shadow-[0_12px_40px_rgba(0,0,0,0.5)] backdrop-blur-sm",
+            selected ? "ring-2 ring-violet-500/85 ring-offset-2 ring-offset-[#06070d]" : "",
+          )}
+          style={{ width: assistantCardWidth }}
+          onPointerDown={(e) => e.stopPropagation()}
+          onMouseEnter={() => window.dispatchEvent(new CustomEvent("workflow:hover-node", { detail: { nodeId: id } }))}
+          onMouseLeave={() => window.dispatchEvent(new CustomEvent("workflow:unhover-node"))}
+        >
+          <Handle
+            id="in"
+            type="target"
+            position={Position.Left}
+            className="!h-3 !w-3 !border-2 !border-violet-500/45 !bg-[#06070d]"
+          />
+          <Handle
+            id="out"
+            type="source"
+            position={Position.Right}
+            className="!h-3 !w-3 !border-2 !border-violet-500/45 !bg-[#06070d]"
+          />
+
+          <div className="mb-2 flex items-center gap-2">
+            <Icon className="h-4 w-4 shrink-0 text-white/75" strokeWidth={2} aria-hidden />
+            <p className="min-w-0 truncate text-[13px] font-semibold tracking-tight text-white">
+              Assistant #{displayIndex}
+            </p>
+          </div>
+
+          <div className="mb-2 flex items-center gap-1 rounded-xl border border-white/10 bg-[#0d0d10] p-1">
+            <button
+              type="button"
+              className={cn(
+                "flex-1 rounded-lg px-2 py-1.5 text-[12px] font-medium transition",
+                assistantMode === "input" ? "bg-white text-zinc-900" : "text-white/75 hover:bg-white/[0.08]",
+              )}
+              onClick={() => patch(id, { assistantMode: "input" })}
+            >
+              Input
+            </button>
+            <button
+              type="button"
+              className={cn(
+                "flex-1 rounded-lg px-2 py-1.5 text-[12px] font-medium transition",
+                assistantMode === "output" ? "bg-white text-zinc-900" : "text-white/75 hover:bg-white/[0.08]",
+              )}
+              onClick={() => patch(id, { assistantMode: "output" })}
+            >
+              Result
+            </button>
+          </div>
+
+          {assistantMode === "input" ? (
+            <textarea
+              value={prompt}
+              onChange={(e) => patch(id, { prompt: e.target.value })}
+              placeholder="Type your prompt for the assistant..."
+              rows={10}
+              onFocus={() => setPromptFocused(true)}
+              onBlur={() => setPromptFocused(false)}
+              className="nodrag nopan min-h-[240px] w-full resize-y rounded-xl border border-white/12 bg-black/35 px-3 py-2 text-[14px] leading-relaxed text-white/92 placeholder:text-white/30 outline-none focus:border-violet-500/40 focus:ring-1 focus:ring-violet-500/25"
+            />
+          ) : (
+            <div className="nodrag nopan min-h-[240px] w-full overflow-auto rounded-xl border border-white/12 bg-black/35 px-3 py-2 text-[14px] leading-relaxed text-white/88">
+              {assistantOutput.trim() ? (
+                <pre className="whitespace-pre-wrap break-words font-sans text-[14px] leading-relaxed text-white/88">
+                  {assistantOutput}
+                </pre>
+              ) : (
+                <p className="text-white/35">No result yet. Switch to Input and run the assistant.</p>
+              )}
+            </div>
+          )}
+
+          <div className="mt-2 flex items-center gap-2">
+            <Select
+              value={assistantModel}
+              onValueChange={(v) => patch(id, { assistantModel: v as AdAssetNodeData["assistantModel"] })}
+            >
+              <SelectTrigger size="sm" className={cn(selectTriggerClass, "min-w-[12.5rem]")}>
+                <SelectValue placeholder="Assistant model" />
+              </SelectTrigger>
+              <SelectContent className={selectContentClass} position="popper">
+                {ASSISTANT_MODELS.map((m) => (
+                  <SelectItem key={m.value} value={m.value} className="text-[12px] focus:bg-violet-500/20">
+                    {m.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <button
+              type="button"
+              title={generating ? "Running assistant…" : "Run assistant"}
+              disabled={generating}
+              className="nodrag nopan ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-zinc-900 shadow-md transition hover:bg-white/95 disabled:cursor-not-allowed disabled:opacity-55"
+              onClick={() => void onGenerate()}
+            >
+              {generating ? (
+                <Loader2 className="h-4 w-4 animate-spin text-zinc-900" aria-hidden />
+              ) : (
+                <RotateCcw className="h-4 w-4 text-zinc-900" strokeWidth={2.25} />
+              )}
+            </button>
+          </div>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
       <WorkflowNodeContextToolbar nodeId={id} onRun={() => void onGenerate()} />
-      <div className="relative flex items-start gap-1">
-      {/* Side tools (reference) */}
       <div
-        className="nodrag nopan flex shrink-0 flex-col gap-1 pt-3"
-        onPointerDown={(e) => e.stopPropagation()}
+        className="relative flex items-end gap-1"
+        onMouseEnter={() => window.dispatchEvent(new CustomEvent("workflow:hover-node", { detail: { nodeId: id } }))}
+        onMouseLeave={() => window.dispatchEvent(new CustomEvent("workflow:unhover-node"))}
       >
-        <button
-          type="button"
-          title="Reference text (soon)"
-          className="flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-[#1a1a1c]/95 text-[11px] font-bold text-white/65 transition hover:border-violet-500/35 hover:text-white"
-          onClick={() => toast.message("Coming soon", { description: "Attach reference text to this node." })}
+      {/* Side tools (reference) */}
+      {data.kind === "video" ? (
+        <div className="nodrag nopan flex shrink-0 flex-col gap-1 pb-3" onPointerDown={(e) => e.stopPropagation()}>
+          <button
+            type="button"
+            onPointerDown={(e) => handleInputBubblePointerDown(e, "text")}
+            title="Text input"
+            className="relative flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-[#1a1a1c]/95 text-[12px] font-bold leading-none text-white/65 transition hover:border-violet-500/35 hover:text-white"
+          >
+            <Handle
+              id="text"
+              type="target"
+              position={Position.Left}
+              style={{ left: 0, top: 0, transform: "none" }}
+              className="!absolute !inset-0 !m-0 !h-full !w-full !rounded-full !border-0 !bg-transparent opacity-0"
+            />
+            T
+          </button>
+
+          <button
+            type="button"
+            onPointerDown={(e) => handleInputBubblePointerDown(e, "startImage")}
+            title="Reference image (soon)"
+            className="relative flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-[#1a1a1c]/95 text-white/65 transition hover:border-violet-500/35 hover:text-white"
+          >
+            <Handle
+              id="startImage"
+              type="target"
+              position={Position.Left}
+              style={{ left: 0, top: 0, transform: "none" }}
+              className="!absolute !inset-0 !m-0 !h-full !w-full !rounded-full !border-0 !bg-transparent opacity-0"
+            />
+            <ImageIcon className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+          </button>
+
+          <button
+            type="button"
+            onPointerDown={(e) => handleInputBubblePointerDown(e, "references")}
+            title="Reference image (soon)"
+            className="relative flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-[#1a1a1c]/95 text-white/65 transition hover:border-violet-500/35 hover:text-white"
+          >
+            <Handle
+              id="references"
+              type="target"
+              position={Position.Left}
+              style={{ left: 0, top: 0, transform: "none" }}
+              className="!absolute !inset-0 !m-0 !h-full !w-full !rounded-full !border-0 !bg-transparent opacity-0"
+            />
+            <ImageIcon className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+          </button>
+
+          <button
+            type="button"
+            onPointerDown={(e) => handleInputBubblePointerDown(e, "endImage")}
+            title="Reference image (soon)"
+            className="relative flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-[#1a1a1c]/95 text-white/65 transition hover:border-violet-500/35 hover:text-white"
+          >
+            <Handle
+              id="endImage"
+              type="target"
+              position={Position.Left}
+              style={{ left: 0, top: 0, transform: "none" }}
+              className="!absolute !inset-0 !m-0 !h-full !w-full !rounded-full !border-0 !bg-transparent opacity-0"
+            />
+            <ImageIcon className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+          </button>
+        </div>
+      ) : data.kind === "image" ? (
+        <div className="nodrag nopan flex shrink-0 flex-col gap-1 pb-3" onPointerDown={(e) => e.stopPropagation()}>
+          <button
+            type="button"
+            onPointerDown={(e) => handleInputBubblePointerDown(e, "text")}
+            title="Text input"
+            className="relative flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-[#1a1a1c]/95 text-[12px] font-bold leading-none text-white/65 transition hover:border-violet-500/35 hover:text-white"
+          >
+            <Handle
+              id="text"
+              type="target"
+              position={Position.Left}
+              style={{ left: 0, top: 0, transform: "none" }}
+              className="!absolute !inset-0 !m-0 !h-full !w-full !rounded-full !border-0 !bg-transparent opacity-0"
+            />
+            T
+          </button>
+
+          <button
+            type="button"
+            onPointerDown={(e) => handleInputBubblePointerDown(e, "references")}
+            title="Reference image (soon)"
+            className="relative flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-[#1a1a1c]/95 text-white/65 transition hover:border-violet-500/35 hover:text-white"
+          >
+            <Handle
+              id="references"
+              type="target"
+              position={Position.Left}
+              style={{ left: 0, top: 0, transform: "none" }}
+              className="!absolute !inset-0 !m-0 !h-full !w-full !rounded-full !border-0 !bg-transparent opacity-0"
+            />
+            <ImageIcon className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+          </button>
+        </div>
+      ) : (
+        <div
+          className="nodrag nopan flex shrink-0 flex-col gap-1 pb-3"
+          onPointerDown={(e) => e.stopPropagation()}
         >
-          T
-        </button>
-        <button
-          type="button"
-          title="Reference image (soon)"
-          className="flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-[#1a1a1c]/95 text-white/65 transition hover:border-violet-500/35 hover:text-white"
-          onClick={() => toast.message("Coming soon", { description: "Attach a reference image to this node." })}
-        >
-          <ImageIcon className="h-3.5 w-3.5" strokeWidth={2} />
-        </button>
-      </div>
+          <button
+            type="button"
+            title="Reference text (soon)"
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-[#1a1a1c]/95 text-[11px] font-bold text-white/65 transition hover:border-violet-500/35 hover:text-white"
+            onClick={() => toast.message("Coming soon", { description: "Attach reference text to this node." })}
+          >
+            T
+          </button>
+          <button
+            type="button"
+            title="Reference image (soon)"
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-[#1a1a1c]/95 text-white/65 transition hover:border-violet-500/35 hover:text-white"
+            onClick={() => toast.message("Coming soon", { description: "Attach a reference image to this node." })}
+          >
+            <ImageIcon className="h-3.5 w-3.5" strokeWidth={2} />
+          </button>
+        </div>
+      )}
 
       <div
         className={cn(generating ? "workflow-generator-glow-wrap" : "contents")}
         data-workflow-generating={generating ? "true" : undefined}
       >
+      <div className={cn("relative pt-5", generating && "rounded-[14px] bg-[#0a0a0e]")} style={{ width: cardWidthPx }}>
+        <div className="nodrag nopan absolute left-0 top-0 z-[6] flex min-w-0 items-center gap-2.5 pr-2" onPointerDown={(e) => e.stopPropagation()}>
+          <Icon className="h-4 w-4 shrink-0 text-white/75" strokeWidth={2} aria-hidden />
+          {titleEditing ? (
+            <input
+              value={titleDraft}
+              onChange={(e) => setTitleDraft(e.target.value)}
+              onBlur={commitTitle}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  commitTitle();
+                }
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  setTitleDraft(data.label || cfg.title);
+                  setTitleEditing(false);
+                }
+              }}
+              autoFocus
+              className="nodrag nopan min-w-0 flex-1 rounded border border-white/20 bg-black/35 px-2 py-0.5 text-[12px] font-semibold tracking-tight text-white outline-none focus:border-violet-400/60"
+            />
+          ) : (
+            <button
+              type="button"
+              className="nodrag nopan min-w-0 truncate text-left text-[13px] font-semibold tracking-tight text-white"
+              onClick={(e) => {
+                e.stopPropagation();
+                setTitleEditing(true);
+              }}
+              onDoubleClick={(e) => {
+                e.stopPropagation();
+                setTitleEditing(true);
+              }}
+              title="Rename"
+            >
+              {displayTitle}
+            </button>
+          )}
+        </div>
       <div
         className={cn(
           "group/card relative overflow-hidden rounded-2xl border border-white/[0.08] bg-[#121212]/98 px-3 pb-3 pt-2.5 shadow-[0_12px_40px_rgba(0,0,0,0.5)] backdrop-blur-sm transition-[width] duration-200 ease-out",
@@ -525,26 +1015,19 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           }, 220);
         }}
       >
-        <Handle
-          id="in"
-          type="target"
-          position={Position.Left}
-          className="!h-3 !w-3 !border-2 !border-violet-500/45 !bg-[#06070d]"
-        />
-
-        {!hasPreviewMedia ? (
-          <div className="flex items-center gap-2.5">
-            <Icon className="h-4 w-4 shrink-0 text-white/75" strokeWidth={2} aria-hidden />
-            <p className="min-w-0 truncate text-[13px] font-semibold tracking-tight text-white">
-              {cfg.title} #{displayIndex}
-            </p>
-          </div>
-        ) : null}
+        {data.kind === "image" || data.kind === "video" ? null : (
+          <Handle
+            id="in"
+            type="target"
+            position={Position.Left}
+            className="!h-3 !w-3 !border-2 !border-violet-500/45 !bg-[#06070d]"
+          />
+        )}
 
         <div
           className={cn(
             "relative w-full overflow-hidden rounded-xl",
-            hasPreviewMedia ? "mt-1.5" : "mt-2.5",
+            hasPreviewMedia ? "mt-0" : "mt-2",
           )}
           style={{ aspectRatio: `${frame.width} / ${frame.height}` }}
         >
@@ -582,31 +1065,32 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             )
           ) : null}
 
-          {hasPreviewMedia ? (
-            <div className="pointer-events-none absolute inset-x-0 top-0 z-[2] flex items-center gap-2 px-2.5 pb-10 pt-2">
-              <div
-                className="absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/85 via-black/45 to-transparent"
-                aria-hidden
-              />
-              <Icon
-                className="relative h-4 w-4 shrink-0 text-white/90 drop-shadow-[0_1px_3px_rgba(0,0,0,0.85)]"
-                strokeWidth={2}
-                aria-hidden
-              />
-              <p className="relative min-w-0 truncate text-[13px] font-semibold tracking-tight text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
-                {cfg.title} #{displayIndex}
-              </p>
-            </div>
-          ) : null}
+          <div className="pointer-events-none absolute right-2 top-2 z-[2] rounded-full bg-black/45 px-2 py-0.5 text-[10px] font-semibold text-white/80">
+            {frame.width} × {frame.height}
+          </div>
 
-          <p
-            className={cn(
-              "pointer-events-none absolute bottom-3 left-2 right-2 text-center text-[10px] leading-snug text-white/22 transition-opacity duration-200",
-              showEditLayer && "opacity-0",
-            )}
-          >
-            Hover to edit prompt &amp; settings
-          </p>
+          {hasPreviewMedia ? (
+            <button
+              type="button"
+              className="nodrag nopan absolute inset-x-2 bottom-14 z-[4] rounded-lg border border-white/15 bg-black/35 px-2.5 py-2 text-left text-[12px] leading-snug text-white/92 backdrop-blur-sm transition hover:border-violet-400/45 hover:bg-black/50"
+              onClick={() => setPromptEditorOpen(true)}
+              onPointerDown={(e) => e.stopPropagation()}
+              title="Click to edit prompt"
+            >
+              <span className="line-clamp-2 whitespace-pre-wrap">
+                {prompt.trim() || "Click to write the prompt for this generation"}
+              </span>
+            </button>
+          ) : (
+            <p
+              className={cn(
+                "pointer-events-none absolute bottom-3 left-2 right-2 text-center text-[10px] leading-snug text-white/22 transition-opacity duration-200",
+                showEditLayer && "opacity-0",
+              )}
+            >
+              Hover to edit prompt &amp; settings
+            </p>
+          )}
 
           <div
             className={cn(
@@ -616,19 +1100,24 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             )}
           >
             <div className="nodrag nopan relative" onPointerDown={(e) => e.stopPropagation()}>
-              <textarea
-                value={prompt}
-                onChange={(e) => patch(id, { prompt: e.target.value })}
-                placeholder={cfg.promptPlaceholder}
-                rows={2}
-                onFocus={() => setPromptFocused(true)}
-                onBlur={() => setPromptFocused(false)}
-                className="min-h-[42px] w-full resize-none rounded-lg border border-white/10 bg-black/55 px-2 py-1.5 pr-8 text-[11px] leading-snug text-white/88 placeholder:text-white/26 outline-none focus:border-violet-500/40 focus:ring-1 focus:ring-violet-500/25"
-              />
+              {!hasPreviewMedia ? (
+                <textarea
+                  value={prompt}
+                  onChange={(e) => patch(id, { prompt: e.target.value })}
+                  placeholder={cfg.promptPlaceholder}
+                  rows={2}
+                  onFocus={() => setPromptFocused(true)}
+                  onBlur={() => setPromptFocused(false)}
+                  className="min-h-[42px] w-full resize-none rounded-lg border border-white/10 bg-black/55 px-2 py-1.5 pr-8 text-[11px] leading-snug text-white/88 placeholder:text-white/26 outline-none focus:border-violet-500/40 focus:ring-1 focus:ring-violet-500/25"
+                />
+              ) : null}
               <button
                 type="button"
                 title="Prompt assistant — describe what you want"
-                className="absolute bottom-1.5 right-1 rounded-md p-1 text-violet-300/85 transition hover:bg-violet-500/15 hover:text-violet-100"
+                className={cn(
+                  "rounded-md p-1 text-violet-300/85 transition hover:bg-violet-500/15 hover:text-violet-100",
+                  hasPreviewMedia ? "absolute right-1 top-1" : "absolute bottom-1.5 right-1",
+                )}
                 onClick={() => {
                   setAssistantOpen(true);
                   setAssistantResult("");
@@ -757,21 +1246,59 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 ) : null}
               </div>
 
-              <button
-                type="button"
-                title={generating ? "Generating…" : "Generate"}
-                disabled={generating}
-                className="nodrag nopan ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-zinc-900 shadow-md transition hover:bg-white/95 disabled:cursor-not-allowed disabled:opacity-55"
-                onClick={() => void onGenerate()}
-              >
-                {generating ? (
-                  <Loader2 className="h-4 w-4 animate-spin text-zinc-900" aria-hidden />
-                ) : (
-                  <Play className="ml-0.5 h-4 w-4 fill-zinc-900 text-zinc-900" strokeWidth={0} />
-                )}
-              </button>
+              <div className={cn("nodrag nopan group/run ml-auto flex shrink-0 items-center gap-1.5", hasPreviewMedia && "absolute bottom-2 right-2 z-20 ml-0")}>
+                {estimatedCredits > 0 ? (
+                  <span className={cn("rounded-md border border-white/10 bg-[#1a1a1c] px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-white/65 shadow-sm", hasPreviewMedia && "border-white/15 bg-[#0f0f13]/90 backdrop-blur-sm")}>
+                    {estimatedCredits} cr
+                  </span>
+                ) : null}
+                <button
+                  type="button"
+                  title={generating ? "Generating…" : hasPreviewMedia ? "Regenerate" : "Generate"}
+                  disabled={generating}
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-zinc-900 shadow-md transition hover:bg-white/95 disabled:cursor-not-allowed disabled:opacity-55"
+                  onClick={() => void onGenerate()}
+                >
+                  {generating ? (
+                    <Loader2 className="h-4 w-4 animate-spin text-zinc-900" aria-hidden />
+                  ) : hasPreviewMedia ? (
+                    <RotateCcw className="h-4 w-4 text-zinc-900" strokeWidth={2.25} />
+                  ) : (
+                    <Play className="h-4 w-4 text-zinc-900" strokeWidth={2.25} fill="currentColor" />
+                  )}
+                </button>
+              </div>
             </div>
           </div>
+
+          {promptEditorOpen ? (
+            <div
+              className="nodrag nopan absolute inset-0 z-[24] flex flex-col justify-end bg-black/35 backdrop-blur-md"
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <div className="rounded-t-xl border-t border-white/20 bg-[#111116]/88 p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-white/65">Edit prompt</p>
+                  <button
+                    type="button"
+                    onClick={() => setPromptEditorOpen(false)}
+                    className="rounded-md px-2 py-1 text-[11px] text-white/60 transition hover:bg-white/10 hover:text-white"
+                  >
+                    Done
+                  </button>
+                </div>
+                <textarea
+                  value={prompt}
+                  onChange={(e) => patch(id, { prompt: e.target.value })}
+                  placeholder={cfg.promptPlaceholder}
+                  rows={7}
+                  onFocus={() => setPromptFocused(true)}
+                  onBlur={() => setPromptFocused(false)}
+                  className="min-h-[160px] w-full resize-y rounded-xl border border-white/15 bg-black/45 px-3 py-2 text-[13px] leading-relaxed text-white/92 placeholder:text-white/35 outline-none focus:border-violet-500/40 focus:ring-1 focus:ring-violet-500/25"
+                />
+              </div>
+            </div>
+          ) : null}
         </div>
 
         {assistantOpen ? (
@@ -882,27 +1409,29 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         />
       </div>
       </div>
-
-      <div
-        className="nodrag nopan flex shrink-0 flex-col gap-1 pt-3"
-        onPointerDown={(e) => e.stopPropagation()}
-      >
-        <button
-          type="button"
-          title="Edit copy (soon)"
-          className="flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-[#1a1a1c]/95 text-white/65 transition hover:border-violet-500/35 hover:text-white"
-          onClick={() => toast.message("Coming soon", { description: "Edit on-canvas copy for this module." })}
+      {data.kind !== "video" ? (
+        <div
+          className="nodrag nopan flex shrink-0 flex-col gap-1 pb-3"
+          onPointerDown={(e) => e.stopPropagation()}
         >
-          <FilePenLine className="h-3.5 w-3.5" strokeWidth={2} />
-        </button>
-        <button
-          type="button"
-          title="Reference image (soon)"
-          className="flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-[#1a1a1c]/95 text-white/65 transition hover:border-violet-500/35 hover:text-white"
-          onClick={() => toast.message("Coming soon", { description: "Attach a reference image to this node." })}
-        >
-          <ImageIcon className="h-3.5 w-3.5" strokeWidth={2} />
-        </button>
+          <button
+            type="button"
+            title="Edit copy (soon)"
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-[#1a1a1c]/95 text-white/65 transition hover:border-violet-500/35 hover:text-white"
+            onClick={() => toast.message("Coming soon", { description: "Edit on-canvas copy for this module." })}
+          >
+            <FilePenLine className="h-3.5 w-3.5" strokeWidth={2} />
+          </button>
+          <button
+            type="button"
+            title="Reference image (soon)"
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-[#1a1a1c]/95 text-white/65 transition hover:border-violet-500/35 hover:text-white"
+            onClick={() => toast.message("Coming soon", { description: "Attach a reference image to this node." })}
+          >
+            <ImageIcon className="h-3.5 w-3.5" strokeWidth={2} />
+          </button>
+        </div>
+      ) : null}
       </div>
       </div>
     </>

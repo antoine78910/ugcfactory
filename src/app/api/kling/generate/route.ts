@@ -1,5 +1,5 @@
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 import { NextResponse } from "next/server";
 import { kieMarketCreateTask } from "@/lib/kieMarket";
@@ -322,12 +322,18 @@ export async function POST(req: Request) {
         "bytedance/seedance-2-fast": "seedance-2-fast",
         "bytedance/seedance-2-preview": "seedance-2-preview",
         "bytedance/seedance-2-fast-preview": "seedance-2-fast-preview",
+        "bytedance/seedance-2-preview-vip": "seedance-2-preview-vip",
+        "bytedance/seedance-2-fast-preview-vip": "seedance-2-fast-preview-vip",
       };
       const taskType = SEEDANCE_TASK[rawModel];
       if (!taskType) {
         return NextResponse.json({ error: `Unsupported Seedance model: ${rawModel}` }, { status: 400 });
       }
-      const preview = taskType === "seedance-2-preview" || taskType === "seedance-2-fast-preview";
+      const preview =
+        taskType === "seedance-2-preview" ||
+        taskType === "seedance-2-fast-preview" ||
+        taskType === "seedance-2-preview-vip" ||
+        taskType === "seedance-2-fast-preview-vip";
       if (preview && !hasKieReferenceImage) {
         return NextResponse.json(
           { error: "This Seedance preview model requires `imageUrl` (image-to-video)." },

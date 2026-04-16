@@ -32,8 +32,9 @@ export async function POST(req: Request) {
   const userPrompt = [
     "Auto-fill this quiz from the page context.",
     "Return JSON with keys:",
-    "{ aboutProduct, problems, promises, persona, angles, offers, videoDurationPreference, precisionNote }",
+    "{ aboutProduct, problems, promises, persona, angles, offers, videoDurationPreference, videoScriptLanguage, precisionNote }",
     "videoDurationPreference must be one of: 15s, 20s, 30s.",
+    "videoScriptLanguage must be one of: en, fr, es, de, it, pt (default en).",
     "",
     "Page context JSON:",
     JSON.stringify(
@@ -51,7 +52,7 @@ export async function POST(req: Request) {
   ].join("\n");
 
   try {
-    const cacheKey = makeCacheKey({ v: 1, body });
+    const cacheKey = makeCacheKey({ v: 2, body });
     try {
       const { data: hit } = await supabase
         .from("gpt_cache")
@@ -83,6 +84,14 @@ export async function POST(req: Request) {
         parsed?.videoDurationPreference === "20s" || parsed?.videoDurationPreference === "30s"
           ? parsed.videoDurationPreference
           : "15s",
+      videoScriptLanguage:
+        parsed?.videoScriptLanguage === "fr" ||
+        parsed?.videoScriptLanguage === "es" ||
+        parsed?.videoScriptLanguage === "de" ||
+        parsed?.videoScriptLanguage === "it" ||
+        parsed?.videoScriptLanguage === "pt"
+          ? parsed.videoScriptLanguage
+          : "en",
       precisionNote: String(
         parsed?.precisionNote ??
           "Auto-fill from URL is helpful, but it will be more precise if you write it yourself.",

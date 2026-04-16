@@ -210,8 +210,11 @@ export default function CreditsPage() {
                 const oldPrice = savePercent ? Math.round(p.priceUsd / (1 - Number(savePercent) / 100)) : null;
                 const maxImages = upToEstimateAiImagesFromCredits(p.credits);
                 const maxVideos = upToEstimateAiVideosFromCredits(p.credits);
-                const showSavePill = Boolean(savePercent) && !p.badge;
-                const showPromoPill = !p.badge && !showSavePill && p.promoLine.length > 0;
+                const hideTopPromoForPack = p.key === "growth" || p.key === "pro";
+                const showSavePill =
+                  Boolean(savePercent) && !p.badge && !hideTopPromoForPack;
+                const showPromoPill =
+                  !p.badge && !showSavePill && !hideTopPromoForPack && p.promoLine.length > 0;
 
                 return (
                   <div
@@ -284,9 +287,16 @@ export default function CreditsPage() {
                                   {p.price}
                                 </span>
                                 {displayPrices && oldPrice != null && oldPrice > p.priceUsd ? (
-                                  <span className="text-xs font-medium line-through text-white/30">
-                                    {formatMoneyAmount(oldPrice, displayPrices.currency)}
-                                  </span>
+                                  <>
+                                    <span className="text-xs font-medium line-through text-white/30">
+                                      {formatMoneyAmount(oldPrice, displayPrices.currency)}
+                                    </span>
+                                    {savePercent ? (
+                                      <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-emerald-300/90">
+                                        Save {savePercent}%
+                                      </span>
+                                    ) : null}
+                                  </>
                                 ) : null}
                               </div>
                               <p className="mt-0.5 text-[10px] leading-tight text-white/35">One-time purchase</p>

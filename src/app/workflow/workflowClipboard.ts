@@ -145,7 +145,7 @@ export function remapPastedWorkflowPayload(payload: WorkflowClipboardPayloadV1):
     if (n.type === "workflowGroup") selectIds.push(n.id);
   }
   for (const n of nodesToAdd) {
-    if (n.type === "adAsset" && !n.parentId) selectIds.push(n.id);
+    if ((n.type === "adAsset" || n.type === "imageRef") && !n.parentId) selectIds.push(n.id);
     if (n.type === "stickyNote") selectIds.push(n.id);
   }
   if (selectIds.length === 0 && nodesToAdd[0]) {

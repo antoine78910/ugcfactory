@@ -12,6 +12,7 @@ type Body = {
   quiz: Record<string, unknown>;
   templateId: TemplateId;
   productName?: string | null;
+  videoScriptLanguage?: unknown;
 };
 
 export async function POST(req: Request) {
@@ -28,6 +29,45 @@ export async function POST(req: Request) {
   const preferredDuration = String(body.quiz?.videoDurationPreference ?? "15s");
   const targetDurationSec =
     preferredDuration === "20s" || preferredDuration === "30s" ? 15 : 15;
+  const videoScriptLanguage =
+    typeof body.videoScriptLanguage === "string" && body.videoScriptLanguage.trim().length > 0
+      ? body.videoScriptLanguage.trim().toLowerCase()
+      : typeof body.quiz?.videoScriptLanguage === "string" && body.quiz.videoScriptLanguage.trim().length > 0
+        ? body.quiz.videoScriptLanguage.trim().toLowerCase()
+        : "en";
+  const languageName =
+    videoScriptLanguage === "fr"
+      ? "French"
+      : videoScriptLanguage === "es"
+        ? "Spanish"
+        : videoScriptLanguage === "de"
+          ? "German"
+          : videoScriptLanguage === "it"
+            ? "Italian"
+            : videoScriptLanguage === "pt"
+              ? "Portuguese"
+              : "English";
+  const wordBudgetByDuration: Record<15 | 20 | 30, string> = {
+    15:
+      languageName === "German"
+        ? "22–36 words total, max 40"
+        : languageName === "French" || languageName === "Spanish" || languageName === "Italian" || languageName === "Portuguese"
+          ? "24–38 words total, max 42"
+          : "25–40 words total, max 42",
+    20:
+      languageName === "German"
+        ? "30–48 words total, max 54"
+        : languageName === "French" || languageName === "Spanish" || languageName === "Italian" || languageName === "Portuguese"
+          ? "34–52 words total, max 58"
+          : "35–55 words total, max 60",
+    30:
+      languageName === "German"
+        ? "45–72 words total, max 80"
+        : languageName === "French" || languageName === "Spanish" || languageName === "Italian" || languageName === "Portuguese"
+          ? "50–78 words total, max 86"
+          : "55–85 words total, max 92",
+  };
+  const requestedDuration = preferredDuration === "30s" ? 30 : preferredDuration === "20s" ? 20 : 15;
 
   // Template style = global style / angle, not placeholder-based anymore.
   const templateStyle = (() => {
@@ -48,8 +88,8 @@ export async function POST(req: Request) {
     "Goal: based on the product analysis + quiz (angles, benefits, problems, promises, persona, offers, etc.), create ONE short UGC video prompt/script inspired by the style examples below.",
     "",
     "VERY IMPORTANT:",
-    "- ALWAYS write the filledPrompt in ENGLISH, as a natural spoken script, even if the input/context is in French.",
-    "- The filledPrompt should describe the camera, shots, actions and EXACT spoken lines (in English).",
+    `- ALWAYS write the filledPrompt in ${languageName}. Never switch to another language.`,
+    `- The filledPrompt should describe the camera, shots, actions and EXACT spoken lines (all in ${languageName}).`,
     "- It should read like one of these examples (but adapted to the specific product, angles and persona):",
     "",
     "Example 1:",
@@ -68,7 +108,7 @@ export async function POST(req: Request) {
     "- Plain text script, 1–3 short paragraphs, no bullet points, no placeholders, no variable names.",
     "- Use the strongest angles/benefits/persona from the context to decide what is said and how it’s shown.",
     "- Match the chosen template style (POV selfie / cinematic beauty / storytelling) described separately.",
-    "- Do NOT write in French; always output English spoken lines.",
+    `- Translate any element that needs translation (spoken lines, CTA, on-screen wording, product claim phrasing) into ${languageName}.`,
     "- FIRST describe body/camera movement BEFORE each spoken line when relevant (what the person does just before speaking).",
     "- For product handling: do NOT invent a box unless the context explicitly says there is one. Prefer showing only the real product device itself.",
     "- Add a dedicated physical product understanding part from context/images: product shape, visible parts, cap, tip/needle/micro-tip area, texture, and the exact way it is manipulated.",
@@ -79,7 +119,7 @@ export async function POST(req: Request) {
     "Timing constraint (very important):",
     "- The spoken dialogue MUST realistically fit inside the target video duration.",
     "- Keep lines short and easy to say at natural speed.",
-    "- For a 15s video: aim around 25–40 spoken words total, max 2–3 short spoken lines.",
+    `- Word budget for requested ${requestedDuration}s in ${languageName}: ${wordBudgetByDuration[requestedDuration]}.`,
     "- Prioritize one strong hook + one key benefit + one short CTA.",
     "- Avoid long technical explanations that cannot be finished in time.",
   ].join("\n");
@@ -90,8 +130,11 @@ export async function POST(req: Request) {
     "Template style (high-level):",
     templateStyle,
     "",
+    `Target spoken language: ${languageName} (${videoScriptLanguage})`,
+    "",
     `Target video duration: ${targetDurationSec}s`,
     "Generate a script that can be fully spoken within this duration at normal pace.",
+    `Respect the requested duration pacing budget (${requestedDuration}s request), while keeping the final video technically compatible with ${targetDurationSec}s generation.`,
     "",
     "Context JSON (product, analysis, quiz with angles/benefits/problems/persona/offers, etc.):",
     JSON.stringify(
@@ -99,6 +142,7 @@ export async function POST(req: Request) {
         url: body.url,
         productName: body.productName ?? null,
         templateId: body.templateId,
+        videoScriptLanguage,
         quiz: body.quiz,
         analysis: body.analysis,
       },

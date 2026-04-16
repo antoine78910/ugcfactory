@@ -51,7 +51,7 @@ export function suggestAutoConnectAfterNodeDrag(
 ): { source: string; target: string } | null {
   const nodes = getNodes();
   const dragged = nodes.find((n) => n.id === draggedId);
-  if (!dragged || dragged.type !== "adAsset") return null;
+  if (!dragged || (dragged.type !== "adAsset" && dragged.type !== "imageRef")) return null;
 
   const dInt = getInternalNode(draggedId);
   const dAnchors = anchorsFromInternal(dInt);
@@ -62,7 +62,7 @@ export function suggestAutoConnectAfterNodeDrag(
   let best: { source: string; target: string; d: number } | null = null;
 
   for (const o of nodes) {
-    if (o.id === draggedId || o.type !== "adAsset") continue;
+    if (o.id === draggedId || (o.type !== "adAsset" && o.type !== "imageRef")) continue;
     if ((o.parentId ?? null) !== dParent) continue;
 
     const oInt = getInternalNode(o.id);

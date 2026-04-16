@@ -71,6 +71,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 import { AdAssetNode, type AdAssetNodeData, type AdAssetNodeType } from "./nodes/AdAssetNode";
+import { ImageRefNode } from "./nodes/ImageRefNode";
 import { StickyNoteNode } from "./nodes/StickyNoteNode";
 import {
   GROUP_COLOR_PRESETS,
@@ -112,6 +113,7 @@ import {
 } from "./workflowClipboard";
 import {
   buildAdAssetNode,
+  buildImageRefNode,
   buildStickyNoteNode,
   WORKFLOW_NODE_DND,
   type BuildAdAssetNodeOptions,
@@ -124,11 +126,13 @@ import {
 } from "./workflowMediaAspect";
 import {
   buildWorkflowProjectPipeline,
+  buildWorkflowProjectPipelineFromRun,
   WORKFLOW_PROJECT_PIPELINE_DND,
+  type WorkflowRunProjectLike,
 } from "./workflowProjectPipeline";
 import type { StickyNoteNodeData } from "./workflowStickyNoteTypes";
 
-const nodeTypes = { adAsset: AdAssetNode, workflowGroup: WorkflowGroupNode, stickyNote: StickyNoteNode };
+const nodeTypes = { adAsset: AdAssetNode, imageRef: ImageRefNode, workflowGroup: WorkflowGroupNode, stickyNote: StickyNoteNode };
 
 /** Vertically centered on the canvas; React Flow’s `center-left` adds a −15px Y offset meant for default margin, which misaligns when margin is 0. */
 const WORKFLOW_LEFT_TOOLS_PANEL_STYLE: CSSProperties = {
@@ -146,6 +150,35 @@ type WorkflowPlacementPickerState = {
   screenY: number;
   /** When the user dropped a wire on empty canvas — new node links from this output. */
   connectFrom?: { nodeId: string; handleId: string | null };
+  /** When the user clicked an input handle — new node links into this target input. */
+  connectTo?: { nodeId: string; handleId: string };
+  /** Optional preset to show context-aware creation choices. */
+  intent?: "text-input" | "image-input" | "text-or-image" | "generic";
+};
+
+type WorkflowInputBubblePreviewState =
+  | {
+      targetNodeId: string;
+      targetHandleId: "text" | "references" | "startImage" | "endImage";
+      kind: "text" | "image";
+      screenX: number;
+      screenY: number;
+      flowX: number;
+      flowY: number;
+    }
+  | null;
+
+type WorkflowOpenInputPickerDetail = {
+  targetNodeId: string;
+  targetHandleId: "text" | "references" | "startImage" | "endImage";
+  screenX: number;
+  screenY: number;
+  forceIntent?: "text-or-image";
+  usePointerFlow?: boolean;
+};
+
+type WorkflowProjectRunListItem = WorkflowRunProjectLike & {
+  created_at?: string;
 };
 
 /** Scissors snip FX — Lucide scissors geometry; two halves close with a snap at the pivot. */
@@ -313,21 +346,21 @@ function WorkflowPagesPanel({
   }
 
   return (
-    <div className="pointer-events-auto absolute right-4 top-4 z-30 w-[min(100%,220px)] sm:right-5 sm:top-5">
-      <div className="overflow-hidden rounded-2xl border border-white/[0.12] bg-[#0b0912]/95 shadow-[0_12px_48px_rgba(0,0,0,0.5)] backdrop-blur-md">
-        <div className="flex items-center justify-between gap-2 border-b border-white/[0.08] px-3 py-2.5">
-          <span className="text-[13px] font-bold text-white">Pages</span>
+    <div className="pointer-events-auto absolute bottom-2 left-2 z-30 w-[min(100%,170px)] sm:bottom-3 sm:left-3">
+      <div className="overflow-hidden rounded-lg border border-white/[0.1] bg-[#0b0912]/90 shadow-[0_8px_24px_rgba(0,0,0,0.4)] backdrop-blur-md">
+        <div className="flex items-center justify-between gap-2 border-b border-white/[0.08] px-2 py-1.5">
+          <span className="text-[11px] font-semibold text-white/90">Pages</span>
           {readOnly ? null : (
             <button
               type="button"
               onClick={onAddPage}
-              className="text-[12px] font-semibold text-white/90 transition hover:text-violet-200"
+              className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-white/80 transition hover:bg-white/[0.08] hover:text-white"
             >
               + New
             </button>
           )}
         </div>
-        <ul className="max-h-[min(40vh,280px)] space-y-1 overflow-y-auto p-2">
+        <ul className="max-h-[min(28vh,170px)] space-y-1 overflow-y-auto p-1">
           {project.pages.map((p) => {
             const active = p.id === project.activePageId;
             return (
@@ -342,7 +375,7 @@ function WorkflowPagesPanel({
                       if (e.key === "Enter") commitRename();
                       if (e.key === "Escape") setRenamingId(null);
                     }}
-                    className="w-full rounded-xl border border-violet-500/35 bg-black/40 px-3 py-2 text-center text-[13px] font-semibold text-white outline-none focus:ring-2 focus:ring-violet-500/40"
+                    className="w-full rounded-md border border-violet-500/35 bg-black/40 px-2 py-1 text-center text-[11px] font-medium text-white outline-none focus:ring-2 focus:ring-violet-500/40"
                   />
                 ) : (
                   <div className="flex items-center gap-1">
@@ -351,10 +384,10 @@ function WorkflowPagesPanel({
                       onClick={() => onSelectPage(p.id)}
                       onDoubleClick={readOnly ? undefined : () => beginRename(p.id, p.name)}
                       className={cn(
-                        "min-w-0 flex-1 rounded-xl px-3 py-2 text-center text-[13px] font-semibold transition",
+                        "min-w-0 flex-1 rounded-md px-2 py-1 text-center text-[11px] font-medium transition",
                         active
                           ? "bg-white/[0.08] text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]"
-                          : "text-white/55 hover:bg-white/[0.05] hover:text-white/85",
+                          : "text-white/50 hover:bg-white/[0.05] hover:text-white/85",
                       )}
                     >
                       <span className="block truncate">{p.name}</span>
@@ -364,9 +397,9 @@ function WorkflowPagesPanel({
                         type="button"
                         title="Delete page"
                         onClick={() => deletePage(p.id)}
-                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white/25 opacity-0 transition hover:bg-red-500/15 hover:text-red-300 group-hover:opacity-100"
+                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-white/25 opacity-0 transition hover:bg-red-500/15 hover:text-red-300 group-hover:opacity-100"
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        <Trash2 className="h-3 w-3" />
                       </button>
                     ) : null}
                   </div>
@@ -376,11 +409,6 @@ function WorkflowPagesPanel({
           })}
         </ul>
       </div>
-      {readOnly ? (
-        <p className="mt-2 px-1 text-[9px] text-white/30">View only — switch pages to explore.</p>
-      ) : (
-        <p className="mt-2 px-1 text-[9px] text-white/30">Double-click a page name to rename.</p>
-      )}
     </div>
   );
 }
@@ -645,13 +673,22 @@ function WorkflowReactFlowChrome({
     setNodes((prev) => [...prev, buildStickyNoteNode(position)]);
     setAddOpen(false);
     setFrameOpen(false);
-    toast.success("Sticky note added");
+    toast.success("Prompt text added");
   }, [screenToFlowPosition, setNodes, setAddOpen, setFrameOpen]);
 
   const [addPlusTab, setAddPlusTab] = useState<"basics" | "upload" | "projects">("basics");
+  const [projectRuns, setProjectRuns] = useState<WorkflowProjectRunListItem[]>([]);
+  const [projectRunsLoading, setProjectRunsLoading] = useState(false);
+  const [projectRunsLoaded, setProjectRunsLoaded] = useState(false);
+  const [projectPickerOpen, setProjectPickerOpen] = useState(false);
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   const [avatarUrls, setAvatarUrls] = useState<string[]>([]);
   const uploadInputRef = useRef<HTMLInputElement>(null);
+  const [pendingImageRefConnect, setPendingImageRefConnect] = useState<{
+    targetNodeId: string;
+    targetHandleId: string;
+    flow: XYPosition;
+  } | null>(null);
 
   useEffect(() => {
     if (!avatarPickerOpen) return;
@@ -662,7 +699,10 @@ function WorkflowReactFlowChrome({
     (e: ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       e.target.value = "";
-      if (!file) return;
+      if (!file) {
+        setPendingImageRefConnect(null);
+        return;
+      }
       const isVideo = file.type.startsWith("video/");
       const objectUrl = URL.createObjectURL(file);
       void (async () => {
@@ -670,32 +710,52 @@ function WorkflowReactFlowChrome({
           const ar = isVideo
             ? await measureVideoAspectFromObjectUrl(objectUrl)
             : await measureImageAspectFromObjectUrl(objectUrl);
-          const kind: WorkflowDragNodeKind = isVideo ? "video" : "image";
           const position = screenToFlowPosition({
-            x: window.innerWidth / 2,
-            y: window.innerHeight / 2,
+            x:
+              pendingImageRefConnect != null
+                ? pendingImageRefConnect.flow.x
+                : window.innerWidth / 2,
+            y:
+              pendingImageRefConnect != null
+                ? pendingImageRefConnect.flow.y
+                : window.innerHeight / 2,
           });
           const baseName = file.name.replace(/\.[^.]+$/, "") || (isVideo ? "Video" : "Image");
-          setNodes((prev) => [
-            ...prev,
-            buildAdAssetNode(kind, position, {
-              intrinsicAspect: ar,
-              referencePreviewUrl: objectUrl,
-              referenceSource: "upload",
-              referenceMediaKind: isVideo ? "video" : "image",
-              label: baseName,
-            }),
-          ]);
+          const nextNode = buildImageRefNode(position, {
+            imageUrl: objectUrl,
+            source: "upload",
+            mediaKind: isVideo ? "video" : "image",
+            intrinsicAspect: ar,
+            label: baseName,
+          });
+          setNodes((prev) => [...prev, nextNode]);
+          if (pendingImageRefConnect) {
+            setEdges((eds) =>
+              addEdge(
+                {
+                  id: `e-${nextNode.id}-${pendingImageRefConnect.targetNodeId}-${crypto.randomUUID().slice(0, 8)}`,
+                  source: nextNode.id,
+                  sourceHandle: "out",
+                  target: pendingImageRefConnect.targetNodeId,
+                  targetHandle: pendingImageRefConnect.targetHandleId,
+                  style: { stroke: "rgba(167, 139, 250, 0.5)", strokeWidth: 2 },
+                },
+                eds,
+              ),
+            );
+            setPendingImageRefConnect(null);
+          }
           setAddOpen(false);
           setFrameOpen(false);
           toast.success("Node added");
         } catch {
+          setPendingImageRefConnect(null);
           URL.revokeObjectURL(objectUrl);
           toast.error("Could not read file", { description: "Try another image or video." });
         }
       })();
     },
-    [screenToFlowPosition, setNodes, setAddOpen, setFrameOpen],
+    [pendingImageRefConnect, screenToFlowPosition, setEdges, setNodes, setAddOpen, setFrameOpen],
   );
 
   const onAvatarPicked = useCallback(
@@ -703,25 +763,45 @@ function WorkflowReactFlowChrome({
       void (async () => {
         const ar = await measureImageAspectFromUrlSafe(url);
         const position = screenToFlowPosition({
-          x: window.innerWidth / 2,
-          y: window.innerHeight / 2,
+          x:
+            pendingImageRefConnect != null
+              ? pendingImageRefConnect.flow.x
+              : window.innerWidth / 2,
+          y:
+            pendingImageRefConnect != null
+              ? pendingImageRefConnect.flow.y
+              : window.innerHeight / 2,
         });
-        setNodes((prev) => [
-          ...prev,
-          buildAdAssetNode("image", position, {
-            intrinsicAspect: ar,
-            referencePreviewUrl: url,
-            referenceSource: "avatar",
-            referenceMediaKind: "image",
-            label: "Avatar",
-          }),
-        ]);
+        const nextNode = buildImageRefNode(position, {
+          imageUrl: url,
+          source: "avatar",
+          mediaKind: "image",
+          intrinsicAspect: ar,
+          label: "Avatar",
+        });
+        setNodes((prev) => [...prev, nextNode]);
+        if (pendingImageRefConnect) {
+          setEdges((eds) =>
+            addEdge(
+              {
+                id: `e-${nextNode.id}-${pendingImageRefConnect.targetNodeId}-${crypto.randomUUID().slice(0, 8)}`,
+                source: nextNode.id,
+                sourceHandle: "out",
+                target: pendingImageRefConnect.targetNodeId,
+                targetHandle: pendingImageRefConnect.targetHandleId,
+                style: { stroke: "rgba(167, 139, 250, 0.5)", strokeWidth: 2 },
+              },
+              eds,
+            ),
+          );
+          setPendingImageRefConnect(null);
+        }
         setAddOpen(false);
         setFrameOpen(false);
         toast.success("Node added");
       })();
     },
-    [screenToFlowPosition, setNodes, setAddOpen, setFrameOpen],
+    [pendingImageRefConnect, screenToFlowPosition, setEdges, setNodes, setAddOpen, setFrameOpen],
   );
 
   const setDragPayload = useCallback((e: DragEvent, payload: string) => {
@@ -744,6 +824,43 @@ function WorkflowReactFlowChrome({
       description: "Brief → angles → image prompts → images → video prompt → video.",
     });
   }, [screenToFlowPosition, setAddOpen, setEdges, setFrameOpen, setNodes]);
+
+  const addProjectPipelineFromRun = useCallback(
+    (run: WorkflowProjectRunListItem) => {
+      const position = screenToFlowPosition({
+        x: window.innerWidth / 2,
+        y: window.innerHeight / 2,
+      });
+      const { nodes: projectNodes, edges: projectEdges } = buildWorkflowProjectPipelineFromRun(position, run);
+      setNodes((prev) => [...prev, ...projectNodes]);
+      setEdges((prev) => [...prev, ...projectEdges]);
+      setAddOpen(false);
+      setFrameOpen(false);
+      setAddPlusTab("basics");
+      toast.success("Project imported", {
+        description: "Loaded product, brief, selected angle, Nano images, video prompt, and video.",
+      });
+    },
+    [screenToFlowPosition, setAddOpen, setEdges, setFrameOpen, setNodes],
+  );
+
+  const loadProjectRuns = useCallback(async () => {
+    if (projectRunsLoading) return;
+    setProjectRunsLoading(true);
+    try {
+      const res = await fetch("/api/runs/list", { cache: "no-store" });
+      const json = (await res.json()) as { data?: WorkflowProjectRunListItem[]; error?: string };
+      if (!res.ok) throw new Error(json.error || "Could not load projects.");
+      setProjectRuns(Array.isArray(json.data) ? json.data : []);
+      setProjectRunsLoaded(true);
+    } catch (e) {
+      toast.error("Could not load projects", {
+        description: e instanceof Error ? e.message : "Unknown error",
+      });
+    } finally {
+      setProjectRunsLoading(false);
+    }
+  }, [projectRunsLoading]);
 
   if (readOnly) {
     return (
@@ -891,7 +1008,7 @@ function WorkflowReactFlowChrome({
                     </div>
                     <WorkflowAddPaletteRow
                       icon={Type}
-                      label="Text"
+                      label="Prompt text"
                       iconShellClass="border-emerald-500/45 bg-emerald-950/80"
                       draggable
                       onDragStart={(e) => {
@@ -965,8 +1082,8 @@ function WorkflowReactFlowChrome({
                 ) : addPlusTab === "upload" ? (
                   <div className="space-y-3 p-3">
                     <p className="text-[12px] leading-snug text-white/55">
-                      Upload an image or video. The module frame matches your file&apos;s aspect ratio. Avatars use your
-                      library from Create → Avatar.
+                      Upload an image or video as a reference node. Connect it to a generator to use as input. Avatars
+                      use your library from Create → Avatar.
                     </p>
                     <input
                       ref={uploadInputRef}
@@ -995,16 +1112,18 @@ function WorkflowReactFlowChrome({
                 ) : (
                   <div className="space-y-3 p-3">
                     <p className="text-[12px] leading-snug text-white/55">
-                      Insert the full project pipeline (brief → assets → video) as linked nodes. You can also drag it
-                      onto the canvas.
+                      Import a saved Link to Ad project into this workflow with one click.
                     </p>
                     <button
                       type="button"
-                      onClick={() => addProjectPipeline()}
+                      onClick={() => {
+                        setProjectPickerOpen(true);
+                        if (!projectRunsLoaded) void loadProjectRuns();
+                      }}
                       className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/12 bg-white/[0.06] py-2.5 text-[13px] font-semibold text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/10"
                     >
                       <FolderKanban className="h-4 w-4 text-white/70" strokeWidth={2} aria-hidden />
-                      Add project pipeline
+                      Choose my projects
                     </button>
                     <div
                       draggable
@@ -1016,8 +1135,16 @@ function WorkflowReactFlowChrome({
                       className="flex cursor-grab items-center gap-2 rounded-xl border border-dashed border-white/15 px-3 py-2.5 text-[12px] text-white/55 active:cursor-grabbing"
                     >
                       <GripVertical className="h-4 w-4 shrink-0 text-white/35" aria-hidden />
-                      Drag to canvas to place pipeline
+                      Drag to canvas to place an empty pipeline
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => addProjectPipeline()}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/12 bg-white/[0.06] py-2 text-[12px] font-semibold text-white/80 transition hover:border-violet-400/35 hover:bg-violet-500/10"
+                    >
+                      <FolderKanban className="h-4 w-4 text-white/65" strokeWidth={2} aria-hidden />
+                      Add empty pipeline
+                    </button>
                   </div>
                 )}
               </div>
@@ -1053,37 +1180,118 @@ function WorkflowReactFlowChrome({
 
           <div className="my-0.5 h-px w-7 bg-white/[0.12]" aria-hidden />
 
-          <button
-            type="button"
-            title={
-              readOnly
-                ? "Cut tool (view only)"
-                : tool === "cutTarget"
-                  ? "Cut tool active — click a link to remove it, or press Esc"
-                  : "Cut tool — click a link to cut it (Ctrl/Cmd+X still cuts the current selection)"
-            }
-            disabled={readOnly}
-            onClick={() => {
-              if (readOnly) return;
-              setAddOpen(false);
-              setFrameOpen(false);
-              if (tool === "cutTarget") {
-                setTool("select");
-              } else {
-                setTool("cutTarget");
-                toast.message("Cut tool", { description: "Click a connection line to remove that link." });
+          <div className="group/cut relative">
+            <button
+              type="button"
+              title={
+                readOnly
+                  ? "Cut tool (view only)"
+                  : tool === "cutTarget"
+                    ? "Cut tool active — click a link to remove it, or press Esc"
+                    : "Cut tool — click a link to cut it (Ctrl/Cmd+X still cuts the current selection)"
               }
-            }}
-            className={cn(
-              "flex h-9 w-9 items-center justify-center rounded-full transition-colors",
-              readOnly && "cursor-not-allowed text-white/35 opacity-90",
-              !readOnly && tool === "cutTarget"
-                ? "bg-white text-zinc-900 shadow-sm hover:bg-white"
-                : !readOnly && "text-white/90 hover:bg-white/[0.08]",
-            )}
-          >
-            <Scissors className={barIcon} strokeWidth={2} />
-          </button>
+              disabled={readOnly}
+              onClick={() => {
+                if (readOnly) return;
+                setAddOpen(false);
+                setFrameOpen(false);
+                if (tool === "cutTarget") {
+                  setTool("select");
+                } else {
+                  setTool("cutTarget");
+                  toast.message("Cut tool", { description: "Click a connection line to remove that link." });
+                }
+              }}
+              className={cn(
+                "flex h-9 w-9 items-center justify-center rounded-full transition-colors",
+                readOnly && "cursor-not-allowed text-white/35 opacity-90",
+                !readOnly && tool === "cutTarget"
+                  ? "bg-white text-zinc-900 shadow-sm hover:bg-white"
+                  : !readOnly && "text-white/90 hover:bg-white/[0.08]",
+              )}
+            >
+              <Scissors className={barIcon} strokeWidth={2} />
+            </button>
+            {!readOnly ? (
+              <div className="pointer-events-none absolute left-[calc(100%+8px)] top-1/2 z-[120] w-36 -translate-y-1/2 rounded-xl border border-white/12 bg-[#0b0912]/95 p-1.5 opacity-0 shadow-xl backdrop-blur-md transition group-hover/cut:pointer-events-auto group-hover/cut:opacity-100 group-focus-within/cut:pointer-events-auto group-focus-within/cut:opacity-100">
+                <button
+                  type="button"
+                  className="flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-[12px] font-medium text-white/90 transition hover:bg-white/[0.08]"
+                  onClick={() => {
+                    setAddOpen(false);
+                    setFrameOpen(false);
+                    setTool("cutTarget");
+                    toast.message("Cut tool", { description: "Click a connection line to remove that link." });
+                  }}
+                >
+                  Cut links
+                </button>
+                <div className="mt-1 border-t border-white/10 pt-1">
+                  <p className="px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wide text-white/45">Add node</p>
+                  <button
+                    type="button"
+                    className="flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-[12px] font-medium text-white/90 transition hover:bg-white/[0.08]"
+                    onClick={() => {
+                      setTool("select");
+                      setFrameOpen(false);
+                      setAddOpen(false);
+                      addNode("image");
+                    }}
+                  >
+                    Image Generator
+                  </button>
+                  <button
+                    type="button"
+                    className="flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-[12px] font-medium text-white/90 transition hover:bg-white/[0.08]"
+                    onClick={() => {
+                      setTool("select");
+                      setFrameOpen(false);
+                      setAddOpen(false);
+                      addNode("video");
+                    }}
+                  >
+                    Video Generator
+                  </button>
+                  <button
+                    type="button"
+                    className="flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-[12px] font-medium text-white/90 transition hover:bg-white/[0.08]"
+                    onClick={() => {
+                      setTool("select");
+                      setFrameOpen(false);
+                      setAddOpen(false);
+                      addNode("variation");
+                    }}
+                  >
+                    Variation
+                  </button>
+                  <button
+                    type="button"
+                    className="flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-[12px] font-medium text-white/90 transition hover:bg-white/[0.08]"
+                    onClick={() => {
+                      setTool("select");
+                      setFrameOpen(false);
+                      setAddOpen(false);
+                      addNode("assistant");
+                    }}
+                  >
+                    Assistant
+                  </button>
+                  <button
+                    type="button"
+                    className="flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-[12px] font-medium text-white/90 transition hover:bg-white/[0.08]"
+                    onClick={() => {
+                      setTool("select");
+                      setFrameOpen(false);
+                      setAddOpen(false);
+                      addStickyNote();
+                    }}
+                  >
+                    Text note
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
           <div className="relative flex w-full flex-col items-center">
             <button
               type="button"
@@ -1139,8 +1347,8 @@ function WorkflowReactFlowChrome({
             type="button"
             title={
               tool === "stickyPlace"
-                ? "Sticky note tool — click the canvas to place (Esc to cancel)"
-                : "Sticky note — click the canvas to place a note"
+                ? "Prompt text tool — click the canvas to place (Esc to cancel)"
+                : "Prompt text — click the canvas to place a prompt node"
             }
             onClick={() => {
               setTool(tool === "stickyPlace" ? "select" : "stickyPlace");
@@ -1194,11 +1402,90 @@ function WorkflowReactFlowChrome({
 
       <AvatarPickerDialog
         open={avatarPickerOpen}
-        onOpenChange={setAvatarPickerOpen}
+        onOpenChange={(open) => {
+          setAvatarPickerOpen(open);
+          if (!open) setPendingImageRefConnect(null);
+        }}
         avatarUrls={avatarUrls}
         onPick={onAvatarPicked}
         title="Choose avatar"
       />
+
+      {projectPickerOpen ? (
+        <div
+          className="fixed inset-0 z-[220] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm"
+          onClick={() => setProjectPickerOpen(false)}
+          role="dialog"
+          aria-label="Choose my projects"
+        >
+          <div
+            className="w-[min(720px,100%)] overflow-hidden rounded-2xl border border-white/12 bg-[#0b0912] shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-white/[0.08] px-4 py-3">
+              <div>
+                <p className="text-[14px] font-semibold text-white">Choose my projects</p>
+                <p className="text-[12px] text-white/50">Import one Link to Ad project into the workflow.</p>
+              </div>
+              <button
+                type="button"
+                className="rounded-lg px-2.5 py-1.5 text-[12px] font-medium text-white/65 transition hover:bg-white/[0.08] hover:text-white"
+                onClick={() => setProjectPickerOpen(false)}
+              >
+                Close
+              </button>
+            </div>
+            <div className="max-h-[min(62vh,520px)] space-y-1.5 overflow-y-auto p-3">
+              {projectRunsLoading ? (
+                <p className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-[12px] text-white/55">
+                  Loading projects...
+                </p>
+              ) : projectRuns.length === 0 ? (
+                <div className="space-y-2 rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                  <p className="text-[12px] text-white/60">No Link to Ad project found yet.</p>
+                  <button
+                    type="button"
+                    onClick={() => void loadProjectRuns()}
+                    className="rounded-lg border border-white/15 px-2.5 py-1.5 text-[12px] font-medium text-white/85 transition hover:bg-white/[0.08]"
+                  >
+                    Refresh
+                  </button>
+                </div>
+              ) : (
+                projectRuns.map((run) => {
+                  const title = (run.title ?? "").trim() || "Untitled project";
+                  const host = (() => {
+                    const raw = (run.store_url ?? "").trim();
+                    if (!raw) return "No store URL";
+                    try {
+                      return new URL(raw).hostname.replace(/^www\./i, "");
+                    } catch {
+                      return raw;
+                    }
+                  })();
+                  return (
+                    <button
+                      key={run.id}
+                      type="button"
+                      onClick={() => {
+                        addProjectPipelineFromRun(run);
+                        setProjectPickerOpen(false);
+                      }}
+                      className="flex w-full items-start justify-between gap-3 rounded-xl border border-white/12 bg-white/[0.04] px-3 py-2 text-left transition hover:border-violet-400/35 hover:bg-violet-500/10"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-[12px] font-semibold text-white/90">{title}</p>
+                        <p className="truncate text-[11px] text-white/45">{host}</p>
+                      </div>
+                      <FolderKanban className="mt-0.5 h-4 w-4 shrink-0 text-white/45" aria-hidden />
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <Panel position="bottom-center" className="!m-0 !mb-4 flex !flex-col !items-center gap-2 !w-auto">
         <button
@@ -1326,37 +1613,124 @@ function WorkflowReactFlowChrome({
               >
                 <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
               </button>
-              <button
-                type="button"
-                title={
-                  readOnly
-                    ? "Cut tool (view only)"
-                    : tool === "cutTarget"
-                      ? "Cut tool active — click a link"
-                      : "Cut tool — click a link to cut"
-                }
-                disabled={readOnly}
-                onClick={() => {
-                  if (readOnly) return;
-                  setAddOpen(false);
-                  setFrameOpen(false);
-                  setSelectionBarExpanded(false);
-                  if (tool === "cutTarget") {
-                    setTool("select");
-                  } else {
-                    setTool("cutTarget");
-                    toast.message("Cut tool", { description: "Click a connection line to remove that link." });
+              <div className="group/cut relative">
+                <button
+                  type="button"
+                  title={
+                    readOnly
+                      ? "Cut tool (view only)"
+                      : tool === "cutTarget"
+                        ? "Cut tool active — click a link"
+                        : "Cut tool — click a link to cut"
                   }
-                }}
-                className={cn(
-                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-35",
-                  readOnly && "text-white/90",
-                  !readOnly && tool === "cutTarget" && "bg-white text-zinc-900 hover:bg-white",
-                  !readOnly && tool !== "cutTarget" && "text-white/90",
-                )}
-              >
-                <Scissors className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-              </button>
+                  disabled={readOnly}
+                  onClick={() => {
+                    if (readOnly) return;
+                    setAddOpen(false);
+                    setFrameOpen(false);
+                    setSelectionBarExpanded(false);
+                    if (tool === "cutTarget") {
+                      setTool("select");
+                    } else {
+                      setTool("cutTarget");
+                      toast.message("Cut tool", { description: "Click a connection line to remove that link." });
+                    }
+                  }}
+                  className={cn(
+                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-35",
+                    readOnly && "text-white/90",
+                    !readOnly && tool === "cutTarget" && "bg-white text-zinc-900 hover:bg-white",
+                    !readOnly && tool !== "cutTarget" && "text-white/90",
+                  )}
+                >
+                  <Scissors className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                </button>
+                {!readOnly ? (
+                  <div className="pointer-events-none absolute left-[calc(100%+8px)] top-1/2 z-[220] w-36 -translate-y-1/2 rounded-xl border border-white/12 bg-[#0b0912]/95 p-1.5 opacity-0 shadow-xl backdrop-blur-md transition group-hover/cut:pointer-events-auto group-hover/cut:opacity-100 group-focus-within/cut:pointer-events-auto group-focus-within/cut:opacity-100">
+                    <button
+                      type="button"
+                      className="flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-[12px] font-medium text-white/90 transition hover:bg-white/[0.08]"
+                      onClick={() => {
+                        setAddOpen(false);
+                        setFrameOpen(false);
+                        setSelectionBarExpanded(false);
+                        setTool("cutTarget");
+                        toast.message("Cut tool", { description: "Click a connection line to remove that link." });
+                      }}
+                    >
+                      Cut links
+                    </button>
+                    <div className="mt-1 border-t border-white/10 pt-1">
+                      <p className="px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wide text-white/45">Add node</p>
+                      <button
+                        type="button"
+                        className="flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-[12px] font-medium text-white/90 transition hover:bg-white/[0.08]"
+                        onClick={() => {
+                          setTool("select");
+                          setFrameOpen(false);
+                          setSelectionBarExpanded(false);
+                          setAddOpen(false);
+                          addNode("image");
+                        }}
+                      >
+                        Image Generator
+                      </button>
+                      <button
+                        type="button"
+                        className="flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-[12px] font-medium text-white/90 transition hover:bg-white/[0.08]"
+                        onClick={() => {
+                          setTool("select");
+                          setFrameOpen(false);
+                          setSelectionBarExpanded(false);
+                          setAddOpen(false);
+                          addNode("video");
+                        }}
+                      >
+                        Video Generator
+                      </button>
+                      <button
+                        type="button"
+                        className="flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-[12px] font-medium text-white/90 transition hover:bg-white/[0.08]"
+                        onClick={() => {
+                          setTool("select");
+                          setFrameOpen(false);
+                          setSelectionBarExpanded(false);
+                          setAddOpen(false);
+                          addNode("variation");
+                        }}
+                      >
+                        Variation
+                      </button>
+                      <button
+                        type="button"
+                        className="flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-[12px] font-medium text-white/90 transition hover:bg-white/[0.08]"
+                        onClick={() => {
+                          setTool("select");
+                          setFrameOpen(false);
+                          setSelectionBarExpanded(false);
+                          setAddOpen(false);
+                          addNode("assistant");
+                        }}
+                      >
+                        Assistant
+                      </button>
+                      <button
+                        type="button"
+                        className="flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-[12px] font-medium text-white/90 transition hover:bg-white/[0.08]"
+                        onClick={() => {
+                          setTool("select");
+                          setFrameOpen(false);
+                          setSelectionBarExpanded(false);
+                          setAddOpen(false);
+                          addStickyNote();
+                        }}
+                      >
+                        Text note
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
               <button
                 type="button"
                 title={canCut ? "Copy selection" : "Nothing to copy in this selection"}
@@ -1524,10 +1898,15 @@ function WorkflowFlowWorkspace({
   const [addOpen, setAddOpen] = useState(false);
   const [frameOpen, setFrameOpen] = useState(false);
   const [selectionBarExpanded, setSelectionBarExpanded] = useState(false);
+  const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
+  const [hoveredEdgeScissors, setHoveredEdgeScissors] = useState<{ x: number; y: number } | null>(null);
+  const edgeHoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastEdgePointerRef = useRef<{ x: number; y: number } | null>(null);
   /** Derive from node `selected` flags — matches React Flow's controlled state (onSelectionChange can lag). */
   const selectedNodes = useMemo(() => nodes.filter((n) => n.selected), [nodes]);
   const [placementPicker, setPlacementPicker] = useState<WorkflowPlacementPickerState | null>(null);
   const placementRef = useRef<HTMLDivElement>(null);
+  const [inputBubblePreview, setInputBubblePreview] = useState<WorkflowInputBubblePreviewState>(null);
   const cutTargetBusyRef = useRef(false);
   const cutSnipClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [cutSnipFx, setCutSnipFx] = useState<{ x: number; y: number } | null>(null);
@@ -1680,6 +2059,140 @@ function WorkflowFlowWorkspace({
   }, [placementPicker]);
 
   useEffect(() => {
+    const onOpenInputPicker = (ev: Event) => {
+      const detail = (ev as CustomEvent<WorkflowOpenInputPickerDetail>).detail;
+      if (!detail) return;
+      const target = nodes.find((n) => n.id === detail.targetNodeId);
+      const yOffsets: Record<WorkflowOpenInputPickerDetail["targetHandleId"], number> = {
+        text: -86,
+        startImage: -28,
+        references: 0,
+        endImage: 28,
+      };
+      const fallbackFlow = screenToFlowPosition({ x: detail.screenX, y: detail.screenY });
+      const leftFlow =
+        target && !detail.usePointerFlow
+          ? { x: target.position.x - 250, y: target.position.y + yOffsets[detail.targetHandleId] }
+          : fallbackFlow;
+      setPlacementPicker({
+        flow: leftFlow,
+        screenX: detail.screenX,
+        screenY: detail.screenY,
+        connectTo: { nodeId: detail.targetNodeId, handleId: detail.targetHandleId },
+        intent: detail.forceIntent ?? (detail.targetHandleId === "text" ? "text-input" : "image-input"),
+      });
+    };
+    window.addEventListener("workflow:open-input-picker", onOpenInputPicker as EventListener);
+    return () =>
+      window.removeEventListener("workflow:open-input-picker", onOpenInputPicker as EventListener);
+  }, [nodes, screenToFlowPosition]);
+
+  useEffect(() => {
+    if (readOnly) return;
+
+    const onPreview = (ev: Event) => {
+      const detail = (ev as CustomEvent<
+        | { active?: boolean }
+        | {
+            targetNodeId: string;
+            targetHandleId: "text" | "references" | "startImage" | "endImage";
+            screenX: number;
+            screenY: number;
+          }
+      >).detail;
+      if (!detail) return;
+
+      if (detail.active === false) {
+        setInputBubblePreview(null);
+        return;
+      }
+
+      if (
+        typeof (detail as any).targetNodeId !== "string" ||
+        typeof (detail as any).targetHandleId !== "string" ||
+        typeof (detail as any).screenX !== "number" ||
+        typeof (detail as any).screenY !== "number"
+      )
+        return;
+
+      const flow = screenToFlowPosition({ x: detail.screenX, y: detail.screenY });
+      setInputBubblePreview({
+        targetNodeId: detail.targetNodeId,
+        targetHandleId: detail.targetHandleId,
+        kind: detail.targetHandleId === "text" ? "text" : "image",
+        screenX: detail.screenX,
+        screenY: detail.screenY,
+        flowX: flow.x,
+        flowY: flow.y,
+      });
+    };
+
+    const onDrop = (ev: Event) => {
+      const detail = (ev as CustomEvent<{
+        targetNodeId: string;
+        targetHandleId: "text" | "references" | "startImage" | "endImage";
+        screenX: number;
+        screenY: number;
+      }>).detail;
+      if (!detail) return;
+
+      const targetHandleId = detail.targetHandleId;
+      const targetNodeId = detail.targetNodeId;
+      const desiredOutFlow = screenToFlowPosition({ x: detail.screenX, y: detail.screenY });
+
+      setInputBubblePreview(null);
+
+      const newNode =
+        targetHandleId === "text"
+          ? buildStickyNoteNode({ x: desiredOutFlow.x, y: desiredOutFlow.y })
+          : buildAdAssetNode("image", { x: desiredOutFlow.x, y: desiredOutFlow.y });
+
+      setNodes((prev) => [...prev, newNode]);
+      setEdges((eds) =>
+        addEdge(
+          {
+            id: `e-${newNode.id}-${targetNodeId}-${crypto.randomUUID().slice(0, 8)}`,
+            source: newNode.id,
+            sourceHandle: "out",
+            target: targetNodeId,
+            targetHandle: targetHandleId,
+            style: { stroke: "rgba(167, 139, 250, 0.5)", strokeWidth: 2 },
+          },
+          eds,
+        ),
+      );
+
+      toast.success("Node added");
+
+      // After the node is measured by React Flow, adjust its position
+      // so its output handle center touches the drop point.
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const placed = (getNodes() as WorkflowCanvasNode[]).find((n) => n.id === newNode.id);
+          const w = (placed as any)?.width;
+          const h = (placed as any)?.height;
+          if (!placed || typeof w !== "number" || typeof h !== "number") return;
+
+          const outX = placed.position.x + w;
+          const outY = placed.position.y + h / 2;
+          const dx = desiredOutFlow.x - outX;
+          const dy = desiredOutFlow.y - outY;
+
+          if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return;
+          setNodes((prev) => prev.map((n) => (n.id === newNode.id ? { ...n, position: { x: n.position.x + dx, y: n.position.y + dy } } : n)));
+        });
+      });
+    };
+
+    window.addEventListener("workflow:input-bubble-preview", onPreview as EventListener);
+    window.addEventListener("workflow:input-bubble-drop", onDrop as EventListener);
+    return () => {
+      window.removeEventListener("workflow:input-bubble-preview", onPreview as EventListener);
+      window.removeEventListener("workflow:input-bubble-drop", onDrop as EventListener);
+    };
+  }, [readOnly, screenToFlowPosition, setNodes, setEdges, getNodes]);
+
+  useEffect(() => {
     if (!placementPicker) return;
     const onDown = (ev: MouseEvent) => {
       const el = placementRef.current;
@@ -1698,8 +2211,10 @@ function WorkflowFlowWorkspace({
           ? buildStickyNoteNode(placementPicker.flow)
           : buildAdAssetNode(kind, placementPicker.flow, options);
       const from = placementPicker.connectFrom;
+      const to = placementPicker.connectTo;
       setNodes((prev) => [...prev, newNode]);
-      if (from && newNode.type === "adAsset") {
+      const connectable = newNode.type === "adAsset" || newNode.type === "imageRef";
+      if (from && connectable) {
         setEdges((eds) =>
           addEdge(
             {
@@ -1714,11 +2229,54 @@ function WorkflowFlowWorkspace({
           ),
         );
       }
+      if (to && connectable) {
+        setEdges((eds) =>
+          addEdge(
+            {
+              id: `e-${newNode.id}-${to.nodeId}-${crypto.randomUUID().slice(0, 8)}`,
+              source: newNode.id,
+              sourceHandle: "out",
+              target: to.nodeId,
+              targetHandle: to.handleId,
+              style: { stroke: "rgba(167, 139, 250, 0.5)", strokeWidth: 2 },
+            },
+            eds,
+          ),
+        );
+      }
       setPlacementPicker(null);
-      toast.success(from && newNode.type === "adAsset" ? "Node connected" : "Node added");
+      toast.success((from || to) && connectable ? "Node connected" : "Node added");
     },
     [placementPicker, setNodes, setEdges],
   );
+
+  const pickUploadAtPlacement = useCallback(() => {
+    if (!placementPicker?.connectTo) {
+      uploadInputRef.current?.click();
+      return;
+    }
+    setPendingImageRefConnect({
+      targetNodeId: placementPicker.connectTo.nodeId,
+      targetHandleId: placementPicker.connectTo.handleId,
+      flow: placementPicker.flow,
+    });
+    setPlacementPicker(null);
+    uploadInputRef.current?.click();
+  }, [placementPicker]);
+
+  const pickAvatarAtPlacement = useCallback(() => {
+    if (placementPicker?.connectTo) {
+      setPendingImageRefConnect({
+        targetNodeId: placementPicker.connectTo.nodeId,
+        targetHandleId: placementPicker.connectTo.handleId,
+        flow: placementPicker.flow,
+      });
+    } else {
+      setPendingImageRefConnect(null);
+    }
+    setPlacementPicker(null);
+    setAvatarPickerOpen(true);
+  }, [placementPicker]);
 
   useEffect(() => {
     const id = project.activePageId;
@@ -1782,10 +2340,10 @@ function WorkflowFlowWorkspace({
   const onNodeDragStop = useCallback(
     (_event: unknown, node: WorkflowCanvasNode) => {
       if (readOnly) return;
-      if (node.type !== "adAsset") return;
+      if (node.type !== "adAsset" && node.type !== "imageRef") return;
       const all = getNodes() as WorkflowCanvasNode[];
-      const selectedAssets = all.filter((n) => n.selected && n.type === "adAsset");
-      if (selectedAssets.length !== 1 || selectedAssets[0]?.id !== node.id) return;
+      const selectedConnectable = all.filter((n) => n.selected && (n.type === "adAsset" || n.type === "imageRef"));
+      if (selectedConnectable.length !== 1 || selectedConnectable[0]?.id !== node.id) return;
 
       const draggedId = node.id;
       const tryLink = () => {
@@ -1953,6 +2511,15 @@ function WorkflowFlowWorkspace({
   }, [frameOpen]);
 
   useEffect(() => {
+    return () => {
+      if (edgeHoverTimerRef.current) {
+        clearTimeout(edgeHoverTimerRef.current);
+        edgeHoverTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
       if (readOnly) return;
       if (isEditableElementFocused()) return;
@@ -2040,6 +2607,11 @@ function WorkflowFlowWorkspace({
           onConnectEnd={readOnly ? undefined : onConnectEnd}
           connectionRadius={WORKFLOW_CONNECTION_RADIUS}
           onNodeDragStop={readOnly ? undefined : onNodeDragStop}
+          onNodeMouseEnter={readOnly ? undefined : (_ev, node) => {
+            if (tool !== "select") return;
+            setHoveredNodeId(node.id);
+          }}
+          onNodeMouseLeave={readOnly ? undefined : () => setHoveredNodeId(null)}
           onDragOver={readOnly ? undefined : onDragOver}
           onDrop={readOnly ? undefined : onDrop}
           nodesDraggable={!readOnly}
@@ -2070,6 +2642,38 @@ function WorkflowFlowWorkspace({
               }, 650);
             });
           }}
+          onEdgeMouseEnter={readOnly ? undefined : (_ev, edge) => {
+            if (tool !== "select") return;
+            setHoveredEdgeId(edge.id);
+            setHoveredEdgeScissors(null);
+            if (edgeHoverTimerRef.current) clearTimeout(edgeHoverTimerRef.current);
+            edgeHoverTimerRef.current = setTimeout(() => {
+              edgeHoverTimerRef.current = null;
+              const pt = lastEdgePointerRef.current;
+              if (!pt) return;
+              setHoveredEdgeScissors({ x: pt.x, y: pt.y });
+            }, 1000);
+          }}
+          onEdgeMouseMove={readOnly ? undefined : (ev) => {
+            if (tool !== "select") return;
+            lastEdgePointerRef.current = { x: (ev as MouseEvent).clientX, y: (ev as MouseEvent).clientY };
+            // If the scissors is already visible, keep it glued to the pointer.
+            if (hoveredEdgeScissors) {
+              setHoveredEdgeScissors({
+                x: (ev as MouseEvent).clientX,
+                y: (ev as MouseEvent).clientY,
+              });
+            }
+          }}
+          onEdgeMouseLeave={readOnly ? undefined : () => {
+            setHoveredEdgeId(null);
+            setHoveredEdgeScissors(null);
+            lastEdgePointerRef.current = null;
+            if (edgeHoverTimerRef.current) {
+              clearTimeout(edgeHoverTimerRef.current);
+              edgeHoverTimerRef.current = null;
+            }
+          }}
           onPaneClick={(ev) => {
             setAddOpen(false);
             setFrameOpen(false);
@@ -2085,20 +2689,56 @@ function WorkflowFlowWorkspace({
               const dx = 100 / zoom;
               const dy = 36 / zoom;
               setNodes((prev) => [...prev, buildStickyNoteNode({ x: p.x - dx, y: p.y - dy })]);
-              toast.success("Sticky note added");
+              toast.success("Prompt text added");
             }
           }}
           className={cn(
             "workflow-flow relative z-[1] !bg-transparent",
             readOnly && "workflow-template-readonly",
+            !readOnly && tool === "select" && "workflow-select-mode",
             !readOnly && tool === "stickyPlace" && "workflow-sticky-place-mode",
             !readOnly && tool === "cutTarget" && "workflow-cut-target-mode",
           )}
           defaultEdgeOptions={{
             style: { stroke: "rgba(167, 139, 250, 0.42)", strokeWidth: 2 },
-            ...(!readOnly && tool === "cutTarget" ? { interactionWidth: 28 } : {}),
+            ...(!readOnly && (tool === "cutTarget" || tool === "select") ? { interactionWidth: 28 } : {}),
           }}
         >
+          {!readOnly && tool === "select" && hoveredEdgeId && hoveredEdgeScissors ? (
+            <button
+              type="button"
+              className="pointer-events-auto fixed z-[140] flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/12 bg-[#0b0912]/95 text-white/80 shadow-[0_12px_38px_rgba(0,0,0,0.55)] backdrop-blur-md transition hover:border-violet-400/35 hover:bg-white/[0.06] hover:text-white"
+              style={{
+                left: Math.max(10, Math.min(hoveredEdgeScissors.x, window.innerWidth - 10)),
+                top: Math.max(10, Math.min(hoveredEdgeScissors.y, window.innerHeight - 10)),
+              }}
+              title="Cut link"
+              aria-label="Cut link"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const x = e.clientX;
+                const y = e.clientY;
+                const ok = cutEdgeAtPointer(hoveredEdgeId);
+                if (!ok) return;
+                setCutSnipFx({ x, y });
+                if (cutSnipClearTimerRef.current) clearTimeout(cutSnipClearTimerRef.current);
+                cutSnipClearTimerRef.current = setTimeout(() => {
+                  cutSnipClearTimerRef.current = null;
+                  setCutSnipFx(null);
+                }, 650);
+                setHoveredEdgeScissors(null);
+                setHoveredEdgeId(null);
+              }}
+            >
+              <Scissors className="h-4 w-4" strokeWidth={2} aria-hidden />
+            </button>
+          ) : null}
+
           <WorkflowReactFlowChrome
             tool={tool}
             setTool={setTool}
@@ -2147,6 +2787,27 @@ function WorkflowFlowWorkspace({
         </div>
       ) : null}
 
+      {inputBubblePreview ? (
+        <div
+          className="pointer-events-none fixed z-[210] -translate-x-1/2 -translate-y-1/2"
+          style={{
+            left: Math.max(12, Math.min(inputBubblePreview.screenX, (typeof window !== "undefined" ? window.innerWidth : 1200) - 12)),
+            top: Math.max(12, Math.min(inputBubblePreview.screenY, (typeof window !== "undefined" ? window.innerHeight : 800) - 12)),
+          }}
+          aria-hidden
+        >
+          {inputBubblePreview.kind === "text" ? (
+            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-black/30 text-[12px] font-bold text-white/70 shadow-[0_10px_30px_rgba(0,0,0,0.5)] backdrop-blur">
+              T
+            </div>
+          ) : (
+            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-black/30 text-[12px] font-bold text-white/70 shadow-[0_10px_30px_rgba(0,0,0,0.5)] backdrop-blur">
+              <ImageIconLucide className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+            </div>
+          )}
+        </div>
+      ) : null}
+
       {placementPicker ? (
         <div
           ref={placementRef}
@@ -2162,53 +2823,121 @@ function WorkflowFlowWorkspace({
             {placementPicker.connectFrom ? "Connect new module" : "Place node"}
           </p>
           <p className="mb-3 text-[12px] text-white/55">
-            {placementPicker.connectFrom
-              ? "Pick a generator — it will be linked from the previous node."
-              : "What should be created here?"}
+            {placementPicker.intent === "text-input"
+              ? "Choose what to connect to this text input."
+              : placementPicker.intent === "text-or-image"
+                ? "Place and choose Text or Image."
+              : placementPicker.intent === "image-input"
+                ? "Choose media source or generator for this image input."
+                : placementPicker.connectFrom
+                  ? "Pick a generator — it will be linked from the previous node."
+                  : "What should be created here?"}
           </p>
           <div className="flex max-h-[min(60vh,360px)] flex-col gap-1.5 overflow-y-auto pr-0.5">
-            <button
-              type="button"
-              className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
-              onClick={() => placeNodeAtPicker("image")}
-            >
-              Image generator
-            </button>
-            <button
-              type="button"
-              className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
-              onClick={() => placeNodeAtPicker("video")}
-            >
-              Video generator
-            </button>
-            <button
-              type="button"
-              className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
-              onClick={() => placeNodeAtPicker("assistant")}
-            >
-              Assistant
-            </button>
-            <button
-              type="button"
-              className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
-              onClick={() => placeNodeAtPicker("upscale")}
-            >
-              Image upscaler
-            </button>
-            <button
-              type="button"
-              className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
-              onClick={() => placeNodeAtPicker("variation")}
-            >
-              Variation
-            </button>
-            <button
-              type="button"
-              className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
-              onClick={() => placeNodeAtPicker("sticky")}
-            >
-              Text (sticky note)
-            </button>
+            {placementPicker.intent === "text-or-image" ? (
+              <>
+                <button
+                  type="button"
+                  className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
+                  onClick={() => placeNodeAtPicker("sticky")}
+                >
+                  Text
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
+                  onClick={() => placeNodeAtPicker("image")}
+                >
+                  Image
+                </button>
+              </>
+            ) : placementPicker.intent === "text-input" ? (
+              <>
+                <button
+                  type="button"
+                  className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
+                  onClick={() => placeNodeAtPicker("sticky")}
+                >
+                  Text
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
+                  onClick={() => placeNodeAtPicker("assistant")}
+                >
+                  Assistant
+                </button>
+              </>
+            ) : placementPicker.intent === "image-input" ? (
+              <>
+                <button
+                  type="button"
+                  className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
+                  onClick={() => placeNodeAtPicker("image")}
+                >
+                  Image generator
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
+                  onClick={pickAvatarAtPlacement}
+                >
+                  Avatar
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
+                  onClick={pickUploadAtPlacement}
+                >
+                  Upload
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
+                  onClick={() => placeNodeAtPicker("image")}
+                >
+                  Image generator
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
+                  onClick={() => placeNodeAtPicker("video")}
+                >
+                  Video generator
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
+                  onClick={() => placeNodeAtPicker("assistant")}
+                >
+                  Assistant
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
+                  onClick={() => placeNodeAtPicker("upscale")}
+                >
+                  Image upscaler
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
+                  onClick={() => placeNodeAtPicker("variation")}
+                >
+                  Variation
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
+                  onClick={() => placeNodeAtPicker("sticky")}
+                >
+                  Prompt text
+                </button>
+              </>
+            )}
           </div>
         </div>
       ) : null}

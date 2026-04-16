@@ -25,6 +25,7 @@ function applyRefundHints(
 
 /** While jobs finish on KIE, refresh DB-backed items sooner so history UI does not lag. */
 const POLL_INTERVAL_MS = 4500;
+const UNAUTHORIZED_STREAK_THRESHOLD = 3;
 
 /**
  * Polls in-flight studio jobs (all library kinds) while the user navigates inside /app.
@@ -40,7 +41,12 @@ export default function StudioGenerationsBackgroundPoll() {
   grantRef.current = grantCredits;
 
   useEffect(() => {
+    let stoppedForUnauthorized = false;
+    let didNotifyUnauthorized = false;
+    let unauthorizedStreak = 0;
+    let id = 0;
     const tick = () => {
+      if (stoppedForUnauthorized) return;
       void (async () => {
         try {
           const res = await fetch("/api/studio/generations/poll", {
@@ -52,6 +58,21 @@ export default function StudioGenerationsBackgroundPoll() {
               piapiApiKey: getPersonalPiapiApiKey() ?? undefined,
             }),
           });
+          if (res.status === 401) {
+            unauthorizedStreak += 1;
+            if (unauthorizedStreak >= UNAUTHORIZED_STREAK_THRESHOLD) {
+              stoppedForUnauthorized = true;
+              if (id) window.clearInterval(id);
+              if (!didNotifyUnauthorized) {
+                didNotifyUnauthorized = true;
+                toast.error("Session expired", {
+                  description: "Please sign in again to continue studio generations.",
+                });
+              }
+            }
+            return;
+          }
+          unauthorizedStreak = 0;
           if (!res.ok) return;
           const json = (await res.json()) as { refundHints?: RefundHint[] };
           const hints = json.refundHints ?? [];
@@ -68,7 +89,7 @@ export default function StudioGenerationsBackgroundPoll() {
     };
 
     tick();
-    const id = window.setInterval(tick, POLL_INTERVAL_MS);
+    id = window.setInterval(tick, POLL_INTERVAL_MS);
     return () => window.clearInterval(id);
   }, []);
 

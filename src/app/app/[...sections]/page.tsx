@@ -162,11 +162,13 @@ type Quiz = {
   angles: string;
   offers: string;
   videoDurationPreference: "15s" | "20s" | "30s";
+  videoScriptLanguage: VideoScriptLanguage;
 };
 
 type NanoModel = "nano" | "pro";
 type TranslateToolMode = "video_translate" | "voice_change";
 type VoiceChangeUploadKind = "audio" | "video";
+type VideoScriptLanguage = "en" | "fr" | "es" | "de" | "it" | "pt";
 type ElevenVoiceOption = {
   voiceId: string;
   name: string;
@@ -184,6 +186,20 @@ function blurSvgDataUrl(w: number, h: number): string {
 }
 
 const THUMB_BLUR = blurSvgDataUrl(24, 24);
+
+const VIDEO_SCRIPT_LANGUAGE_LABELS: Record<VideoScriptLanguage, string> = {
+  en: "English",
+  fr: "French",
+  es: "Spanish",
+  de: "German",
+  it: "Italian",
+  pt: "Portuguese",
+};
+
+function normalizeVideoScriptLanguage(v: unknown): VideoScriptLanguage {
+  if (v === "fr" || v === "es" || v === "de" || v === "it" || v === "pt") return v;
+  return "en";
+}
 
 function formatClockTime(totalSeconds: number): string {
   if (!Number.isFinite(totalSeconds) || totalSeconds < 0) return "0:00";
@@ -839,6 +855,7 @@ export default function AppBrandWizard() {
     angles: "",
     offers: "",
     videoDurationPreference: "15s",
+    videoScriptLanguage: "en",
   });
   const [quizPrecisionNote, setQuizPrecisionNote] = useState<string>("");
   const [isQuizAutofilling, setIsQuizAutofilling] = useState(false);
@@ -1849,6 +1866,7 @@ export default function AppBrandWizard() {
       angles: "",
       offers: "",
       videoDurationPreference: "15s",
+      videoScriptLanguage: "en",
     });
     setSelectedProductImageUrls([]);
     setNanoModel("nano");
@@ -2097,6 +2115,7 @@ export default function AppBrandWizard() {
       setQuiz((q) => ({
         ...q,
         ...(r.quiz ?? {}),
+        videoScriptLanguage: normalizeVideoScriptLanguage((r.quiz ?? {})?.videoScriptLanguage),
       }));
       setSelectedProductImageUrls(Array.isArray(r.packshot_urls) ? r.packshot_urls : []);
       setImagePrompt(r.image_prompt ?? "");
@@ -2269,10 +2288,21 @@ export default function AppBrandWizard() {
     if (typeof window === "undefined") return;
     if (!isBrowserStudioWizardPath(pathname)) return;
 
-    const projectId =
-      appSection === "projects" ? null : runId || searchParams.get("project") || null;
-    const wantPath = sectionToPath(appSection, projectId);
     const cur = window.location.pathname + window.location.search;
+    const urlProject =
+      searchParams.get("project") ?? new URLSearchParams(window.location.search).get("project");
+    const projectId =
+      appSection === "projects" ? null : runId || urlProject || null;
+    const wantPath = sectionToPath(appSection, projectId);
+    // Avoid stripping `?project=` before loadRun() sets `runId` (refresh / deep link would lose the run).
+    if (
+      appSection === "link_to_ad" &&
+      Boolean(urlProject?.trim()) &&
+      !runId &&
+      (cur.includes("project=") || cur.includes("project%3D"))
+    ) {
+      return;
+    }
     if (cur !== wantPath) {
       window.history.replaceState(null, "", wantPath);
     }
@@ -2368,6 +2398,7 @@ export default function AppBrandWizard() {
           pre.videoDurationPreference === "20s" || pre.videoDurationPreference === "30s"
             ? pre.videoDurationPreference
             : "15s",
+        videoScriptLanguage: normalizeVideoScriptLanguage(pre.videoScriptLanguage),
       }));
 
       setStep("quiz");
@@ -2388,6 +2419,7 @@ export default function AppBrandWizard() {
             pre.videoDurationPreference === "20s" || pre.videoDurationPreference === "30s"
               ? pre.videoDurationPreference
               : "15s",
+          videoScriptLanguage: normalizeVideoScriptLanguage(pre.videoScriptLanguage),
         },
       });
       void refreshMeAndRuns();
@@ -2431,6 +2463,7 @@ export default function AppBrandWizard() {
           json.data.videoDurationPreference === "20s" || json.data.videoDurationPreference === "30s"
             ? json.data.videoDurationPreference
             : "15s",
+        videoScriptLanguage: normalizeVideoScriptLanguage(json.data.videoScriptLanguage),
       }));
       setQuizPrecisionNote(
         String(
@@ -2602,7 +2635,11 @@ export default function AppBrandWizard() {
               : packshotUrls.length > 0
                 ? packshotUrls
                 : extracted.images,
-          quiz: { persona: quiz.persona, videoDurationPreference: quiz.videoDurationPreference },
+          quiz: {
+            persona: quiz.persona,
+            videoDurationPreference: quiz.videoDurationPreference,
+            videoScriptLanguage: quiz.videoScriptLanguage,
+          },
         }),
       });
       const json = (await res.json()) as { error?: string; data?: any };
@@ -2769,6 +2806,7 @@ export default function AppBrandWizard() {
           quiz,
           templateId: selectedTemplate,
           productName: extracted.title,
+          videoScriptLanguage: quiz.videoScriptLanguage,
         }),
       });
       const json = (await res.json()) as { error?: string; data?: any };
@@ -4892,6 +4930,29 @@ export default function AppBrandWizard() {
                           <SelectItem value="30s" className={studioSelectItemClass}>
                             30s
                           </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>8) Video script language</Label>
+                      <Select
+                        value={quiz.videoScriptLanguage}
+                        onValueChange={(v) =>
+                          setQuiz((q) => ({
+                            ...q,
+                            videoScriptLanguage: normalizeVideoScriptLanguage(v),
+                          }))
+                        }
+                      >
+                        <SelectTrigger className="w-full max-w-xs rounded-xl border-white/15 bg-[#0a0a0d] text-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent position="popper" className={studioSelectContentClass}>
+                          {Object.entries(VIDEO_SCRIPT_LANGUAGE_LABELS).map(([code, label]) => (
+                            <SelectItem key={code} value={code} className={studioSelectItemClass}>
+                              {label}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>

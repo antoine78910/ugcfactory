@@ -206,5 +206,5 @@ export function cloneWorkflowSelection(
 }
 
 export function canCloneWorkflowSelection(selected: WorkflowCanvasNode[]): boolean {
-  return selected.some((n) => n.type === "workflowGroup" || n.type === "adAsset" || n.type === "stickyNote");
+  return selected.some((n) => n.type === "workflowGroup" || n.type === "adAsset" || n.type === "imageRef" || n.type === "stickyNote");
 }

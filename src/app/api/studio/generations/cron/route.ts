@@ -71,7 +71,7 @@ export async function POST(req: Request) {
     let backfillUpdated = 0;
     let retentionPurged = 0;
     try {
-      const bf = await backfillEphemeralStudioResults(admin, 15);
+      const bf = await backfillEphemeralStudioResults(admin, 50);
       backfillUpdated = bf.updated;
     } catch (e) {
       serverLog("studio_media_backfill_error", { message: e instanceof Error ? e.message : String(e) });

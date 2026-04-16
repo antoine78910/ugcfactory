@@ -15,9 +15,9 @@ function normalizeKieTaskToNanoShape(data: KieMarketRecordInfo) {
   if (kieRecordStateIsSuccess(data.state)) {
     if (urls.length === 0) {
       return {
-        successFlag: 0 as const,
+        successFlag: -1 as const,
         response: {} as Record<string, unknown>,
-        errorMessage: null as string | null,
+        errorMessage: "Task completed but no media URL was returned by provider.",
       };
     }
     return {

@@ -3,6 +3,33 @@ import { walkJsonForHttpsUrls } from "@/lib/walkJsonForHttpsUrls";
 
 const PIAPI_BASE = "https://api.piapi.ai";
 const PIAPI_TASK_PREFIX = "piapi:";
+const PIAPI_FETCH_RETRIES = 3;
+
+async function fetchPiapiWithRetry(
+  url: string,
+  init: RequestInit,
+  retries = PIAPI_FETCH_RETRIES,
+): Promise<Response> {
+  let lastErr: unknown;
+  for (let i = 0; i < retries; i++) {
+    try {
+      const res = await fetch(url, init);
+      if (res.ok || i === retries - 1) return res;
+      if (res.status === 429 || res.status === 502 || res.status === 503 || res.status === 504) {
+        await new Promise((r) => setTimeout(r, 350 * (i + 1)));
+        continue;
+      }
+      return res;
+    } catch (err) {
+      lastErr = err;
+      if (i < retries - 1) {
+        await new Promise((r) => setTimeout(r, 350 * (i + 1)));
+        continue;
+      }
+    }
+  }
+  throw lastErr;
+}
 
 function getPiApiKey() {
   return requireEnv("PIAPI_API_KEY");
@@ -30,6 +57,8 @@ export function isPiapiTaskId(taskId: string): boolean {
 export type PiapiSeedanceTaskType =
   | "seedance-2-preview"
   | "seedance-2-fast-preview"
+  | "seedance-2-preview-vip"
+  | "seedance-2-fast-preview-vip"
   | "seedance-2"
   | "seedance-2-fast";
 
@@ -121,7 +150,7 @@ export type PiapiGenericTask = {
 export async function piapiGetSeedanceTask(taskId: string, overrideApiKey?: string): Promise<PiapiSeedanceTask> {
   const apiKey = overrideApiKey?.trim() || getPiApiKey();
   const id = decodePiapiTaskId(taskId);
-  const res = await fetch(`${PIAPI_BASE}/api/v1/task/${encodeURIComponent(id)}`, {
+  const res = await fetchPiapiWithRetry(`${PIAPI_BASE}/api/v1/task/${encodeURIComponent(id)}`, {
     method: "GET",
     headers: { "X-API-Key": apiKey },
     cache: "no-store",
@@ -140,7 +169,7 @@ export async function piapiGetSeedanceTask(taskId: string, overrideApiKey?: stri
 export async function piapiGetTask(taskId: string, overrideApiKey?: string): Promise<PiapiGenericTask> {
   const apiKey = overrideApiKey?.trim() || getPiApiKey();
   const id = decodePiapiTaskId(taskId);
-  const res = await fetch(`${PIAPI_BASE}/api/v1/task/${encodeURIComponent(id)}`, {
+  const res = await fetchPiapiWithRetry(`${PIAPI_BASE}/api/v1/task/${encodeURIComponent(id)}`, {
     method: "GET",
     headers: { "X-API-Key": apiKey },
     cache: "no-store",

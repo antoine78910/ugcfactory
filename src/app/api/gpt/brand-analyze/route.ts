@@ -61,7 +61,7 @@ export async function POST(req: Request) {
     "step9_objections: [{ objection, response }]",
     "",
     "Also output quizPrefill matching the quiz questions:",
-    "quizPrefill: { aboutProduct, problems, promises, persona, angles, offers, videoDurationPreference }",
+    "quizPrefill: { aboutProduct, problems, promises, persona, angles, offers, videoDurationPreference, videoScriptLanguage }",
     "",
     "Also output researchNotes: short bullet list of what you used from the page (claims, FAQ, proof).",
     "",

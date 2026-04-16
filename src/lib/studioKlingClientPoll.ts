@@ -63,11 +63,13 @@ export async function pollKlingVideo(
   taskId: string,
   personalApiKey?: string,
   piapiApiKey?: string,
+  opts?: { maxRounds?: number; timeoutMessage?: string },
 ): Promise<string> {
   const p = personalApiKey ? `&personalApiKey=${encodeURIComponent(personalApiKey)}` : "";
   const pi = piapiApiKey ? `&piapiApiKey=${encodeURIComponent(piapiApiKey)}` : "";
   const keyParam = `${p}${pi}`;
-  for (let i = 0; i < POLL_MAX_ROUNDS; i++) {
+  const maxRounds = Math.max(1, Math.floor(opts?.maxRounds ?? POLL_MAX_ROUNDS));
+  for (let i = 0; i < maxRounds; i++) {
     const res = await fetchStatusWithTimeout(
       `/api/kling/status?taskId=${encodeURIComponent(taskId)}${keyParam}`,
     );
@@ -94,7 +96,7 @@ export async function pollKlingVideo(
     }
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
   }
-  throw new Error("Video generation timed out. Please try again.");
+  throw new Error(opts?.timeoutMessage || "Video generation timed out. Please try again.");
 }
 
 type VeoStatusJson = {

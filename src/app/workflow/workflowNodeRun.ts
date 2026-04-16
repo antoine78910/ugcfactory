@@ -1,6 +1,7 @@
 import type { Edge, Node } from "@xyflow/react";
 
 import type { AdAssetNodeData } from "@/app/workflow/nodes/AdAssetNode";
+import type { ImageRefNodeData } from "@/app/workflow/nodes/ImageRefNode";
 import type { StickyNoteNodeData } from "@/app/workflow/workflowStickyNoteTypes";
 import { calculateVideoCredits } from "@/lib/linkToAd/generationCredits";
 import { studioImageCreditsChargedTotal } from "@/lib/pricing";
@@ -50,7 +51,9 @@ function textFromUpstreamNode(n: Node): string {
 /** Collect non-empty text from nodes connected to this node's target handle `in`. */
 export function collectLinkedPromptTexts(nodes: Node[], edges: Edge[], targetNodeId: string): string[] {
   const byId = new Map(nodes.map((n) => [n.id, n]));
-  const incoming = edges.filter((e) => e.target === targetNodeId && (e.targetHandle === "in" || !e.targetHandle));
+  const incoming = edges.filter(
+    (e) => e.target === targetNodeId && (e.targetHandle === "in" || e.targetHandle === "text" || !e.targetHandle),
+  );
   const parts: string[] = [];
   for (const e of incoming) {
     const src = byId.get(e.source);
@@ -69,13 +72,21 @@ export function composeWorkflowPrompt(localPrompt: string, linkedParts: string[]
   return local;
 }
 
-/** First image URL from upstream adAsset nodes (output, then reference). */
+/** First image URL from upstream adAsset or imageRef nodes. */
 export function collectLinkedImageUrl(nodes: Node[], edges: Edge[], targetNodeId: string): string | undefined {
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const incoming = edges.filter((e) => e.target === targetNodeId && (e.targetHandle === "in" || !e.targetHandle));
   for (const e of incoming) {
     const src = byId.get(e.source);
-    if (!src || src.type !== "adAsset") continue;
+    if (!src) continue;
+    if (src.type === "imageRef") {
+      const d = src.data as ImageRefNodeData;
+      if (d.mediaKind === "video") continue;
+      const url = d.imageUrl?.trim();
+      if (url) return url;
+      continue;
+    }
+    if (src.type !== "adAsset") continue;
     const d = src.data as AdAssetNodeData;
     const out = d.outputPreviewUrl?.trim();
     const ref = d.referencePreviewUrl?.trim();
@@ -87,6 +98,82 @@ export function collectLinkedImageUrl(nodes: Node[], edges: Edge[], targetNodeId
     return url;
   }
   return undefined;
+}
+
+/** All linked image URLs from upstream adAsset/imageRef nodes (deduplicated, non-video only). */
+export function collectLinkedImageUrls(nodes: Node[], edges: Edge[], targetNodeId: string): string[] {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const incoming = edges.filter((e) => e.target === targetNodeId && (e.targetHandle === "in" || !e.targetHandle));
+  const urls: string[] = [];
+  const seen = new Set<string>();
+  for (const e of incoming) {
+    const src = byId.get(e.source);
+    if (!src) continue;
+    if (src.type === "imageRef") {
+      const d = src.data as ImageRefNodeData;
+      if (d.mediaKind === "video") continue;
+      const url = d.imageUrl?.trim();
+      if (!url || seen.has(url)) continue;
+      seen.add(url);
+      urls.push(url);
+      continue;
+    }
+    if (src.type !== "adAsset") continue;
+    const d = src.data as AdAssetNodeData;
+    const out = d.outputPreviewUrl?.trim();
+    const ref = d.referencePreviewUrl?.trim();
+    const url = out || ref;
+    if (!url || seen.has(url)) continue;
+    const kind = d.outputMediaKind ?? d.referenceMediaKind;
+    if (kind === "video") continue;
+    if (d.kind === "video" && d.referenceMediaKind !== "image" && !out) continue;
+    seen.add(url);
+    urls.push(url);
+  }
+  return urls;
+}
+
+/** Linked image URLs filtered by target handles on the destination node. */
+export function collectLinkedImageUrlsForHandles(
+  nodes: Node[],
+  edges: Edge[],
+  targetNodeId: string,
+  targetHandles: string[],
+): string[] {
+  const wanted = new Set(targetHandles);
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const incoming = edges.filter((e) => {
+    if (e.target !== targetNodeId) return false;
+    const h = e.targetHandle ?? "in";
+    return wanted.has(h);
+  });
+  const urls: string[] = [];
+  const seen = new Set<string>();
+  for (const e of incoming) {
+    const src = byId.get(e.source);
+    if (!src) continue;
+    if (src.type === "imageRef") {
+      const d = src.data as ImageRefNodeData;
+      if (d.mediaKind === "video") continue;
+      const url = d.imageUrl?.trim();
+      if (!url || seen.has(url)) continue;
+      seen.add(url);
+      urls.push(url);
+      continue;
+    }
+    if (src.type !== "adAsset") continue;
+    const d = src.data as AdAssetNodeData;
+    const out = d.outputPreviewUrl?.trim();
+    const ref = d.referencePreviewUrl?.trim();
+    const url = out || ref;
+    if (!url || seen.has(url)) continue;
+    const kind = d.outputMediaKind ?? d.referenceMediaKind;
+    if (kind === "video") continue;
+    if (d.kind === "video" && d.referenceMediaKind !== "image" && !out) continue;
+    seen.add(url);
+    urls.push(url);
+  }
+  return urls;
 }
 
 export function resolveWorkflowImagePickerModel(raw: string): StudioImageKiePickerModelId {
@@ -292,6 +379,8 @@ export type WorkflowRunVideoParams = {
   resolution: string;
   linkedImageUrl?: string;
   referenceImageUrl?: string;
+  endImageUrl?: string;
+  referenceImageUrls?: string[];
 };
 
 export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promise<{ videoUrl: string }> {
@@ -299,6 +388,8 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
   const pKey = params.personalApiKey;
   const piKey = params.piapiApiKey;
   const startUrl = params.referenceImageUrl?.trim() || params.linkedImageUrl?.trim() || undefined;
+  const endUrl = params.endImageUrl?.trim() || undefined;
+  const refUrls = (params.referenceImageUrls ?? []).map((u) => u.trim()).filter(Boolean);
   const quality = klingQualityFromVideoResolution(params.resolution);
   const duration = workflowVideoDefaultDuration(modelId);
   const credits = calculateVideoCredits({
@@ -332,7 +423,7 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
         model: veoModel,
         aspectRatio: veoAspect,
         generationType: startUrl ? "FIRST_AND_LAST_FRAMES_2_VIDEO" : "TEXT_2_VIDEO",
-        imageUrls: startUrl ? [startUrl] : undefined,
+        imageUrls: startUrl ? [startUrl, ...(endUrl ? [endUrl] : [])] : undefined,
         personalApiKey: pKey,
       }),
     });
@@ -368,7 +459,7 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
       accountPlan: params.planId,
       marketModel: modelId,
       prompt: params.prompt,
-      imageUrl: startUrl,
+      imageUrl: startUrl ?? refUrls[0],
       duration,
       aspectRatio:
         (isKling30 || isKling26) && !startUrl

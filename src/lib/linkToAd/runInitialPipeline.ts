@@ -416,6 +416,8 @@ export async function runContinueScriptsPipeline(
       phase: "after_scripts",
       generationMode,
       customUgcIntent,
+      aiProvider,
+      ltaVideoDurationSec: scriptTargetDurationSec,
       cleanCandidate: snap.cleanCandidate,
       fallbackImageUrl: snap.fallbackImageUrl,
       confidence: snap.confidence,

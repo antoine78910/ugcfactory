@@ -116,6 +116,7 @@ async function imageFileMeetsMinDimensions(file: File, minW: number, minH: numbe
 const STUDIO_VIDEO_LIBRARY_KIND_PARAM = STUDIO_VIDEO_TAB_KINDS.join(",");
 
 type VideoTab = "create" | "edit";
+type VideoPriority = "normal" | "vip";
 
 type VideoModelId =
   | "kling-3.0/video"
@@ -131,6 +132,22 @@ type VideoModelId =
   | "veo3";
 
 type VideoFamily = "kie" | "veo" | "sora";
+
+const SEEDANCE_STRICT_NO_FACE_MODELS: VideoModelId[] = [
+  "bytedance/seedance-2",
+  "bytedance/seedance-2-fast",
+];
+
+const SEEDANCE_AI_FACE_ONLY_MODELS: VideoModelId[] = [
+  "bytedance/seedance-2-preview",
+  "bytedance/seedance-2-fast-preview",
+];
+
+const SEEDANCE_PREVIEW_MODELS: VideoModelId[] = [
+  "bytedance/seedance-2-preview",
+  "bytedance/seedance-2-fast-preview",
+];
+const SEEDANCE_PREVIEW_POLL_MAX_ROUNDS = Math.ceil((12 * 60 * 60 * 1000) / 4000);
 
 const MODEL_OPTIONS: { id: VideoModelId; label: string; family: VideoFamily }[] = [
   { id: "kling-3.0/video", label: "Kling 3.0", family: "kie" },
@@ -580,6 +597,10 @@ function videoHistoryAspectLabel(family: string, aspect: string, veoAspect: stri
   return aspect;
 }
 
+function isSeedancePreviewModelId(id: string): boolean {
+  return id === "bytedance/seedance-2-preview" || id === "bytedance/seedance-2-fast-preview";
+}
+
 async function registerStudioTask(params: {
   kind: "studio_video";
   label: string;
@@ -647,6 +668,7 @@ export default function StudioVideoPanel({
   const HIDE_VIDEO_EDIT_TAB = true;
   const FORCED_VIDEO_MODEL_ID: VideoModelId = "openai/sora-2";
   const [modelId, setModelId] = useState<VideoModelId>(VIDEO_MODEL_ACCESS_ORDER[0]!);
+  const [videoPriority, setVideoPriority] = useState<VideoPriority>("normal");
   const [duration, setDuration] = useState("10");
   const [aspect, setAspect] = useState("9:16");
   const [klingMode, setKlingMode] = useState<"std" | "pro">("std");
@@ -795,6 +817,16 @@ export default function StudioVideoPanel({
   >("create_start");
 
   const meta = MODEL_OPTIONS.find((m) => m.id === modelId)!;
+  const isSeedanceStrictNoFaceModel = SEEDANCE_STRICT_NO_FACE_MODELS.includes(modelId);
+  const isSeedanceAiFaceOnlyModel = SEEDANCE_AI_FACE_ONLY_MODELS.includes(modelId);
+  const isSeedancePreviewModel = SEEDANCE_PREVIEW_MODELS.includes(modelId);
+  const seedanceFacePolicyHint = isSeedanceStrictNoFaceModel
+    ? "Face input not allowed, even AI"
+    : isSeedanceAiFaceOnlyModel
+      ? "Only AI faces allowed, no real faces"
+      : null;
+  const seedancePriorityInfoText =
+    "VIP pricing is x2 credits per generation.\n\nPeak hours: From 09:00 to 15:00 GMT, Seedance Preview experiences high traffic. During this period, queue times may extend to several hours.\n\nCurrently outside peak hours: Normal is usually 5-60 min. VIP (fast) is usually 3-5 min.";
   /** Preview Seedance models need a start image; Seedance 2 / Fast support text-only. */
   const startFrameOptional =
     meta.family === "veo" ||
@@ -811,7 +843,7 @@ export default function StudioVideoPanel({
   );
   const billingDurationSec = klingCustomMulti ? klingMultiTotalSec : Number(duration);
 
-  const credits = useMemo(
+  const baseCredits = useMemo(
     () =>
       calculateVideoCredits({
         modelId,
@@ -820,6 +852,10 @@ export default function StudioVideoPanel({
         quality: klingMode,
       }),
     [modelId, billingDurationSec, soundOn, klingMode],
+  );
+  const credits = useMemo(
+    () => (videoPriority === "vip" ? baseCredits * 2 : baseCredits),
+    [baseCredits, videoPriority],
   );
 
   useEffect(() => {
@@ -1794,7 +1830,17 @@ export default function StudioVideoPanel({
             snap.modelId === "openai/sora-2-pro" ? "Sora 2 Pro started" : "Sora 2 started",
             { description: "Rendering…" },
           );
-          const url = await pollKlingVideo(json.taskId, pKey, piKey);
+          const url = await pollKlingVideo(
+            json.taskId,
+            pKey,
+            piKey,
+            isSeedancePreviewModelId(snap.modelId)
+              ? {
+                  maxRounds: SEEDANCE_PREVIEW_POLL_MAX_ROUNDS,
+                  timeoutMessage: "Seedance Preview generation is still processing after 12 hours.",
+                }
+              : undefined,
+          );
           void completeStudioTask(json.taskId, url);
           const doneAt = Date.now();
           const doneId = `${jobId}-done-${doneAt}`;
@@ -1962,7 +2008,17 @@ export default function StudioVideoPanel({
           ),
         );
         toast.message("Generation started", { description: "Polling provider…" });
-        const url = await pollKlingVideo(json.taskId, pKey, piKey);
+        const url = await pollKlingVideo(
+          json.taskId,
+          pKey,
+          piKey,
+          isSeedancePreviewModelId(snap.modelId)
+            ? {
+                maxRounds: SEEDANCE_PREVIEW_POLL_MAX_ROUNDS,
+                timeoutMessage: "Seedance Preview generation is still processing after 12 hours.",
+              }
+            : undefined,
+        );
         void completeStudioTask(json.taskId, url);
         const doneAt = Date.now();
         const doneId = `${jobId}-done-${doneAt}`;
@@ -2346,6 +2402,9 @@ export default function StudioVideoPanel({
                   }}
                 />
               </div>
+              {seedanceFacePolicyHint ? (
+                <p className="mt-2 text-[10px] leading-snug text-white/45">{seedanceFacePolicyHint}</p>
+              ) : null}
               {klingCustomMulti ? (
                 <p className="mt-3 text-[10px] leading-snug text-white/38">
                   Multi-shot: define each scene below in Parameters. Start frame only — end frame is disabled.
@@ -2383,8 +2442,56 @@ export default function StudioVideoPanel({
                     }}
                     featuredTitle="Video models"
                   />
+                  {isSeedanceStrictNoFaceModel ? (
+                    <div className="mt-2 flex items-start gap-1.5 text-[10px] leading-snug text-white/45">
+                      <HelpCircle
+                        className="mt-0.5 h-3.5 w-3.5 shrink-0"
+                        strokeWidth={2}
+                        aria-hidden
+                        title="Seedance blocks face inputs (including AI faces) due to anti-deepfake policy."
+                      />
+                      <span>Face input policy (anti-deepfake): this model does not accept face input, even AI.</span>
+                    </div>
+                  ) : null}
                 </div>
               )}
+
+              {isSeedancePreviewModel ? (
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1.5">
+                    <Label className="text-xs text-white/45">Priority</Label>
+                    <div className="group relative">
+                      <button
+                        type="button"
+                        aria-label="Priority info"
+                        className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-white/20 text-[10px] font-bold text-white/55 transition hover:text-white/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/45"
+                      >
+                        ?
+                      </button>
+                      <div className="pointer-events-none absolute left-0 z-20 mt-1 hidden w-72 whitespace-pre-line rounded-lg border border-white/15 bg-[#111118] p-2.5 text-[10px] leading-snug text-white/80 shadow-xl group-hover:block group-focus-within:block">
+                        {seedancePriorityInfoText}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] p-1">
+                    {(["normal", "vip"] as const).map((tier) => (
+                      <button
+                        key={tier}
+                        type="button"
+                        onClick={() => setVideoPriority(tier)}
+                        className={cn(
+                          "rounded-md px-3 py-1.5 text-xs font-semibold transition",
+                          videoPriority === tier
+                            ? "border border-violet-400/60 bg-violet-500/15 text-white"
+                            : "border border-white/10 bg-black/20 text-white/65 hover:border-white/20",
+                        )}
+                      >
+                        {tier === "vip" ? "VIP" : "Normal"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
 
               {studioVideoSupportsMultiShot(modelId) ? (
                 <div className="space-y-2">

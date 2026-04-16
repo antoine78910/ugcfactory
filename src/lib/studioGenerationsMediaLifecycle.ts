@@ -25,7 +25,7 @@ export async function backfillEphemeralStudioResults(
     .eq("status", "ready")
     .not("result_urls", "is", null)
     .order("created_at", { ascending: false })
-    .limit(Math.min(500, limit * 10));
+    .limit(Math.min(1000, limit * 20));
 
   if (error) throw error;
 

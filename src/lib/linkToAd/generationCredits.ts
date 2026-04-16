@@ -17,7 +17,6 @@ import {
   linkToAdSeedanceMarketModel,
   linkToAdVideoCredits,
 } from "@/lib/pricing";
-import { normalizeUgcScriptVideoDurationSec } from "@/lib/ugcAiScriptBrief";
 
 // ---------------------------------------------------------------------------
 // Image credits
@@ -65,13 +64,8 @@ export function creditsLinkToAdFullPipeline(
   durationSec: number,
   seedanceSpeed: LinkToAdSeedanceSpeed = "normal",
 ): number {
-  const video = creditsLinkToAdVideoFromImage(model, durationSec, seedanceSpeed);
-  const d = normalizeUgcScriptVideoDurationSec(durationSec);
-  /** Product bundle: first URL “Generate” for 15s / 30s normal is billed as the video tier only (79 / 144), not scan+refs on top. */
-  if (seedanceSpeed === "normal" && (d === 15 || d === 30)) {
-    return video;
-  }
-  return CREDITS_LINK_TO_AD_STORE_SCAN + CREDITS_LINK_TO_AD_THREE_REF_IMAGES + video;
+  void durationSec;
+  return creditsLinkToAdVideoFromImage(model, durationSec, seedanceSpeed);
 }
 
 /** Full ad bundle — backend must bill this fixed amount, not sum of parts. */

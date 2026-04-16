@@ -318,6 +318,10 @@
 }
 
 /* Sticky note placement tool: custom cursor on empty canvas (asset: public/workflow/sticky-note-cursor.png). */
+.workflow-flow.workflow-select-mode .react-flow__pane {
+  cursor: default !important;
+}
+
 .workflow-flow.workflow-sticky-place-mode .react-flow__pane {
   cursor:
     url("/workflow/sticky-note-cursor.png") 6 4,
@@ -419,34 +423,37 @@
   pointer-events: none;
 }
 
-/* Image / video generator — Run in progress: luminous violet perimeter */
+/* Image / video generator — Run in progress: luminous violet perimeter (conic sweep) */
 .workflow-generator-glow-wrap {
+  --glow-angle: 0deg;
+  position: relative;
   border-radius: 1rem;
   padding: 2px;
-  background: linear-gradient(
-    115deg,
-    rgba(91, 33, 182, 0.55),
-    rgba(167, 139, 250, 0.95),
-    rgba(196, 181, 253, 0.75),
-    rgba(124, 58, 237, 0.65),
-    rgba(167, 139, 250, 0.9),
-    rgba(91, 33, 182, 0.5)
+  background: conic-gradient(
+    from var(--glow-angle),
+    rgba(91, 33, 182, 0.25) 0%,
+    rgba(167, 139, 250, 0.05) 15%,
+    transparent 30%,
+    transparent 55%,
+    rgba(167, 139, 250, 0.05) 70%,
+    rgba(196, 181, 253, 1) 85%,
+    rgba(139, 92, 246, 0.95) 92%,
+    rgba(91, 33, 182, 0.25) 100%
   );
-  background-size: 320% 320%;
-  animation: workflow-generator-border-flow 2.4s ease infinite;
+  animation: workflow-generator-conic-spin 1.8s linear infinite;
   box-shadow:
-    0 0 20px rgba(139, 92, 246, 0.45),
-    0 0 42px rgba(167, 139, 250, 0.22);
+    0 0 24px rgba(139, 92, 246, 0.5),
+    0 0 48px rgba(167, 139, 250, 0.18);
 }
 
-@keyframes workflow-generator-border-flow {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
+@property --glow-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes workflow-generator-conic-spin {
+  to {
+    --glow-angle: 360deg;
   }
 }

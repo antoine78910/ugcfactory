@@ -17,6 +17,7 @@ import {
   WAVESPEED_CHAIN_PROVIDER,
   WAVESPEED_PROVIDER,
 } from "@/lib/wavespeedChain";
+import { persistStudioMediaUrls, isStudioMediaPublicUrl } from "@/lib/studioGenerationsMedia";
 
 /** DB rows we still poll until Kie/PiAPI reports terminal state. */
 export const STUDIO_GENERATION_IN_PROGRESS_STATUSES = [
@@ -208,10 +209,26 @@ export async function pollStudioGenerationRow(
   if (out.kind === "processing") return;
 
   if (out.kind === "success") {
-    // Save provider URLs directly — cron backfill (backfillEphemeralStudioResults) archives
-    // them to Supabase Storage asynchronously, keeping this poll path fast and avoiding
-    // Vercel serverless timeouts caused by large video downloads.
-    const resultUrls = (out.urls ?? []).map((u) => String(u).trim()).filter(Boolean);
+    let resultUrls = (out.urls ?? []).map((u) => String(u).trim()).filter(Boolean);
+
+    // Archive to Supabase Storage immediately when possible (prevents ephemeral URL expiry).
+    // Falls back to saving provider URLs — cron backfill will retry later.
+    if (resultUrls.length > 0 && !resultUrls.every(isStudioMediaPublicUrl)) {
+      try {
+        const { urls: archived } = await persistStudioMediaUrls({
+          admin: supabase,
+          userId: row.user_id,
+          rowId: row.id,
+          urls: resultUrls,
+        });
+        if (archived.length > 0) resultUrls = archived;
+      } catch (e) {
+        serverLog("studio_poll_archival_fallback", {
+          rowId: row.id,
+          message: e instanceof Error ? e.message : String(e),
+        });
+      }
+    }
 
     const { error } = await supabase
       .from("studio_generations")

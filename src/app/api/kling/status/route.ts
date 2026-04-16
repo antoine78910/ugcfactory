@@ -10,6 +10,49 @@ import {
 import { isPiapiTaskId, piapiGenericTaskStatusToLegacy, piapiGetTask } from "@/lib/piapiSeedance";
 import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
 
+const RECENT_FAILURE_LOGS = new Map<string, number>();
+const LOG_THROTTLE_MS = 20_000;
+
+function logGenerationFailureThrottled(scope: string, message: string, meta: Record<string, unknown>) {
+  const key = `${scope}:${String(meta.taskId ?? "")}:${message}`;
+  const now = Date.now();
+  const last = RECENT_FAILURE_LOGS.get(key) ?? 0;
+  if (now - last < LOG_THROTTLE_MS) return;
+  RECENT_FAILURE_LOGS.set(key, now);
+  logGenerationFailure(scope, message, meta);
+}
+
+function toFiniteNumber(v: unknown): number | null {
+  const n = typeof v === "number" ? v : typeof v === "string" ? Number(v) : NaN;
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Best-effort queue ETA extraction from PiAPI raw task payload. */
+function extractPiapiWaitHints(raw: unknown): { wait_estimate_seconds: number | null; queue_position: number | null } {
+  if (!raw || typeof raw !== "object") {
+    return { wait_estimate_seconds: null, queue_position: null };
+  }
+  const r = raw as Record<string, unknown>;
+  const waitCandidates: unknown[] = [
+    r.eta_seconds,
+    r.estimated_wait_seconds,
+    r.estimated_remaining_seconds,
+    r.wait_seconds,
+    r.queue_wait_seconds,
+    (r.meta as Record<string, unknown> | undefined)?.eta_seconds,
+    (r.meta as Record<string, unknown> | undefined)?.estimated_wait_seconds,
+  ];
+  const queueCandidates: unknown[] = [
+    r.queue_position,
+    (r.meta as Record<string, unknown> | undefined)?.queue_position,
+  ];
+  const wait =
+    waitCandidates.map(toFiniteNumber).find((n): n is number => n !== null && n >= 0) ?? null;
+  const queue =
+    queueCandidates.map(toFiniteNumber).find((n): n is number => n !== null && n >= 0) ?? null;
+  return { wait_estimate_seconds: wait, queue_position: queue };
+}
+
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const taskId = (searchParams.get("taskId") ?? "").trim();
@@ -24,8 +67,12 @@ export async function GET(req: Request) {
     if (isPiapiTaskId(taskId)) {
       const data = await piapiGetTask(taskId, piapiKey);
       const mapped = piapiGenericTaskStatusToLegacy(data);
+      const waitHints = extractPiapiWaitHints(data);
       if (mapped.status === "FAILED" && mapped.error_message) {
-        logGenerationFailure("kling/status", mapped.error_message, { taskId, provider: "piapi" });
+        logGenerationFailureThrottled("kling/status", mapped.error_message, {
+          taskId,
+          provider: "piapi",
+        });
       }
       const urls = (mapped.response ?? []).map((u) => String(u).trim()).filter(Boolean);
       const statusOut =
@@ -37,6 +84,8 @@ export async function GET(req: Request) {
           error_message: mapped.error_message
             ? userFacingProviderErrorOrDefault(mapped.error_message)
             : mapped.error_message,
+          wait_estimate_seconds: waitHints.wait_estimate_seconds,
+          queue_position: waitHints.queue_position,
           raw: data,
         },
       });
@@ -89,7 +138,7 @@ export async function GET(req: Request) {
     }
     if (kieRecordStateIsFail(data.state)) {
       const rawFail = data.failMsg ?? "Task failed";
-      logGenerationFailure("kling/status", rawFail, { taskId, provider: "kie-market" });
+      logGenerationFailureThrottled("kling/status", rawFail, { taskId, provider: "kie-market" });
       return NextResponse.json({
         data: {
           status: "FAILED",
@@ -102,7 +151,7 @@ export async function GET(req: Request) {
     // Sora / KIE sometimes return failMsg (e.g. "internal error") while state is still "generating" or unknown.
     const failMsgOnly = (data.failMsg ?? "").trim();
     if (failMsgOnly && urls.length === 0 && !kieRecordStateIsSuccess(data.state)) {
-      logGenerationFailure("kling/status", failMsgOnly, {
+      logGenerationFailureThrottled("kling/status", failMsgOnly, {
         taskId,
         provider: "kie-market",
         state: data.state,
