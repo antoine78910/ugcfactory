@@ -2444,12 +2444,9 @@ export default function StudioVideoPanel({
                   />
                   {isSeedanceStrictNoFaceModel ? (
                     <div className="mt-2 flex items-start gap-1.5 text-[10px] leading-snug text-white/45">
-                      <HelpCircle
-                        className="mt-0.5 h-3.5 w-3.5 shrink-0"
-                        strokeWidth={2}
-                        aria-hidden
-                        title="Seedance blocks face inputs (including AI faces) due to anti-deepfake policy."
-                      />
+                      <span title="Seedance blocks face inputs (including AI faces) due to anti-deepfake policy.">
+                        <HelpCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden />
+                      </span>
                       <span>Face input policy (anti-deepfake): this model does not accept face input, even AI.</span>
                     </div>
                   ) : null}

@@ -101,7 +101,6 @@ const CREATE_NAV: CreateNavEntry[] = [
     href: "/workflow",
     label: "Workflow",
     icon: GitBranch,
-    soon: true,
   },
   { kind: "route", id: "avatar", label: "Avatar", icon: UserRound },
   { kind: "route", id: "ad_clone", label: "Translate", icon: Languages },

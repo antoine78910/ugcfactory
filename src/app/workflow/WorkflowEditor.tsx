@@ -684,6 +684,16 @@ function WorkflowReactFlowChrome({
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   const [avatarUrls, setAvatarUrls] = useState<string[]>([]);
   const uploadInputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const onOpen = () => uploadInputRef.current?.click();
+    window.addEventListener("workflow:open-upload-picker", onOpen as EventListener);
+    return () => window.removeEventListener("workflow:open-upload-picker", onOpen as EventListener);
+  }, []);
+  useEffect(() => {
+    const onOpen = () => setAvatarPickerOpen(true);
+    window.addEventListener("workflow:open-avatar-picker", onOpen as EventListener);
+    return () => window.removeEventListener("workflow:open-avatar-picker", onOpen as EventListener);
+  }, []);
   const [pendingImageRefConnect, setPendingImageRefConnect] = useState<{
     targetNodeId: string;
     targetHandleId: string;
@@ -949,7 +959,7 @@ function WorkflowReactFlowChrome({
               <Plus className={barIcon} strokeWidth={2.25} />
             </button>
             {addOpen ? (
-              <div className="absolute left-[calc(100%+10px)] top-0 z-20 w-[min(100vw-20px,300px)] overflow-hidden rounded-xl border border-white/10 bg-[#0b0912] shadow-xl">
+              <div className="absolute left-[calc(100%+10px)] top-0 z-[80] w-[min(100vw-20px,300px)] overflow-hidden rounded-xl border border-white/10 bg-[#0b0912] shadow-xl">
                 <div className="flex border-b border-white/[0.08]">
                   <button
                     type="button"
@@ -988,6 +998,7 @@ function WorkflowReactFlowChrome({
                     Projects
                   </button>
                 </div>
+                <div className="max-h-[min(70vh,440px)] overflow-y-auto">
                 {addPlusTab === "basics" ? (
                   <div className="py-1">
                     <p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wide text-white/40">
@@ -1078,12 +1089,19 @@ function WorkflowReactFlowChrome({
                       }}
                       onClick={() => addNode("variation")}
                     />
+                    <button
+                      type="button"
+                      onClick={() => setAvatarPickerOpen(true)}
+                      className="flex w-full items-center gap-2 border-t border-white/[0.06] px-3 py-2 text-left text-[12px] text-white/60 transition hover:bg-white/[0.04] hover:text-white/80"
+                    >
+                      <UserRound className="h-4 w-4 shrink-0 text-white/40" strokeWidth={2} aria-hidden />
+                      <span>Avatar</span>
+                    </button>
                   </div>
                 ) : addPlusTab === "upload" ? (
                   <div className="space-y-3 p-3">
                     <p className="text-[12px] leading-snug text-white/55">
-                      Upload an image or video as a reference node. Connect it to a generator to use as input. Avatars
-                      use your library from Create → Avatar.
+                      Upload an image or video as a reference node. Connect it to a generator to use as input.
                     </p>
                     <input
                       ref={uploadInputRef}
@@ -1099,14 +1117,6 @@ function WorkflowReactFlowChrome({
                     >
                       <Upload className="h-4 w-4 text-white/70" strokeWidth={2} aria-hidden />
                       Browse files
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setAvatarPickerOpen(true)}
-                      className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/12 bg-white/[0.06] py-2.5 text-[13px] font-semibold text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/10"
-                    >
-                      <UserRound className="h-4 w-4 text-white/70" strokeWidth={2} aria-hidden />
-                      Choose avatar
                     </button>
                   </div>
                 ) : (
@@ -1147,6 +1157,7 @@ function WorkflowReactFlowChrome({
                     </button>
                   </div>
                 )}
+                </div>
               </div>
             ) : null}
           </div>
@@ -1908,6 +1919,7 @@ function WorkflowFlowWorkspace({
   const placementRef = useRef<HTMLDivElement>(null);
   const [inputBubblePreview, setInputBubblePreview] = useState<WorkflowInputBubblePreviewState>(null);
   const cutTargetBusyRef = useRef(false);
+  const cutSuppressNextPaneClickRef = useRef(false);
   const cutSnipClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [cutSnipFx, setCutSnipFx] = useState<{ x: number; y: number } | null>(null);
 
@@ -2102,18 +2114,23 @@ function WorkflowFlowWorkspace({
       >).detail;
       if (!detail) return;
 
-      if (detail.active === false) {
+      if ("active" in detail && detail.active === false) {
         setInputBubblePreview(null);
         return;
       }
 
       if (
-        typeof (detail as any).targetNodeId !== "string" ||
-        typeof (detail as any).targetHandleId !== "string" ||
-        typeof (detail as any).screenX !== "number" ||
-        typeof (detail as any).screenY !== "number"
-      )
+        !("targetNodeId" in detail) ||
+        !("targetHandleId" in detail) ||
+        !("screenX" in detail) ||
+        !("screenY" in detail) ||
+        typeof detail.targetNodeId !== "string" ||
+        typeof detail.targetHandleId !== "string" ||
+        typeof detail.screenX !== "number" ||
+        typeof detail.screenY !== "number"
+      ) {
         return;
+      }
 
       const flow = screenToFlowPosition({ x: detail.screenX, y: detail.screenY });
       setInputBubblePreview({
@@ -2213,7 +2230,7 @@ function WorkflowFlowWorkspace({
       const from = placementPicker.connectFrom;
       const to = placementPicker.connectTo;
       setNodes((prev) => [...prev, newNode]);
-      const connectable = newNode.type === "adAsset" || newNode.type === "imageRef";
+      const connectable = newNode.type === "adAsset";
       if (from && connectable) {
         setEdges((eds) =>
           addEdge(
@@ -2251,31 +2268,13 @@ function WorkflowFlowWorkspace({
   );
 
   const pickUploadAtPlacement = useCallback(() => {
-    if (!placementPicker?.connectTo) {
-      uploadInputRef.current?.click();
-      return;
-    }
-    setPendingImageRefConnect({
-      targetNodeId: placementPicker.connectTo.nodeId,
-      targetHandleId: placementPicker.connectTo.handleId,
-      flow: placementPicker.flow,
-    });
     setPlacementPicker(null);
-    uploadInputRef.current?.click();
+    window.dispatchEvent(new CustomEvent("workflow:open-upload-picker"));
   }, [placementPicker]);
 
   const pickAvatarAtPlacement = useCallback(() => {
-    if (placementPicker?.connectTo) {
-      setPendingImageRefConnect({
-        targetNodeId: placementPicker.connectTo.nodeId,
-        targetHandleId: placementPicker.connectTo.handleId,
-        flow: placementPicker.flow,
-      });
-    } else {
-      setPendingImageRefConnect(null);
-    }
     setPlacementPicker(null);
-    setAvatarPickerOpen(true);
+    window.dispatchEvent(new CustomEvent("workflow:open-avatar-picker"));
   }, [placementPicker]);
 
   useEffect(() => {
@@ -2607,11 +2606,6 @@ function WorkflowFlowWorkspace({
           onConnectEnd={readOnly ? undefined : onConnectEnd}
           connectionRadius={WORKFLOW_CONNECTION_RADIUS}
           onNodeDragStop={readOnly ? undefined : onNodeDragStop}
-          onNodeMouseEnter={readOnly ? undefined : (_ev, node) => {
-            if (tool !== "select") return;
-            setHoveredNodeId(node.id);
-          }}
-          onNodeMouseLeave={readOnly ? undefined : () => setHoveredNodeId(null)}
           onDragOver={readOnly ? undefined : onDragOver}
           onDrop={readOnly ? undefined : onDrop}
           nodesDraggable={!readOnly}
@@ -2627,19 +2621,30 @@ function WorkflowFlowWorkspace({
           selectionMode={SelectionMode.Partial}
           onEdgeClick={(event, edge) => {
             if (readOnly || tool !== "cutTarget") return;
+            event.preventDefault();
             event.stopPropagation();
+            // React Flow sometimes triggers `onPaneClick` after edge clicks.
+            // In cut mode, `onPaneClick` switches back to select, so suppress the next pane click.
+            cutSuppressNextPaneClickRef.current = true;
+            // Best-effort: stop native propagation too.
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (event as any).nativeEvent?.stopImmediatePropagation?.();
             const x = event.clientX;
             const y = event.clientY;
-            /* Defer updates: React Flow may invoke this during its commit; updating same tree synchronously triggers "state update on component that hasn't mounted yet". */
+            const ok = cutEdgeAtPointer(edge.id);
+            if (!ok) {
+              cutSuppressNextPaneClickRef.current = false;
+              return;
+            }
+            setCutSnipFx({ x, y });
+            if (cutSnipClearTimerRef.current) clearTimeout(cutSnipClearTimerRef.current);
+            cutSnipClearTimerRef.current = setTimeout(() => {
+              cutSnipClearTimerRef.current = null;
+              setCutSnipFx(null);
+            }, 650);
+            // Allow pane clicks again after this tick.
             queueMicrotask(() => {
-              const ok = cutEdgeAtPointer(edge.id);
-              if (!ok) return;
-              setCutSnipFx({ x, y });
-              if (cutSnipClearTimerRef.current) clearTimeout(cutSnipClearTimerRef.current);
-              cutSnipClearTimerRef.current = setTimeout(() => {
-                cutSnipClearTimerRef.current = null;
-                setCutSnipFx(null);
-              }, 650);
+              cutSuppressNextPaneClickRef.current = false;
             });
           }}
           onEdgeMouseEnter={readOnly ? undefined : (_ev, edge) => {
@@ -2656,12 +2661,12 @@ function WorkflowFlowWorkspace({
           }}
           onEdgeMouseMove={readOnly ? undefined : (ev) => {
             if (tool !== "select") return;
-            lastEdgePointerRef.current = { x: (ev as MouseEvent).clientX, y: (ev as MouseEvent).clientY };
+            lastEdgePointerRef.current = { x: ev.clientX, y: ev.clientY };
             // If the scissors is already visible, keep it glued to the pointer.
             if (hoveredEdgeScissors) {
               setHoveredEdgeScissors({
-                x: (ev as MouseEvent).clientX,
-                y: (ev as MouseEvent).clientY,
+                x: ev.clientX,
+                y: ev.clientY,
               });
             }
           }}
@@ -2680,7 +2685,11 @@ function WorkflowFlowWorkspace({
             setSelectionBarExpanded(false);
             setPlacementPicker(null);
             if (!readOnly && tool === "cutTarget") {
-              setTool("select");
+              if (cutSuppressNextPaneClickRef.current) {
+                cutSuppressNextPaneClickRef.current = false;
+                return;
+              }
+              // Stay in cut mode; user exits via Esc or toolbar toggle.
               return;
             }
             if (!readOnly && tool === "stickyPlace") {
@@ -2701,7 +2710,11 @@ function WorkflowFlowWorkspace({
           )}
           defaultEdgeOptions={{
             style: { stroke: "rgba(167, 139, 250, 0.42)", strokeWidth: 2 },
-            ...(!readOnly && (tool === "cutTarget" || tool === "select") ? { interactionWidth: 28 } : {}),
+            ...(!readOnly && tool === "cutTarget"
+              ? { interactionWidth: 44 }
+              : !readOnly && tool === "select"
+                ? { interactionWidth: 28 }
+                : {}),
           }}
         >
           {!readOnly && tool === "select" && hoveredEdgeId && hoveredEdgeScissors ? (
