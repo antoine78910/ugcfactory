@@ -53,10 +53,10 @@ export async function POST(req: Request) {
     mode,
   });
 
-  // Always create the customer record in Dub.
+  // Await the Dub lead event so Vercel doesn't terminate the function before it completes.
   // With clickId → direct attribution to the affiliate click.
   // Without clickId → deferred mode: Dub retroactively matches a click if found later.
-  void trackDubLeadServer({
+  await trackDubLeadServer({
     clickId: clickId || "",
     customerExternalId,
     customerEmail: email,

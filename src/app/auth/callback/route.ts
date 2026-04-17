@@ -161,7 +161,12 @@ export async function GET(req: NextRequest) {
                   : typeof meta?.full_name === "string"
                     ? meta.full_name.trim()
                     : undefined;
-              void trackDubLeadServer({
+              console.log("[Dub] auth/callback track.lead →", {
+                customerExternalId: userData.user.id,
+                clickId: clickId || "(none)",
+                mode: clickId ? "async" : "deferred",
+              });
+              await trackDubLeadServer({
                 clickId: clickId || "",
                 customerExternalId: userData.user.id,
                 customerEmail: email,

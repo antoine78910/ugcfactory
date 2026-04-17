@@ -1,20 +1,20 @@
 import type { Dub } from "dub";
 
-let dubClient: Dub | null | undefined;
+let dubClient: Dub | undefined;
 
 async function getDubClient(): Promise<Dub | null> {
   if (dubClient !== undefined) return dubClient;
   const token = process.env.DUB_API_KEY?.trim();
   if (!token) {
-    dubClient = null;
+    console.warn("[Dub] DUB_API_KEY is not set — sale tracking disabled. Add it to your Vercel env vars.");
     return null;
   }
   try {
     const { Dub: DubClass } = await import("dub");
     dubClient = new DubClass({ token });
     return dubClient;
-  } catch {
-    dubClient = null;
+  } catch (err) {
+    console.error("[Dub] Failed to initialise Dub SDK:", err instanceof Error ? err.message : err);
     return null;
   }
 }
