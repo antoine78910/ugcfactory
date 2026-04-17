@@ -37,6 +37,7 @@ import {
   stripeSubscriptionPeriodEndDate,
   stripeSubscriptionPeriodEndIso,
 } from "@/lib/stripeSubscriptionPeriodEnd";
+import { trackDubSaleServer } from "@/lib/dub/trackSaleServer";
 
 function subscriptionPeriodEndFallbackDate(): Date {
   return new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
@@ -237,6 +238,33 @@ export async function POST(req: Request) {
         } catch (brevoErr) {
           serverLog("stripe_webhook_brevo_error", {
             error: brevoErr instanceof Error ? brevoErr.message : "unknown",
+          });
+        }
+
+        // --- Dub: track sale (non-blocking, server-side) ---
+        try {
+          const amountCents = session.amount_total ?? 0;
+          const currency = (session as any).currency ?? "usd";
+          const isSubscription = session.mode === "subscription";
+          const planId = session.metadata?.subscription_plan ?? "";
+          const packKey = session.metadata?.credit_pack ?? "";
+          if (amountCents > 0) {
+            void trackDubSaleServer({
+              customerExternalId: userId,
+              amount: amountCents,
+              invoiceId: session.id,
+              paymentProcessor: "stripe",
+              eventName: "Purchase",
+              currency,
+              metadata: {
+                type: isSubscription ? "subscription" : "credit_pack",
+                plan: planId || packKey || "unknown",
+              },
+            });
+          }
+        } catch (dubErr) {
+          serverLog("stripe_webhook_dub_sale_error", {
+            error: dubErr instanceof Error ? dubErr.message : "unknown",
           });
         }
 

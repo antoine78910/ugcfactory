@@ -18,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { STICKY_NOTE_COLOR_PRESETS, STICKY_NOTE_TEXT_COLOR_PRESETS } from "../workflowStickyNoteTypes";
 import type { StickyNoteNodeData } from "../workflowStickyNoteTypes";
 
 const tbBtn =
@@ -149,6 +150,60 @@ export function StickyNoteNodeToolbar({ nodeId, data, selected, patch, editorRef
         >
           <Strikethrough className="h-3.5 w-3.5" strokeWidth={2.25} />
         </button>
+
+        <div className={tbDivider} aria-hidden />
+
+        <Select value={data.color} onValueChange={(v) => patch({ color: v })}>
+          <SelectTrigger
+            size="sm"
+            className="h-8 min-w-[8rem] w-auto gap-1.5 border-white/10 bg-white/[0.06] px-2 text-[12px] text-white/85 hover:bg-white/[0.1]"
+            aria-label="Note background color"
+          >
+            <SelectValue>Color</SelectValue>
+            <ChevronDown className="h-3.5 w-3.5 opacity-60" strokeWidth={2.5} />
+          </SelectTrigger>
+          <SelectContent className="border-white/10 bg-[#1a1824] text-white">
+            {STICKY_NOTE_COLOR_PRESETS.map((c) => (
+              <SelectItem key={c.value} value={c.value} className="text-[13px]">
+                <span className="inline-flex items-center gap-2">
+                  <span
+                    className="inline-block h-3.5 w-3.5 rounded-sm border border-white/20"
+                    style={{ backgroundColor: c.value }}
+                    aria-hidden
+                  />
+                  {c.label}
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <div className={tbDivider} aria-hidden />
+
+        <Select value={data.textColor} onValueChange={(v) => patch({ textColor: v })}>
+          <SelectTrigger
+            size="sm"
+            className="h-8 min-w-[8rem] w-auto gap-1.5 border-white/10 bg-white/[0.06] px-2 text-[12px] text-white/85 hover:bg-white/[0.1]"
+            aria-label="Note font color"
+          >
+            <SelectValue placeholder="Font" />
+            <ChevronDown className="h-3.5 w-3.5 opacity-60" strokeWidth={2.5} />
+          </SelectTrigger>
+          <SelectContent className="border-white/10 bg-[#1a1824] text-white">
+            {STICKY_NOTE_TEXT_COLOR_PRESETS.map((c) => (
+              <SelectItem key={c.value} value={c.value} className="text-[13px]">
+                <span className="inline-flex items-center gap-2">
+                  <span
+                    className="inline-block h-3.5 w-3.5 rounded-sm border border-white/20"
+                    style={{ backgroundColor: c.value }}
+                    aria-hidden
+                  />
+                  {c.label}
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
         <div className={tbDivider} aria-hidden />
       </div>

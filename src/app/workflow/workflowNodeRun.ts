@@ -2,6 +2,7 @@ import type { Edge, Node } from "@xyflow/react";
 
 import type { AdAssetNodeData } from "@/app/workflow/nodes/AdAssetNode";
 import type { ImageRefNodeData } from "@/app/workflow/nodes/ImageRefNode";
+import type { TextPromptNodeData } from "@/app/workflow/nodes/TextPromptNode";
 import type { StickyNoteNodeData } from "@/app/workflow/workflowStickyNoteTypes";
 import { calculateVideoCredits } from "@/lib/linkToAd/generationCredits";
 import { studioImageCreditsChargedTotal } from "@/lib/pricing";
@@ -22,6 +23,7 @@ import {
 } from "@/lib/studioImageModels";
 import { normalizeKieVeoModel, type KieVeoAspectRatio } from "@/lib/kie";
 import { pollKlingVideo, pollVeoVideo } from "@/lib/studioKlingClientPoll";
+import { uploadBlobUrlToCdn } from "@/lib/uploadBlobUrlToCdn";
 
 export function stripStickyHtmlToText(html: string): string {
   const h = html.trim();
@@ -35,6 +37,10 @@ export function stripStickyHtmlToText(html: string): string {
 }
 
 function textFromUpstreamNode(n: Node): string {
+  if (n.type === "textPrompt") {
+    const d = n.data as TextPromptNodeData;
+    return (d.prompt ?? "").trim();
+  }
   if (n.type === "stickyNote") {
     const d = n.data as StickyNoteNodeData;
     const plain = d.text?.trim();
@@ -54,6 +60,30 @@ export function collectLinkedPromptTexts(nodes: Node[], edges: Edge[], targetNod
   const incoming = edges.filter(
     (e) => e.target === targetNodeId && (e.targetHandle === "in" || e.targetHandle === "text" || !e.targetHandle),
   );
+  const parts: string[] = [];
+  for (const e of incoming) {
+    const src = byId.get(e.source);
+    if (!src) continue;
+    const t = textFromUpstreamNode(src).trim();
+    if (t) parts.push(t);
+  }
+  return parts;
+}
+
+/** Collect prompt text only from edges whose target handle is in `targetHandles` (exact match). */
+export function collectLinkedPromptTextsForHandles(
+  nodes: Node[],
+  edges: Edge[],
+  targetNodeId: string,
+  targetHandles: string[],
+): string[] {
+  const wanted = new Set(targetHandles);
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const incoming = edges.filter((e) => {
+    if (e.target !== targetNodeId) return false;
+    const h = e.targetHandle ?? "";
+    return wanted.has(h);
+  });
   const parts: string[] = [];
   for (const e of incoming) {
     const src = byId.get(e.source);
@@ -163,11 +193,40 @@ export function collectLinkedImageUrlsForHandles(
     }
     if (src.type !== "adAsset") continue;
     const d = src.data as AdAssetNodeData;
+    const kind = d.outputMediaKind ?? d.referenceMediaKind;
+    const targetHandle = e.targetHandle ?? "in";
+
+    if (d.kind === "video" && kind === "video" && (targetHandle === "startImage" || targetHandle === "endImage")) {
+      const last = d.videoExtractedLastFrameUrl?.trim();
+      const first = d.videoExtractedFirstFrameUrl?.trim();
+      const srcHandle = e.sourceHandle ?? "out";
+      const pick =
+        srcHandle === "videoFirst"
+          ? first
+          : srcHandle === "videoLast"
+            ? last
+            : last || first;
+      if (!pick || seen.has(pick)) continue;
+      seen.add(pick);
+      urls.push(pick);
+      continue;
+    }
+
+    const srcHandle = e.sourceHandle ?? "out";
+    if (srcHandle === "generated") {
+      const out = d.outputPreviewUrl?.trim();
+      if (!out || seen.has(out)) continue;
+      if (kind === "video") continue;
+      if (d.outputMediaKind === "video") continue;
+      seen.add(out);
+      urls.push(out);
+      continue;
+    }
+
     const out = d.outputPreviewUrl?.trim();
     const ref = d.referencePreviewUrl?.trim();
     const url = out || ref;
     if (!url || seen.has(url)) continue;
-    const kind = d.outputMediaKind ?? d.referenceMediaKind;
     if (kind === "video") continue;
     if (d.kind === "video" && d.referenceMediaKind !== "image" && !out) continue;
     seen.add(url);
@@ -324,6 +383,56 @@ export type WorkflowRunImageParams = {
   referenceImageUrls?: string[];
 };
 
+function isLocalOnlyWorkflowMediaUrl(url: string): boolean {
+  const u = url.trim().toLowerCase();
+  return u.startsWith("blob:") || u.startsWith("data:");
+}
+
+function mimeFromDataUrl(url: string): string | undefined {
+  const m = /^data:([^;,]+)/i.exec(url.trim());
+  return m?.[1];
+}
+
+/**
+ * Browser-only: uploads blob/data URLs to public storage so server-side generation can fetch them.
+ */
+async function resolveLocalWorkflowMediaUrlForServer(url: string): Promise<string> {
+  const u = url.trim();
+  if (!u || !isLocalOnlyWorkflowMediaUrl(u)) return u;
+  const dataMime = u.startsWith("data:") ? mimeFromDataUrl(u) : undefined;
+  const fallbackMime =
+    dataMime && /^image\//i.test(dataMime)
+      ? dataMime
+      : dataMime && /^video\//i.test(dataMime)
+        ? dataMime
+        : "image/png";
+  const ext = /^video\//i.test(fallbackMime)
+    ? fallbackMime.includes("webm")
+      ? ".webm"
+      : fallbackMime.includes("quicktime")
+        ? ".mov"
+        : ".mp4"
+    : fallbackMime.includes("jpeg") || fallbackMime.includes("jpg")
+      ? ".jpg"
+      : fallbackMime.includes("webp")
+        ? ".webp"
+        : fallbackMime.includes("gif")
+          ? ".gif"
+          : ".png";
+  return uploadBlobUrlToCdn(u, `workflow-media-${crypto.randomUUID()}${ext}`, fallbackMime);
+}
+
+async function resolveLocalWorkflowMediaUrlsForServer(urls: string[] | undefined): Promise<string[]> {
+  if (!urls?.length) return [];
+  const out: string[] = [];
+  for (const raw of urls) {
+    const t = raw.trim();
+    if (!t) continue;
+    out.push(await resolveLocalWorkflowMediaUrlForServer(t));
+  }
+  return out;
+}
+
 export async function runWorkflowImageJob(params: WorkflowRunImageParams): Promise<{ imageUrl: string }> {
   const pickerModel = resolveWorkflowImagePickerModel(params.model);
   if (!params.personalApiKey && !canUseStudioImagePickerModel(params.planId, pickerModel)) {
@@ -340,6 +449,8 @@ export async function runWorkflowImageJob(params: WorkflowRunImageParams): Promi
   const n = Math.min(4, Math.max(1, params.quantity));
   const resolutionForApi = studioImageModelSupportsResolutionPicker(pickerModel) ? studioRes : "2K";
 
+  const resolvedReferenceUrls = await resolveLocalWorkflowMediaUrlsForServer(params.referenceImageUrls);
+
   const startRes = await fetch("/api/studio/generations/start", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -353,7 +464,7 @@ export async function runWorkflowImageJob(params: WorkflowRunImageParams): Promi
       resolution: resolutionForApi,
       numImages: n,
       personalApiKey: params.personalApiKey,
-      imageUrls: params.referenceImageUrls?.length ? params.referenceImageUrls : undefined,
+      imageUrls: resolvedReferenceUrls.length ? resolvedReferenceUrls : undefined,
     }),
   });
   const startJson = (await startRes.json()) as {
@@ -387,9 +498,13 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
   const modelId = resolveWorkflowVideoModelId(params.model);
   const pKey = params.personalApiKey;
   const piKey = params.piapiApiKey;
-  const startUrl = params.referenceImageUrl?.trim() || params.linkedImageUrl?.trim() || undefined;
-  const endUrl = params.endImageUrl?.trim() || undefined;
-  const refUrls = (params.referenceImageUrls ?? []).map((u) => u.trim()).filter(Boolean);
+  const startRaw = params.referenceImageUrl?.trim() || params.linkedImageUrl?.trim() || "";
+  const startUrl = startRaw ? await resolveLocalWorkflowMediaUrlForServer(startRaw) : undefined;
+  const endRaw = params.endImageUrl?.trim() || "";
+  const endUrl = endRaw ? await resolveLocalWorkflowMediaUrlForServer(endRaw) : undefined;
+  const refUrls = await resolveLocalWorkflowMediaUrlsForServer(
+    (params.referenceImageUrls ?? []).map((u) => u.trim()).filter(Boolean),
+  );
   const quality = klingQualityFromVideoResolution(params.resolution);
   const duration = workflowVideoDefaultDuration(modelId);
   const credits = calculateVideoCredits({

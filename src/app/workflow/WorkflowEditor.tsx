@@ -67,12 +67,14 @@ import {
 import { AvatarPickerDialog } from "@/app/_components/AvatarPickerDialog";
 import { loadAvatarUrls } from "@/lib/avatarLibrary";
 import { useSupabaseBrowserClient } from "@/lib/supabase/BrowserSupabaseProvider";
+import { uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 import { AdAssetNode, type AdAssetNodeData, type AdAssetNodeType } from "./nodes/AdAssetNode";
 import { ImageRefNode } from "./nodes/ImageRefNode";
 import { StickyNoteNode } from "./nodes/StickyNoteNode";
+import { TextPromptNode, type TextPromptNodeData } from "./nodes/TextPromptNode";
 import {
   GROUP_COLOR_PRESETS,
   WorkflowGroupNode,
@@ -115,6 +117,7 @@ import {
   buildAdAssetNode,
   buildImageRefNode,
   buildStickyNoteNode,
+  buildTextPromptNode,
   WORKFLOW_NODE_DND,
   type BuildAdAssetNodeOptions,
   type WorkflowDragNodeKind,
@@ -132,7 +135,13 @@ import {
 } from "./workflowProjectPipeline";
 import type { StickyNoteNodeData } from "./workflowStickyNoteTypes";
 
-const nodeTypes = { adAsset: AdAssetNode, imageRef: ImageRefNode, workflowGroup: WorkflowGroupNode, stickyNote: StickyNoteNode };
+const nodeTypes = {
+  adAsset: AdAssetNode,
+  imageRef: ImageRefNode,
+  workflowGroup: WorkflowGroupNode,
+  stickyNote: StickyNoteNode,
+  textPrompt: TextPromptNode,
+};
 
 /** Vertically centered on the canvas; React Flow’s `center-left` adds a −15px Y offset meant for default margin, which misaligns when margin is 0. */
 const WORKFLOW_LEFT_TOOLS_PANEL_STYLE: CSSProperties = {
@@ -209,6 +218,33 @@ function getPointerClientPoint(event: MouseEvent | TouchEvent): { x: number; y: 
   const t = (event as TouchEvent).changedTouches?.[0];
   if (t) return { x: t.clientX, y: t.clientY };
   return null;
+}
+
+function segmentsIntersect(
+  a1: { x: number; y: number },
+  a2: { x: number; y: number },
+  b1: { x: number; y: number },
+  b2: { x: number; y: number },
+): boolean {
+  const orient = (p: { x: number; y: number }, q: { x: number; y: number }, r: { x: number; y: number }) =>
+    (q.y - p.y) * (r.x - q.x) - (q.x - p.x) * (r.y - q.y);
+  const onSeg = (p: { x: number; y: number }, q: { x: number; y: number }, r: { x: number; y: number }) =>
+    q.x <= Math.max(p.x, r.x) &&
+    q.x >= Math.min(p.x, r.x) &&
+    q.y <= Math.max(p.y, r.y) &&
+    q.y >= Math.min(p.y, r.y);
+
+  const o1 = orient(a1, a2, b1);
+  const o2 = orient(a1, a2, b2);
+  const o3 = orient(b1, b2, a1);
+  const o4 = orient(b1, b2, a2);
+
+  if ((o1 > 0 && o2 < 0 || o1 < 0 && o2 > 0) && (o3 > 0 && o4 < 0 || o3 < 0 && o4 > 0)) return true;
+  if (o1 === 0 && onSeg(a1, b1, a2)) return true;
+  if (o2 === 0 && onSeg(a1, b2, a2)) return true;
+  if (o3 === 0 && onSeg(b1, a1, b2)) return true;
+  if (o4 === 0 && onSeg(b1, a2, b2)) return true;
+  return false;
 }
 
 function isEditableElementFocused(): boolean {
@@ -673,6 +709,17 @@ function WorkflowReactFlowChrome({
     setNodes((prev) => [...prev, buildStickyNoteNode(position)]);
     setAddOpen(false);
     setFrameOpen(false);
+    toast.success("Note added");
+  }, [screenToFlowPosition, setNodes, setAddOpen, setFrameOpen]);
+
+  const addTextPromptNode = useCallback(() => {
+    const position = screenToFlowPosition({
+      x: window.innerWidth / 2,
+      y: window.innerHeight / 2,
+    });
+    setNodes((prev) => [...prev, buildTextPromptNode(position)]);
+    setAddOpen(false);
+    setFrameOpen(false);
     toast.success("Prompt text added");
   }, [screenToFlowPosition, setNodes, setAddOpen, setFrameOpen]);
 
@@ -685,12 +732,28 @@ function WorkflowReactFlowChrome({
   const [avatarUrls, setAvatarUrls] = useState<string[]>([]);
   const uploadInputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
-    const onOpen = () => uploadInputRef.current?.click();
+    const onOpen = (
+      ev: Event,
+    ) => {
+      const detail = (ev as CustomEvent<{
+        pendingConnect?: { targetNodeId: string; targetHandleId: string; flow: XYPosition };
+      }>).detail;
+      pendingImageRefConnectRef.current = detail?.pendingConnect ?? null;
+      setPendingImageRefConnect(detail?.pendingConnect ?? null);
+      uploadInputRef.current?.click();
+    };
     window.addEventListener("workflow:open-upload-picker", onOpen as EventListener);
     return () => window.removeEventListener("workflow:open-upload-picker", onOpen as EventListener);
   }, []);
   useEffect(() => {
-    const onOpen = () => setAvatarPickerOpen(true);
+    const onOpen = (ev: Event) => {
+      const detail = (ev as CustomEvent<{
+        pendingConnect?: { targetNodeId: string; targetHandleId: string; flow: XYPosition };
+      }>).detail;
+      pendingImageRefConnectRef.current = detail?.pendingConnect ?? null;
+      setPendingImageRefConnect(detail?.pendingConnect ?? null);
+      setAvatarPickerOpen(true);
+    };
     window.addEventListener("workflow:open-avatar-picker", onOpen as EventListener);
     return () => window.removeEventListener("workflow:open-avatar-picker", onOpen as EventListener);
   }, []);
@@ -699,6 +762,24 @@ function WorkflowReactFlowChrome({
     targetHandleId: string;
     flow: XYPosition;
   } | null>(null);
+  const pendingImageRefConnectRef = useRef<{
+    targetNodeId: string;
+    targetHandleId: string;
+    flow: XYPosition;
+  } | null>(null);
+  const updatePendingImageRefConnect = useCallback(
+    (
+      next: {
+        targetNodeId: string;
+        targetHandleId: string;
+        flow: XYPosition;
+      } | null,
+    ) => {
+      pendingImageRefConnectRef.current = next;
+      setPendingImageRefConnect(next);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!avatarPickerOpen) return;
@@ -709,8 +790,9 @@ function WorkflowReactFlowChrome({
     (e: ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       e.target.value = "";
+      const pendingConnect = pendingImageRefConnectRef.current;
       if (!file) {
-        setPendingImageRefConnect(null);
+        updatePendingImageRefConnect(null);
         return;
       }
       const isVideo = file.type.startsWith("video/");
@@ -721,66 +803,57 @@ function WorkflowReactFlowChrome({
             ? await measureVideoAspectFromObjectUrl(objectUrl)
             : await measureImageAspectFromObjectUrl(objectUrl);
           const position = screenToFlowPosition({
-            x:
-              pendingImageRefConnect != null
-                ? pendingImageRefConnect.flow.x
-                : window.innerWidth / 2,
-            y:
-              pendingImageRefConnect != null
-                ? pendingImageRefConnect.flow.y
-                : window.innerHeight / 2,
+            x: pendingConnect != null ? pendingConnect.flow.x : window.innerWidth / 2,
+            y: pendingConnect != null ? pendingConnect.flow.y : window.innerHeight / 2,
           });
           const baseName = file.name.replace(/\.[^.]+$/, "") || (isVideo ? "Video" : "Image");
+          const hostedUrl = await uploadFileToCdn(file, { kind: isVideo ? "video" : "image" });
           const nextNode = buildImageRefNode(position, {
-            imageUrl: objectUrl,
+            imageUrl: hostedUrl,
             source: "upload",
             mediaKind: isVideo ? "video" : "image",
             intrinsicAspect: ar,
             label: baseName,
           });
           setNodes((prev) => [...prev, nextNode]);
-          if (pendingImageRefConnect) {
+          if (pendingConnect) {
             setEdges((eds) =>
               addEdge(
                 {
-                  id: `e-${nextNode.id}-${pendingImageRefConnect.targetNodeId}-${crypto.randomUUID().slice(0, 8)}`,
+                  id: `e-${nextNode.id}-${pendingConnect.targetNodeId}-${crypto.randomUUID().slice(0, 8)}`,
                   source: nextNode.id,
                   sourceHandle: "out",
-                  target: pendingImageRefConnect.targetNodeId,
-                  targetHandle: pendingImageRefConnect.targetHandleId,
+                  target: pendingConnect.targetNodeId,
+                  targetHandle: pendingConnect.targetHandleId,
                   style: { stroke: "rgba(167, 139, 250, 0.5)", strokeWidth: 2 },
                 },
                 eds,
               ),
             );
-            setPendingImageRefConnect(null);
+            updatePendingImageRefConnect(null);
           }
           setAddOpen(false);
           setFrameOpen(false);
           toast.success("Node added");
+          URL.revokeObjectURL(objectUrl);
         } catch {
-          setPendingImageRefConnect(null);
+          updatePendingImageRefConnect(null);
           URL.revokeObjectURL(objectUrl);
           toast.error("Could not read file", { description: "Try another image or video." });
         }
       })();
     },
-    [pendingImageRefConnect, screenToFlowPosition, setEdges, setNodes, setAddOpen, setFrameOpen],
+    [screenToFlowPosition, setEdges, setNodes, setAddOpen, setFrameOpen, updatePendingImageRefConnect],
   );
 
   const onAvatarPicked = useCallback(
     (url: string) => {
       void (async () => {
+        const pendingConnect = pendingImageRefConnectRef.current;
         const ar = await measureImageAspectFromUrlSafe(url);
         const position = screenToFlowPosition({
-          x:
-            pendingImageRefConnect != null
-              ? pendingImageRefConnect.flow.x
-              : window.innerWidth / 2,
-          y:
-            pendingImageRefConnect != null
-              ? pendingImageRefConnect.flow.y
-              : window.innerHeight / 2,
+          x: pendingConnect != null ? pendingConnect.flow.x : window.innerWidth / 2,
+          y: pendingConnect != null ? pendingConnect.flow.y : window.innerHeight / 2,
         });
         const nextNode = buildImageRefNode(position, {
           imageUrl: url,
@@ -790,28 +863,28 @@ function WorkflowReactFlowChrome({
           label: "Avatar",
         });
         setNodes((prev) => [...prev, nextNode]);
-        if (pendingImageRefConnect) {
+        if (pendingConnect) {
           setEdges((eds) =>
             addEdge(
               {
-                id: `e-${nextNode.id}-${pendingImageRefConnect.targetNodeId}-${crypto.randomUUID().slice(0, 8)}`,
+                id: `e-${nextNode.id}-${pendingConnect.targetNodeId}-${crypto.randomUUID().slice(0, 8)}`,
                 source: nextNode.id,
                 sourceHandle: "out",
-                target: pendingImageRefConnect.targetNodeId,
-                targetHandle: pendingImageRefConnect.targetHandleId,
+                target: pendingConnect.targetNodeId,
+                targetHandle: pendingConnect.targetHandleId,
                 style: { stroke: "rgba(167, 139, 250, 0.5)", strokeWidth: 2 },
               },
               eds,
             ),
           );
-          setPendingImageRefConnect(null);
+          updatePendingImageRefConnect(null);
         }
         setAddOpen(false);
         setFrameOpen(false);
         toast.success("Node added");
       })();
     },
-    [pendingImageRefConnect, screenToFlowPosition, setEdges, setNodes, setAddOpen, setFrameOpen],
+    [screenToFlowPosition, setEdges, setNodes, setAddOpen, setFrameOpen, updatePendingImageRefConnect],
   );
 
   const setDragPayload = useCallback((e: DragEvent, payload: string) => {
@@ -1023,6 +1096,18 @@ function WorkflowReactFlowChrome({
                       iconShellClass="border-emerald-500/45 bg-emerald-950/80"
                       draggable
                       onDragStart={(e) => {
+                        setDragPayload(e, "textPrompt");
+                        setAddOpen(false);
+                        setFrameOpen(false);
+                      }}
+                      onClick={() => addTextPromptNode()}
+                    />
+                    <WorkflowAddPaletteRow
+                      icon={MessageSquare}
+                      label="Canvas note"
+                      iconShellClass="border-amber-500/40 bg-amber-950/70"
+                      draggable
+                      onDragStart={(e) => {
                         setDragPayload(e, "sticky");
                         setAddOpen(false);
                         setFrameOpen(false);
@@ -1077,25 +1162,13 @@ function WorkflowReactFlowChrome({
                       }}
                       onClick={() => addNode("upscale")}
                     />
-                    <WorkflowAddPaletteRow
-                      icon={Sparkles}
-                      label="Variation"
-                      iconShellClass="border-violet-300/35 bg-zinc-900/85"
-                      draggable
-                      onDragStart={(e) => {
-                        setDragPayload(e, "variation");
-                        setAddOpen(false);
-                        setFrameOpen(false);
-                      }}
-                      onClick={() => addNode("variation")}
-                    />
                     <button
                       type="button"
                       onClick={() => setAvatarPickerOpen(true)}
-                      className="flex w-full items-center gap-2 border-t border-white/[0.06] px-3 py-2 text-left text-[12px] text-white/60 transition hover:bg-white/[0.04] hover:text-white/80"
+                      className="flex w-full items-center rounded-lg border border-white/10 bg-black/30 px-2.5 py-1.5 text-left text-[12px] font-medium text-white/90 transition hover:bg-white/[0.08]"
                     >
-                      <UserRound className="h-4 w-4 shrink-0 text-white/40" strokeWidth={2} aria-hidden />
-                      <span>Avatar</span>
+                      <UserRound className="mr-2 h-4 w-4 shrink-0 text-white/75" strokeWidth={2} aria-hidden />
+                      Avatar
                     </button>
                   </div>
                 ) : addPlusTab === "upload" ? (
@@ -1191,118 +1264,26 @@ function WorkflowReactFlowChrome({
 
           <div className="my-0.5 h-px w-7 bg-white/[0.12]" aria-hidden />
 
-          <div className="group/cut relative">
-            <button
-              type="button"
-              title={
-                readOnly
-                  ? "Cut tool (view only)"
-                  : tool === "cutTarget"
-                    ? "Cut tool active — click a link to remove it, or press Esc"
-                    : "Cut tool — click a link to cut it (Ctrl/Cmd+X still cuts the current selection)"
-              }
-              disabled={readOnly}
-              onClick={() => {
-                if (readOnly) return;
-                setAddOpen(false);
-                setFrameOpen(false);
-                if (tool === "cutTarget") {
-                  setTool("select");
-                } else {
-                  setTool("cutTarget");
-                  toast.message("Cut tool", { description: "Click a connection line to remove that link." });
-                }
-              }}
-              className={cn(
-                "flex h-9 w-9 items-center justify-center rounded-full transition-colors",
-                readOnly && "cursor-not-allowed text-white/35 opacity-90",
-                !readOnly && tool === "cutTarget"
-                  ? "bg-white text-zinc-900 shadow-sm hover:bg-white"
-                  : !readOnly && "text-white/90 hover:bg-white/[0.08]",
-              )}
-            >
-              <Scissors className={barIcon} strokeWidth={2} />
-            </button>
-            {!readOnly ? (
-              <div className="pointer-events-none absolute left-[calc(100%+8px)] top-1/2 z-[120] w-36 -translate-y-1/2 rounded-xl border border-white/12 bg-[#0b0912]/95 p-1.5 opacity-0 shadow-xl backdrop-blur-md transition group-hover/cut:pointer-events-auto group-hover/cut:opacity-100 group-focus-within/cut:pointer-events-auto group-focus-within/cut:opacity-100">
-                <button
-                  type="button"
-                  className="flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-[12px] font-medium text-white/90 transition hover:bg-white/[0.08]"
-                  onClick={() => {
-                    setAddOpen(false);
-                    setFrameOpen(false);
-                    setTool("cutTarget");
-                    toast.message("Cut tool", { description: "Click a connection line to remove that link." });
-                  }}
-                >
-                  Cut links
-                </button>
-                <div className="mt-1 border-t border-white/10 pt-1">
-                  <p className="px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wide text-white/45">Add node</p>
-                  <button
-                    type="button"
-                    className="flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-[12px] font-medium text-white/90 transition hover:bg-white/[0.08]"
-                    onClick={() => {
-                      setTool("select");
-                      setFrameOpen(false);
-                      setAddOpen(false);
-                      addNode("image");
-                    }}
-                  >
-                    Image Generator
-                  </button>
-                  <button
-                    type="button"
-                    className="flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-[12px] font-medium text-white/90 transition hover:bg-white/[0.08]"
-                    onClick={() => {
-                      setTool("select");
-                      setFrameOpen(false);
-                      setAddOpen(false);
-                      addNode("video");
-                    }}
-                  >
-                    Video Generator
-                  </button>
-                  <button
-                    type="button"
-                    className="flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-[12px] font-medium text-white/90 transition hover:bg-white/[0.08]"
-                    onClick={() => {
-                      setTool("select");
-                      setFrameOpen(false);
-                      setAddOpen(false);
-                      addNode("variation");
-                    }}
-                  >
-                    Variation
-                  </button>
-                  <button
-                    type="button"
-                    className="flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-[12px] font-medium text-white/90 transition hover:bg-white/[0.08]"
-                    onClick={() => {
-                      setTool("select");
-                      setFrameOpen(false);
-                      setAddOpen(false);
-                      addNode("assistant");
-                    }}
-                  >
-                    Assistant
-                  </button>
-                  <button
-                    type="button"
-                    className="flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-[12px] font-medium text-white/90 transition hover:bg-white/[0.08]"
-                    onClick={() => {
-                      setTool("select");
-                      setFrameOpen(false);
-                      setAddOpen(false);
-                      addStickyNote();
-                    }}
-                  >
-                    Text note
-                  </button>
-                </div>
-              </div>
-            ) : null}
-          </div>
+          <button
+            type="button"
+            title={readOnly ? "Cut tool (view only)" : tool === "cutTarget" ? "Cut tool active" : "Cut tool"}
+            disabled={readOnly}
+            onClick={() => {
+              if (readOnly) return;
+              setAddOpen(false);
+              setFrameOpen(false);
+              setTool(tool === "cutTarget" ? "select" : "cutTarget");
+            }}
+            className={cn(
+              "flex h-9 w-9 items-center justify-center rounded-full transition-colors",
+              readOnly && "cursor-not-allowed text-white/35 opacity-90",
+              !readOnly && tool === "cutTarget"
+                ? "bg-white text-zinc-900 shadow-sm hover:bg-white"
+                : !readOnly && "text-white/90 hover:bg-white/[0.08]",
+            )}
+          >
+            <Scissors className={barIcon} strokeWidth={2} />
+          </button>
           <div className="relative flex w-full flex-col items-center">
             <button
               type="button"
@@ -1336,8 +1317,8 @@ function WorkflowReactFlowChrome({
             type="button"
             title={
               canClone
-                ? "Duplicate selection — group, generator, or sticky note"
-                : "Select a group, generator, or sticky note to duplicate"
+                ? "Duplicate selection — group, generator, prompt text, or canvas note"
+                : "Select a group, generator, prompt text, or canvas note to duplicate"
             }
             disabled={!canClone}
             onClick={() => {
@@ -1358,8 +1339,8 @@ function WorkflowReactFlowChrome({
             type="button"
             title={
               tool === "stickyPlace"
-                ? "Prompt text tool — click the canvas to place (Esc to cancel)"
-                : "Prompt text — click the canvas to place a prompt node"
+                ? "Canvas note tool — click to place (Esc to cancel)"
+                : "Canvas note — click the canvas to place a note"
             }
             onClick={() => {
               setTool(tool === "stickyPlace" ? "select" : "stickyPlace");
@@ -1415,7 +1396,7 @@ function WorkflowReactFlowChrome({
         open={avatarPickerOpen}
         onOpenChange={(open) => {
           setAvatarPickerOpen(open);
-          if (!open) setPendingImageRefConnect(null);
+          if (!open) updatePendingImageRefConnect(null);
         }}
         avatarUrls={avatarUrls}
         onPick={onAvatarPicked}
@@ -1596,7 +1577,7 @@ function WorkflowReactFlowChrome({
                 title={
                   canClone
                     ? "Duplicate selection"
-                    : "Select a group, a generator, or a sticky note to duplicate"
+                    : "Select a group, a generator, a prompt text module, or a canvas note to duplicate"
                 }
                 disabled={!canClone}
                 onClick={() => {
@@ -1624,124 +1605,26 @@ function WorkflowReactFlowChrome({
               >
                 <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
               </button>
-              <div className="group/cut relative">
-                <button
-                  type="button"
-                  title={
-                    readOnly
-                      ? "Cut tool (view only)"
-                      : tool === "cutTarget"
-                        ? "Cut tool active — click a link"
-                        : "Cut tool — click a link to cut"
-                  }
-                  disabled={readOnly}
-                  onClick={() => {
-                    if (readOnly) return;
-                    setAddOpen(false);
-                    setFrameOpen(false);
-                    setSelectionBarExpanded(false);
-                    if (tool === "cutTarget") {
-                      setTool("select");
-                    } else {
-                      setTool("cutTarget");
-                      toast.message("Cut tool", { description: "Click a connection line to remove that link." });
-                    }
-                  }}
-                  className={cn(
-                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-35",
-                    readOnly && "text-white/90",
-                    !readOnly && tool === "cutTarget" && "bg-white text-zinc-900 hover:bg-white",
-                    !readOnly && tool !== "cutTarget" && "text-white/90",
-                  )}
-                >
-                  <Scissors className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-                </button>
-                {!readOnly ? (
-                  <div className="pointer-events-none absolute left-[calc(100%+8px)] top-1/2 z-[220] w-36 -translate-y-1/2 rounded-xl border border-white/12 bg-[#0b0912]/95 p-1.5 opacity-0 shadow-xl backdrop-blur-md transition group-hover/cut:pointer-events-auto group-hover/cut:opacity-100 group-focus-within/cut:pointer-events-auto group-focus-within/cut:opacity-100">
-                    <button
-                      type="button"
-                      className="flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-[12px] font-medium text-white/90 transition hover:bg-white/[0.08]"
-                      onClick={() => {
-                        setAddOpen(false);
-                        setFrameOpen(false);
-                        setSelectionBarExpanded(false);
-                        setTool("cutTarget");
-                        toast.message("Cut tool", { description: "Click a connection line to remove that link." });
-                      }}
-                    >
-                      Cut links
-                    </button>
-                    <div className="mt-1 border-t border-white/10 pt-1">
-                      <p className="px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wide text-white/45">Add node</p>
-                      <button
-                        type="button"
-                        className="flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-[12px] font-medium text-white/90 transition hover:bg-white/[0.08]"
-                        onClick={() => {
-                          setTool("select");
-                          setFrameOpen(false);
-                          setSelectionBarExpanded(false);
-                          setAddOpen(false);
-                          addNode("image");
-                        }}
-                      >
-                        Image Generator
-                      </button>
-                      <button
-                        type="button"
-                        className="flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-[12px] font-medium text-white/90 transition hover:bg-white/[0.08]"
-                        onClick={() => {
-                          setTool("select");
-                          setFrameOpen(false);
-                          setSelectionBarExpanded(false);
-                          setAddOpen(false);
-                          addNode("video");
-                        }}
-                      >
-                        Video Generator
-                      </button>
-                      <button
-                        type="button"
-                        className="flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-[12px] font-medium text-white/90 transition hover:bg-white/[0.08]"
-                        onClick={() => {
-                          setTool("select");
-                          setFrameOpen(false);
-                          setSelectionBarExpanded(false);
-                          setAddOpen(false);
-                          addNode("variation");
-                        }}
-                      >
-                        Variation
-                      </button>
-                      <button
-                        type="button"
-                        className="flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-[12px] font-medium text-white/90 transition hover:bg-white/[0.08]"
-                        onClick={() => {
-                          setTool("select");
-                          setFrameOpen(false);
-                          setSelectionBarExpanded(false);
-                          setAddOpen(false);
-                          addNode("assistant");
-                        }}
-                      >
-                        Assistant
-                      </button>
-                      <button
-                        type="button"
-                        className="flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-[12px] font-medium text-white/90 transition hover:bg-white/[0.08]"
-                        onClick={() => {
-                          setTool("select");
-                          setFrameOpen(false);
-                          setSelectionBarExpanded(false);
-                          setAddOpen(false);
-                          addStickyNote();
-                        }}
-                      >
-                        Text note
-                      </button>
-                    </div>
-                  </div>
-                ) : null}
-              </div>
+              <button
+                type="button"
+                title={readOnly ? "Cut tool (view only)" : tool === "cutTarget" ? "Cut tool active" : "Cut tool"}
+                disabled={readOnly}
+                onClick={() => {
+                  if (readOnly) return;
+                  setAddOpen(false);
+                  setFrameOpen(false);
+                  setSelectionBarExpanded(false);
+                  setTool(tool === "cutTarget" ? "select" : "cutTarget");
+                }}
+                className={cn(
+                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-35",
+                  readOnly && "text-white/90",
+                  !readOnly && tool === "cutTarget" && "bg-white text-zinc-900 hover:bg-white",
+                  !readOnly && tool !== "cutTarget" && "text-white/90",
+                )}
+              >
+                <Scissors className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+              </button>
               <button
                 type="button"
                 title={canCut ? "Copy selection" : "Nothing to copy in this selection"}
@@ -1922,6 +1805,10 @@ function WorkflowFlowWorkspace({
   const cutSuppressNextPaneClickRef = useRef(false);
   const cutSnipClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [cutSnipFx, setCutSnipFx] = useState<{ x: number; y: number } | null>(null);
+  const [cutTrailPoints, setCutTrailPoints] = useState<{ x: number; y: number }[]>([]);
+  const cutTrailActiveRef = useRef(false);
+  const cutTrailJustFinishedRef = useRef(false);
+  const workspaceRootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     return () => {
@@ -2043,6 +1930,11 @@ function WorkflowFlowWorkspace({
         toast.success("Node added");
         return;
       }
+      if (raw === "textPrompt") {
+        setNodes((prev) => [...prev, buildTextPromptNode(flowPos)]);
+        toast.success("Node added");
+        return;
+      }
       if (isWorkflowAdAssetDragKind(raw)) {
         setNodes((prev) => [...prev, buildAdAssetNode(raw, flowPos)]);
         toast.success("Node added");
@@ -2076,10 +1968,10 @@ function WorkflowFlowWorkspace({
       if (!detail) return;
       const target = nodes.find((n) => n.id === detail.targetNodeId);
       const yOffsets: Record<WorkflowOpenInputPickerDetail["targetHandleId"], number> = {
-        text: -86,
-        startImage: -28,
+        text: -100,
+        startImage: -67,
+        endImage: -33,
         references: 0,
-        endImage: 28,
       };
       const fallbackFlow = screenToFlowPosition({ x: detail.screenX, y: detail.screenY });
       const leftFlow =
@@ -2155,49 +2047,15 @@ function WorkflowFlowWorkspace({
 
       const targetHandleId = detail.targetHandleId;
       const targetNodeId = detail.targetNodeId;
-      const desiredOutFlow = screenToFlowPosition({ x: detail.screenX, y: detail.screenY });
+      const flow = screenToFlowPosition({ x: detail.screenX, y: detail.screenY });
 
       setInputBubblePreview(null);
-
-      const newNode =
-        targetHandleId === "text"
-          ? buildStickyNoteNode({ x: desiredOutFlow.x, y: desiredOutFlow.y })
-          : buildAdAssetNode("image", { x: desiredOutFlow.x, y: desiredOutFlow.y });
-
-      setNodes((prev) => [...prev, newNode]);
-      setEdges((eds) =>
-        addEdge(
-          {
-            id: `e-${newNode.id}-${targetNodeId}-${crypto.randomUUID().slice(0, 8)}`,
-            source: newNode.id,
-            sourceHandle: "out",
-            target: targetNodeId,
-            targetHandle: targetHandleId,
-            style: { stroke: "rgba(167, 139, 250, 0.5)", strokeWidth: 2 },
-          },
-          eds,
-        ),
-      );
-
-      toast.success("Node added");
-
-      // After the node is measured by React Flow, adjust its position
-      // so its output handle center touches the drop point.
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          const placed = (getNodes() as WorkflowCanvasNode[]).find((n) => n.id === newNode.id);
-          const w = (placed as any)?.width;
-          const h = (placed as any)?.height;
-          if (!placed || typeof w !== "number" || typeof h !== "number") return;
-
-          const outX = placed.position.x + w;
-          const outY = placed.position.y + h / 2;
-          const dx = desiredOutFlow.x - outX;
-          const dy = desiredOutFlow.y - outY;
-
-          if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return;
-          setNodes((prev) => prev.map((n) => (n.id === newNode.id ? { ...n, position: { x: n.position.x + dx, y: n.position.y + dy } } : n)));
-        });
+      setPlacementPicker({
+        flow,
+        screenX: detail.screenX,
+        screenY: detail.screenY,
+        connectTo: { nodeId: targetNodeId, handleId: targetHandleId },
+        intent: targetHandleId === "text" ? "text-input" : "image-input",
       });
     };
 
@@ -2207,7 +2065,7 @@ function WorkflowFlowWorkspace({
       window.removeEventListener("workflow:input-bubble-preview", onPreview as EventListener);
       window.removeEventListener("workflow:input-bubble-drop", onDrop as EventListener);
     };
-  }, [readOnly, screenToFlowPosition, setNodes, setEdges, getNodes]);
+  }, [readOnly, screenToFlowPosition]);
 
   useEffect(() => {
     if (!placementPicker) return;
@@ -2221,17 +2079,28 @@ function WorkflowFlowWorkspace({
   }, [placementPicker]);
 
   const placeNodeAtPicker = useCallback(
-    (kind: WorkflowDragNodeKind | "sticky", options?: BuildAdAssetNodeOptions) => {
+    (kind: WorkflowDragNodeKind | "sticky" | "textPrompt", options?: BuildAdAssetNodeOptions) => {
       if (!placementPicker) return;
       const newNode =
         kind === "sticky"
           ? buildStickyNoteNode(placementPicker.flow)
-          : buildAdAssetNode(kind, placementPicker.flow, options);
+          : kind === "textPrompt"
+            ? buildTextPromptNode(placementPicker.flow)
+            : buildAdAssetNode(kind, placementPicker.flow, options);
       const from = placementPicker.connectFrom;
       const to = placementPicker.connectTo;
       setNodes((prev) => [...prev, newNode]);
-      const connectable = newNode.type === "adAsset";
-      if (from && connectable) {
+      const connectableFrom = newNode.type === "adAsset";
+      const connectableTo = newNode.type === "adAsset" || newNode.type === "textPrompt";
+      if (from && connectableFrom) {
+        const defaultTargetHandle =
+          newNode.type === "adAsset"
+            ? ((newNode.data as AdAssetNodeData).kind === "video"
+                ? "startImage"
+                : (newNode.data as AdAssetNodeData).kind === "image"
+                  ? "references"
+                  : "in")
+            : "in";
         setEdges((eds) =>
           addEdge(
             {
@@ -2239,14 +2108,14 @@ function WorkflowFlowWorkspace({
               source: from.nodeId,
               sourceHandle: from.handleId ?? undefined,
               target: newNode.id,
-              targetHandle: "in",
+              targetHandle: defaultTargetHandle,
               style: { stroke: "rgba(167, 139, 250, 0.5)", strokeWidth: 2 },
             },
             eds,
           ),
         );
       }
-      if (to && connectable) {
+      if (to && connectableTo) {
         setEdges((eds) =>
           addEdge(
             {
@@ -2262,19 +2131,34 @@ function WorkflowFlowWorkspace({
         );
       }
       setPlacementPicker(null);
-      toast.success((from || to) && connectable ? "Node connected" : "Node added");
+      const linked = (from && connectableFrom) || (to && connectableTo);
+      toast.success(linked ? "Node connected" : "Node added");
     },
     [placementPicker, setNodes, setEdges],
   );
 
   const pickUploadAtPlacement = useCallback(() => {
+    const pendingConnect = placementPicker?.connectTo
+      ? {
+          targetNodeId: placementPicker.connectTo.nodeId,
+          targetHandleId: placementPicker.connectTo.handleId,
+          flow: placementPicker.flow,
+        }
+      : undefined;
     setPlacementPicker(null);
-    window.dispatchEvent(new CustomEvent("workflow:open-upload-picker"));
+    window.dispatchEvent(new CustomEvent("workflow:open-upload-picker", { detail: { pendingConnect } }));
   }, [placementPicker]);
 
   const pickAvatarAtPlacement = useCallback(() => {
+    const pendingConnect = placementPicker?.connectTo
+      ? {
+          targetNodeId: placementPicker.connectTo.nodeId,
+          targetHandleId: placementPicker.connectTo.handleId,
+          flow: placementPicker.flow,
+        }
+      : undefined;
     setPlacementPicker(null);
-    window.dispatchEvent(new CustomEvent("workflow:open-avatar-picker"));
+    window.dispatchEvent(new CustomEvent("workflow:open-avatar-picker", { detail: { pendingConnect } }));
   }, [placementPicker]);
 
   useEffect(() => {
@@ -2323,17 +2207,31 @@ function WorkflowFlowWorkspace({
   const onConnect = useCallback(
     (params: Connection) => {
       if (readOnly) return;
-      setEdges((eds) =>
-        addEdge(
+      const { target, targetHandle } = params;
+      if (!target) return;
+      const handleId = targetHandle ?? "";
+      const targetNode = (getNodes() as WorkflowCanvasNode[]).find((n) => n.id === target);
+      let replaceSameHandle = false;
+      if (targetNode?.type === "adAsset") {
+        const kind = (targetNode.data as AdAssetNodeData).kind;
+        if (handleId === "text" && (kind === "image" || kind === "video")) replaceSameHandle = true;
+        if (handleId === "startImage" && kind === "video") replaceSameHandle = true;
+        if (handleId === "endImage" && kind === "video") replaceSameHandle = true;
+      }
+      setEdges((eds) => {
+        const base = replaceSameHandle
+          ? eds.filter((e) => !(e.target === target && (e.targetHandle ?? "") === handleId))
+          : eds;
+        return addEdge(
           {
             ...params,
             style: { stroke: "rgba(167, 139, 250, 0.5)", strokeWidth: 2 },
           },
-          eds,
-        ),
-      );
+          base,
+        );
+      });
     },
-    [readOnly, setEdges],
+    [readOnly, setEdges, getNodes],
   );
 
   const onNodeDragStop = useCallback(
@@ -2371,9 +2269,14 @@ function WorkflowFlowWorkspace({
   const onConnectEnd = useCallback(
     (event: MouseEvent | TouchEvent, connectionState: FinalConnectionState) => {
       if (readOnly) return;
-      const fromNode = connectionState.fromNode;
-      const fromHandle = connectionState.fromHandle;
-      if (!fromNode || fromHandle?.type !== "source") return;
+      const raw = connectionState as FinalConnectionState & {
+        fromNodeId?: string | null;
+        fromHandleId?: string | null;
+      };
+      const fromNodeId = connectionState.fromNode?.id ?? raw.fromNodeId ?? null;
+      const fromHandleId = connectionState.fromHandle?.id ?? raw.fromHandleId ?? null;
+      // Some RF versions do not reliably populate `fromNode`/`fromHandle` objects on drop-to-empty-canvas.
+      if (!fromNodeId) return;
       if (connectionState.toHandle && connectionState.isValid) return;
 
       const pt = getPointerClientPoint(event);
@@ -2386,7 +2289,7 @@ function WorkflowFlowWorkspace({
         flow,
         screenX: pt.x,
         screenY: pt.y,
-        connectFrom: { nodeId: fromNode.id, handleId: fromHandle.id ?? null },
+        connectFrom: { nodeId: fromNodeId, handleId: fromHandleId ?? null },
       });
     },
     [readOnly, screenToFlowPosition],
@@ -2395,7 +2298,7 @@ function WorkflowFlowWorkspace({
   const activeName = activePage?.name ?? "Page";
 
   const patchNodeData = useCallback(
-    (nodeId: string, patch: Partial<AdAssetNodeData & WorkflowGroupNodeData & StickyNoteNodeData>) => {
+    (nodeId: string, patch: Partial<AdAssetNodeData & WorkflowGroupNodeData & StickyNoteNodeData & TextPromptNodeData>) => {
       setNodes((nds) =>
         nds.map((n) =>
           n.id === nodeId ? ({ ...n, data: { ...n.data, ...patch } } as WorkflowCanvasNode) : n,
@@ -2408,7 +2311,9 @@ function WorkflowFlowWorkspace({
   const cloneSelection = useCallback(() => {
     const res = cloneWorkflowSelection(nodes, edges, selectedNodes);
     if (!res) {
-      toast.error("Nothing to duplicate", { description: "Select a group, a generator, or a sticky note." });
+      toast.error("Nothing to duplicate", {
+        description: "Select a group, a generator, a prompt text module, or a canvas note.",
+      });
       return;
     }
     const { nodesToAdd, edgesToAdd, selectIds } = res;
@@ -2445,7 +2350,9 @@ function WorkflowFlowWorkspace({
   const cutSelection = useCallback(() => {
     const payload = buildWorkflowClipboardPayload(nodes, edges, selectedNodes);
     if (!payload) {
-      toast.error("Nothing to cut", { description: "Select a group, a generator, or a sticky note." });
+      toast.error("Nothing to cut", {
+        description: "Select a group, a generator, a prompt text module, or a canvas note.",
+      });
       return;
     }
     void (async () => {
@@ -2477,10 +2384,59 @@ function WorkflowFlowWorkspace({
     return removed;
   }, [setEdges]);
 
+  const edgeEndpointFlowPoint = useCallback(
+    (nodeId: string, edgeHandleId: string | null | undefined, side: "source" | "target"): { x: number; y: number } | null => {
+      const n = getInternalNode(nodeId) as any;
+      if (!n) return null;
+      const abs = n.internals?.positionAbsolute ?? n.positionAbsolute ?? n.position;
+      if (!abs || typeof abs.x !== "number" || typeof abs.y !== "number") return null;
+      const width = (n.measured?.width ?? n.width ?? 0) as number;
+      const height = (n.measured?.height ?? n.height ?? 0) as number;
+      const handleCandidates = n.internals?.handleBounds?.[side] as Array<{ id?: string | null; x: number; y: number; width: number; height: number }> | undefined;
+      const picked =
+        handleCandidates?.find((h) => (edgeHandleId ?? null) === (h.id ?? null)) ??
+        handleCandidates?.[0];
+      if (picked && Number.isFinite(picked.x) && Number.isFinite(picked.y)) {
+        return {
+          x: abs.x + picked.x + (picked.width ?? 0) / 2,
+          y: abs.y + picked.y + (picked.height ?? 0) / 2,
+        };
+      }
+      return side === "source"
+        ? { x: abs.x + width, y: abs.y + height / 2 }
+        : { x: abs.x, y: abs.y + height / 2 };
+    },
+    [getInternalNode],
+  );
+
+  const cutEdgesCrossingTrail = useCallback(
+    (trailFlow: { x: number; y: number }[]): number => {
+      if (trailFlow.length < 2) return 0;
+      const hitIds = new Set<string>();
+      for (const e of edges) {
+        const a = edgeEndpointFlowPoint(e.source, e.sourceHandle ?? null, "source");
+        const b = edgeEndpointFlowPoint(e.target, e.targetHandle ?? null, "target");
+        if (!a || !b) continue;
+        for (let i = 1; i < trailFlow.length; i += 1) {
+          if (segmentsIntersect(trailFlow[i - 1]!, trailFlow[i]!, a, b)) {
+            hitIds.add(e.id);
+            break;
+          }
+        }
+      }
+      if (!hitIds.size) return 0;
+      setEdges((eds) => eds.filter((e) => !hitIds.has(e.id)));
+      return hitIds.size;
+    },
+    [edges, edgeEndpointFlowPoint, setEdges],
+  );
+
   const copySelection = useCallback(() => {
     const payload = buildWorkflowClipboardPayload(nodes, edges, selectedNodes);
     if (!payload) {
-      toast.error("Nothing to copy", { description: "Select a group, a generator, or a sticky note." });
+      toast.error("Nothing to copy", {
+        description: "Select a group, a generator, a prompt text module, or a canvas note.",
+      });
       return;
     }
     void writeWorkflowClipboardPayload(payload).then(
@@ -2492,7 +2448,9 @@ function WorkflowFlowWorkspace({
   const deleteSelection = useCallback(() => {
     const payload = buildWorkflowClipboardPayload(nodes, edges, selectedNodes);
     if (!payload) {
-      toast.error("Nothing to remove", { description: "Select a group, a generator, or a sticky note." });
+      toast.error("Nothing to remove", {
+        description: "Select a group, a generator, a prompt text module, or a canvas note.",
+      });
       return;
     }
     const ids = new Set(payload.nodes.map((n) => n.id));
@@ -2586,7 +2544,50 @@ function WorkflowFlowWorkspace({
   }, [readOnly, tool, setTool]);
 
   return (
-    <div className="relative h-full min-h-0 w-full">
+    <div
+      ref={workspaceRootRef}
+      className="relative h-full min-h-0 w-full"
+      onMouseDown={(ev) => {
+        if (readOnly || tool !== "cutTarget") return;
+        if (ev.button !== 0) return;
+        const target = ev.target as HTMLElement | null;
+        if (!target?.closest(".react-flow")) return;
+        if (target.closest(".react-flow__panel")) return;
+        if (target.closest("button, input, textarea, select, [role=\"button\"]")) return;
+        cutTrailActiveRef.current = true;
+        cutTrailJustFinishedRef.current = false;
+        const first = { x: ev.clientX, y: ev.clientY };
+        setCutTrailPoints([first]);
+        setHoveredEdgeId(null);
+        setHoveredEdgeScissors(null);
+      }}
+      onMouseMove={(ev) => {
+        if (readOnly || tool !== "cutTarget") return;
+        if (!cutTrailActiveRef.current) return;
+        setCutTrailPoints((prev) => {
+          if (!prev.length) return [{ x: ev.clientX, y: ev.clientY }];
+          const last = prev[prev.length - 1]!;
+          const dx = ev.clientX - last.x;
+          const dy = ev.clientY - last.y;
+          if (dx * dx + dy * dy < 16) return prev;
+          return [...prev, { x: ev.clientX, y: ev.clientY }];
+        });
+      }}
+      onMouseUp={() => {
+        if (readOnly || tool !== "cutTarget") return;
+        if (!cutTrailActiveRef.current) return;
+        cutTrailActiveRef.current = false;
+        setCutTrailPoints((screenPts) => {
+          if (screenPts.length >= 2) {
+            const flowPts = screenPts.map((p) => screenToFlowPosition(p));
+            const removed = cutEdgesCrossingTrail(flowPts);
+            if (removed > 0) toast.success(`${removed} connection${removed > 1 ? "s" : ""} cut`);
+          }
+          return [];
+        });
+        cutTrailJustFinishedRef.current = true;
+      }}
+    >
       <WorkflowPagesPanel
         project={project}
         setProject={setProject}
@@ -2623,29 +2624,7 @@ function WorkflowFlowWorkspace({
             if (readOnly || tool !== "cutTarget") return;
             event.preventDefault();
             event.stopPropagation();
-            // React Flow sometimes triggers `onPaneClick` after edge clicks.
-            // In cut mode, `onPaneClick` switches back to select, so suppress the next pane click.
-            cutSuppressNextPaneClickRef.current = true;
-            // Best-effort: stop native propagation too.
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (event as any).nativeEvent?.stopImmediatePropagation?.();
-            const x = event.clientX;
-            const y = event.clientY;
-            const ok = cutEdgeAtPointer(edge.id);
-            if (!ok) {
-              cutSuppressNextPaneClickRef.current = false;
-              return;
-            }
-            setCutSnipFx({ x, y });
-            if (cutSnipClearTimerRef.current) clearTimeout(cutSnipClearTimerRef.current);
-            cutSnipClearTimerRef.current = setTimeout(() => {
-              cutSnipClearTimerRef.current = null;
-              setCutSnipFx(null);
-            }, 650);
-            // Allow pane clicks again after this tick.
-            queueMicrotask(() => {
-              cutSuppressNextPaneClickRef.current = false;
-            });
+            void edge;
           }}
           onEdgeMouseEnter={readOnly ? undefined : (_ev, edge) => {
             if (tool !== "select") return;
@@ -2685,6 +2664,10 @@ function WorkflowFlowWorkspace({
             setSelectionBarExpanded(false);
             setPlacementPicker(null);
             if (!readOnly && tool === "cutTarget") {
+              if (cutTrailJustFinishedRef.current) {
+                cutTrailJustFinishedRef.current = false;
+                return;
+              }
               if (cutSuppressNextPaneClickRef.current) {
                 cutSuppressNextPaneClickRef.current = false;
                 return;
@@ -2698,7 +2681,7 @@ function WorkflowFlowWorkspace({
               const dx = 100 / zoom;
               const dy = 36 / zoom;
               setNodes((prev) => [...prev, buildStickyNoteNode({ x: p.x - dx, y: p.y - dy })]);
-              toast.success("Prompt text added");
+              toast.success("Note added");
             }
           }}
           className={cn(
@@ -2717,6 +2700,40 @@ function WorkflowFlowWorkspace({
                 : {}),
           }}
         >
+          {!readOnly && tool === "cutTarget" && cutTrailPoints.length >= 1 ? (
+            <svg className="pointer-events-none absolute inset-0 z-[130]" aria-hidden>
+              {(() => {
+                const rect = workspaceRootRef.current?.getBoundingClientRect();
+                if (!rect) return null;
+                const localPts = cutTrailPoints.map((p) => ({ x: p.x - rect.left, y: p.y - rect.top }));
+                if (localPts.length === 1) {
+                  const p = localPts[0]!;
+                  return (
+                    <circle
+                      cx={p.x}
+                      cy={p.y}
+                      r={10}
+                      fill="rgba(251, 113, 133, 0.12)"
+                      stroke="rgba(251, 113, 133, 0.95)"
+                      strokeWidth={2}
+                      strokeDasharray="6 5"
+                    />
+                  );
+                }
+                return (
+                  <polyline
+                    points={localPts.map((p) => `${p.x},${p.y}`).join(" ")}
+                    fill="none"
+                    stroke="rgba(251, 113, 133, 0.95)"
+                    strokeWidth={2.5}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeDasharray="8 7"
+                  />
+                );
+              })()}
+            </svg>
+          ) : null}
           {!readOnly && tool === "select" && hoveredEdgeId && hoveredEdgeScissors ? (
             <button
               type="button"
@@ -2837,9 +2854,9 @@ function WorkflowFlowWorkspace({
           </p>
           <p className="mb-3 text-[12px] text-white/55">
             {placementPicker.intent === "text-input"
-              ? "Choose what to connect to this text input."
+              ? "Prompt text is the black module for generation copy. Canvas note is only for annotations on the board."
               : placementPicker.intent === "text-or-image"
-                ? "Place and choose Text or Image."
+                ? "Add a canvas note (annotation) or an image block."
               : placementPicker.intent === "image-input"
                 ? "Choose media source or generator for this image input."
                 : placementPicker.connectFrom
@@ -2854,7 +2871,7 @@ function WorkflowFlowWorkspace({
                   className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
                   onClick={() => placeNodeAtPicker("sticky")}
                 >
-                  Text
+                  Canvas note
                 </button>
                 <button
                   type="button"
@@ -2869,9 +2886,16 @@ function WorkflowFlowWorkspace({
                 <button
                   type="button"
                   className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
+                  onClick={() => placeNodeAtPicker("textPrompt")}
+                >
+                  Prompt text
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
                   onClick={() => placeNodeAtPicker("sticky")}
                 >
-                  Text
+                  Canvas note
                 </button>
                 <button
                   type="button"
@@ -2945,9 +2969,16 @@ function WorkflowFlowWorkspace({
                 <button
                   type="button"
                   className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
-                  onClick={() => placeNodeAtPicker("sticky")}
+                  onClick={() => placeNodeAtPicker("textPrompt")}
                 >
                   Prompt text
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
+                  onClick={() => placeNodeAtPicker("sticky")}
+                >
+                  Canvas note
                 </button>
               </>
             )}

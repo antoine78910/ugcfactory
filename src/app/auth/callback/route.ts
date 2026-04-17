@@ -152,8 +152,8 @@ export async function GET(req: NextRequest) {
             void brevoTrackEvent(email, "signup", {
               eventProperties: { source: "app", method: "oauth_or_magic_link" },
             });
-            const clickId = normalizeDubClickId(req.cookies.get("dub_id")?.value);
-            if (clickId && userData.user?.id) {
+            if (userData.user?.id) {
+              const clickId = normalizeDubClickId(req.cookies.get("dub_id")?.value);
               const meta = userData.user.user_metadata as { first_name?: string; full_name?: string } | null;
               const name =
                 typeof meta?.first_name === "string" && meta.first_name.trim()
@@ -162,11 +162,12 @@ export async function GET(req: NextRequest) {
                     ? meta.full_name.trim()
                     : undefined;
               void trackDubLeadServer({
-                clickId,
+                clickId: clickId || "",
                 customerExternalId: userData.user.id,
                 customerEmail: email,
                 customerName: name,
                 eventName: "Sign up",
+                mode: clickId ? "async" : "deferred",
               });
             }
           }

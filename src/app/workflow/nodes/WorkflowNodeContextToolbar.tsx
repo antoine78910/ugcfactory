@@ -54,7 +54,13 @@ export function WorkflowNodeContextToolbar({
     setNodes(nodes.filter((n) => !removeIds.has(n.id)));
     setEdges(getEdges().filter((e) => !removeIds.has(e.source) && !removeIds.has(e.target)));
     const removed =
-      node.type === "workflowGroup" ? "Group removed" : node.type === "stickyNote" ? "Note removed" : "Module removed";
+      node.type === "workflowGroup"
+        ? "Group removed"
+        : node.type === "stickyNote"
+          ? "Note removed"
+          : node.type === "textPrompt"
+            ? "Prompt text removed"
+            : "Module removed";
     toast.success(removed);
   }, [getEdges, getNodes, nodeId, setEdges, setNodes]);
 

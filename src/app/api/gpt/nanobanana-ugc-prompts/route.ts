@@ -26,15 +26,21 @@ Your goal is to generate the best possible reference images that will later be u
 to generate UGC style videos.
 
 You will receive:
-- A marketing script (including VIDEO_METADATA)
-- A reference image of the product
-- Optionally: a reference image of the avatar
+* A marketing script (including VIDEO_METADATA)
+* A reference image of the product
+* Optionally: a reference image of the avatar
 
 The script is the creative director of every image you generate.
 Every image must visually translate what the script communicates.
 The generated images must look like real photos taken by real people on smartphones.
 Never generate perfect, polished, or studio-quality images.
 Every prompt must feel like an authentic, slightly imperfect smartphone capture.
+
+FOR 30 SECOND SCRIPTS:
+The script is divided into PART 1 and PART 2.
+Generate 3 images based on the full script as usual.
+The images represent the overall scene and subject —
+not specifically PART 1 or PART 2.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 STEP 1 — READ AND UNDERSTAND THE SCRIPT
@@ -78,6 +84,8 @@ PRODUCT ROLE IN THE SCRIPT:
 → Is it being used as part of a routine (application)?
 → Is it held up as proof of results (testimonial)?
 → The product interaction in the image must match its role in the script.
+→ The script describes WHAT the product does — NOT what it looks like.
+→ For product appearance, ALWAYS refer to the product reference image only.
 
 COHERENCE CHECK BEFORE GENERATING:
 → Does the scene match the moment described in the script?
@@ -92,12 +100,34 @@ STEP 2 — ANALYZE ALL PROVIDED IMAGES
 
 After reading the script, analyze every image provided.
 
-PRODUCT IMAGE ANALYSIS:
-→ Is the product OPEN, CLOSED, or WEARABLE?
-→ Exact visual details: color, label text, logo position, shape, texture, size
-→ How is it realistically used or worn based on what is visible?
-→ If usage reference images are provided (someone using the product),
-   extract exactly how it is held, worn, or applied and reproduce that.
+PRODUCT IMAGE ANALYSIS (CRITICAL — do this first):
+Before writing any prompt, analyze the product reference image
+with maximum visual precision. Extract and describe EXACTLY:
+
+→ Product FORMAT: box / tube / pouch / bottle / jar / device
+   Never assume or invent a different format than what is shown
+→ Product SHAPE: rectangular / cylindrical / flat / square
+→ Product COLORS: exact colors of each zone of the packaging
+→ Product TYPOGRAPHY: exact text visible, font weight, position
+→ Product LOGO: exact logo shape, color, position on packaging
+→ Product MATERIALS: matte / glossy / metallic / translucent
+→ Product SIZE relative to a hand: small / medium / large
+
+This visual analysis is the ONLY source of truth
+for the product's appearance.
+The script may mention the product name or benefits —
+but NEVER use the script to determine the product's visual appearance.
+Only the reference image determines what the product looks like.
+
+PRODUCT FORMAT LOCK (CRITICAL):
+→ If the image shows a BOX → generate a box. Never a tube.
+→ If the image shows a TUBE → generate a tube. Never a box.
+→ If the image shows a POUCH → generate a pouch. Never a bottle.
+→ If the image shows a JAR → generate a jar. Never a tube.
+→ Never change the product format under any circumstance.
+→ Never approximate or simplify the packaging.
+→ Never generate a different variant of the same brand.
+→ Never mix elements from different product images or URLs.
 
 AVATAR IMAGE ANALYSIS (if provided):
 → Extract exact facial structure, skin tone, hair texture and color,
@@ -116,18 +146,16 @@ IF avatar_source = REFERENCE IMAGE:
 → Do NOT use text persona description for visual generation
 → The avatar image overrides any text description of the subject
 → Describe the face with maximum precision:
-   — facial shape and natural asymmetry (which side is slightly wider/different)
+   — facial shape and natural asymmetry
    — eye details: iris color and texture, lid heaviness left vs right,
      lash variation, inner corner redness, natural wet sheen on lower lids
    — skin details: pore concentration zones, sebum sheen on T-zone,
-     pigmentation spots (size, spacing, irregularity), peach fuzz location,
-     under-eye shadows, natural redness zones
-   — hair: curl pattern, movement direction, flyaways, baby hairs at hairline,
+     pigmentation spots, peach fuzz location, under-eye shadows
+   — hair: curl pattern, movement direction, flyaways, baby hairs,
      color variation where light catches, volume and lift at crown
 
 → WHAT STAYS IDENTICAL ACROSS ALL 3 PROMPTS:
    Face, skin tone, hair, eye color, facial structure, unique physical traits
-   The subject must be recognizably the same person in all 3 images.
 
 → WHAT VARIES ACROSS THE 3 PROMPTS:
    Shot type and camera angle
@@ -162,22 +190,18 @@ For each of the 3 prompts, define and vary these 9 parameters:
 4. HAIR (always ultra specific — never generic):
    Describe curl pattern, length, color with light variation,
    movement direction, flyaways, baby hairs, styling state.
-   Example: "loose 4C coils escaping a high bun, several strands
-   falling on forehead, slight warm reddish cast where curls catch
-   the light, baby hairs at hairline, crown lifted and voluminous"
    Never write just "ponytail" or "wavy hair" alone.
 
 5. UNIQUE PHYSICAL TRAIT (always include at least one):
    Freckles / acne marks / hyperpigmentation / sun pigmentation spots /
-   small scar / birthmark / gap teeth / visible pores on nose and
-   inner cheeks / dark under-eye circles / asymmetrical smile /
-   grown-out beard with uneven patches / natural stretch marks /
-   peach fuzz along jaw / slight redness around nostrils
+   small scar / birthmark / gap teeth / visible pores / dark under-eye circles /
+   asymmetrical smile / grown-out beard with uneven patches /
+   natural stretch marks / peach fuzz along jaw / slight redness around nostrils
 
 6. LOCATION & SCENE:
    Bathroom / Bedroom / Gym / City street / Café / Kitchen /
    Outdoor training space / Living room / Office corner
-   → Always add minimum 3 imperfect scene details (see ENVIRONMENT RULE)
+   → Always add minimum 3 imperfect scene details
    → Location must match the moment described in the script
 
 7. MOOD & ENERGY:
@@ -190,7 +214,6 @@ For each of the 3 prompts, define and vary these 9 parameters:
    Describe fabric, color, fit, and at least one:
    pilling / slight fade / wrinkle / bleach spot /
    stretched collar / fabric pull / untucked hem / loosely tied
-   → Must match the moment of day and scene context of the script
 
 9. ACCESSORIES (match to scene context):
    Sunglasses / Earrings / Necklace / Watch / Hat / Rings /
@@ -200,39 +223,58 @@ For each of the 3 prompts, define and vary these 9 parameters:
 PRODUCT INTEGRATION RULE (CRITICAL)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Read product_state from VIDEO_METADATA AND analyze the product image directly.
+PRODUCT IDENTIFICATION LOCK (CRITICAL):
+The reference product image provided is the ONLY product
+that must appear in every generated image.
+Reproduce it with maximum visual fidelity based on
+the product image analysis done in STEP 2.
+
+→ Exact packaging format as shown in reference image
+→ Exact colors, gradient, and finish
+→ Exact logo typography and placement
+→ Exact text content visible on packaging
+→ Never approximate, simplify, or redesign the packaging
+→ Never generate a different product from the same brand
+→ Never mix elements from different product images or URLs
+→ If multiple images are provided as input, use ONLY
+   the designated product reference image
+→ The product must look identical to the reference in every prompt
+
+PRODUCT REPRODUCTION RULE:
+→ Reproduce the product EXACTLY as seen in the reference image
+→ Same format, same colors, same typography, same proportions
+→ Label must always face the camera and remain fully legible
+→ Product must be proportional to the human hand holding it
+→ Never invent details not visible in the reference image
+
+Always add these to the NEGATIVE PROMPT:
+→ wrong product, different brand, different packaging shape,
+  different text on packaging, different product from same brand,
+  different format than reference image
+
+Read product_state from VIDEO_METADATA AND the product image.
 The product interaction must match the product's role in the script.
 
 CLOSED (sealed pouch, capped bottle, closed box):
 → Subject holds product toward camera
 → Describe exact grip: fingers wrapped around product, label facing lens
-→ Describe every visible product detail: exact colors, label text,
-   logo position, material texture, size relative to hand
 → No application, no opening, no pretend usage
 
 OPEN (open jar, spray, roller, device ready to use):
 → Subject interacts with product naturally
 → Describe exact gesture matching what is visible in product image
-→ Describe full product appearance including open state
 
 WEARABLE (strip, patch, clothing, jewelry):
 → Subject wears the exact item as shown in reference usage images
 → Reproduce exact placement, angle, and appearance on body
-→ Match color, shape, size, and logo precisely
-→ If usage reference images show how it is worn, reproduce that exactly
 
 PRODUCT SIZE IN FRAME (CRITICAL):
-→ The product must always be proportional to the human hand holding it
+→ Product must always be proportional to the human hand holding it
 → Never smaller than what a real hand would naturally hold
 → Never oversized or distorted relative to the subject
-→ The product label must always face the camera and remain fully legible
+→ Product label must always face the camera and remain fully legible
 → Never turn the product away from the lens
 → Never obscure the label with fingers or shadow
-
-The product must:
-→ Appear clearly visible and sharply focused
-→ Be described with full visual detail matching the reference image exactly
-→ Never be approximated, altered, or redesigned
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 HUMAN ANATOMY RULE (CRITICAL)
@@ -329,7 +371,7 @@ CAMERA TECHNICAL RULE (CRITICAL)
 Always specify these technical parameters in every prompt:
 
 LENS & SENSOR:
-→ 35mm equivalent, casual smartphone selfie perspective (no device or brand names)
+→ 35mm equivalent, front-facing iPhone camera
 → f/2.2 aperture, ISO 400
 → Natural phone lens distortion
 → Minor unfiltered sensor grain
@@ -358,6 +400,8 @@ PRESERVATION INSTRUCTIONS (always end every prompt with these):
 → Preserve natural hair volume and texture.
 → Preserve product label legibility.
 → Preserve exact facial structure and identity.
+→ Preserve exact product format, colors, logo, and text
+   exactly as shown in the reference image.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 LIGHTING RULE
@@ -399,12 +443,12 @@ Each prompt must use a different shot type.
 Shot type must match the moment and emotion of the script.
 
 Available shot types:
-- Close-up — tight on face expression or product detail
-- Medium shot — person and product both clearly visible
-- Wide shot — full environment tells the lifestyle story
-- Front-facing selfie — eye contact, no phone visible, vertical
-- Mirror selfie — phone visible, person reflected in mirror
-- Over-the-shoulder — immersive POV, someone else appears to be filming
+* Close-up — tight on face expression or product detail
+* Medium shot — person and product both clearly visible
+* Wide shot — full environment tells the lifestyle story
+* Front-facing selfie — eye contact, no phone visible, vertical
+* Mirror selfie — phone visible, person reflected in mirror
+* Over-the-shoulder — immersive POV, someone else appears to be filming
 
 Never use the same shot type twice across the 3 prompts.
 Never default always to mirror selfie.
@@ -451,7 +495,10 @@ cinematic depth of field, studio lighting, professional retouching,
 heavy makeup, 3D render, CGI, cartoon, illustration, extra fingers,
 oversaturated, HDR, Instagram filter, film grain, analog look,
 salon hair, flat hair, glassy eyes, frozen expression, posed expression,
-perfect teeth, symmetric face, stock photo composition
+perfect teeth, symmetric face, stock photo composition,
+wrong product, different brand, different packaging shape,
+different text on packaging, different product from same brand,
+different format than reference image
 
 Add contextual negatives based on product and avatar:
 → If product is CLOSED:
@@ -466,41 +513,30 @@ Add contextual negatives based on product and avatar:
    different eye color, different ethnicity
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-PROMPT FORMAT (STRICT — for in-app editing)
+PROMPT FORMAT
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Generate THREE blocks labeled exactly:
+Generate THREE prompts labeled:
 
 PROMPT 1
 PROMPT 2
 PROMPT 3
 
-Inside EACH block, use EXACTLY these headings (use an em dash in EDIT lines as shown):
+Each prompt must:
+* be between 150 and 220 words
+* be written as one continuous paragraph
+* follow this exact order:
+  1. Subject: face + skin + hair + unique trait
+  2. Clothing + accessories
+  3. Action + product interaction (matching script role)
+  4. Expression + emotion (matching script hook)
+  5. Environment + scene details (minimum 3 imperfect elements)
+  6. Lighting (matched to script moment)
+  7. Camera technical specs
+  8. Preservation instructions
+* end with a NEGATIVE PROMPT block on a separate line
 
-EDIT — Avatar:
-→ 2–5 short sentences only: face, skin texture, hair, one unique trait, clothing + accessories.
-→ If avatar_source = REFERENCE IMAGE: match the reference; otherwise follow TEXT GENERATED rules.
-→ Do NOT include lighting, camera, lens, resolution, quality, “smartphone”, “9:16”, ISO, HDR, or preservation here.
-
-EDIT — Scene:
-→ 1–3 sentences: location, time of day, mood, minimum three imperfect environment details.
-
-EDIT — Shot:
-→ 1–4 sentences: how the product is held or used (match product_state + script), expression matching the script hook.
-
-TECHNICAL:
-→ ONE compact paragraph (can be dense): lighting for this moment, camera / lens / smartphone capture details, framing, and ALL preservation instructions (label legibility, do-not-change-face, etc.).
-→ Everything about image quality, realism, “not studio”, aspect ratio, sharpness, etc. goes HERE — never in the three EDIT sections.
-
-NEGATIVE PROMPT:
-→ Same rule as before: list of negative terms (can be multiple lines).
-
-Rules:
-- The EDIT sections together should stay readable for a marketer (no camera specs, no “48MP”, no “vertical 9:16” there).
-- Do not repeat the NEGATIVE list inside TECHNICAL.
-- Do not add any other headings inside a prompt block.
-
-Output only PROMPT 1, PROMPT 2, PROMPT 3 with this structure.
+Output only the three prompts and their negative prompts.
 Do not explain your reasoning.
 `.trim();
 
@@ -548,7 +584,7 @@ export async function POST(req: Request) {
   const developer = [
     "Follow the instructions in the user message exactly.",
     "Output only PROMPT 1, PROMPT 2, and PROMPT 3.",
-    "Each PROMPT block MUST use this exact structure: three EDIT sections (Avatar / Scene / Shot), one TECHNICAL section, then NEGATIVE PROMPT. Labels must match exactly (EDIT — Avatar:, EDIT — Scene:, EDIT — Shot:, TECHNICAL:, NEGATIVE PROMPT:). No preamble, no reasoning.",
+    "Do not add preamble, explanations, or reasoning.",
   ].join("\n");
 
   const userText = [

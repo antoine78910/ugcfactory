@@ -31,21 +31,31 @@ export type DubLeadParams = {
   customerAvatar?: string | null;
   /** Default "Sign up" — Dub uses this to tie later sale events via `leadEventName`. */
   eventName?: string;
+  /**
+   * "async" (default) — fire and forget with attribution.
+   * "deferred" — no clickId yet; Dub retroactively matches a prior click for this customer.
+   * "wait" — block until Dub confirms the event.
+   */
+  mode?: "async" | "deferred" | "wait";
 };
 
 /**
- * Server-side Dub lead (e.g. after signup). No-op if `DUB_API_KEY` is unset or `clickId` is empty.
+ * Server-side Dub lead (e.g. after signup).
+ * - With clickId: direct attribution to the affiliate click.
+ * - Without clickId (mode="deferred"): creates the customer record so Dub can retroactively
+ *   attribute a prior click for this customerExternalId.
+ * No-op if `DUB_API_KEY` is unset or `customerExternalId` is empty.
  * Errors are logged and swallowed so auth/signup flows never fail.
  */
 export async function trackDubLeadServer(params: DubLeadParams): Promise<void> {
-  const clickId = params.clickId.trim();
-  if (!clickId) return;
+  const externalId = params.customerExternalId.trim();
+  if (!externalId) return;
 
   const client = await getDubClient();
   if (!client) return;
 
-  const externalId = params.customerExternalId.trim();
-  if (!externalId) return;
+  const clickId = params.clickId.trim();
+  const mode = params.mode ?? (clickId ? "async" : "deferred");
 
   try {
     await client.track.lead({
@@ -55,7 +65,7 @@ export async function trackDubLeadServer(params: DubLeadParams): Promise<void> {
       customerEmail: params.customerEmail?.trim() || undefined,
       customerName: params.customerName?.trim() || undefined,
       customerAvatar: params.customerAvatar?.trim() || undefined,
-      mode: "async",
+      mode,
     });
   } catch (err) {
     console.error("[dub] track.lead failed", err instanceof Error ? err.message : err);

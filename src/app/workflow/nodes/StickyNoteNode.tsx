@@ -65,7 +65,7 @@ export function StickyNoteNode({ id, data: rawData, selected }: NodeProps<Sticky
     const nodes = getNodes() as WorkflowCanvasNode[];
     setNodes(nodes.filter((n) => n.id !== id));
     setEdges(getEdges().filter((e) => e.source !== id && e.target !== id));
-    toast.success("Prompt text deleted");
+    toast.success("Note deleted");
   }, [getEdges, getNodes, id, setEdges, setNodes]);
 
   const shapeClass =
@@ -85,14 +85,15 @@ export function StickyNoteNode({ id, data: rawData, selected }: NodeProps<Sticky
       <StickyNoteNodeToolbar nodeId={id} data={data} selected={selected} patch={patch} editorRef={editorRef} />
       <div
         className={cn(
-          "workflow-sticky-note flex flex-col overflow-hidden border bg-[#141418] shadow-[0_12px_28px_rgba(0,0,0,0.35)]",
+          "workflow-sticky-note flex flex-col overflow-hidden border shadow-[0_12px_28px_rgba(0,0,0,0.35)]",
           shapeClass,
           sizeClass,
           selected && "ring-2 ring-violet-500/85 ring-offset-2 ring-offset-[#06070d]",
         )}
         style={{
+          backgroundColor: data.color,
           borderColor,
-          color: "#f4f4f5",
+          color: data.textColor,
         }}
         onMouseEnter={() => window.dispatchEvent(new CustomEvent("workflow:hover-node", { detail: { nodeId: id } }))}
         onMouseLeave={() => window.dispatchEvent(new CustomEvent("workflow:unhover-node"))}
@@ -102,19 +103,19 @@ export function StickyNoteNode({ id, data: rawData, selected }: NodeProps<Sticky
           className="flex shrink-0 cursor-grab items-center gap-1 border-b border-white/10 px-2 py-1.5 active:cursor-grabbing"
           title="Drag to move"
         >
-          <GripVertical className="h-3.5 w-3.5 shrink-0 opacity-45" strokeWidth={2.25} aria-hidden />
+          <GripVertical className="h-3.5 w-3.5 shrink-0 text-zinc-700/70" strokeWidth={2.25} aria-hidden />
           <span
             id={`workflow-sticky-label-${id}`}
-            className="select-none text-[10px] font-semibold uppercase tracking-wide text-white/55"
+            className="select-none text-[10px] font-semibold uppercase tracking-wide text-zinc-700/80"
           >
-            Prompt text
+            Note
           </span>
           <button
             type="button"
             onClick={deleteNode}
-            className="ml-auto inline-flex h-6 w-6 items-center justify-center rounded-md text-white/45 transition hover:bg-rose-500/15 hover:text-rose-300"
-            title="Delete text node"
-            aria-label="Delete text node"
+            className="ml-auto inline-flex h-6 w-6 items-center justify-center rounded-md text-zinc-700/80 transition hover:bg-rose-500/15 hover:text-rose-700"
+            title="Delete note"
+            aria-label="Delete note"
           >
             <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />
           </button>
@@ -127,7 +128,7 @@ export function StickyNoteNode({ id, data: rawData, selected }: NodeProps<Sticky
             className={cn(
               "nodrag nopan max-h-[min(40vh,280px)] min-h-[3.25rem] w-full flex-1 overflow-y-auto outline-none",
               "[&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5",
-              "[&_p]:text-white/92 [&_span]:text-white/92",
+              "[&_p]:text-inherit [&_span]:text-inherit",
             )}
             contentEditable
             suppressContentEditableWarning

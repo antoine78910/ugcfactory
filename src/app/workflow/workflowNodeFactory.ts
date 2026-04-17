@@ -2,11 +2,12 @@ import type { XYPosition } from "@xyflow/react";
 
 import type { AdAssetNodeData, AdAssetNodeType } from "./nodes/AdAssetNode";
 import type { ImageRefNodeData, ImageRefNodeType } from "./nodes/ImageRefNode";
+import type { TextPromptNodeType } from "./nodes/TextPromptNode";
 import type { StickyNoteNodeType } from "./workflowStickyNoteTypes";
 import { aspectRatioStringFromIntrinsic } from "./workflowMediaAspect";
 import { STICKY_NOTE_DEFAULT_DATA } from "./workflowStickyNoteTypes";
 
-/** Custom data transfer type for palette → canvas drag (values: `pick` | node kind | `sticky` | `imageRef`). */
+/** Custom data transfer type for palette → canvas drag (values: `pick` | node kind | `sticky` | `textPrompt` | `imageRef`). */
 export const WORKFLOW_NODE_DND = "application/youry-workflow-node";
 
 export type WorkflowDragNodeKind = AdAssetNodeType["data"]["kind"];
@@ -103,6 +104,16 @@ export function buildStickyNoteNode(position: XYPosition): StickyNoteNodeType {
     position,
     zIndex: 2,
     data: { ...STICKY_NOTE_DEFAULT_DATA },
+  };
+}
+
+export function buildTextPromptNode(position: XYPosition): TextPromptNodeType {
+  return {
+    id: crypto.randomUUID(),
+    type: "textPrompt",
+    position,
+    zIndex: 1,
+    data: { prompt: "" },
   };
 }
 

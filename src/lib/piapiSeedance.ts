@@ -126,7 +126,14 @@ export async function piapiCreateSeedanceTask(opts: {
       json?.error?.raw_message?.trim() ||
       json?.message?.trim() ||
       "Unknown error";
-    throw new Error(`Video generation could not be started (HTTP ${res.status} / ${reason})`);
+    const isInsufficientCredits = /insufficient.?credits/i.test(reason);
+    const isVip = opts.taskType.endsWith("-vip");
+    const hint = isInsufficientCredits
+      ? isVip
+        ? " VIP tasks cost more on the provider side. Try normal priority or top-up the provider account."
+        : " Top-up the provider account (PiAPI) or use a different model."
+      : "";
+    throw new Error(`Video generation could not be started (HTTP ${res.status} / ${reason}).${hint}`);
   }
   return id;
 }

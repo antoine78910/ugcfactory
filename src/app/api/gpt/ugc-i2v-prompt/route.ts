@@ -31,8 +31,8 @@ export async function POST(req: Request) {
   const developer = [
     "Follow OUTPUT FORMAT in the user instructions exactly.",
     videoDurationSeconds === 30
-      ? "For 30s: output PROMPT PART 1 and PROMPT PART 2 only. Each part 60–100 words, one continuous paragraph per part per OUTPUT FORMAT. No EDIT — section labels. No bullet points."
-      : "For 5s/10s/15s: output ONE prompt as one continuous paragraph (60–100 words) per OUTPUT FORMAT. For 10s, use the same structure as 5s/15s. No bullet points.",
+      ? "For 30s: output PROMPT PART 1 and PROMPT PART 2 only. Each part 120–180 words, one continuous paragraph per part per OUTPUT FORMAT. No markdown headings besides those two lines. No bullet points."
+      : "For 5s/10s/15s: output ONE prompt as one continuous paragraph (120–180 words) per OUTPUT FORMAT. For 10s, use the same structure as 5s/15s. No bullet points.",
     "The script and VIDEO_METADATA are the source of truth for dialogue and product behavior.",
     "Non-interactive mode: never ask for more inputs, never request image/script, never explain what you need, never add prefaces/disclaimers.",
     "Return the prompt content directly and nothing else.",

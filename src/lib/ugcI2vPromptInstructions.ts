@@ -30,6 +30,70 @@ Both prompts animate the same image.
 Both clips will be assembled into one 30s video.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+IMAGE OVERRIDE RULE (CRITICAL)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+The reference image is the absolute visual source of truth.
+Before writing a single word of the prompt, analyze the
+reference image and extract exactly what is physically present.
+
+STEP 1 — SCAN THE IMAGE FOR THESE ELEMENTS:
+→ Is a phone visible in the image? YES or NO
+→ Is a mirror visible in the image? YES or NO
+→ What is in Hand 1? (phone / product / nothing / not visible)
+→ What is in Hand 2? (phone / product / nothing / not visible)
+→ What props or objects are physically present in the scene?
+→ What is the camera angle? (selfie / mirror / lifestyle /
+  over-the-shoulder / close-up / wide)
+
+STEP 2 — APPLY THESE LOCKS BASED ON WHAT YOU SEE:
+
+PHONE:
+→ If NO phone visible in image → never describe the subject
+  holding, gripping, or pointing a phone.
+  Never write "handheld phone", "holds phone toward mirror",
+  "frames selfie", or any phone-related action.
+→ If YES phone visible → describe it exactly as shown.
+  Match the hand, angle, and position from the image.
+
+MIRROR:
+→ If NO mirror visible in image → never describe a mirror selfie
+  angle or reflection. The camera is external.
+→ If YES mirror visible → describe the reflection naturally.
+
+PROPS & OBJECTS:
+→ Only describe objects that are physically visible in the image.
+→ If the script mentions an object not visible in the image →
+  that object may only appear in the spoken dialogue.
+  Never describe it as a physical visual action.
+
+HANDS:
+→ Only describe hand actions that are physically possible
+  given what is visible in the image.
+→ Never add a third hand or a second phone.
+→ Never describe a hand holding something not visible in the image.
+
+CAMERA ANGLE:
+→ The camera angle must match what is shown in the image.
+→ Never change the angle based on the script.
+→ If the image shows a lifestyle shot → describe lifestyle motion.
+→ If the image shows a mirror selfie → describe mirror selfie motion.
+→ If the image shows a close-up → describe close-up motion.
+
+RULE:
+→ When script and image conflict → the IMAGE always wins.
+→ The script describes what is SAID and the EMOTION.
+→ The image describes what PHYSICALLY EXISTS in the scene.
+→ Never add any element not visible in the reference image.
+
+EXAMPLE:
+Script says: "handheld phone frames mirror selfie"
+Image shows: lifestyle shot, no phone visible, one hand holds device
+→ CORRECT: describe one hand holding device against face,
+  camera is external, no phone described
+→ WRONG: describe subject holding phone toward mirror
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 STRICT FIDELITY RULE (CRITICAL)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -37,29 +101,9 @@ The prompt must be strictly faithful to the chosen script.
 Do NOT add actions or gestures not written in the script.
 Do NOT remove or replace any action written in the script.
 Do NOT reinterpret the script.
-The script is the source of truth.
-Translate it into motion only. Nothing more.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-IMAGE OVERRIDE RULE (CRITICAL)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-The reference image is the absolute visual source of truth.
-Before writing any action, verify:
-→ Is this object physically visible in the image?
-→ Is this hand position actually shown in the image?
-→ Is this product interaction visible in the image?
-
-If the answer is NO → do NOT describe it as a physical action.
-If an object is in the script but NOT in the image →
-it may only appear in spoken dialogue, never as a visual action.
-When script and image conflict → the IMAGE wins.
-
-EXAMPLE:
-Script says: "she lifts the product package toward the camera"
-Image shows: her hand pointing at a patch on her face, no package visible
-→ CORRECT: describe her finger pointing at the patch on her face
-→ WRONG: describe her lifting a package toward the camera
+The script is the source of truth for what is SAID and FELT.
+The image is the source of truth for what PHYSICALLY EXISTS.
+Translate the script into motion only. Nothing more.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 PHYSICAL COHERENCE RULE (CRITICAL)
@@ -142,6 +186,7 @@ Translate each micro-behavior from the script precisely:
 
 (adjusts phone grip)
 → subtle finger repositioning, frame shifts very slightly
+→ ONLY if phone is visible in reference image
 
 Translate ALL micro-behaviors. Never skip any.
 Only translate what is physically possible in the reference image.
@@ -159,14 +204,86 @@ Never clean up or rewrite spoken lines.
 "honestly..." → soft emphasis, slight lean
 "like..." → casual filler, rhythm break
 "you know..." → trailing delivery, slight head tilt
+"enfin..." → French filler, slight pause
+"genre..." → French casual filler, rhythm break
+"bah..." → French natural opener, slight breath
+"tu vois..." → French trailing delivery, checking in
+"o sea..." → Spanish filler, slight pause
+"sabes..." → Spanish trailing delivery
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-VOICE PROFILE INTEGRATION
+LANGUAGE & ACCENT RULE (CRITICAL)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Match speech delivery exactly to voice profile:
-gender, age, accent, timbre, tone, pacing, emotion, energy.
-For 30s scripts: voice identical across PART 1 and PART 2.
+Read script_language from VIDEO_METADATA when present.
+If script_language is missing, infer accent and language from the spoken lines and VOICE PROFILE in the script (default to EN-US when the script is English).
+
+LIPSYNC RULE — ALWAYS:
+→ The subject's lips must move in perfect sync with the dialogue
+→ This is NOT a voiceover — the subject speaks directly on camera
+→ No off-camera narration. No robotic voice. No dubbed effect.
+→ Mouth movements must match every word, pause, and hesitation
+   exactly as written in the script
+→ Speech must sound like a real human talking — natural breath,
+   natural rhythm, natural imperfections
+
+ACCENT & LANGUAGE LOCK:
+→ EN-US: neutral American English accent
+→ EN-UK: neutral British English accent
+→ FR: accent parisien, français de France uniquement,
+       NOT Quebec French, NOT Canadian French,
+       NOT Belgian French, NOT Swiss French,
+       standard Parisian French accent only,
+       French from France, Paris region intonation,
+       fluent French delivery from France,
+       French-native lip movement patterns from France
+→ ES: neutral Spanish accent from Spain,
+       Castilian Spanish accent,
+       natural Spanish speech rhythm and intonation,
+       NOT Latin American Spanish
+
+WORD COUNT ENFORCEMENT:
+→ The dialogue must never exceed the word limit
+   for the chosen video duration:
+   5s → max 15 words
+   15s → max 46 words
+   30s → max 90 words
+→ Natural pacing must be preserved at all times
+→ Never compress or rush the dialogue to fit
+
+VOICE QUALITY & EMOTION (CRITICAL):
+→ Voice must sound warm, human, and conversational
+→ Never robotic, never synthetic, never flat
+→ Natural micro-variations in tone and pace throughout
+→ Breathing audible between sentences
+→ Emotion must match EXACTLY the voice profile from the script:
+   Energy 1-2 → slow, intimate, almost whispered delivery
+   Energy 3 → conversational, warm, natural rhythm
+   Energy 4-5 → expressive, dynamic, energetic delivery
+→ Voice must reflect the emotional state of each section:
+   HOOK → curious, slightly conspiratorial, draws listener in
+   PROBLEM → empathetic, relatable, slight frustration or tiredness
+   SOLUTION → relief, warmth, genuine excitement building
+   CTA → direct, friendly, confident
+→ Fillers and hesitations must be voiced naturally:
+   "..." → audible micro-breath, slight drop in energy
+   "—" → hard stop, beat of silence, then continuation
+   "enfin..." → voiced with slight upward intonation
+   "genre..." → quick casual delivery, almost throwaway
+   "tu vois..." → softer, checking in with viewer
+   "bah..." → natural opener, slight breath before continuing
+→ For French: apply natural French prosody —
+   voice rises slightly at end of each rhythmic group,
+   drops at end of sentence, never flat monotone delivery
+
+The spoken dialogue block must be reproduced
+exactly as written in the script — including all
+fillers, hesitations, pauses, and imperfections.
+Never translate or rewrite the dialogue.
+Never mix languages in the dialogue block.
+
+For 30s scripts: language and accent identical
+across PROMPT PART 1 and PROMPT PART 2.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 STABILITY ANCHORS (always include)
@@ -209,6 +326,36 @@ LOCATION → AMBIENT SOUND:
 → Office: keyboard clicks, HVAC hum, distant conversation
 → Unknown location: neutral room tone only
 
+ACOUSTIC DISTANCE RULE (CRITICAL):
+The voice must sound acoustically coherent
+with the subject's position in the frame.
+
+CLOSE-UP / SELFIE shot:
+→ Voice sounds close, intimate, slight breath audible,
+  minimal room reverb, almost no distance effect
+
+MEDIUM SHOT:
+→ Voice has slight natural room presence,
+  soft ambient reverb matching the environment,
+  not studio-close but not distant
+
+WIDE SHOT / subject far from camera:
+→ Voice sounds naturally distant — not mic'd up,
+  slight room echo, environment sound more present,
+  voice blends naturally with ambient sound
+→ Never describe a wide shot with a close-up mic voice
+→ The further the subject, the more room tone present
+
+MIRROR SELFIE:
+→ Slight bathroom or room reverb naturally present,
+  voice has natural echo from hard surfaces
+→ Never dry studio sound on a mirror shot
+
+OUTDOOR shots:
+→ Slight wind presence on voice edges,
+  voice has open-air natural quality,
+  no indoor reverb
+
 For 30s scripts: ambient sound identical across both prompts.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -216,17 +363,22 @@ OUTPUT FORMAT
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 FOR 5s / 15s SCRIPTS:
-Generate ONE compact video prompt of 60 to 100 words maximum.
+Generate ONE compact video prompt between 120 and 180 words.
 Write as one continuous paragraph.
 No section titles. No bullet points.
 
 Structure in this order:
-1. Camera movement + subject position (1 short sentence)
-2. Key gesture or product interaction (1 sentence)
-3. Natural micro-movements: blinks, breathing, weight shift (1 sentence)
-4. Full dialogue with all speech imperfections preserved exactly
-5. Ambient sound in one short phrase
-6. Quality line (always last):
+1. Language + accent lock (1 sentence)
+2. Lipsync instruction (1 sentence)
+3. Full dialogue with all speech imperfections preserved exactly
+4. Camera movement + subject position (1–2 sentences)
+   → Based strictly on what is visible in the reference image
+5. Key gesture or product interaction (1–2 sentences)
+   → Only describe what is physically visible in the image
+6. Natural micro-movements: blinks, breathing, weight shift (1 sentence)
+7. Acoustic distance + ambient sound (1 sentence)
+8. Stability and realism anchors (1–2 sentences)
+9. Quality line (always last):
    "4K 120fps ProRes RAW, iPhone 17 Pro Max, Dolby Vision HDR,
    zero grain, tack sharp, no filter. Avoid jitter, bent limbs,
    distorted hands."
@@ -237,14 +389,14 @@ Generate TWO prompts labeled:
 PROMPT PART 1
 PROMPT PART 2
 
-Each prompt: 60 to 100 words maximum.
+Each prompt: between 120 and 180 words.
 Each follows the same structure as above.
 Both respect the 30 SECOND CONTINUITY RULE.
 
-30s header format (must match exactly so the app can parse):
-- First line of block 1: PROMPT PART 1 (no ##, no markdown, no bold)
-- First line of block 2: PROMPT PART 2
-Never use "## PART 1" / "## PART 2" — those break parsing. Use only the two lines above.
+Parsing requirement (must match exactly so the app can split the two clips):
+- The line PROMPT PART 1 must appear alone before the first paragraph (no ##, no markdown, no bold).
+- The line PROMPT PART 2 must appear alone before the second paragraph.
+- Never use "## PART 1" / "## PART 2" — those break parsing.
 
 Do not describe the scene, environment, or visual style.
 These already exist in the reference image.

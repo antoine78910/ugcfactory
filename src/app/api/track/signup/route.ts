@@ -44,15 +44,17 @@ export async function POST(req: Request) {
   const firstName = typeof body.firstName === "string" ? body.firstName.trim() : "";
   const customerExternalId = userId || email;
 
-  if (clickId) {
-    void trackDubLeadServer({
-      clickId,
-      customerExternalId,
-      customerEmail: email,
-      customerName: firstName || undefined,
-      eventName: "Sign up",
-    });
-  }
+  // Always create the customer record in Dub.
+  // With clickId → direct attribution to the affiliate click.
+  // Without clickId → deferred mode: Dub retroactively matches a click if found later.
+  void trackDubLeadServer({
+    clickId: clickId || "",
+    customerExternalId,
+    customerEmail: email,
+    customerName: firstName || undefined,
+    eventName: "Sign up",
+    mode: clickId ? "async" : "deferred",
+  });
 
   return NextResponse.json({ ok: true });
 }

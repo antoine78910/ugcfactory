@@ -43,6 +43,10 @@ function normalizeExternalImageUrl(raw: string): string {
   return u;
 }
 
+function isBrowserLocalUrl(url: string): boolean {
+  return /^blob:/i.test(url) || /^data:/i.test(url);
+}
+
 /** KIE accepts our JPEG/PNG URLs; everything else is re-encoded to JPEG on storage. */
 export function needsKieNanoBananaImageInputNormalize(url: string): boolean {
   const u = normalizeExternalImageUrl(url);
@@ -93,6 +97,9 @@ async function uploadJpegToUgcUploads(jpeg: Buffer): Promise<string> {
 async function normalizeOneUrl(raw: string): Promise<string> {
   const url = normalizeExternalImageUrl(raw);
   if (!url) return url;
+  if (isBrowserLocalUrl(url)) {
+    throw new Error("This reference image is local-only (blob/data URL). Re-upload the image so it has a public HTTPS URL.");
+  }
 
   if (!needsKieNanoBananaImageInputNormalize(url)) {
     return url;
@@ -103,7 +110,17 @@ async function normalizeOneUrl(raw: string): Promise<string> {
     return hit.url;
   }
 
-  const buf = await fetchBuffer(url);
+  let buf: Buffer;
+  try {
+    buf = await fetchBuffer(url);
+  } catch (e) {
+    if (e instanceof Error && /fetch failed/i.test(e.message)) {
+      throw new Error(
+        "Could not download one reference image from its URL. Re-upload it (or use a public HTTPS image URL) and try again.",
+      );
+    }
+    throw e;
+  }
   let jpeg: Buffer;
   try {
     jpeg = await sharp(buf).rotate().jpeg({ quality: 90, mozjpeg: true }).toBuffer();

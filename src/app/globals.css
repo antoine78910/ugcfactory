@@ -418,42 +418,41 @@
   }
 }
 
+/* Let port bubbles sit outside the card without being clipped. */
+.workflow-flow .react-flow__node {
+  overflow: visible;
+}
+
 /* Workflow template preview: nodes are view-only; pan/zoom still work on the pane. */
 .workflow-template-readonly .react-flow__node {
   pointer-events: none;
 }
 
-/* Image / video generator — Run in progress: luminous violet perimeter (conic sweep) */
-.workflow-generator-glow-wrap {
-  --glow-angle: 0deg;
-  position: relative;
-  border-radius: 1rem;
-  padding: 2px;
-  background: conic-gradient(
-    from var(--glow-angle),
-    rgba(91, 33, 182, 0.25) 0%,
-    rgba(167, 139, 250, 0.05) 15%,
-    transparent 30%,
-    transparent 55%,
-    rgba(167, 139, 250, 0.05) 70%,
-    rgba(196, 181, 253, 1) 85%,
-    rgba(139, 92, 246, 0.95) 92%,
-    rgba(91, 33, 182, 0.25) 100%
-  );
-  animation: workflow-generator-conic-spin 1.8s linear infinite;
-  box-shadow:
-    0 0 24px rgba(139, 92, 246, 0.5),
-    0 0 48px rgba(167, 139, 250, 0.18);
+/* Image / video generator — run in progress (minimal, smooth) */
+.workflow-generator-card--busy {
+  animation: workflow-generator-card-border 2.4s ease-in-out infinite;
 }
 
-@property --glow-angle {
-  syntax: "<angle>";
-  initial-value: 0deg;
-  inherits: false;
+@keyframes workflow-generator-card-border {
+  0%,
+  100% {
+    border-color: rgba(167, 139, 250, 0.14);
+  }
+  50% {
+    border-color: rgba(196, 181, 253, 0.34);
+  }
 }
 
-@keyframes workflow-generator-conic-spin {
-  to {
-    --glow-angle: 360deg;
+.workflow-generator-preview--busy {
+  animation: workflow-generator-preview-inset 2.4s ease-in-out infinite;
+}
+
+@keyframes workflow-generator-preview-inset {
+  0%,
+  100% {
+    box-shadow: inset 0 0 0 1px rgba(167, 139, 250, 0.12);
+  }
+  50% {
+    box-shadow: inset 0 0 0 1px rgba(196, 181, 253, 0.32);
   }
 }

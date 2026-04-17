@@ -1,6 +1,8 @@
 import type { Edge } from "@xyflow/react";
 
 import type { AdAssetNodeType } from "./nodes/AdAssetNode";
+import type { ImageRefNodeType } from "./nodes/ImageRefNode";
+import type { TextPromptNodeType } from "./nodes/TextPromptNode";
 import type { StickyNoteNodeType } from "./workflowStickyNoteTypes";
 import type { WorkflowGroupNodeType } from "./nodes/WorkflowGroupNode";
 import type { WorkflowCanvasNode } from "./workflowFlowTypes";
@@ -70,6 +72,26 @@ export function collectWorkflowSelectionNodeRefs(
   for (const s of selectedStickies) {
     if (addedIds.has(s.id)) continue;
     const nodeRef = allNodes.find((x) => x.id === s.id) ?? s;
+    if (!addedIds.has(nodeRef.id)) {
+      out.push(nodeRef);
+      addedIds.add(nodeRef.id);
+    }
+  }
+
+  const selectedImageRefs = selected.filter((n): n is ImageRefNodeType => n.type === "imageRef");
+  for (const r of selectedImageRefs) {
+    if (addedIds.has(r.id)) continue;
+    const nodeRef = allNodes.find((x) => x.id === r.id) ?? r;
+    if (!addedIds.has(nodeRef.id)) {
+      out.push(nodeRef);
+      addedIds.add(nodeRef.id);
+    }
+  }
+
+  const selectedTextPrompts = selected.filter((n): n is TextPromptNodeType => n.type === "textPrompt");
+  for (const t of selectedTextPrompts) {
+    if (addedIds.has(t.id)) continue;
+    const nodeRef = allNodes.find((x) => x.id === t.id) ?? t;
     if (!addedIds.has(nodeRef.id)) {
       out.push(nodeRef);
       addedIds.add(nodeRef.id);
@@ -186,6 +208,42 @@ export function cloneWorkflowSelection(
     selectIds.push(newId);
   }
 
+  const selectedImageRefs = refs.filter((n): n is ImageRefNodeType => n.type === "imageRef");
+  for (const r of selectedImageRefs) {
+    if (idMap.has(r.id)) continue;
+
+    const newId = crypto.randomUUID();
+    idMap.set(r.id, newId);
+
+    nodesToAdd.push({
+      id: newId,
+      type: "imageRef",
+      position: { x: r.position.x + DX, y: r.position.y + DY },
+      data: structuredClone(r.data),
+      selected: false,
+      zIndex: r.zIndex,
+    });
+    selectIds.push(newId);
+  }
+
+  const selectedTextPrompts = refs.filter((n): n is TextPromptNodeType => n.type === "textPrompt");
+  for (const t of selectedTextPrompts) {
+    if (idMap.has(t.id)) continue;
+
+    const newId = crypto.randomUUID();
+    idMap.set(t.id, newId);
+
+    nodesToAdd.push({
+      id: newId,
+      type: "textPrompt",
+      position: { x: t.position.x + DX, y: t.position.y + DY },
+      data: structuredClone(t.data),
+      selected: false,
+      zIndex: t.zIndex ?? 1,
+    });
+    selectIds.push(newId);
+  }
+
   if (nodesToAdd.length === 0) return null;
 
   const edgesToAdd: Edge[] = [];
@@ -206,5 +264,12 @@ export function cloneWorkflowSelection(
 }
 
 export function canCloneWorkflowSelection(selected: WorkflowCanvasNode[]): boolean {
-  return selected.some((n) => n.type === "workflowGroup" || n.type === "adAsset" || n.type === "imageRef" || n.type === "stickyNote");
+  return selected.some(
+    (n) =>
+      n.type === "workflowGroup" ||
+      n.type === "adAsset" ||
+      n.type === "imageRef" ||
+      n.type === "stickyNote" ||
+      n.type === "textPrompt",
+  );
 }
