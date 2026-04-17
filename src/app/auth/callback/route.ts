@@ -164,15 +164,15 @@ export async function GET(req: NextRequest) {
               console.log("[Dub] auth/callback track.lead →", {
                 customerExternalId: userData.user.id,
                 clickId: clickId || "(none)",
-                mode: clickId ? "async" : "deferred",
+                mode: clickId ? "wait" : "deferred",
               });
               await trackDubLeadServer({
                 clickId: clickId || "",
                 customerExternalId: userData.user.id,
                 customerEmail: email,
                 customerName: name,
-                eventName: "Sign up",
-                mode: clickId ? "async" : "deferred",
+                eventName: "Sign Up",
+                mode: clickId ? "wait" : "deferred",
               });
             }
           }

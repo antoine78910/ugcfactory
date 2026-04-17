@@ -27,6 +27,8 @@ export type DubSaleParams = {
   invoiceId?: string;
   paymentProcessor?: string;
   eventName?: string;
+  /** Must match the lead `eventName` (case-sensitive) for attribution. */
+  leadEventName?: string;
   currency?: string;
   metadata?: Record<string, string>;
 };
@@ -42,11 +44,14 @@ export async function trackDubSaleServer(params: DubSaleParams): Promise<void> {
   const client = await getDubClient();
   if (!client) return;
 
+  const leadEventName = params.leadEventName?.trim() || "Sign Up";
+
   console.log("[Dub] track.sale →", {
     customerExternalId: externalId,
     amount: params.amount,
     invoiceId: params.invoiceId || "(none)",
     currency: params.currency || "usd",
+    leadEventName,
   });
 
   try {
@@ -55,6 +60,7 @@ export async function trackDubSaleServer(params: DubSaleParams): Promise<void> {
       amount: params.amount,
       paymentProcessor: (params.paymentProcessor ?? "stripe") as "stripe",
       eventName: params.eventName?.trim() || "Purchase",
+      leadEventName,
       ...(params.invoiceId ? { invoiceId: params.invoiceId } : {}),
       ...(params.currency ? { currency: params.currency } : {}),
       ...(params.metadata ? { metadata: params.metadata } : {}),

@@ -48,7 +48,8 @@ export async function POST(req: Request) {
   const userId = typeof body.userId === "string" ? body.userId.trim() : "";
   const firstName = typeof body.firstName === "string" ? body.firstName.trim() : "";
   const customerExternalId = userId || email;
-  const mode = clickId ? "async" : "deferred";
+  /** `wait` ensures Dub records the lead before the response returns (better on serverless). */
+  const mode = clickId ? "wait" : "deferred";
 
   console.log("[Dub] /api/track/signup", {
     traceId,
@@ -67,7 +68,7 @@ export async function POST(req: Request) {
     customerExternalId,
     customerEmail: email,
     customerName: firstName || undefined,
-    eventName: "Sign up",
+    eventName: "Sign Up",
     mode,
   });
 

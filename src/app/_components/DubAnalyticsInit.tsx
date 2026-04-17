@@ -47,14 +47,28 @@ function DubClickIdQueryParamGuard() {
 export function DubAnalyticsInit() {
   if (!DUB_PUBLISHABLE_KEY) return null;
   if (typeof window !== "undefined") {
-    setTimeout(() => {
-      const hasGlobal = Boolean((window as any)._dubAnalytics);
-      const cookieDubId = document.cookie.match(/(?:^|;\s*)dub_id=([^;]+)/)?.[1];
-      console.log("[DubTrace] Analytics runtime check", {
-        hasGlobalDubAnalytics: hasGlobal,
-        cookieDubId: cookieDubId ? decodeURIComponent(cookieDubId) : "(none)",
-      });
-    }, 1000);
+    const logRuntime = (label: string) => {
+      try {
+        const w = window as Window & { dubAnalytics?: unknown };
+        const da = w.dubAnalytics;
+        const hasStub = typeof da === "function";
+        const scriptInHead = Boolean(
+          document.head?.querySelector("script[src*='dubcdn.com/analytics/script']"),
+        );
+        const cookieDubId = document.cookie.match(/(?:^|;\s*)dub_id=([^;]+)/)?.[1];
+        console.log("[DubTrace] Analytics runtime check", {
+          label,
+          /** Dub injects `window.dubAnalytics` (no underscore). Docs mentioning `_dubAnalytics` are outdated. */
+          hasDubAnalyticsFn: hasStub,
+          dubScriptInHead: scriptInHead,
+          cookieDubId: cookieDubId ? decodeURIComponent(cookieDubId) : "(none)",
+        });
+      } catch {
+        /* ignore */
+      }
+    };
+    setTimeout(() => logRuntime("t+1s"), 1000);
+    setTimeout(() => logRuntime("t+3s"), 3000);
   }
   return (
     <>

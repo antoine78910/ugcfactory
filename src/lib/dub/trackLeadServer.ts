@@ -29,7 +29,7 @@ export type DubLeadParams = {
   customerEmail?: string;
   customerName?: string;
   customerAvatar?: string | null;
-  /** Default "Sign up" — Dub uses this to tie later sale events via `leadEventName`. */
+  /** Default "Sign Up" — Dub uses this to tie later sale events via `leadEventName` (case-sensitive). */
   eventName?: string;
   /**
    * "async" (default) — fire and forget with attribution.
@@ -61,13 +61,13 @@ export async function trackDubLeadServer(params: DubLeadParams): Promise<void> {
     customerExternalId: externalId,
     clickId: clickId || "(none)",
     mode,
-    eventName: params.eventName?.trim() || "Sign up",
+    eventName: params.eventName?.trim() || "Sign Up",
   });
 
   try {
     await client.track.lead({
       clickId,
-      eventName: params.eventName?.trim() || "Sign up",
+      eventName: params.eventName?.trim() || "Sign Up",
       customerExternalId: externalId,
       customerEmail: params.customerEmail?.trim() || undefined,
       customerName: params.customerName?.trim() || undefined,

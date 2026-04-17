@@ -66,6 +66,8 @@ export default function RootLayout({
           data-website-id={DATAFAST_WEBSITE_ID}
           data-domain={DATAFAST_DOMAIN}
         />
+        {/* Dub script early so `window.dubAnalytics` exists before auth and other client code runs. */}
+        <DubAnalyticsInit />
         <BrowserSupabaseProvider>
           <CreditsPlanProvider>
             <RedeemTokenGuard />
@@ -75,7 +77,6 @@ export default function RootLayout({
           </CreditsPlanProvider>
         </BrowserSupabaseProvider>
         <Toaster richColors />
-        <DubAnalyticsInit />
       </body>
     </html>
   );

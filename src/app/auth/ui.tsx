@@ -14,6 +14,7 @@ import {
   useSupabaseBrowserClient,
 } from "@/lib/supabase/BrowserSupabaseProvider";
 import { getAuthCallbackUrl } from "@/lib/supabase/authRedirect";
+import { useAnalytics } from "@dub/analytics/react";
 
 type AuthMode = "signin" | "signup";
 
@@ -21,6 +22,7 @@ export default function AuthClient({ mode = "signin", redirectTo }: { mode?: Aut
   const router = useRouter();
   const supabaseReady = useBrowserSupabaseReady();
   const supabase = useSupabaseBrowserClient();
+  const { trackLead } = useAnalytics();
 
   const redirectQuery =
     redirectTo && redirectTo.startsWith("/") && !redirectTo.startsWith("//")
@@ -125,9 +127,27 @@ export default function AuthClient({ mode = "signin", redirectTo }: { mode?: Aut
           ? (new URLSearchParams(window.location.search).get("dub_id")?.trim() ?? "")
           : "";
       const dubClickId = dubClickFromCookie || dubClickFromUrl;
+      const customerExternalId = signUpData.user?.id?.trim() || cleanEmail;
       console.log("[Dub] signup – dub_id cookie:", dubClickFromCookie || "(none)");
       console.log("[Dub] signup – dub_id url param:", dubClickFromUrl || "(none)");
-      console.log("[Dub] signup – using clickId:", dubClickId || "(none) → deferred lead");
+      console.log(
+        "[Dub] signup – using clickId:",
+        dubClickId || "(none)",
+        dubClickId ? "(server+client will attribute)" : "(deferred lead, no click id)",
+      );
+      try {
+        trackLead({
+          eventName: "Sign Up",
+          customerExternalId,
+          customerEmail: cleanEmail,
+          customerName: cleanFirst,
+          ...(dubClickId ? { clickId: dubClickId } : {}),
+          ...(dubClickId ? { mode: "async" } : { mode: "deferred" }),
+        });
+        console.log("[Dub] client trackLead queued", { customerExternalId, hasClickId: Boolean(dubClickId) });
+      } catch (leadErr) {
+        console.warn("[Dub] client trackLead error:", leadErr);
+      }
       fetch("/api/track/signup", {
         method: "POST",
         credentials: "include",
