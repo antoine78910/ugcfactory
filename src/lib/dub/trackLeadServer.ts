@@ -57,6 +57,13 @@ export async function trackDubLeadServer(params: DubLeadParams): Promise<void> {
   const clickId = params.clickId.trim();
   const mode = params.mode ?? (clickId ? "async" : "deferred");
 
+  console.log("[Dub] track.lead →", {
+    customerExternalId: externalId,
+    clickId: clickId || "(none)",
+    mode,
+    eventName: params.eventName?.trim() || "Sign up",
+  });
+
   try {
     await client.track.lead({
       clickId,
@@ -67,7 +74,8 @@ export async function trackDubLeadServer(params: DubLeadParams): Promise<void> {
       customerAvatar: params.customerAvatar?.trim() || undefined,
       mode,
     });
+    console.log("[Dub] track.lead ✓ OK", { customerExternalId: externalId, mode });
   } catch (err) {
-    console.error("[dub] track.lead failed", err instanceof Error ? err.message : err);
+    console.error("[Dub] track.lead ✗ FAILED", err instanceof Error ? err.message : err);
   }
 }

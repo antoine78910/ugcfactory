@@ -42,6 +42,13 @@ export async function trackDubSaleServer(params: DubSaleParams): Promise<void> {
   const client = await getDubClient();
   if (!client) return;
 
+  console.log("[Dub] track.sale →", {
+    customerExternalId: externalId,
+    amount: params.amount,
+    invoiceId: params.invoiceId || "(none)",
+    currency: params.currency || "usd",
+  });
+
   try {
     await client.track.sale({
       customerExternalId: externalId,
@@ -52,7 +59,8 @@ export async function trackDubSaleServer(params: DubSaleParams): Promise<void> {
       ...(params.currency ? { currency: params.currency } : {}),
       ...(params.metadata ? { metadata: params.metadata } : {}),
     });
+    console.log("[Dub] track.sale ✓ OK", { customerExternalId: externalId, amount: params.amount });
   } catch (err) {
-    console.error("[dub] track.sale failed", err instanceof Error ? err.message : err);
+    console.error("[Dub] track.sale ✗ FAILED", err instanceof Error ? err.message : err);
   }
 }

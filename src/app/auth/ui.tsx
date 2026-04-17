@@ -120,6 +120,14 @@ export default function AuthClient({ mode = "signin", redirectTo }: { mode?: Aut
               return m?.[1] ? decodeURIComponent(m[1].trim()) : "";
             })()
           : "";
+      const dubClickFromUrl =
+        typeof window !== "undefined"
+          ? (new URLSearchParams(window.location.search).get("dub_id")?.trim() ?? "")
+          : "";
+      const dubClickId = dubClickFromCookie || dubClickFromUrl;
+      console.log("[Dub] signup – dub_id cookie:", dubClickFromCookie || "(none)");
+      console.log("[Dub] signup – dub_id url param:", dubClickFromUrl || "(none)");
+      console.log("[Dub] signup – using clickId:", dubClickId || "(none) → deferred lead");
       fetch("/api/track/signup", {
         method: "POST",
         credentials: "include",
@@ -128,9 +136,16 @@ export default function AuthClient({ mode = "signin", redirectTo }: { mode?: Aut
           email: cleanEmail,
           userId: signUpData.user?.id ?? "",
           firstName: cleanFirst,
-          ...(dubClickFromCookie ? { clickId: dubClickFromCookie } : {}),
+          ...(dubClickId ? { clickId: dubClickId } : {}),
         }),
-      }).catch(() => {});
+      })
+        .then(async (r) => {
+          const json = await r.json().catch(() => ({}));
+          console.log("[Dub] /api/track/signup response:", r.status, json);
+        })
+        .catch((err) => {
+          console.warn("[Dub] /api/track/signup failed:", err);
+        });
       toast.success("Account created", { description: "Check your inbox to confirm your email." });
       router.push(`/auth/check-email?email=${encodeURIComponent(cleanEmail)}`);
       router.refresh();

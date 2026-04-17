@@ -43,6 +43,15 @@ export async function POST(req: Request) {
   const userId = typeof body.userId === "string" ? body.userId.trim() : "";
   const firstName = typeof body.firstName === "string" ? body.firstName.trim() : "";
   const customerExternalId = userId || email;
+  const mode = clickId ? "async" : "deferred";
+
+  console.log("[Dub] /api/track/signup", {
+    customerExternalId,
+    clickFromCookie: clickFromCookie || "(none)",
+    clickFromBody: clickFromBody || "(none)",
+    clickId: clickId || "(none)",
+    mode,
+  });
 
   // Always create the customer record in Dub.
   // With clickId → direct attribution to the affiliate click.
@@ -53,7 +62,7 @@ export async function POST(req: Request) {
     customerEmail: email,
     customerName: firstName || undefined,
     eventName: "Sign up",
-    mode: clickId ? "async" : "deferred",
+    mode,
   });
 
   return NextResponse.json({ ok: true });
