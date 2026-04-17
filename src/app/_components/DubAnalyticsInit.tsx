@@ -18,8 +18,12 @@ function DubClickIdQueryParamGuard() {
     try {
       const params = new URLSearchParams(window.location.search);
       const dubIdFromUrl = params.get("dub_id")?.trim();
-      if (!dubIdFromUrl) return;
       const existing = document.cookie.match(/(?:^|;\s*)dub_id=([^;]+)/)?.[1];
+      console.log("[DubTrace] Analytics guard mount", {
+        dubIdFromUrl: dubIdFromUrl || "(none)",
+        existingCookieDubId: existing ? decodeURIComponent(existing) : "(none)",
+      });
+      if (!dubIdFromUrl) return;
       if (existing) {
         console.log("[Dub] dub_id already set in cookie:", decodeURIComponent(existing));
         return;
@@ -42,6 +46,16 @@ function DubClickIdQueryParamGuard() {
  */
 export function DubAnalyticsInit() {
   if (!DUB_PUBLISHABLE_KEY) return null;
+  if (typeof window !== "undefined") {
+    setTimeout(() => {
+      const hasGlobal = Boolean((window as any)._dubAnalytics);
+      const cookieDubId = document.cookie.match(/(?:^|;\s*)dub_id=([^;]+)/)?.[1];
+      console.log("[DubTrace] Analytics runtime check", {
+        hasGlobalDubAnalytics: hasGlobal,
+        cookieDubId: cookieDubId ? decodeURIComponent(cookieDubId) : "(none)",
+      });
+    }, 1000);
+  }
   return (
     <>
       <DubAnalytics

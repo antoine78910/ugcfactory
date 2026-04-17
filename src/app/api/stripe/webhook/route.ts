@@ -115,6 +115,7 @@ async function brevoEmitCancelSubscription(opts: {
 }
 
 export async function POST(req: Request) {
+  const traceId = `stripe_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
   const secret = process.env.STRIPE_SECRET_KEY?.trim();
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET?.trim();
 
@@ -143,6 +144,7 @@ export async function POST(req: Request) {
   }
 
   try {
+    serverLog("dub_trace_stripe_event_start", { traceId, eventType: event.type, eventId: event.id });
     switch (event.type) {
 
       // -----------------------------------------------------------------------
@@ -249,7 +251,15 @@ export async function POST(req: Request) {
           const planId = session.metadata?.subscription_plan ?? "";
           const packKey = session.metadata?.credit_pack ?? "";
           if (amountCents > 0) {
-            void trackDubSaleServer({
+            serverLog("dub_trace_sale_track_start", {
+              traceId,
+              eventId: event.id,
+              sessionId: session.id,
+              userId,
+              amountCents,
+              currency,
+            });
+            await trackDubSaleServer({
               customerExternalId: userId,
               amount: amountCents,
               invoiceId: session.id,
@@ -261,9 +271,25 @@ export async function POST(req: Request) {
                 plan: planId || packKey || "unknown",
               },
             });
+            serverLog("dub_trace_sale_track_done", {
+              traceId,
+              eventId: event.id,
+              sessionId: session.id,
+              userId,
+            });
+          } else {
+            serverLog("dub_trace_sale_track_skipped", {
+              traceId,
+              eventId: event.id,
+              sessionId: session.id,
+              userId,
+              reason: "amount_total_is_zero_or_missing",
+            });
           }
         } catch (dubErr) {
           serverLog("stripe_webhook_dub_sale_error", {
+            traceId,
+            eventId: event.id,
             error: dubErr instanceof Error ? dubErr.message : "unknown",
           });
         }

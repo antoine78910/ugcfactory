@@ -15,15 +15,20 @@ import { normalizeDubClickId } from "@/lib/dub/clickId";
 import { trackDubLeadServer } from "@/lib/dub/trackLeadServer";
 
 export async function POST(req: Request) {
+  const traceId = `signup_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  console.log("[DubTrace] /api/track/signup START", { traceId });
+
   let body: { email?: string; userId?: string; firstName?: string; clickId?: string } = {};
   try {
     body = (await req.json()) as typeof body;
   } catch {
+    console.warn("[DubTrace] /api/track/signup invalid json body", { traceId });
     return NextResponse.json({ ok: false }, { status: 400 });
   }
 
   const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
   if (!email) {
+    console.warn("[DubTrace] /api/track/signup missing email", { traceId });
     return NextResponse.json({ ok: false, error: "Missing email" }, { status: 400 });
   }
 
@@ -46,6 +51,7 @@ export async function POST(req: Request) {
   const mode = clickId ? "async" : "deferred";
 
   console.log("[Dub] /api/track/signup", {
+    traceId,
     customerExternalId,
     clickFromCookie: clickFromCookie || "(none)",
     clickFromBody: clickFromBody || "(none)",
@@ -62,6 +68,12 @@ export async function POST(req: Request) {
     customerEmail: email,
     customerName: firstName || undefined,
     eventName: "Sign up",
+    mode,
+  });
+
+  console.log("[DubTrace] /api/track/signup DONE", {
+    traceId,
+    customerExternalId,
     mode,
   });
 
