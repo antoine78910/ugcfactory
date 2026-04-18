@@ -8,7 +8,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "process-studio-logos": "node scripts/process-studio-model-logos.mjs"
+    "process-studio-logos": "node scripts/process-studio-model-logos.mjs",
+    "capture-og-banner": "node scripts/capture-og-banner.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",

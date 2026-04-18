@@ -20,13 +20,61 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const defaultTitle = "Youry | Turn Any Product Into A Video Ad";
+const defaultDescription =
+  "Turn any product into realistic AI ads, UGC, reels and stories.";
+
+/** Absolute base URL for Open Graph / Twitter cards (Discord, Slack, etc.). */
+function metadataBaseUrl(): URL {
+  const candidates = [
+    process.env.NEXT_PUBLIC_APP_URL?.trim(),
+    process.env.APP_URL?.trim(),
+    process.env.NEXT_PUBLIC_SITE_URL?.trim(),
+    process.env.VERCEL_URL?.trim()
+      ? `https://${process.env.VERCEL_URL.trim()}`
+      : "",
+  ].filter(Boolean) as string[];
+  for (const raw of candidates) {
+    const s = raw.replace(/\/+$/, "");
+    const withScheme = /^https?:\/\//i.test(s) ? s : `https://${s}`;
+    try {
+      return new URL(withScheme);
+    } catch {
+      /* try next */
+    }
+  }
+  return new URL("https://app.youry.io");
+}
+
 export const metadata: Metadata = {
-  title: "Youry | Turn Any Product Into A Video Ad",
-  description: "Turn any product into realistic AI ads, UGC, reels and stories.",
+  metadataBase: metadataBaseUrl(),
+  title: defaultTitle,
+  description: defaultDescription,
   icons: {
     icon: "/icon.png",
     shortcut: "/icon.png",
     apple: "/icon.png",
+  },
+  openGraph: {
+    type: "website",
+    siteName: "Youry",
+    locale: "en_US",
+    title: defaultTitle,
+    description: defaultDescription,
+    images: [
+      {
+        url: "/og-banner.png",
+        width: 1200,
+        height: 630,
+        alt: "Youry — product to video ads",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: defaultTitle,
+    description: defaultDescription,
+    images: ["/og-banner.png"],
   },
 };
 
