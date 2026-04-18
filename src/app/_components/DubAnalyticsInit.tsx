@@ -1,7 +1,8 @@
 "use client";
 
 import { Analytics as DubAnalytics } from "@dub/analytics/react";
-import { useEffect } from "react";
+import { useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 
 const DUB_PUBLISHABLE_KEY =
   process.env.NEXT_PUBLIC_DUB_PUBLISHABLE_KEY?.trim() ?? "dub_pk_HMcoWNyXmq6E8OQGgpK6eEcF";
@@ -9,49 +10,66 @@ const DUB_REFER_DOMAIN =
   process.env.NEXT_PUBLIC_DUB_REFER_DOMAIN?.trim() ?? "go.youry.io";
 
 /**
- * If the landing page (www.youry.io) forwarded `dub_id` as a query param
- * (e.g. app.youry.io/signup?dub_id=xxx), save it as a first-party cookie so
- * the signup flow can read it even when the param is not present on app pages.
+ * Reads `dub_id` from URL query params via Next.js `useSearchParams` (reactive
+ * to client-side navigation) and saves it as a first-party `.youry.io` cookie
+ * so the signup flow can read it even when the param is no longer in the URL.
+ * Must be inside a <Suspense> boundary because useSearchParams requires it.
  */
-function DubClickIdQueryParamGuard() {
+function DubClickIdGuardInner() {
+  const searchParams = useSearchParams();
+  const dubIdFromUrl = searchParams.get("dub_id")?.trim() ?? "";
+
   useEffect(() => {
+    if (!dubIdFromUrl) return;
     try {
-      const params = new URLSearchParams(window.location.search);
-      const dubIdFromUrl = params.get("dub_id")?.trim();
       const existing = document.cookie.match(/(?:^|;\s*)dub_id=([^;]+)/)?.[1];
-      console.log("[DubTrace] Analytics guard mount", {
-        dubIdFromUrl: dubIdFromUrl || "(none)",
+      console.log("[DubTrace] Analytics guard", {
+        dubIdFromUrl,
         existingCookieDubId: existing ? decodeURIComponent(existing) : "(none)",
       });
-      if (!dubIdFromUrl) return;
       if (existing) {
         console.log("[Dub] dub_id already set in cookie:", decodeURIComponent(existing));
         return;
       }
       const expires = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toUTCString();
+      // SameSite=Lax is required so the cookie is sent on cross-site top-level
+      // navigations (e.g. returning from Google OAuth or Stripe checkout).
       document.cookie = `dub_id=${encodeURIComponent(dubIdFromUrl)};domain=.youry.io;path=/;expires=${expires};SameSite=Lax`;
       console.log("[Dub] dub_id saved from URL query param:", dubIdFromUrl);
     } catch {
       // never block the page
     }
-  }, []);
+  }, [dubIdFromUrl]);
+
   return null;
+}
+
+function DubClickIdQueryParamGuard() {
+  return (
+    <Suspense fallback={null}>
+      <DubClickIdGuardInner />
+    </Suspense>
+  );
 }
 
 /**
  * Dub client-side conversion + referral click tracking.
- * cookieOptions.domain is set to `.youry.io` so the cookie is shared between
- * www.youry.io and app.youry.io.
+ * cookieOptions.domain  → `.youry.io` so the cookie is shared across all
+ *                          youry.io subdomains (www ↔ app).
+ * cookieOptions.sameSite → `lax` so the cookie is included on cross-site
+ *                          top-level navigations (Google OAuth redirect back,
+ *                          Stripe checkout return, etc.).
  * @see https://dub.co/docs/analytics/quickstart
  */
 export function DubAnalyticsInit() {
-  if (!DUB_PUBLISHABLE_KEY) return null;
-  if (typeof window !== "undefined") {
+  // Keep diagnostic logging in useEffect — no side-effects during render.
+  useEffect(() => {
+    if (!DUB_PUBLISHABLE_KEY) return;
     const logRuntime = (label: string) => {
       try {
         const w = window as Window & { dubAnalytics?: unknown };
         const da = w.dubAnalytics;
-        const hasStub = typeof da === "function";
+        const hasStub = typeof da === "function" || (da !== null && typeof da === "object");
         const scriptInHead = Boolean(
           document.head?.querySelector("script[src*='dubcdn.com/analytics/script']"),
         );
@@ -67,9 +85,15 @@ export function DubAnalyticsInit() {
         /* ignore */
       }
     };
-    setTimeout(() => logRuntime("t+1s"), 1000);
-    setTimeout(() => logRuntime("t+3s"), 3000);
-  }
+    const t1 = setTimeout(() => logRuntime("t+1s"), 1000);
+    const t3 = setTimeout(() => logRuntime("t+3s"), 3000);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t3);
+    };
+  }, []);
+
+  if (!DUB_PUBLISHABLE_KEY) return null;
   return (
     <>
       <DubAnalytics
@@ -79,6 +103,10 @@ export function DubAnalyticsInit() {
         }}
         cookieOptions={{
           domain: ".youry.io",
+          // Without sameSite: 'lax', the Dub script may default to Strict,
+          // which would block the cookie from being sent when the browser
+          // returns from an external redirect (OAuth, Stripe, etc.).
+          sameSite: "lax",
         }}
       />
       <DubClickIdQueryParamGuard />

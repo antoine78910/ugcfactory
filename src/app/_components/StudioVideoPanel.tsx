@@ -1504,6 +1504,10 @@ export default function StudioVideoPanel({
       editSceneBackground,
     };
 
+    // Track the DB-registered generation id so the catch block can decide whether
+    // to refund inline (no row yet) or let the background poll sweep handle it
+    // (row exists → sweep atomically marks credits_refund_hint_sent=true, preventing double-refund).
+    let currentEditStudioGenId: string | null = null;
     void (async () => {
       try {
         const editPKey = getPersonalApiKey();
@@ -1534,6 +1538,7 @@ export default function StudioVideoPanel({
             inputUrls: [snap.editMotionImageUrl, snap.editMotionVideoUrl].filter(Boolean) as string[],
             aspectRatio: aspect,
           });
+          currentEditStudioGenId = studioGenId ?? null;
           setHistoryItems((prev) =>
             prev.map((i) =>
               i.id === jobId
@@ -1601,6 +1606,7 @@ export default function StudioVideoPanel({
           inputUrls: [snap.editVideoUrl, ...(snap.editElementUrls || [])].filter(Boolean) as string[],
           aspectRatio: aspect,
         });
+        currentEditStudioGenId = studioGenId ?? null;
         setHistoryItems((prev) =>
           prev.map((i) =>
             i.id === jobId
@@ -1640,7 +1646,12 @@ export default function StudioVideoPanel({
         toast.success("Video ready");
       } catch (e) {
         const msg = userMessageFromCaughtError(e, "Something went wrong while generating. Please try again.");
-        refundPlatformCredits(platformChargeEdit, grantCredits, creditsRef);
+        // Only refund immediately when no DB row was registered.
+        // If a row was registered, the background poll sweep atomically handles the refund
+        // (credits_refund_hint_sent=true) to prevent double-charging the ledger.
+        if (!currentEditStudioGenId) {
+          refundPlatformCredits(platformChargeEdit, grantCredits, creditsRef);
+        }
         toast.error(msg);
         setHistoryItems((prev) =>
           prev.map((i) =>
@@ -1789,6 +1800,10 @@ export default function StudioVideoPanel({
       videoPriority,
     };
 
+    // Track the DB-registered generation id so the catch block can decide whether
+    // to refund inline (no row yet) or let the background poll sweep handle it
+    // (row exists → sweep atomically marks credits_refund_hint_sent=true, preventing double-refund).
+    let currentCreateStudioGenId: string | null = null;
     void (async () => {
       try {
         const pKey = getPersonalApiKey();
@@ -1824,6 +1839,7 @@ export default function StudioVideoPanel({
             inputUrls: snap.startUrl ? [snap.startUrl] : undefined,
             aspectRatio: snap.historyAspect,
           });
+          currentCreateStudioGenId = studioGenId ?? null;
           setHistoryItems((prev) =>
             prev.map((i) =>
               i.id === jobId
@@ -1908,6 +1924,7 @@ export default function StudioVideoPanel({
             inputUrls: urls.length ? urls : undefined,
             aspectRatio: snap.historyAspect,
           });
+          currentCreateStudioGenId = studioGenId ?? null;
           setHistoryItems((prev) =>
             prev.map((i) =>
               i.id === jobId
@@ -2005,6 +2022,7 @@ export default function StudioVideoPanel({
           inputUrls: snap.startUrl ? [snap.startUrl] : undefined,
           aspectRatio: snap.historyAspect,
         });
+        currentCreateStudioGenId = studioGenId ?? null;
         setHistoryItems((prev) =>
           prev.map((i) =>
             i.id === jobId
@@ -2054,7 +2072,12 @@ export default function StudioVideoPanel({
         toast.success("Video ready");
       } catch (e) {
         const msg = userMessageFromCaughtError(e, "Something went wrong while generating. Please try again.");
-        refundPlatformCredits(platformChargeCreate, grantCredits, creditsRef);
+        // Only refund immediately when no DB row was registered.
+        // If a row was registered, the background poll sweep atomically handles the refund
+        // (credits_refund_hint_sent=true) to prevent double-charging the ledger.
+        if (!currentCreateStudioGenId) {
+          refundPlatformCredits(platformChargeCreate, grantCredits, creditsRef);
+        }
         toast.error(msg);
         setHistoryItems((prev) =>
           prev.map((i) =>

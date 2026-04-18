@@ -23,7 +23,11 @@ import {
 } from "@/lib/studioImageModels";
 import { normalizeKieVeoModel, type KieVeoAspectRatio } from "@/lib/kie";
 import { pollKlingVideo, pollVeoVideo } from "@/lib/studioKlingClientPoll";
+import { studioVideoDurationSecOptions, validateStudioVideoJobDuration } from "@/lib/studioVideoModelCapabilities";
 import { uploadBlobUrlToCdn } from "@/lib/uploadBlobUrlToCdn";
+
+/** Max reference image wires / URLs merged into one workflow Image generator job (Kie / NanoBanana). */
+export const WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX = 14;
 
 export function stripStickyHtmlToText(html: string): string {
   const h = html.trim();
@@ -364,6 +368,31 @@ export function resolveWorkflowVideoModelId(raw: string): string {
   return t;
 }
 
+function seedancePreviewMarketModelForGenerate(modelId: string, priority: "normal" | "vip"): string {
+  if (priority !== "vip") return modelId;
+  if (modelId === "bytedance/seedance-2-preview") return "bytedance/seedance-2-preview-vip";
+  if (modelId === "bytedance/seedance-2-fast-preview") return "bytedance/seedance-2-fast-preview-vip";
+  return modelId;
+}
+
+function isWorkflowSeedancePreviewModel(modelId: string): boolean {
+  return modelId === "bytedance/seedance-2-preview" || modelId === "bytedance/seedance-2-fast-preview";
+}
+
+/** Clamp stored duration to allowed values for the resolved workflow video model. */
+export function coerceWorkflowVideoDurationSec(rawModel: string, stored: number | undefined): number {
+  const modelId = resolveWorkflowVideoModelId(rawModel);
+  const allowed = studioVideoDurationSecOptions(modelId)
+    .map((x) => Number(x))
+    .filter((n) => Number.isFinite(n) && n > 0);
+  if (!allowed.length) {
+    return workflowVideoDefaultDuration(modelId);
+  }
+  const s = stored != null && Number.isFinite(stored) ? Math.round(Number(stored)) : NaN;
+  if (allowed.includes(s)) return s;
+  return workflowVideoDefaultDuration(modelId);
+}
+
 function isVeoPicker(id: string): boolean {
   return id === "veo3_lite" || id === "veo3_fast" || id === "veo3";
 }
@@ -449,7 +478,10 @@ export async function runWorkflowImageJob(params: WorkflowRunImageParams): Promi
   const n = Math.min(4, Math.max(1, params.quantity));
   const resolutionForApi = studioImageModelSupportsResolutionPicker(pickerModel) ? studioRes : "2K";
 
-  const resolvedReferenceUrls = await resolveLocalWorkflowMediaUrlsForServer(params.referenceImageUrls);
+  const cappedRefs = (params.referenceImageUrls ?? []).slice(0, WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX);
+  const resolvedReferenceUrls = await resolveLocalWorkflowMediaUrlsForServer(
+    cappedRefs.length ? cappedRefs : undefined,
+  );
 
   const startRes = await fetch("/api/studio/generations/start", {
     method: "POST",
@@ -488,6 +520,10 @@ export type WorkflowRunVideoParams = {
   model: string;
   aspectRatio: string;
   resolution: string;
+  /** Seconds; coerced per model if missing or invalid. */
+  durationSec?: number;
+  /** Seedance 2 Preview / Fast Preview only — maps to PiAPI VIP task and doubles credits. */
+  seedancePriority?: "normal" | "vip";
   linkedImageUrl?: string;
   referenceImageUrl?: string;
   endImageUrl?: string;
@@ -506,13 +542,22 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
     (params.referenceImageUrls ?? []).map((u) => u.trim()).filter(Boolean),
   );
   const quality = klingQualityFromVideoResolution(params.resolution);
-  const duration = workflowVideoDefaultDuration(modelId);
-  const credits = calculateVideoCredits({
+  const seedancePri: "normal" | "vip" = params.seedancePriority === "vip" ? "vip" : "normal";
+  const duration = coerceWorkflowVideoDurationSec(params.model, params.durationSec);
+  const marketModelForGenerate = seedancePreviewMarketModelForGenerate(modelId, seedancePri);
+  try {
+    validateStudioVideoJobDuration(marketModelForGenerate, duration);
+  } catch (err) {
+    throw new Error(err instanceof Error ? err.message : "Invalid video duration.");
+  }
+  const baseCredits = calculateVideoCredits({
     modelId,
     duration,
     audio: modelId === "kling-3.0/video" || modelId === "kling-2.6/video",
     quality,
   });
+  const credits =
+    seedancePri === "vip" && isWorkflowSeedancePreviewModel(modelId) ? baseCredits * 2 : baseCredits;
 
   if (
     isSeedancePicker(modelId) &&
@@ -572,7 +617,7 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       accountPlan: params.planId,
-      marketModel: modelId,
+      marketModel: marketModelForGenerate,
       prompt: params.prompt,
       imageUrl: startUrl ?? refUrls[0],
       duration,
@@ -636,14 +681,22 @@ export function workflowImageChargeCredits(params: {
   });
 }
 
-export function workflowVideoChargeCredits(params: { model: string; resolution: string }): number {
+export function workflowVideoChargeCredits(params: {
+  model: string;
+  resolution: string;
+  durationSec?: number;
+  seedancePriority?: "normal" | "vip";
+}): number {
   const modelId = resolveWorkflowVideoModelId(params.model);
   const quality = klingQualityFromVideoResolution(params.resolution);
-  const duration = workflowVideoDefaultDuration(modelId);
-  return calculateVideoCredits({
+  const duration = coerceWorkflowVideoDurationSec(params.model, params.durationSec);
+  const base = calculateVideoCredits({
     modelId,
     duration,
     audio: modelId === "kling-3.0/video" || modelId === "kling-2.6/video",
     quality,
   });
+  const pri = params.seedancePriority === "vip" ? "vip" : "normal";
+  if (pri === "vip" && isWorkflowSeedancePreviewModel(modelId)) return base * 2;
+  return base;
 }

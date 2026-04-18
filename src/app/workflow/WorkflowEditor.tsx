@@ -9,6 +9,7 @@ import {
   type Connection,
   type Edge,
   type FinalConnectionState,
+  type OnConnectStartParams,
   Panel,
   ReactFlow,
   ReactFlowProvider,
@@ -1803,12 +1804,28 @@ function WorkflowFlowWorkspace({
   const [inputBubblePreview, setInputBubblePreview] = useState<WorkflowInputBubblePreviewState>(null);
   const cutTargetBusyRef = useRef(false);
   const cutSuppressNextPaneClickRef = useRef(false);
+  /** After a wire drop that opens the placement menu, ignore the synthetic pane click that would clear it. */
+  const suppressWorkflowPaneClickRef = useRef(false);
+  /** XY Flow can omit `fromNode` on `onConnectEnd`; keep the handle we started from. */
+  const connectInteractionOriginRef = useRef<{ nodeId: string; handleId: string | null } | null>(null);
   const cutSnipClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [cutSnipFx, setCutSnipFx] = useState<{ x: number; y: number } | null>(null);
   const [cutTrailPoints, setCutTrailPoints] = useState<{ x: number; y: number }[]>([]);
   const cutTrailActiveRef = useRef(false);
   const cutTrailJustFinishedRef = useRef(false);
   const workspaceRootRef = useRef<HTMLDivElement>(null);
+
+  /** Opening the placement menu after a wire drop often triggers a synthetic pane `click` that would clear it immediately. */
+  const armPlacementPickerAgainstPaneClick = useCallback(() => {
+    suppressWorkflowPaneClickRef.current = true;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (suppressWorkflowPaneClickRef.current) {
+          suppressWorkflowPaneClickRef.current = false;
+        }
+      });
+    });
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -1978,6 +1995,7 @@ function WorkflowFlowWorkspace({
         target && !detail.usePointerFlow
           ? { x: target.position.x - 250, y: target.position.y + yOffsets[detail.targetHandleId] }
           : fallbackFlow;
+      armPlacementPickerAgainstPaneClick();
       setPlacementPicker({
         flow: leftFlow,
         screenX: detail.screenX,
@@ -1989,7 +2007,7 @@ function WorkflowFlowWorkspace({
     window.addEventListener("workflow:open-input-picker", onOpenInputPicker as EventListener);
     return () =>
       window.removeEventListener("workflow:open-input-picker", onOpenInputPicker as EventListener);
-  }, [nodes, screenToFlowPosition]);
+  }, [nodes, screenToFlowPosition, armPlacementPickerAgainstPaneClick]);
 
   useEffect(() => {
     if (readOnly) return;
@@ -2050,6 +2068,7 @@ function WorkflowFlowWorkspace({
       const flow = screenToFlowPosition({ x: detail.screenX, y: detail.screenY });
 
       setInputBubblePreview(null);
+      armPlacementPickerAgainstPaneClick();
       setPlacementPicker({
         flow,
         screenX: detail.screenX,
@@ -2065,7 +2084,7 @@ function WorkflowFlowWorkspace({
       window.removeEventListener("workflow:input-bubble-preview", onPreview as EventListener);
       window.removeEventListener("workflow:input-bubble-drop", onDrop as EventListener);
     };
-  }, [readOnly, screenToFlowPosition]);
+  }, [readOnly, screenToFlowPosition, armPlacementPickerAgainstPaneClick]);
 
   useEffect(() => {
     if (!placementPicker) return;
@@ -2204,6 +2223,22 @@ function WorkflowFlowWorkspace({
     });
   }, [setProject]);
 
+  const onConnectStart = useCallback(
+    (_event: MouseEvent | TouchEvent, params: OnConnectStartParams) => {
+      if (readOnly) return;
+      const nid = params.nodeId?.trim();
+      if (!nid) {
+        connectInteractionOriginRef.current = null;
+        return;
+      }
+      connectInteractionOriginRef.current = {
+        nodeId: nid,
+        handleId: params.handleId?.trim() ? params.handleId.trim() : null,
+      };
+    },
+    [readOnly],
+  );
+
   const onConnect = useCallback(
     (params: Connection) => {
       if (readOnly) return;
@@ -2269,30 +2304,47 @@ function WorkflowFlowWorkspace({
   const onConnectEnd = useCallback(
     (event: MouseEvent | TouchEvent, connectionState: FinalConnectionState) => {
       if (readOnly) return;
-      const raw = connectionState as FinalConnectionState & {
-        fromNodeId?: string | null;
-        fromHandleId?: string | null;
-      };
-      const fromNodeId = connectionState.fromNode?.id ?? raw.fromNodeId ?? null;
-      const fromHandleId = connectionState.fromHandle?.id ?? raw.fromHandleId ?? null;
-      // Some RF versions do not reliably populate `fromNode`/`fromHandle` objects on drop-to-empty-canvas.
-      if (!fromNodeId) return;
-      if (connectionState.toHandle && connectionState.isValid) return;
+      const origin = connectInteractionOriginRef.current;
+      try {
+        const raw = connectionState as FinalConnectionState & {
+          fromNodeId?: string | null;
+          fromHandleId?: string | null;
+        };
+        const fromNodeId =
+          connectionState.fromNode?.id ??
+          connectionState.fromHandle?.nodeId ??
+          raw.fromNodeId ??
+          origin?.nodeId ??
+          null;
+        const fromHandleId =
+          connectionState.fromHandle?.id ??
+          raw.fromHandleId ??
+          origin?.handleId ??
+          null;
+        // Some RF versions do not reliably populate `fromNode`/`fromHandle` objects on drop-to-empty-canvas.
+        if (!fromNodeId) return;
+        // Only skip the "create module" picker when a connection actually landed on a valid target.
+        if (connectionState.isValid === true && connectionState.toNode) return;
 
-      const pt = getPointerClientPoint(event);
-      if (!pt) return;
+        const pt = getPointerClientPoint(event);
+        if (!pt) return;
 
-      const flow = screenToFlowPosition({ x: pt.x, y: pt.y });
-      setAddOpen(false);
-      setFrameOpen(false);
-      setPlacementPicker({
-        flow,
-        screenX: pt.x,
-        screenY: pt.y,
-        connectFrom: { nodeId: fromNodeId, handleId: fromHandleId ?? null },
-      });
+        const flow = screenToFlowPosition({ x: pt.x, y: pt.y });
+        setAddOpen(false);
+        setFrameOpen(false);
+        // The following `click` on the pane would clear this menu; suppress one pane click (see onPaneClick).
+        armPlacementPickerAgainstPaneClick();
+        setPlacementPicker({
+          flow,
+          screenX: pt.x,
+          screenY: pt.y,
+          connectFrom: { nodeId: fromNodeId, handleId: fromHandleId ?? null },
+        });
+      } finally {
+        connectInteractionOriginRef.current = null;
+      }
     },
-    [readOnly, screenToFlowPosition],
+    [readOnly, screenToFlowPosition, armPlacementPickerAgainstPaneClick],
   );
 
   const activeName = activePage?.name ?? "Page";
@@ -2604,7 +2656,9 @@ function WorkflowFlowWorkspace({
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={readOnly ? undefined : onConnect}
+          onConnectStart={readOnly ? undefined : onConnectStart}
           onConnectEnd={readOnly ? undefined : onConnectEnd}
+          connectionDragThreshold={0}
           connectionRadius={WORKFLOW_CONNECTION_RADIUS}
           onNodeDragStop={readOnly ? undefined : onNodeDragStop}
           onDragOver={readOnly ? undefined : onDragOver}
@@ -2659,6 +2713,10 @@ function WorkflowFlowWorkspace({
             }
           }}
           onPaneClick={(ev) => {
+            if (suppressWorkflowPaneClickRef.current) {
+              suppressWorkflowPaneClickRef.current = false;
+              return;
+            }
             setAddOpen(false);
             setFrameOpen(false);
             setSelectionBarExpanded(false);

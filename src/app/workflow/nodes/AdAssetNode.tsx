@@ -36,6 +36,7 @@ import {
 } from "@/app/_components/CreditsPlanContext";
 import { userMessageFromCaughtError } from "@/lib/generationUserMessage";
 import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
+import { studioVideoDurationSecOptions } from "@/lib/studioVideoModelCapabilities";
 
 import {
   Select,
@@ -52,10 +53,13 @@ import {
   collectLinkedPromptTexts,
   collectLinkedPromptTextsForHandles,
   composeWorkflowPrompt,
+  coerceWorkflowVideoDurationSec,
+  resolveWorkflowVideoModelId,
   runWorkflowImageJob,
   runWorkflowVideoJob,
   workflowImageChargeCredits,
   workflowVideoChargeCredits,
+  WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX,
 } from "../workflowNodeRun";
 import { WorkflowNodeContextToolbar } from "./WorkflowNodeContextToolbar";
 
@@ -88,6 +92,10 @@ export type AdAssetNodeData = {
   /** Video-specific selected start/end frames. */
   videoStartImageUrl?: string;
   videoEndImageUrl?: string;
+  /** Video: clip length in seconds (per model). */
+  videoDurationSec?: number;
+  /** Video: Seedance 2 Preview / Fast Preview queue tier (doubles credits when VIP). */
+  videoPriority?: "normal" | "vip";
   /**
    * JPEG data URLs of the output video’s first / last frame (grabbed from the preview).
    * When this module’s `out` is wired to another video’s `startImage` / `endImage`, these are used as stills (last frame preferred for continuations).
@@ -173,6 +181,9 @@ const VARIATION_ASPECTS = ["1:1", "4:5", "9:16", "16:9"] as const;
 const IMAGE_RESOLUTIONS = ["1024", "1536", "2K"] as const;
 const VIDEO_RESOLUTIONS = ["720p", "1080p"] as const;
 const VARIATION_RESOLUTIONS = ["1024", "1536", "2K"] as const;
+
+const WORKFLOW_SEEDANCE_PREVIEW_PRIORITY_INFO =
+  "VIP uses faster PiAPI queue and costs 2× credits vs Normal for Seedance Preview / Fast Preview.";
 
 const selectTriggerClass =
   "nodrag nopan h-8 max-h-8 min-h-8 shrink-0 rounded-full border-white/12 bg-[#1c1c1f] text-[11px] font-medium text-white/90 shadow-none hover:bg-[#252528] focus:ring-1 focus:ring-violet-500/35 data-[size=default]:h-8 px-2.5 gap-1";
@@ -419,7 +430,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         );
       };
       const onMove = (ev: PointerEvent) => {
-        if (Math.abs(ev.clientX - startX) > 4 || Math.abs(ev.clientY - startY) > 4) moved = true;
+        if (Math.abs(ev.clientX - startX) > 2 || Math.abs(ev.clientY - startY) > 2) moved = true;
         window.dispatchEvent(
           new CustomEvent("workflow:input-bubble-preview", {
             detail: {
@@ -587,6 +598,21 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     return i < 0 ? 1 : i + 1;
   });
 
+  /** Incoming wires counted like `collectLinkedImageUrlsForHandles(..., ["references","in"])`. */
+  const imageReferenceWireCount = useStore(
+    useCallback(
+      (s) => {
+        if (data.kind !== "image") return 0;
+        return s.edges.filter((e) => {
+          if (e.target !== id) return false;
+          const h = e.targetHandle ?? "in";
+          return h === "references" || h === "in";
+        }).length;
+      },
+      [data.kind, id],
+    ),
+  );
+
   const displayTitle = useMemo(() => {
     const base = (data.label || cfg.title).trim();
     // Avoid double-numbering if the label already ends with " #<number>".
@@ -689,12 +715,57 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
 
   const showQuantity =
     data.kind === "image" || data.kind === "variation" || data.kind === "assistant" || data.kind === "upscale";
-  const estimatedCredits =
-    data.kind === "image"
-      ? workflowImageChargeCredits({ model, resolution, quantity })
-      : data.kind === "video"
-        ? workflowVideoChargeCredits({ model, resolution })
-        : 0;
+
+  const videoDurationOptions = useMemo(() => {
+    if (data.kind !== "video") return [] as string[];
+    return studioVideoDurationSecOptions(resolveWorkflowVideoModelId(model));
+  }, [data.kind, model]);
+
+  const resolvedVideoModelId = useMemo(
+    () => (data.kind === "video" ? resolveWorkflowVideoModelId(model) : ""),
+    [data.kind, model],
+  );
+
+  const showWorkflowSeedancePreviewPriority =
+    data.kind === "video" &&
+    (resolvedVideoModelId === "bytedance/seedance-2-preview" ||
+      resolvedVideoModelId === "bytedance/seedance-2-fast-preview");
+
+  const videoPriorityEffective: "normal" | "vip" =
+    data.kind === "video" && data.videoPriority === "vip" ? "vip" : "normal";
+
+  const estimatedCredits = useMemo(() => {
+    if (data.kind === "image") {
+      return workflowImageChargeCredits({ model, resolution, quantity });
+    }
+    if (data.kind === "video") {
+      return workflowVideoChargeCredits({
+        model,
+        resolution,
+        durationSec: data.videoDurationSec,
+        seedancePriority: videoPriorityEffective,
+      });
+    }
+    return 0;
+  }, [
+    data.kind,
+    data.videoDurationSec,
+    data.videoPriority,
+    model,
+    quantity,
+    resolution,
+    videoPriorityEffective,
+  ]);
+
+  useEffect(() => {
+    if (data.kind !== "video") return;
+    if (data.videoDurationSec === undefined) return;
+    const coerced = coerceWorkflowVideoDurationSec(model, data.videoDurationSec);
+    if (data.videoDurationSec !== coerced) {
+      patch(id, { videoDurationSec: coerced });
+    }
+  }, [data.kind, data.videoDurationSec, id, model, patch]);
+
   const assistantModel = data.assistantModel ?? "claude-sonnet-4-5";
   const assistantMode = data.assistantMode ?? "input";
   const assistantOutput = data.assistantOutput ?? "";
@@ -764,6 +835,13 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       const mergedImageReferences = Array.from(
         new Set([...(refImageForImageGen ? [refImageForImageGen] : []), ...linkedImageReferences]),
       );
+      let refsForJob = mergedImageReferences;
+      if (refsForJob.length > WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX) {
+        toast.message("Reference limit", {
+          description: `Using the first ${WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX} of ${refsForJob.length} reference images.`,
+        });
+        refsForJob = refsForJob.slice(0, WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX);
+      }
       const charge = workflowImageChargeCredits({
         model,
         resolution,
@@ -788,7 +866,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           aspectRatio,
           resolution,
           quantity,
-          referenceImageUrls: mergedImageReferences.length ? mergedImageReferences : undefined,
+          referenceImageUrls: refsForJob.length ? refsForJob : undefined,
         });
         patch(id, {
           outputPreviewUrl: imageUrl,
@@ -806,7 +884,12 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     }
 
     /* video */
-    const vCharge = workflowVideoChargeCredits({ model, resolution });
+    const vCharge = workflowVideoChargeCredits({
+      model,
+      resolution,
+      durationSec: data.videoDurationSec,
+      seedancePriority: data.videoPriority === "vip" ? "vip" : "normal",
+    });
     if (!creditBypass && creditsRef.current < vCharge) {
       toast.error("Not enough credits", { description: `You need ${vCharge} credits for this run.` });
       return;
@@ -844,6 +927,8 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         model,
         aspectRatio,
         resolution,
+        durationSec: data.videoDurationSec,
+        seedancePriority: data.videoPriority === "vip" ? "vip" : "normal",
         linkedImageUrl: startFrame,
         referenceImageUrl: undefined,
         endImageUrl: endFrame,
@@ -867,6 +952,8 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     data.kind,
     data.referenceMediaKind,
     data.referencePreviewUrl,
+    data.videoDurationSec,
+    data.videoPriority,
     data.videoStartImageUrl,
     data.videoEndImageUrl,
     generating,
@@ -1110,7 +1197,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             </button>
           </div>
 
-          <div className={cn(workflowPortBubbleShellClass, "nodrag nopan")}>
+          <div className={cn(workflowPortBubbleShellClass, "nodrag nopan relative")}>
             <Handle
               id="references"
               type="target"
@@ -1121,11 +1208,23 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             <button
               type="button"
               onPointerDown={(e) => handleInputBubblePointerDown(e, "references")}
-              title="Reference images — unlimited incoming images."
+              title={`Reference images — ${imageReferenceWireCount}/${WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX} connected (max ${WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX} for this job).`}
               className={cn(workflowPortBubbleHitClass, "text-white/65 hover:text-white")}
             >
               <Images className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
             </button>
+            <span
+              className="pointer-events-none absolute -right-0.5 -top-1 rounded px-[3px] py-px text-[8px] font-bold tabular-nums leading-none text-white/70 shadow-[0_1px_6px_rgba(0,0,0,0.65)] ring-1 ring-white/12"
+              style={{
+                background:
+                  imageReferenceWireCount >= WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX
+                    ? "rgba(251,113,133,0.35)"
+                    : "rgba(24,24,27,0.92)",
+              }}
+              aria-hidden
+            >
+              {imageReferenceWireCount}/{WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX}
+            </span>
           </div>
         </div>
       ) : (
@@ -1452,7 +1551,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                   <Settings className="h-3.5 w-3.5" strokeWidth={2} />
                 </button>
                 {settingsOpen ? (
-                  <div className="absolute bottom-[calc(100%+6px)] left-0 z-20 w-[200px] rounded-xl border border-white/10 bg-[#1a1a1c] p-2.5 shadow-xl">
+                  <div className="absolute bottom-[calc(100%+6px)] left-0 z-20 w-[min(240px,calc(100vw-2rem))] max-h-[min(70vh,26rem)] overflow-y-auto rounded-xl border border-white/10 bg-[#1a1a1c] p-2.5 shadow-xl">
                     <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-white/45">
                       Resolution
                     </p>
@@ -1468,6 +1567,62 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                         ))}
                       </SelectContent>
                     </Select>
+                    {data.kind === "video" && videoDurationOptions.length > 0 ? (
+                      <>
+                        <p className="mb-1.5 mt-2.5 text-[10px] font-semibold uppercase tracking-wide text-white/45">
+                          Duration
+                        </p>
+                        <Select
+                          value={String(coerceWorkflowVideoDurationSec(model, data.videoDurationSec))}
+                          onValueChange={(v) => patch(id, { videoDurationSec: Number(v) })}
+                        >
+                          <SelectTrigger size="sm" className={cn(selectTriggerClass, "h-9 w-full max-w-none rounded-lg")}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className={selectContentClass} position="popper">
+                            {videoDurationOptions.map((r) => (
+                              <SelectItem key={r} value={r} className="text-[12px] focus:bg-violet-500/20">
+                                {r}s
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </>
+                    ) : data.kind === "video" && videoDurationOptions.length === 0 ? (
+                      <p className="mt-2.5 text-[10px] leading-snug text-white/40">
+                        Veo uses a fixed clip length on the provider (~8s). Duration is not adjustable here.
+                      </p>
+                    ) : null}
+                    {showWorkflowSeedancePreviewPriority ? (
+                      <div className="mt-2.5 space-y-1">
+                        <div className="flex items-center gap-1">
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Priority</p>
+                          <span
+                            className="inline-flex h-3.5 w-3.5 cursor-help items-center justify-center rounded-full border border-white/18 text-[9px] font-bold text-white/45"
+                            title={WORKFLOW_SEEDANCE_PREVIEW_PRIORITY_INFO}
+                          >
+                            ?
+                          </span>
+                        </div>
+                        <div className="flex gap-1 rounded-lg border border-white/10 bg-black/25 p-1">
+                          {(["normal", "vip"] as const).map((tier) => (
+                            <button
+                              key={tier}
+                              type="button"
+                              onClick={() => patch(id, { videoPriority: tier })}
+                              className={cn(
+                                "nodrag nopan flex-1 rounded-md px-2 py-1 text-[10px] font-semibold transition",
+                                (data.videoPriority ?? "normal") === tier
+                                  ? "border border-violet-400/55 bg-violet-500/15 text-white"
+                                  : "border border-white/8 bg-black/20 text-white/55 hover:text-white/75",
+                              )}
+                            >
+                              {tier === "vip" ? "VIP" : "Normal"}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
                     <button
                       type="button"
                       className="mt-2 w-full rounded-lg py-1.5 text-[11px] text-white/45 hover:bg-white/[0.05] hover:text-white/70"
