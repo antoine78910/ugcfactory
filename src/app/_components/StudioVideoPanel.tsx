@@ -601,6 +601,14 @@ function isSeedancePreviewModelId(id: string): boolean {
   return id === "bytedance/seedance-2-preview" || id === "bytedance/seedance-2-fast-preview";
 }
 
+/** PiAPI preview queue: VIP uses distinct `task_type` via `marketModel` on POST /api/kling/generate. */
+function seedancePreviewMarketModelForApi(pickerId: string, priority: VideoPriority): string {
+  if (priority !== "vip") return pickerId;
+  if (pickerId === "bytedance/seedance-2-preview") return "bytedance/seedance-2-preview-vip";
+  if (pickerId === "bytedance/seedance-2-fast-preview") return "bytedance/seedance-2-fast-preview-vip";
+  return pickerId;
+}
+
 async function registerStudioTask(params: {
   kind: "studio_video";
   label: string;
@@ -1778,6 +1786,7 @@ export default function StudioVideoPanel({
       klingShots: klingCustom ? klingShots.map((s) => ({ ...s })) : undefined,
       klingElementsPayload,
       historyAspect,
+      videoPriority,
     };
 
     void (async () => {
@@ -1952,7 +1961,7 @@ export default function StudioVideoPanel({
           : Number(snap.duration);
         const klingGenerateBody: Record<string, unknown> = {
           accountPlan: snap.planId,
-          marketModel: snap.modelId,
+          marketModel: seedancePreviewMarketModelForApi(snap.modelId, snap.videoPriority),
           prompt: snap.prompt,
           imageUrl: snap.startUrl ?? undefined,
           duration: klingDurationSec,

@@ -94,6 +94,8 @@ function normalizeVideoModelForGate(id: string): string {
   if (id === "kling-2.6/image-to-video" || id === "kling-2.6/text-to-video") return "kling-2.6/video";
   if (id === "sora-2-image-to-video" || id === "sora-2-text-to-video") return "openai/sora-2";
   if (id === "sora-2-pro-image-to-video" || id === "sora-2-pro-text-to-video") return "openai/sora-2-pro";
+  if (id === "bytedance/seedance-2-preview-vip") return "bytedance/seedance-2-preview";
+  if (id === "bytedance/seedance-2-fast-preview-vip") return "bytedance/seedance-2-fast-preview";
   return id;
 }
 

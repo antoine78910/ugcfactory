@@ -168,7 +168,12 @@ export function validateStudioVideoJobDuration(
     }
     return;
   }
-  if (resolvedModel === "bytedance/seedance-2-preview" || resolvedModel === "bytedance/seedance-2-fast-preview") {
+  if (
+    resolvedModel === "bytedance/seedance-2-preview" ||
+    resolvedModel === "bytedance/seedance-2-fast-preview" ||
+    resolvedModel === "bytedance/seedance-2-preview-vip" ||
+    resolvedModel === "bytedance/seedance-2-fast-preview-vip"
+  ) {
     if (duration !== 5 && duration !== 10 && duration !== 15) {
       throw new Error("Invalid duration for Seedance 2 Preview. Must be 5, 10, or 15.");
     }
