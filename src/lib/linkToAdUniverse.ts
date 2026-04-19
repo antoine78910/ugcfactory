@@ -56,6 +56,11 @@ export type LinkToAdUniverseSnapshotV1 = {
    * Top-level nano/kling fields mirror the selected angle for legacy readers.
    */
   linkToAdPipelineByAngle?: [LinkToAdAnglePipelineV1, LinkToAdAnglePipelineV1, LinkToAdAnglePipelineV1] | null;
+  /**
+   * When true, UI shows the compact reference strip + video column for the active angle.
+   * Duplicates the active slot’s `videoStageMode` in `linkToAdPipelineByAngle` for top-level snapshot / hydration.
+   */
+  videoStageMode?: boolean;
 };
 
 /** Saved pipeline for one script angle (3 reference images + Kling state for that angle). */
