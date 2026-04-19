@@ -33,6 +33,7 @@ import {
   validateStudioVideoJobDuration,
   studioVideoIsSeedance2ProPickerId,
 } from "@/lib/studioVideoModelCapabilities";
+import { inferSeedanceReferenceKindFromUrl } from "@/lib/seedanceReferenceUrlKind";
 
 type KlingAspectRatio = "16:9" | "9:16" | "1:1";
 type KlingMode = "std" | "pro";
@@ -65,8 +66,8 @@ type Body = {
   multiPrompt?: KlingMultiPromptShot[];
   /**
    * Kling 3.0: `@name` in prompts + `kling_elements` in the Market payload.
-   * Seedance: same shape; URLs are flattened in order (start → element refs → end) for the provider.
-   * Prompt uses `@image1` … `@imageN` (tags may be auto-prefixed when missing). Max 12 (Pro) / 9 (Preview) images total.
+   * Seedance: same shape; URLs are flattened (start → element refs → end), then split into image / video / audio lists for the provider.
+   * Prompt uses `@imageN` / `@videoN` / `@audioN` (tags may be auto-prefixed). Max 12 refs (Pro) / 9 (Preview) total; Preview elements are images only.
    */
   klingElements?: KlingElementInput[];
   /**
@@ -166,9 +167,12 @@ function normalizeKlingElements(
       ? row.element_input_urls.map((u) => String(u ?? "").trim()).filter(Boolean)
       : [];
     if (urls.length < minUrls || urls.length > 4) {
+      const seedanceEl = minUrls === 1;
       return {
         ok: false,
-        error: `Element "${name}": provide between ${minUrls} and 4 reference image URLs.`,
+        error: seedanceEl
+          ? `Element "${name}": provide between 1 and 4 reference URLs (HTTPS image, video, or audio).`
+          : `Element "${name}": provide between ${minUrls} and 4 reference image URLs.`,
       };
     }
     elements.push({ name, description: desc, element_input_urls: urls });
@@ -176,28 +180,45 @@ function normalizeKlingElements(
   return { ok: true, elements };
 }
 
-function pushUniqueImageUrl(out: string[], raw: string, max: number): void {
+function pushUniqueMediaUrl(out: string[], raw: string, max: number): void {
   const u = String(raw ?? "").trim();
   if (!u || out.includes(u) || out.length >= max) return;
   out.push(u);
 }
 
-/** Start frame, then each element’s reference URLs, then optional end frame (Seedance provider order). */
-function buildSeedanceOrderedImageUrls(
+/** Start frame, then each element’s reference URLs, then optional end frame (flattened Seedance order before bucketing). */
+function buildSeedanceOrderedReferenceUrls(
   start: string,
   end: string | undefined,
   elements: KlingElementInput[],
   max: number,
 ): string[] {
   const out: string[] = [];
-  pushUniqueImageUrl(out, start, max);
+  pushUniqueMediaUrl(out, start, max);
   for (const el of elements) {
     for (const u of el.element_input_urls) {
-      pushUniqueImageUrl(out, u, max);
+      pushUniqueMediaUrl(out, u, max);
     }
   }
-  if (end) pushUniqueImageUrl(out, end, max);
+  if (end) pushUniqueMediaUrl(out, end, max);
   return out;
+}
+
+function partitionSeedanceReferenceUrls(ordered: string[]): {
+  imgs: string[];
+  vids: string[];
+  auds: string[];
+} {
+  const imgs: string[] = [];
+  const vids: string[] = [];
+  const auds: string[] = [];
+  for (const u of ordered) {
+    const k = inferSeedanceReferenceKindFromUrl(u);
+    if (k === "audio") auds.push(u);
+    else if (k === "video") vids.push(u);
+    else imgs.push(u);
+  }
+  return { imgs, vids, auds };
 }
 
 function isSeedanceCompactPreviewMarketModel(raw: string): boolean {
@@ -585,7 +606,9 @@ export async function POST(req: Request) {
           else if (it.type === "video") videoOrder.push(it.url);
           else audioOrder.push(it.url);
         }
-        let imagesToMirror = imageOrder;
+        let imagesToMirror: string[] = imageOrder;
+        let videosToMirror: string[] = videoOrder;
+        let audiosToMirror: string[] = audioOrder;
         if (elementsNorm.elements.length > 0) {
           if (!imageOrder.length) {
             return NextResponse.json(
@@ -596,24 +619,44 @@ export async function POST(req: Request) {
               { status: 400 },
             );
           }
-          const merged: string[] = buildSeedanceOrderedImageUrls(
-            imageOrder[0]!,
-            undefined,
-            elementsNorm.elements,
-            maxImages,
-          );
-          for (let i = 1; i < imageOrder.length; i++) {
-            pushUniqueImageUrl(merged, imageOrder[i]!, maxImages);
+          const cap = SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS;
+          const flat: string[] = [];
+          pushUniqueMediaUrl(flat, imageOrder[0]!, cap);
+          for (const el of elementsNorm.elements) {
+            for (const u of el.element_input_urls) {
+              pushUniqueMediaUrl(flat, u, cap);
+            }
           }
-          if (merged.length > maxImages) {
+          for (let i = 1; i < imageOrder.length; i++) {
+            pushUniqueMediaUrl(flat, imageOrder[i]!, cap);
+          }
+          for (const u of videoOrder) {
+            pushUniqueMediaUrl(flat, u, cap);
+          }
+          for (const u of audioOrder) {
+            pushUniqueMediaUrl(flat, u, cap);
+          }
+          if (flat.length > cap) {
             return NextResponse.json(
               {
-                error: `Too many Seedance reference images (${merged.length}). Maximum is ${maxImages} for this model.`,
+                error: `Too many Seedance references (${flat.length}). Maximum is ${cap} for this model.`,
               },
               { status: 400 },
             );
           }
-          imagesToMirror = merged;
+          const part = partitionSeedanceReferenceUrls(flat);
+          if (part.auds.length > 0 && part.imgs.length === 0 && part.vids.length === 0) {
+            return NextResponse.json(
+              {
+                error:
+                  "Seedance omni mode does not allow audio-only references. Add at least one image or video when using Elements.",
+              },
+              { status: 400 },
+            );
+          }
+          imagesToMirror = part.imgs;
+          videosToMirror = part.vids;
+          audiosToMirror = part.auds;
         }
         const mirroredImg: string[] = [];
         const mirroredVid: string[] = [];
@@ -622,10 +665,10 @@ export async function POST(req: Request) {
           for (const u of imagesToMirror) {
             mirroredImg.push(await mirrorImageUrlForPiapiSeedance(u, user.id));
           }
-          for (const u of videoOrder) {
+          for (const u of videosToMirror) {
             mirroredVid.push(await mirrorVideoUrlForPiapiSeedance(u, user.id));
           }
-          for (const u of audioOrder) {
+          for (const u of audiosToMirror) {
             mirroredAud.push(await mirrorAudioUrlForPiapiSeedance(u, user.id));
           }
         } catch (mirrorErr) {
@@ -666,14 +709,14 @@ export async function POST(req: Request) {
       if (useCompactSeedancePreviewRefs) {
         const compactUrls = compactNorm.urls.slice(0, SEEDANCE_COMPACT_PREVIEW_MAX_IMAGE_URLS);
         if (elementsNorm.elements.length > 0) {
-          ordered = buildSeedanceOrderedImageUrls(
+          ordered = buildSeedanceOrderedReferenceUrls(
             compactUrls[0]!,
             undefined,
             elementsNorm.elements,
             maxImages,
           );
           for (let i = 1; i < compactUrls.length; i++) {
-            pushUniqueImageUrl(ordered, compactUrls[i]!, maxImages);
+            pushUniqueMediaUrl(ordered, compactUrls[i]!, maxImages);
           }
         } else {
           ordered = compactUrls;
@@ -685,7 +728,7 @@ export async function POST(req: Request) {
             { status: 400 },
           );
         }
-        ordered = buildSeedanceOrderedImageUrls(
+        ordered = buildSeedanceOrderedReferenceUrls(
           imageUrlRaw,
           hasKieEndImage ? endImageUrlRaw : undefined,
           elementsNorm.elements,
@@ -698,16 +741,40 @@ export async function POST(req: Request) {
       if (ordered.length > maxImages) {
         return NextResponse.json(
           {
-            error: `Too many Seedance reference images (${ordered.length}). Maximum is ${maxImages} for this model.`,
+            error: `Too many Seedance references (${ordered.length}). Maximum is ${maxImages} for this model.`,
           },
           { status: 400 },
         );
       }
 
-      const mirrored: string[] = [];
-      try {
+      if (preview && elementsNorm.elements.length > 0) {
         for (const u of ordered) {
-          mirrored.push(await mirrorImageUrlForPiapiSeedance(u, user.id));
+          if (inferSeedanceReferenceKindFromUrl(u) !== "image") {
+            return NextResponse.json(
+              {
+                error:
+                  "Seedance Preview does not support video or audio in element references. Use images only, or switch to Seedance 2 / Fast.",
+              },
+              { status: 400 },
+            );
+          }
+        }
+      }
+
+      const { imgs, vids, auds } = partitionSeedanceReferenceUrls(ordered);
+
+      const mirroredImg: string[] = [];
+      const mirroredVid: string[] = [];
+      const mirroredAud: string[] = [];
+      try {
+        for (const u of imgs) {
+          mirroredImg.push(await mirrorImageUrlForPiapiSeedance(u, user.id));
+        }
+        for (const u of vids) {
+          mirroredVid.push(await mirrorVideoUrlForPiapiSeedance(u, user.id));
+        }
+        for (const u of auds) {
+          mirroredAud.push(await mirrorAudioUrlForPiapiSeedance(u, user.id));
         }
       } catch (mirrorErr) {
         logGenerationFailure("kling/generate/mirror-seedance-images", mirrorErr, {
@@ -719,7 +786,7 @@ export async function POST(req: Request) {
             error:
               mirrorErr instanceof Error
                 ? mirrorErr.message
-                : "Could not prepare reference images for the video provider.",
+                : "Could not prepare reference media for the video provider.",
           },
           { status: 502 },
         );
@@ -728,7 +795,10 @@ export async function POST(req: Request) {
       const rawTaskId = await piapiCreateSeedanceTask({
         taskType,
         prompt,
-        imageUrls: mirrored.length ? mirrored : undefined,
+        imageUrls: mirroredImg.length ? mirroredImg : undefined,
+        videoUrls: mirroredVid.length ? mirroredVid : undefined,
+        audioUrls: mirroredAud.length ? mirroredAud : undefined,
+        preferOmniReference: mirroredVid.length > 0 || mirroredAud.length > 0,
         forceOmniReference: elementsNorm.elements.length > 0,
         duration,
         aspectRatio: seedanceAspectRatio,

@@ -29,6 +29,7 @@ import { AvatarInputCornerBadge } from "@/app/_components/AvatarInputCornerBadge
 import { StudioEmptyExamples, StudioOutputPane } from "@/app/_components/StudioEmptyExamples";
 import { StudioGenerationsHistory } from "@/app/_components/StudioGenerationsHistory";
 import { userMessageFromCaughtError } from "@/lib/generationUserMessage";
+import { inferSeedanceReferenceKindFromUrl } from "@/lib/seedanceReferenceUrlKind";
 import {
   assertStudioAudioUpload,
   assertStudioImageUpload,
@@ -219,7 +220,7 @@ function countUniqueSeedanceStudioRefs(opts: {
     for (const u of opts.compactUrls) add(u);
   } else if (opts.useOmni && opts.omniItems.length) {
     for (const it of opts.omniItems) {
-      if (it.kind === "image") add(it.url);
+      add(it.url);
     }
   } else {
     add(opts.startUrl);
@@ -1242,8 +1243,14 @@ export default function StudioVideoPanel({
 
   const pickKlingElementImage = useCallback((rowId: string) => {
     klingElementUploadRowIdRef.current = rowId;
-    klingElementFileRef.current?.click();
-  }, []);
+    const input = klingElementFileRef.current;
+    if (input) {
+      input.accept = studioVideoIsSeedance2ProPickerId(modelId)
+        ? SEEDANCE_PRO_OMNI_FILE_ACCEPT
+        : STUDIO_IMAGE_FILE_ACCEPT;
+    }
+    input?.click();
+  }, [modelId]);
 
   const handleKlingElementsModalOpenChange = useCallback((open: boolean) => {
     setKlingElementsModalOpen(open);
@@ -1289,7 +1296,7 @@ export default function StudioVideoPanel({
       toast.error("Media required", {
         description:
           minUrls <= 1
-            ? "Add 1–4 reference images for this element."
+            ? "Add 1–4 reference files (image, video, or audio) for this element."
             : "Add 2–4 reference images (required by Kling 3.0 for element references).",
       });
       return;
@@ -1334,40 +1341,114 @@ export default function StudioVideoPanel({
     const rowId = klingElementUploadRowIdRef.current;
     e.target.value = "";
     if (!file || !rowId) return;
-    if (file.size > KLING_ELEMENT_MEDIA_MAX_BYTES) {
-      toast.error("File too large", { description: "Each image must be 10MB or less." });
-      klingElementUploadRowIdRef.current = null;
+
+    const seedanceProEl = studioVideoIsSeedance2ProPickerId(modelId);
+
+    if (!seedanceProEl) {
+      if (file.size > KLING_ELEMENT_MEDIA_MAX_BYTES) {
+        toast.error("File too large", { description: "Each image must be 10MB or less." });
+        klingElementUploadRowIdRef.current = null;
+        return;
+      }
+      const dimsOk = await imageFileMeetsMinDimensions(
+        file,
+        KLING_ELEMENT_MEDIA_MIN_PX,
+        KLING_ELEMENT_MEDIA_MIN_PX,
+      );
+      if (!dimsOk) {
+        toast.error("Image too small", {
+          description: `Use images at least ${KLING_ELEMENT_MEDIA_MIN_PX}×${KLING_ELEMENT_MEDIA_MIN_PX}px.`,
+        });
+        klingElementUploadRowIdRef.current = null;
+        return;
+      }
+      setKlingElementUploadBusy(true);
+      try {
+        const u = await uploadStudioMediaFile(file, "image");
+        setKlingElementForm((prev) => {
+          if (!prev || prev.id !== rowId || prev.urls.length >= 4) return prev;
+          return { ...prev, urls: [...prev.urls, u] };
+        });
+        toast.success("Image added");
+      } catch (err) {
+        toast.error("Upload failed", {
+          description: userMessageFromCaughtError(err, "Use JPEG, PNG, WebP, or GIF."),
+        });
+      } finally {
+        setKlingElementUploadBusy(false);
+        klingElementUploadRowIdRef.current = null;
+      }
       return;
     }
-    const dimsOk = await imageFileMeetsMinDimensions(
-      file,
-      KLING_ELEMENT_MEDIA_MIN_PX,
-      KLING_ELEMENT_MEDIA_MIN_PX,
-    );
-    if (!dimsOk) {
-      toast.error("Image too small", {
-        description: `Use images at least ${KLING_ELEMENT_MEDIA_MIN_PX}×${KLING_ELEMENT_MEDIA_MIN_PX}px.`,
+
+    const inferred = inferStudioUploadKind(file);
+    let kind: UploadFileKind = inferred;
+    try {
+      if (inferred === "image") {
+        assertStudioImageUpload(file);
+        if (file.size > KLING_ELEMENT_MEDIA_MAX_BYTES) {
+          toast.error("File too large", { description: "Each image must be 10MB or less." });
+          klingElementUploadRowIdRef.current = null;
+          return;
+        }
+        const dimsOk = await imageFileMeetsMinDimensions(
+          file,
+          KLING_ELEMENT_MEDIA_MIN_PX,
+          KLING_ELEMENT_MEDIA_MIN_PX,
+        );
+        if (!dimsOk) {
+          toast.error("Image too small", {
+            description: `Use images at least ${KLING_ELEMENT_MEDIA_MIN_PX}×${KLING_ELEMENT_MEDIA_MIN_PX}px.`,
+          });
+          klingElementUploadRowIdRef.current = null;
+          return;
+        }
+      } else if (inferred === "video") {
+        const ext = fileExtensionLower(file);
+        const mime = file.type || "";
+        const okProVideo =
+          ext === ".mp4" ||
+          ext === ".mov" ||
+          mime === "video/mp4" ||
+          mime === "video/quicktime";
+        if (!okProVideo) {
+          toast.error("Video format", {
+            description: "Seedance 2 reference videos must be MP4 or MOV (not WebM).",
+          });
+          klingElementUploadRowIdRef.current = null;
+          return;
+        }
+        assertStudioVideoUpload(file);
+        kind = "video";
+      } else {
+        assertStudioAudioUpload(file);
+        kind = "audio";
+      }
+    } catch (err) {
+      toast.error("Invalid file", {
+        description: err instanceof Error ? err.message : "Choose another file.",
       });
       klingElementUploadRowIdRef.current = null;
       return;
     }
+
     setKlingElementUploadBusy(true);
     try {
-      const u = await uploadStudioMediaFile(file, "image");
+      const u = await uploadStudioMediaFile(file, kind);
       setKlingElementForm((prev) => {
         if (!prev || prev.id !== rowId || prev.urls.length >= 4) return prev;
         return { ...prev, urls: [...prev.urls, u] };
       });
-      toast.success("Image added");
+      toast.success("Media added");
     } catch (err) {
       toast.error("Upload failed", {
-        description: userMessageFromCaughtError(err, "Use JPEG, PNG, WebP, or GIF."),
+        description: userMessageFromCaughtError(err, "Try again."),
       });
     } finally {
       setKlingElementUploadBusy(false);
       klingElementUploadRowIdRef.current = null;
     }
-  }, []);
+  }, [modelId]);
 
   const onSeedanceCompactFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -2289,8 +2370,8 @@ export default function StudioVideoPanel({
         elements: klingElementsPayloadEarly,
       });
       if (n > maxSlots) {
-        toast.error(`Too many reference images (${n}).`, {
-          description: `This Seedance model accepts at most ${maxSlots} unique URLs (start, optional end, and element images).`,
+        toast.error(`Too many references (${n}).`, {
+          description: `This Seedance model accepts at most ${maxSlots} unique URLs (start, optional end, omni references, and element media).`,
         });
         return;
       }
@@ -3651,10 +3732,11 @@ export default function StudioVideoPanel({
                 ) : studioVideoIsSeedance2ProPickerId(modelId) ? (
                   <>
                     <span className="text-white/55">Seedance 2 / Fast:</span> up to{" "}
-                    <span className="text-white/65">3</span> elements, <span className="text-white/65">1–4</span> images
-                    each; <span className="text-white/65">@image1</span> / <span className="text-white/65">@image2</span>…
-                    = flattened URL order. Mix <span className="text-white/65">video + audio</span> in{" "}
-                    <span className="text-white/55">Reference media</span> above, not Elements.
+                    <span className="text-white/65">3</span> elements, <span className="text-white/65">1–4</span> files
+                    each (image, MP4/MOV, or MP3/WAV). The provider maps references to{" "}
+                    <span className="text-white/65">@imageN</span>, then <span className="text-white/65">@videoN</span>, then{" "}
+                    <span className="text-white/65">@audioN</span> (same ordering rules as Reference media). You still need
+                    at least one <span className="text-white/65">@image1</span> from the start frame or omni images.
                   </>
                 ) : (
                   <>
@@ -3670,66 +3752,79 @@ export default function StudioVideoPanel({
                     Saved elements
                   </p>
                   <ul className="space-y-2">
-                    {sortKlingElementDrafts(klingElementDrafts).map((el) => (
-                      <li
-                        key={el.id}
-                        className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-black/30 px-3 py-2.5"
-                      >
-                        <div className="flex min-w-0 flex-1 items-center gap-2.5">
-                          {el.urls[0] ? (
-                            <span className="relative h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-white/12 bg-black/50">
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={el.urls[0]} alt="" className="h-full w-full object-cover" />
-                            </span>
-                          ) : (
-                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-dashed border-white/15 bg-black/40 text-[10px] text-white/35">
-                              —
-                            </span>
-                          )}
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-xs font-medium text-white/90">@{el.name.trim() || "-"}</p>
-                            <p className="truncate text-[10px] text-white/40">
-                              {el.description.trim() ? el.description.trim() : "No description"} · {el.urls.length}{" "}
-                              image{el.urls.length === 1 ? "" : "s"}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex shrink-0 gap-1">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className={cn(
-                              "h-8 w-8 p-0 text-white/55 hover:bg-white/[0.06]",
-                              el.pinned && "text-amber-300/95",
+                    {sortKlingElementDrafts(klingElementDrafts).map((el) => {
+                      const headUrl = el.urls[0];
+                      const headKind = headUrl ? inferSeedanceReferenceKindFromUrl(headUrl) : null;
+                      const refLabel = studioVideoIsSeedance2ProPickerId(modelId)
+                        ? `reference${el.urls.length === 1 ? "" : "s"}`
+                        : `image${el.urls.length === 1 ? "" : "s"}`;
+                      return (
+                        <li
+                          key={el.id}
+                          className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-black/30 px-3 py-2.5"
+                        >
+                          <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                            {headUrl ? (
+                              <span className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/12 bg-black/50">
+                                {headKind === "image" ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img src={headUrl} alt="" className="h-full w-full object-cover" />
+                                ) : headKind === "video" ? (
+                                  <VideoIcon className="h-5 w-5 text-white/55" aria-hidden />
+                                ) : (
+                                  <Music2 className="h-5 w-5 text-white/55" aria-hidden />
+                                )}
+                              </span>
+                            ) : (
+                              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-dashed border-white/15 bg-black/40 text-[10px] text-white/35">
+                                —
+                              </span>
                             )}
-                            title={el.pinned ? "Unpin" : "Pin to top"}
-                            aria-label={el.pinned ? "Unpin element" : "Pin element"}
-                            onClick={() => toggleElementPin(el.id)}
-                          >
-                            <Pin className="h-3.5 w-3.5" aria-hidden />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 px-2 text-[11px] text-white/70 hover:bg-white/[0.06]"
-                            onClick={() => editKlingElementInModal(el)}
-                          >
-                            Edit
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 px-2 text-[11px] text-rose-300/90 hover:bg-white/[0.06] hover:text-rose-200"
-                            onClick={() => removeKlingElementDraft(el.id)}
-                          >
-                            Remove
-                          </Button>
-                        </div>
-                      </li>
-                    ))}
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-xs font-medium text-white/90">@{el.name.trim() || "-"}</p>
+                              <p className="truncate text-[10px] text-white/40">
+                                {el.description.trim() ? el.description.trim() : "No description"} · {el.urls.length}{" "}
+                                {refLabel}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex shrink-0 gap-1">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className={cn(
+                                "h-8 w-8 p-0 text-white/55 hover:bg-white/[0.06]",
+                                el.pinned && "text-amber-300/95",
+                              )}
+                              title={el.pinned ? "Unpin" : "Pin to top"}
+                              aria-label={el.pinned ? "Unpin element" : "Pin element"}
+                              onClick={() => toggleElementPin(el.id)}
+                            >
+                              <Pin className="h-3.5 w-3.5" aria-hidden />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 px-2 text-[11px] text-white/70 hover:bg-white/[0.06]"
+                              onClick={() => editKlingElementInModal(el)}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 px-2 text-[11px] text-rose-300/90 hover:bg-white/[0.06] hover:text-rose-200"
+                              onClick={() => removeKlingElementDraft(el.id)}
+                            >
+                              Remove
+                            </Button>
+                          </div>
+                        </li>
+                      );
+                    })}
                   </ul>
                 </div>
               ) : null}
@@ -3856,22 +3951,37 @@ export default function StudioVideoPanel({
                       </Button>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      {klingElementForm.urls.map((u, ui) => (
-                        <button
-                          key={`${klingElementForm.id}-img-${ui}`}
-                          type="button"
-                          className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-white/10"
-                          onClick={() =>
-                            setKlingElementForm((f) =>
-                              f ? { ...f, urls: f.urls.filter((_, j) => j !== ui) } : f,
-                            )
-                          }
-                          title="Remove image"
-                        >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={u} alt="" className="h-full w-full object-cover" />
-                        </button>
-                      ))}
+                      {klingElementForm.urls.map((u, ui) => {
+                        const rk = inferSeedanceReferenceKindFromUrl(u);
+                        return (
+                          <button
+                            key={`${klingElementForm.id}-ref-${ui}`}
+                            type="button"
+                            className="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/10 bg-black/40"
+                            onClick={() =>
+                              setKlingElementForm((f) =>
+                                f ? { ...f, urls: f.urls.filter((_, j) => j !== ui) } : f,
+                              )
+                            }
+                            title="Remove file"
+                          >
+                            {rk === "image" ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={u} alt="" className="h-full w-full object-cover" />
+                            ) : rk === "video" ? (
+                              <>
+                                <VideoIcon className="h-7 w-7 text-white/55" aria-hidden />
+                                <span className="sr-only">Video</span>
+                              </>
+                            ) : (
+                              <>
+                                <Music2 className="h-7 w-7 text-white/55" aria-hidden />
+                                <span className="sr-only">Audio</span>
+                              </>
+                            )}
+                          </button>
+                        );
+                      })}
                       {klingElementForm.urls.length < 4 ? (
                         <button
                           type="button"
@@ -3881,18 +3991,27 @@ export default function StudioVideoPanel({
                         >
                           <Upload className="h-8 w-8 opacity-70" strokeWidth={1.5} aria-hidden />
                           <span className="text-center text-sm font-medium text-white/70">
-                            Click to upload images
+                            {studioVideoIsSeedance2ProPickerId(modelId)
+                              ? "Click to upload (image, video, or audio)"
+                              : "Click to upload images"}
                           </span>
                         </button>
                       ) : null}
                     </div>
                     <p className="text-[10px] leading-snug text-white/40">
-                      Images: JPEG, PNG, WebP, or GIF, at least {KLING_ELEMENT_MEDIA_MIN_PX}×
-                      {KLING_ELEMENT_MEDIA_MIN_PX}px, max {Math.round(KLING_ELEMENT_MEDIA_MAX_BYTES / (1024 * 1024))}MB
-                      each.{" "}
-                      {studioVideoIsSeedance2ProPickerId(modelId)
-                        ? "1–4 images per element."
-                        : "2–4 images per element (Kling 3.0)."}
+                      {studioVideoIsSeedance2ProPickerId(modelId) ? (
+                        <>
+                          Images: JPEG, PNG, WebP, or GIF (min {KLING_ELEMENT_MEDIA_MIN_PX}×{KLING_ELEMENT_MEDIA_MIN_PX}
+                          px, max {Math.round(KLING_ELEMENT_MEDIA_MAX_BYTES / (1024 * 1024))}
+                          MB). Videos: MP4 or MOV. Audio: MP3 or WAV. Up to 1–4 files per element (Seedance 2 / Fast).
+                        </>
+                      ) : (
+                        <>
+                          Images: JPEG, PNG, WebP, or GIF, at least {KLING_ELEMENT_MEDIA_MIN_PX}×
+                          {KLING_ELEMENT_MEDIA_MIN_PX}px, max {Math.round(KLING_ELEMENT_MEDIA_MAX_BYTES / (1024 * 1024))}MB
+                          each. 2–4 images per element (Kling 3.0).
+                        </>
+                      )}
                     </p>
                   </div>
 
