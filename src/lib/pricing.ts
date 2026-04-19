@@ -35,7 +35,7 @@ export const PRICING_BASE = {
 export const STARTER_CREDIT_VALUE_USD = 29.99 / 250;
 
 // ---------------------------------------------------------------------------
-// Link to Ad — Seedance normal (preview): video slice only (full URL Generate adds scan + 3× ref images)
+// Link to Ad, Seedance normal (preview): video slice only (full URL Generate adds scan + 3× ref images)
 // ---------------------------------------------------------------------------
 
 /** Link to Ad Priority = Normal (Seedance 2 Fast Preview). */
@@ -135,7 +135,7 @@ export const SEEDREAM_45_COST_USD = 0.0325;
 export const SEEDREAM_50_LITE_FAL_LIST_USD = 0.035;
 export const SEEDREAM_50_LITE_COST_USD = 0.0275;
 
-/** Google Nano Banana 2 / Pro on Kie — credits & COGS from provider sheet (Fal list + negotiated COGS). */
+/** Google Nano Banana 2 / Pro on Kie, credits & COGS from provider sheet (Fal list + negotiated COGS). */
 function googleImageTier(p: {
   model: string;
   cost_usd: number;
@@ -173,7 +173,7 @@ function fixedImageModelCredits(p: {
   };
 }
 
-/** NanoBanana 2 — 1K / 2K / 4K (studio `nano`). */
+/** NanoBanana 2, 1K / 2K / 4K (studio `nano`). */
 const GOOGLE_NANO_2_1K = fixedImageModelCredits({
   model: "google_nano_banana_2_1k",
   credits: 1,
@@ -189,7 +189,7 @@ const GOOGLE_NANO_2_4K = fixedImageModelCredits({
   credits: 3,
   fal_list_price_usd: 0.16,
 });
-/** NanoBanana Pro — 1K/2K = 3 cr; 4K = 4 cr (studio `pro`). */
+/** NanoBanana Pro, 1K/2K = 3 cr; 4K = 4 cr (studio `pro`). */
 const GOOGLE_NANO_PRO_12K = fixedImageModelCredits({
   model: "google_nano_banana_pro_1k_2k",
   credits: 3,
@@ -207,7 +207,7 @@ export const IMAGE_MODEL = {
   google_nano_banana_2_4k: GOOGLE_NANO_2_4K,
   google_nano_banana_pro_1k_2k: GOOGLE_NANO_PRO_12K,
   google_nano_banana_pro_4k: GOOGLE_NANO_PRO_4K,
-  /** Legacy — “nano normal” (0.5 cr / image; total jobs use integer credits via ceil). */
+  /** Legacy, “nano normal” (0.5 cr / image; total jobs use integer credits via ceil). */
   nanobanana_standard: fixedImageModelCredits({
     model: "nanobanana_standard",
     credits: 0.5,
@@ -263,12 +263,12 @@ export const IMAGE_MODEL = {
   }),
 };
 
-/** Kie Market model id — Topaz Video Upscale (1× / 2× / 4×). */
+/** Kie Market model id, Topaz Video Upscale (1× / 2× / 4×). */
 export const KIE_TOPAZ_VIDEO_UPSCALE_MODEL = "topaz/video-upscale" as const;
-/** Kie Market model id — Topaz Image Upscale (2K / 4K / 8K). */
+/** Kie Market model id, Topaz Image Upscale (2K / 4K / 8K). */
 export const KIE_TOPAZ_IMAGE_UPSCALE_MODEL = "topaz/image-upscale" as const;
 
-/** Topaz Video Upscaler — negotiated COGS $0.06/s vs Fal list $0.08/s (−25%). */
+/** Topaz Video Upscaler, negotiated COGS $0.06/s vs Fal list $0.08/s (−25%). */
 export const TOPAZ_VIDEO_UPSCALER = {
   kie_model: KIE_TOPAZ_VIDEO_UPSCALE_MODEL,
   cost_usd_per_second: 0.06,
@@ -277,7 +277,7 @@ export const TOPAZ_VIDEO_UPSCALER = {
   credits_per_second: 2,
 } as const;
 
-/** Topaz Image Upscaler — fixed per-image pricing tiers (2K / 4K / 8K). */
+/** Topaz Image Upscaler, fixed per-image pricing tiers (2K / 4K / 8K). */
 export const TOPAZ_IMAGE_UPSCALER = {
   kie_model: KIE_TOPAZ_IMAGE_UPSCALE_MODEL,
   tiers: {
@@ -377,7 +377,7 @@ function mapImageModelToEconomicsRow(
   };
 }
 
-/** Google Nano Banana 2 (Kie) — studio economics rows. */
+/** Google Nano Banana 2 (Kie), studio economics rows. */
 export const STUDIO_IMAGE_GOOGLE_NANO_2_ECONOMICS_ROWS: StudioImageEconomicsRow[] = [
   mapImageModelToEconomicsRow(
     "google_nano_banana_2_4k",
@@ -507,7 +507,7 @@ export type StudioGrokImagineEconomicsRow = {
   cogsUsd: number;
 };
 
-/** Grok Imagine — batch-priced; no Fal list in sheet. */
+/** Grok Imagine, batch-priced; no Fal list in sheet. */
 export const STUDIO_IMAGE_GROK_IMAGINE_ROWS: StudioGrokImagineEconomicsRow[] = [
   {
     modelAndModality: "grok-imagine, image-to-image",
@@ -539,7 +539,7 @@ export type StudioUpscaleEconomicsRow = {
   cogsUsd: number;
 };
 
-/** Topaz Video Upscaler — same credits/s for 1× / 2× / 4× (Kie). */
+/** Topaz Video Upscaler, same credits/s for 1× / 2× / 4× (Kie). */
 export const STUDIO_UPSCALE_TOPAZ_VIDEO_ROWS: StudioUpscaleEconomicsRow[] = [
   {
     modelAndModality: "Topaz Video Upscaler, upscale factor 1× / 2× / 4×",
@@ -557,7 +557,7 @@ export const STUDIO_UPSCALE_TOPAZ_VIDEO_ROWS: StudioUpscaleEconomicsRow[] = [
   },
 ];
 
-/** Topaz Image Upscaler — 2K / 4K / 8K fixed per-image rows. */
+/** Topaz Image Upscaler, 2K / 4K / 8K fixed per-image rows. */
 export const STUDIO_UPSCALE_TOPAZ_IMAGE_ROWS: StudioUpscaleEconomicsRow[] = [
   {
     modelAndModality: "Topaz Image Upscaler, image-upscale, 8K",
@@ -600,7 +600,7 @@ export function creditsForImageModel(key: ImageModelKey): number {
   return IMAGE_MODEL[key].credits;
 }
 
-/** Pro / Standard studio UI — same resolution keys as Kie Google image APIs. */
+/** Pro / Standard studio UI, same resolution keys as Kie Google image APIs. */
 export type StudioImageOutputResolution = "1K" | "2K" | "4K";
 
 /**
@@ -647,18 +647,18 @@ export function studioImageCreditsChargedTotal(opts: {
 }
 
 // ---------------------------------------------------------------------------
-// Video — Kling 3.0 dynamic (primary)
+// Video, Kling 3.0 dynamic (primary)
 // ---------------------------------------------------------------------------
 
 /**
- * Kling 3.0 / 2.6 — 720p (`std`) vs 1080p (`pro`).
+ * Kling 3.0 / 2.6, 720p (`std`) vs 1080p (`pro`).
  */
 export function is1080pVideoQuality(quality: string | undefined): boolean {
   return quality === "pro" || quality === "1080p";
 }
 
 /**
- * Kling 3.0 — provider Our price ($/s) × 2 → retail $/s → credits/s at $0.07/credit (same as Sora sheet).
+ * Kling 3.0, provider Our price ($/s) × 2 → retail $/s → credits/s at $0.07/credit (same as Sora sheet).
  * Sheet: 1080p+audio $0.135/s → 4 cr/s · 1080p $0.09/s → 3 · 720p+audio $0.10/s → 3 · 720p $0.07/s → 2
  */
 export function kling30CreditsPerSecondFromSheet(quality: string | undefined, audio: boolean): number {
@@ -675,8 +675,8 @@ export function kling30CreditsPerSecondFromSheet(quality: string | undefined, au
 }
 
 /**
- * Kling 2.6 — Fal "Our price" **per video** (5s / 10s × audio). Text vs image same $ on sheet.
- * Retail = ×2 → credits = round(retail / 0.07). Quality (720p/1080p) not priced separately on sheet — ignored for billing.
+ * Kling 2.6, Fal "Our price" **per video** (5s / 10s × audio). Text vs image same $ on sheet.
+ * Retail = ×2 → credits = round(retail / 0.07). Quality (720p/1080p) not priced separately on sheet, ignored for billing.
  */
 export function calculateKling26VideoCredits(
   durationSec: number,
@@ -729,7 +729,7 @@ export const KLING_3_0_12S_AUDIO_REFERENCE = {
 } as const;
 
 // ---------------------------------------------------------------------------
-// Video — Sora (optional fixed tiers)
+// Video, Sora (optional fixed tiers)
 // ---------------------------------------------------------------------------
 
 type VideoTierPricing = {
@@ -752,7 +752,7 @@ type VideoTierPricing = {
  * credits = round(retail / {@link SORA_2_PRO_BILLING_CREDIT_USD}).
  * Example: $1.65 → $3.30 → 3.30/0.07 ≈ 47 credits.
  *
- * Sheet rows (provider Our price) — i2v/t2v/storyboard share the same $ for a given quality+duration:
+ * Sheet rows (provider Our price), i2v/t2v/storyboard share the same $ for a given quality+duration:
  * High 10s $1.65 → 47 · High 15s $3.15 → 90 · Std 10s $0.75 → 21 · Std 15s $1.35 → 39
  */
 export const SORA_2_PRO_BILLING_CREDIT_USD = 0.07;
@@ -836,7 +836,7 @@ export const SORA_2_STANDARD_15S = makeSora2ProTier({
   fal_list_price_usd: 1.5,
 });
 
-/** @deprecated Use `SORA_2_STANDARD_10S` — kept for `/api/pricing` reference row name */
+/** @deprecated Use `SORA_2_STANDARD_10S`, kept for `/api/pricing` reference row name */
 export const SORA_10S = SORA_2_STANDARD_10S;
 
 /**
@@ -849,14 +849,14 @@ export function calculateSora2BaseCredits(durationSec: number, quality: string |
   return isStable ? SORA_2_STABLE_15S.credits : SORA_2_STANDARD_15S.credits;
 }
 
-/** @deprecated Use {@link calculateSora2BaseCredits} with quality — defaults to Standard. */
+/** @deprecated Use {@link calculateSora2BaseCredits} with quality, defaults to Standard. */
 export function calculateSoraCredits(durationSec: number): number {
   return calculateSora2BaseCredits(durationSec, "std");
 }
 
 // ---------------------------------------------------------------------------
-// Video — Veo 3.1 (KIE Market: per-video by `model` + t2v / i2v same credits)
-// https://docs.kie.ai/veo3-api/generate-veo-3-video — `veo3` | `veo3_fast` | `veo3_lite`
+// Video, Veo 3.1 (KIE Market: per-video by `model` + t2v / i2v same credits)
+// https://docs.kie.ai/veo3-api/generate-veo-3-video, `veo3` | `veo3_fast` | `veo3_lite`
 // ---------------------------------------------------------------------------
 
 const _VEO_3_1_LITE_BASE = makeSora2ProTier({
@@ -920,7 +920,7 @@ export function calculateSora2ProCredits(durationSec: number, quality: string | 
 }
 
 // ---------------------------------------------------------------------------
-// Ads — fixed bundle (backend must use this total)
+// Ads, fixed bundle (backend must use this total)
 // ---------------------------------------------------------------------------
 
 export const AD_GENERATION_COMPOSITION = {
@@ -963,7 +963,7 @@ export const SUBSCRIPTIONS = [
 ] as const;
 
 // ---------------------------------------------------------------------------
-// Marketing — approximate generation counts from a credit balance (UI copy only)
+// Marketing, approximate generation counts from a credit balance (UI copy only)
 // Nanobanana-class images: 0.5 cr each → count ≈ credits × 2.
 // Sora 2–class videos: 5 cr each → count ≈ credits / 5.
 // ---------------------------------------------------------------------------
@@ -1059,7 +1059,7 @@ export function calculateVideoCreditsForModel(opts: VideoCreditOptions): number 
 }
 
 /**
- * Studio Edit Video tab — `studio-edit/…` picker ids.
+ * Studio Edit Video tab, `studio-edit/…` picker ids.
  * Edit jobs bill like Kling 3.0 length × quality; motion pickers use motion-control curve.
  */
 export function calculateStudioVideoEditCredits(opts: {
@@ -1105,7 +1105,7 @@ export const WAVESPEED_HEYGEN_TRANSLATE_CREDITS_PER_SECOND = 1;
 
 /**
  * Motion control (Kling 2.6 / 3.0): fixed credits/s by quality tier.
- * (No separate audio toggle in UI — priced by 720p/1080p only.)
+ * (No separate audio toggle in UI, priced by 720p/1080p only.)
  */
 export function calculateMotionControlCreditsFromDuration(
   durationSeconds: number,

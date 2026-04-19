@@ -87,7 +87,7 @@ export function LandingSeedanceTopButton() {
             Seedance Pro 2.0 now available !
           </span>
         </span>
-        <span className="sr-only">Seedance Pro 2.0 now available — sign up</span>
+        <span className="sr-only">Seedance Pro 2.0 now available, sign up</span>
       </Link>
     </div>
   );

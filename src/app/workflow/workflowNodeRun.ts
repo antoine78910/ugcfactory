@@ -522,7 +522,7 @@ export type WorkflowRunVideoParams = {
   resolution: string;
   /** Seconds; coerced per model if missing or invalid. */
   durationSec?: number;
-  /** Seedance 2 Preview / Fast Preview only — maps to PiAPI VIP task and doubles credits. */
+  /** Seedance 2 Preview / Fast Preview only, maps to PiAPI VIP task and doubles credits. */
   seedancePriority?: "normal" | "vip";
   linkedImageUrl?: string;
   referenceImageUrl?: string;

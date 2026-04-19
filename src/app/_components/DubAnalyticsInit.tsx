@@ -62,7 +62,7 @@ function DubClickIdQueryParamGuard() {
  * @see https://dub.co/docs/analytics/quickstart
  */
 export function DubAnalyticsInit() {
-  // Keep diagnostic logging in useEffect — no side-effects during render.
+  // Keep diagnostic logging in useEffect, no side-effects during render.
   useEffect(() => {
     if (!DUB_PUBLISHABLE_KEY) return;
     const logRuntime = (label: string) => {

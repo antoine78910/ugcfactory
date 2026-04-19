@@ -24,9 +24,9 @@ type Body = {
   imageUrl: string;
   /** Public HTTPS URL of motion reference video (after upload). */
   videoUrl: string;
-  /** UI: 720p | 1080p | std | pro — KIE expects `720p` / `1080p` (not std/pro). */
+  /** UI: 720p | 1080p | std | pro, KIE expects `720p` / `1080p` (not std/pro). */
   quality?: string;
-  /** `kling-3.0` (default) or `kling-2.6` — see docs.kie.ai motion-control vs motion-control-v3. */
+  /** `kling-3.0` (default) or `kling-2.6`, see docs.kie.ai motion-control vs motion-control-v3. */
   motionFamily?: string;
   /** Background from motion clip vs character still (`background_source` on 3.0 only). */
   backgroundSource?: BackgroundSource;
@@ -97,7 +97,7 @@ export async function POST(req: Request) {
     let input: Record<string, unknown>;
 
     if (family === "kling-2.6") {
-      // Kling 2.6: no `background_source` — map scene choice to `character_orientation` only.
+      // Kling 2.6: no `background_source`, map scene choice to `character_orientation` only.
       const character_orientation: CharacterOrientation =
         backgroundSource === "input_image" ? "image" : "video";
       input = {

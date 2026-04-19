@@ -34,7 +34,7 @@ export async function backfillEphemeralStudioResults(
   for (const row of (rows ?? []) as Pick<StudioGenerationRow, "id" | "user_id" | "result_urls">[]) {
     const urls = normalizeResultUrls(row.result_urls as unknown);
     if (urls.length === 0) continue;
-    // Skip rows where ALL URLs are already on our storage — nothing to migrate.
+    // Skip rows where ALL URLs are already on our storage, nothing to migrate.
     if (urls.every(isStudioMediaPublicUrl)) continue;
 
     scanned++;

@@ -44,12 +44,12 @@ export async function POST(req: Request) {
     "---",
     `Target video duration for this run: ${String(videoDurationSeconds)} seconds.`,
     videoDurationSeconds === 30
-      ? "You MUST output PROMPT PART 1 and PROMPT PART 2 (30s workflow — two 15s clips)."
+      ? "You MUST output PROMPT PART 1 and PROMPT PART 2 (30s workflow, two 15s clips)."
       : "Output a single continuous video prompt (not PART 1 / PART 2).",
     "The reference image is already selected and available in this pipeline. Do not ask for it.",
     "Do not ask questions. Do not ask for additional inputs. Produce final prompts now.",
     "",
-    "UGC SCRIPT FOR THIS ANGLE (includes voice profile — use it):",
+    "UGC SCRIPT FOR THIS ANGLE (includes voice profile, use it):",
     angleScript,
   ].join("\n");
 

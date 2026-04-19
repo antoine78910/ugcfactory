@@ -41,14 +41,14 @@ export type StudioHistoryItem = {
   model?: string;
   /** Human-readable model name for UI (optional). */
   modelLabel?: string;
-  /** Aspect chosen in Studio (e.g. 16:9, 9:16, 3:4) — drives history thumbnail frame. */
+  /** Aspect chosen in Studio (e.g. 16:9, 9:16, 3:4), drives history thumbnail frame. */
   aspectRatio?: string;
   /**
    * Supabase `studio_generations.id` from `/api/studio/generations/register`.
    * Used to hide a stale “processing” server row when the client already has a ready item with media.
    */
   studioGenerationId?: string;
-  /** Provider task id (KIE / PiAPI) — used to restore in-flight rows after reload. */
+  /** Provider task id (KIE / PiAPI), used to restore in-flight rows after reload. */
   externalTaskId?: string;
 };
 
@@ -108,7 +108,7 @@ export type StudioImageLightboxEditModelOption = { value: string; label: string 
 export type StudioImageLightboxEditConfig = {
   nanoAspectOptions: readonly string[];
   proAspectOptions: readonly string[];
-  /** Seedream unified pickers — same list as Studio main panel (no `auto`). */
+  /** Seedream unified pickers, same list as Studio main panel (no `auto`). */
   seedreamAspectOptions: readonly string[];
   resolutionOptions: readonly ("1K" | "2K" | "4K")[];
   seedModel: string;
@@ -745,7 +745,7 @@ export function StudioGenerationsHistory({
               <div className="rounded-xl border border-white/[0.07] bg-white/[0.03] p-3.5">
                 <div className="mb-2 text-[13px] font-semibold text-white/85">Prompt</div>
                 <p className="whitespace-pre-wrap break-words text-[12px] leading-relaxed text-white/55">
-                  {lightboxItem.prompt?.trim() ? lightboxItem.prompt.trim() : "—"}
+                  {lightboxItem.prompt?.trim() ? lightboxItem.prompt.trim() : "-"}
                 </p>
                 {lightboxItem.modelLabel ? (
                   <p className="mt-2.5 text-[10px] font-semibold uppercase tracking-wide text-violet-300/90">

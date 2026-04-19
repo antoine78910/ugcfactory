@@ -52,7 +52,7 @@ function isSora2ProResolved(model: string): boolean {
   );
 }
 
-/** Allowed duration values (seconds) for the Studio Video picker — matches server validation. */
+/** Allowed duration values (seconds) for the Studio Video picker, matches server validation. */
 export function studioVideoDurationSecOptions(pickerId: string): string[] {
   switch (pickerId) {
     case "kling-3.0/video":
@@ -108,6 +108,19 @@ export function studioVideoRequiresStartImage(pickerId: string): boolean {
   return (
     pickerId === "bytedance/seedance-2-preview" || pickerId === "bytedance/seedance-2-fast-preview"
   );
+}
+
+/**
+ * Studio Create tab: Seedance 2 Preview / Fast Preview use a single 1–4 image upload strip
+ * (PiAPI image refs) instead of separate start/end frame slots.
+ */
+export function studioVideoUsesSeedanceCompactReferenceUploads(pickerId: string): boolean {
+  return pickerId === "bytedance/seedance-2-preview" || pickerId === "bytedance/seedance-2-fast-preview";
+}
+
+/** Studio Create: Seedance 2 / Fast use omni_reference mixed media instead of start/end frames. */
+export function studioVideoUsesSeedanceProOmniMediaUploads(pickerId: string): boolean {
+  return pickerId === "bytedance/seedance-2" || pickerId === "bytedance/seedance-2-fast";
 }
 
 /** Create tab: show aspect ratio when the provider accepts it for the current frame setup. */

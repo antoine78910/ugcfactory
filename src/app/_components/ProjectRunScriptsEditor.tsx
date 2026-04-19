@@ -320,7 +320,7 @@ export function ProjectRunScriptsEditor({
 
       {addOpen && angleCount < 4 ? (
         <div className="rounded-xl border border-violet-500/25 bg-violet-500/[0.07] p-3 space-y-3">
-          <p className="text-[11px] font-semibold text-white/80">New angle — how should the AI work?</p>
+          <p className="text-[11px] font-semibold text-white/80">New angle, how should the AI work?</p>
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
@@ -361,7 +361,7 @@ export function ProjectRunScriptsEditor({
             </div>
           ) : (
             <p className="text-[11px] leading-relaxed text-white/50">
-              We’ll ask the model for one new angle that fits the product brief only — no extra input needed.
+              We’ll ask the model for one new angle that fits the product brief only, no extra input needed.
               <span className="mt-1 block font-medium text-amber-200/85">
                 {isPlatformCreditBypassActive()
                   ? "No platform credits while Personal API mode is on."

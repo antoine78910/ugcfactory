@@ -67,7 +67,7 @@ export async function GET(req: NextRequest) {
    * Session cookies from `exchangeCodeForSession` MUST be set on the same
    * NextResponse that we return. Copying via `getAll()` from another response
    * fails in Next.js 15+: programmatic cookies are not reliably readable back,
-   * and `set(cookie)` drops path/httpOnly/sameSite — so the browser never
+   * and `set(cookie)` drops path/httpOnly/sameSite, so the browser never
    * stores the session and the next request hits `/` unauthenticated → /signin.
    */
   let redirectResponse = NextResponse.redirect(postAuthUrl, 302);

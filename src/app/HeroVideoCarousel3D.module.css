@@ -1,5 +1,5 @@
 /**
- * 3D ring: “bowl” / recessed center — middle of the arc reads farther (smaller), flanks read closer (larger).
+ * 3D ring: “bowl” / recessed center, middle of the arc reads farther (smaller), flanks read closer (larger).
  * Panels sit on the outer radius but normals flip inward: rotateY(θ) translateZ(+r) rotateY(180deg).
  */
 
@@ -48,7 +48,7 @@
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
-  /* +Z on the cylinder, then 180° so faces point at the axis — center of strip sinks, sides swell. */
+  /* +Z on the cylinder, then 180° so faces point at the axis, center of strip sinks, sides swell. */
   transform: rotateY(var(--angle)) translateZ(var(--r)) rotateY(180deg);
   transform-origin: center center;
   backface-visibility: hidden;

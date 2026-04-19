@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Check, Coins, CreditCard, X } from "lucide-react";
+import { ArrowRight, CreditCard } from "lucide-react";
 import { toast } from "sonner";
 import StudioShell from "@/app/_components/StudioShell";
 import type { SubscriptionDowngradePreview } from "@/app/_components/SubscriptionDowngradeDialog";
@@ -11,21 +11,13 @@ import { consumeCheckoutQueryParams, useCreditsPlan } from "@/app/_components/Cr
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { SUBSCRIPTIONS } from "@/lib/pricing";
-import {
-  planRank,
-  SUBSCRIPTION_MODEL_MATRIX_ROWS,
-  type AccountPlanId,
-} from "@/lib/subscriptionModelAccess";
+import { SubscriptionPlanFeatureList } from "@/app/_components/SubscriptionPlanFeatureList";
 import {
   subscriptionPlanSortIndex,
   type SubscriptionPlanId,
 } from "@/lib/stripe/subscriptionPrices";
 import { openStripeBillingPortal } from "@/lib/stripe/openBillingPortalClient";
 import type { StripeDisplayPricesPayload } from "@/lib/billing/stripeDisplayTypes";
-import {
-  upToEstimateAiImagesFromCredits,
-  upToEstimateAiVideosFromCredits,
-} from "@/lib/billing/creditUsageEstimates";
 import { formatMoneyAmount } from "@/lib/billing/formatMoney";
 import { buildUsdStripeDisplayPricesFallback } from "@/lib/billing/stripeDisplayFallback";
 
@@ -41,18 +33,8 @@ type PlanDef = {
   description: string;
   monthly: number;
   credits: number;
-  /** Approx. monthly capacity at typical credit costs (Link to Ad / images / videos). */
-  usage: { linkToAd: string; images: string; videos: string };
   highlight?: boolean;
 };
-
-function upToAiImagesFromMonthlyCredits(creditsPerMonth: number): string {
-  return String(upToEstimateAiImagesFromCredits(creditsPerMonth));
-}
-
-function upToAiVideosFromMonthlyCredits(creditsPerMonth: number): string {
-  return String(upToEstimateAiVideosFromCredits(creditsPerMonth));
-}
 
 const PLANS: PlanDef[] = [
   {
@@ -61,11 +43,6 @@ const PLANS: PlanDef[] = [
     description: "Learn the workflow and launch your first campaigns.",
     monthly: SUBSCRIPTIONS[0].price_usd,
     credits: SUBSCRIPTIONS[0].credits_per_month,
-    usage: {
-      linkToAd: "4",
-      images: upToAiImagesFromMonthlyCredits(SUBSCRIPTIONS[0].credits_per_month),
-      videos: upToAiVideosFromMonthlyCredits(SUBSCRIPTIONS[0].credits_per_month),
-    },
   },
   {
     id: "growth",
@@ -74,11 +51,6 @@ const PLANS: PlanDef[] = [
     description: "The plan most teams pick once content is weekly.",
     monthly: SUBSCRIPTIONS[1].price_usd,
     credits: SUBSCRIPTIONS[1].credits_per_month,
-    usage: {
-      linkToAd: "10",
-      images: upToAiImagesFromMonthlyCredits(SUBSCRIPTIONS[1].credits_per_month),
-      videos: upToAiVideosFromMonthlyCredits(SUBSCRIPTIONS[1].credits_per_month),
-    },
     highlight: true,
   },
   {
@@ -87,11 +59,6 @@ const PLANS: PlanDef[] = [
     description: "Scale creatives without hitting limits every few days.",
     monthly: SUBSCRIPTIONS[2].price_usd,
     credits: SUBSCRIPTIONS[2].credits_per_month,
-    usage: {
-      linkToAd: "24",
-      images: upToAiImagesFromMonthlyCredits(SUBSCRIPTIONS[2].credits_per_month),
-      videos: upToAiVideosFromMonthlyCredits(SUBSCRIPTIONS[2].credits_per_month),
-    },
   },
   {
     id: "scale",
@@ -99,11 +66,6 @@ const PLANS: PlanDef[] = [
     description: "Agencies and brands running multiple products at once.",
     monthly: SUBSCRIPTIONS[3].price_usd,
     credits: SUBSCRIPTIONS[3].credits_per_month,
-    usage: {
-      linkToAd: "55",
-      images: upToAiImagesFromMonthlyCredits(SUBSCRIPTIONS[3].credits_per_month),
-      videos: upToAiVideosFromMonthlyCredits(SUBSCRIPTIONS[3].credits_per_month),
-    },
   },
 ];
 
@@ -425,13 +387,6 @@ export default function SubscriptionPage() {
 
   const billingPricesReady = displayPrices !== null;
 
-  function isModelIncluded(planIdRaw: string, row: (typeof SUBSCRIPTION_MODEL_MATRIX_ROWS)[number]): boolean {
-    const planId = (planIdRaw === "free" ? "free" : planIdRaw) as AccountPlanId;
-    const r = planRank(planId);
-    const idx = Math.max(0, Math.min(3, r - 1));
-    return row.tiers[idx];
-  }
-
   const isSubscribed = planId !== "free";
 
   const planGridClass = "grid-cols-1 sm:grid-cols-2 xl:grid-cols-4";
@@ -622,56 +577,7 @@ export default function SubscriptionPage() {
                       )}
                     </Button>
 
-                    <ul className="mt-4 flex min-h-0 flex-1 flex-col space-y-2 border-t border-white/10 pt-4 text-left text-xs text-white/72">
-                      <li className="flex items-start gap-2.5">
-                        <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-violet-500/20 text-violet-200">
-                          <Coins className="h-3 w-3" aria-hidden />
-                        </span>
-                        <span className="min-w-0">
-                          <span className="font-semibold text-white">{plan.credits.toLocaleString()} credits</span>
-                        </span>
-                      </li>
-                      <li className="pl-1 text-white/50">
-                        Up to {Number(plan.usage.images).toLocaleString()} AI images (Nanobanana)
-                      </li>
-                      <li className="pl-1 text-white/50">
-                        Up to {Number(plan.usage.videos).toLocaleString()} AI videos (Sora 2)
-                      </li>
-                      <li className="pt-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-white/45">
-                        Included models
-                      </li>
-                      <li className="pl-1 text-white/55">
-                        <div className="space-y-1.5">
-                          {SUBSCRIPTION_MODEL_MATRIX_ROWS.map((row) => {
-                            const included = isModelIncluded(plan.id, row);
-                            return (
-                              <div key={row.label} className="flex items-center gap-2.5">
-                                <div className="flex min-w-0 flex-1 items-center gap-2">
-                                  <span
-                                    className={cn(
-                                      "flex h-5 w-5 flex-none shrink-0 items-center justify-center rounded-md border text-[10px] font-semibold",
-                                      included
-                                        ? "border-emerald-400/40 bg-emerald-500/15 text-emerald-200"
-                                        : "border-red-400/30 bg-red-500/10 text-red-200/90",
-                                    )}
-                                    aria-label={included ? "Included" : "Not included"}
-                                  >
-                                    {included ? (
-                                      <Check className="h-3.5 w-3.5" />
-                                    ) : (
-                                      <X className="h-3.5 w-3.5" />
-                                    )}
-                                  </span>
-                                  <span className="min-w-0 truncate text-xs text-white/70" title={row.label}>
-                                    {row.label}
-                                  </span>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </li>
-                    </ul>
+                    <SubscriptionPlanFeatureList planId={plan.id as SubscriptionPlanId} credits={plan.credits} />
                   </div>
                 );
               })}

@@ -73,11 +73,11 @@ export async function POST(req: Request) {
   const templateStyle = (() => {
     switch (body.templateId) {
       case "template1":
-        return "Template 1 — UGC smartphone authentique (POV / selfie), handheld front camera, face-to-camera, direct talk, simple background.";
+        return "Template 1, UGC smartphone authentique (POV / selfie), handheld front camera, face-to-camera, direct talk, simple background.";
       case "template2":
-        return "Template 2 — Beauty / wellness cinematic UGC, medium close-up, soft natural light, elegant minimal background, gentle movements.";
+        return "Template 2, Beauty / wellness cinematic UGC, medium close-up, soft natural light, elegant minimal background, gentle movements.";
       case "template3":
-        return "Template 3 — Storytelling / problem-solution UGC, medium shot, small story arc (before/after), honest tone, natural gestures.";
+        return "Template 3, Storytelling / problem-solution UGC, medium shot, small story arc (before/after), honest tone, natural gestures.";
     }
   })();
 

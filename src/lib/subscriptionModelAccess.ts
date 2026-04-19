@@ -62,7 +62,7 @@ const VIDEO_EDIT_PICKER_MIN_RANK: Record<string, number> = {
   "studio-edit/grok": 2,
   "studio-edit/kling-omni": 2,
   "studio-edit/kling-o1": 2,
-  /** Kling 3.0 Motion Control — Starter+ (same as core studio bundle). */
+  /** Kling 3.0 Motion Control, Starter+ (same as core studio bundle). */
   "studio-edit/motion": 1,
   "studio-edit/motion-v3": 1,
 };

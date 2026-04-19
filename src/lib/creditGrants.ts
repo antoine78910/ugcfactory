@@ -51,7 +51,7 @@ export async function getUserCreditBalance(
   };
 }
 
-/** FIFO spend — `amount` is display credits (e.g. 0.5); returns display credits actually spent. */
+/** FIFO spend, `amount` is display credits (e.g. 0.5); returns display credits actually spent. */
 export async function spendUserCredits(
   admin: SupabaseClient,
   userId: string,

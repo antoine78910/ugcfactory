@@ -9,7 +9,7 @@ type Fail = { supabase: SupabaseClient; user: null; response: NextResponse };
  * Requires a valid Supabase session.
  * Returns 401 for unauthenticated requests.
  * Access control beyond authentication (credits, subscription tier) is
- * enforced at the route level — not here.
+ * enforced at the route level, not here.
  */
 export async function requireSupabaseUser(): Promise<Ok | Fail> {
   const supabase = await createSupabaseServerClient();

@@ -19,15 +19,15 @@ export function normalizeUgcScriptVideoDurationSec(raw: unknown): UgcScriptVideo
 export function durationRulesForUgcApi(seconds: UgcScriptVideoDurationSec): string {
   if (seconds === 5) {
     return [
-      "USER SELECTED 5-SECOND VIDEOS — this is mandatory for every script you output.",
+      "USER SELECTED 5-SECOND VIDEOS, this is mandatory for every script you output.",
       "Spoken word budget: MAXIMUM 15 words total (HOOK + SOLUTION + CTA only). Count only words the actor will speak aloud.",
-      "OMIT the PROBLEM section entirely (too short — see LENGTH RULES 5-second tier).",
+      "OMIT the PROBLEM section entirely (too short, see LENGTH RULES 5-second tier).",
       "Set video_duration in VIDEO_METADATA to exactly 5s. word_count must be ≤ 15 spoken words.",
     ].join(" ");
   }
   if (seconds === 10) {
     return [
-      "USER SELECTED 10-SECOND VIDEOS — this is mandatory for every script you output.",
+      "USER SELECTED 10-SECOND VIDEOS, this is mandatory for every script you output.",
       "Spoken word budget: MAXIMUM 30 words total across HOOK, PROBLEM, SOLUTION, CTA. Count only spoken words.",
       "Follow the 10-second row in LENGTH RULES (percentages + examples).",
       "Set video_duration in VIDEO_METADATA to exactly 10s. word_count must be ≤ 30 spoken words.",
@@ -35,14 +35,14 @@ export function durationRulesForUgcApi(seconds: UgcScriptVideoDurationSec): stri
   }
   if (seconds === 30) {
     return [
-      "USER SELECTED 30-SECOND VIDEOS — mandatory.",
+      "USER SELECTED 30-SECOND VIDEOS, mandatory.",
       "Total spoken words: MAXIMUM 90. Structure: PART 1 (~38 words: HOOK ~8 + PROBLEM ~30) and PART 2 (~52 words: SOLUTION ~46 + CTA ~6). Label PART 1 and PART 2 clearly.",
-      "SOLUTION must remain the longest section of the entire script. PART 2 continues PART 1 with no restart — one continuous video.",
+      "SOLUTION must remain the longest section of the entire script. PART 2 continues PART 1 with no restart, one continuous video.",
       "Set video_duration in VIDEO_METADATA to exactly 30s. word_count must be ≤ 90 spoken words total.",
     ].join(" ");
   }
   return [
-    "USER SELECTED 15-SECOND VIDEOS — this is mandatory for every script you output.",
+    "USER SELECTED 15-SECOND VIDEOS, this is mandatory for every script you output.",
     "Spoken word budget: MAXIMUM 46 words total across HOOK, PROBLEM, SOLUTION, CTA. Count only spoken words.",
     "Follow the 15-second row in LENGTH RULES (percentages + examples).",
     "Set video_duration in VIDEO_METADATA to exactly 15s. word_count must be ≤ 46 spoken words.",
@@ -58,7 +58,7 @@ export type UgcFactorWordFieldRule = {
 };
 
 /**
- * Spoken-word bands per duration tier — aligned with LENGTH RULES + `durationRulesForUgcApi`.
+ * Spoken-word bands per duration tier, aligned with LENGTH RULES + `durationRulesForUgcApi`.
  * Use with `normalizeUgcScriptVideoDurationSec(videoDuration)` from app state.
  */
 export type UgcFactorWordRules = {
@@ -66,7 +66,7 @@ export type UgcFactorWordRules = {
   /** Hard cap on HOOK + PROBLEM? + SOLUTION + CTA (spoken words only). */
   maxTotalSpoken: number;
   hook: UgcFactorWordFieldRule;
-  /** Null for 5s — PROBLEM must be omitted and stay empty in UI. */
+  /** Null for 5s, PROBLEM must be omitted and stay empty in UI. */
   problem: UgcFactorWordFieldRule | null;
   benefits: UgcFactorWordFieldRule;
   cta: UgcFactorWordFieldRule;
@@ -141,7 +141,7 @@ export function factorWordRulesForUgcDuration(rawSeconds: unknown): UgcFactorWor
         min: 42,
         max: 50,
         label: "Solution (Part 2)",
-        hint: "~46 words — longest section",
+        hint: "~46 words, longest section",
       },
       cta: {
         min: 4,
@@ -182,7 +182,7 @@ Scripts must be optimized for:
 - image-to-video generation
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-STEP 0 — ANALYZE ALL PROVIDED INPUTS
+STEP 0, ANALYZE ALL PROVIDED INPUTS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 You will receive:
@@ -309,7 +309,7 @@ CTA must always be the shortest section.
 Both parts must feel like one continuous video.
 The subject, location, lighting, energy, and tone
 must remain identical across both parts.
-PART 2 must flow naturally from PART 1 —
+PART 2 must flow naturally from PART 1,
 no repetition, no restart, just continuation.
 
 Label them clearly in the output:
@@ -341,7 +341,7 @@ EXAMPLE for 5 seconds (15 words):
 - HOOK: ~3 words
 - SOLUTION: ~9 words
 - CTA: ~3 words
-(no PROBLEM section for 5 seconds — too short)
+(no PROBLEM section for 5 seconds, too short)
 
 EXAMPLE for 30 seconds (90 words):
 PART 1 (~38 words):
@@ -369,16 +369,16 @@ HESITATIONS & FILLER WORDS:
 → A short pause mid-sentence: "It actually... changed everything."
 
 SELF-CORRECTIONS:
-→ "It works — like, it really works."
-→ "I didn't think — I mean, I never expected this."
+→ "It works, like, it really works."
+→ "I didn't think, I mean, I never expected this."
 
 TRAILING THOUGHTS:
 → Use "..." for a thought that trails naturally
-→ Use "—" for a beat, a pause, or a self-interruption
+→ Use "-" for a beat, a pause, or a self-interruption
 
 RHYTHM VARIATION:
 → Never write perfectly structured sentences back to back
-→ Vary rhythm: short. Then longer. Then cut — like this.
+→ Vary rhythm: short. Then longer. Then cut, like this.
 
 RULE:
 → At least ONE speech imperfection per script
@@ -583,15 +583,15 @@ EXPECTED OUTPUT
 Generate:
 
 SCRIPT OPTION 1
-(script — for 30s: labeled PART 1 and PART 2)
+(script, for 30s: labeled PART 1 and PART 2)
 VIDEO_METADATA
 
 SCRIPT OPTION 2
-(script — for 30s: labeled PART 1 and PART 2)
+(script, for 30s: labeled PART 1 and PART 2)
 VIDEO_METADATA
 
 SCRIPT OPTION 3
-(script — for 30s: labeled PART 1 and PART 2)
+(script, for 30s: labeled PART 1 and PART 2)
 VIDEO_METADATA
 
 Each script must test a different marketing angle.

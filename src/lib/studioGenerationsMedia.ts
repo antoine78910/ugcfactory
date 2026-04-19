@@ -9,7 +9,7 @@ export const STUDIO_MEDIA_BUCKET = "studio-media";
 
 const PUBLIC_STUDIO_MEDIA_MARKER = "/storage/v1/object/public/studio-media/";
 
-/** Hosts / paths that expire quickly — must be replaced by our Storage URLs. */
+/** Hosts / paths that expire quickly, must be replaced by our Storage URLs. */
 export function isEphemeralOrUnstableMediaUrl(url: string): boolean {
   const u = url.trim().toLowerCase();
   if (!u || !/^https?:\/\//i.test(u)) return false;
@@ -114,7 +114,7 @@ export async function persistStudioMediaUrls(opts: {
 
     const downloaded = await fetchMediaBytes(src);
     if (!downloaded) {
-      // Keep original URL as fallback — cron backfill will retry archival later.
+      // Keep original URL as fallback, cron backfill will retry archival later.
       out.push(src);
       continue;
     }

@@ -85,7 +85,7 @@ Several pickers use **one UI id**; the backend resolves to **two KIE `model` str
 | ------------ | ---- |
 | Kling 2.6 text-to-video | [text-to-video](https://docs.kie.ai/market/kling/text-to-video) |
 | Kling 2.6 image-to-video | [image-to-video](https://docs.kie.ai/market/kling/image-to-video) |
-| Kling 3.0 | [kling-3-0](https://docs.kie.ai/market/kling/kling-3-0) |
+| Kling 3.0 | [kling-3-0](https://docs.kie.ai/market/kling/kling-3-0) — single-shot supports **first + last** frames via `image_urls` (length 1–2) plus optional **`kling_elements`** (`@element_name` in the prompt, 2–4 URLs per element, max 3 elements). |
 | Sora 2 text-to-video | [sora-2-text-to-video](https://docs.kie.ai/market/sora2/sora-2-text-to-video) |
 | Sora 2 image-to-video | [sora-2-image-to-video](https://docs.kie.ai/market/sora2/sora-2-image-to-video) |
 | Sora 2 Pro text-to-video | [sora-2-pro-text-to-video](https://docs.kie.ai/market/sora2/sora-2-pro-text-to-video) |
@@ -108,9 +108,13 @@ Studio ids: `bytedance/seedance-2` (Pro), `bytedance/seedance-2-fast` (Fast), `b
 | Seedance 2 Preview API | [seedance-2-preview](https://piapi.ai/docs/seedance-api/seedance-2-preview) |
 | Model comparison (pricing $/s, duration, modes) | [model-comparison](https://piapi.ai/docs/seedance-api/model-comparison) |
 
+**Reference images in prompts (PiAPI):** `@image1`, `@image2`, … match the **order** of `image_urls` (1-based). Seedance 2 Pro supports **`first_last_frames`** (1–2 images) and **`omni_reference`** (up to **12** images + optional short video/audio per docs). Preview supports up to **9** `image_urls`. The app mirrors frames to Supabase then sends public URLs (`mirrorImageUrlForPiapiSeedance`).
+
+**Studio “Elements” for Seedance:** The same element library allows **1–4** URLs per element (PiAPI); **Kling 3.0** still requires **2–4** per element (KIE). URLs are flattened after the start frame and before the optional end frame; the Seedance request uses `omni_reference` when elements are present (or when there are more than two unique images). If the prompt omits `@imageN`, `ensureSeedancePromptImageTags` in `piapiSeedance.ts` prepends tags.
+
 **Short copy for UI:** Preview models are the older preview pipeline; **Seedance 2** / **Seedance 2 Fast** use the current `seedance-2` / `seedance-2-fast` task types (higher quality vs lower cost — see comparison table).
 
-**Implementation:** `src/lib/piapiSeedance.ts`, `src/app/api/kling/generate/route.ts` (PiAPI branch).
+**Implementation:** `src/lib/piapiSeedance.ts` (`SEEDANCE_PRO_MAX_IMAGE_URLS`, `SEEDANCE_PREVIEW_MAX_IMAGE_URLS`, `ensureSeedancePromptImageTags`), `src/app/api/kling/generate/route.ts` (PiAPI branch).
 
 ---
 

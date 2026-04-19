@@ -106,7 +106,7 @@ type NanoBanana2GenerateResponse =
   | { code: 200; message: string; data: { taskId: string } }
   | { code: number; message: string; data?: unknown };
 
-/** NanoBanana 2 — text/image with 1K/2K/4K resolution (replaces legacy `/generate` for studio “nano”). */
+/** NanoBanana 2, text/image with 1K/2K/4K resolution (replaces legacy `/generate` for studio “nano”). */
 export async function nanoBananaGenerate2(req: {
   prompt: string;
   imageUrls?: string[];

@@ -76,13 +76,13 @@ function buildDualHook(): WorkflowProjectStateV1 {
   const a = buildAdAssetNode("image", { x: 40, y: 80 });
   a.data = {
     ...a.data,
-    label: "Hook A — problem",
+    label: "Hook A, problem",
     prompt: "Close-up frustration moment, cool tones, thumb-stopping.",
   };
   const b = buildAdAssetNode("image", { x: 40, y: 320 });
   b.data = {
     ...b.data,
-    label: "Hook B — desire",
+    label: "Hook B, desire",
     prompt: "Aspirational lifestyle shot, warm light, product visible.",
   };
   const v = buildAdAssetNode("video", { x: 420, y: 200 });

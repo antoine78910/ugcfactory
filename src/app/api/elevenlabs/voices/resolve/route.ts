@@ -18,7 +18,7 @@ function mapVoice(v: NonNullable<Awaited<ReturnType<typeof getElevenLabsVoiceByI
 }
 
 /**
- * POST body: `{ ids: string[] }` — resolve voice metadata for saved favorite IDs
+ * POST body: `{ ids: string[] }`, resolve voice metadata for saved favorite IDs
  * not yet present in the client’s loaded list (e.g. not on current shared page).
  */
 export async function POST(req: Request) {

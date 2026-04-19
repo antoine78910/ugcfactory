@@ -1,4 +1,4 @@
-/** Kie Market — Google Nano Banana 2 / Pro (`docs.kie.ai`). */
+/** Kie Market, Google Nano Banana 2 / Pro (`docs.kie.ai`). */
 
 export const KIE_MODEL_NANO_BANANA_2 = "nano-banana-2";
 export const KIE_MODEL_NANO_BANANA_PRO = "nano-banana-pro";

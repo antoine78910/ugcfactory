@@ -211,7 +211,7 @@ export default function ApiTestPage() {
                   <div>
                     <h2 className="text-sm font-bold text-white">Alternate video API</h2>
                     <p className="mt-1 text-xs leading-relaxed text-white/45">
-                      Optional second key for some video models: same idea—no platform credit charge on those flows when
+                      Optional second key for some video models: same idea, no platform credit charge on those flows when
                       this mode is on.
                     </p>
                   </div>

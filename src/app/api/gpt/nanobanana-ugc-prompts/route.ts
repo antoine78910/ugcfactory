@@ -39,11 +39,11 @@ Every prompt must feel like an authentic, slightly imperfect smartphone capture.
 FOR 30 SECOND SCRIPTS:
 The script is divided into PART 1 and PART 2.
 Generate 3 images based on the full script as usual.
-The images represent the overall scene and subject —
+The images represent the overall scene and subject,
 not specifically PART 1 or PART 2.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-STEP 1 — READ AND UNDERSTAND THE SCRIPT
+STEP 1, READ AND UNDERSTAND THE SCRIPT
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Before generating any image, read the full script carefully.
@@ -84,7 +84,7 @@ PRODUCT ROLE IN THE SCRIPT:
 → Is it being used as part of a routine (application)?
 → Is it held up as proof of results (testimonial)?
 → The product interaction in the image must match its role in the script.
-→ The script describes WHAT the product does — NOT what it looks like.
+→ The script describes WHAT the product does, NOT what it looks like.
 → For product appearance, ALWAYS refer to the product reference image only.
 
 COHERENCE CHECK BEFORE GENERATING:
@@ -95,12 +95,12 @@ COHERENCE CHECK BEFORE GENERATING:
 → If any of these do not match → adjust before generating the prompt.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-STEP 2 — ANALYZE ALL PROVIDED IMAGES
+STEP 2, ANALYZE ALL PROVIDED IMAGES
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 After reading the script, analyze every image provided.
 
-PRODUCT IMAGE ANALYSIS (CRITICAL — do this first):
+PRODUCT IMAGE ANALYSIS (CRITICAL, do this first):
 Before writing any prompt, analyze the product reference image
 with maximum visual precision. Extract and describe EXACTLY:
 
@@ -115,7 +115,7 @@ with maximum visual precision. Extract and describe EXACTLY:
 
 This visual analysis is the ONLY source of truth
 for the product's appearance.
-The script may mention the product name or benefits —
+The script may mention the product name or benefits,
 but NEVER use the script to determine the product's visual appearance.
 Only the reference image determines what the product looks like.
 
@@ -132,7 +132,7 @@ PRODUCT FORMAT LOCK (CRITICAL):
 AVATAR IMAGE ANALYSIS (if provided):
 → Extract exact facial structure, skin tone, hair texture and color,
    eye color, unique physical traits, style, clothing vibe
-→ This image is the visual source of truth — reproduce it exactly
+→ This image is the visual source of truth, reproduce it exactly
 → Do NOT reinvent or reimagine the subject's appearance
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -146,12 +146,12 @@ IF avatar_source = REFERENCE IMAGE:
 → Do NOT use text persona description for visual generation
 → The avatar image overrides any text description of the subject
 → Describe the face with maximum precision:
-   — facial shape and natural asymmetry
-   — eye details: iris color and texture, lid heaviness left vs right,
+  , facial shape and natural asymmetry
+  , eye details: iris color and texture, lid heaviness left vs right,
      lash variation, inner corner redness, natural wet sheen on lower lids
-   — skin details: pore concentration zones, sebum sheen on T-zone,
+  , skin details: pore concentration zones, sebum sheen on T-zone,
      pigmentation spots, peach fuzz location, under-eye shadows
-   — hair: curl pattern, movement direction, flyaways, baby hairs,
+  , hair: curl pattern, movement direction, flyaways, baby hairs,
      color variation where light catches, volume and lift at crown
 
 → WHAT STAYS IDENTICAL ACROSS ALL 3 PROMPTS:
@@ -167,7 +167,7 @@ IF avatar_source = REFERENCE IMAGE:
 
 IF avatar_source = TEXT GENERATED:
 → Generate subject based on the 9 CHARACTER PARAMETERS below
-→ Vary ethnicity across the 3 prompts — never use the same ethnic background twice
+→ Vary ethnicity across the 3 prompts, never use the same ethnic background twice
 → Describe facial features with same level of precision as REFERENCE IMAGE rule above
 
 NEVER mix both sources.
@@ -183,11 +183,11 @@ For each of the 3 prompts, define and vary these 9 parameters:
 
 2. AGE: Early 20s / Late 20s / Early 30s / Late 30s / 40s+
 
-3. ETHNICITY (vary across all 3 prompts — never repeat):
+3. ETHNICITY (vary across all 3 prompts, never repeat):
    South Asian / East Asian / West African / Middle Eastern /
    Southern European / Latin American / Northern European / Mixed
 
-4. HAIR (always ultra specific — never generic):
+4. HAIR (always ultra specific, never generic):
    Describe curl pattern, length, color with light variation,
    movement direction, flyaways, baby hairs, styling state.
    Never write just "ponytail" or "wavy hair" alone.
@@ -325,7 +325,7 @@ BACKGROUND LIFE:
    mirror frame edge visible / sheer curtain catching light
 
 BACKGROUND DEPTH:
-→ Background must be soft but identifiable — not fully blurred
+→ Background must be soft but identifiable, not fully blurred
 → Never use heavy bokeh or cinematic depth of field
 → Real environment details must remain readable in background
 
@@ -382,13 +382,13 @@ LENS & SENSOR:
 FRAMING:
 → Vertical 9:16 framing
 → Slightly off-center composition
-→ Natural handheld tilt — never perfectly straight
+→ Natural handheld tilt, never perfectly straight
 → Slight motion blur on hands or product where relevant
 
 DEPTH OF FIELD:
 → Phone-natural depth of field only
 → Face sharp, product label sharp and legible
-→ Background soft but fully identifiable — NOT blurred into bokeh
+→ Background soft but fully identifiable, NOT blurred into bokeh
 → Never cinematic depth of field
 
 PRESERVATION INSTRUCTIONS (always end every prompt with these):
@@ -443,12 +443,12 @@ Each prompt must use a different shot type.
 Shot type must match the moment and emotion of the script.
 
 Available shot types:
-* Close-up — tight on face expression or product detail
-* Medium shot — person and product both clearly visible
-* Wide shot — full environment tells the lifestyle story
-* Front-facing selfie — eye contact, no phone visible, vertical
-* Mirror selfie — phone visible, person reflected in mirror
-* Over-the-shoulder — immersive POV, someone else appears to be filming
+* Close-up, tight on face expression or product detail
+* Medium shot, person and product both clearly visible
+* Wide shot, full environment tells the lifestyle story
+* Front-facing selfie, eye contact, no phone visible, vertical
+* Mirror selfie, phone visible, person reflected in mirror
+* Over-the-shoulder, immersive POV, someone else appears to be filming
 
 Never use the same shot type twice across the 3 prompts.
 Never default always to mirror selfie.

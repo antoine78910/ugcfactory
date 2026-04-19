@@ -74,7 +74,7 @@ export type AdAssetNodeData = {
   resolution?: string;
   /** Image / variation batch count */
   quantity?: number;
-  /** width ÷ height — when set, module frame matches this exact shape */
+  /** width ÷ height, when set, module frame matches this exact shape */
   intrinsicAspect?: number;
   /** Object URL or remote URL shown inside the preview */
   referencePreviewUrl?: string;
@@ -656,7 +656,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   const workflowPortTargetHandleClass =
     "nodrag nopan !absolute !left-0 !top-0 !box-border !h-8 !w-8 !min-h-8 !min-w-8 !max-h-8 !max-w-8 !rounded-full !border-0 !bg-transparent opacity-0 !transform-none";
 
-  /** Outer ring for input ports — `Handle` stays out of `<button>` for correct measurement. */
+  /** Outer ring for input ports, `Handle` stays out of `<button>` for correct measurement. */
   const workflowPortBubbleShellClass =
     "relative h-8 w-8 shrink-0 rounded-full border border-white/12 bg-[#1a1a1c]/95 transition hover:border-violet-500/35";
 
@@ -670,7 +670,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   useLayoutEffect(() => {
     if (data.kind === "assistant") return;
     updateNodeInternals(id);
-    // Second pass after layout/paint — avoids stale handle bounds when flex/card size settles.
+    // Second pass after layout/paint, avoids stale handle bounds when flex/card size settles.
     const t = requestAnimationFrame(() => updateNodeInternals(id));
     return () => cancelAnimationFrame(t);
   }, [
@@ -1110,7 +1110,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             <button
               type="button"
               onPointerDown={(e) => handleInputBubblePointerDown(e, "text")}
-              title="Prompt text — one incoming wire; compose the main prompt inside the module."
+              title="Prompt text, one incoming wire; compose the main prompt inside the module."
               className={cn(
                 workflowPortBubbleHitClass,
                 "text-[12px] font-bold leading-none text-white/65 hover:text-white",
@@ -1131,7 +1131,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             <button
               type="button"
               onPointerDown={(e) => handleInputBubblePointerDown(e, "startImage")}
-              title="Start frame image — one incoming image (first frame / primary reference)."
+              title="Start frame image, one incoming image (first frame / primary reference)."
               className={cn(workflowPortBubbleHitClass, "text-white/65 hover:text-white")}
             >
               <ImageIcon className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
@@ -1149,7 +1149,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             <button
               type="button"
               onPointerDown={(e) => handleInputBubblePointerDown(e, "endImage")}
-              title="End frame image — one incoming image (last frame when the model supports it)."
+              title="End frame image, one incoming image (last frame when the model supports it)."
               className={cn(workflowPortBubbleHitClass, "text-white/65 hover:text-white")}
             >
               <ImageIcon className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
@@ -1167,7 +1167,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             <button
               type="button"
               onPointerDown={(e) => handleInputBubblePointerDown(e, "references")}
-              title="Reference images — unlimited incoming images for models that use extra references."
+              title="Reference images, unlimited incoming images for models that use extra references."
               className={cn(workflowPortBubbleHitClass, "text-white/65 hover:text-white")}
             >
               <Images className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
@@ -1187,7 +1187,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             <button
               type="button"
               onPointerDown={(e) => handleInputBubblePointerDown(e, "text")}
-              title="Prompt text — one incoming wire; compose the main prompt inside the module."
+              title="Prompt text, one incoming wire; compose the main prompt inside the module."
               className={cn(
                 workflowPortBubbleHitClass,
                 "text-[12px] font-bold leading-none text-white/65 hover:text-white",
@@ -1208,7 +1208,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             <button
               type="button"
               onPointerDown={(e) => handleInputBubblePointerDown(e, "references")}
-              title={`Reference images — ${imageReferenceWireCount}/${WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX} connected (max ${WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX} for this job).`}
+              title={`Reference images, ${imageReferenceWireCount}/${WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX} connected (max ${WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX} for this job).`}
               className={cn(workflowPortBubbleHitClass, "text-white/65 hover:text-white")}
             >
               <Images className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
@@ -1445,7 +1445,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               ) : null}
               <button
                 type="button"
-                title="Prompt assistant — describe what you want"
+                title="Prompt assistant, describe what you want"
                 className={cn(
                   "rounded-md p-1 text-violet-300/85 transition hover:bg-violet-500/15 hover:text-violet-100",
                   hasPreviewMedia ? "absolute right-1 top-1" : "absolute bottom-1.5 right-1",
@@ -1816,7 +1816,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                   position={Position.Right}
                   className={workflowPortSourceBubbleHandleClass}
                   aria-label="First frame output"
-                  title="First frame — double-click to capture from this video, drag to connect"
+                  title="First frame, double-click to capture from this video, drag to connect"
                   onDoubleClick={(e) => {
                     e.stopPropagation();
                     void onExtractVideoFrame("first");
@@ -1843,7 +1843,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                   position={Position.Right}
                   className={workflowPortSourceBubbleHandleClass}
                   aria-label="Last frame output"
-                  title="Last frame — double-click to capture, drag to the next clip’s start port"
+                  title="Last frame, double-click to capture, drag to the next clip’s start port"
                   onDoubleClick={(e) => {
                     e.stopPropagation();
                     void onExtractVideoFrame("last");
@@ -1862,7 +1862,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           {showImageGeneratedChainBubble ? (
             <div
               className={cn(workflowPortBubbleShellClass, "nodrag nopan relative border-violet-400/35")}
-              title="Generated image — drag to connect another module"
+              title="Generated image, drag to connect another module"
             >
               <Handle
                 id="generated"

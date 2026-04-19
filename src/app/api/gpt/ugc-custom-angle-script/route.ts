@@ -45,7 +45,7 @@ export async function POST(req: Request) {
 
   const developer = [
     "Follow EVERY rule in the instructions below.",
-    "The user provides a brand brief AND one specific marketing angle — output only ONE script.",
+    "The user provides a brand brief AND one specific marketing angle, output only ONE script.",
     "OVERRIDE: Generate SCRIPT OPTION 1 and its VIDEO_METADATA only. Do NOT output SCRIPT OPTION 2 or SCRIPT OPTION 3.",
     "After VIDEO_METADATA, add one line: ANGLE_HEADLINE: (12–24 words summarizing this creative angle).",
     `${durationRulesForUgcApi(videoDurationSeconds)} For word limits: count only HOOK, PROBLEM, SOLUTION, CTA lines (when PROBLEM exists).`,
@@ -68,7 +68,7 @@ export async function POST(req: Request) {
     brandBrief,
     "",
     `Target video length (user selected in the app): ${String(videoDurationSeconds)} seconds.`,
-    `Respect the spoken-word cap for this exact length — shorter = fewer words.`,
+    `Respect the spoken-word cap for this exact length, shorter = fewer words.`,
     "",
     imageNote,
   ].join("\n");

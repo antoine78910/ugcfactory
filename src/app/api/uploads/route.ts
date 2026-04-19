@@ -62,6 +62,10 @@ export async function POST(req: Request) {
         "video/mp4": ".mp4",
         "video/quicktime": ".mov",
         "video/webm": ".webm",
+        "audio/mpeg": ".mp3",
+        "audio/mp3": ".mp3",
+        "audio/wav": ".wav",
+        "audio/x-wav": ".wav",
       };
       return map[file.type] ?? "";
     })();
@@ -70,7 +74,8 @@ export async function POST(req: Request) {
       extFromName ||
       extFromType ||
       ((file.type || "").startsWith("image/") ? ".jpg" : "") ||
-      ((file.type || "").startsWith("video/") ? ".mp4" : "");
+      ((file.type || "").startsWith("video/") ? ".mp4" : "") ||
+      ((file.type || "").startsWith("audio/") ? ".mp3" : "");
     const filename = `${crypto.randomUUID()}${ext}`;
 
     const supabaseAdmin = createSupabaseServiceClient();

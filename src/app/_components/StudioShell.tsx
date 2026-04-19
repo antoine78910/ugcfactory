@@ -389,7 +389,7 @@ function StudioShellInner({
                             "pointer-events-none block w-full min-w-0 select-none rounded-lg border border-white/[0.07] bg-white/[0.02] px-4 py-3 text-left text-[15px] font-semibold leading-snug text-white/32 shadow-none",
                             navCollapsed && "px-2.5 py-3.5",
                           )}
-                          title={`${label} — coming soon`}
+                          title={`${label}, coming soon`}
                           aria-disabled="true"
                         >
                           <span

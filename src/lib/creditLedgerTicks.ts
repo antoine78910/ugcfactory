@@ -1,6 +1,6 @@
 /**
  * Credit ledger stores integer "ticks" in Postgres (`user_credit_grants`, `studio_generations.credits_charged`).
- * 2 ticks = 1.0 display credit — allows billing steps of 0.5 (e.g. Google Nano Banana).
+ * 2 ticks = 1.0 display credit, allows billing steps of 0.5 (e.g. Google Nano Banana).
  */
 
 export const LEDGER_TICKS_PER_DISPLAY_CREDIT = 2;

@@ -16,7 +16,7 @@ export type LinkToAdUniverseSnapshotV1 = {
   fallbackImageUrl: string | null;
   confidence: string | null;
   neutralUploadUrl: string | null;
-  /** Packshot URLs from images-classify (product-only), best first — used to rebuild multi-angle GPT context. */
+  /** Packshot URLs from images-classify (product-only), best first, used to rebuild multi-angle GPT context. */
   productOnlyImageUrls?: string[] | null;
   /** User-uploaded additional product photos. */
   userPhotoUrls?: string[] | null;
@@ -730,7 +730,7 @@ export function parseThreeLabeledPrompts(text: string): [string, string, string]
   return [byNum[1], byNum[2], byNum[3]];
 }
 
-/** Inverse of `parseThreeLabeledPrompts` — stable PROMPT 1/2/3 blocks for persistence and editing. */
+/** Inverse of `parseThreeLabeledPrompts`, stable PROMPT 1/2/3 blocks for persistence and editing. */
 export function composeThreeLabeledPrompts(bodies: [string, string, string]): string {
   const b = bodies.map((x) => x.replace(/\r\n/g, "\n").trim());
   if (!b[0] && !b[1] && !b[2]) return "";
@@ -755,7 +755,7 @@ export function stripInlineTechnicalNoiseFromNanoSection(field: string): string 
   const patterns: RegExp[] = [
     // **NEGATIVE PROMPT:** or plain NEGATIVE PROMPT
     /\n\s*\*{0,2}NEGATIVE\s+PROMPT\*{0,2}\b/i,
-    // **TECHNICAL:** or TECHNICAL —
+    // **TECHNICAL:** or TECHNICAL,
     /(?:^|\n)\s*\*{0,2}TECHNICAL\*{0,2}\s*[—:*\s]/im,
     /\n\s*---+\s*NEGATIVE/i,
     /\n\s*PRESERVATION\s+INSTRUCTIONS\b/i,
@@ -776,7 +776,7 @@ export function stripInlineTechnicalNoiseFromNanoSection(field: string): string 
  * as well as "---" separators and "# PROMPT N" headers used in multi-prompt raw text.
  */
 const NANO_SECTION_END_LA =
-  // Next EDIT — <any> header (plain or **bold**)
+  // Next EDIT, <any> header (plain or **bold**)
   "(?=" +
   "\\n\\s*\\*{0,2}EDIT\\s*[—:-]|" +
   // TECHNICAL block
@@ -790,7 +790,7 @@ const NANO_SECTION_END_LA =
   // End of string
   "$)";
 
-/** True when prompts use EDIT — / TECHNICAL: blocks from the image prompt API. */
+/** True when prompts use EDIT, / TECHNICAL: blocks from the image prompt API. */
 export function parseNanoEditableSections(editable: string): NanoEditableSections & { isStructured: boolean } {
   const raw = editable.replace(/\r\n/g, "\n");
   if (!raw.trim()) {
@@ -804,7 +804,7 @@ export function parseNanoEditableSections(editable: string): NanoEditableSection
       isStructured: false,
     };
   }
-  // Pattern for any EDIT header (handles "EDIT — X:", "**EDIT — X:**", newlines after colon, etc.)
+  // Pattern for any EDIT header (handles "EDIT, X:", "**EDIT, X:**", newlines after colon, etc.)
   const editHdr = (label: string) =>
     `\\*{0,2}EDIT\\s*[—:-]\\s*${label}\\*{0,2}\\s*:?\\*{0,2}\\s*\\n?\\s*`;
 
@@ -832,9 +832,9 @@ export function composeNanoEditableSections(parts: NanoEditableSections): string
   const s = parts.scene.replace(/\r\n/g, "\n").trim();
   const pr = parts.product.replace(/\r\n/g, "\n").trim();
   const lines: string[] = [];
-  if (p) lines.push(`EDIT — Avatar:\n${p}`);
-  if (s) lines.push(`EDIT — Scene:\n${s}`);
-  if (pr) lines.push(`EDIT — Shot:\n${pr}`);
+  if (p) lines.push(`EDIT, Avatar:\n${p}`);
+  if (s) lines.push(`EDIT, Scene:\n${s}`);
+  if (pr) lines.push(`EDIT, Shot:\n${pr}`);
   return lines.join("\n\n");
 }
 
@@ -847,7 +847,7 @@ export function splitNanoPromptBodyForEditing(body: string): { editable: string;
   if (!t.trim()) return { editable: "", technicalTail: "" };
 
   const patterns: RegExp[] = [
-    // **TECHNICAL:** or TECHNICAL — (plain or bold markdown)
+    // **TECHNICAL:** or TECHNICAL, (plain or bold markdown)
     /(?:^|\n)\s*\*{0,2}TECHNICAL\*{0,2}\s*[—:*\s]/im,
     // **NEGATIVE PROMPT:** or plain, at start or after newline
     /^\s*\*{0,2}NEGATIVE\s+PROMPT\*{0,2}\b/im,
@@ -925,7 +925,7 @@ function peelAmbienceSentencesFromParagraph(paragraph: string): { motion: string
  * Heuristic: extract spoken dialogue (quoted text + voice description)
  * and ambient sound region from an unstructured video prompt blob.
  * Works by locating quoted speech blocks, voice description, and ambient
- * sound — rather than naively splitting on sentence boundaries which
+ * sound, rather than naively splitting on sentence boundaries which
  * breaks text inside quotation marks.
  */
 function extractLegacySections(text: string): { motion: string; dialogue: string; ambience: string } | null {
@@ -1002,14 +1002,14 @@ function extractLegacySections(text: string): { motion: string; dialogue: string
   return { motion, dialogue, ambience };
 }
 
-/** True when the video prompt uses EDIT — Motion / Dialogue / Ambience blocks. */
+/** True when the video prompt uses EDIT, Motion / Dialogue / Ambience blocks. */
 export function parseVideoPromptEditableSections(editable: string): VideoPromptEditableSections & { isStructured: boolean } {
   const raw = editable.replace(/\r\n/g, "\n");
   if (!raw.trim()) {
     return { motion: "", dialogue: "", ambience: "", isStructured: false };
   }
-  // Structured prompts (including legacy ones) may place "EDIT — Dialogue:" / "EDIT — Ambience:" inline
-  // (not necessarily on their own line) and sometimes omit "EDIT — Motion:" entirely.
+  // Structured prompts (including legacy ones) may place "EDIT, Dialogue:" / "EDIT, Ambience:" inline
+  // (not necessarily on their own line) and sometimes omit "EDIT, Motion:" entirely.
   // Split sections by label positions so each part lands in the correct UI panel.
   if (/EDIT\s*[—:-]\s*(?:Motion|Dialogue|Ambience|Ambient)\b/im.test(raw)) {
     const techIdx = raw.search(/(?:^|\n|\s)\s*(?:#\s*)?\*{0,2}TECHNICAL\*{0,2}\b/i);
@@ -1075,22 +1075,22 @@ export function parseVideoPromptEditableSections(editable: string): VideoPromptE
 }
 
 /**
- * Compose sections WITH `EDIT —` headers (for UI editor display only).
+ * Compose sections WITH EDIT section headers (Motion, Dialogue, …) for UI editor display only.
  */
 export function composeVideoPromptEditableSections(parts: VideoPromptEditableSections): string {
   const m = parts.motion.replace(/\r\n/g, "\n").trim();
   const d = parts.dialogue.replace(/\r\n/g, "\n").trim();
   const a = parts.ambience.replace(/\r\n/g, "\n").trim();
   const lines: string[] = [];
-  if (m) lines.push(`EDIT — Motion:\n${m}`);
-  if (d) lines.push(`EDIT — Dialogue:\n${d}`);
-  if (a) lines.push(`EDIT — Ambience:\n${a}`);
+  if (m) lines.push(`EDIT, Motion:\n${m}`);
+  if (d) lines.push(`EDIT, Dialogue:\n${d}`);
+  if (a) lines.push(`EDIT, Ambience:\n${a}`);
   return lines.join("\n\n");
 }
 
 /**
  * Compose sections as clean continuous text (for the actual API prompt sent to PiAPI / Seedance).
- * No section headers — just the raw content joined with spacing.
+ * No section headers, just the raw content joined with spacing.
  */
 export function composeVideoPromptForApi(parts: VideoPromptEditableSections): string {
   const m = parts.motion.replace(/\r\n/g, "\n").trim();
@@ -1104,7 +1104,7 @@ export function composeVideoPromptForApi(parts: VideoPromptEditableSections): st
 }
 
 /**
- * Strip `EDIT — Motion:`, `EDIT — Dialogue:`, `EDIT — Ambience:` labels from a prompt string,
+ * Strip `EDIT, Motion:`, `EDIT, Dialogue:`, `EDIT, Ambience:` labels from a prompt string,
  * returning clean continuous text ready for the video generation API.
  */
 export function stripEditSectionLabels(text: string): string {

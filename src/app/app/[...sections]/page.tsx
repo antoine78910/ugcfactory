@@ -528,7 +528,7 @@ function addNonEmptyUrl(set: Set<string>, url: string | null | undefined) {
 }
 
 /**
- * Images to show under each ad on the brand dashboard — scoped to this run only.
+ * Images to show under each ad on the brand dashboard, scoped to this run only.
  * Excludes crawl "fallback" hero images and avatar/persona refs so packs stay product-consistent.
  */
 function collectProjectRunImageUrls(run: {
@@ -609,7 +609,7 @@ function collectProjectRunImageUrls(run: {
 }
 
 /**
- * Images for the project dashboard "Images" column only — NanoBanana Pro outputs from Link to Ad
+ * Images for the project dashboard "Images" column only, NanoBanana Pro outputs from Link to Ad
  * (`extracted` universe). Excludes packshots, crawled product images, and classic wizard `generated_image_urls`.
  */
 function collectProjectRunNanoBananaProImageUrls(run: { extracted?: unknown }): string[] {
@@ -924,7 +924,7 @@ export default function AppBrandWizard() {
   const [motionVideoUploadPending, setMotionVideoUploadPending] = useState(false);
   const [motionVideoPosterUrl, setMotionVideoPosterUrl] = useState<string | null>(null);
   const [motionVideoPreviewLoading, setMotionVideoPreviewLoading] = useState(false);
-  /** True only after the video element fires onPlaying — guarantees real frames are visible. */
+  /** True only after the video element fires onPlaying, guarantees real frames are visible. */
   const [motionVideoPlaying, setMotionVideoPlaying] = useState(false);
   const [motionVideoDetectedDuration, setMotionVideoDetectedDuration] = useState<number | null>(null);
   const [motionCharacterImageUrl, setMotionCharacterImageUrl] = useState<string | null>(null);
@@ -1104,7 +1104,7 @@ export default function AppBrandWizard() {
     () => motionControlBackgroundSourceDescription(motionKlingFamily),
     [motionKlingFamily],
   );
-  /** Translate / HeyGen outputs only — not Kling motion-control jobs (separate history state). */
+  /** Translate / HeyGen outputs only, not Kling motion-control jobs (separate history state). */
   const readyTranslateVideos = useMemo(
     () =>
       translateHistoryItems.filter(
@@ -1286,7 +1286,7 @@ export default function AppBrandWizard() {
                 (Boolean(p.rowId?.trim()) && i.id === p.rowId),
             );
             if (onServer) continue;
-            // Row missing from Supabase — re-register so server poll can pick it up
+            // Row missing from Supabase, re-register so server poll can pick it up
             void registerStudioGenerationClient({
               kind: STUDIO_GENERATION_KIND_STUDIO_TRANSLATE_VIDEO,
               label: p.label,
@@ -1429,7 +1429,7 @@ export default function AppBrandWizard() {
               );
             }
           } catch {
-            /* transient network error — keep retrying */
+            /* transient network error, keep retrying */
           }
         }
       }
@@ -1662,7 +1662,7 @@ export default function AppBrandWizard() {
     if (!motionVideoPreviewSrc) return;
     const id = window.setTimeout(() => {
       setMotionVideoPlaying((prev) => {
-        if (prev) return prev; // already playing — no-op
+        if (prev) return prev; // already playing, no-op
         // Force-show whatever frame is available and stop spinner.
         const v = motionVideoPreviewRef.current;
         if (v) {
@@ -3211,7 +3211,7 @@ export default function AppBrandWizard() {
                               <div className="px-4 pt-2">
                                 <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Your ads</p>
                                 <p className="mt-0.5 text-[11px] text-white/35">
-                                  Thumbnails below — click one to continue in Link to Ad with that generation.
+                                  Thumbnails below, click one to continue in Link to Ad with that generation.
                                 </p>
                               </div>
                               <div className="flex gap-2 overflow-x-auto px-4 pb-4 pt-2 [-webkit-overflow-scrolling:touch]">
@@ -3275,7 +3275,7 @@ export default function AppBrandWizard() {
                                 <div>
                                   <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Images</p>
                                   <p className="mt-0.5 text-[11px] text-white/35">
-                                    Grouped by ad — NanoBanana Pro frames from each Link to Ad run (no product /
+                                    Grouped by ad, NanoBanana Pro frames from each Link to Ad run (no product /
                                     packshot images).
                                   </p>
                                   {projectRunMedia.every((x) => x.images.length === 0) ? (
@@ -3328,7 +3328,7 @@ export default function AppBrandWizard() {
                                 <div>
                                   <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Videos</p>
                                   <p className="mt-0.5 text-[11px] text-white/35">
-                                    Grouped by ad — Kling outputs and classic wizard videos stored on each run.
+                                    Grouped by ad, Kling outputs and classic wizard videos stored on each run.
                                   </p>
                                   {projectRunMedia.every((x) => x.videos.length === 0) ? (
                                     <p className="mt-2 text-xs text-white/40">No generated videos on this brand yet.</p>
@@ -3369,7 +3369,7 @@ export default function AppBrandWizard() {
                                     </p>
                                     <p className="mt-1 max-w-2xl text-[11px] leading-relaxed text-white/40">
                                       For each ad: tweak the brief (core story + optional full scan), then edit angles as
-                                      factors. Add a 4th angle or clear one you dislike — changes sync with Link to Ad.
+                                      factors. Add a 4th angle or clear one you dislike, changes sync with Link to Ad.
                                     </p>
                                   </div>
                                   {proj.runs.map((run) => {
@@ -3456,7 +3456,7 @@ export default function AppBrandWizard() {
                               </button>
                               <div
                                 className="pointer-events-none flex min-h-[2.25rem] select-none items-center rounded-xl border border-white/[0.07] bg-white/[0.02] px-3 py-2 shadow-none"
-                                title="Create Voice — coming soon"
+                                title="Create Voice, coming soon"
                                 aria-disabled="true"
                               >
                                 <span className="flex min-w-0 w-full items-center justify-between gap-2">
@@ -3826,7 +3826,7 @@ export default function AppBrandWizard() {
                               <div className="rounded-xl border border-white/10 bg-black/20 p-2.5 space-y-2">
                                 <Label className="text-xs text-white/45">Voice</Label>
                                 <p className="text-[10px] leading-snug text-white/35">
-                                  ElevenLabs voice library — filter by language and listen to the sample.
+                                  ElevenLabs voice library, filter by language and listen to the sample.
                                 </p>
 
                                 <div className="flex items-center gap-2">
@@ -3964,7 +3964,7 @@ export default function AppBrandWizard() {
                                 {/* Sample audio preview */}
                                 {selectedElevenVoice?.previewUrl ? (
                                   <div className="rounded-lg border border-white/10 bg-black/30 p-2">
-                                    <p className="mb-1 text-[9px] uppercase tracking-wide text-white/35">Sample — {selectedElevenVoice.name}</p>
+                                    <p className="mb-1 text-[9px] uppercase tracking-wide text-white/35">Sample, {selectedElevenVoice.name}</p>
                                     <SampleAudioPlayer src={selectedElevenVoice.previewUrl} />
                                   </div>
                                 ) : null}
@@ -4296,7 +4296,7 @@ export default function AppBrandWizard() {
                                           mediaUrl: json.mediaUrl,
                                           kind: resultIsVideo ? "video" : "audio",
                                           status: "ready",
-                                          label: `Voice changed — ${selectedElevenVoice?.name ?? "custom"}`,
+                                          label: `Voice changed, ${selectedElevenVoice?.name ?? "custom"}`,
                                           studioGenerationKind: STUDIO_GENERATION_KIND_VOICE_CHANGE,
                                         }
                                       : i,
@@ -4456,7 +4456,7 @@ export default function AppBrandWizard() {
                                 inputUrls: motionInputUrls.length > 0 ? motionInputUrls : undefined,
                               });
                               if (isTranslate) {
-                                // Save to localStorage now that we have rowId — same id as Supabase/React,
+                                // Save to localStorage now that we have rowId, same id as Supabase/React,
                                 // so mergeStudioHistoryWithServer will correctly deduplicate.
                                 upsertTranslatePendingJob({
                                   taskId: providerTaskId,
@@ -5170,15 +5170,15 @@ export default function AppBrandWizard() {
                               <div className="space-y-2">
                                 <div>
                                   <div className="text-[11px] font-semibold text-white/70">Avatar / person</div>
-                                  <div className="whitespace-pre-wrap text-muted-foreground">{block.avatar || "—"}</div>
+                                  <div className="whitespace-pre-wrap text-muted-foreground">{block.avatar || "-"}</div>
                                 </div>
                                 <div>
                                   <div className="text-[11px] font-semibold text-white/70">Scene</div>
-                                  <div className="whitespace-pre-wrap text-muted-foreground">{block.scene || "—"}</div>
+                                  <div className="whitespace-pre-wrap text-muted-foreground">{block.scene || "-"}</div>
                                 </div>
                                 <div>
                                   <div className="text-[11px] font-semibold text-white/70">Product & action</div>
-                                  <div className="whitespace-pre-wrap text-muted-foreground">{block.product || "—"}</div>
+                                  <div className="whitespace-pre-wrap text-muted-foreground">{block.product || "-"}</div>
                                 </div>
                               </div>
                             ) : (

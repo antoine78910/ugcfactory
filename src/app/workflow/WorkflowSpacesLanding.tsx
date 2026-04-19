@@ -246,7 +246,7 @@ export function WorkflowSpacesLanding() {
         ) : filteredSpaces.length === 0 ? (
           <div className="mt-12 rounded-2xl border border-dashed border-white/15 bg-white/[0.02] px-6 py-14 text-center">
             <p className="text-sm text-white/55">
-              {query.trim() ? "No workflows match your search." : "No workflows yet — create your first one above."}
+              {query.trim() ? "No workflows match your search." : "No workflows yet, create your first one above."}
             </p>
           </div>
         ) : (

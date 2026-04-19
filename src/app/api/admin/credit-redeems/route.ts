@@ -44,7 +44,7 @@ function isTokenActive(t: TokenRow, now: Date): boolean {
 
 /**
  * GET /api/admin/credit-redeems
- * Primary admin only — lists redeem tokens and paginated redemption audit log.
+ * Primary admin only, lists redeem tokens and paginated redemption audit log.
  */
 export async function GET(req: Request) {
   const { response } = await requireAdmin();

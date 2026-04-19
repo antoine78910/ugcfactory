@@ -282,7 +282,7 @@ function RedeemPageContent() {
           setStatus("error");
         }
       } catch {
-        setErrorMsg("Network error — please try again.");
+        setErrorMsg("Network error, please try again.");
         setStatus("error");
       }
     })();

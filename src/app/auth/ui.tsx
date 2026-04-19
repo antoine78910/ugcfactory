@@ -128,7 +128,7 @@ export default function AuthClient({ mode = "signin", redirectTo }: { mode?: Aut
       console.log("[Dub] signup – dub_id url param:", dubClickFromUrl || "(none)");
       console.log(
         "[Dub] signup – clickId for server attribution:",
-        dubClickId || "(none — deferred mode)",
+        dubClickId || "(none, deferred mode)",
       );
       // Server-side only: avoids the 403 that client-side trackLead triggers when
       // app.youry.io is not in Dub's Allowed Hostnames list.

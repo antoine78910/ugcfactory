@@ -36,7 +36,7 @@ export const CREDITS_LINK_TO_AD_STORE_SCAN = 8;
 export const CREDITS_LINK_TO_AD_VIDEO_PROMPT_AI = CLAUDE_AI_CREDITS;
 
 // ---------------------------------------------------------------------------
-// Video — dynamic pricing by model + duration (Link to Ad)
+// Video, dynamic pricing by model + duration (Link to Ad)
 // ---------------------------------------------------------------------------
 
 export {
@@ -68,12 +68,12 @@ export function creditsLinkToAdFullPipeline(
   return creditsLinkToAdVideoFromImage(model, durationSec, seedanceSpeed);
 }
 
-/** Full ad bundle — backend must bill this fixed amount, not sum of parts. */
+/** Full ad bundle, backend must bill this fixed amount, not sum of parts. */
 export { AD_CREDITS as CREDITS_AD_GENERATION };
 export { AD_CREDITS };
 
 // ---------------------------------------------------------------------------
-// Video generation — dynamic by duration (studio)
+// Video generation, dynamic by duration (studio)
 // ---------------------------------------------------------------------------
 
 export function calculateVideoCredits(opts: {
@@ -93,7 +93,7 @@ export function calculateVideoCredits(opts: {
 export { calculateVideoCreditsFromDuration };
 
 // ---------------------------------------------------------------------------
-// Motion control — same curve as Kling 3.0 video length
+// Motion control, same curve as Kling 3.0 video length
 // ---------------------------------------------------------------------------
 
 export function calculateMotionControlCredits(opts: {

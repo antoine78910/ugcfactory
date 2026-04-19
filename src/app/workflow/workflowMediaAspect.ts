@@ -65,7 +65,7 @@ export function aspectRatioStringFromIntrinsic(ar: number): string {
   return `${rw}:${rh}`;
 }
 
-/** Best effort for remote avatar URLs (CORS may block — caller can fall back). */
+/** Best effort for remote avatar URLs (CORS may block, caller can fall back). */
 export async function measureImageAspectFromUrlSafe(url: string): Promise<number> {
   try {
     return await measureImageAspectFromObjectUrl(url);

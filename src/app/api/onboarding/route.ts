@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import { brevoUpsertContact } from "@/lib/brevo";
@@ -23,41 +23,47 @@ export async function POST(req: Request) {
       ? String((body as { referral_source: unknown }).referral_source)
       : "";
 
+  const userId = auth.user.id;
+  const email = auth.user.email?.trim() ?? "";
   const admin = createSupabaseServiceClient();
 
-  // Save to DB (fails silently if table doesn't exist yet)
+  // Critical path: Postgres upsert only (fast). Auth `updateUserById` often takes seconds, defer it.
   if (admin) {
     try {
       await admin.from("user_onboarding").upsert(
-        { user_id: auth.user.id, work_type: workType, referral_source: referralSource },
+        { user_id: userId, work_type: workType, referral_source: referralSource },
         { onConflict: "user_id" },
       );
     } catch {
       // non-blocking
     }
-
-    // Update user metadata for easy access in other places
-    try {
-      await admin.auth.admin.updateUserById(auth.user.id, {
-        user_metadata: { onboarding_work_type: workType, onboarding_referral_source: referralSource, onboarding_completed: true },
-      });
-    } catch {
-      // non-blocking
-    }
   }
 
-  // Track in Brevo
-  try {
-    const email = auth.user.email?.trim();
+  after(async () => {
+    if (admin) {
+      try {
+        await admin.auth.admin.updateUserById(userId, {
+          user_metadata: {
+            onboarding_work_type: workType,
+            onboarding_referral_source: referralSource,
+            onboarding_completed: true,
+          },
+        });
+      } catch {
+        /* non-blocking */
+      }
+    }
     if (email) {
-      void brevoUpsertContact(email, {
-        WORK_TYPE: workType,
-        REFERRAL_SOURCE: referralSource,
-      });
+      try {
+        await brevoUpsertContact(email, {
+          WORK_TYPE: workType,
+          REFERRAL_SOURCE: referralSource,
+        });
+      } catch {
+        /* brevoUpsertContact already logs */
+      }
     }
-  } catch {
-    // non-blocking
-  }
+  });
 
   return NextResponse.json({ ok: true });
 }

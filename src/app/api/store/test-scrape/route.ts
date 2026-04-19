@@ -110,7 +110,7 @@ export async function POST(req: NextRequest) {
     }
   } else {
     timings.classifyMs = 0;
-    classifyError = "No images found during extraction — classify skipped.";
+    classifyError = "No images found during extraction, classify skipped.";
   }
 
   timings.totalMs = (timings.extractMs ?? 0) + (timings.classifyMs ?? 0);

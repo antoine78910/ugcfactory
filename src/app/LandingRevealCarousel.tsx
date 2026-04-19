@@ -144,7 +144,7 @@ export function LandingRevealCarousel() {
   const [isActive, setIsActive] = useState(false);
   const carouselTrackRef = useRef<HTMLDivElement>(null);
   const carouselSetRef = useRef<HTMLDivElement>(null);
-  /** Second copy of the strip — used to measure scroll period (first set width + flex gap). */
+  /** Second copy of the strip, used to measure scroll period (first set width + flex gap). */
   const carouselSet2Ref = useRef<HTMLDivElement>(null);
   const revealSectionRef = useRef<HTMLElement | null>(null);
   const revealRegistryRef = useRef<(RevealRegistryEntry | null)[]>(

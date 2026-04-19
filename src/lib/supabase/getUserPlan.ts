@@ -3,7 +3,7 @@ import { parseAccountPlan, type AccountPlanId } from "@/lib/subscriptionModelAcc
 
 /**
  * Fetch the user's active subscription plan from the DB (server-side only).
- * Uses the service-role client to bypass RLS — safe because this is server-only code.
+ * Uses the service-role client to bypass RLS, safe because this is server-only code.
  * Returns "free" if no active subscription is found.
  */
 export async function getUserPlan(userId: string): Promise<AccountPlanId> {

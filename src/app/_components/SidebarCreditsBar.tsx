@@ -51,7 +51,7 @@ export default function SidebarCreditsBar({ collapsed = false }: SidebarCreditsB
           )}
         >
           {indeterminate ? (
-            <span className="text-[11px] font-semibold text-zinc-600/80">—</span>
+            <span className="text-[11px] font-semibold text-zinc-600/80">-</span>
           ) : (
             <>
               {percentRemaining}
@@ -126,7 +126,7 @@ export default function SidebarCreditsBar({ collapsed = false }: SidebarCreditsB
       {showCta ? (
         <div className="mt-1.5 flex flex-col gap-1 border-t border-white/10 pt-1.5">
           <p className="text-[9px] font-medium leading-snug text-rose-200/70">
-            Low balance — top up or upgrade.
+            Low balance, top up or upgrade.
           </p>
           <div className="flex gap-1.5">
             <Link

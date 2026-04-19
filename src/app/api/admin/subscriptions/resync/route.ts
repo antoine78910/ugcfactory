@@ -4,12 +4,12 @@ export const runtime = "nodejs";
  * Admin endpoint: resync a user's subscription status from Stripe.
  *
  * POST /api/admin/subscriptions/resync
- * Body (JSON) — one of:
+ * Body (JSON), one of:
  *   { "user_email": "foo@bar.com" }
  *   { "stripe_subscription_id": "sub_xxx" }
  *
  * GET /api/admin/subscriptions/resync?email=foo@bar.com
- *   — read-only: returns DB row + live Stripe status without writing anything
+ *  , read-only: returns DB row + live Stripe status without writing anything
  */
 
 import { NextResponse } from "next/server";

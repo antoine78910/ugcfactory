@@ -40,7 +40,7 @@ export function readLatestAvatarUrlFromLocal(): string | null {
 
 /**
  * Load the latest avatar URL.
- * Server is authoritative — only falls back to localStorage on network failure (never on empty server response).
+ * Server is authoritative, only falls back to localStorage on network failure (never on empty server response).
  */
 export async function loadLatestAvatarUrl(): Promise<string | null> {
   try {
@@ -48,14 +48,14 @@ export async function loadLatestAvatarUrl(): Promise<string | null> {
     if (res.ok) {
       const json = (await res.json()) as { data?: AvatarLikeItem[] };
       const data = Array.isArray(json.data) ? json.data : [];
-      // Server responded — return its result even if empty (do NOT fall back to localStorage)
+      // Server responded, return its result even if empty (do NOT fall back to localStorage)
       return pickLatestAvatarUrl(data);
     }
   } catch {
-    // Network error only — fall back to local
+    // Network error only, fall back to local
     return readLatestAvatarUrlFromLocal();
   }
-  // Non-ok status (e.g. 401) — return null, never show another account's data
+  // Non-ok status (e.g. 401), return null, never show another account's data
   return null;
 }
 
@@ -94,7 +94,7 @@ export function readAvatarUrlsFromLocal(): string[] {
 
 /**
  * Load all avatar URLs.
- * Server is authoritative — only falls back to localStorage on network failure (never on empty server response).
+ * Server is authoritative, only falls back to localStorage on network failure (never on empty server response).
  */
 export async function loadAvatarUrls(): Promise<string[]> {
   try {
@@ -102,13 +102,13 @@ export async function loadAvatarUrls(): Promise<string[]> {
     if (res.ok) {
       const json = (await res.json()) as { data?: AvatarLikeItem[] };
       const data = Array.isArray(json.data) ? json.data : [];
-      // Server responded — return its result even if empty (do NOT fall back to localStorage)
+      // Server responded, return its result even if empty (do NOT fall back to localStorage)
       return pickAvatarUrlsNewestFirst(data);
     }
   } catch {
-    // Network error only — fall back to local
+    // Network error only, fall back to local
     return readAvatarUrlsFromLocal();
   }
-  // Non-ok status (e.g. 401) — return empty, never show another account's data
+  // Non-ok status (e.g. 401), return empty, never show another account's data
   return [];
 }

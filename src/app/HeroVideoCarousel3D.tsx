@@ -17,7 +17,7 @@ const DEFAULT_SRCS = [
   '/studio/0328(10).mp4',
 ];
 
-/** 10 clips, ~36° apart — about 5 readable in view; no duplicate `<video>` URLs. */
+/** 10 clips, ~36° apart, about 5 readable in view; no duplicate `<video>` URLs. */
 const MAX_UNIQUE_SRCS = 10;
 
 type Props = { srcs?: readonly string[] };
@@ -45,7 +45,7 @@ export function HeroVideoCarousel3D({ srcs = DEFAULT_SRCS }: Props) {
       for (const { video } of videoPanels) video.pause();
     };
 
-    /** All clips play while visible — no “top N by screen area” rule (center of the 3D ring read smaller and was wrongly paused). */
+    /** All clips play while visible, no “top N by screen area” rule (center of the 3D ring read smaller and was wrongly paused). */
     const playAllEligible = () => {
       if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
         pauseAll();

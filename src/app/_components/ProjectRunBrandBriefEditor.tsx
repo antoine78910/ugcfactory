@@ -88,7 +88,7 @@ export function ProjectRunBrandBriefEditor({
           <p className="text-xs font-semibold text-white/80">Product brief</p>
           <p className="mt-0.5 max-w-xl text-[11px] leading-snug text-white/45">
             Edit the core story (positioning, product, who it’s for). Extra scan detail stays available below for power
-            users — it still feeds the AI when you generate scripts.
+            users, it still feeds the AI when you generate scripts.
           </p>
         </div>
         <Button
@@ -110,7 +110,7 @@ export function ProjectRunBrandBriefEditor({
           onChange={(e) => setHero(e.target.value)}
           className="min-h-[100px] border-white/10 bg-black/40 text-sm leading-relaxed text-white/85"
           spellCheck
-          placeholder="Brand, product, promise, audience — the part you’d tweak before generating new angles."
+          placeholder="Brand, product, promise, audience, the part you’d tweak before generating new angles."
         />
       </div>
 
@@ -121,7 +121,7 @@ export function ProjectRunBrandBriefEditor({
             onClick={() => setFullOpen((o) => !o)}
             className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-[11px] font-semibold text-white/60 transition hover:bg-white/[0.04] hover:text-white/75"
           >
-            <span>More from the scan ({tail.length.toLocaleString()} chars) — optional detail</span>
+            <span>More from the scan ({tail.length.toLocaleString()} chars), optional detail</span>
             <ChevronDown className={cn("h-4 w-4 shrink-0 transition", fullOpen && "rotate-180")} aria-hidden />
           </button>
           {fullOpen ? (
@@ -133,7 +133,7 @@ export function ProjectRunBrandBriefEditor({
                 spellCheck
               />
               <p className="mt-1.5 text-[10px] text-white/35">
-                Objections, extra angles ideas, positioning nuance — kept for context, hidden by default so the panel
+                Objections, extra angles ideas, positioning nuance, kept for context, hidden by default so the panel
                 stays light.
               </p>
             </div>

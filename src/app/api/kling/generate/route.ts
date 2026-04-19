@@ -4,8 +4,21 @@ export const maxDuration = 120;
 import { NextResponse } from "next/server";
 import { kieMarketCreateTask } from "@/lib/kieMarket";
 import { mirrorImageUrlForPiapiSeedance } from "@/lib/mirrorImageUrlForPiapi";
+import {
+  mirrorAudioUrlForPiapiSeedance,
+  mirrorVideoUrlForPiapiSeedance,
+} from "@/lib/mirrorSeedanceReferenceMedia";
 import { resolveKieVideoPickerToMarketModel } from "@/lib/kieVideoModelResolver";
-import { encodePiapiTaskId, piapiCreateSeedanceTask, type PiapiSeedanceTaskType } from "@/lib/piapiSeedance";
+import {
+  encodePiapiTaskId,
+  piapiCreateSeedanceTask,
+  SEEDANCE_COMPACT_PREVIEW_MAX_IMAGE_URLS,
+  SEEDANCE_PREVIEW_MAX_IMAGE_URLS,
+  SEEDANCE_PRO_MAX_IMAGE_URLS,
+  SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS,
+  type PiapiSeedanceAspectRatio,
+  type PiapiSeedanceTaskType,
+} from "@/lib/piapiSeedance";
 import { hasPersonalApiKey } from "@/lib/personalApiBypass";
 import {
   canUseStudioVideoModel,
@@ -16,7 +29,10 @@ import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/ge
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { getUserPlan } from "@/lib/supabase/getUserPlan";
 import { isKieServableReferenceImageUrl } from "@/lib/kieSoraReferenceImage";
-import { validateStudioVideoJobDuration } from "@/lib/studioVideoModelCapabilities";
+import {
+  validateStudioVideoJobDuration,
+  studioVideoIsSeedance2ProPickerId,
+} from "@/lib/studioVideoModelCapabilities";
 
 type KlingAspectRatio = "16:9" | "9:16" | "1:1";
 type KlingMode = "std" | "pro";
@@ -37,27 +53,43 @@ type Body = {
   marketModel?: string;
   prompt: string;
   imageUrl?: string;
+  /** Last frame for Kling 3.0 (two URLs in `image_urls`) and Seedance first/last ordering. */
+  endImageUrl?: string;
   duration?: number; // seconds
   aspectRatio?: KlingAspectRatio; // optional if image is provided
   sound?: boolean;
   mode?: KlingMode;
-  /** Kling 3.0 only — multi-shot sequencing */
+  /** Kling 3.0 only, multi-shot sequencing */
   multiShots?: boolean;
-  /** Kling 3.0 only — when `multiShots` is true, each shot prompt + duration (seconds). */
+  /** Kling 3.0 only, when `multiShots` is true, each shot prompt + duration (seconds). */
   multiPrompt?: KlingMultiPromptShot[];
-  /** Kling 3.0 only — `@name` references in prompts; max 3 elements, 2–4 image URLs each. */
+  /**
+   * Kling 3.0: `@name` in prompts + `kling_elements` in the Market payload.
+   * Seedance (PiAPI): same shape in the request body; URLs are flattened in order (start → element refs → end)
+   * and the prompt should use `@image1` … `@imageN` (auto-prefixed when missing). Max 12 (Pro) / 9 (Preview) images total.
+   */
   klingElements?: KlingElementInput[];
+  /**
+   * Seedance 2 Preview / Fast Preview (+ VIP variants): 1–4 HTTPS image URLs only.
+   * When set, replaces `imageUrl` / `endImageUrl` / `klingElements` ordering for that request.
+   */
+  seedancePreviewImageUrls?: string[];
+  /**
+   * Seedance 2 / Fast only: ordered omni references (images, videos, audio).
+   * Mutually exclusive with `imageUrl` / `endImageUrl` / `klingElements` in the Studio client.
+   */
+  seedanceOmniMedia?: { type: "image" | "video" | "audio"; url: string }[];
   personalApiKey?: string;
   piapiApiKey?: string;
 };
 
-/** Per-shot length — Kling 3.0 Market API: integer 1–12 seconds each. @see https://docs.kie.ai/market/kling/kling-3-0 */
+/** Per-shot length, Kling 3.0 Market API: integer 1–12 seconds each. @see https://docs.kie.ai/market/kling/kling-3-0 */
 const KLING_SHOT_DURATION_MIN = 1;
 const KLING_SHOT_DURATION_MAX = 12;
 const KLING_MULTI_MAX_SHOTS = 5;
 const KLING_ELEMENT_MAX = 3;
 
-/** Total clip length — Kling 3.0 `input.duration` string enum 3…15 must equal sum of `multi_prompt` durations. */
+/** Total clip length, Kling 3.0 `input.duration` string enum 3…15 must equal sum of `multi_prompt` durations. */
 const KLING_TOTAL_DURATION_MIN = 3;
 const KLING_TOTAL_DURATION_MAX = 15;
 
@@ -111,12 +143,14 @@ function normalizeKlingMultiPrompt(body: Body): {
 
 function normalizeKlingElements(
   raw: unknown,
+  opts?: { minUrlsPerElement?: number },
 ): { ok: true; elements: KlingElementInput[] } | { ok: false; error: string } {
   if (raw == null) return { ok: true, elements: [] };
   if (!Array.isArray(raw)) return { ok: false, error: "`klingElements` must be an array." };
   if (raw.length > KLING_ELEMENT_MAX) {
     return { ok: false, error: `At most ${KLING_ELEMENT_MAX} Kling elements are allowed.` };
   }
+  const minUrls = opts?.minUrlsPerElement ?? 2;
   const elements: KlingElementInput[] = [];
   for (let i = 0; i < raw.length; i++) {
     const row = raw[i] as KlingElementInput | null;
@@ -131,15 +165,133 @@ function normalizeKlingElements(
     const urls = Array.isArray(row?.element_input_urls)
       ? row.element_input_urls.map((u) => String(u ?? "").trim()).filter(Boolean)
       : [];
-    if (urls.length < 2 || urls.length > 4) {
+    if (urls.length < minUrls || urls.length > 4) {
       return {
         ok: false,
-        error: `Element "${name}": provide between 2 and 4 reference image URLs.`,
+        error: `Element "${name}": provide between ${minUrls} and 4 reference image URLs.`,
       };
     }
     elements.push({ name, description: desc, element_input_urls: urls });
   }
   return { ok: true, elements };
+}
+
+function pushUniqueImageUrl(out: string[], raw: string, max: number): void {
+  const u = String(raw ?? "").trim();
+  if (!u || out.includes(u) || out.length >= max) return;
+  out.push(u);
+}
+
+/** Start frame, then each element’s reference URLs, then optional end frame (Seedance / PiAPI order). */
+function buildSeedanceOrderedImageUrls(
+  start: string,
+  end: string | undefined,
+  elements: KlingElementInput[],
+  max: number,
+): string[] {
+  const out: string[] = [];
+  pushUniqueImageUrl(out, start, max);
+  for (const el of elements) {
+    for (const u of el.element_input_urls) {
+      pushUniqueImageUrl(out, u, max);
+    }
+  }
+  if (end) pushUniqueImageUrl(out, end, max);
+  return out;
+}
+
+function isSeedanceCompactPreviewMarketModel(raw: string): boolean {
+  return (
+    raw === "bytedance/seedance-2-preview" ||
+    raw === "bytedance/seedance-2-fast-preview" ||
+    raw === "bytedance/seedance-2-preview-vip" ||
+    raw === "bytedance/seedance-2-fast-preview-vip"
+  );
+}
+
+function normalizeSeedanceCompactPreviewUrls(
+  body: Body,
+): { ok: true; urls: string[] } | { ok: false; error: string } {
+  const raw = body.seedancePreviewImageUrls;
+  if (raw == null) return { ok: true, urls: [] };
+  if (!Array.isArray(raw)) {
+    return { ok: false, error: "`seedancePreviewImageUrls` must be an array." };
+  }
+  if (raw.length === 0) return { ok: true, urls: [] };
+  if (raw.length > SEEDANCE_COMPACT_PREVIEW_MAX_IMAGE_URLS) {
+    return {
+      ok: false,
+      error: `At most ${SEEDANCE_COMPACT_PREVIEW_MAX_IMAGE_URLS} images are allowed for Seedance Preview compact upload.`,
+    };
+  }
+  const urls: string[] = [];
+  const seen = new Set<string>();
+  for (let i = 0; i < raw.length; i++) {
+    const u = typeof raw[i] === "string" ? raw[i]!.trim() : "";
+    if (!u) {
+      return { ok: false, error: `Reference image ${i + 1}: URL is empty.` };
+    }
+    if (!isKieServableReferenceImageUrl(u)) {
+      return {
+        ok: false,
+        error: `Reference image ${i + 1}: must be a reachable HTTPS image URL.`,
+      };
+    }
+    if (seen.has(u)) continue;
+    seen.add(u);
+    urls.push(u);
+  }
+  if (!urls.length) {
+    return { ok: false, error: "`seedancePreviewImageUrls` must contain at least one valid image URL." };
+  }
+  return { ok: true, urls };
+}
+
+type SeedanceOmniMediaItem = { type: "image" | "video" | "audio"; url: string };
+
+function normalizeSeedanceOmniMedia(
+  body: Body,
+): { ok: true; items: SeedanceOmniMediaItem[] } | { ok: false; error: string } {
+  const raw = body.seedanceOmniMedia;
+  if (raw == null) return { ok: true, items: [] };
+  if (!Array.isArray(raw)) {
+    return { ok: false, error: "`seedanceOmniMedia` must be an array." };
+  }
+  if (raw.length > SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS) {
+    return {
+      ok: false,
+      error: `At most ${SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS} Seedance omni references are allowed.`,
+    };
+  }
+  const items: SeedanceOmniMediaItem[] = [];
+  const seen = new Set<string>();
+  for (let i = 0; i < raw.length; i++) {
+    const row = raw[i] as { type?: unknown; url?: unknown };
+    const t = typeof row?.type === "string" ? row.type.trim().toLowerCase() : "";
+    if (t !== "image" && t !== "video" && t !== "audio") {
+      return { ok: false, error: `Reference ${i + 1}: type must be image, video, or audio.` };
+    }
+    const u = typeof row?.url === "string" ? row.url.trim() : "";
+    if (!u) {
+      return { ok: false, error: `Reference ${i + 1}: url is required.` };
+    }
+    if (!isKieServableReferenceImageUrl(u)) {
+      return { ok: false, error: `Reference ${i + 1}: must be a reachable HTTPS URL.` };
+    }
+    if (seen.has(u)) continue;
+    seen.add(u);
+    items.push({ type: t as "image" | "video" | "audio", url: u });
+  }
+  const img = items.filter((x) => x.type === "image").length;
+  const vid = items.filter((x) => x.type === "video").length;
+  const aud = items.filter((x) => x.type === "audio").length;
+  if (items.length > 0 && aud > 0 && img === 0 && vid === 0) {
+    return {
+      ok: false,
+      error: "Seedance omni mode does not allow audio-only references. Add at least one image or video.",
+    };
+  }
+  return { ok: true, items };
 }
 
 function isKling26(model: string): boolean {
@@ -179,7 +331,42 @@ export async function POST(req: Request) {
 
   const rawModel = (body.marketModel ?? "kling-3.0/video").trim() || "kling-3.0/video";
   const imageUrlRaw = (body.imageUrl ?? "").trim();
+  const endImageUrlRaw = (body.endImageUrl ?? "").trim();
   const hasKieReferenceImage = isKieServableReferenceImageUrl(imageUrlRaw);
+  const hasKieEndImage = isKieServableReferenceImageUrl(endImageUrlRaw);
+  const compactNorm = normalizeSeedanceCompactPreviewUrls(body);
+  if (!compactNorm.ok) {
+    return NextResponse.json({ error: compactNorm.error }, { status: 400 });
+  }
+  if (compactNorm.urls.length > 0 && !isSeedanceCompactPreviewMarketModel(rawModel)) {
+    return NextResponse.json(
+      { error: "`seedancePreviewImageUrls` is only valid for Seedance Preview or Fast Preview models." },
+      { status: 400 },
+    );
+  }
+  const useCompactSeedancePreviewRefs =
+    isSeedanceCompactPreviewMarketModel(rawModel) && compactNorm.urls.length > 0;
+
+  const omniNorm = normalizeSeedanceOmniMedia(body);
+  if (!omniNorm.ok) {
+    return NextResponse.json({ error: omniNorm.error }, { status: 400 });
+  }
+  if (omniNorm.items.length > 0 && !studioVideoIsSeedance2ProPickerId(rawModel)) {
+    return NextResponse.json(
+      { error: "`seedanceOmniMedia` is only valid for Seedance 2 or Seedance 2 Fast." },
+      { status: 400 },
+    );
+  }
+  const useSeedanceProOmniRefs = studioVideoIsSeedance2ProPickerId(rawModel) && omniNorm.items.length > 0;
+  if (useSeedanceProOmniRefs && (hasKieReferenceImage || hasKieEndImage)) {
+    return NextResponse.json(
+      {
+        error: "When using `seedanceOmniMedia`, omit `imageUrl` and `endImageUrl`.",
+      },
+      { status: 400 },
+    );
+  }
+
   const model = resolveKieVideoPickerToMarketModel(rawModel, hasKieReferenceImage);
   const prompt = (body.prompt ?? "").trim();
 
@@ -192,16 +379,50 @@ export async function POST(req: Request) {
   if (multiNorm && !multiNorm.ok) {
     return NextResponse.json({ error: multiNorm.error }, { status: 400 });
   }
-  const elementsNorm = kling30Multi ? normalizeKlingElements(body.klingElements) : { ok: true as const, elements: [] };
+  const elementUrlMin = rawModel.startsWith("bytedance/seedance") ? 1 : 2;
+  const elementsNorm =
+    model === "kling-3.0/video" || rawModel.startsWith("bytedance/seedance")
+      ? normalizeKlingElements(body.klingElements, { minUrlsPerElement: elementUrlMin })
+      : { ok: true as const, elements: [] };
   if (!elementsNorm.ok) {
     return NextResponse.json({ error: elementsNorm.error }, { status: 400 });
   }
 
-  if (kling30Multi && elementsNorm.elements.length > 0 && !hasKieReferenceImage) {
+  if (useCompactSeedancePreviewRefs && elementsNorm.elements.length > 0) {
+    return NextResponse.json(
+      {
+        error:
+          "Do not combine `klingElements` with `seedancePreviewImageUrls`. Use only the compact reference image list (1–4 URLs).",
+      },
+      { status: 400 },
+    );
+  }
+
+  if (useSeedanceProOmniRefs && elementsNorm.elements.length > 0) {
+    return NextResponse.json(
+      {
+        error:
+          "Do not combine `klingElements` with `seedanceOmniMedia`. Use only the omni media list (images, videos, audio).",
+      },
+      { status: 400 },
+    );
+  }
+
+  if (model === "kling-3.0/video" && elementsNorm.elements.length > 0 && !hasKieReferenceImage) {
     return NextResponse.json(
       {
         error:
           "Kling 3.0 requires a start frame (`imageUrl`) when using element references (`kling_elements` / @name in prompts).",
+      },
+      { status: 400 },
+    );
+  }
+
+  if (rawModel.startsWith("bytedance/seedance") && elementsNorm.elements.length > 0 && !hasKieReferenceImage) {
+    return NextResponse.json(
+      {
+        error:
+          "Seedance requires a start frame (`imageUrl`) when using reference elements (extra images use @image2, @image3, … in the prompt).",
       },
       { status: 400 },
     );
@@ -282,11 +503,19 @@ export async function POST(req: Request) {
           multi_shots: false,
           multi_prompt: [],
         };
+        if (elementsNorm.elements.length) {
+          input.kling_elements = elementsNorm.elements.map((el) => ({
+            name: el.name,
+            description: el.description,
+            element_input_urls: el.element_input_urls,
+          }));
+        }
       }
 
       if (hasKieReferenceImage) {
-        // Kling 3.0 multi-shot: first frame only (same as single-frame I2V).
-        input.image_urls = [imageUrlRaw];
+        const frameUrls = [imageUrlRaw];
+        if (hasKieEndImage) frameUrls.push(endImageUrlRaw);
+        input.image_urls = frameUrls;
       } else if (body.aspectRatio) {
         input.aspect_ratio = body.aspectRatio;
       }
@@ -334,45 +563,143 @@ export async function POST(req: Request) {
         taskType === "seedance-2-fast-preview" ||
         taskType === "seedance-2-preview-vip" ||
         taskType === "seedance-2-fast-preview-vip";
-      if (preview && !hasKieReferenceImage) {
+      if (preview && !hasKieReferenceImage && !useCompactSeedancePreviewRefs) {
         return NextResponse.json(
-          { error: "This Seedance preview model requires `imageUrl` (image-to-video)." },
+          { error: "This Seedance preview model requires `imageUrl` (image-to-video) or `seedancePreviewImageUrls`." },
+          { status: 400 },
+        );
+      }
+      if (hasKieEndImage && !hasKieReferenceImage && !useCompactSeedancePreviewRefs) {
+        return NextResponse.json(
+          { error: "Provide `imageUrl` (start frame) when using `endImageUrl` on Seedance." },
           { status: 400 },
         );
       }
       const duration = Number(body.duration ?? 10);
-      const seedanceAspectRatio =
-        body.aspectRatio === "1:1" ? ("4:3" as const) : (body.aspectRatio ?? "9:16");
-      let piapiImageUrl: string | undefined;
-      if (hasKieReferenceImage) {
+      const maxImages = preview ? SEEDANCE_PREVIEW_MAX_IMAGE_URLS : SEEDANCE_PRO_MAX_IMAGE_URLS;
+
+      const seedanceAspectRatio: PiapiSeedanceAspectRatio =
+        body.aspectRatio === "1:1" ? "4:3" : ((body.aspectRatio ?? "9:16") as PiapiSeedanceAspectRatio);
+
+      if (useSeedanceProOmniRefs) {
+        const items = omniNorm.items;
+        if (items.length > SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS) {
+          return NextResponse.json(
+            {
+              error: `Too many Seedance omni references (${items.length}). Maximum is ${SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS}.`,
+            },
+            { status: 400 },
+          );
+        }
+        const imageOrder: string[] = [];
+        const videoOrder: string[] = [];
+        const audioOrder: string[] = [];
+        for (const it of items) {
+          if (it.type === "image") imageOrder.push(it.url);
+          else if (it.type === "video") videoOrder.push(it.url);
+          else audioOrder.push(it.url);
+        }
+        const mirroredImg: string[] = [];
+        const mirroredVid: string[] = [];
+        const mirroredAud: string[] = [];
         try {
-          piapiImageUrl = await mirrorImageUrlForPiapiSeedance(imageUrlRaw, user.id);
+          for (const u of imageOrder) {
+            mirroredImg.push(await mirrorImageUrlForPiapiSeedance(u, user.id));
+          }
+          for (const u of videoOrder) {
+            mirroredVid.push(await mirrorVideoUrlForPiapiSeedance(u, user.id));
+          }
+          for (const u of audioOrder) {
+            mirroredAud.push(await mirrorAudioUrlForPiapiSeedance(u, user.id));
+          }
         } catch (mirrorErr) {
-          logGenerationFailure("kling/generate/mirror-seedance-image", mirrorErr, {
+          logGenerationFailure("kling/generate/mirror-seedance-omni", mirrorErr, {
             model,
-            imageHost: (() => {
-              try {
-                return new URL(imageUrlRaw).hostname;
-              } catch {
-                return "invalid";
-              }
-            })(),
+            count: items.length,
           });
           return NextResponse.json(
             {
               error:
                 mirrorErr instanceof Error
                   ? mirrorErr.message
-                  : "Could not prepare the reference image for the video provider.",
+                  : "Could not prepare reference media for the video provider.",
             },
             { status: 502 },
           );
         }
+        const rawTaskId = await piapiCreateSeedanceTask({
+          taskType,
+          prompt,
+          imageUrls: mirroredImg.length ? mirroredImg : undefined,
+          videoUrls: mirroredVid.length ? mirroredVid : undefined,
+          audioUrls: mirroredAud.length ? mirroredAud : undefined,
+          preferOmniReference: true,
+          duration,
+          aspectRatio: seedanceAspectRatio,
+          overrideApiKey: piapiKey,
+        });
+        return NextResponse.json({
+          taskId: encodePiapiTaskId(rawTaskId),
+          provider: "piapi",
+          model,
+        });
       }
+
+      let ordered: string[] = [];
+      if (useCompactSeedancePreviewRefs) {
+        ordered = compactNorm.urls.slice(0, SEEDANCE_COMPACT_PREVIEW_MAX_IMAGE_URLS);
+      } else if (elementsNorm.elements.length > 0 || hasKieEndImage) {
+        if (!hasKieReferenceImage) {
+          return NextResponse.json(
+            { error: "Seedance requires `imageUrl` when using an end frame or reference elements." },
+            { status: 400 },
+          );
+        }
+        ordered = buildSeedanceOrderedImageUrls(
+          imageUrlRaw,
+          hasKieEndImage ? endImageUrlRaw : undefined,
+          elementsNorm.elements,
+          maxImages,
+        );
+      } else if (hasKieReferenceImage) {
+        ordered = [imageUrlRaw];
+      }
+
+      if (ordered.length > maxImages) {
+        return NextResponse.json(
+          {
+            error: `Too many Seedance reference images (${ordered.length}). Maximum is ${maxImages} for this model.`,
+          },
+          { status: 400 },
+        );
+      }
+
+      const mirrored: string[] = [];
+      try {
+        for (const u of ordered) {
+          mirrored.push(await mirrorImageUrlForPiapiSeedance(u, user.id));
+        }
+      } catch (mirrorErr) {
+        logGenerationFailure("kling/generate/mirror-seedance-images", mirrorErr, {
+          model,
+          count: ordered.length,
+        });
+        return NextResponse.json(
+          {
+            error:
+              mirrorErr instanceof Error
+                ? mirrorErr.message
+                : "Could not prepare reference images for the video provider.",
+          },
+          { status: 502 },
+        );
+      }
+
       const rawTaskId = await piapiCreateSeedanceTask({
         taskType,
         prompt,
-        imageUrl: piapiImageUrl,
+        imageUrls: mirrored.length ? mirrored : undefined,
+        forceOmniReference: elementsNorm.elements.length > 0,
         duration,
         aspectRatio: seedanceAspectRatio,
         overrideApiKey: piapiKey,

@@ -98,7 +98,7 @@ export function StickyNoteNode({ id, data: rawData, selected }: NodeProps<Sticky
         onMouseEnter={() => window.dispatchEvent(new CustomEvent("workflow:hover-node", { detail: { nodeId: id } }))}
         onMouseLeave={() => window.dispatchEvent(new CustomEvent("workflow:unhover-node"))}
       >
-        {/* Draggable strip (editor is nodrag — without this, only the thin padding could move the note). */}
+        {/* Draggable strip (editor is nodrag, without this, only the thin padding could move the note). */}
         <div
           className="flex shrink-0 cursor-grab items-center gap-1 border-b border-white/10 px-2 py-1.5 active:cursor-grabbing"
           title="Drag to move"

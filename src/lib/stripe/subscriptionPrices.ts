@@ -1,6 +1,6 @@
 /**
  * Stripe Price IDs for subscription checkout (monthly).
- * Set in env — see `.env.example`.
+ * Set in env, see `.env.example`.
  */
 
 import type { BillingCheckoutCurrency } from "@/lib/geo/billingRegion";
@@ -73,7 +73,7 @@ export function getMonthlySubscriptionPriceId(
   return usd[planId];
 }
 
-/** Yearly prices — optional; create in Stripe and set env when ready. */
+/** Yearly prices, optional; create in Stripe and set env when ready. */
 export function getYearlySubscriptionPriceId(
   planId: SubscriptionPlanId,
   currency: BillingCheckoutCurrency = "usd",

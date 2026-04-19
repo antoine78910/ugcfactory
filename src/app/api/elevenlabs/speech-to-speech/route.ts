@@ -233,7 +233,7 @@ export async function POST(req: Request) {
   } catch (err) {
     logGenerationFailure("elevenlabs/speech-to-speech", err, { rowId, voiceId });
     const rawMessage = messageFromUnknown(err);
-    console.error("[voice-change] FAILED — raw error:", rawMessage);
+    console.error("[voice-change] FAILED, raw error:", rawMessage);
     await supabase
       .from("studio_generations")
       .update({

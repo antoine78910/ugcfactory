@@ -3,11 +3,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AtSign,
+  ChevronDown,
   CirclePlus,
   Clock,
   Expand,
   HelpCircle,
   ImageIcon,
+  Music2,
   Shrink,
   Sparkles,
   Trash2,
@@ -27,10 +29,19 @@ import { StudioEmptyExamples, StudioOutputPane } from "@/app/_components/StudioE
 import { StudioGenerationsHistory } from "@/app/_components/StudioGenerationsHistory";
 import { userMessageFromCaughtError } from "@/lib/generationUserMessage";
 import {
+  assertStudioAudioUpload,
+  assertStudioImageUpload,
+  assertStudioVideoUpload,
+  fileExtensionLower,
+  inferStudioUploadKind,
+  STUDIO_AUDIO_FILE_ACCEPT,
   STUDIO_IMAGE_FILE_ACCEPT,
   STUDIO_VIDEO_FILE_ACCEPT,
 } from "@/lib/studioUploadValidation";
-import type { StudioHistoryItem } from "@/app/_components/StudioGenerationsHistory";
+import {
+  isProbablyVideoUrl,
+  type StudioHistoryItem,
+} from "@/app/_components/StudioGenerationsHistory";
 import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
 import {
   StudioModelPicker,
@@ -66,7 +77,13 @@ import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
 import { readStudioHistoryLocal, writeStudioHistoryLocal } from "@/lib/studioHistoryLocalStorage";
 import { uploadFileToCdn, type UploadFileKind } from "@/lib/uploadBlobUrlToCdn";
 import { cn } from "@/lib/utils";
-import { STUDIO_VIDEO_TAB_KINDS } from "@/lib/studioGenerationKinds";
+import { STUDIO_GENERATION_KIND_STUDIO_IMAGE, STUDIO_VIDEO_TAB_KINDS } from "@/lib/studioGenerationKinds";
+import {
+  SEEDANCE_COMPACT_PREVIEW_MAX_IMAGE_URLS,
+  SEEDANCE_PREVIEW_MAX_IMAGE_URLS,
+  SEEDANCE_PRO_MAX_IMAGE_URLS,
+  SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS,
+} from "@/lib/piapiSeedance";
 import {
   studioVideoDurationRangeLabel,
   studioVideoDurationSecOptions,
@@ -76,12 +93,18 @@ import {
   studioVideoSupportsMultiShot,
   studioVideoSupportsNativeAudio,
   studioVideoSupportsQualityPicker,
+  studioVideoUsesSeedanceCompactReferenceUploads,
+  studioVideoUsesSeedanceProOmniMediaUploads,
   STUDIO_VEO_DURATION_HINT,
 } from "@/lib/studioVideoModelCapabilities";
 
 const LS_STUDIO_VIDEO_HISTORY = "ugc_studio_video_history_v1";
 
-/** Kling 3.0 multi-shot: per-shot duration — Market API integer 1–12s each (see Kling 3.0 docs). */
+/** PiAPI Seedance 2 Pro: reference videos must be MP4 or MOV (not WebM). */
+const SEEDANCE_PRO_OMNI_VIDEO_ACCEPT = "video/mp4,video/quicktime,.mp4,.mov";
+const SEEDANCE_PRO_OMNI_FILE_ACCEPT = `${STUDIO_IMAGE_FILE_ACCEPT},${SEEDANCE_PRO_OMNI_VIDEO_ACCEPT},${STUDIO_AUDIO_FILE_ACCEPT}`;
+
+/** Kling 3.0 multi-shot: per-shot duration, Market API integer 1–12s each (see Kling 3.0 docs). */
 const KLING_MULTI_SHOT_SEC_MIN = 1;
 const KLING_MULTI_SHOT_SEC_MAX = 12;
 const KLING_MULTI_MAX_SHOTS = 5;
@@ -93,9 +116,43 @@ const KLING_SHOT_DURATION_OPTIONS = Array.from(
 
 type KlingShotRow = { id: string; prompt: string; durationSec: number };
 type KlingElementDraft = { id: string; name: string; description: string; urls: string[] };
+type SeedanceOmniRefItem = { kind: "image" | "video" | "audio"; url: string };
+
+/** True if the prompt contains `@name` (case-insensitive) for Kling element references. */
+function promptUsesKlingElementTag(prompt: string, elementName: string): boolean {
+  const n = elementName.trim().toLowerCase();
+  if (!n) return false;
+  return prompt.toLowerCase().includes(`@${n}`);
+}
+
+type KlingElementPayloadRow = { name: string; description: string; element_input_urls: string[] };
+
+function countUniqueSeedanceReferenceUrls(
+  start: string | null | undefined,
+  end: string | null | undefined,
+  payload: KlingElementPayloadRow[] | undefined,
+): number {
+  const seen = new Set<string>();
+  const add = (raw: string | null | undefined) => {
+    const u = String(raw ?? "").trim();
+    if (!u || seen.has(u)) return;
+    seen.add(u);
+  };
+  add(start);
+  for (const el of payload ?? []) {
+    for (const u of el.element_input_urls) add(u);
+  }
+  add(end);
+  return seen.size;
+}
 
 const KLING_ELEMENT_MEDIA_MAX_BYTES = 10 * 1024 * 1024;
 const KLING_ELEMENT_MEDIA_MIN_PX = 300;
+
+/** Kling 3.0 Market API requires 2+ refs per element; Seedance (PiAPI) allows a single ref per slot. */
+function minReferenceUrlsPerVideoElement(modelId: string): number {
+  return modelId.startsWith("bytedance/seedance") ? 1 : 2;
+}
 
 async function imageFileMeetsMinDimensions(file: File, minW: number, minH: number): Promise<boolean> {
   if (!file.type.startsWith("image/")) return true;
@@ -656,6 +713,14 @@ export default function StudioVideoPanel({
   const [tab, setTab] = useState<VideoTab>("create");
   const [startUrl, setStartUrl] = useState<string | null>(null);
   const [endUrl, setEndUrl] = useState<string | null>(null);
+  /** Seedance Preview / Fast Preview: 1–4 uploaded refs (replaces start/end frames). */
+  const [seedanceCompactRefUrls, setSeedanceCompactRefUrls] = useState<string[]>([]);
+  const [seedanceCompactUploadBusy, setSeedanceCompactUploadBusy] = useState(false);
+  const seedanceCompactFileRef = useRef<HTMLInputElement>(null);
+  /** Seedance 2 / Fast: omni_reference media strip (images, MP4/MOV, MP3/WAV). */
+  const [seedanceProOmniItems, setSeedanceProOmniItems] = useState<SeedanceOmniRefItem[]>([]);
+  const [seedanceProOmniUploadBusy, setSeedanceProOmniUploadBusy] = useState(false);
+  const seedanceProOmniFileRef = useRef<HTMLInputElement>(null);
   const [prompt, setPrompt] = useState("");
   const [multiShot, setMultiShot] = useState(false);
   /** Kling 3.0 multi-shot: per-shot prompts via provider `multi_prompt`. */
@@ -721,7 +786,7 @@ export default function StudioVideoPanel({
       );
       if (res.status === 401) {
         setServerHistory(false);
-        // Do NOT wipe historyItems — keep the localStorage seed so the user's
+        // Do NOT wipe historyItems, keep the localStorage seed so the user's
         // previously generated videos remain visible until they re-authenticate.
         return;
       }
@@ -821,10 +886,15 @@ export default function StudioVideoPanel({
   const [avatarUrls, setAvatarUrls] = useState<string[]>([]);
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   const [avatarPickTarget, setAvatarPickTarget] = useState<
-    "create_start" | "create_end" | "edit_motion" | "edit_elements"
+    "create_start" | "create_end" | "edit_motion" | "edit_elements" | "kling_element"
   >("create_start");
+  const [studioImagePickOpen, setStudioImagePickOpen] = useState(false);
+  const [studioImagePickItems, setStudioImagePickItems] = useState<StudioHistoryItem[]>([]);
+  const [studioImagePickLoading, setStudioImagePickLoading] = useState(false);
 
   const meta = MODEL_OPTIONS.find((m) => m.id === modelId)!;
+  const compactSeedanceRefUploads = studioVideoUsesSeedanceCompactReferenceUploads(modelId);
+  const seedanceProOmniRefUploads = studioVideoUsesSeedanceProOmniMediaUploads(modelId);
   const isSeedanceStrictNoFaceModel = SEEDANCE_STRICT_NO_FACE_MODELS.includes(modelId);
   const isSeedanceAiFaceOnlyModel = SEEDANCE_AI_FACE_ONLY_MODELS.includes(modelId);
   const isSeedancePreviewModel = SEEDANCE_PREVIEW_MODELS.includes(modelId);
@@ -874,6 +944,45 @@ export default function StudioVideoPanel({
       return null;
     });
   }, [klingCustomMulti]);
+
+  useEffect(() => {
+    const compact = studioVideoUsesSeedanceCompactReferenceUploads(modelId);
+    const proOmni = studioVideoUsesSeedanceProOmniMediaUploads(modelId);
+    if (compact) {
+      setStartUrl(null);
+      setEndUrl(null);
+      setStartFramePreviewBlob((prev) => {
+        if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
+        return null;
+      });
+      setEndFramePreviewBlob((prev) => {
+        if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
+        return null;
+      });
+      setSeedanceProOmniItems([]);
+      setKlingElementDrafts([]);
+      setKlingElementForm(null);
+      setKlingElementsModalOpen(false);
+    } else if (proOmni) {
+      setStartUrl(null);
+      setEndUrl(null);
+      setStartFramePreviewBlob((prev) => {
+        if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
+        return null;
+      });
+      setEndFramePreviewBlob((prev) => {
+        if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
+        return null;
+      });
+      setSeedanceCompactRefUrls([]);
+      setKlingElementDrafts([]);
+      setKlingElementForm(null);
+      setKlingElementsModalOpen(false);
+    } else {
+      setSeedanceCompactRefUrls([]);
+      setSeedanceProOmniItems([]);
+    }
+  }, [modelId]);
 
   const motionEdit = isMotionEditPicker(editPickerId);
   const editCredits = useMemo(
@@ -1039,19 +1148,24 @@ export default function StudioVideoPanel({
   const saveKlingElementForm = useCallback(() => {
     if (!klingElementForm) return;
     const name = klingElementForm.name.trim();
-    const desc = klingElementForm.description.trim();
     if (!name) {
       toast.error("Name required", { description: "Enter an element name." });
       return;
     }
-    if (!desc) {
-      toast.error("Description required", { description: "Enter an element description." });
+    const minUrls = minReferenceUrlsPerVideoElement(modelId);
+    const urlCount = klingElementForm.urls.length;
+    if (urlCount < minUrls || urlCount > 4) {
+      toast.error("Media required", {
+        description:
+          minUrls <= 1
+            ? "Add 1–4 reference images for this element."
+            : "Add 2–4 reference images (required by Kling 3.0 for element references).",
+      });
       return;
     }
-    const urlCount = klingElementForm.urls.length;
-    if (urlCount < 2 || urlCount > 4) {
-      toast.error("Media required", {
-        description: "Add 2–4 reference images (provider requirement).",
+    if (modelId === "kling-3.0/video" && !klingElementForm.description.trim()) {
+      toast.error("Description required", {
+        description: "Kling 3.0 needs a description for each element reference.",
       });
       return;
     }
@@ -1061,7 +1175,11 @@ export default function StudioVideoPanel({
       toast.error("Maximum 3 elements", { description: "Remove an element to add another." });
       return;
     }
-    const committed: KlingElementDraft = { ...klingElementForm, name, description: desc };
+    const committed: KlingElementDraft = {
+      ...klingElementForm,
+      name,
+      description: klingElementForm.description.trim(),
+    };
     const next = isEdit
       ? klingElementDrafts.map((d) => (d.id === id ? committed : d))
       : [...klingElementDrafts, committed];
@@ -1078,7 +1196,7 @@ export default function StudioVideoPanel({
         urls: [],
       });
     }
-  }, [klingElementForm, klingElementDrafts]);
+  }, [klingElementForm, klingElementDrafts, modelId]);
 
   const onKlingElementFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1120,6 +1238,112 @@ export default function StudioVideoPanel({
     }
   }, []);
 
+  const onSeedanceCompactFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (file.size > KLING_ELEMENT_MEDIA_MAX_BYTES) {
+      toast.error("File too large", { description: "Each image must be 10MB or less." });
+      return;
+    }
+    const dimsOk = await imageFileMeetsMinDimensions(
+      file,
+      KLING_ELEMENT_MEDIA_MIN_PX,
+      KLING_ELEMENT_MEDIA_MIN_PX,
+    );
+    if (!dimsOk) {
+      toast.error("Image too small", {
+        description: `Use images at least ${KLING_ELEMENT_MEDIA_MIN_PX}×${KLING_ELEMENT_MEDIA_MIN_PX}px.`,
+      });
+      return;
+    }
+    setSeedanceCompactUploadBusy(true);
+    try {
+      const u = await uploadStudioMediaFile(file, "image");
+      setSeedanceCompactRefUrls((prev) =>
+        prev.length >= SEEDANCE_COMPACT_PREVIEW_MAX_IMAGE_URLS ? prev : [...prev, u],
+      );
+      toast.success("Image added");
+    } catch (err) {
+      toast.error("Upload failed", {
+        description: userMessageFromCaughtError(err, "Use JPEG, PNG, WebP, or GIF."),
+      });
+    } finally {
+      setSeedanceCompactUploadBusy(false);
+    }
+  }, []);
+
+  const onSeedanceProOmniFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (seedanceProOmniItems.length >= SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS) return;
+
+    const inferred = inferStudioUploadKind(file);
+    let kind: UploadFileKind = inferred;
+    try {
+      if (inferred === "image") {
+        assertStudioImageUpload(file);
+        if (file.size > KLING_ELEMENT_MEDIA_MAX_BYTES) {
+          toast.error("File too large", { description: "Each image must be 10MB or less." });
+          return;
+        }
+        const dimsOk = await imageFileMeetsMinDimensions(
+          file,
+          KLING_ELEMENT_MEDIA_MIN_PX,
+          KLING_ELEMENT_MEDIA_MIN_PX,
+        );
+        if (!dimsOk) {
+          toast.error("Image too small", {
+            description: `Use images at least ${KLING_ELEMENT_MEDIA_MIN_PX}×${KLING_ELEMENT_MEDIA_MIN_PX}px.`,
+          });
+          return;
+        }
+      } else if (inferred === "video") {
+        const ext = fileExtensionLower(file);
+        const mime = file.type || "";
+        const okProVideo =
+          ext === ".mp4" ||
+          ext === ".mov" ||
+          mime === "video/mp4" ||
+          mime === "video/quicktime";
+        if (!okProVideo) {
+          toast.error("Video format", {
+            description: "Seedance 2 reference videos must be MP4 or MOV (not WebM).",
+          });
+          return;
+        }
+        assertStudioVideoUpload(file);
+        kind = "video";
+      } else {
+        assertStudioAudioUpload(file);
+        kind = "audio";
+      }
+    } catch (err) {
+      toast.error("Invalid file", {
+        description: err instanceof Error ? err.message : "Choose another file.",
+      });
+      return;
+    }
+
+    setSeedanceProOmniUploadBusy(true);
+    try {
+      const u = await uploadStudioMediaFile(file, kind);
+      setSeedanceProOmniItems((prev) =>
+        prev.length >= SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS
+          ? prev
+          : [...prev, { kind: inferred === "image" ? "image" : inferred === "video" ? "video" : "audio", url: u }],
+      );
+      toast.success("Media added");
+    } catch (err) {
+      toast.error("Upload failed", {
+        description: userMessageFromCaughtError(err, "Try again."),
+      });
+    } finally {
+      setSeedanceProOmniUploadBusy(false);
+    }
+  }, [seedanceProOmniItems.length]);
+
   const applyAvatarToStartFrame = useCallback((avatarUrl: string) => {
     const u = avatarUrl.trim();
     if (!u) return;
@@ -1148,10 +1372,62 @@ export default function StudioVideoPanel({
     toast.success("Avatar added to elements");
   }, []);
 
+  const applyAvatarToKlingElement = useCallback((avatarUrl: string) => {
+    const u = avatarUrl.trim();
+    if (!u) return;
+    setKlingElementForm((prev) => {
+      if (!prev || prev.urls.length >= 4 || prev.urls.includes(u)) return prev;
+      return { ...prev, urls: [...prev.urls, u] };
+    });
+    toast.success("Image added to element");
+  }, []);
+
+  const openStudioImagesForElementPick = useCallback(async () => {
+    if (!klingElementForm) {
+      toast.error("Add or edit an element first.", { description: "Open the element form below." });
+      return;
+    }
+    if (klingElementForm.urls.length >= 4) return;
+    setStudioImagePickItems([]);
+    setStudioImagePickLoading(true);
+    setStudioImagePickOpen(true);
+    try {
+      const res = await fetch(
+        `/api/studio/generations?kind=${encodeURIComponent(STUDIO_GENERATION_KIND_STUDIO_IMAGE)}`,
+        { cache: "no-store" },
+      );
+      if (!res.ok) {
+        const t = await res.text().catch(() => "");
+        throw new Error(t || `HTTP ${res.status}`);
+      }
+      const json = (await res.json()) as { data?: StudioHistoryItem[] };
+      const rows = json.data ?? [];
+      const picks = rows.filter(
+        (r) =>
+          r.kind === "image" &&
+          r.status === "ready" &&
+          Boolean(r.mediaUrl?.trim()) &&
+          !isProbablyVideoUrl(r.mediaUrl),
+      );
+      setStudioImagePickItems(picks);
+    } catch (e) {
+      toast.error("Could not load studio images", {
+        description: userMessageFromCaughtError(e, "Try again."),
+      });
+      setStudioImagePickOpen(false);
+    } finally {
+      setStudioImagePickLoading(false);
+    }
+  }, [klingElementForm]);
+
   const onPickAvatar = useCallback(
     (url: string) => {
       if (avatarPickTarget === "edit_motion") {
         applyAvatarToMotionCharacter(url);
+        return;
+      }
+      if (avatarPickTarget === "kling_element") {
+        applyAvatarToKlingElement(url);
         return;
       }
       if (avatarPickTarget === "edit_elements") {
@@ -1167,6 +1443,7 @@ export default function StudioVideoPanel({
     [
       avatarPickTarget,
       applyAvatarToMotionCharacter,
+      applyAvatarToKlingElement,
       applyAvatarToElements,
       applyAvatarToStartFrame,
       applyAvatarToEndFrame,
@@ -1722,10 +1999,35 @@ export default function StudioVideoPanel({
       modelId !== "kling-3.0/video" &&
       modelId !== "kling-2.6/video" &&
       !startUrl &&
-      !studioVideoIsSeedance2ProPickerId(modelId)
+      !studioVideoIsSeedance2ProPickerId(modelId) &&
+      !compactSeedanceRefUploads &&
+      !seedanceProOmniRefUploads
     ) {
       toast.error("Add a start frame image for this model.");
       return;
+    }
+    if (compactSeedanceRefUploads) {
+      const n = seedanceCompactRefUrls.length;
+      if (n < 1) {
+        toast.error("Add 1–4 reference images (upload).");
+        return;
+      }
+      if (n > SEEDANCE_COMPACT_PREVIEW_MAX_IMAGE_URLS) {
+        toast.error(`At most ${SEEDANCE_COMPACT_PREVIEW_MAX_IMAGE_URLS} reference images.`);
+        return;
+      }
+    }
+    if (seedanceProOmniRefUploads && seedanceProOmniItems.length > 0) {
+      if (seedanceProOmniItems.every((x) => x.kind === "audio")) {
+        toast.error("Audio-only is not allowed", {
+          description: "Add at least one image or video (Seedance omni_reference).",
+        });
+        return;
+      }
+      if (seedanceProOmniItems.length > SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS) {
+        toast.error(`At most ${SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS} media files.`);
+        return;
+      }
     }
     const gate = studioVideoUpgradeMessage(planId, modelId);
     if (!isPersonalApiActive() && gate) {
@@ -1738,21 +2040,53 @@ export default function StudioVideoPanel({
       return;
     }
 
+    const supportsReferenceElements =
+      modelId === "kling-3.0/video" ||
+      (modelId.startsWith("bytedance/seedance") &&
+        !compactSeedanceRefUploads &&
+        !seedanceProOmniRefUploads);
+    const minElUrls = minReferenceUrlsPerVideoElement(modelId);
     const klingElementsPayloadEarly =
-      klingCustom && klingElementDrafts.length
+      supportsReferenceElements && klingElementDrafts.length
         ? klingElementDrafts
-            .filter((r) => r.name.trim() && r.urls.length >= 2)
+            .filter((r) => r.name.trim() && r.urls.length >= minElUrls)
             .map((r) => ({
               name: r.name.trim(),
               description: r.description.trim() || r.name.trim(),
               element_input_urls: r.urls.slice(0, 4),
             }))
         : undefined;
-    if (klingCustom && klingElementsPayloadEarly?.length && !startUrl?.trim()) {
-      toast.error("Add a start frame image when using Elements (@references).", {
-        description: "Kling 3.0 requires image_urls[0] for element references.",
+    if (supportsReferenceElements && klingElementsPayloadEarly?.length && !startUrl?.trim()) {
+      toast.error("Add a start frame image when using Elements.", {
+        description:
+          modelId === "kling-3.0/video"
+            ? "Kling 3.0 requires image_urls[0] for element references."
+            : "Seedance needs a start frame, then @image2, @image3, … in your prompt for extra references (see PiAPI Seedance docs).",
       });
       return;
+    }
+    if (modelId.startsWith("bytedance/seedance") && klingElementsPayloadEarly?.length) {
+      const maxSlots = modelId.includes("preview")
+        ? SEEDANCE_PREVIEW_MAX_IMAGE_URLS
+        : SEEDANCE_PRO_MAX_IMAGE_URLS;
+      const n = countUniqueSeedanceReferenceUrls(startUrl, endUrl, klingElementsPayloadEarly);
+      if (n > maxSlots) {
+        toast.error(`Too many reference images (${n}).`, {
+          description: `This Seedance model accepts at most ${maxSlots} unique URLs (start, optional end, and element images).`,
+        });
+        return;
+      }
+    }
+    if (modelId === "kling-3.0/video" && klingElementsPayloadEarly?.length && !klingCustom) {
+      const p = prompt.trim();
+      for (const el of klingElementsPayloadEarly) {
+        if (!promptUsesKlingElementTag(p, el.name)) {
+          toast.error(`Mention @${el.name} in your prompt`, {
+            description: "So the model knows which element to apply (same idea as Higgsfield-style @references).",
+          });
+          return;
+        }
+      }
     }
 
     const jobId = crypto.randomUUID();
@@ -1763,13 +2097,19 @@ export default function StudioVideoPanel({
     }
     const startedAt = Date.now();
     const historyAspect = videoHistoryAspectLabel(meta.family, aspect, veoAspect);
+    const seedanceCreatePosterUrl =
+      seedanceCompactRefUrls[0] ??
+      seedanceProOmniItems.find((i) => i.kind === "image")?.url ??
+      seedanceProOmniItems.find((i) => i.kind === "video")?.url ??
+      startUrl ??
+      undefined;
     setHistoryItems((prev) => [
       {
         id: jobId,
         kind: "video",
         status: "generating",
         label,
-        posterUrl: startUrl ?? undefined,
+        posterUrl: seedanceCreatePosterUrl,
         createdAt: startedAt,
         model: modelId,
         modelLabel: studioVideoDisplayLabel(modelId),
@@ -1787,6 +2127,11 @@ export default function StudioVideoPanel({
       prompt: promptForJob,
       startUrl,
       endUrl,
+      seedanceCompactRefUrls: compactSeedanceRefUploads ? [...seedanceCompactRefUrls] : undefined,
+      seedanceOmniMedia:
+        seedanceProOmniRefUploads && seedanceProOmniItems.length
+          ? seedanceProOmniItems.map((x) => ({ type: x.kind, url: x.url }))
+          : undefined,
       duration,
       veoAspect,
       aspect,
@@ -1976,17 +2321,21 @@ export default function StudioVideoPanel({
         const klingDurationSec = kling30MultiActive
           ? snap.klingShots!.reduce((a, s) => a + s.durationSec, 0)
           : Number(snap.duration);
+        const compactSnapRefs = snap.seedanceCompactRefUrls;
+        const omniSnap = snap.seedanceOmniMedia;
         const klingGenerateBody: Record<string, unknown> = {
           accountPlan: snap.planId,
           marketModel: seedancePreviewMarketModelForApi(snap.modelId, snap.videoPriority),
           prompt: snap.prompt,
-          imageUrl: snap.startUrl ?? undefined,
           duration: klingDurationSec,
           aspectRatio:
             (isKling30 || isKling26) && !snap.startUrl
               ? snap.aspect
               : studioVideoIsSeedancePickerId(snap.modelId) &&
-                  (Boolean(snap.startUrl) || studioVideoIsSeedance2ProPickerId(snap.modelId))
+                  (Boolean(snap.startUrl) ||
+                    studioVideoIsSeedance2ProPickerId(snap.modelId) ||
+                    (Array.isArray(compactSnapRefs) && compactSnapRefs.length > 0) ||
+                    (Array.isArray(omniSnap) && omniSnap.length > 0))
                 ? snap.aspect
                 : undefined,
           sound: studioVideoSupportsNativeAudio(snap.modelId) ? snap.soundOn : undefined,
@@ -1994,15 +2343,28 @@ export default function StudioVideoPanel({
           personalApiKey: pKey,
           piapiApiKey: piKey,
         };
+        if (Array.isArray(omniSnap) && omniSnap.length) {
+          klingGenerateBody.seedanceOmniMedia = omniSnap;
+        } else if (compactSnapRefs?.length) {
+          klingGenerateBody.seedancePreviewImageUrls = compactSnapRefs;
+        } else {
+          klingGenerateBody.imageUrl = snap.startUrl ?? undefined;
+          if (snap.endUrl?.trim()) klingGenerateBody.endImageUrl = snap.endUrl.trim();
+        }
         if (kling30MultiActive) {
           klingGenerateBody.multiShots = true;
           klingGenerateBody.multiPrompt = snap.klingShots!.map((s) => ({
             prompt: s.prompt.trim(),
             duration: Math.round(Number(s.durationSec)),
           }));
-          if (snap.klingElementsPayload?.length) {
-            klingGenerateBody.klingElements = snap.klingElementsPayload;
-          }
+        }
+        const supportsKlingElementsOnApi =
+          isKling30 ||
+          (snap.modelId.startsWith("bytedance/seedance") &&
+            !(Array.isArray(compactSnapRefs) && compactSnapRefs.length > 0) &&
+            !(Array.isArray(omniSnap) && omniSnap.length > 0));
+        if (supportsKlingElementsOnApi && snap.klingElementsPayload?.length) {
+          klingGenerateBody.klingElements = snap.klingElementsPayload;
         }
         const res = await fetch("/api/kling/generate", {
           method: "POST",
@@ -2019,7 +2381,13 @@ export default function StudioVideoPanel({
           model: snap.modelId,
           creditsCharged: platformChargeCreate,
           personalApiKey: pKey,
-          inputUrls: snap.startUrl ? [snap.startUrl] : undefined,
+          inputUrls: snap.seedanceOmniMedia?.length
+            ? snap.seedanceOmniMedia.map((x) => x.url)
+            : snap.seedanceCompactRefUrls?.length
+              ? snap.seedanceCompactRefUrls
+              : snap.startUrl
+                ? [snap.startUrl]
+                : undefined,
           aspectRatio: snap.historyAspect,
         });
         currentCreateStudioGenId = studioGenId ?? null;
@@ -2059,7 +2427,12 @@ export default function StudioVideoPanel({
               status: "ready",
               label,
               mediaUrl: url,
-              posterUrl: snap.startUrl ?? undefined,
+              posterUrl:
+                snap.seedanceOmniMedia?.find((x) => x.type === "image")?.url ??
+                snap.seedanceOmniMedia?.[0]?.url ??
+                snap.seedanceCompactRefUrls?.[0] ??
+                snap.startUrl ??
+                undefined,
               createdAt: doneAt,
               model: snap.modelId,
               modelLabel: studioVideoDisplayLabel(snap.modelId),
@@ -2348,7 +2721,7 @@ export default function StudioVideoPanel({
                 <div>
                   <Label className="text-xs text-white/45">Background source</Label>
                   <p className="mt-0.5 text-[10px] leading-snug text-white/35">
-                    Kling 3.0 Motion Control — KIE <span className="text-white/55">background_source</span>.
+                    Kling 3.0 Motion Control, KIE <span className="text-white/55">background_source</span>.
                   </p>
                   <Select
                     value={editSceneBackground}
@@ -2390,65 +2763,246 @@ export default function StudioVideoPanel({
             <div className="studio-params-scroll flex min-w-0 flex-col gap-2 overflow-y-auto lg:h-full lg:min-h-0 lg:flex-1 lg:pb-10">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Create prompt</p>
             <div className="rounded-2xl border border-white/10 bg-[#101014] p-3">
-              <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                <FrameSlot
-                  label="Start frame"
-                  optional={startFrameOptional}
-                  avatarLibraryBadge
-                  url={startUrl}
-                  previewUrl={startFramePreviewBlob}
-                  uploading={frameUploadBusy && frameUploadSlot === "start"}
-                  disabled={frameUploadBusy}
-                  onPick={() => pickFrame("start")}
-                  onAvatarBadgeClick={() => {
-                    setAvatarPickTarget("create_start");
-                    setAvatarPickerOpen(true);
-                  }}
-                  onClear={() => {
-                    setStartUrl(null);
-                    setStartFramePreviewBlob((prev) => {
-                      if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
-                      return null;
-                    });
-                  }}
-                />
-                <FrameSlot
-                  label="End frame"
-                  optional
-                  avatarLibraryBadge
-                  url={endUrl}
-                  previewUrl={endFramePreviewBlob}
-                  uploading={frameUploadBusy && frameUploadSlot === "end"}
-                  disabled={frameUploadBusy || klingCustomMulti}
-                  onPick={() => pickFrame("end")}
-                  onAvatarBadgeClick={() => {
-                    setAvatarPickTarget("create_end");
-                    setAvatarPickerOpen(true);
-                  }}
-                  onClear={() => {
-                    setEndUrl(null);
-                    setEndFramePreviewBlob((prev) => {
-                      if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
-                      return null;
-                    });
-                  }}
-                />
-              </div>
+              {compactSeedanceRefUploads ? (
+                <div>
+                  <Label className="text-xs text-white/65">
+                    Reference images <span className="text-rose-400" aria-hidden="true">*</span>
+                  </Label>
+                  <p className="mt-1 text-[10px] leading-snug text-white/40">
+                    Seedance Preview / Fast Preview: upload 1–4 images (file upload only).
+                  </p>
+                  <input
+                    ref={seedanceCompactFileRef}
+                    type="file"
+                    accept={STUDIO_IMAGE_FILE_ACCEPT}
+                    className="hidden"
+                    onChange={onSeedanceCompactFileChange}
+                  />
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {seedanceCompactRefUrls.map((u, ui) => (
+                      <button
+                        key={`seed-compact-${ui}-${u.slice(-32)}`}
+                        type="button"
+                        className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-white/10"
+                        onClick={() => setSeedanceCompactRefUrls((prev) => prev.filter((_, j) => j !== ui))}
+                        title="Remove image"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={u} alt="" className="h-full w-full object-cover" />
+                      </button>
+                    ))}
+                    {seedanceCompactRefUrls.length < SEEDANCE_COMPACT_PREVIEW_MAX_IMAGE_URLS ? (
+                      <button
+                        type="button"
+                        disabled={seedanceCompactUploadBusy}
+                        onClick={() => seedanceCompactFileRef.current?.click()}
+                        className="flex min-h-[120px] min-w-[min(100%,280px)] flex-1 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/20 bg-[#0c0c10] px-4 py-6 text-white/45 transition hover:border-violet-400/35 hover:bg-white/[0.02] hover:text-white/65 disabled:opacity-50"
+                      >
+                        <Upload className="h-8 w-8 opacity-70" strokeWidth={1.5} aria-hidden />
+                        <span className="text-center text-sm font-medium text-white/70">
+                          {seedanceCompactRefUrls.length === 0
+                            ? "Click to upload (1–4 images)"
+                            : `Add image (${seedanceCompactRefUrls.length}/${SEEDANCE_COMPACT_PREVIEW_MAX_IMAGE_URLS})`}
+                        </span>
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              ) : seedanceProOmniRefUploads ? (
+                <div>
+                  <Label className="text-xs text-white/65">Reference media</Label>
+                  <p className="mt-1 text-[10px] leading-snug text-white/40">
+                    Seedance 2 / Fast — optional omni references (PiAPI). Leave empty for text-only video.
+                  </p>
+                  <input
+                    ref={seedanceProOmniFileRef}
+                    type="file"
+                    accept={SEEDANCE_PRO_OMNI_FILE_ACCEPT}
+                    className="hidden"
+                    onChange={onSeedanceProOmniFileChange}
+                  />
+                  <button
+                    type="button"
+                    disabled={
+                      seedanceProOmniUploadBusy ||
+                      seedanceProOmniItems.length >= SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS
+                    }
+                    onClick={() => seedanceProOmniFileRef.current?.click()}
+                    className="relative mt-2 flex min-h-[132px] w-full flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-white/22 bg-[#0c0c10] px-4 py-5 text-white/45 transition hover:border-violet-400/35 hover:bg-white/[0.02] hover:text-white/65 disabled:opacity-50"
+                  >
+                    <span className="flex items-center justify-center">
+                      <span className="-mr-1 flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-black/55">
+                        <ImageIcon className="h-[18px] w-[18px] text-white/70" aria-hidden />
+                      </span>
+                      <span className="z-[1] flex h-11 w-11 items-center justify-center rounded-full border border-white/18 bg-black/70">
+                        <VideoIcon className="h-5 w-5 text-white/78" aria-hidden />
+                      </span>
+                      <span className="-ml-1 flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-black/55">
+                        <Music2 className="h-[18px] w-[18px] text-white/70" aria-hidden />
+                      </span>
+                    </span>
+                    <span className="text-sm font-semibold text-white/80">Upload media</span>
+                    <span className="text-xs font-medium text-white/50">Image, video or audio</span>
+                    <span className="max-w-[20rem] text-center text-[10px] leading-snug text-white/35">
+                      Images (JPEG/PNG/WebP/GIF), video MP4/MOV, audio MP3/WAV — max{" "}
+                      {SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS} files. Audio requires at least one image or video.
+                    </span>
+                  </button>
+                  {seedanceProOmniItems.length > 0 ? (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {seedanceProOmniItems.map((it, ui) => (
+                        <button
+                          key={`seed-omni-${ui}-${it.url.slice(-28)}`}
+                          type="button"
+                          className="relative flex h-[4.5rem] w-[4.5rem] shrink-0 flex-col items-center justify-center overflow-hidden rounded-lg border border-white/10 bg-black/45"
+                          onClick={() => setSeedanceProOmniItems((prev) => prev.filter((_, j) => j !== ui))}
+                          title="Remove"
+                        >
+                          {it.kind === "image" ? (
+                            <>
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={it.url} alt="" className="h-full w-full object-cover" />
+                            </>
+                          ) : it.kind === "video" ? (
+                            <>
+                              <VideoIcon className="h-7 w-7 text-white/55" aria-hidden />
+                              <span className="mt-0.5 text-[9px] text-white/42">Video</span>
+                            </>
+                          ) : (
+                            <>
+                              <Music2 className="h-7 w-7 text-white/55" aria-hidden />
+                              <span className="mt-0.5 text-[9px] text-white/42">Audio</span>
+                            </>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                  <FrameSlot
+                    label="Start frame"
+                    optional={startFrameOptional}
+                    avatarLibraryBadge
+                    url={startUrl}
+                    previewUrl={startFramePreviewBlob}
+                    uploading={frameUploadBusy && frameUploadSlot === "start"}
+                    disabled={frameUploadBusy}
+                    onPick={() => pickFrame("start")}
+                    onAvatarBadgeClick={() => {
+                      setAvatarPickTarget("create_start");
+                      setAvatarPickerOpen(true);
+                    }}
+                    onClear={() => {
+                      setStartUrl(null);
+                      setStartFramePreviewBlob((prev) => {
+                        if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
+                        return null;
+                      });
+                    }}
+                  />
+                  <FrameSlot
+                    label="End frame"
+                    optional
+                    avatarLibraryBadge
+                    url={endUrl}
+                    previewUrl={endFramePreviewBlob}
+                    uploading={frameUploadBusy && frameUploadSlot === "end"}
+                    disabled={frameUploadBusy || klingCustomMulti}
+                    onPick={() => pickFrame("end")}
+                    onAvatarBadgeClick={() => {
+                      setAvatarPickTarget("create_end");
+                      setAvatarPickerOpen(true);
+                    }}
+                    onClear={() => {
+                      setEndUrl(null);
+                      setEndFramePreviewBlob((prev) => {
+                        if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
+                        return null;
+                      });
+                    }}
+                  />
+                </div>
+              )}
               {seedanceFacePolicyHint ? (
                 <p className="mt-2 text-[10px] leading-snug text-white/45">{seedanceFacePolicyHint}</p>
               ) : null}
               {klingCustomMulti ? (
                 <p className="mt-3 text-[10px] leading-snug text-white/38">
-                  Multi-shot: define each scene below in Parameters. Start frame only — end frame is disabled.
+                  Multi-shot: define each scene below in Parameters. Start frame only, end frame is disabled.
                 </p>
               ) : (
-                <Textarea
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  placeholder="Describe your video, like 'A woman walking through a neon-lit city'."
-                  className="mt-4 min-h-[120px] w-full resize-none border-white/10 bg-[#0a0a0d] px-3 py-3 text-sm text-white placeholder:text-white/35 focus-visible:ring-0"
-                  rows={4}
-                />
+                <>
+                  <Textarea
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    placeholder={
+                      modelId === "kling-3.0/video" &&
+                      klingElementDrafts.some((d) => d.name.trim() && d.urls.length >= minReferenceUrlsPerVideoElement(modelId))
+                        ? "Describe the scene and use @element_name for each saved element (e.g. @product, @model)."
+                        : modelId.startsWith("bytedance/seedance") &&
+                            !compactSeedanceRefUploads &&
+                            !seedanceProOmniRefUploads &&
+                            klingElementDrafts.some(
+                              (d) => d.name.trim() && d.urls.length >= minReferenceUrlsPerVideoElement(modelId),
+                            )
+                          ? "Describe the video. Reference extra images with @image2, @image3, … (start frame is @image1), or we prepend tags if you omit them."
+                          : "Describe your video, like 'A woman walking through a neon-lit city'."
+                    }
+                    className="mt-4 min-h-[120px] w-full resize-none border-white/10 bg-[#0a0a0d] px-3 py-3 text-sm text-white placeholder:text-white/35 focus-visible:ring-0"
+                    rows={4}
+                  />
+                  {(modelId === "kling-3.0/video" && !klingCustomMulti) ||
+                  (modelId.startsWith("bytedance/seedance") &&
+                    !compactSeedanceRefUploads &&
+                    !seedanceProOmniRefUploads) ? (
+                    <div className="mt-3 space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-9 gap-1.5 rounded-full border-white/15 bg-black/30 px-3 text-[11px] text-white/80 hover:bg-white/[0.06]"
+                          onClick={openKlingElementsModal}
+                        >
+                          <AtSign className="h-3 w-3" aria-hidden />
+                          Elements
+                        </Button>
+                        <span className="max-w-[min(100%,20rem)] text-[10px] leading-snug text-white/38">
+                          {modelId === "kling-3.0/video" ? (
+                            <>
+                              Optional, 2–4 images per element (upload, avatar, or studio; Kling 3.0 API). Use{" "}
+                              <span className="text-white/55">@name</span> in the prompt.
+                            </>
+                          ) : (
+                            <>
+                              Optional, same library; PiAPI Seedance uses{" "}
+                              <span className="text-white/55">@image1</span> (start),{" "}
+                              <span className="text-white/55">@image2</span>… for refs (max{" "}
+                              {modelId.includes("preview")
+                                ? SEEDANCE_PREVIEW_MAX_IMAGE_URLS
+                                : SEEDANCE_PRO_MAX_IMAGE_URLS}{" "}
+                              images).
+                            </>
+                          )}
+                        </span>
+                      </div>
+                      {klingElementDrafts.length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          {klingElementDrafts.map((el) => (
+                            <span
+                              key={el.id}
+                              className="rounded-md border border-violet-500/25 bg-violet-500/10 px-2 py-0.5 text-[10px] font-medium text-violet-200/90"
+                            >
+                              @{el.name.trim() || "-"}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </>
               )}
             </div>
 
@@ -2667,7 +3221,7 @@ export default function StudioVideoPanel({
                             : "text-amber-200/90",
                         )}
                       >
-                            Total {klingMultiTotalSec}s — each shot 1–12s; sum must be 3–15s (Kling 3.0 API).
+                            Total {klingMultiTotalSec}s, each shot 1–12s; sum must be 3–15s (Kling 3.0 API).
                       </p>
                     </div>
                   ) : null}
@@ -2721,7 +3275,12 @@ export default function StudioVideoPanel({
                       </Select>
                     </div>
                   ) : null}
-                  {studioVideoShowsAspectRatioCreate(modelId, Boolean(startUrl)) ? (
+                  {studioVideoShowsAspectRatioCreate(
+                    modelId,
+                    Boolean(startUrl) ||
+                      (compactSeedanceRefUploads && seedanceCompactRefUrls.length > 0) ||
+                      (seedanceProOmniRefUploads && seedanceProOmniItems.length > 0),
+                  ) ? (
                     <div>
                       <Label className="text-xs text-white/45">Aspect ratio</Label>
                       <Select value={aspect} onValueChange={setAspect}>
@@ -2845,8 +3404,14 @@ export default function StudioVideoPanel({
 
             <div className="space-y-4 px-5 py-4">
               <Dialog.Description className="text-xs leading-relaxed text-white/45">
-                Use <span className="text-white/65">@element_name</span> in a shot prompt. Each element needs 2–4
-                reference images. Up to 3 elements.
+                <span className="text-white/55">Kling 3.0:</span> use{" "}
+                <span className="text-white/65">@element_name</span> in the main or multi-shot prompts.{" "}
+                <span className="text-white/55">Seedance (PiAPI):</span> start frame is{" "}
+                <span className="text-white/65">@image1</span>; each extra image is <span className="text-white/65">@image2</span>,{" "}
+                <span className="text-white/65">@image3</span>… in order (start → element refs → optional end frame). Each
+                element can use 1–4 images. <span className="text-white/55">Kling 3.0</span> still requires 2–4 images per
+                element (provider rule). Up to 3 elements. Add refs via upload,{" "}
+                <span className="text-white/55">Avatar library</span>, or <span className="text-white/55">Studio images</span>.
               </Dialog.Description>
 
               {klingElementDrafts.length > 0 ? (
@@ -2861,7 +3426,7 @@ export default function StudioVideoPanel({
                         className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-black/30 px-3 py-2.5"
                       >
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-xs font-medium text-white/90">@{el.name.trim() || "—"}</p>
+                          <p className="truncate text-xs font-medium text-white/90">@{el.name.trim() || "-"}</p>
                           <p className="truncate text-[10px] text-white/40">
                             {el.description.trim() ? el.description.trim() : "No description"} · {el.urls.length}{" "}
                             image{el.urls.length === 1 ? "" : "s"}
@@ -2935,26 +3500,57 @@ export default function StudioVideoPanel({
                       aria-required
                     />
                   </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="kling-element-desc" className="text-xs text-white/65">
-                      Description <span className="text-rose-400" aria-hidden="true">*</span>
-                    </Label>
-                    <Textarea
-                      id="kling-element-desc"
-                      value={klingElementForm.description}
-                      onChange={(e) =>
-                        setKlingElementForm((f) => (f ? { ...f, description: e.target.value } : f))
-                      }
-                      placeholder="Enter element description"
-                      rows={4}
-                      className="min-h-[100px] w-full resize-none border-white/10 bg-[#0a0a0d] text-sm text-white placeholder:text-white/35 focus-visible:ring-0"
-                      aria-required
-                    />
-                  </div>
+                  {modelId === "kling-3.0/video" ? (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="kling-element-desc" className="text-xs text-white/65">
+                        Description <span className="text-rose-400" aria-hidden="true">*</span>
+                      </Label>
+                      <Textarea
+                        id="kling-element-desc"
+                        value={klingElementForm.description}
+                        onChange={(e) =>
+                          setKlingElementForm((f) => (f ? { ...f, description: e.target.value } : f))
+                        }
+                        placeholder="Describe this element for the provider (required by Kling 3.0)."
+                        rows={4}
+                        className="min-h-[88px] w-full resize-none border-white/10 bg-[#0a0a0d] text-sm text-white placeholder:text-white/35 focus-visible:ring-0"
+                        aria-required
+                      />
+                    </div>
+                  ) : null}
                   <div className="space-y-2">
                     <Label className="text-xs text-white/65">
                       Media <span className="text-rose-400" aria-hidden="true">*</span>
                     </Label>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 rounded-lg border-white/15 bg-black/30 px-2.5 text-[11px] text-white/75 hover:bg-white/[0.06]"
+                        disabled={klingElementUploadBusy || klingElementForm.urls.length >= 4}
+                        onClick={() => {
+                          setAvatarPickTarget("kling_element");
+                          setAvatarPickerOpen(true);
+                        }}
+                      >
+                        Avatar library
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 rounded-lg border-white/15 bg-black/30 px-2.5 text-[11px] text-white/75 hover:bg-white/[0.06]"
+                        disabled={
+                          klingElementUploadBusy ||
+                          studioImagePickLoading ||
+                          klingElementForm.urls.length >= 4
+                        }
+                        onClick={() => void openStudioImagesForElementPick()}
+                      >
+                        Studio images
+                      </Button>
+                    </div>
                     <div className="flex flex-wrap gap-2">
                       {klingElementForm.urls.map((u, ui) => (
                         <button
@@ -2987,11 +3583,44 @@ export default function StudioVideoPanel({
                       ) : null}
                     </div>
                     <p className="text-[10px] leading-snug text-white/40">
-                      Images: JPEG, PNG, WebP, or GIF — at least {KLING_ELEMENT_MEDIA_MIN_PX}×
+                      Images: JPEG, PNG, WebP, or GIF, at least {KLING_ELEMENT_MEDIA_MIN_PX}×
                       {KLING_ELEMENT_MEDIA_MIN_PX}px, max {Math.round(KLING_ELEMENT_MEDIA_MAX_BYTES / (1024 * 1024))}MB
-                      each.
+                      each.{" "}
+                      {modelId.startsWith("bytedance/seedance")
+                        ? "1–4 images per element."
+                        : "2–4 images per element (Kling 3.0)."}
                     </p>
                   </div>
+
+                  {modelId.startsWith("bytedance/seedance") ? (
+                    <details
+                      key={`kling-el-adv-${klingElementForm.id}`}
+                      className="group mt-3 rounded-lg border border-white/[0.08] bg-black/30"
+                    >
+                      <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2.5 text-xs font-medium text-white/70 transition hover:bg-white/[0.04] [&::-webkit-details-marker]:hidden">
+                        <span>Advanced</span>
+                        <ChevronDown
+                          className="h-4 w-4 shrink-0 text-white/45 transition group-open:rotate-180"
+                          aria-hidden
+                        />
+                      </summary>
+                      <div className="space-y-1.5 border-t border-white/[0.06] px-3 pb-3 pt-2">
+                        <Label htmlFor="kling-element-desc-seed" className="text-xs text-white/55">
+                          Description <span className="text-white/35">(optional)</span>
+                        </Label>
+                        <Textarea
+                          id="kling-element-desc-seed"
+                          value={klingElementForm.description}
+                          onChange={(e) =>
+                            setKlingElementForm((f) => (f ? { ...f, description: e.target.value } : f))
+                          }
+                          placeholder="Optional, extra context (defaults to the name if empty)."
+                          rows={4}
+                          className="min-h-[88px] w-full resize-none border-white/10 bg-[#0a0a0d] text-sm text-white placeholder:text-white/35 focus-visible:ring-0"
+                        />
+                      </div>
+                    </details>
+                  ) : null}
                 </div>
               ) : null}
             </div>
@@ -3021,6 +3650,68 @@ export default function StudioVideoPanel({
         </Dialog.Portal>
       </Dialog.Root>
 
+      <Dialog.Root open={studioImagePickOpen} onOpenChange={setStudioImagePickOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-[225] bg-black/70 backdrop-blur-[3px] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-[226] w-[min(92vw,480px)] max-h-[min(85vh,560px)] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-2xl border border-white/[0.08] bg-[#101014] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.65)] outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-[0.98] data-[state=open]:zoom-in-[0.98]">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <Dialog.Title className="text-base font-semibold text-white">Studio images</Dialog.Title>
+              <Dialog.Close asChild>
+                <button
+                  type="button"
+                  className="rounded-lg p-1.5 text-white/45 transition hover:bg-white/[0.06] hover:text-white"
+                  aria-label="Close"
+                >
+                  <X className="h-4 w-4" aria-hidden />
+                </button>
+              </Dialog.Close>
+            </div>
+            <Dialog.Description className="sr-only">
+              Pick a generated image from Create → Image to add as a reference for the current element.
+            </Dialog.Description>
+            {studioImagePickLoading ? (
+              <p className="py-8 text-center text-sm text-white/50">Loading…</p>
+            ) : studioImagePickItems.length === 0 ? (
+              <p className="py-6 text-sm leading-relaxed text-white/55">
+                No completed studio images yet. Generate images in{" "}
+                <span className="font-medium text-white/75">Create → Image</span>, then try again.
+              </p>
+            ) : (
+              <div className="max-h-[min(52vh,380px)] overflow-y-auto studio-params-scroll pr-1">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {studioImagePickItems
+                    .filter((item) => Boolean(item.mediaUrl?.trim()))
+                    .map((item) => {
+                      const u = item.mediaUrl!.trim();
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => {
+                            setKlingElementForm((prev) => {
+                              if (!prev || prev.urls.length >= 4 || prev.urls.includes(u)) return prev;
+                              return { ...prev, urls: [...prev.urls, u] };
+                            });
+                            setStudioImagePickOpen(false);
+                            toast.success("Image added to element");
+                          }}
+                          className="group relative aspect-square overflow-hidden rounded-xl border border-white/12 bg-black/40 transition hover:border-violet-400/45"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={u} alt="" className="h-full w-full object-cover" />
+                          <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 to-transparent px-2 py-1.5 text-[10px] font-medium text-white/90 opacity-0 transition group-hover:opacity-100">
+                            Add
+                          </span>
+                        </button>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+
       <StudioBillingDialog
         open={billing.open}
         onOpenChange={(o) => {
@@ -3041,7 +3732,17 @@ export default function StudioVideoPanel({
         onOpenChange={setAvatarPickerOpen}
         avatarUrls={avatarUrls}
         onPick={onPickAvatar}
-        title="Choose avatar for video upload"
+        title={
+          avatarPickTarget === "kling_element"
+            ? "Choose image for element"
+            : avatarPickTarget === "edit_elements"
+              ? "Choose image for video edit"
+              : avatarPickTarget === "edit_motion"
+                ? "Choose character image"
+                : avatarPickTarget === "create_end"
+                  ? "Choose avatar for end frame"
+                  : "Choose avatar for start frame"
+        }
       />
     </div>
   );

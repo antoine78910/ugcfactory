@@ -65,7 +65,7 @@ export function workflowSpaceStorageKey(scope: string, spaceId: string): string 
   return `youry-workflow-space-v2:${scope}:${spaceId}`;
 }
 
-/** @internal — use `loadProjectForSpace` from workflowSpacesStorage in app code. */
+/** @internal, use `loadProjectForSpace` from workflowSpacesStorage in app code. */
 export function loadWorkflowProjectRaw(scope: string, spaceId: string): WorkflowProjectStateV1 {
   const def = defaultWorkflowProject();
   if (typeof window === "undefined") return def;

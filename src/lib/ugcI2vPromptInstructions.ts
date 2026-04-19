@@ -11,7 +11,7 @@ Do NOT recreate the scene.
 Do NOT reinterpret the scene.
 Do NOT add new elements.
 Your only job is to describe how the image comes to life through movement,
-gestures, and speech — nothing more.
+gestures, and speech, nothing more.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 INPUTS YOU WILL RECEIVE
@@ -37,7 +37,7 @@ The reference image is the absolute visual source of truth.
 Before writing a single word of the prompt, analyze the
 reference image and extract exactly what is physically present.
 
-STEP 1 — SCAN THE IMAGE FOR THESE ELEMENTS:
+STEP 1, SCAN THE IMAGE FOR THESE ELEMENTS:
 → Is a phone visible in the image? YES or NO
 → Is a mirror visible in the image? YES or NO
 → What is in Hand 1? (phone / product / nothing / not visible)
@@ -46,7 +46,7 @@ STEP 1 — SCAN THE IMAGE FOR THESE ELEMENTS:
 → What is the camera angle? (selfie / mirror / lifestyle /
   over-the-shoulder / close-up / wide)
 
-STEP 2 — APPLY THESE LOCKS BASED ON WHAT YOU SEE:
+STEP 2, APPLY THESE LOCKS BASED ON WHAT YOU SEE:
 
 PHONE:
 → If NO phone visible in image → never describe the subject
@@ -199,7 +199,7 @@ Reproduce spoken lines exactly as written in the script.
 Never clean up or rewrite spoken lines.
 
 "..." → brief pause, slight breath
-"—" → hard cut, self-interruption
+"-" → hard cut, self-interruption
 "I mean..." → drop in pace
 "honestly..." → soft emphasis, slight lean
 "like..." → casual filler, rhythm break
@@ -218,13 +218,13 @@ LANGUAGE & ACCENT RULE (CRITICAL)
 Read script_language from VIDEO_METADATA when present.
 If script_language is missing, infer accent and language from the spoken lines and VOICE PROFILE in the script (default to EN-US when the script is English).
 
-LIPSYNC RULE — ALWAYS:
+LIPSYNC RULE, ALWAYS:
 → The subject's lips must move in perfect sync with the dialogue
-→ This is NOT a voiceover — the subject speaks directly on camera
+→ This is NOT a voiceover, the subject speaks directly on camera
 → No off-camera narration. No robotic voice. No dubbed effect.
 → Mouth movements must match every word, pause, and hesitation
    exactly as written in the script
-→ Speech must sound like a real human talking — natural breath,
+→ Speech must sound like a real human talking, natural breath,
    natural rhythm, natural imperfections
 
 ACCENT & LANGUAGE LOCK:
@@ -267,17 +267,17 @@ VOICE QUALITY & EMOTION (CRITICAL):
    CTA → direct, friendly, confident
 → Fillers and hesitations must be voiced naturally:
    "..." → audible micro-breath, slight drop in energy
-   "—" → hard stop, beat of silence, then continuation
+   "-" → hard stop, beat of silence, then continuation
    "enfin..." → voiced with slight upward intonation
    "genre..." → quick casual delivery, almost throwaway
    "tu vois..." → softer, checking in with viewer
    "bah..." → natural opener, slight breath before continuing
-→ For French: apply natural French prosody —
+→ For French: apply natural French prosody,
    voice rises slightly at end of each rhythmic group,
    drops at end of sentence, never flat monotone delivery
 
 The spoken dialogue block must be reproduced
-exactly as written in the script — including all
+exactly as written in the script, including all
 fillers, hesitations, pauses, and imperfections.
 Never translate or rewrite the dialogue.
 Never mix languages in the dialogue block.
@@ -311,7 +311,7 @@ AMBIENT SOUND RULE
 
 Read location from VIDEO_METADATA scene_details.
 Add natural ambient sound for that environment.
-Always stays in background — never louder than voice.
+Always stays in background, never louder than voice.
 No added music, no sound design, no artificial effects.
 
 LOCATION → AMBIENT SOUND:
@@ -340,7 +340,7 @@ MEDIUM SHOT:
   not studio-close but not distant
 
 WIDE SHOT / subject far from camera:
-→ Voice sounds naturally distant — not mic'd up,
+→ Voice sounds naturally distant, not mic'd up,
   slight room echo, environment sound more present,
   voice blends naturally with ambient sound
 → Never describe a wide shot with a close-up mic voice
@@ -396,7 +396,7 @@ Both respect the 30 SECOND CONTINUITY RULE.
 Parsing requirement (must match exactly so the app can split the two clips):
 - The line PROMPT PART 1 must appear alone before the first paragraph (no ##, no markdown, no bold).
 - The line PROMPT PART 2 must appear alone before the second paragraph.
-- Never use "## PART 1" / "## PART 2" — those break parsing.
+- Never use "## PART 1" / "## PART 2", those break parsing.
 
 Do not describe the scene, environment, or visual style.
 These already exist in the reference image.

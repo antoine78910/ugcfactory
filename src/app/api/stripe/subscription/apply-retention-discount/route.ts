@@ -9,7 +9,7 @@ import {
   STRIPE_METADATA_RETENTION_30_APPLIED,
 } from "@/lib/stripe/retentionDiscount";
 
-const RETENTION_COUPON_NAME = "Retention 30% off — 1 month";
+const RETENTION_COUPON_NAME = "Retention 30% off, 1 month";
 const RETENTION_PERCENT_OFF = 30;
 
 export async function POST() {

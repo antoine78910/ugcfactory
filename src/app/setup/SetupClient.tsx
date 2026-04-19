@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowRight, Check, Coins, Sparkles, Zap } from "lucide-react";
+import { ArrowRight, Check, Sparkles, Zap } from "lucide-react";
+import { SubscriptionPlanFeatureList } from "@/app/_components/SubscriptionPlanFeatureList";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { SUBSCRIPTIONS } from "@/lib/pricing";
@@ -15,11 +16,26 @@ const TRIAL_CREDITS = 15;
 
 type Currency = "usd" | "eur";
 
+export type SetupClientProps = {
+  /** When true, used inside `/onboarding` (no full-page chrome / duplicate backgrounds). */
+  embedded?: boolean;
+};
+
 function CurrencySymbol({ currency }: { currency: Currency }) {
   return <>{currency === "eur" ? "€" : "$"}</>;
 }
 
-const PLANS = [
+type PlanDef = {
+  id: SubscriptionPlanId;
+  name: string;
+  description: string;
+  monthly: number;
+  credits: number;
+  badge?: string;
+  highlight?: boolean;
+};
+
+const PLANS: PlanDef[] = [
   {
     id: "starter",
     name: "Starter",
@@ -30,7 +46,7 @@ const PLANS = [
   {
     id: "growth",
     name: "Growth",
-    badge: "Most popular",
+    badge: "Popular",
     description: "The plan most teams pick once content is weekly.",
     monthly: SUBSCRIPTIONS[1].price_usd,
     credits: SUBSCRIPTIONS[1].credits_per_month,
@@ -43,9 +59,16 @@ const PLANS = [
     monthly: SUBSCRIPTIONS[2].price_usd,
     credits: SUBSCRIPTIONS[2].credits_per_month,
   },
-] as const;
+  {
+    id: "scale",
+    name: "Scale",
+    description: "Agencies and brands running multiple products at once.",
+    monthly: SUBSCRIPTIONS[3].price_usd,
+    credits: SUBSCRIPTIONS[3].credits_per_month,
+  },
+];
 
-export default function SetupClient() {
+export default function SetupClient({ embedded = false }: SetupClientProps) {
   const [currency, setCurrency] = useState<Currency>("usd");
   const [trialLoading, setTrialLoading] = useState(false);
   const [planLoading, setPlanLoading] = useState<string | null>(null);
@@ -72,10 +95,11 @@ export default function SetupClient() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("checkout") === "cancel") {
-      toast.message("Checkout cancelled — you can try again below.");
-      window.history.replaceState({}, "", "/setup");
+      toast.message("Checkout cancelled, you can try again below.");
+      const clearPath = embedded ? "/onboarding?step=setup" : "/setup";
+      window.history.replaceState({}, "", clearPath);
     }
-  }, []);
+  }, [embedded]);
 
   async function startTrialCheckout() {
     setTrialLoading(true);
@@ -107,7 +131,11 @@ export default function SetupClient() {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ planId, billing: "monthly" }),
+        body: JSON.stringify({
+          planId,
+          billing: "monthly",
+          ...(embedded ? { fromOnboarding: true } : {}),
+        }),
       });
       const data = (await res.json()) as { url?: string; error?: string };
       if (!res.ok) throw new Error(data.error ?? "Checkout failed");
@@ -133,16 +161,24 @@ export default function SetupClient() {
   const pricesReady = displayPrices !== null;
 
   return (
-    <div className="flex min-h-[100dvh] flex-col items-center bg-[#050507] px-4 py-14 text-white">
-      {/* Background glows */}
-      <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div className="absolute left-1/2 top-0 h-[500px] w-[900px] -translate-x-1/2 rounded-full bg-violet-600/10 blur-[130px]" />
-        <div className="absolute -left-32 top-1/3 h-56 w-56 rounded-full bg-indigo-600/8 blur-[80px]" />
-      </div>
+    <div
+      className={cn(
+        "flex flex-col items-center text-white",
+        embedded
+          ? "w-full bg-transparent px-0 py-2 sm:py-4"
+          : "min-h-[100dvh] bg-[#050507] px-4 py-14",
+      )}
+    >
+      {!embedded ? (
+        <div className="pointer-events-none fixed inset-0 overflow-hidden">
+          <div className="absolute left-1/2 top-0 h-[500px] w-[900px] -translate-x-1/2 rounded-full bg-violet-600/10 blur-[130px]" />
+          <div className="absolute -left-32 top-1/3 h-56 w-56 rounded-full bg-indigo-600/8 blur-[80px]" />
+        </div>
+      ) : null}
 
-      <div className="relative w-full max-w-3xl">
+      <div className="relative w-full max-w-6xl">
         {/* Header */}
-        <header className="mb-12 text-center">
+        <header className={cn("text-center", embedded ? "mb-8" : "mb-12")}>
           <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-violet-400/80">
             Almost there
           </p>
@@ -152,11 +188,11 @@ export default function SetupClient() {
           <p className="mt-3 text-sm text-white/40">
             Start with a <span className="font-semibold text-white/65">
               {currency === "eur" ? "1€" : "$1"} trial
-            </span> — or go straight to a full subscription.
+            </span>, or go straight to a full subscription.
           </p>
         </header>
 
-        {/* $1 Trial card — hero */}
+        {/* $1 Trial card, hero */}
         {trialAvailable && (
           <div className="mb-8 relative overflow-hidden rounded-3xl border border-violet-400/35 bg-gradient-to-br from-violet-600/20 via-violet-800/10 to-transparent p-8 shadow-[0_0_60px_rgba(139,92,246,0.18),inset_0_1px_0_rgba(255,255,255,0.08)]">
             {/* Glow blob */}
@@ -175,7 +211,7 @@ export default function SetupClient() {
                   </span>
                 </h2>
                 <p className="mt-1 text-sm text-white/50">
-                  Get {TRIAL_CREDITS} credits to explore the Link to Ad workflow — from product scan to
+                  Get {TRIAL_CREDITS} credits to explore the Link to Ad workflow, from product scan to
                   UGC images. No commitment.
                 </p>
 
@@ -233,35 +269,37 @@ export default function SetupClient() {
           <div className="h-px flex-1 bg-white/8" />
         </div>
 
-        {/* Plan cards */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {/* Plan cards, 4 tiers (Starter → Scale) */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {PLANS.map((plan) => {
-            const isHighlight = "highlight" in plan && plan.highlight;
-            const badge = "badge" in plan ? plan.badge : undefined;
+            const isHighlight = Boolean(plan.highlight);
+            const badge = plan.badge;
 
             return (
               <div
                 key={plan.id}
                 className={cn(
-                  "relative flex flex-col rounded-2xl border p-6 transition-all",
+                  "relative flex h-full flex-col rounded-2xl border p-5 transition-all sm:p-6",
                   isHighlight
                     ? "border-violet-400/40 bg-gradient-to-b from-violet-600/[0.16] via-[#0b0914] to-[#06070d] shadow-[0_0_48px_rgba(139,92,246,0.14)]"
                     : "border-white/10 bg-white/[0.03] hover:border-white/18",
                 )}
               >
-                {badge && (
+                {badge ? (
                   <span className="mb-3 inline-block self-start rounded-full border border-violet-400/45 bg-violet-500/25 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-violet-100">
                     {badge}
                   </span>
+                ) : (
+                  <span className="mb-3 block h-[22px]" aria-hidden />
                 )}
 
                 <h3 className="text-lg font-bold text-white">{plan.name}</h3>
-                <p className="mt-1 text-xs leading-snug text-white/40">{plan.description}</p>
+                <p className="mt-1 min-h-[2.5rem] text-xs leading-snug text-white/40">{plan.description}</p>
 
                 <div className="mt-4">
                   {pricesReady ? (
                     <div className="flex items-baseline gap-1">
-                      <span className="text-3xl font-extrabold tabular-nums text-white">
+                      <span className="text-2xl font-extrabold tabular-nums text-white sm:text-3xl">
                         {planMonthlyLabel(plan)}
                       </span>
                       <span className="text-sm text-white/40">/mo</span>
@@ -269,23 +307,16 @@ export default function SetupClient() {
                   ) : (
                     <div className="h-9 w-24 animate-pulse rounded-lg bg-white/10" />
                   )}
-                  <p className="mt-0.5 text-xs text-white/30">Billed monthly · cancel anytime</p>
                 </div>
 
-                <div className="mt-3 flex items-center gap-1.5 text-[12px] text-white/50">
-                  <Coins className="h-3.5 w-3.5 text-violet-300/70" />
-                  <span>
-                    <span className="font-semibold text-white/80">{plan.credits.toLocaleString()} credits</span>
-                    {" "}/ month
-                  </span>
-                </div>
+                <SubscriptionPlanFeatureList planId={plan.id} credits={plan.credits} />
 
                 <button
                   type="button"
                   disabled={planLoading !== null}
                   onClick={() => void startPlanCheckout(plan.id)}
                   className={cn(
-                    "mt-5 h-10 w-full rounded-xl text-sm font-semibold transition-all",
+                    "mt-5 h-10 w-full shrink-0 rounded-xl text-sm font-semibold transition-all",
                     isHighlight
                       ? "border border-violet-200/35 bg-violet-400 text-black shadow-[0_5px_0_0_rgba(76,29,149,0.9)] hover:bg-violet-300 hover:shadow-[0_7px_0_0_rgba(76,29,149,0.9)] active:translate-y-0.5 active:shadow-none"
                       : "border border-white/15 bg-white/8 text-white hover:bg-white/12",
@@ -294,7 +325,7 @@ export default function SetupClient() {
                   {planLoading === plan.id ? (
                     "Redirecting…"
                   ) : (
-                    <span className="inline-flex items-center gap-1.5">
+                    <span className="inline-flex items-center justify-center gap-1.5">
                       Subscribe <ArrowRight className="h-3.5 w-3.5" />
                     </span>
                   )}

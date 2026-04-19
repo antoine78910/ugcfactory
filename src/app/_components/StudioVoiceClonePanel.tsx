@@ -302,7 +302,7 @@ export function StudioVoiceClonePanel() {
           </span>
         </Label>
         <p className="text-[11px] leading-snug text-amber-200/80">
-          {VOICE_CLONE_MIN_AUDIO_SECONDS} seconds of audio required — add enough samples so the total duration
+          {VOICE_CLONE_MIN_AUDIO_SECONDS} seconds of audio required, add enough samples so the total duration
           reaches at least {VOICE_CLONE_MIN_AUDIO_SECONDS}s (multiple files count together).
         </p>
 
@@ -382,7 +382,7 @@ export function StudioVoiceClonePanel() {
             {durationLoading
               ? "Measuring total audio duration…"
               : totalAudioSeconds === null
-                ? "Could not measure duration — try other files."
+                ? "Could not measure duration, try other files."
                 : `Total: ${totalAudioSeconds.toFixed(1)} s · minimum ${VOICE_CLONE_MIN_AUDIO_SECONDS}s required`}
           </p>
         ) : null}

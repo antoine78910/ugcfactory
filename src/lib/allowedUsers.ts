@@ -2,7 +2,7 @@
  * Server-side allowlist of emails permitted to use application APIs.
  *
  * Security notes:
- * - Hard-coded at build time. Not configurable via env vars — prevents bypass
+ * - Hard-coded at build time. Not configurable via env vars, prevents bypass
  *   via deployment config changes or environment injection.
  * - Comparison is always lowercase-trimmed to prevent spoofing with casing.
  * - This is the single source of truth: every protected route goes through
@@ -16,7 +16,7 @@ const ALLOWED_USER_EMAILS = new Set<string>([
 ]);
 
 /**
- * Personal API auto-activation — uses real DB credits but routes generations
+ * Personal API auto-activation, uses real DB credits but routes generations
  * through the account's own provider API keys (KIE + PiAPI).
  * Credits are unique per account (from user_credit_grants ledger).
  */
@@ -33,7 +33,7 @@ export function isAllowedUser(email: string | null | undefined): boolean {
 
 /**
  * Returns true when this account should auto-enable personal API keys.
- * These accounts use the real credit ledger — credits are NOT hardcoded.
+ * These accounts use the real credit ledger, credits are NOT hardcoded.
  */
 export function isPersonalApiUser(email: string | null | undefined): boolean {
   if (!email?.trim()) return false;

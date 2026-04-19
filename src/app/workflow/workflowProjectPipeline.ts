@@ -66,8 +66,8 @@ export function buildWorkflowProjectPipeline(origin: XYPosition): {
 
   const angleDefs = [
     { label: "Angle A", y: oy - 40, hint: "First hook or story beat to test (problem, desire, or proof)." },
-    { label: "Angle B", y: oy + 110, hint: "Second creative direction — alternate hook or audience angle." },
-    { label: "Angle C", y: oy + 260, hint: "Third direction — social proof, urgency, or lifestyle angle." },
+    { label: "Angle B", y: oy + 110, hint: "Second creative direction, alternate hook or audience angle." },
+    { label: "Angle C", y: oy + 260, hint: "Third direction, social proof, urgency, or lifestyle angle." },
   ] as const;
 
   const angles: ReturnType<typeof buildAdAssetNode>[] = [];
@@ -107,7 +107,7 @@ export function buildWorkflowProjectPipeline(origin: XYPosition): {
     { x: ox + 1580, y: oy + 110 },
     {
       label: "Video prompt",
-      prompt: "Motion, pacing, hook, VO or captions, and CTA — tied to the image you selected.",
+      prompt: "Motion, pacing, hook, VO or captions, and CTA, tied to the image you selected.",
     },
   );
   nodes.push(vidPrompt);
@@ -118,7 +118,7 @@ export function buildWorkflowProjectPipeline(origin: XYPosition): {
     { x: ox + 1880, y: oy + 110 },
     {
       label: "Video",
-      prompt: "Final clip for this branch — duplicate the pipeline to explore parallel concepts.",
+      prompt: "Final clip for this branch, duplicate the pipeline to explore parallel concepts.",
     },
   );
   nodes.push(video);

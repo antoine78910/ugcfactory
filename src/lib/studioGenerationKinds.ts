@@ -6,15 +6,15 @@
 /** Nano / Seedream / etc. from the Image studio tab */
 export const STUDIO_GENERATION_KIND_STUDIO_IMAGE = "studio_image" as const;
 
-/** Packshots / angles registered from Link to Ad — shown only in Projects studio library, not in Create → Image */
+/** Packshots / angles registered from Link to Ad, shown only in Projects studio library, not in Create → Image */
 export const STUDIO_GENERATION_KIND_LINK_TO_AD_IMAGE = "link_to_ad_image" as const;
 
-/** Link to Ad final videos (PiAPI/Kling) — Projects library only, not Create → Video */
+/** Link to Ad final videos (PiAPI/Kling), Projects library only, not Create → Video */
 export const STUDIO_GENERATION_KIND_LINK_TO_AD_VIDEO = "link_to_ad_video" as const;
-/** Translate tab final videos (WaveSpeed) — kept separate from Motion Control history. */
+/** Translate tab final videos (WaveSpeed), kept separate from Motion Control history. */
 export const STUDIO_GENERATION_KIND_STUDIO_TRANSLATE_VIDEO = "studio_translate_video" as const;
 
-/** Voice change outputs (ElevenLabs) — separate from Translate history. */
+/** Voice change outputs (ElevenLabs), separate from Translate history. */
 export const STUDIO_GENERATION_KIND_VOICE_CHANGE = "studio_voice_change" as const;
 
 /**

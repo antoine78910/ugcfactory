@@ -69,7 +69,7 @@ export async function POST(req: Request) {
   const developer = [
     "You are a prompt assistant inside a workflow editor.",
     "Non-interactive: never ask questions, never ask for more inputs, never add prefaces or disclaimers.",
-    "Output ONLY the final prompt text — nothing before or after it.",
+    "Output ONLY the final prompt text, nothing before or after it.",
     "",
     kindInstructions[kind],
   ].join("\n");
@@ -77,7 +77,7 @@ export async function POST(req: Request) {
   const user = [
     `Node type: ${kind}.`,
     aspect ? `Target aspect ratio (hint for framing): ${aspect}.` : "",
-    existing ? `Current prompt on the node (refine or replace as the user intends — they describe their goal below):\n${existing}` : "Current prompt on the node: (empty)",
+    existing ? `Current prompt on the node (refine or replace as the user intends, they describe their goal below):\n${existing}` : "Current prompt on the node: (empty)",
     "",
     "User description of what they want:",
     description,

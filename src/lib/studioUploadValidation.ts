@@ -8,6 +8,13 @@ export const STUDIO_IMAGE_FILE_ACCEPT =
 
 export const STUDIO_VIDEO_FILE_ACCEPT = "video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm";
 
+/** PiAPI Seedance 2 omni: mp3, wav only. */
+export const STUDIO_AUDIO_FILE_ACCEPT = "audio/mpeg,audio/wav,.mp3,.wav";
+
+const AUDIO_MIMES = new Set(["audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav"]);
+
+const AUDIO_EXTS = new Set([".mp3", ".wav"]);
+
 const IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 
 const IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif"]);
@@ -26,9 +33,11 @@ const HEIC_MIMES = new Set([
 const HEIC_EXTS = new Set([".heic", ".heif"]);
 
 export const FORMAT_HINT_IMAGE_FR =
-  "Formats acceptés : JPEG, PNG, WebP ou GIF (pas HEIC — convertis depuis l’iPhone ou un outil en ligne).";
+  "Formats acceptés : JPEG, PNG, WebP ou GIF (pas HEIC, convertis depuis l’iPhone ou un outil en ligne).";
 
 export const FORMAT_HINT_VIDEO_FR = "Formats acceptés : MP4, MOV ou WebM.";
+
+export const FORMAT_HINT_AUDIO_FR = "Formats acceptés : MP3 ou WAV (max ~15 s recommandé pour Seedance).";
 
 export const HEIC_NOT_SUPPORTED_FR =
   "Le format HEIC / HEIF n’est pas pris en charge. Exporte en JPEG ou PNG (Réglages iPhone > Appareil photo > Formats > « Le plus compatible »), ou convertis le fichier avant l’envoi.";
@@ -65,6 +74,12 @@ export function isAllowedStudioVideoFile(file: File): boolean {
   return VIDEO_MIMES.has(mime) || VIDEO_EXTS.has(ext);
 }
 
+export function isAllowedStudioAudioFile(file: File): boolean {
+  const mime = normalizeMime(file.type || "");
+  const ext = fileExtensionLower(file);
+  return AUDIO_MIMES.has(mime) || AUDIO_EXTS.has(ext);
+}
+
 export function assertStudioImageUpload(file: File): void {
   if (isHeicLike(file)) {
     throw new Error(HEIC_NOT_SUPPORTED_FR);
@@ -78,6 +93,16 @@ export function assertStudioImageUpload(file: File): void {
     );
   }
   throw new Error(`Impossible de reconnaître l’image. ${FORMAT_HINT_IMAGE_FR}`);
+}
+
+export function assertStudioAudioUpload(file: File): void {
+  if (isAllowedStudioAudioFile(file)) return;
+  const ext = fileExtensionLower(file);
+  const mime = normalizeMime(file.type || "");
+  if (mime.startsWith("audio/") || AUDIO_EXTS.has(ext)) {
+    throw new Error(`Format audio non pris en charge (${ext || mime || "?"}). ${FORMAT_HINT_AUDIO_FR}`);
+  }
+  throw new Error(`Format audio non reconnu. ${FORMAT_HINT_AUDIO_FR}`);
 }
 
 export function assertStudioVideoUpload(file: File): void {
@@ -97,15 +122,17 @@ export function assertStudioVideoUpload(file: File): void {
   throw new Error(`Format vidéo non reconnu. ${FORMAT_HINT_VIDEO_FR}`);
 }
 
-export function assertStudioUploadForKind(file: File, kind: "image" | "video"): void {
+export function assertStudioUploadForKind(file: File, kind: "image" | "video" | "audio"): void {
   if (kind === "video") assertStudioVideoUpload(file);
+  else if (kind === "audio") assertStudioAudioUpload(file);
   else assertStudioImageUpload(file);
 }
 
-export function inferStudioUploadKind(file: File): "image" | "video" {
+export function inferStudioUploadKind(file: File): "image" | "video" | "audio" {
   const mime = normalizeMime(file.type || "");
   const ext = fileExtensionLower(file);
   if (mime.startsWith("video/") || VIDEO_EXTS.has(ext)) return "video";
+  if (mime.startsWith("audio/") || AUDIO_EXTS.has(ext)) return "audio";
   return "image";
 }
 
@@ -115,12 +142,14 @@ export function assertGenericMultipartUpload(file: File): void {
     throw new Error(HEIC_NOT_SUPPORTED_FR);
   }
   if (isAllowedStudioVideoFile(file)) return;
+  if (isAllowedStudioAudioFile(file)) return;
   if (isAllowedStudioImageFile(file)) return;
 
   const mime = normalizeMime(file.type || "");
   const ext = fileExtensionLower(file);
   const looksVideo =
     mime.startsWith("video/") || VIDEO_EXTS.has(ext) || ext === ".m4v" || ext === ".avi";
+  const looksAudio = mime.startsWith("audio/") || AUDIO_EXTS.has(ext);
   const looksImage = mime.startsWith("image/") || IMAGE_EXTS.has(ext);
 
   if (looksVideo) {
@@ -128,10 +157,15 @@ export function assertGenericMultipartUpload(file: File): void {
       `Format vidéo non pris en charge (${ext || mime}). ${FORMAT_HINT_VIDEO_FR}`,
     );
   }
+  if (looksAudio) {
+    throw new Error(
+      `Format audio non pris en charge (${ext || mime}). ${FORMAT_HINT_AUDIO_FR}`,
+    );
+  }
   if (looksImage) {
     throw new Error(
       `Format d’image non pris en charge (${ext || mime}). ${FORMAT_HINT_IMAGE_FR}`,
     );
   }
-  throw new Error(`${FORMAT_HINT_IMAGE_FR} ${FORMAT_HINT_VIDEO_FR}`);
+  throw new Error(`${FORMAT_HINT_IMAGE_FR} ${FORMAT_HINT_VIDEO_FR} ${FORMAT_HINT_AUDIO_FR}`);
 }

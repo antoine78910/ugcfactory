@@ -9,26 +9,37 @@ import { getPlanFromPriceId } from "@/lib/stripe/subscriptionPrices";
 import { isAllowedUser, isPersonalApiUser } from "@/lib/allowedUsers";
 import { getUserCreditBalance } from "@/lib/creditGrants";
 import { stripeSubscriptionPeriodEndIso } from "@/lib/stripeSubscriptionPeriodEnd";
+import {
+  computeStudioAccessAllowed,
+  isTrialMetadataActive,
+  isTrialTimeWindowOpen,
+  type TrialAppMetadata,
+} from "@/lib/studioAccessPolicy";
 
 export type MeSubscriptionResponse = {
   planId: AccountPlanId;
   billing: "monthly" | "yearly" | null;
   userId: string;
-  /** When true the client must not deduct or check credits — account has unlimited access. */
+  /** When true the client must not deduct or check credits, account has unlimited access. */
   unlimited?: boolean;
   /**
    * When true the client should auto-activate stored personal API keys (KIE + PiAPI)
    * so that generations use the founder's own provider accounts.
-   * Only set for emails in the server-side allowlist — never exposed for other users.
+   * Only set for emails in the server-side allowlist, never exposed for other users.
    */
   autoEnablePersonalApi?: boolean;
   /** Server-authoritative credit balance from the ledger (sum of non-expired grants). */
   creditBalance?: number;
   /**
-   * True when the user purchased the $1 trial (15 credits, Link to Ad only access).
-   * Set via app_metadata by the Stripe webhook — not user-editable.
+   * True while the $1 trial window is still open (`trial_started_at` + 24h) and `trial_active`.
+   * UI: trial-only gating; not set once the window expires.
    */
   isTrial?: boolean;
+  /**
+   * When false, the client should keep the user off studio routes until they complete
+   * the $1 trial (with credits) or buy a subscription (`/onboarding?step=setup`).
+   */
+  studioAccessAllowed?: boolean;
 };
 
 /**
@@ -40,7 +51,7 @@ export async function GET() {
   const auth = await requireSupabaseUser();
   if (auth.response) return auth.response;
 
-  // Allowlisted accounts get unlimited access — skip Stripe entirely.
+  // Allowlisted accounts get unlimited access, skip Stripe entirely.
   if (isAllowedUser(auth.user.email)) {
     return NextResponse.json({
       planId: "scale" as AccountPlanId,
@@ -49,6 +60,7 @@ export async function GET() {
       unlimited: true,
       autoEnablePersonalApi: true,
       creditBalance: 999_999,
+      studioAccessAllowed: true,
     } satisfies MeSubscriptionResponse);
   }
 
@@ -71,6 +83,7 @@ export async function GET() {
       unlimited: true,
       autoEnablePersonalApi: true,
       creditBalance,
+      studioAccessAllowed: true,
     } satisfies MeSubscriptionResponse);
   }
 
@@ -86,17 +99,32 @@ export async function GET() {
     return { ...base, creditBalance: 0 };
   }
 
-  // Detect trial users via app_metadata (set by webhook, not user-editable)
-  async function getIsTrial(): Promise<boolean> {
+  async function getTrialAppMetadata(): Promise<TrialAppMetadata> {
     try {
       const a = createSupabaseServiceClient();
-      if (!a) return false;
+      if (!a) return {};
       const { data } = await a.auth.admin.getUserById(userId);
-      const meta = data?.user?.app_metadata as Record<string, unknown> | null;
-      return meta?.trial_active === true;
+      return (data?.user?.app_metadata as TrialAppMetadata | undefined) ?? {};
     } catch {
-      return false;
+      return {};
     }
+  }
+
+  async function withFreeTierTrialFlags(
+    base: MeSubscriptionResponse,
+    trialMeta: TrialAppMetadata,
+  ): Promise<MeSubscriptionResponse> {
+    const withBal = await withCreditBalance(base);
+    const credits = typeof withBal.creditBalance === "number" && Number.isFinite(withBal.creditBalance)
+      ? withBal.creditBalance
+      : 0;
+    const trialUi = isTrialMetadataActive(trialMeta) && isTrialTimeWindowOpen(trialMeta);
+    const studioAccessAllowed = computeStudioAccessAllowed({
+      planId: withBal.planId,
+      trialMeta,
+      creditBalance: credits,
+    });
+    return { ...withBal, isTrial: trialUi, studioAccessAllowed };
   }
 
   const free: MeSubscriptionResponse = { planId: "free", billing: null, userId };
@@ -173,6 +201,7 @@ export async function GET() {
               billing,
               userId: auth.user.id,
               creditBalance,
+              studioAccessAllowed: true,
             } satisfies MeSubscriptionResponse);
           }
         }
@@ -192,9 +221,8 @@ export async function GET() {
         // non-critical
       }
 
-      const isTrial = await getIsTrial();
-      const freeWithTrial: MeSubscriptionResponse = isTrial ? { ...free, isTrial: true } : free;
-      return NextResponse.json(await withCreditBalance(freeWithTrial));
+      const trialMeta = await getTrialAppMetadata();
+      return NextResponse.json(await withFreeTierTrialFlags(free, trialMeta));
     } catch (err) {
       console.error("[me/subscription] Stripe error:", err);
       // Fall through to DB fallback below
@@ -204,7 +232,10 @@ export async function GET() {
   // ── 2. Fallback: read from DB (when Stripe key is missing or Stripe failed) ─
   try {
     const admin = createSupabaseServiceClient();
-    if (!admin) return NextResponse.json(await withCreditBalance(free));
+    if (!admin) {
+      const trialMeta = await getTrialAppMetadata();
+      return NextResponse.json(await withFreeTierTrialFlags(free, trialMeta));
+    }
 
     const { data, error } = await admin
       .from("user_subscriptions")
@@ -213,25 +244,29 @@ export async function GET() {
       .maybeSingle();
 
     if (error || !data) {
-      const isTrial = await getIsTrial();
-      return NextResponse.json(await withCreditBalance(isTrial ? { ...free, isTrial: true } : free));
+      const trialMeta = await getTrialAppMetadata();
+      return NextResponse.json(await withFreeTierTrialFlags(free, trialMeta));
     }
     if (data.status !== "active" && data.status !== "trialing") {
-      const isTrial = await getIsTrial();
-      return NextResponse.json(await withCreditBalance(isTrial ? { ...free, isTrial: true } : free));
+      const trialMeta = await getTrialAppMetadata();
+      return NextResponse.json(await withFreeTierTrialFlags(free, trialMeta));
     }
 
     const planId = parseAccountPlan(data.plan_id);
     const raw = data.billing;
     const billing = raw === "yearly" ? "yearly" : raw === "monthly" ? "monthly" : null;
 
-    return NextResponse.json(await withCreditBalance({
-      planId,
-      billing: planId === "free" ? null : billing,
-      userId: auth.user.id,
-    }));
+    return NextResponse.json(
+      await withCreditBalance({
+        planId,
+        billing: planId === "free" ? null : billing,
+        userId: auth.user.id,
+        studioAccessAllowed: true,
+      }),
+    );
   } catch (err) {
     console.error("[me/subscription] DB fallback error:", err);
-    return NextResponse.json(await withCreditBalance(free));
+    const trialMeta = await getTrialAppMetadata();
+    return NextResponse.json(await withFreeTierTrialFlags(free, trialMeta));
   }
 }

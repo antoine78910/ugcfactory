@@ -6,7 +6,7 @@
  * Defaults to the live marketing site so it matches production without a local Host hack.
  *
  * Usage: `node scripts/capture-og-banner.mjs`
- * Env:   `OG_CAPTURE_URL` — override base URL (e.g. `http://127.0.0.1:3000` with Host forwarded by a proxy).
+ * Env:   `OG_CAPTURE_URL`, override base URL (e.g. `http://127.0.0.1:3000` with Host forwarded by a proxy).
  */
 
 import { chromium } from "playwright";

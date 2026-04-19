@@ -58,7 +58,7 @@ export function WorkflowInviteWelcome({ spaceId }: { spaceId: string }) {
           <p className="mb-6 text-[14px] leading-relaxed text-white/55">
             <span className="font-medium text-white/80">{payload.invitedBy}</span> invited you to
             collaborate on this workflow project
-            {payload.role === "editor" ? " — you can view and edit" : " — you have view access"}.
+            {payload.role === "editor" ? ", you can view and edit" : ", you have view access"}.
           </p>
 
           <Dialog.Close asChild>

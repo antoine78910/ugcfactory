@@ -99,6 +99,19 @@ export function isCreditsOrSubscriptionPath(pathname: string): boolean {
 }
 
 /**
+ * True for studio tool routes (`/link-to-ad`, `/video`, `/workflow`, …) but not bare `/`
+ * (marketing home) or `/subscription` / `/onboarding`.
+ */
+export function isStudioToolPath(pathname: string): boolean {
+  const stripped = pathnameWithoutLegacyAppPrefix(pathname);
+  const first = stripped.split("/").filter(Boolean)[0] ?? "";
+  if (!first) return false;
+  if (first === "watermark") return true;
+  if (first === "workflow") return true;
+  return first in SLUG_TO_SECTION;
+}
+
+/**
  * Whether the pathname is the in-browser studio wizard (or legacy `/app/*`).
  * Use before syncing `history.replaceState` / pushState to public URLs without `/app`.
  */

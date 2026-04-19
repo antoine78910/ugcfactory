@@ -19,7 +19,7 @@ function emailHtml(bookingUrl: string) {
   <p>Hi there,</p>
   <p>Thanks for signing up. We would love to help you get the most out of the product.</p>
   <p><a href="${bookingUrl}" style="color:#6d28d9;font-weight:600">Book a quick call with us</a> at a time that works for you.</p>
-  <p>— The team</p>
+  <p>Thanks,<br />The team</p>
 </body>
 </html>`;
 }

@@ -18,6 +18,10 @@ function extFromMime(mime: string): string {
     "video/mp4": ".mp4",
     "video/quicktime": ".mov",
     "video/webm": ".webm",
+    "audio/mpeg": ".mp3",
+    "audio/mp3": ".mp3",
+    "audio/wav": ".wav",
+    "audio/x-wav": ".wav",
   } as Record<string, string>;
   return m[mime] ?? "";
 }
@@ -32,7 +36,7 @@ async function uploadViaNextApi(file: File): Promise<string> {
     const isNetwork = e instanceof TypeError && String(e.message).toLowerCase().includes("fetch");
     throw new Error(
       isNetwork
-        ? "Upload failed (network). If the file is large, try again — the app may route big uploads directly to storage."
+        ? "Upload failed (network). If the file is large, try again, the app may route big uploads directly to storage."
         : e instanceof Error
           ? e.message
           : "Upload failed",
@@ -72,7 +76,8 @@ async function uploadViaSupabaseDirect(file: File): Promise<string> {
       ? name.slice(dot).toLowerCase()
       : extFromMime(mime) ||
         (mime.startsWith("image/") ? ".jpg" : "") ||
-        (mime.startsWith("video/") ? ".mp4" : "");
+        (mime.startsWith("video/") ? ".mp4" : "") ||
+        (mime.startsWith("audio/") ? ".mp3" : "");
 
   const path = `${userData.user.id}/${crypto.randomUUID()}${ext || (mime.startsWith("image/") ? ".jpg" : ".bin")}`;
 
@@ -92,7 +97,7 @@ async function uploadViaSupabaseDirect(file: File): Promise<string> {
  * Upload a browser `File` to public CDN URL.
  * Large files and videos use Supabase Storage from the browser (bypasses Vercel body limits).
  */
-export type UploadFileKind = "image" | "video";
+export type UploadFileKind = "image" | "video" | "audio";
 
 export async function uploadFileToCdn(
   file: File,
@@ -102,7 +107,8 @@ export async function uploadFileToCdn(
   assertStudioUploadForKind(file, kind);
 
   const mime = file.type || "";
-  const useDirect = file.size > VERCEL_SAFE_BODY_BYTES || mime.startsWith("video/");
+  const useDirect =
+    file.size > VERCEL_SAFE_BODY_BYTES || mime.startsWith("video/") || mime.startsWith("audio/");
 
   if (useDirect) {
     try {

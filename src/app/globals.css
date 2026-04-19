@@ -87,7 +87,7 @@
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);
   --card-foreground: oklch(0.985 0 0);
-  /* Selects / dropdowns — charcoal panels (not white), align with studio param UI */
+  /* Selects / dropdowns, charcoal panels (not white), align with studio param UI */
   --popover: #121212;
   --popover-foreground: #fafafa;
   --primary: oklch(0.922 0 0);
@@ -164,7 +164,7 @@
   animation: marquee-track 38s linear infinite;
 }
 
-/* Link to Ad — loader scan site (barre + clip-path, branding violet) */
+/* Link to Ad, loader scan site (barre + clip-path, branding violet) */
 @keyframes lta-website-scan-move {
   0% {
     top: 0;
@@ -237,7 +237,7 @@
   transition: clip-path 1s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
-/* Link to Ad — image reference assembly loader (3 cards reveal progressively). */
+/* Link to Ad, image reference assembly loader (3 cards reveal progressively). */
 @keyframes lta-image-arch-reveal {
   0% {
     clip-path: inset(0 100% 0 0);
@@ -310,7 +310,7 @@
   accent-color: rgb(139 92 246);
 }
 
-/* Workflow canvas: second Background layer — a bit brighter dots in the middle of the viewport only */
+/* Workflow canvas: second Background layer, a bit brighter dots in the middle of the viewport only */
 .workflow-flow svg.react-flow__background.workflow-flow-dot-glow {
   opacity: 1;
   mask-image: radial-gradient(ellipse 54% 50% at 50% 46%, #000 0%, transparent 98%);
@@ -350,7 +350,7 @@
   stroke-width: 3.25px !important;
 }
 
-/* One-shot snip overlay — pivot ≈ blade crossing in 24×24 icon space. */
+/* One-shot snip overlay, pivot ≈ blade crossing in 24×24 icon space. */
 .workflow-cut-fx-root {
   position: fixed;
   left: 0;
@@ -428,7 +428,7 @@
   pointer-events: none;
 }
 
-/* Image / video generator — run in progress (minimal, smooth) */
+/* Image / video generator, run in progress (minimal, smooth) */
 .workflow-generator-card--busy {
   animation: workflow-generator-card-border 2.4s ease-in-out infinite;
 }

@@ -1,4 +1,4 @@
-/* Hide native video UI on mobile (esp. iOS) — carousel is decorative, muted autoplay only */
+/* Hide native video UI on mobile (esp. iOS), carousel is decorative, muted autoplay only */
 .revealVideo {
   pointer-events: none;
   -webkit-touch-callout: none;

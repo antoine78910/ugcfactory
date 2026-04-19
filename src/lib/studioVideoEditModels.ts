@@ -1,5 +1,5 @@
 /**
- * Studio « Edit Video » — picker ids vs Kie `createTask` models.
+ * Studio « Edit Video », picker ids vs Kie `createTask` models.
  *
  * O1 edit input shape aligns with public Kling O1 docs (AIML / Fal): `prompt`, `video_url`, optional `image_urls`, `keep_audio`.
  * Omni / Grok slugs are not clearly listed in Kie’s public index; override via env if Kie returns “unknown model”.

@@ -344,7 +344,7 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
             return [row, ...prev.filter((i) => i.id !== rowId)];
           });
           toast.message("Image upscale running", {
-            description: "You can leave this page — it will appear in history when ready.",
+            description: "You can leave this page, it will appear in history when ready.",
           });
         } catch (e) {
           const msg = userMessageFromCaughtError(e, "Something went wrong while upscaling.");

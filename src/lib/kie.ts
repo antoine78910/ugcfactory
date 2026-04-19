@@ -7,7 +7,7 @@ function getKieApiKey() {
   return getEnv("KIE_API_KEY") ?? requireEnv("VEO3_API_KEY");
 }
 
-/** KIE `POST /api/v1/veo/generate` `model` enum — see https://docs.kie.ai/veo3-api/generate-veo-3-video */
+/** KIE `POST /api/v1/veo/generate` `model` enum, see https://docs.kie.ai/veo3-api/generate-veo-3-video */
 export type KieVeoModel = "veo3" | "veo3_fast" | "veo3_lite";
 
 export function normalizeKieVeoModel(raw: string | undefined): KieVeoModel {

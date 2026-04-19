@@ -252,7 +252,7 @@ function angleBriefPartsFromScriptOption(
 
   // Last resort: existing heuristic teaser.
   const teaser = teaserFromScriptBlock(raw, angleIndex);
-  // teaserFromScriptBlock can also append an ellipsis — give a show-all if it's long.
+  // teaserFromScriptBlock can also append an ellipsis, give a show-all if it's long.
   const canExpand = teaser.length > 160 || /…$/.test(teaser) || /\.{3}$/.test(teaser);
   return { brief: teaser, full: teaser, canExpand };
 }
@@ -425,7 +425,7 @@ function NanoThreeImageGenerationGrid({
                     </div>
                   </motion.div>
                 ) : (
-                  <div className="flex h-full items-center justify-center text-[11px] text-white/25">—</div>
+                  <div className="flex h-full items-center justify-center text-[11px] text-white/25">-</div>
                 )}
               </div>
               {!busy ? (
@@ -445,7 +445,7 @@ function NanoThreeImageGenerationGrid({
   );
 }
 
-/** Large 9:16 stage while Kling renders — same visual language as Nano image generation (feed-ready). */
+/** Large 9:16 stage while Kling renders, same visual language as Nano image generation (feed-ready). */
 function KlingVideoGenerationPlaceholder({
   posterUrl,
   statusText,
@@ -570,7 +570,7 @@ export type LinkToAdUniverseProps = {
   onRunsChanged?: () => void;
   /** Last few Link to Ad runs (e.g. 3 most recent) for quick switching. */
   recentLinkToAdRuns?: LinkToAdRecentRunChip[];
-  /** Current run id (persisted) — highlights the active chip. */
+  /** Current run id (persisted), highlights the active chip. */
   activeRunId?: string | null;
   onActiveRunIdChange?: (runId: string | null) => void;
   /** Parent remounts Link to Ad for a clean session (Return to Link to Ad). */
@@ -596,7 +596,7 @@ function LinkToAdRecentRunsToggle({
       className={cn("flex items-center", compact ? "gap-1.5" : "gap-2.5")}
       title={
         hidePreviousLtaGenerations
-          ? "Recent projects are hidden — click the switch to show them again"
+          ? "Recent projects are hidden, click the switch to show them again"
           : "Click to hide the recent projects strip"
       }
     >
@@ -711,7 +711,7 @@ function LinkToAdRecentRunsChips({
           >
             {!compact ? (
               <p className="text-[10px] leading-snug text-white/45">
-                All your Link to Ad generations are stored in your projects — switch between your last three here, or open
+                All your Link to Ad generations are stored in your projects, switch between your last three here, or open
                 Projects for the full list.
               </p>
             ) : null}
@@ -766,7 +766,7 @@ function LinkToAdRecentRunsChips({
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={r.thumbUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
                       ) : (
-                        <span className="flex h-full w-full items-center justify-center text-[9px] text-white/30">—</span>
+                        <span className="flex h-full w-full items-center justify-center text-[9px] text-white/30">-</span>
                       )}
                     </span>
                     <span className="min-w-0 flex-1">
@@ -1008,7 +1008,7 @@ function PersonaPhotoSection({
       )}
       {personaPhotoUrls.length > 0 && (
         <p className="text-[10px] leading-relaxed text-violet-300/60">
-          The persona photo will be used as visual reference — avatar description will be skipped in the script.
+          The persona photo will be used as visual reference, avatar description will be skipped in the script.
         </p>
       )}
     </div>
@@ -1071,7 +1071,7 @@ export default function LinkToAdUniverse({
       .then(({ data }) => _setUserEmail(data.user?.email ?? null))
       .catch(() => {});
   }, [supabaseClient]);
-  /** 30s = two chained 15s clips — disabled in UI until launch (“Soon”). */
+  /** 30s = two chained 15s clips, disabled in UI until launch (“Soon”). */
   const _30sUnlocked = false;
   const DEMO_EMAILS = new Set(["anto.delbos@gmail.com", "app@youry.com"]);
   const isDemoUser = Boolean(_userEmail && DEMO_EMAILS.has(_userEmail.toLowerCase()));
@@ -1260,11 +1260,11 @@ export default function LinkToAdUniverse({
     dialogue: "",
     ambience: "",
   });
-  /** Text after EDIT blocks (fidelity / audio rules) — not shown in UI, sent to the video model. */
+  /** Text after EDIT blocks (fidelity / audio rules), not shown in UI, sent to the video model. */
   const [videoPromptTechnicalTail, setVideoPromptTechnicalTail] = useState("");
-  /** Older one-blob prompts without EDIT — sections.motion holds the full creative text. */
+  /** Older one-blob prompts without EDIT, sections.motion holds the full creative text. */
   const [videoPromptIsLegacyBlob, setVideoPromptIsLegacyBlob] = useState(false);
-  /** Native <details> open state — hide summary preview while editing to avoid duplicating Motion/Dialogue/Ambience. */
+  /** Native <details> open state, hide summary preview while editing to avoid duplicating Motion/Dialogue/Ambience. */
   /** Which video prompt subsection is expanded for editing (nano-style; one at a time). */
   const [videoPromptExpandedKey, setVideoPromptExpandedKey] = useState<
     "motion" | "dialogue" | "ambience" | "legacy" | null
@@ -1282,7 +1282,7 @@ export default function LinkToAdUniverse({
   const [nanoBananaSelectedImageIndex, setNanoBananaSelectedImageIndex] = useState<0 | 1 | 2 | null>(null);
   const [ugcVideoPromptGpt, setUgcVideoPromptGpt] = useState("");
   const [nanoPromptDrafts, setNanoPromptDrafts] = useState<[string, string, string]>(["", "", ""]);
-  /** Technical suffix (negative prompt, etc.) — not shown in the main editor; rejoined when generating. */
+  /** Technical suffix (negative prompt, etc.), not shown in the main editor; rejoined when generating. */
   const [nanoPromptTechnicalTails, setNanoPromptTechnicalTails] = useState<[string, string, string]>([
     "",
     "",
@@ -2066,7 +2066,7 @@ export default function LinkToAdUniverse({
     };
   }, [factorWordCounts, factorWordRules, spokenWordTotal]);
 
-  /** 5s tier omits PROBLEM — clear leftover text when user selects 5s. */
+  /** 5s tier omits PROBLEM, clear leftover text when user selects 5s. */
   useEffect(() => {
     if (normalizeUgcScriptVideoDurationSec(videoDuration) !== 5) return;
     setScriptFactors((prev) => {
@@ -2176,7 +2176,7 @@ export default function LinkToAdUniverse({
     return aiScrapedCandidateUrls.filter((u) => u !== preview).slice(0, LINK_TO_AD_CHANGE_PICKER_MAX);
   }, [aiScrapedCandidateUrls, resolvedPreviewUrl]);
 
-  /** Thumbnail strip: active preview (AI pick / neutral / chosen) plus user-uploaded product photos only — not every scraped packshot. */
+  /** Thumbnail strip: active preview (AI pick / neutral / chosen) plus user-uploaded product photos only, not every scraped packshot. */
   const productPhotosStripUrls = useMemo(() => {
     const out: string[] = [];
     const seen = new Set<string>();
@@ -2719,7 +2719,7 @@ export default function LinkToAdUniverse({
     setPendingCustomAnglePreview(null);
     setPendingCustomAngleEditing(false);
     void onSelectAngle(nextNumber - 1, { scriptsText: merged, angleLabels: nextLabels });
-    toast.success(`Custom angle added as angle ${nextNumber} — selected; ready to generate.`);
+    toast.success(`Custom angle added as angle ${nextNumber}, selected; ready to generate.`);
   }
 
   function parseAngleSummaryToFactors(text: string) {
@@ -3794,12 +3794,12 @@ export default function LinkToAdUniverse({
           partialUrls[firstEmptySlot] = urls[0] ?? "";
           setNanoBananaImageUrls([...partialUrls]);
         } catch {
-          // Task expired or failed — will re-generate this slot below.
+          // Task expired or failed, will re-generate this slot below.
           partialUrls[firstEmptySlot] = "";
         }
       }
 
-      // Re-generate any still-missing slots in parallel (no extra credit charge — original payment already done).
+      // Re-generate any still-missing slots in parallel (no extra credit charge, original payment already done).
       const missingSlots = ([0, 1, 2] as const).filter((slotIdx) => !partialUrls[slotIdx]?.trim());
       if (missingSlots.length > 0) {
         const submitted = await Promise.all(
@@ -4105,7 +4105,7 @@ export default function LinkToAdUniverse({
       setLtaFrozenCredits(null);
 
       // Re-upload to Supabase storage in background (for persistence) without blocking the UI.
-      // Only update image URLs and persist to DB — never touch video/kling state since the user
+      // Only update image URLs and persist to DB, never touch video/kling state since the user
       // may have already selected an image and started video generation by the time this completes.
       void (async () => {
         try {
@@ -4431,7 +4431,7 @@ export default function LinkToAdUniverse({
   }
 
   /**
-   * @param chainPart2Prompt — If set, runs the second 15s clip only (30s workflow). Do not clear 30s refs.
+   * @param chainPart2Prompt, If set, runs the second 15s clip only (30s workflow). Do not clear 30s refs.
    */
   async function onGenerateKlingVideo(overrideVideoPrompt?: string, chainPart2Prompt?: string) {
     const url = storeUrl.trim();
@@ -4515,7 +4515,7 @@ export default function LinkToAdUniverse({
         if (!isTimeout || attempt >= MAX_GENERATE_ATTEMPTS - 1) {
           throw new Error(json.error || "Video generation failed");
         }
-        toast.info("Video provider was slow — retrying automatically…");
+        toast.info("Video provider was slow, retrying automatically…");
       }
       if (!json?.taskId) throw new Error(json?.error || "Video generation failed");
       {
@@ -4652,7 +4652,7 @@ export default function LinkToAdUniverse({
   }, [klingSlotSignature]);
 
   // klingResumeAttemptedRef is already reset by the klingSlotSignature effect above.
-  // Do NOT reset it here when klingPollTaskId becomes null — that causes infinite
+  // Do NOT reset it here when klingPollTaskId becomes null, that causes infinite
   // resume loops when a task is permanently failed (slot still has taskId, no videoUrl).
 
   /**
@@ -4864,7 +4864,7 @@ export default function LinkToAdUniverse({
             const p2 = kling30sPart2PromptRef.current;
             kling30sPart2PromptRef.current = null;
             kling30sNextClipIsPart2Ref.current = true;
-            toast.success(didPersistVideo ? "Part 1 saved — generating part 2…" : "Part 1 ready — generating part 2…");
+            toast.success(didPersistVideo ? "Part 1 saved, generating part 2…" : "Part 1 ready, generating part 2…");
             void onGenerateKlingVideo(undefined, p2);
           } else {
             if (clipPart === 2) {
@@ -5923,7 +5923,7 @@ export default function LinkToAdUniverse({
                     {showAiImagePicker && aiAlternativeUrls.length > 0 ? (
                       <div className="rounded-lg border border-violet-400/20 bg-violet-500/[0.06] p-2">
                         <p className="text-[10px] font-medium text-violet-100/90">
-                          Best alternatives (ranked) — not the full crawl list
+                          Best alternatives (ranked), not the full crawl list
                         </p>
                         <div className="mt-2 flex flex-wrap gap-2">
                           {aiAlternativeUrls.map((u, i) => (
@@ -6155,7 +6155,7 @@ export default function LinkToAdUniverse({
                     {showAiImagePicker && aiAlternativeUrls.length > 0 ? (
                       <div className="rounded-lg border border-violet-400/20 bg-violet-500/[0.06] p-2">
                         <p className="text-[10px] font-medium text-violet-100/90">
-                          Best alternatives (ranked) — not the full crawl list
+                          Best alternatives (ranked), not the full crawl list
                         </p>
                         <div className="mt-2 flex flex-wrap gap-2">
                           {aiAlternativeUrls.map((u, i) => (
@@ -6352,7 +6352,7 @@ export default function LinkToAdUniverse({
                   {pendingCustomAnglePreview ? (
                     <div className="mt-3 space-y-2 rounded-lg border border-violet-400/25 bg-violet-500/[0.08] p-3">
                       <p className="text-xs font-semibold text-violet-200">
-                        Generated angle — review before adding
+                        Generated angle, review before adding
                         {pendingCustomAngleEditing ? (
                           <span className="ml-1.5 font-normal text-violet-300/80">(editing)</span>
                         ) : null}
@@ -6556,7 +6556,7 @@ export default function LinkToAdUniverse({
                   {showAiImagePicker && aiAlternativeUrls.length > 0 ? (
                     <div className="mt-2 rounded-lg border border-violet-400/20 bg-violet-500/[0.06] p-2">
                       <p className="text-[10px] font-medium text-violet-100/90">
-                        Best alternatives (ranked) — not the full crawl list
+                        Best alternatives (ranked), not the full crawl list
                       </p>
                       <div className="mt-2 flex flex-wrap gap-2">
                         {aiAlternativeUrls.map((u, i) => (
@@ -6697,7 +6697,7 @@ export default function LinkToAdUniverse({
                                 </span>
                               ) : (
                                 <span className="flex h-full w-full items-center justify-center text-[9px] font-medium uppercase tracking-wide text-white/25">
-                                  —
+                                  -
                                 </span>
                               )}
                               {url ? (
@@ -7177,7 +7177,7 @@ export default function LinkToAdUniverse({
                                 </span>
                               ) : (
                                 <span className="flex h-full w-full items-center justify-center text-xs font-medium uppercase tracking-wide text-white/25">
-                                  —
+                                  -
                                 </span>
                               )}
                               {imgUrl ? (
@@ -7380,7 +7380,7 @@ export default function LinkToAdUniverse({
                                           ))}
                                         </div>
                                         <p className="text-[11px] leading-snug text-violet-300/80">
-                                          Using uploaded persona photo — appearance will match the reference image.
+                                          Using uploaded persona photo, appearance will match the reference image.
                                         </p>
                                       </div>
                                     ) : (
@@ -7500,7 +7500,7 @@ export default function LinkToAdUniverse({
                           {videoPromptIsLegacyBlob ? (
                             <div className="space-y-2">
                               <p className="px-1 text-[9px] font-semibold uppercase tracking-wide text-amber-200/75">
-                                Older prompt — regenerate the video prompt for Motion / Dialogue / Ambience
+                                Older prompt, regenerate the video prompt for Motion / Dialogue / Ambience
                               </p>
                               <div className="flex min-w-0 items-start gap-2">
                                 <button
@@ -8094,7 +8094,7 @@ export default function LinkToAdUniverse({
         style={{ maxWidth: 200 }}
       >
         <span className="text-[10px] font-bold uppercase tracking-widest text-violet-300/60">Replaying…</span>
-        <span className="text-[11px] font-medium text-white/80">{DEMO_PHASES[demoPhaseIndex]?.label ?? "—"}</span>
+        <span className="text-[11px] font-medium text-white/80">{DEMO_PHASES[demoPhaseIndex]?.label ?? "-"}</span>
         <button type="button" onClick={stopDemoReplay} className="rounded-md bg-red-600/70 px-3 py-1 text-[11px] font-semibold text-white hover:bg-red-500">
           Stop
         </button>

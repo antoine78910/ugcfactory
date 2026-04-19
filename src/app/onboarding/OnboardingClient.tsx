@@ -3,10 +3,11 @@
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import SetupClient from "@/app/setup/SetupClient";
 
 const OTHER_MAX_LEN = 160;
 
@@ -55,7 +56,7 @@ const chipDisabled = cn(
   "cursor-not-allowed border-white/[0.06] bg-white/[0.02] text-white/35",
 );
 
-/** Primary CTA — matches landing “Get started” (page.tsx). */
+/** Primary CTA, matches landing “Get started” (page.tsx). */
 const nextEnabledClass = cn(
   "h-10 w-full max-w-[200px] rounded-2xl border border-violet-200/40 bg-violet-400 text-sm font-semibold text-black",
   "shadow-[0_6px_0_0_rgba(76,29,149,0.9)] ring-offset-0 transition-all",
@@ -80,8 +81,55 @@ function payloadReferral(referral: ReferralSource, otherText: string): string {
   return t.length ? `other:${t.slice(0, OTHER_MAX_LEN)}` : "other";
 }
 
+function OnboardingSteps({ phase }: { phase: "personalize" | "setup" }) {
+  const isSetup = phase === "setup";
+  return (
+    <div className="mb-5 flex select-none items-center justify-center gap-2 text-xs sm:mb-6">
+      <div className="flex items-center gap-2 text-emerald-200/90">
+        <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500/80" aria-hidden />
+        <span>Register</span>
+      </div>
+      <div className="h-px w-10 shrink-0 bg-white/10" aria-hidden />
+      <div
+        className={cn(
+          "flex items-center gap-2",
+          isSetup ? "text-emerald-200/90" : "text-violet-300/95",
+        )}
+      >
+        <span
+          className={cn(
+            "h-2 w-2 shrink-0 rounded-full",
+            isSetup ? "bg-emerald-500/80" : "bg-violet-400 shadow-[0_0_10px_rgba(167,139,250,0.55)]",
+          )}
+          aria-hidden
+        />
+        <span>Personalize</span>
+      </div>
+      <div className="h-px w-10 shrink-0 bg-white/10" aria-hidden />
+      <div
+        className={cn(
+          "flex items-center gap-2",
+          isSetup ? "text-violet-300/95" : "text-white/35",
+        )}
+      >
+        <span
+          className={cn(
+            "h-2 w-2 shrink-0 rounded-full",
+            isSetup ? "bg-violet-400 shadow-[0_0_10px_rgba(167,139,250,0.55)]" : "bg-white/15",
+          )}
+          aria-hidden
+        />
+        <span>Setup</span>
+      </div>
+    </div>
+  );
+}
+
 export default function OnboardingClient() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isSetupStep = searchParams.get("step") === "setup";
+
   const [workType, setWorkType] = useState<WorkType | null>(null);
   const [workOtherText, setWorkOtherText] = useState("");
   const [referralSource, setReferralSource] = useState<ReferralSource | null>(null);
@@ -108,12 +156,12 @@ export default function OnboardingClient() {
     } catch {
       /* non-blocking */
     }
-    router.push("/setup");
+    router.push("/onboarding?step=setup");
   }
 
   return (
     <div className="min-h-[100dvh] overflow-x-clip bg-[#050507] text-white antialiased selection:bg-violet-500/30">
-      {/* Nav — same shell as landing (page.tsx header) */}
+      {/* Nav, same shell as landing (page.tsx header) */}
       <header className="sticky top-0 z-50 border-b border-white/[0.08] bg-[#050507]/85 backdrop-blur-md supports-[backdrop-filter]:bg-[#050507]/20">
         <div className="mx-auto flex min-w-0 max-w-6xl items-center gap-2 px-4 py-2.5 sm:px-5 sm:py-3">
           <Link
@@ -132,31 +180,34 @@ export default function OnboardingClient() {
         </div>
       </header>
 
-      <main className="relative mx-auto max-w-2xl overflow-visible px-5 pb-20 pt-6 sm:px-6 sm:pt-8">
-        {/* Soft violet wash — same language as LP hero */}
+      <main
+        className={cn(
+          "relative mx-auto overflow-visible px-5 pb-20 pt-6 sm:px-6 sm:pt-8",
+          isSetupStep ? "max-w-6xl xl:max-w-[1200px]" : "max-w-2xl",
+        )}
+      >
+        {/* Soft violet wash, same on Personalize and Setup (subtle orb like LP hero) */}
         <div
           className="pointer-events-none absolute left-1/2 top-0 z-0 h-[320px] w-[min(100vw,640px)] -translate-x-1/2 rounded-full bg-violet-600/[0.08] blur-[100px]"
           aria-hidden
         />
 
-        <div className="relative z-10 mx-auto w-full max-w-2xl overflow-visible">
-          <div className="mb-5 flex select-none items-center justify-center gap-2 text-xs text-white/40 sm:mb-6">
-            <div className="flex items-center gap-2">
-              <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500/80" aria-hidden />
-              <span>Register</span>
-            </div>
-            <div className="h-px w-10 shrink-0 bg-white/10" aria-hidden />
-            <div className="flex items-center gap-2 text-violet-300/95">
-              <span className="h-2 w-2 shrink-0 rounded-full bg-violet-400 shadow-[0_0_10px_rgba(167,139,250,0.55)]" aria-hidden />
-              <span>Personalize</span>
-            </div>
-            <div className="h-px w-10 shrink-0 bg-white/10" aria-hidden />
-            <div className="flex items-center gap-2 text-white/35">
-              <span className="h-2 w-2 shrink-0 rounded-full bg-white/15" aria-hidden />
-              <span>Setup</span>
-            </div>
-          </div>
+        <div
+          className={cn(
+            "relative z-10 mx-auto w-full overflow-visible",
+            isSetupStep ? "max-w-6xl xl:max-w-[1200px]" : "max-w-2xl",
+          )}
+        >
+          <OnboardingSteps phase={isSetupStep ? "setup" : "personalize"} />
 
+          {isSetupStep ? (
+            <div className="mx-auto w-full max-w-6xl xl:max-w-[1200px]">
+              <SetupClient embedded />
+            </div>
+          ) : null}
+
+          {!isSetupStep ? (
+            <>
           <div className="mb-5 text-center sm:mb-6">
             <h1 className="text-xl font-semibold tracking-tight text-white md:text-2xl">
               Personalize your{" "}
@@ -273,6 +324,8 @@ export default function OnboardingClient() {
               </div>
             </div>
           </div>
+            </>
+          ) : null}
         </div>
       </main>
     </div>

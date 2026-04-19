@@ -28,7 +28,7 @@ import { useSupabaseBrowserClient } from "@/lib/supabase/BrowserSupabaseProvider
 import { displayCreditsToLedgerTicks } from "@/lib/creditLedgerTicks";
 
 // ---------------------------------------------------------------------------
-// localStorage keys — bare (no namespace).
+// localStorage keys, bare (no namespace).
 // Cross-account isolation is handled via LS_OWNER (see below).
 // ---------------------------------------------------------------------------
 const LS_CREDITS = "ugc_demo_credits";
@@ -91,10 +91,19 @@ function lsRemove(key: string) {
   }
 }
 
+const CHECKOUT_GRACE_MS = 5 * 60 * 1000;
+
+/** Stripe success may return before webhooks update `app_metadata` / subscription. */
+export function isCheckoutGracePeriodActive(): boolean {
+  if (typeof window === "undefined") return false;
+  const ts = Number(lsGet(LS_CHECKOUT_TS));
+  return Number.isFinite(ts) && Date.now() - ts < CHECKOUT_GRACE_MS;
+}
+
 /**
  * Called when the server confirms this is a founder account (autoEnablePersonalApi: true).
  * If the user already has API keys stored in localStorage but hasn't toggled them on,
- * this silently enables them — so founders never need to visit /apitest manually.
+ * this silently enables them, so founders never need to visit /apitest manually.
  * Only sets the "enabled" flag; never creates or overwrites actual key values.
  */
 function autoEnableFounderApiKeys() {
@@ -248,6 +257,11 @@ type CreditsPlanContextValue = CreditsState & {
    * Other features are visible but their generate button is locked.
    */
   isTrial: boolean;
+  /**
+   * When false, studio tool routes redirect to onboarding paywall until the user has
+   * an active $1 trial (with credits), a paid plan, or unlimited access.
+   */
+  studioAccessAllowed: boolean;
   setSubscriptionPlan: (planId: SubscriptionPlanId) => void;
   addPackCredits: (packKey: CreditPackKey) => void;
   spendCredits: (n: number) => void;
@@ -315,7 +329,7 @@ const SUBSCRIPTION_TIERS = [
 
 const CreditsPlanContext = createContext<CreditsPlanContextValue | null>(null);
 
-/** Must match `readState` when `window` is undefined — avoids hydration mismatch from reading localStorage in useState. */
+/** Must match `readState` when `window` is undefined, avoids hydration mismatch from reading localStorage in useState. */
 const HYDRATION_SAFE_CREDITS_STATE: CreditsState = { planId: "free", current: 0, total: 0 };
 
 export function CreditsPlanProvider({
@@ -329,6 +343,7 @@ export function CreditsPlanProvider({
   const [state, setState] = useState<CreditsState>(HYDRATION_SAFE_CREDITS_STATE);
   const [isUnlimited, setIsUnlimited] = useState(false);
   const [isTrial, setIsTrial] = useState(false);
+  const [studioAccessAllowed, setStudioAccessAllowed] = useState(true);
   const supabase = useSupabaseBrowserClient();
 
   // Hydrate from localStorage after SSR markup (same default as server) to avoid Sidebar / banner mismatches.
@@ -357,7 +372,7 @@ export function CreditsPlanProvider({
   const activeUserId = resolvedUserId ?? null;
 
   // ---------------------------------------------------------------------------
-  // DB sync — runs once on mount.
+  // DB sync, runs once on mount.
   //
   // Always fetches the authoritative plan from the server.
   // The API also returns the confirmed userId, which is used to:
@@ -368,11 +383,35 @@ export function CreditsPlanProvider({
   // "free" (webhook not yet processed), we keep the plan from consumeCheckoutQueryParams.
   // ---------------------------------------------------------------------------
   useEffect(() => {
-    // Skip when not authenticated — avoids a guaranteed 401 on public pages.
-    if (!activeUserId) return;
+    if (!activeUserId) {
+      setStudioAccessAllowed(true);
+      return;
+    }
+
+    if (typeof window !== "undefined") {
+      const sp = new URLSearchParams(window.location.search);
+      if (sp.get("checkout") === "trial_success") {
+        lsSet(LS_CHECKOUT_TS, String(Date.now()));
+        const path = window.location.pathname;
+        const clean = path.includes("?") ? path.split("?")[0]! : path;
+        window.history.replaceState({}, "", clean || "/");
+      }
+    }
+
     fetch("/api/me/subscription")
       .then((r) => (r.ok ? r.json() : null))
-      .then((data: { planId: string; userId?: string; unlimited?: boolean; autoEnablePersonalApi?: boolean; creditBalance?: number; isTrial?: boolean } | null) => {
+      .then(
+        (
+          data: {
+            planId: string;
+            userId?: string;
+            unlimited?: boolean;
+            autoEnablePersonalApi?: boolean;
+            creditBalance?: number;
+            isTrial?: boolean;
+            studioAccessAllowed?: boolean;
+          } | null,
+        ) => {
         if (!data) return;
 
         // Founder account: auto-enable stored personal API keys if they exist.
@@ -380,24 +419,26 @@ export function CreditsPlanProvider({
           autoEnableFounderApiKeys();
         }
 
-        // Trial users: flag them for UI gating.
-        if (data.isTrial === true) {
-          setIsTrial(true);
-        }
-
-        // Unlimited accounts: flag them and apply the top plan — never deduct credits.
+        // Unlimited accounts: flag them and apply the top plan, never deduct credits.
         if (data.unlimited === true) {
           setIsUnlimited(true);
+          setStudioAccessAllowed(true);
+          setIsTrial(false);
           const confirmedUid = data.userId ?? null;
           if (confirmedUid) lsSet(LS_OWNER, confirmedUid);
           setState({ planId: "scale", current: 999_999, total: 999_999 });
           return;
         }
 
+        setStudioAccessAllowed(
+          typeof data.studioAccessAllowed === "boolean" ? data.studioAccessAllowed : true,
+        );
+        setIsTrial(data.isTrial === true);
+
         const confirmedUid = data.userId ?? null;
         const serverPlan = parseAccountPlan(data.planId);
 
-        // Detect a different account — clear stale data before applying.
+        // Detect a different account, clear stale data before applying.
         if (confirmedUid) {
           const storedOwner = lsGet(LS_OWNER);
           if (storedOwner && storedOwner !== confirmedUid) {
@@ -414,10 +455,8 @@ export function CreditsPlanProvider({
 
         if (serverPlan === "free") {
           // Check grace period: if checkout happened < 5 min ago, the webhook may
-          // not have fired yet — keep the plan written by consumeCheckoutQueryParams.
-          const ts = Number(lsGet(LS_CHECKOUT_TS));
-          const inGrace = Number.isFinite(ts) && Date.now() - ts < 5 * 60 * 1000;
-          if (inGrace) return;
+          // not have fired yet, keep the plan written by consumeCheckoutQueryParams.
+          if (isCheckoutGracePeriodActive()) return;
 
           // Server is authoritative: apply free plan with ledger balance.
           const localPlan = parseAccountPlan(lsGet(LS_PLAN));
@@ -431,7 +470,7 @@ export function CreditsPlanProvider({
           return;
         }
 
-        // Server confirms a paid plan — apply it with the authoritative ledger balance.
+        // Server confirms a paid plan, apply it with the authoritative ledger balance.
         const alloc = subscriptionCredits(serverPlan);
         lsSet(LS_PLAN, serverPlan);
         if (serverBalance !== null) {
@@ -445,7 +484,7 @@ export function CreditsPlanProvider({
         setState(readState(confirmedUid));
       })
       .catch(() => {
-        /* network error — keep local state */
+        /* network error, keep local state */
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeUserId]);
@@ -595,6 +634,7 @@ export function CreditsPlanProvider({
       percentRemaining,
       isUnlimited,
       isTrial,
+      studioAccessAllowed,
       setSubscriptionPlan,
       addPackCredits,
       spendCredits,
@@ -607,6 +647,7 @@ export function CreditsPlanProvider({
       percentRemaining,
       isUnlimited,
       isTrial,
+      studioAccessAllowed,
       setSubscriptionPlan,
       addPackCredits,
       spendCredits,

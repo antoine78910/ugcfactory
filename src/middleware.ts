@@ -16,7 +16,7 @@ function isStudioHost(hostHeader: string): boolean {
   );
 }
 
-/** Routes that have their own `src/app/<name>` pages — do not rewrite to `/app/*`. */
+/** Routes that have their own `src/app/<name>` pages, do not rewrite to `/app/*`. */
 function isExcludedFromStudioRewrite(pathname: string): boolean {
   if (pathname.startsWith("/auth")) return true;
   const first = pathname.split("/").filter(Boolean)[0] ?? "";
@@ -33,11 +33,11 @@ function isExcludedFromStudioRewrite(pathname: string): boolean {
     "dashboard",
     "admin",
     "apitest",
-    /** Gift / promo credit links — must not rewrite or `[...sections]` swallows `/redeem` and shows Link to Ad. */
+    /** Gift / promo credit links, must not rewrite or `[...sections]` swallows `/redeem` and shows Link to Ad. */
     "redeem",
-    /** Top-level `src/app/workflow/*` — must not rewrite to `/app/workflow` or `[...sections]` treats it as unknown and shows Link to Ad. */
+    /** Top-level `src/app/workflow/*`, must not rewrite to `/app/workflow` or `[...sections]` treats it as unknown and shows Link to Ad. */
     "workflow",
-    /** Onboarding + setup — standalone pages, not part of the studio shell. */
+    /** Onboarding + setup, standalone pages, not part of the studio shell. */
     "onboarding",
     "setup",
   ]).has(first);
@@ -148,7 +148,7 @@ export async function middleware(req: NextRequest) {
       // getUser() refreshes the token if expired and writes the new cookie via setAll.
       await supabase.auth.getUser();
     } catch {
-      /* non-fatal — continue without refresh */
+      /* non-fatal, continue without refresh */
     }
     return response;
   }

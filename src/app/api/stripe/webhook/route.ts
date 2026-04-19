@@ -1,7 +1,7 @@
 export const runtime = "nodejs";
 
 /**
- * Stripe webhook — verifies signature then updates DB.
+ * Stripe webhook, verifies signature then updates DB.
  * URL: https://app.youry.io/api/stripe/webhook
  * Events to enable in Stripe Dashboard:
  *   checkout.session.completed
@@ -13,7 +13,7 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import { getSupabaseUrlOptional } from "@/lib/supabase/env";
 
-/** GET /api/stripe/webhook — health check (no auth required). */
+/** GET /api/stripe/webhook, health check (no auth required). */
 export async function GET() {
   const hasSecret = Boolean(process.env.STRIPE_SECRET_KEY?.trim());
   const hasWebhookSecret = Boolean(process.env.STRIPE_WEBHOOK_SECRET?.trim());
@@ -148,7 +148,7 @@ export async function POST(req: Request) {
     switch (event.type) {
 
       // -----------------------------------------------------------------------
-      // Checkout completed — subscription start OR one-time credit pack
+      // Checkout completed, subscription start OR one-time credit pack
       // -----------------------------------------------------------------------
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
@@ -205,8 +205,9 @@ export async function POST(req: Request) {
             await addPackCreditsLedger(admin, userId, TRIAL_CREDITS);
             // Mark user as trial in app_metadata (service-role only, not user-editable)
             try {
+              const started = new Date().toISOString();
               await admin.auth.admin.updateUserById(userId, {
-                app_metadata: { trial_active: true },
+                app_metadata: { trial_active: true, trial_started_at: started },
               });
             } catch { /* non-blocking */ }
             serverLog("stripe_webhook_trial_credits_granted", { userId, credits: TRIAL_CREDITS });
@@ -321,7 +322,7 @@ export async function POST(req: Request) {
       }
 
       // -----------------------------------------------------------------------
-      // Monthly renewal — grant subscription credits
+      // Monthly renewal, grant subscription credits
       // -----------------------------------------------------------------------
       case "invoice.payment_succeeded": {
         const invoice = event.data.object as Stripe.Invoice;
@@ -391,7 +392,7 @@ export async function POST(req: Request) {
           previous_attributes?: Partial<Stripe.Subscription> | null;
         }).previous_attributes;
 
-        /** User canceled renewal in portal — subscription stays active until period end. */
+        /** User canceled renewal in portal, subscription stays active until period end. */
         const cancelJustScheduled =
           sub.cancel_at_period_end === true &&
           previousAttributes != null &&
@@ -502,7 +503,7 @@ export async function POST(req: Request) {
   } catch (err) {
     const message = err instanceof Error ? err.message : "Handler error.";
     serverLog("stripe_webhook_handler_error", { event: event.type, error: message });
-    // Return 200 so Stripe does not retry — log the error for investigation
+    // Return 200 so Stripe does not retry, log the error for investigation
     return NextResponse.json({ received: true, error: message });
   }
 

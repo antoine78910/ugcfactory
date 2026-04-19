@@ -1,6 +1,12 @@
 import Link from "next/link";
 import Image from "next/image";
+import { headers } from "next/headers";
 import { studioAppPath } from "@/lib/studioAppOrigin";
+import {
+  landingCountryFromHeaders,
+  landingTrialCurrencyFromCountry,
+  landingTrialPriceSnippet,
+} from "@/lib/landingTrialPrice";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { HeroVideoCarousel3D } from "./HeroVideoCarousel3D";
@@ -49,7 +55,12 @@ const HERO_STUDIO_VIDEOS = [
   "/studio/0328(9).mp4",
   "/studio/0328(10).mp4",
 ] as const;
-export default function LandingPage() {
+
+export default async function LandingPage() {
+  const h = await headers();
+  const country = landingCountryFromHeaders((name) => h.get(name));
+  const trialPrice = landingTrialPriceSnippet(landingTrialCurrencyFromCountry(country));
+
   return (
     <div className="min-h-screen overflow-x-clip bg-[#050507] text-white selection:bg-violet-500/30">
       {/*
@@ -148,7 +159,7 @@ export default function LandingPage() {
                   className="inline-flex items-center justify-center gap-1.5"
                 >
                   <Sparkles className="h-4 w-4 shrink-0" aria-hidden />
-                  <span>Generate</span>
+                  <span>Create your Ad For {trialPrice}</span>
                 </Link>
               </Button>
             </div>
@@ -156,7 +167,7 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* 3D video cylinder — less translate-y = sits higher vs bottom anchor */}
+        {/* 3D video cylinder, less translate-y = sits higher vs bottom anchor */}
         <div
           className="pointer-events-none absolute inset-x-0 bottom-0 z-[2] h-[min(460px,56svh)] translate-y-8 overflow-hidden sm:h-[min(530px,60svh)] sm:translate-y-6 lg:h-[min(640px,66svh)] lg:translate-y-5"
           aria-hidden
@@ -218,7 +229,7 @@ export default function LandingPage() {
         >
           <Link href={studioAppPath("/signup")} prefetch={false}>
             <Sparkles className="mr-2 h-4 w-4" />
-            Try it yourself
+            Start your {trialPrice} trial
             <ArrowRight className="ml-2 h-4 w-4" />
           </Link>
         </Button>
@@ -243,7 +254,7 @@ export default function LandingPage() {
           >
             <Link href={studioAppPath("/signup")} prefetch={false}>
               <Sparkles className="mr-1.5 h-4 w-4" />
-              Generate your ad
+              Try for {trialPrice}
             </Link>
           </Button>
         </div>

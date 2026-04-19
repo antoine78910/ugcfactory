@@ -1,6 +1,6 @@
 import type { Node } from "@xyflow/react";
 
-/** Pixels (screen / flow at zoom 1) — dropping a wire near a handle snaps more easily. */
+/** Pixels (screen / flow at zoom 1), dropping a wire near a handle snaps more easily. */
 export const WORKFLOW_CONNECTION_RADIUS = 96;
 
 /** Max distance in flow space between output (right) and input (left) to auto-link after dragging a node. */

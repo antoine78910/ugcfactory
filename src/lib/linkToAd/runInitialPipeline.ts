@@ -44,7 +44,7 @@ export type InitialPipelineResult =
       runId: string;
       scriptsStepOk: boolean;
       scriptsError?: string;
-      /** True when vision thinks packaging/label legibility is weak — user should add pouch/pack photos. */
+      /** True when vision thinks packaging/label legibility is weak, user should add pouch/pack photos. */
       suggestAdditionalProductPhotos?: boolean;
     }
   | { ok: false; error: string; runId?: string };
@@ -61,14 +61,14 @@ export async function runInitialPipeline(
   opts: {
     storeUrl: string;
     neutralUploadUrl: string | null;
-    /** User product uploads (main + additional) captured before a fresh run — used when main slot is empty. */
+    /** User product uploads (main + additional) captured before a fresh run, used when main slot is empty. */
     userProductImageUrls?: string[];
     /** Persona / avatar reference URLs for script generation vision. */
     personaImageUrls?: string[];
     generationMode?: "automatic" | "custom_ugc";
     customUgcIntent?: string;
     aiProvider?: "gpt" | "claude";
-    /** 5 / 10 / 15 / 30 — spoken-word budget for UGC scripts (Link to Ad duration control). */
+    /** 5 / 10 / 15 / 30, spoken-word budget for UGC scripts (Link to Ad duration control). */
     videoDurationSeconds?: number;
   },
   onProgress?: (step: InitialPipelineStepIndex) => void,

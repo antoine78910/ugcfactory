@@ -1,7 +1,7 @@
 /**
  * KIE Sora image-to-video requires a publicly reachable image URL (see
  * https://docs.kie.ai/market/sora2/sora-2-pro-image-to-video ).
- * Blob / data URLs must not flip the request to image-to-video — use text-to-video instead.
+ * Blob / data URLs must not flip the request to image-to-video, use text-to-video instead.
  */
 export function isKieServableReferenceImageUrl(raw: string | null | undefined): boolean {
   const u = String(raw ?? "").trim();

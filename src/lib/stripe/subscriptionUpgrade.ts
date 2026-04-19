@@ -52,7 +52,7 @@ export function classifySubscriptionChange(args: {
   return "ok";
 }
 
-/** Display $/mo — yearly uses same 0.7× rule as subscription page. */
+/** Display $/mo, yearly uses same 0.7× rule as subscription page. */
 export function subscriptionPriceDisplayUsd(planId: SubscriptionPlanId, billing: "monthly" | "yearly"): number {
   const i = subscriptionPlanSortIndex(planId);
   const m = i >= 0 ? SUBSCRIPTIONS[i].price_usd : 0;

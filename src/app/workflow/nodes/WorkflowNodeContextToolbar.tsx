@@ -19,7 +19,7 @@ const splitChev = cn(btn, "w-7 px-0");
 type WorkflowNodeContextToolbarProps = {
   nodeId: string;
   onRun: () => void;
-  /** Sticky notes only need duplicate / delete — no run or path controls. */
+  /** Sticky notes only need duplicate / delete, no run or path controls. */
   variant?: "module" | "sticky";
 };
 

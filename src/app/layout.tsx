@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
 import { CreditsPlanProvider } from "@/app/_components/CreditsPlanContext";
+import { StudioAccessGuard } from "@/app/_components/StudioAccessGuard";
 import { BrowserSupabaseProvider } from "@/lib/supabase/BrowserSupabaseProvider";
 import { Toaster } from "@/components/ui/sonner";
 import HeyoInit from "@/app/_components/HeyoInit";
@@ -66,7 +67,7 @@ export const metadata: Metadata = {
         url: "/og-banner.png",
         width: 1200,
         height: 630,
-        alt: "Youry — product to video ads",
+        alt: "Youry, product to video ads",
       },
     ],
   },
@@ -118,6 +119,7 @@ export default function RootLayout({
         <DubAnalyticsInit />
         <BrowserSupabaseProvider>
           <CreditsPlanProvider>
+            <StudioAccessGuard />
             <RedeemTokenGuard />
             <HeyoInit />
             <ClarityInit />

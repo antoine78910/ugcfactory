@@ -39,7 +39,7 @@ type Body = {
   resolution?: string;
   numImages?: number;
   personalApiKey?: string;
-  /** Reference image URLs (Studio Image tab) — forwarded to Kie. */
+  /** Reference image URLs (Studio Image tab), forwarded to Kie. */
   imageUrls?: string[];
 };
 
@@ -84,7 +84,7 @@ export async function POST(req: Request) {
   }
 
   const usesPersonalApi = Boolean(personalKey);
-  // Calculate credits server-side — never trust the client-provided value
+  // Calculate credits server-side, never trust the client-provided value
   const numImages = Math.max(1, Math.min(Number(body.numImages) || 1, 10));
   const resolution = (body.resolution as "1K" | "2K" | "4K" | undefined) ?? "1K";
   const creditsDisplay = usesPersonalApi ? 0 : computeImageCredits(model, resolution, numImages);

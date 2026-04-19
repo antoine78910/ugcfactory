@@ -23,7 +23,7 @@ type Body = {
   productImageUrl?: string | null;
   /** Up to 3 HTTPS product references (multi-angle) for GPT vision */
   productImageUrls?: string[] | null;
-  /** Optional persona/avatar reference images — when present, scripts skip text persona description. */
+  /** Optional persona/avatar reference images, when present, scripts skip text persona description. */
   avatarImageUrls?: string[] | null;
   /** 5 | 10 | 15 | 30 (legacy: 8 → 10s tier). Drives max spoken-word count per script. */
   videoDurationSeconds?: number;
@@ -103,7 +103,7 @@ export async function POST(req: Request) {
         : "I am also attaching the product image for reference.";
 
   const avatarNote = avatarRefs.length > 0
-    ? `AVATAR/PERSONA REFERENCE IMAGES ATTACHED: ${String(avatarRefs.length)} image(s). This is the person who will appear in the video. Match their appearance exactly. Do NOT describe their physical appearance in the script text — the image is the visual source of truth. Set avatar_source: REFERENCE IMAGE.`
+    ? `AVATAR/PERSONA REFERENCE IMAGES ATTACHED: ${String(avatarRefs.length)} image(s). This is the person who will appear in the video. Match their appearance exactly. Do NOT describe their physical appearance in the script text, the image is the visual source of truth. Set avatar_source: REFERENCE IMAGE.`
     : "No avatar/persona reference image attached. Describe the persona fully in each script and set avatar_source: TEXT GENERATED.";
 
   const userPayload = [
@@ -116,7 +116,7 @@ export async function POST(req: Request) {
     previousScriptsText ? previousScriptsText : "",
     "",
     `Target video length (user selected in the app): ${String(videoDurationSeconds)} seconds.`,
-    `You MUST respect the spoken-word cap for this exact length — shorter videos mean fewer words (see system rules). Do not write for a different duration.`,
+    `You MUST respect the spoken-word cap for this exact length, shorter videos mean fewer words (see system rules). Do not write for a different duration.`,
     "",
     "The scripts must follow the UGC AI script structure.",
     "Test 3 different marketing angles.",

@@ -319,7 +319,7 @@ export async function POST(req: Request) {
     const system = [
       "You are a product image analyst for e-commerce UGC content creation.",
       "Analyze each image shown and return a structured JSON score.",
-      "Return STRICT JSON only — no markdown, no explanation outside the JSON.",
+      "Return STRICT JSON only, no markdown, no explanation outside the JSON.",
     ].join("\n");
 
     const userText = [
@@ -330,10 +330,10 @@ export async function POST(req: Request) {
       "- image_quality: Resolution, sharpness, no blur/artifacts (10 = high-res studio quality)",
       "- background_clean: How clean/minimal is the background? (10 = pure white studio, 0 = cluttered scene)",
       "- ugc_suitability: Would this image work as a reference for UGC / image-generation models? (10 = ideal packshot)",
-      "- packaging_readability: For the PRIMARY sellable unit (bottle, box, pouch, sachet, bag, tub, etc.): is the entire pack visible (not cropped), and is printed brand/ingredient text sharp and readable? (10 = full pack + all important wording legible). Heavily penalize crops that cut off lines of text. For supplements/food in flexible pouches or sachets, prefer shots where the printed pouch/sachet is the hero over bare product with no visible pack — rank those higher when both exist.",
+      "- packaging_readability: For the PRIMARY sellable unit (bottle, box, pouch, sachet, bag, tub, etc.): is the entire pack visible (not cropped), and is printed brand/ingredient text sharp and readable? (10 = full pack + all important wording legible). Heavily penalize crops that cut off lines of text. For supplements/food in flexible pouches or sachets, prefer shots where the printed pouch/sachet is the hero over bare product with no visible pack, rank those higher when both exist.",
       "",
       "Also set per image (required):",
-      '- label_fully_legible: boolean — true only if NO important printed words appear covered by a hand, another object, glare, shadow, sticker, or edge crop; false if any wording is partly hidden or unreadable.',
+      '- label_fully_legible: boolean, true only if NO important printed words appear covered by a hand, another object, glare, shadow, sticker, or edge crop; false if any wording is partly hidden or unreadable.',
       "",
       "Return JSON:",
       "{",
@@ -518,7 +518,7 @@ export async function POST(req: Request) {
         if (s.composite < 4.25) continue;
         const extraReason =
           s.reason?.trim() ||
-          "Additional reference — combine with the main image if label or pouch details are split across shots.";
+          "Additional reference, combine with the main image if label or pouch details are split across shots.";
         productOnlyUrls.push({ url: s.url, reason: extraReason });
         already.add(s.url);
       }

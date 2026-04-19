@@ -38,6 +38,12 @@ export async function POST(req: Request) {
       : "monthly";
   const billing = billingRaw === "yearly" ? "yearly" : "monthly";
 
+  const fromOnboarding =
+    typeof body === "object" &&
+    body !== null &&
+    "fromOnboarding" in body &&
+    Boolean((body as { fromOnboarding?: unknown }).fromOnboarding);
+
   /** When true, `checkout.session.completed` will not call Dub `track.sale` (e.g. $1 paid trial). */
   const skipDubPartnerSale =
     typeof body === "object" &&
@@ -76,7 +82,9 @@ export async function POST(req: Request) {
       mode: "subscription",
       line_items: [{ price: priceId, quantity: 1 }],
       success_url: `${base.replace(/\/$/, "")}/subscription?checkout=success&plan=${encodeURIComponent(planId)}`,
-      cancel_url: `${base.replace(/\/$/, "")}/subscription?checkout=cancel`,
+      cancel_url: fromOnboarding
+        ? `${base.replace(/\/$/, "")}/onboarding?step=setup&checkout=cancel`
+        : `${base.replace(/\/$/, "")}/subscription?checkout=cancel`,
       allow_promotion_codes: true,
       metadata: {
         user_id: auth.user.id,

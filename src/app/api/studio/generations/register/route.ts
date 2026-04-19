@@ -48,7 +48,7 @@ export async function POST(req: Request) {
   const hasKiePersonal = Boolean(String(body.personalApiKey ?? "").trim());
   const hasPiapiPersonal = Boolean(String(body.piapiApiKey ?? "").trim());
   const providerLc = provider.toLowerCase();
-  /** Do not OR keys across providers — that breaks polling (e.g. KIE key set but PiAPI job never polled). */
+  /** Do not OR keys across providers, that breaks polling (e.g. KIE key set but PiAPI job never polled). */
   const usesPersonalApi =
     providerLc === "piapi" ? hasPiapiPersonal : hasKiePersonal;
   const taskIdsRaw = Array.isArray(body.taskIds) ? body.taskIds : body.taskId ? [body.taskId] : [];

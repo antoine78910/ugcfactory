@@ -29,7 +29,7 @@ export const runtime = "nodejs";
 
 /**
  * Vercel serverless: Hobby ~10s max unless project uses Pro Fluid Compute with a higher limit.
- * Poll touches DB + KIE/PiAPI + optional download/re-upload of media per row — keep row cap below.
+ * Poll touches DB + KIE/PiAPI + optional download/re-upload of media per row, keep row cap below.
  */
 export const maxDuration = 60;
 

@@ -46,7 +46,7 @@ export function isStudioGoogleNanoBananaPickerId(
   return id === "google_nano_banana" || id === "nanobanana_standard" || id === "google_nano_banana_edit";
 }
 
-/** Quality/resolution row — only NanoBanana 2 and Pro expose 1K / 2K / 4K in Studio. */
+/** Quality/resolution row, only NanoBanana 2 and Pro expose 1K / 2K / 4K in Studio. */
 export function studioImageModelSupportsResolutionPicker(id: string): boolean {
   return id === "nano" || id === "pro";
 }

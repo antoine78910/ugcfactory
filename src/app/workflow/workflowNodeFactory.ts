@@ -16,7 +16,7 @@ export type BuildAdAssetNodeOptions = {
   label?: string;
   /** Initial prompt on the node (e.g. template pipelines). */
   prompt?: string;
-  /** width/height — when set, card preview uses this exact shape. */
+  /** width/height, when set, card preview uses this exact shape. */
   intrinsicAspect?: number;
   referencePreviewUrl?: string;
   referenceSource?: "upload" | "avatar";

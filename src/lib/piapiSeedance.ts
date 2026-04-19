@@ -5,6 +5,17 @@ const PIAPI_BASE = "https://api.piapi.ai";
 const PIAPI_TASK_PREFIX = "piapi:";
 const PIAPI_FETCH_RETRIES = 3;
 
+/** PiAPI Seedance 2 (Pro), max images in `omni_reference` mode. @see https://piapi.ai/docs/seedance-api/seedance-2 */
+export const SEEDANCE_PRO_MAX_IMAGE_URLS = 12;
+
+/** Pro `omni_reference`: max total items across image_urls + video_urls + audio_urls. */
+export const SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS = 12;
+/** Seedance Preview, max reference images. @see https://piapi.ai/docs/seedance-api/seedance-2-preview */
+export const SEEDANCE_PREVIEW_MAX_IMAGE_URLS = 9;
+
+/** Studio compact upload UI for Preview / Fast Preview (ordered `image_urls`, 1–4). */
+export const SEEDANCE_COMPACT_PREVIEW_MAX_IMAGE_URLS = 4;
+
 async function fetchPiapiWithRetry(
   url: string,
   init: RequestInit,
@@ -66,12 +77,76 @@ function isSeedance2ProTaskType(t: PiapiSeedanceTaskType): boolean {
   return t === "seedance-2" || t === "seedance-2-fast";
 }
 
+/**
+ * When the prompt does not already reference @imageN, prepend tags so PiAPI can bind `image_urls`
+ * (see Seedance docs: @image1, @image2, …).
+ */
+export function ensureSeedancePromptImageTags(prompt: string, imageCount: number): string {
+  const p = (prompt ?? "").trim();
+  if (imageCount <= 0) return p;
+  if (/\b@image\d+\b/i.test(p)) return p;
+  if (imageCount === 1) return `@image1 ${p}`.trim();
+  const tags = Array.from({ length: imageCount }, (_, i) => `@image${i + 1}`).join(", ");
+  return `${tags}, ${p}`.trim();
+}
+
+/**
+ * Prepends @imageN / @videoN / @audioN when the prompt omits that media family entirely
+ * (PiAPI Seedance 2 omni_reference, see PiAPI docs).
+ */
+export function ensureSeedancePromptMediaTags(
+  prompt: string,
+  counts: { image: number; video: number; audio: number },
+): string {
+  const p = (prompt ?? "").trim();
+  const { image: ic, video: vc, audio: ac } = counts;
+  if (ic + vc + ac <= 0) return p;
+
+  const parts: string[] = [];
+  if (ic > 0 && !/\b@image\d+\b/i.test(p)) {
+    parts.push(ic === 1 ? "@image1" : Array.from({ length: ic }, (_, i) => `@image${i + 1}`).join(", "));
+  }
+  if (vc > 0 && !/\b@video\d+\b/i.test(p)) {
+    parts.push(vc === 1 ? "@video1" : Array.from({ length: vc }, (_, i) => `@video${i + 1}`).join(", "));
+  }
+  if (ac > 0 && !/\b@audio\d+\b/i.test(p)) {
+    parts.push(ac === 1 ? "@audio1" : Array.from({ length: ac }, (_, i) => `@audio${i + 1}`).join(", "));
+  }
+  if (!parts.length) return p;
+  return `${parts.join(" ")}, ${p}`.trim();
+}
+
+export type PiapiSeedanceAspectRatio =
+  | "16:9"
+  | "9:16"
+  | "3:4"
+  | "4:3"
+  | "21:9"
+  | "1:1"
+  | "auto";
+
 export async function piapiCreateSeedanceTask(opts: {
   taskType: PiapiSeedanceTaskType;
   prompt: string;
+  /** Single reference (legacy). Ignored when `imageUrls` is non-empty. */
   imageUrl?: string;
+  /** Ordered reference images: @image1 = index 0, etc. */
+  imageUrls?: string[];
+  /** Seedance 2 Pro `omni_reference` only, motion references (MP4/MOV). */
+  videoUrls?: string[];
+  /** Seedance 2 Pro `omni_reference` only, MP3/WAV, ≤15s recommended. */
+  audioUrls?: string[];
+  /**
+   * Seedance 2 Pro: use `omni_reference` when set, even if there are only two URLs after dedupe,
+   * so element references are not misclassified as first+last only.
+   */
+  forceOmniReference?: boolean;
+  /**
+   * Seedance 2 Pro: force `omni_reference` (e.g. Studio mixed media strip) even with only 1–2 images.
+   */
+  preferOmniReference?: boolean;
   duration: number;
-  aspectRatio?: "16:9" | "9:16" | "3:4" | "4:3";
+  aspectRatio?: PiapiSeedanceAspectRatio;
   overrideApiKey?: string;
 }): Promise<string> {
   const apiKey = opts.overrideApiKey?.trim() || getPiApiKey();
@@ -80,21 +155,57 @@ export async function piapiCreateSeedanceTask(opts: {
     ? Math.min(15, Math.max(4, Math.round(Number(opts.duration)) || 5))
     : Math.min(15, Math.max(5, Math.round(Number(opts.duration)) || 5));
 
-  const prompt = opts.imageUrl
-    ? `@image1 ${opts.prompt}`
-    : opts.prompt;
+  const urlsRaw =
+    opts.imageUrls && opts.imageUrls.length > 0
+      ? opts.imageUrls
+      : opts.imageUrl
+        ? [opts.imageUrl]
+        : [];
+  const urls = urlsRaw.map((u) => String(u ?? "").trim()).filter(Boolean);
+  const videoUrls = (opts.videoUrls ?? []).map((u) => String(u ?? "").trim()).filter(Boolean);
+  const audioUrls = (opts.audioUrls ?? []).map((u) => String(u ?? "").trim()).filter(Boolean);
+  const totalRefs = urls.length + videoUrls.length + audioUrls.length;
+
+  const finalPrompt =
+    totalRefs > 0
+      ? ensureSeedancePromptMediaTags(opts.prompt, {
+          image: urls.length,
+          video: videoUrls.length,
+          audio: audioUrls.length,
+        })
+      : opts.prompt.trim();
 
   const input: Record<string, unknown> = {
-    prompt,
+    prompt: finalPrompt,
     duration,
     aspect_ratio: opts.aspectRatio ?? "9:16",
   };
+
   if (pro) {
-    input.mode = opts.imageUrl ? "first_last_frames" : "text_to_video";
+    if (totalRefs === 0) {
+      input.mode = "text_to_video";
+    } else {
+      const useOmni =
+        videoUrls.length > 0 ||
+        audioUrls.length > 0 ||
+        urls.length > 2 ||
+        opts.forceOmniReference === true ||
+        opts.preferOmniReference === true;
+      if (useOmni) {
+        input.mode = "omni_reference";
+        if (urls.length) input.image_urls = urls;
+        if (videoUrls.length) input.video_urls = videoUrls;
+        if (audioUrls.length) input.audio_urls = audioUrls;
+      } else {
+        input.mode = "first_last_frames";
+        input.image_urls = urls;
+        input.aspect_ratio = "auto";
+      }
+    }
+  } else if (urls.length > 0) {
+    input.image_urls = urls;
   }
-  if (opts.imageUrl) {
-    input.image_urls = [opts.imageUrl];
-  }
+
   const res = await fetch(`${PIAPI_BASE}/api/v1/task`, {
     method: "POST",
     headers: {

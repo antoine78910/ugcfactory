@@ -181,7 +181,7 @@ export async function pollStudioGenerationRow(
     else if (mapped.status === "SUCCESS") out = { kind: "success", urls: mapped.response };
     else out = { kind: "fail", message: mapped.error_message ?? "Video task failed." };
   } else if (providerLc === "kie-veo") {
-    /** Veo uses a dedicated endpoint — not the KIE Market jobs API. */
+    /** Veo uses a dedicated endpoint, not the KIE Market jobs API. */
     const veoData = await kieVeoRecordInfo(row.external_task_id, kieKey);
     const flag = veoData.successFlag;
     if (flag === 1) {
@@ -212,7 +212,7 @@ export async function pollStudioGenerationRow(
     let resultUrls = (out.urls ?? []).map((u) => String(u).trim()).filter(Boolean);
 
     // Archive to Supabase Storage immediately when possible (prevents ephemeral URL expiry).
-    // Falls back to saving provider URLs — cron backfill will retry later.
+    // Falls back to saving provider URLs, cron backfill will retry later.
     if (resultUrls.length > 0 && !resultUrls.every(isStudioMediaPublicUrl)) {
       try {
         const { urls: archived } = await persistStudioMediaUrls({

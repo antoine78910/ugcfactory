@@ -8,7 +8,7 @@
 export const ELEVENLABS_LABEL_SKIP = "__none__";
 
 /**
- * Languages — common values used in the ElevenLabs voice library (display names).
+ * Languages, common values used in the ElevenLabs voice library (display names).
  * The API stores label values as free-form strings; these match typical dashboard entries.
  */
 export const ELEVENLABS_LANGUAGE_OPTIONS: readonly string[] = [
@@ -60,7 +60,7 @@ export const ELEVENLABS_LANGUAGE_OPTIONS: readonly string[] = [
 ].sort((a, b) => a.localeCompare(b));
 
 /**
- * Accent — matches the ElevenLabs voice-library accent filter (dashboard).
+ * Accent, matches the ElevenLabs voice-library accent filter (dashboard).
  * Includes the set shown in product UI (e.g. Acadian … Quebec, Standard) plus common regional tags.
  */
 export const ELEVENLABS_ACCENT_OPTIONS: readonly string[] = [
@@ -84,8 +84,8 @@ export const ELEVENLABS_ACCENT_OPTIONS: readonly string[] = [
   "Welsh",
 ].sort((a, b) => a.localeCompare(b));
 
-/** Gender — ElevenLabs voice library (UI). */
+/** Gender, ElevenLabs voice library (UI). */
 export const ELEVENLABS_GENDER_OPTIONS: readonly string[] = ["Male", "Female", "Neutral"];
 
-/** Age — ElevenLabs voice library (UI). */
+/** Age, ElevenLabs voice library (UI). */
 export const ELEVENLABS_AGE_OPTIONS: readonly string[] = ["Young", "Middle Aged", "Old"];

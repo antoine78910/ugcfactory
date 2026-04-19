@@ -17,7 +17,7 @@ function deriveAppEndpoint(row: Record<string, unknown>): string {
     return "/api/studio/generations/start";
   }
   if (kind === "studio_upscale") return "/api/kie/upscale";
-  return "—";
+  return "-";
 }
 
 export async function GET(req: Request) {

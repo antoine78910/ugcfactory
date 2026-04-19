@@ -52,8 +52,9 @@ export async function POST(req: Request) {
       mode: "payment",
       line_items: [{ price: priceId, quantity: 1 }],
       success_url: `${base.replace(/\/$/, "")}/?checkout=trial_success`,
-      cancel_url: `${base.replace(/\/$/, "")}/setup?checkout=cancel`,
-      allow_promotion_codes: false,
+      cancel_url: `${base.replace(/\/$/, "")}/onboarding?step=setup&checkout=cancel`,
+      /** Show “Add promotion code” on Checkout (USD + EUR $1/1€ trial). */
+      allow_promotion_codes: true,
       metadata: {
         user_id: auth.user.id,
         /** Identifies this as a trial credit grant (30 credits) */

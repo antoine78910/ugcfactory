@@ -94,7 +94,7 @@ async function postDubJson<TResponse>(
 export function getDubApiToken(): string | null {
   const token = process.env.DUB_API_KEY?.trim();
   if (!token) {
-    console.warn("[Dub] DUB_API_KEY is not set — tracking disabled. Add it to your Vercel env vars.");
+    console.warn("[Dub] DUB_API_KEY is not set, tracking disabled. Add it to your Vercel env vars.");
     return null;
   }
   return token;

@@ -17,7 +17,7 @@ export function isCreditPackKey(key: string): key is CreditPackKey {
   return (CREDIT_PACK_KEYS as readonly string[]).includes(key);
 }
 
-/** Launch, Growth, Boost, Pro, Scale — see `.env.example` */
+/** Launch, Growth, Boost, Pro, Scale, see `.env.example` */
 export function getCreditPackStripePriceId(
   packKey: CreditPackKey,
   currency: BillingCheckoutCurrency = "usd",

@@ -20,7 +20,20 @@ import {
 import { cn } from "@/lib/utils";
 import { ledgerTicksToDisplayCredits } from "@/lib/creditLedgerTicks";
 
-type Tab = "generations" | "runs" | "credits";
+type Tab = "generations" | "runs" | "credits" | "onboarding";
+
+type OnboardingAdminRow = {
+  user_id: string;
+  email: string;
+  work_type: string | null;
+  referral_source: string | null;
+  completed_at: string;
+  created_at: string;
+  plan_id: string | null;
+  sub_status: string | null;
+  is_subscriber: boolean;
+  trial_active: boolean;
+};
 
 type CreditRedeemTokenRow = {
   id: string;
@@ -125,7 +138,7 @@ function kindLabel(kind: string): string {
 
 function productLinkLabel(raw: string): string {
   const t = raw.trim();
-  if (!t) return "—";
+  if (!t) return "-";
   try {
     return new URL(t).hostname;
   } catch {
@@ -134,7 +147,7 @@ function productLinkLabel(raw: string): string {
 }
 
 function formatDurationMs(ms: number): string {
-  if (!Number.isFinite(ms) || ms < 0) return "—";
+  if (!Number.isFinite(ms) || ms < 0) return "-";
   const s = Math.round(ms / 1000);
   if (s < 60) return `${s}s`;
   const m = Math.floor(s / 60);
@@ -145,15 +158,15 @@ function formatDurationMs(ms: number): string {
 function durationForRow(row: GenerationRow): string {
   const startIso = row.started_at || row.created_at;
   const start = Date.parse(startIso);
-  if (!Number.isFinite(start)) return "—";
+  if (!Number.isFinite(start)) return "-";
   const endIso = row.completed_at || (row.status === "processing" ? new Date().toISOString() : row.updated_at);
   const end = Date.parse(endIso);
-  if (!Number.isFinite(end)) return "—";
+  if (!Number.isFinite(end)) return "-";
   return formatDurationMs(end - start);
 }
 
 function MediaPreview({ urls }: { urls: string[] | null }) {
-  if (!urls || urls.length === 0) return <span className="text-white/25">—</span>;
+  if (!urls || urls.length === 0) return <span className="text-white/25">-</span>;
   const first = urls[0];
   const isVideo = /\.(mp4|webm|mov)/i.test(first) || first.includes("video");
   return (
@@ -224,6 +237,15 @@ export default function AdminPage() {
   const [runPage, setRunPage] = useState(1);
   const [runSearch, setRunSearch] = useState("");
   const [runSearchInput, setRunSearchInput] = useState("");
+
+  const [onboardRows, setOnboardRows] = useState<OnboardingAdminRow[]>([]);
+  const [onboardTotal, setOnboardTotal] = useState(0);
+  const [onboardPage, setOnboardPage] = useState(1);
+  const [onboardSearch, setOnboardSearch] = useState("");
+  const [onboardSearchInput, setOnboardSearchInput] = useState("");
+  const [onboardLoading, setOnboardLoading] = useState(false);
+  const [onboardError, setOnboardError] = useState<string | null>(null);
+  const [onboardWarning, setOnboardWarning] = useState<string | null>(null);
 
   // Expanded row (for prompt/details)
   const [expandedGenId, setExpandedGenId] = useState<string | null>(null);
@@ -299,6 +321,31 @@ export default function AdminPage() {
     }
   }, [runPage, runSearch]);
 
+  const fetchOnboarding = useCallback(async () => {
+    setOnboardLoading(true);
+    setOnboardError(null);
+    setOnboardWarning(null);
+    try {
+      const params = new URLSearchParams({ page: String(onboardPage), per_page: String(perPage) });
+      if (onboardSearch) params.set("q", onboardSearch);
+      const r = await fetch(`/api/admin/onboarding?${params}`);
+      const d = (await r.json()) as {
+        rows?: OnboardingAdminRow[];
+        total?: number;
+        warning?: string;
+        error?: string;
+      };
+      if (!r.ok) throw new Error(d.error ?? `HTTP ${r.status}`);
+      setOnboardRows(d.rows ?? []);
+      setOnboardTotal(d.total ?? 0);
+      if (d.warning) setOnboardWarning(d.warning);
+    } catch (e) {
+      setOnboardError(e instanceof Error ? e.message : "Failed to load onboarding");
+    } finally {
+      setOnboardLoading(false);
+    }
+  }, [onboardPage, onboardSearch]);
+
   const fetchCreditRedeems = useCallback(async () => {
     setCreditLoading(true);
     setCreditError(null);
@@ -330,11 +377,13 @@ export default function AdminPage() {
   useEffect(() => {
     if (tab === "generations") void fetchGenerations();
     else if (tab === "runs") void fetchRuns();
-    else void fetchCreditRedeems();
-  }, [tab, fetchGenerations, fetchRuns, fetchCreditRedeems]);
+    else if (tab === "credits") void fetchCreditRedeems();
+    else if (tab === "onboarding") void fetchOnboarding();
+  }, [tab, fetchGenerations, fetchRuns, fetchCreditRedeems, fetchOnboarding]);
 
   const genTotalPages = Math.max(1, Math.ceil(genTotal / perPage));
   const runTotalPages = Math.max(1, Math.ceil(runTotal / perPage));
+  const onboardTotalPages = Math.max(1, Math.ceil(onboardTotal / perPage));
   const creditLogTotalPages = Math.max(1, Math.ceil(creditLogTotal / creditLogPerPage));
 
   const copyRedeemLink = useCallback(async (secret: string, rowId: string) => {
@@ -413,7 +462,11 @@ export default function AdminPage() {
             <div>
               <h1 className="text-lg font-bold tracking-tight">Admin Dashboard</h1>
               <p className="text-xs text-white/40">
-                {tab === "credits" ? "Credit gift links & redemption audit" : "All user generations & projects"}
+                {tab === "credits"
+                  ? "Credit gift links & redemption audit"
+                  : tab === "onboarding"
+                    ? "Onboarding answers, emails, and subscription status after checkout"
+                    : "All user generations & projects"}
               </p>
             </div>
           </div>
@@ -437,6 +490,16 @@ export default function AdminPage() {
               )}
             >
               Link to Ad Runs
+            </button>
+            <button
+              type="button"
+              onClick={() => { setTab("onboarding"); setOnboardPage(1); }}
+              className={cn(
+                "rounded-lg px-3 py-1.5 text-xs font-semibold transition",
+                tab === "onboarding" ? "bg-violet-500 text-white" : "bg-white/5 text-white/60 hover:bg-white/10",
+              )}
+            >
+              Onboarding
             </button>
             <button
               type="button"
@@ -465,7 +528,7 @@ export default function AdminPage() {
             />
           </div>
         )}
-        {tab !== "credits" && stats && (
+        {tab !== "credits" && tab !== "onboarding" && stats && (
           <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard label="Total Generations" value={stats.totalGenerations} icon={Activity} accent="bg-violet-500/20 text-violet-300" />
             <StatCard label="Total Users" value={stats.totalUsers} icon={Users} accent="bg-blue-500/20 text-blue-300" />
@@ -509,13 +572,37 @@ export default function AdminPage() {
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
             <input
               type="text"
-              placeholder={tab === "generations" ? "Search by label or task ID…" : "Search by URL, title, or prompt…"}
-              value={tab === "generations" ? genSearchInput : runSearchInput}
-              onChange={(e) => tab === "generations" ? setGenSearchInput(e.target.value) : setRunSearchInput(e.target.value)}
+              placeholder={
+                tab === "generations"
+                  ? "Search by label or task ID…"
+                  : tab === "onboarding"
+                    ? "Search work type or referral source…"
+                    : "Search by URL, title, or prompt…"
+              }
+              value={
+                tab === "generations"
+                  ? genSearchInput
+                  : tab === "onboarding"
+                    ? onboardSearchInput
+                    : runSearchInput
+              }
+              onChange={(e) => {
+                if (tab === "generations") setGenSearchInput(e.target.value);
+                else if (tab === "onboarding") setOnboardSearchInput(e.target.value);
+                else setRunSearchInput(e.target.value);
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
-                  if (tab === "generations") { setGenSearch(genSearchInput); setGenPage(1); }
-                  else { setRunSearch(runSearchInput); setRunPage(1); }
+                  if (tab === "generations") {
+                    setGenSearch(genSearchInput);
+                    setGenPage(1);
+                  } else if (tab === "onboarding") {
+                    setOnboardSearch(onboardSearchInput);
+                    setOnboardPage(1);
+                  } else {
+                    setRunSearch(runSearchInput);
+                    setRunPage(1);
+                  }
                 }
               }}
               className="w-full rounded-lg border border-white/10 bg-white/[0.03] py-2 pl-10 pr-3 text-sm text-white placeholder-white/30 outline-none transition focus:border-violet-400/40"
@@ -665,7 +752,7 @@ export default function AdminPage() {
                   {creditTokens.map((row) => (
                     <tr key={row.id} className="border-b border-white/5 transition hover:bg-white/[0.02]">
                       <td className="max-w-[180px] truncate px-3 py-2.5 text-white/70" title={row.label ?? ""}>
-                        {row.label?.trim() ? row.label : "—"}
+                        {row.label?.trim() ? row.label : "-"}
                       </td>
                       <td className="px-3 py-2.5 tabular-nums font-semibold text-amber-200/90">{row.amount}</td>
                       <td className="px-3 py-2.5 tabular-nums text-white/55">
@@ -704,7 +791,7 @@ export default function AdminPage() {
                 </tbody>
               </table>
               {creditTokens.length === 0 && !creditLoading && (
-                <p className="py-8 text-center text-sm text-white/30">No tokens yet — create one via POST /api/credits/redeem-tokens</p>
+                <p className="py-8 text-center text-sm text-white/30">No tokens yet, create one via POST /api/credits/redeem-tokens</p>
               )}
             </div>
 
@@ -735,9 +822,9 @@ export default function AdminPage() {
                         </td>
                         <td className="px-3 py-2.5 tabular-nums font-medium text-amber-200/90">{row.credits}</td>
                         <td className="max-w-[160px] truncate px-3 py-2.5 text-white/55" title={row.token_label ?? ""}>
-                          {row.token_label?.trim() ? row.token_label : "—"}
+                          {row.token_label?.trim() ? row.token_label : "-"}
                         </td>
-                        <td className="px-3 py-2.5 font-mono text-[10px] text-white/35">{row.token_secret_prefix ?? "—"}</td>
+                        <td className="px-3 py-2.5 font-mono text-[10px] text-white/35">{row.token_secret_prefix ?? "-"}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -769,6 +856,116 @@ export default function AdminPage() {
                     <ChevronRight className="h-3.5 w-3.5" />
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        ) : tab === "onboarding" && onboardLoading && onboardRows.length === 0 ? (
+          <div className="mt-12 flex items-center justify-center gap-2 text-white/40">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            Loading onboarding…
+          </div>
+        ) : tab === "onboarding" ? (
+          <div className="mt-4 space-y-3">
+            {onboardWarning && (
+              <div className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+                {onboardWarning}
+              </div>
+            )}
+            {onboardError && (
+              <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                {onboardError}
+              </div>
+            )}
+            <p className="text-[11px] text-white/45">
+              Emails come from Auth. Paying = Stripe subscription status active or trialing in{" "}
+              <code className="rounded bg-white/10 px-1 py-0.5 text-[10px] text-white/70">user_subscriptions</code>.
+              Trial flag reflects app metadata (e.g. $1 trial) at load time.
+            </p>
+            <div className="overflow-x-auto rounded-xl border border-white/[0.08]">
+              <table className="w-full min-w-[960px] text-left text-xs">
+                <thead>
+                  <tr className="border-b border-white/10 text-[10px] uppercase tracking-wide text-white/40">
+                    <th className="px-3 py-2.5 font-semibold">Email</th>
+                    <th className="px-3 py-2.5 font-semibold">Work</th>
+                    <th className="px-3 py-2.5 font-semibold">Referral</th>
+                    <th className="px-3 py-2.5 font-semibold">Completed</th>
+                    <th className="px-3 py-2.5 font-semibold">Plan</th>
+                    <th className="px-3 py-2.5 font-semibold">Sub status</th>
+                    <th className="px-3 py-2.5 font-semibold">Paying</th>
+                    <th className="px-3 py-2.5 font-semibold">Trial</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {onboardRows.map((row) => (
+                    <tr key={row.user_id} className="border-b border-white/5 transition hover:bg-white/[0.02]">
+                      <td className="max-w-[220px] truncate px-3 py-2.5 text-violet-200/90" title={row.email || row.user_id}>
+                        {row.email?.trim() ? row.email : row.user_id.slice(0, 8)}
+                      </td>
+                      <td className="max-w-[200px] truncate px-3 py-2.5 text-white/70" title={row.work_type ?? ""}>
+                        {row.work_type?.trim() ? row.work_type : "-"}
+                      </td>
+                      <td className="max-w-[220px] truncate px-3 py-2.5 text-white/60" title={row.referral_source ?? ""}>
+                        {row.referral_source?.trim() ? row.referral_source : "-"}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-2.5 text-white/45">
+                        {new Date(row.completed_at).toLocaleString()}
+                      </td>
+                      <td className="px-3 py-2.5 font-medium text-white/70">{row.plan_id ?? "-"}</td>
+                      <td className="px-3 py-2.5 text-white/50">{row.sub_status ?? "-"}</td>
+                      <td className="px-3 py-2.5">
+                        <span
+                          className={cn(
+                            "rounded-full border px-2 py-0.5 text-[10px] font-semibold",
+                            row.is_subscriber
+                              ? "border-emerald-500/35 bg-emerald-500/15 text-emerald-200"
+                              : "border-white/15 bg-white/[0.05] text-white/45",
+                          )}
+                        >
+                          {row.is_subscriber ? "Yes" : "No"}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <span
+                          className={cn(
+                            "rounded-full border px-2 py-0.5 text-[10px] font-semibold",
+                            row.trial_active
+                              ? "border-amber-500/35 bg-amber-500/15 text-amber-200"
+                              : "border-white/15 bg-white/[0.05] text-white/45",
+                          )}
+                        >
+                          {row.trial_active ? "Yes" : "No"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {onboardRows.length === 0 && !onboardLoading && (
+                <p className="py-8 text-center text-sm text-white/30">No onboarding rows yet</p>
+              )}
+            </div>
+            <div className="flex items-center justify-between px-1">
+              <p className="text-[11px] text-white/40">{onboardTotal} total</p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={onboardPage <= 1}
+                  onClick={() => setOnboardPage((p) => p - 1)}
+                  className="flex h-7 w-7 items-center justify-center rounded-md border border-white/10 bg-white/5 text-white/50 transition hover:bg-white/10 disabled:opacity-30"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </button>
+                <span className="text-xs tabular-nums text-white/50">
+                  {onboardPage} / {onboardTotalPages}
+                </span>
+                <button
+                  type="button"
+                  disabled={onboardPage >= onboardTotalPages}
+                  onClick={() => setOnboardPage((p) => p + 1)}
+                  className="flex h-7 w-7 items-center justify-center rounded-md border border-white/10 bg-white/5 text-white/50 transition hover:bg-white/10 disabled:opacity-30"
+                >
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </button>
               </div>
             </div>
           </div>
@@ -830,7 +1027,7 @@ export default function AdminPage() {
                             {productLinkLabel(row.input_urls[0])}
                           </a>
                         ) : (
-                          <span className="text-white/25">—</span>
+                          <span className="text-white/25">-</span>
                         )}
                       </td>
                       <td className="px-3 py-2.5">
@@ -843,21 +1040,21 @@ export default function AdminPage() {
                           ? ledgerTicksToDisplayCredits(row.credits_charged)
                           : row.uses_personal_api
                             ? "API key"
-                            : "—"}
+                            : "-"}
                       </td>
                       <td className="px-3 py-2.5">
                         <span className="max-w-[180px] truncate block text-white/55" title={row.model || ""}>
-                          {row.model?.trim() ? row.model : "—"}
+                          {row.model?.trim() ? row.model : "-"}
                         </span>
                       </td>
                       <td className="px-3 py-2.5">
                         <span className="max-w-[180px] truncate block font-mono text-[11px] text-white/45" title={row.app_endpoint || ""}>
-                          {row.app_endpoint?.trim() ? row.app_endpoint : "—"}
+                          {row.app_endpoint?.trim() ? row.app_endpoint : "-"}
                         </span>
                       </td>
                       <td className="px-3 py-2.5 text-white/50">{row.provider}</td>
                       <td className="max-w-[200px] truncate px-3 py-2.5 text-white/60" title={row.label}>
-                        {row.label || "—"}
+                        {row.label || "-"}
                       </td>
                       <td className="px-3 py-2.5"><MediaPreview urls={row.result_urls} /></td>
                       <td className="px-3 py-2.5 tabular-nums text-white/50 whitespace-nowrap">{durationForRow(row)}</td>
@@ -891,8 +1088,8 @@ export default function AdminPage() {
                                   </p>
                                 ) : null}
                                 <p><span className="text-white/40">Created:</span> {new Date(row.created_at).toLocaleString()}</p>
-                                <p><span className="text-white/40">Model:</span> {row.model?.trim() ? row.model : "—"}</p>
-                                <p><span className="text-white/40">App API:</span> <span className="font-mono">{row.app_endpoint?.trim() ? row.app_endpoint : "—"}</span></p>
+                                <p><span className="text-white/40">Model:</span> {row.model?.trim() ? row.model : "-"}</p>
+                                <p><span className="text-white/40">App API:</span> <span className="font-mono">{row.app_endpoint?.trim() ? row.app_endpoint : "-"}</span></p>
                                 <p><span className="text-white/40">Duration:</span> {durationForRow(row)}</p>
                                 {row.error_message && (
                                   <p className="text-red-300/80"><span className="text-white/40">Error:</span> {row.error_message}</p>
@@ -997,9 +1194,9 @@ export default function AdminPage() {
                           <a href={row.store_url} target="_blank" rel="noreferrer" className="text-violet-300 underline underline-offset-2 hover:text-violet-200">
                             {new URL(row.store_url).hostname}
                           </a>
-                        ) : "—"}
+                        ) : "-"}
                       </td>
-                      <td className="max-w-[180px] truncate px-3 py-2.5 text-white/60">{row.title ?? "—"}</td>
+                      <td className="max-w-[180px] truncate px-3 py-2.5 text-white/60">{row.title ?? "-"}</td>
                       <td className="px-3 py-2.5 tabular-nums text-white/50">
                         {(row.generated_image_urls?.length ?? 0) + (row.packshot_urls?.length ?? 0)}
                       </td>
@@ -1008,7 +1205,7 @@ export default function AdminPage() {
                           <a href={row.video_url} target="_blank" rel="noreferrer" className="text-violet-300 underline underline-offset-2 hover:text-violet-200 text-[11px]">
                             View video
                           </a>
-                        ) : <span className="text-white/25">—</span>}
+                        ) : <span className="text-white/25">-</span>}
                       </td>
                       <td className="px-3 py-2.5 text-white/40 whitespace-nowrap">{relativeTime(row.updated_at)}</td>
                     </tr>
@@ -1018,11 +1215,11 @@ export default function AdminPage() {
                           <div className="grid gap-3 sm:grid-cols-2">
                             <div>
                               <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Image Prompt</p>
-                              <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-white/70">{row.image_prompt || "—"}</p>
+                              <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-white/70">{row.image_prompt || "-"}</p>
                             </div>
                             <div>
                               <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Video Prompt</p>
-                              <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-white/70">{row.video_prompt || "—"}</p>
+                              <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-white/70">{row.video_prompt || "-"}</p>
                             </div>
                             <div>
                               <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Details</p>

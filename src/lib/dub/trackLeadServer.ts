@@ -6,12 +6,12 @@ export type DubLeadParams = {
   customerEmail?: string;
   customerName?: string;
   customerAvatar?: string | null;
-  /** Default "Sign Up" — Dub uses this to tie later sale events via `leadEventName` (case-sensitive). */
+  /** Default "Sign Up", Dub uses this to tie later sale events via `leadEventName` (case-sensitive). */
   eventName?: string;
   /**
-   * "async" (default) — fire and forget with attribution.
-   * "deferred" — no clickId yet; Dub retroactively matches a prior click for this customer.
-   * "wait" — block until Dub confirms the event.
+   * "async" (default), fire and forget with attribution.
+   * "deferred", no clickId yet; Dub retroactively matches a prior click for this customer.
+   * "wait", block until Dub confirms the event.
    */
   mode?: "async" | "deferred" | "wait";
 };

@@ -20,7 +20,7 @@ type KieMarketCreateTaskResponse =
 export async function kieMarketCreateTask(req: KieMarketCreateTaskRequest, overrideApiKey?: string) {
   const apiKey = overrideApiKey || getKieApiKey();
 
-  /** KIE often returns HTTP 200 with code=500 ("internal error", "Server exception", etc.) — retry with backoff. */
+  /** KIE often returns HTTP 200 with code=500 ("internal error", "Server exception", etc.), retry with backoff. */
   const maxAttempts = 4;
   const backoffBeforeAttemptMs = [0, 700, 1500, 2800];
 
@@ -254,7 +254,7 @@ export async function kieMarketRecordInfo(taskId: string, overrideApiKey?: strin
 
   /**
    * Polling calls this every few seconds. KIE often returns HTTP 200 with `code: 500` + `msg` for
-   * server-side failures — retrying that 5× per poll hid errors and looked like infinite loading.
+   * server-side failures, retrying that 5× per poll hid errors and looked like infinite loading.
    * Terminal envelope codes fail immediately; only true transient cases retry (short cap).
    */
   const maxAttempts = 3;
@@ -333,7 +333,7 @@ export async function kieMarketRecordInfo(taskId: string, overrideApiKey?: strin
     }
 
     const retryableHttp = !res.ok && (res.status === 429 || res.status === 502 || res.status === 503 || res.status === 504);
-    /** JSON `code` 500 = server error per KIE docs — retry at most once (this loop), then surface. */
+    /** JSON `code` 500 = server error per KIE docs, retry at most once (this loop), then surface. */
     const retryableCode =
       code === 429 || code === 500 || code === 502 || code === 503 || code === 504;
     const retryableMsg = /timeout|temporar|try again|gateway|rate|busy|overload|fetch failed|network|econnreset|internal error|server error|server exception/i.test(
@@ -500,7 +500,7 @@ export function parseResultUrls(resultJson: string | undefined): string[] {
   return [];
 }
 
-/** Fallback when `resultUrls` is missing — walk JSON for https URLs (image/video). */
+/** Fallback when `resultUrls` is missing, walk JSON for https URLs (image/video). */
 export function parseKieResultMediaUrls(
   resultJson: string | Record<string, unknown> | undefined | null,
 ): string[] {

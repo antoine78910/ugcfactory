@@ -4,7 +4,7 @@ export type DubSaleParams = {
   customerExternalId: string;
   /** Amount in cents. */
   amount: number;
-  /** Stripe invoice/session ID — used as idempotency key. */
+  /** Stripe invoice/session ID, used as idempotency key. */
   invoiceId?: string;
   paymentProcessor?: string;
   eventName?: string;

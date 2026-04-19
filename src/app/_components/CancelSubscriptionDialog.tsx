@@ -18,7 +18,7 @@ type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   planName: string;
-  /** e.g. "March 25, 2026" — shown as "Your subscription is active until …" */
+  /** e.g. "March 25, 2026", shown as "Your subscription is active until …" */
   subscriptionActiveUntilLabel: string | null;
   /** When false, the -30% step is skipped (already used once per Stripe customer). */
   retentionOfferEligible: boolean;
@@ -30,7 +30,7 @@ type Props = {
 };
 
 const LOST_ITEMS = [
-  "Projects and generated media — we prioritize storage for active paying subscribers, so when your plan ends your projects and files may be removed to free capacity.",
+  "Projects and generated media, we prioritize storage for active paying subscribers, so when your plan ends your projects and files may be removed to free capacity.",
   "Your saved projects and brand briefs",
   "Your AI voice clones and avatar settings",
   "Access to all premium AI models",
@@ -176,7 +176,7 @@ export function CancelSubscriptionDialog({
                   </div>
                   <div>
                     <Dialog.Title className="text-lg font-bold tracking-tight text-white sm:text-xl">
-                      Wait — we have an offer for you
+                      Wait, we have an offer for you
                     </Dialog.Title>
                   </div>
                 </div>
@@ -218,7 +218,7 @@ export function CancelSubscriptionDialog({
                       Applying discount…
                     </span>
                   ) : (
-                    "Claim 30% off — keep my plan"
+                    "Claim 30% off, keep my plan"
                   )}
                 </Button>
                 <Button

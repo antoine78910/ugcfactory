@@ -45,7 +45,7 @@ export async function GET(req: Request) {
         outputs: waveUrls,
         error: pred.error ?? null,
         done: waveDone && waveUrls.length > 0,
-        /** Completed but provider has not attached URLs yet — keep polling. */
+        /** Completed but provider has not attached URLs yet, keep polling. */
         waitingForOutputs: waveDone && waveUrls.length === 0,
         failed,
       },

@@ -17,7 +17,7 @@ export type LinkToAdUniverseStepperProps = {
 };
 
 export function LinkToAdUniverseStepper({ currentStep }: LinkToAdUniverseStepperProps) {
-  /** Avoid mixing per-step “content ready” flags with “which step we’re on” — that showed a check on the active step. */
+  /** Avoid mixing per-step “content ready” flags with “which step we’re on”, that showed a check on the active step. */
   const pos = Math.min(Math.max(currentStep, 1), 5);
 
   return (

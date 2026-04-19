@@ -158,9 +158,9 @@ type WorkflowPlacementPickerState = {
   flow: XYPosition;
   screenX: number;
   screenY: number;
-  /** When the user dropped a wire on empty canvas — new node links from this output. */
+  /** When the user dropped a wire on empty canvas, new node links from this output. */
   connectFrom?: { nodeId: string; handleId: string | null };
-  /** When the user clicked an input handle — new node links into this target input. */
+  /** When the user clicked an input handle, new node links into this target input. */
   connectTo?: { nodeId: string; handleId: string };
   /** Optional preset to show context-aware creation choices. */
   intent?: "text-input" | "image-input" | "text-or-image" | "generic";
@@ -191,7 +191,7 @@ type WorkflowProjectRunListItem = WorkflowRunProjectLike & {
   created_at?: string;
 };
 
-/** Scissors snip FX — Lucide scissors geometry; two halves close with a snap at the pivot. */
+/** Scissors snip FX, Lucide scissors geometry; two halves close with a snap at the pivot. */
 function WorkflowCutSnipFx({ x, y }: { x: number; y: number }) {
   const cap = { strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
   return (
@@ -1089,7 +1089,7 @@ function WorkflowReactFlowChrome({
                       title="Drop on the canvas to choose node type"
                     >
                       <GripVertical className="h-4 w-4 shrink-0 text-white/35" aria-hidden />
-                      <span>Drag to canvas — pick type on drop</span>
+                      <span>Drag to canvas, pick type on drop</span>
                     </div>
                     <WorkflowAddPaletteRow
                       icon={Type}
@@ -1240,7 +1240,7 @@ function WorkflowReactFlowChrome({
 
           <button
             type="button"
-            title="Select — drag on empty canvas to box-select; Ctrl/Cmd+click to add to selection"
+            title="Select, drag on empty canvas to box-select; Ctrl/Cmd+click to add to selection"
             onClick={() => setTool("select")}
             className={cn(
               "flex h-9 w-9 items-center justify-center rounded-full transition-colors",
@@ -1290,7 +1290,7 @@ function WorkflowReactFlowChrome({
               type="button"
               title={
                 canGroup
-                  ? "Group selection — name and color"
+                  ? "Group selection, name and color"
                   : "Select tool: drag on the canvas to box-select two or more nodes, then set name and color"
               }
               disabled={!canGroup}
@@ -1318,7 +1318,7 @@ function WorkflowReactFlowChrome({
             type="button"
             title={
               canClone
-                ? "Duplicate selection — group, generator, prompt text, or canvas note"
+                ? "Duplicate selection, group, generator, prompt text, or canvas note"
                 : "Select a group, generator, prompt text, or canvas note to duplicate"
             }
             disabled={!canClone}
@@ -1340,8 +1340,8 @@ function WorkflowReactFlowChrome({
             type="button"
             title={
               tool === "stickyPlace"
-                ? "Canvas note tool — click to place (Esc to cancel)"
-                : "Canvas note — click the canvas to place a note"
+                ? "Canvas note tool, click to place (Esc to cancel)"
+                : "Canvas note, click the canvas to place a note"
             }
             onClick={() => {
               setTool(tool === "stickyPlace" ? "select" : "stickyPlace");
@@ -1362,7 +1362,7 @@ function WorkflowReactFlowChrome({
 
           <button
             type="button"
-            title="Undo — Ctrl+Z"
+            title="Undo, Ctrl+Z"
             disabled={!canUndo}
             onClick={() => {
               if (!canUndo) return;
@@ -1377,7 +1377,7 @@ function WorkflowReactFlowChrome({
           </button>
           <button
             type="button"
-            title="Redo — Ctrl+Y or Ctrl+Shift+Z"
+            title="Redo, Ctrl+Y or Ctrl+Shift+Z"
             disabled={!canRedo}
             onClick={() => {
               if (!canRedo) return;
@@ -1674,7 +1674,7 @@ function WorkflowReactFlowChrome({
           ) : (
             <button
               type="button"
-              title="Group selection — click to show actions"
+              title="Group selection, click to show actions"
               onClick={() => {
                 setSelectionBarExpanded(true);
                 setAddOpen(false);
@@ -1797,7 +1797,7 @@ function WorkflowFlowWorkspace({
   const [hoveredEdgeScissors, setHoveredEdgeScissors] = useState<{ x: number; y: number } | null>(null);
   const edgeHoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastEdgePointerRef = useRef<{ x: number; y: number } | null>(null);
-  /** Derive from node `selected` flags — matches React Flow's controlled state (onSelectionChange can lag). */
+  /** Derive from node `selected` flags, matches React Flow's controlled state (onSelectionChange can lag). */
   const selectedNodes = useMemo(() => nodes.filter((n) => n.selected), [nodes]);
   const [placementPicker, setPlacementPicker] = useState<WorkflowPlacementPickerState | null>(null);
   const placementRef = useRef<HTMLDivElement>(null);
@@ -2918,7 +2918,7 @@ function WorkflowFlowWorkspace({
               : placementPicker.intent === "image-input"
                 ? "Choose media source or generator for this image input."
                 : placementPicker.connectFrom
-                  ? "Pick a generator — it will be linked from the previous node."
+                  ? "Pick a generator, it will be linked from the previous node."
                   : "What should be created here?"}
           </p>
           <div className="flex max-h-[min(60vh,360px)] flex-col gap-1.5 overflow-y-auto pr-0.5">
@@ -3280,7 +3280,7 @@ export function WorkflowTemplatePreview({ templateId }: { templateId: string }) 
       </div>
 
       <p className="pointer-events-none absolute bottom-1 left-1/2 z-10 -translate-x-1/2 text-[10px] text-violet-200/30">
-        View only — use the banner to copy this template into your workspace
+        View only, use the banner to copy this template into your workspace
       </p>
     </div>
   );

@@ -44,7 +44,7 @@ export function userFacingProviderError(raw: string | null | undefined): string 
   if (/not found|\b404\b|expired|does not exist|task not found/.test(lower)) {
     return "A resource was missing or expired (for example the image link). Re-upload and try again.";
   }
-  // Model / API rejected generation settings (Sora, Veo, etc.) — not the Motion/Translate upload limits.
+  // Model / API rejected generation settings (Sora, Veo, etc.), not the Motion/Translate upload limits.
   if (
     /\b(invalid|unsupported|bad|exceeds)\b.*\b(aspect|resolution|dimensions?|width|height)\b/i.test(lower) ||
     /\b(aspect|resolution|dimensions?|width|height)\b.*\b(invalid|unsupported|not supported|not allowed|exceed|too large|too small)\b/i.test(lower) ||
@@ -52,7 +52,7 @@ export function userFacingProviderError(raw: string | null | undefined): string 
   ) {
     return "Le modèle a refusé les paramètres (format d’image, ratio ou durée). Pour Sora 2 / Sora 2 Pro : durée 10 s ou 15 s, ratio portrait ou paysage cohérent ; avec image de départ, utilise une image nette (souvent 9:16 ou 16:9). Réessaie après ajustement.";
   }
-  // Upload / payload too large — keep Motion & Translate caps as examples for those flows only when it’s clearly a file-size issue.
+  // Upload / payload too large, keep Motion & Translate caps as examples for those flows only when it’s clearly a file-size issue.
   if (
     /\b413\b|request entity too large|payload too large|body too large|content[- ]length|multipart/i.test(lower) ||
     /file too large|file size|max(imum)? upload|upload (size|limit)|maximum (file|video) size|video (file )?too large/i.test(lower) ||

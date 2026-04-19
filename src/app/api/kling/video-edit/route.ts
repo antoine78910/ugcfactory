@@ -26,7 +26,7 @@ type Body = {
   videoUrl: string;
   /** Optional reference images / elements (up to 4 URLs). */
   imageUrls?: string[];
-  /** `std` | `pro` — ignored when `autoSettings` is true (non-motion). */
+  /** `std` | `pro`, ignored when `autoSettings` is true (non-motion). */
   quality?: string;
   /** When true, use Pro mode for Kie edit models that support `mode`. */
   autoSettings?: boolean;
