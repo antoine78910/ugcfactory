@@ -1,7 +1,8 @@
 "use client";
 
-import Link from "next/link";
+import { useCallback, useState } from "react";
 import { ArrowRight } from "lucide-react";
+import { toast } from "sonner";
 import { Dialog } from "radix-ui";
 import { SUBSCRIPTIONS } from "@/lib/pricing";
 import { formatDisplayCredits } from "@/lib/creditLedgerTicks";
@@ -53,6 +54,7 @@ type Props = {
 /**
  * Trial Link to Ad: insufficient credits on final video render.
  * Same plan grid + feature bullets as `/subscription` (monthly prices, IP-cached).
+ * Subscribe opens Stripe Checkout (same API as the subscription page).
  */
 export function LtaTrialVideoUpgradeDialog({
   open,
@@ -64,6 +66,30 @@ export function LtaTrialVideoUpgradeDialog({
   const currency = displayPrices?.currency ?? "usd";
   const shortfall = Math.max(0, requiredCredits - currentCredits);
   const billingPricesReady = displayPrices !== null;
+  const [checkoutLoading, setCheckoutLoading] = useState<SubscriptionPlanId | null>(null);
+
+  const startSubscriptionCheckout = useCallback(async (planIdCheckout: SubscriptionPlanId) => {
+    setCheckoutLoading(planIdCheckout);
+    try {
+      const res = await fetch("/api/stripe/checkout/subscription", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ planId: planIdCheckout, billing: "monthly" }),
+      });
+      const data = (await res.json()) as { url?: string; error?: string };
+      if (!res.ok) throw new Error(data.error || "Checkout failed");
+      if (data.url) {
+        window.location.href = data.url;
+        return;
+      }
+      throw new Error("No checkout URL");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Checkout failed");
+    } finally {
+      setCheckoutLoading(null);
+    }
+  }, []);
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -115,7 +141,7 @@ export function LtaTrialVideoUpgradeDialog({
                 ) : (
                   <>just below the credits needed for this step.</>
                 )}{" "}
-                Pick a plan below (same as on the subscription page).
+                Pick a plan below — you&rsquo;ll go straight to Stripe checkout (monthly).
               </Dialog.Description>
             </div>
           </div>
@@ -177,23 +203,26 @@ export function LtaTrialVideoUpgradeDialog({
                       )}
                     </div>
 
-                    <Dialog.Close asChild>
-                      <Button
-                        type="button"
-                        className={cn(
-                          "mt-3 h-10 w-full shrink-0 rounded-xl text-sm font-bold transition-all",
-                          plan.highlight
-                            ? "border border-violet-200/35 bg-violet-400 text-black shadow-[0_4px_0_0_rgba(76,29,149,0.85)] hover:bg-violet-300"
-                            : "border border-white/15 bg-white/10 text-white hover:bg-white/15",
-                        )}
-                        asChild
-                      >
-                        <Link href="/subscription" className="inline-flex items-center justify-center gap-2">
+                    <Button
+                      type="button"
+                      disabled={checkoutLoading !== null}
+                      onClick={() => void startSubscriptionCheckout(plan.id)}
+                      className={cn(
+                        "mt-3 inline-flex h-10 w-full shrink-0 items-center justify-center gap-2 rounded-xl text-sm font-bold transition-all",
+                        plan.highlight
+                          ? "border border-violet-200/35 bg-violet-400 text-black shadow-[0_4px_0_0_rgba(76,29,149,0.85)] hover:bg-violet-300 disabled:opacity-60"
+                          : "border border-white/15 bg-white/10 text-white hover:bg-white/15 disabled:opacity-60",
+                      )}
+                    >
+                      {checkoutLoading === plan.id ? (
+                        "Redirecting…"
+                      ) : (
+                        <>
                           Subscribe
                           <ArrowRight className="h-4 w-4" aria-hidden />
-                        </Link>
-                      </Button>
-                    </Dialog.Close>
+                        </>
+                      )}
+                    </Button>
 
                     <SubscriptionPlanFeatureList
                       planId={plan.id}
