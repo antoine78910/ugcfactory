@@ -9,7 +9,6 @@ import {
   ChevronDown,
   ChevronRight,
   ChevronUp,
-  Coins,
   Eye,
   EyeOff,
   ImagePlus,
@@ -30,6 +29,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { CreditCostBadge } from "@/app/_components/CreditCostBadge";
 import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
 import { absolutizeImageUrl } from "@/lib/imageUrl";
 import {
@@ -583,33 +583,29 @@ export type LinkToAdUniverseProps = {
   onSwitchLinkToAdRun?: (runId: string) => void;
 };
 
-/** Second line on violet primary CTAs (black text on `bg-violet-400`), same pattern as main “Generate”. */
-function LinkToAdPrimaryCreditsLine({
+/**
+ * Same pattern as Studio Video Generate: one row, number-only pill (no “credits” label, no coin).
+ * On LTA `bg-violet-400` + black label we use a dark translucent pill; studio uses `bg-white/15` on violet-500.
+ */
+function LinkToAdStudioStyleCreditPill({
   amount,
   hideCredits,
+  compact,
 }: {
   amount: number;
   hideCredits: boolean;
+  compact?: boolean;
 }) {
   if (hideCredits) return null;
   return (
-    <span className="inline-flex items-center justify-center gap-1 text-[11px] font-semibold tabular-nums leading-tight text-black/90 sm:text-xs">
-      <Coins className="h-3.5 w-3.5 shrink-0 opacity-90" aria-hidden />
-      {amount} credits
-    </span>
-  );
-}
-
-/** High-contrast credits chip on glass / violet-outline rows (replaces tiny violet-on-violet pills). */
-function LinkToAdGlassCreditsChip({ amount, hideCredits }: { amount: number; hideCredits: boolean }) {
-  if (hideCredits) return null;
-  return (
     <span
-      className="inline-flex items-center gap-0.5 rounded-md border border-white/20 bg-black/50 px-2 py-0.5 text-[11px] font-bold tabular-nums text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
-      title="credits"
+      className={
+        compact
+          ? "rounded-md bg-black/15 px-1.5 py-0.5 text-xs font-semibold tabular-nums text-black"
+          : "rounded-md bg-black/15 px-2 py-0.5 text-base font-semibold tabular-nums text-black"
+      }
     >
-      <Coins className="h-3 w-3 shrink-0 text-amber-200/95" aria-hidden />
-      {amount} credits
+      {amount}
     </span>
   );
 }
@@ -5326,7 +5322,7 @@ export default function LinkToAdUniverse({
                     onChange={(e) => setStoreUrl(e.target.value)}
                     placeholder="https://your-product-page.com"
                     autoFocus
-                    className="h-11 w-full border-0 !bg-transparent pl-4 pr-36 text-sm text-white placeholder:text-white/25 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                    className="h-11 w-full border-0 !bg-transparent pl-4 pr-[10.5rem] text-sm text-white placeholder:text-white/25 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 sm:pr-44"
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
                         e.preventDefault();
@@ -5338,13 +5334,17 @@ export default function LinkToAdUniverse({
                     type="button"
                     disabled={!storeUrl.trim()}
                     onClick={handleGenerateFromUrl}
-                    className="absolute right-2 top-1/2 inline-flex h-auto min-h-[2.75rem] -translate-y-1/2 flex-col items-center justify-center gap-0.5 rounded-[1rem] border border-violet-200/40 bg-violet-400 px-3 py-1.5 text-center text-sm font-semibold text-black shadow-[0_6px_0_0_rgba(76,29,149,0.9)] ring-offset-0 transition-all hover:-translate-y-[calc(50%+1px)] hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9),0_0_18px_rgba(167,139,250,0.30)] focus-visible:border-violet-400/45 focus-visible:ring-violet-400/55 focus-visible:ring-[3px] active:translate-y-[calc(-50%+6px)] active:shadow-[0_0_0_0_rgba(76,29,149,0.9)] disabled:opacity-40"
+                    className="absolute right-2 top-1/2 inline-flex h-[2.75rem] max-w-[min(100%,11.5rem)] -translate-y-1/2 items-center justify-center gap-0 rounded-[1rem] border border-violet-200/40 bg-violet-400 px-2 text-sm font-semibold text-black shadow-[0_6px_0_0_rgba(76,29,149,0.9)] ring-offset-0 transition-all hover:-translate-y-[calc(50%+1px)] hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9),0_0_18px_rgba(167,139,250,0.30)] focus-visible:border-violet-400/45 focus-visible:ring-violet-400/55 focus-visible:ring-[3px] active:translate-y-[calc(-50%+6px)] active:shadow-[0_0_0_0_rgba(76,29,149,0.9)] disabled:opacity-40 sm:max-w-none sm:min-w-[10rem] sm:px-2.5"
                   >
-                    <span className="inline-flex items-center gap-1.5 leading-tight">
+                    <span className="inline-flex min-w-0 items-center gap-1 sm:gap-1.5">
+                      <span className="truncate">Generate</span>
                       <Sparkles className="h-4 w-4 shrink-0" aria-hidden />
-                      Generate
+                      <LinkToAdStudioStyleCreditPill
+                        amount={ltaInitialGenerateCharge}
+                        hideCredits={hideCredits}
+                        compact
+                      />
                     </span>
-                    <LinkToAdPrimaryCreditsLine amount={ltaInitialGenerateCharge} hideCredits={hideCredits} />
                   </Button>
                 </div>
               </div>
@@ -5833,7 +5833,7 @@ export default function LinkToAdUniverse({
                   disabled={isWorking || !storeUrl.trim()}
                   onClick={handleGenerateFromUrl}
                   aria-busy={isWorking}
-                  className={`${primaryBtnClass} h-auto min-h-14 shrink-0 px-8 py-2.5 text-base sm:min-w-[160px] inline-flex flex-col items-center justify-center gap-1`}
+                  className={`${primaryBtnClass} h-auto min-h-14 shrink-0 px-5 py-2.5 text-base sm:min-w-[200px] sm:px-8 inline-flex items-center justify-center`}
                 >
                   {isWorking ? (
                     <span className="inline-flex items-center justify-center gap-2">
@@ -5841,13 +5841,14 @@ export default function LinkToAdUniverse({
                       Working…
                     </span>
                   ) : (
-                    <>
-                      <span className="inline-flex items-center justify-center gap-2 font-semibold leading-tight">
-                        <Sparkles className="h-5 w-5 shrink-0" aria-hidden />
-                        Generate
-                      </span>
-                      <LinkToAdPrimaryCreditsLine amount={ltaInitialGenerateCharge} hideCredits={hideCredits} />
-                    </>
+                    <span className="inline-flex items-center justify-center gap-2 font-semibold leading-tight">
+                      Generate
+                      <Sparkles className="h-5 w-5 shrink-0" aria-hidden />
+                      <LinkToAdStudioStyleCreditPill
+                        amount={ltaInitialGenerateCharge}
+                        hideCredits={hideCredits}
+                      />
+                    </span>
                   )}
                 </Button>
               </div>
@@ -6354,7 +6355,7 @@ export default function LinkToAdUniverse({
                   >
                     <RefreshCw className="h-3 w-3 transition-transform group-hover/regen:rotate-90" aria-hidden />
                     Regenerate
-                    {hideCredits ? null : <LinkToAdGlassCreditsChip amount={2} hideCredits={hideCredits} />}
+                    {hideCredits ? null : <CreditCostBadge amount={2} />}
                   </button>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-3">
@@ -6856,9 +6857,7 @@ export default function LinkToAdUniverse({
                         >
                           <RefreshCw className="h-2.5 w-2.5 transition-transform group-hover/ri:rotate-90" aria-hidden />
                           Regen 3 images
-                          {hideCredits ? null : (
-                            <LinkToAdGlassCreditsChip amount={ltaThreeImagesCharge} hideCredits={hideCredits} />
-                          )}
+                          {hideCredits ? null : <CreditCostBadge amount={ltaThreeImagesCharge} className="text-[9px]" />}
                         </button>
                       ) : null}
                     </div>
@@ -6920,7 +6919,7 @@ export default function LinkToAdUniverse({
                       >
                         <RefreshCw className="h-2.5 w-2.5 transition-transform group-hover/regen-sa:rotate-90" aria-hidden />
                         Regenerate
-                        {hideCredits ? null : <LinkToAdGlassCreditsChip amount={2} hideCredits={hideCredits} />}
+                        {hideCredits ? null : <CreditCostBadge amount={2} className="px-1 py-px text-[9px]" />}
                       </button>
                     </div>
                     <div className="grid grid-cols-1 gap-2">
@@ -7200,12 +7199,16 @@ export default function LinkToAdUniverse({
                         type="button"
                         disabled={isNanoAllImagesSubmitting || selectedAngleIndex === null || !nanoBananaPromptsRaw.trim()}
                         onClick={() => void onGenerateNanoBananaImagesFromAllPrompts()}
-                        className={`h-auto min-h-12 w-full max-w-md flex-col gap-1 py-2.5 ${primaryBtnClass}`}
+                        className={`h-auto min-h-12 w-full max-w-md py-2.5 ${primaryBtnClass} inline-flex items-center justify-center`}
                       >
                         <span className="inline-flex items-center justify-center gap-2 text-sm font-semibold leading-tight">
                           Generate 3 images
+                          <Sparkles className="h-5 w-5 shrink-0" aria-hidden />
+                          <LinkToAdStudioStyleCreditPill
+                            amount={ltaThreeImagesCharge}
+                            hideCredits={hideCredits}
+                          />
                         </span>
-                        <LinkToAdPrimaryCreditsLine amount={ltaThreeImagesCharge} hideCredits={hideCredits} />
                       </Button>
                     </div>
                   ) : null}
@@ -7235,9 +7238,7 @@ export default function LinkToAdUniverse({
                           >
                             <RefreshCw className="h-3 w-3 transition-transform group-hover/ri:rotate-90" aria-hidden />
                             Regenerate 3 images
-                            {hideCredits ? null : (
-                              <LinkToAdGlassCreditsChip amount={ltaThreeImagesCharge} hideCredits={hideCredits} />
-                            )}
+                            {hideCredits ? null : <CreditCostBadge amount={ltaThreeImagesCharge} />}
                           </button>
                         ) : null}
                       </div>
@@ -7338,7 +7339,7 @@ export default function LinkToAdUniverse({
                             !nanoBananaImageUrl
                           }
                           onClick={() => void handleGenerateVideoFromSelectedImage()}
-                          className={`flex h-auto min-h-12 w-full flex-col gap-1 py-2.5 ${primaryBtnClass}`}
+                          className={`flex h-auto min-h-12 w-full items-center justify-center py-2.5 ${primaryBtnClass}`}
                         >
                           {isVideoPromptLoading || isKlingSubmitting || klingPollTaskId ? (
                             <span className="inline-flex items-center justify-center gap-2 text-base font-semibold">
@@ -7346,9 +7347,13 @@ export default function LinkToAdUniverse({
                               Working…
                             </span>
                           ) : (
-                            <span className="inline-flex items-center justify-center gap-2 text-base font-semibold leading-tight">
+                            <span className="inline-flex min-w-0 items-center justify-center gap-2 text-base font-semibold leading-tight">
+                              <span className="min-w-0 truncate">Generate video from this image</span>
                               <Video className="h-5 w-5 shrink-0" aria-hidden />
-                              Generate video from this image
+                              <LinkToAdStudioStyleCreditPill
+                                amount={ltaVideoConfirmCreditsDisplay}
+                                hideCredits={hideCredits}
+                              />
                             </span>
                           )}
                         </Button>
@@ -7807,6 +7812,9 @@ export default function LinkToAdUniverse({
                                     <span className="inline-flex items-center gap-2 text-sm font-semibold leading-tight">
                                       <RefreshCw className="h-4 w-4 shrink-0" aria-hidden />
                                       Regenerate
+                                      {hideCredits ? null : (
+                                        <CreditCostBadge amount={ltaVideoConfirmCreditsDisplay} />
+                                      )}
                                     </span>
                                   )}
                                 </Button>
@@ -7956,19 +7964,19 @@ export default function LinkToAdUniverse({
                             </div>
                             <Button
                               type="button"
-                              className={`mt-3 h-auto min-h-11 w-full flex-col gap-1 py-2.5 ${primaryBtnClass}`}
+                              className={`mt-3 h-auto min-h-11 w-full py-2.5 ${primaryBtnClass} inline-flex items-center justify-center`}
                               onClick={() => {
                                 void onGenerateKlingVideo();
                               }}
                             >
-                              <span className="inline-flex items-center justify-center gap-2 text-sm font-semibold leading-tight">
+                              <span className="inline-flex min-w-0 items-center justify-center gap-2 px-1 text-sm font-semibold leading-tight">
+                                <span className="min-w-0 truncate">Generate video from selected image</span>
                                 <Video className="h-4 w-4 shrink-0" aria-hidden />
-                                Generate video from selected image
+                                <LinkToAdStudioStyleCreditPill
+                                  amount={ltaVideoConfirmCreditsDisplay}
+                                  hideCredits={hideCredits}
+                                />
                               </span>
-                              <LinkToAdPrimaryCreditsLine
-                                amount={ltaVideoConfirmCreditsDisplay}
-                                hideCredits={hideCredits}
-                              />
                             </Button>
                           </div>
                         ) : null}
@@ -7995,11 +8003,15 @@ export default function LinkToAdUniverse({
                           !nanoBananaImageUrl
                         }
                         onClick={() => void handleGenerateVideoFromSelectedImage()}
-                        className={`flex h-auto min-h-12 py-2.5 ${primaryBtnClass}`}
+                        className={`flex h-auto min-h-12 items-center justify-center py-2.5 ${primaryBtnClass}`}
                       >
-                        <span className="inline-flex items-center justify-center gap-2 text-base font-semibold leading-tight">
+                        <span className="inline-flex min-w-0 items-center justify-center gap-2 text-base font-semibold leading-tight">
+                          <span className="min-w-0 truncate">Generate video from this image</span>
                           <Video className="h-5 w-5 shrink-0" aria-hidden />
-                          Generate video from this image
+                          <LinkToAdStudioStyleCreditPill
+                            amount={ltaVideoConfirmCreditsDisplay}
+                            hideCredits={hideCredits}
+                          />
                         </span>
                       </Button>
                     </div>
@@ -8139,7 +8151,7 @@ export default function LinkToAdUniverse({
             >
               Regenerate images too
               {hideCredits ? null : (
-                <LinkToAdGlassCreditsChip amount={ltaThreeImagesCharge} hideCredits={hideCredits} />
+                <CreditCostBadge amount={ltaThreeImagesCharge} className="px-2" iconClassName="h-3 w-3" />
               )}
             </button>
             <button
