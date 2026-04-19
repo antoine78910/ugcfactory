@@ -331,16 +331,6 @@ export default function SetupClient({ embedded = false }: SetupClientProps) {
             );
           })}
         </div>
-
-        {/* Skip */}
-        <div className="mt-10 text-center">
-          <a
-            href="/"
-            className="text-xs text-white/25 underline-offset-4 transition hover:text-white/50 hover:underline"
-          >
-            Skip for now and explore the free tier
-          </a>
-        </div>
       </div>
     </div>
   );
