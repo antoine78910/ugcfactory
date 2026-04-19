@@ -1136,22 +1136,31 @@ export default function LinkToAdUniverse({
   /** Amount debited on "Generate" from URL (trial vs full pipeline); used for refunds on failure. */
   const lastLtaUrlGenerateChargeRef = useRef(0);
 
+  /** Read-only balance gate (opens billing modal). Use immediately before any paid LTA step. */
+  const hasLtaCreditsFor = useCallback((cost: number): boolean => {
+    if (isPlatformCreditBypassActive()) return true;
+    const k = Math.max(0, Math.floor(cost));
+    if (k <= 0) return true;
+    if (creditsBalanceRef.current < k) {
+      setLtaCreditModal({ current: creditsBalanceRef.current, required: k });
+      return false;
+    }
+    return true;
+  }, []);
+
   /** Deduct from wallet once on URL Generate; keep ref/frozen in sync with that charge. */
   const spendLtaCreditsIfEnough = useCallback(
     (cost: number): boolean => {
+      if (!hasLtaCreditsFor(cost)) return false;
       if (isPlatformCreditBypassActive()) return true;
       const k = Math.max(0, Math.floor(cost));
       if (k <= 0) return true;
-      if (creditsBalanceRef.current < k) {
-        setLtaCreditModal({ current: creditsBalanceRef.current, required: k });
-        return false;
-      }
       spendCredits(k);
       creditsBalanceRef.current = Math.max(0, creditsBalanceRef.current - k);
       setLtaFrozenCredits((x) => (x !== null ? Math.max(0, x - k) : x));
       return true;
     },
-    [spendCredits],
+    [hasLtaCreditsFor, spendCredits],
   );
 
   const [storeUrl, setStoreUrl] = useState("");
@@ -3272,20 +3281,9 @@ export default function LinkToAdUniverse({
     }
 
     // New scan / fresh pipeline: wallet failure unlocks below (lock already set at scan start).
-    const walletNow = creditsBalanceRef.current;
     const initialCharge = ltaInitialGenerateCharge;
-    if (walletNow < initialCharge) {
-      setIsWorking(false);
-      setStage("idle");
-      setLtaVideoDurationLocked(false);
-      setLtaCreditModal({
-        current: walletNow,
-        required: initialCharge,
-      });
-      return;
-    }
     let chargedFullBundle = false;
-    setLtaFrozenCredits(walletNow);
+    setLtaFrozenCredits(creditsBalanceRef.current);
     if (!spendLtaCreditsIfEnough(initialCharge)) {
       setIsWorking(false);
       setStage("idle");
@@ -3949,8 +3947,17 @@ export default function LinkToAdUniverse({
     }
     const force = Boolean(opts?.forceRegenerateCharge);
     const hasExisting = nanoBananaImageUrls.some((u) => typeof u === "string" && u.trim().length > 0);
-    const shouldCharge = (force || hasExisting) && !ltaPrepaidThreeImagesRegen;
+    // Non-trial: first 3-image batch is covered by the URL “full pipeline” charge, so only regen / force bills here.
+    // Trial: initial URL charge is scan+scripts only (LINK_TO_AD_TRIAL_INITIAL_GENERATE), so the first batch must debit.
+    const shouldCharge =
+      (linkToAdTrialEconomy || force || hasExisting) && !ltaPrepaidThreeImagesRegen;
     const usingPrepaid = ltaPrepaidThreeImagesRegen && !shouldCharge;
+    const nanoRefs = resolveNanoProductImageUrls();
+    const img = nanoRefs[0];
+    if (!img || !/^https?:\/\//i.test(img)) {
+      toast.error("HTTPS product image is required to generate images.");
+      return;
+    }
     if (shouldCharge) {
       const walletNow = creditsBalanceRef.current;
       setLtaFrozenCredits(walletNow);
@@ -3958,12 +3965,6 @@ export default function LinkToAdUniverse({
         setLtaFrozenCredits(null);
         return;
       }
-    }
-    const nanoRefs = resolveNanoProductImageUrls();
-    const img = nanoRefs[0];
-    if (!img || !/^https?:\/\//i.test(img)) {
-      toast.error("HTTPS product image is required to generate images.");
-      return;
     }
 
     setIsNanoAllImagesSubmitting(true);
@@ -3990,6 +3991,11 @@ export default function LinkToAdUniverse({
     if (!signatureMatches) {
       const nextPrompts = await onGenerateNanoBananaPrompts(idx, { keepThreeImagesSubmitting: true });
       if (!nextPrompts) {
+        if (shouldCharge && !isPlatformCreditBypassActive()) {
+          grantCredits(ltaThreeImagesCharge);
+          creditsBalanceRef.current += ltaThreeImagesCharge;
+          setLtaFrozenCredits(null);
+        }
         setIsNanoAllImagesSubmitting(false);
         return;
       }
@@ -4003,12 +4009,15 @@ export default function LinkToAdUniverse({
     }
 
     if (!prompts[0] || !prompts[1] || !prompts[2]) {
+      if (shouldCharge && !isPlatformCreditBypassActive()) {
+        grantCredits(ltaThreeImagesCharge);
+        creditsBalanceRef.current += ltaThreeImagesCharge;
+        setLtaFrozenCredits(null);
+      }
       toast.error("Some image prompts are missing.");
       setIsNanoAllImagesSubmitting(false);
       return;
     }
-
-    setIsNanoAllImagesSubmitting(true);
 
     // Reset old images + downstream state so we don't “reuse” previous results.
     setNanoBananaImageUrl(null);
