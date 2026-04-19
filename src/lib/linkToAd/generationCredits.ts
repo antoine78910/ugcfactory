@@ -34,11 +34,11 @@ export const CREDITS_LINK_TO_AD_STORE_SCAN = 8;
 
 /**
  * $1 trial only (Link to Ad): cheap scan → scripts + image prompts, then per-image batch,
- * then a flat video render price so 15 trial credits cannot finish without subscribing.
+ * then a flat video render price so trial credits cannot finish the final video without subscribing.
  * Free-without-trial keeps normal {@link creditsLinkToAdFullPipeline} / 10-cr image batch pricing.
  */
 export const LINK_TO_AD_TRIAL_INITIAL_GENERATE = 2;
-export const LINK_TO_AD_TRIAL_THREE_IMAGES = 5;
+export const LINK_TO_AD_TRIAL_THREE_IMAGES = 10;
 export const LINK_TO_AD_TRIAL_FINAL_VIDEO = 30;
 
 /** Claude AI step: video prompt generation. */

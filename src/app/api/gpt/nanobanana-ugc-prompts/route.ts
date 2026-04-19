@@ -5,6 +5,11 @@ import { openaiResponsesTextWithImages } from "@/lib/openaiResponses";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { claudeMessagesTextWithImages } from "@/lib/claudeResponses";
 import { MAX_NANO_BANANA_PRODUCT_REFERENCE_IMAGES } from "@/lib/productReferenceImages";
+import {
+  composeThreeLabeledPrompts,
+  parseThreeLabeledPrompts,
+  splitNanoPromptBodyForEditing,
+} from "@/lib/linkToAdUniverse";
 
 type Body = {
   marketingScript: string;
@@ -247,10 +252,7 @@ PRODUCT REPRODUCTION RULE:
 → Product must be proportional to the human hand holding it
 → Never invent details not visible in the reference image
 
-Always add these to the NEGATIVE PROMPT:
-→ wrong product, different brand, different packaging shape,
-  different text on packaging, different product from same brand,
-  different format than reference image
+Avoid wrong-product drift in Shot prose (wrong brand, wrong pack shape, illegible label).
 
 Read product_state from VIDEO_METADATA AND the product image.
 The product interaction must match the product's role in the script.
@@ -365,43 +367,12 @@ CLOTHING:
    untucked hem / stretched collar / fabric pull
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-CAMERA TECHNICAL RULE (CRITICAL)
+CAMERA / PRESERVATION / NEGATIVE (INTERNAL ONLY — DO NOT OUTPUT)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Always specify these technical parameters in every prompt:
-
-LENS & SENSOR:
-→ 35mm equivalent, front-facing iPhone camera
-→ f/2.2 aperture, ISO 400
-→ Natural phone lens distortion
-→ Minor unfiltered sensor grain
-→ Subtle vignetting at edges
-→ Compression artifacts present
-→ Limited dynamic range
-
-FRAMING:
-→ Vertical 9:16 framing
-→ Slightly off-center composition
-→ Natural handheld tilt, never perfectly straight
-→ Slight motion blur on hands or product where relevant
-
-DEPTH OF FIELD:
-→ Phone-natural depth of field only
-→ Face sharp, product label sharp and legible
-→ Background soft but fully identifiable, NOT blurred into bokeh
-→ Never cinematic depth of field
-
-PRESERVATION INSTRUCTIONS (always end every prompt with these):
-→ Do not smooth skin.
-→ Do not blur background.
-→ No beauty filter.
-→ No film grain.
-→ Preserve all skin imperfections.
-→ Preserve natural hair volume and texture.
-→ Preserve product label legibility.
-→ Preserve exact facial structure and identity.
-→ Preserve exact product format, colors, logo, and text
-   exactly as shown in the reference image.
+The product pipeline appends standardized camera, preservation, and negative-prompt text server-side.
+You must NOT paste EXIF lines, "PRESERVATION INSTRUCTIONS", "NEGATIVE PROMPT", or recipe-style technical stacks in your reply.
+Still *compose* images as if they were shot on a modern phone: natural asymmetry, readable background, label legible, no beauty filter — describe those outcomes in Avatar / Scene / Shot prose only.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 LIGHTING RULE
@@ -486,58 +457,34 @@ IF avatar_source = TEXT GENERATED:
 NEGATIVE PROMPT RULE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Always end each prompt with a NEGATIVE PROMPT block.
-
-Standard negative prompt (always include):
-plastic skin, waxy skin, airbrushed skin, poreless skin, glass skin,
-beauty filter, skin smoothing, perfect symmetry, heavy bokeh,
-cinematic depth of field, studio lighting, professional retouching,
-heavy makeup, 3D render, CGI, cartoon, illustration, extra fingers,
-oversaturated, HDR, Instagram filter, film grain, analog look,
-salon hair, flat hair, glassy eyes, frozen expression, posed expression,
-perfect teeth, symmetric face, stock photo composition,
-wrong product, different brand, different packaging shape,
-different text on packaging, different product from same brand,
-different format than reference image
-
-Add contextual negatives based on product and avatar:
-→ If product is CLOSED:
-   applying product, open product, product contents visible,
-   product label turned away from camera, label obscured by fingers
-→ If product is WEARABLE:
-   product held in hand, product not on body,
-   incorrect placement of product on body
-→ If avatar is REFERENCE IMAGE:
-   different skin tone, different hair color, different facial structure,
-   younger face, older face, idealized features, beauty filter on face,
-   different eye color, different ethnicity
+Do not output a NEGATIVE PROMPT block or comma-separated negative lists.
+The server adds a standard negative prompt. You may still avoid unwanted looks *implicitly* via Shot / Scene wording (e.g. "no studio ring light", "background stays readable, not bokeh soup").
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-PROMPT FORMAT
+PROMPT FORMAT (USER-FACING BLOCKS ONLY)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Generate THREE prompts labeled:
+Generate THREE prompts labeled exactly:
 
 PROMPT 1
 PROMPT 2
 PROMPT 3
 
-Each prompt must:
-* be between 150 and 220 words
-* be written as one continuous paragraph
-* follow this exact order:
-  1. Subject: face + skin + hair + unique trait
-  2. Clothing + accessories
-  3. Action + product interaction (matching script role)
-  4. Expression + emotion (matching script hook)
-  5. Environment + scene details (minimum 3 imperfect elements)
-  6. Lighting (matched to script moment)
-  7. Camera technical specs
-  8. Preservation instructions
-* end with a NEGATIVE PROMPT block on a separate line
+Inside EACH prompt, use ONLY these three labeled sections (in this order), each as rich prose (one or more paragraphs). Total length across the three sections: roughly 180–280 words per PROMPT.
 
-Output only the three prompts and their negative prompts.
-Do not explain your reasoning.
+EDIT, Avatar:
+→ Subject appearance, age, skin texture, hair, eyes, imperfections, clothing, accessories, and anything identity-locked from references.
+
+EDIT, Scene:
+→ Location, imperfect environmental details, time-of-day feel, and lighting described in natural language (no EXIF, no "ISO", no lens model names).
+
+EDIT, Shot:
+→ Shot type (must differ across PROMPT 1/2/3), framing intent, product interaction (hands, label facing camera, proportions), expression and micro-movements tied to the script hook. Product visuals must match the reference image analysis only.
+
+Rules:
+* Use the exact headers "EDIT, Avatar:", "EDIT, Scene:", and "EDIT, Shot:" (comma after EDIT).
+* Do not add TECHNICAL, PRESERVATION INSTRUCTIONS, NEGATIVE PROMPT, horizontal-rule separators before those blocks, or standalone camera-spec paragraphs.
+* Do not explain your reasoning. Output only PROMPT 1, PROMPT 2, and PROMPT 3.
 `.trim();
 
 export async function POST(req: Request) {
@@ -583,7 +530,8 @@ export async function POST(req: Request) {
 
   const developer = [
     "Follow the instructions in the user message exactly.",
-    "Output only PROMPT 1, PROMPT 2, and PROMPT 3.",
+    "Output only PROMPT 1, PROMPT 2, and PROMPT 3 with EDIT, Avatar / Scene / Shot sections.",
+    "Never output TECHNICAL headers, preservation bullet lists, EXIF, or NEGATIVE PROMPT blocks.",
     "Do not add preamble, explanations, or reasoning.",
   ].join("\n");
 
@@ -624,7 +572,14 @@ export async function POST(req: Request) {
         { status: 502 },
       );
     }
-    return NextResponse.json({ data: trimmed });
+    const triple = parseThreeLabeledPrompts(trimmed);
+    const stripped: [string, string, string] = [
+      splitNanoPromptBodyForEditing(triple[0]).editable.trim(),
+      splitNanoPromptBodyForEditing(triple[1]).editable.trim(),
+      splitNanoPromptBodyForEditing(triple[2]).editable.trim(),
+    ];
+    const cleaned = composeThreeLabeledPrompts(stripped);
+    return NextResponse.json({ data: cleaned });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error.";
     return NextResponse.json({ error: message }, { status: 502 });

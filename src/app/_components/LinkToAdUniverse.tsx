@@ -98,6 +98,7 @@ import { assertStudioImageUpload, STUDIO_IMAGE_FILE_ACCEPT } from "@/lib/studioU
 import {
   creditsLinkToAdFullPipeline,
   creditsLinkToAdVideoFromImage,
+  CREDITS_LINK_TO_AD_THREE_REF_IMAGES,
   LINK_TO_AD_DEFAULT_VIDEO_MODEL,
   LINK_TO_AD_DEFAULT_VIDEO_DURATION_SEC,
   LINK_TO_AD_TRIAL_FINAL_VIDEO,
@@ -146,7 +147,7 @@ function clampToMaxWords(text: string, maxWords: number): string {
   return parts.slice(0, maxWords).join(" ");
 }
 
-/** Single-line preview for collapsed Nano image prompt rows (technical / negative tails are stored separately). */
+/** Single-line preview for collapsed Nano image prompt rows (Avatar / Scene / Shot; server adds render suffix at generation). */
 function nanoPromptPreviewOneLine(text: string, maxChars = 72): string {
   const t = String(text ?? "")
     .replace(/\s+/g, " ")
@@ -157,7 +158,7 @@ function nanoPromptPreviewOneLine(text: string, maxChars = 72): string {
 
 function patchNanoEditableSection(
   draft: string,
-  section: "person" | "avatar" | "scene",
+  section: "person" | "scene" | "product",
   value: string,
 ): string {
   const parsed = parseNanoEditableSections(draft);
@@ -165,7 +166,7 @@ function patchNanoEditableSection(
   return composeNanoEditableSections({
     person: section === "person" ? value : parsed.person,
     scene: section === "scene" ? value : parsed.scene,
-    product: section === "avatar" ? value : parsed.product,
+    product: section === "product" ? value : parsed.product,
   });
 }
 
@@ -5044,7 +5045,7 @@ export default function LinkToAdUniverse({
     [linkToAdTrialEconomy, ltaGenerateCredits],
   );
   const ltaThreeImagesCharge = useMemo(
-    () => (linkToAdTrialEconomy ? LINK_TO_AD_TRIAL_THREE_IMAGES : 10),
+    () => (linkToAdTrialEconomy ? LINK_TO_AD_TRIAL_THREE_IMAGES : CREDITS_LINK_TO_AD_THREE_REF_IMAGES),
     [linkToAdTrialEconomy],
   );
   const ltaKlingVideoCharge = useMemo(
@@ -7048,8 +7049,8 @@ export default function LinkToAdUniverse({
                                   {(
                                     [
                                       { key: "person" as const, label: "Avatar", value: parsed.person },
-                                      { key: "avatar" as const, label: "Shot", value: parsed.product },
                                       { key: "scene" as const, label: "Scene", value: parsed.scene },
+                                      { key: "product" as const, label: "Shot", value: parsed.product },
                                     ] as const
                                   ).map(({ key, label, value }) => {
                                     const rowKey = `p${i}-${key}`;
@@ -7166,7 +7167,10 @@ export default function LinkToAdUniverse({
                         onClick={() => void onGenerateNanoBananaImagesFromAllPrompts()}
                         className={`h-auto min-h-12 w-full max-w-md flex-col gap-1 py-2.5 ${primaryBtnClass}`}
                       >
-                        <span className="text-sm font-semibold leading-tight">Generate 3 images</span>
+                        <span className="inline-flex items-center justify-center gap-2 text-sm font-semibold leading-tight">
+                          Generate 3 images
+                          {hideCredits ? null : <CreditCostBadge amount={ltaThreeImagesCharge} className="text-[9px]" />}
+                        </span>
                       </Button>
                     </div>
                   ) : null}

@@ -15,6 +15,8 @@ import { serverLog } from "@/lib/serverLog";
 import { getEnv } from "@/lib/env";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { getUserPlan } from "@/lib/supabase/getUserPlan";
+import { mergeNanoPromptForApi, splitNanoPromptBodyForEditing } from "@/lib/linkToAdUniverse";
+import { LINK_TO_AD_NANO_IMAGE_SERVER_SUFFIX } from "@/lib/linkToAd/nanoImageServerSuffix";
 
 type Body = {
   accountPlan?: string;
@@ -43,9 +45,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
-  const prompt = (body.prompt ?? "").trim();
+  let prompt = (body.prompt ?? "").trim();
   if (!prompt) {
     return NextResponse.json({ error: "Missing `prompt`." }, { status: 400 });
+  }
+  if (body.linkToAd === true) {
+    const { editable, technicalTail } = splitNanoPromptBodyForEditing(prompt);
+    const tail = technicalTail.trim() ? technicalTail : LINK_TO_AD_NANO_IMAGE_SERVER_SUFFIX;
+    prompt = mergeNanoPromptForApi(editable, tail).trim();
   }
 
   const rawModel = body.model ?? "nano";
