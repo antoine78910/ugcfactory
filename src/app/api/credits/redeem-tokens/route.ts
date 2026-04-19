@@ -3,8 +3,8 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
-import { isAllowedUser } from "@/lib/allowedUsers";
-import { sessionUserEmail } from "@/lib/sessionUserEmail";
+import { isSubscriptionUnlimitedEmail } from "@/lib/allowedUsers";
+import { resolveAuthUserEmail } from "@/lib/sessionUserEmail";
 
 /**
  * POST /api/credits/redeem-tokens
@@ -16,7 +16,10 @@ export async function POST(req: Request) {
   const auth = await requireSupabaseUser();
   if (auth.response) return auth.response;
 
-  if (!isAllowedUser(sessionUserEmail(auth.user))) {
+  const admin = createSupabaseServiceClient();
+  const email = await resolveAuthUserEmail(auth.user, admin);
+
+  if (!isSubscriptionUnlimitedEmail(email)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -42,7 +45,6 @@ export async function POST(req: Request) {
     expiresAt = new Date(Date.now() + days * 86_400_000).toISOString();
   }
 
-  const admin = createSupabaseServiceClient();
   if (!admin) {
     return NextResponse.json({ error: "DB not configured" }, { status: 503 });
   }
@@ -85,11 +87,13 @@ export async function GET() {
   const auth = await requireSupabaseUser();
   if (auth.response) return auth.response;
 
-  if (!isAllowedUser(sessionUserEmail(auth.user))) {
+  const admin = createSupabaseServiceClient();
+  const email = await resolveAuthUserEmail(auth.user, admin);
+
+  if (!isSubscriptionUnlimitedEmail(email)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const admin = createSupabaseServiceClient();
   if (!admin) {
     return NextResponse.json({ error: "DB not configured" }, { status: 503 });
   }

@@ -3,11 +3,15 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
-import { sessionUserEmail } from "@/lib/sessionUserEmail";
+import { resolveAuthUserEmail } from "@/lib/sessionUserEmail";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import { parseAccountPlan, type AccountPlanId } from "@/lib/subscriptionModelAccess";
 import { getPlanFromPriceId } from "@/lib/stripe/subscriptionPrices";
-import { isAllowedUser, isPersonalApiUser } from "@/lib/allowedUsers";
+import {
+  isAllowedUser,
+  isPersonalApiUser,
+  isSubscriptionUnlimitedEmail,
+} from "@/lib/allowedUsers";
 import { getUserCreditBalance } from "@/lib/creditGrants";
 import { stripeSubscriptionPeriodEndIso } from "@/lib/stripeSubscriptionPeriodEnd";
 import {
@@ -52,16 +56,18 @@ export async function GET() {
   const auth = await requireSupabaseUser();
   if (auth.response) return auth.response;
 
-  const email = sessionUserEmail(auth.user);
+  const adminClient = createSupabaseServiceClient();
+  const email = await resolveAuthUserEmail(auth.user, adminClient);
 
-  // Allowlisted accounts get unlimited access, skip Stripe entirely.
-  if (isAllowedUser(email)) {
+  // Allowlisted + primary admin accounts get unlimited access, skip Stripe entirely.
+  if (isSubscriptionUnlimitedEmail(email)) {
     return NextResponse.json({
       planId: "growth" as AccountPlanId,
       billing: null,
       userId: auth.user.id,
       unlimited: true,
-      autoEnablePersonalApi: true,
+      /** Founder allowlist only; primary admins get unlimited credits without forcing personal API mode. */
+      autoEnablePersonalApi: isAllowedUser(email),
       creditBalance: 999_999,
       studioAccessAllowed: true,
     } satisfies MeSubscriptionResponse);

@@ -1,3 +1,5 @@
+import { isPrimaryAdminEmail } from "@/lib/adminEmails";
+
 /**
  * Server-side allowlist of emails permitted to use application APIs.
  *
@@ -39,4 +41,12 @@ export function isAllowedUser(email: string | null | undefined): boolean {
 export function isPersonalApiUser(email: string | null | undefined): boolean {
   if (!email?.trim()) return false;
   return PERSONAL_API_USER_EMAILS.has(email.trim().toLowerCase());
+}
+
+/**
+ * Accounts that get the “unlimited” subscription payload (allowlist + primary admins).
+ * Keeps admin tooling and studio credits in sync even if JWT email fields are sparse.
+ */
+export function isSubscriptionUnlimitedEmail(email: string | null | undefined): boolean {
+  return isAllowedUser(email) || isPrimaryAdminEmail(email);
 }

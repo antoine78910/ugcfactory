@@ -1,13 +1,16 @@
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { NextResponse } from "next/server";
 import { isPrimaryAdminEmail } from "@/lib/adminEmails";
-import { sessionUserEmail } from "@/lib/sessionUserEmail";
+import { createSupabaseServiceClient } from "@/lib/supabase/admin";
+import { resolveAuthUserEmail } from "@/lib/sessionUserEmail";
 
 export async function requireAdmin() {
   const auth = await requireSupabaseUser();
   if (auth.response) return auth;
 
-  const email = sessionUserEmail(auth.user)?.toLowerCase().trim() ?? "";
+  const admin = createSupabaseServiceClient();
+  const email =
+    (await resolveAuthUserEmail(auth.user, admin))?.toLowerCase().trim() ?? "";
   if (!isPrimaryAdminEmail(email)) {
     return {
       ...auth,

@@ -4,8 +4,8 @@ import { NextResponse } from "next/server";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import { getUserCreditBalance } from "@/lib/creditGrants";
-import { isAllowedUser } from "@/lib/allowedUsers";
-import { sessionUserEmail } from "@/lib/sessionUserEmail";
+import { isSubscriptionUnlimitedEmail } from "@/lib/allowedUsers";
+import { resolveAuthUserEmail } from "@/lib/sessionUserEmail";
 
 export type MeCreditsResponse = {
   balance: number;
@@ -17,7 +17,10 @@ export async function GET() {
   const auth = await requireSupabaseUser();
   if (auth.response) return auth.response;
 
-  if (isAllowedUser(sessionUserEmail(auth.user))) {
+  const admin = createSupabaseServiceClient();
+  const email = await resolveAuthUserEmail(auth.user, admin);
+
+  if (isSubscriptionUnlimitedEmail(email)) {
     return NextResponse.json({
       balance: 999_999,
       subscriptionCredits: 999_999,
@@ -25,7 +28,6 @@ export async function GET() {
     } satisfies MeCreditsResponse);
   }
 
-  const admin = createSupabaseServiceClient();
   if (!admin) {
     return NextResponse.json({ balance: 0, subscriptionCredits: 0, packCredits: 0 } satisfies MeCreditsResponse);
   }
