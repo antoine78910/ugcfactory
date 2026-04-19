@@ -112,7 +112,7 @@ export function studioVideoRequiresStartImage(pickerId: string): boolean {
 
 /**
  * Studio Create tab: Seedance 2 Preview / Fast Preview use a single 1–4 image upload strip
- * (PiAPI image refs) instead of separate start/end frame slots.
+ * (provider image refs) instead of separate start/end frame slots.
  */
 export function studioVideoUsesSeedanceCompactReferenceUploads(pickerId: string): boolean {
   return pickerId === "bytedance/seedance-2-preview" || pickerId === "bytedance/seedance-2-fast-preview";
