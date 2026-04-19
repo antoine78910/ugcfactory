@@ -143,8 +143,10 @@ export function SubscriptionPlanFeatureList({
   return (
     <ul
       className={cn(
-        "mt-4 flex min-h-0 flex-1 flex-col space-y-2 border-t border-white/10 pt-4 text-left text-xs text-white/72",
+        "mt-4 flex min-h-0 flex-1 flex-col space-y-2 border-t border-white/10 pt-4 text-left text-white/72",
         className,
+        /** After `className` so callers (e.g. LTA trial dialog) cannot shrink list / credits with `text-[11px]`. */
+        "!text-xs",
       )}
     >
       <li className="flex items-center gap-2.5">
