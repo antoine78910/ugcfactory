@@ -65,18 +65,18 @@ type Body = {
   multiPrompt?: KlingMultiPromptShot[];
   /**
    * Kling 3.0: `@name` in prompts + `kling_elements` in the Market payload.
-   * Seedance (PiAPI): same shape in the request body; URLs are flattened in order (start → element refs → end)
-   * and the prompt should use `@image1` … `@imageN` (auto-prefixed when missing). Max 12 (Pro) / 9 (Preview) images total.
+   * Seedance: same shape; URLs are flattened in order (start → element refs → end) for the provider.
+   * Prompt uses `@image1` … `@imageN` (tags may be auto-prefixed when missing). Max 12 (Pro) / 9 (Preview) images total.
    */
   klingElements?: KlingElementInput[];
   /**
    * Seedance 2 Preview / Fast Preview (+ VIP variants): 1–4 HTTPS image URLs only.
-   * When set, replaces `imageUrl` / `endImageUrl` / `klingElements` ordering for that request.
+   * With `klingElements`, the first URL is the start frame; remaining compact URLs append after element refs.
    */
   seedancePreviewImageUrls?: string[];
   /**
    * Seedance 2 / Fast only: ordered omni references (images, videos, audio).
-   * Mutually exclusive with `imageUrl` / `endImageUrl` / `klingElements` in the Studio client.
+   * With `klingElements`, the first image URL is @image1; element URLs follow, then remaining omni images.
    */
   seedanceOmniMedia?: { type: "image" | "video" | "audio"; url: string }[];
   personalApiKey?: string;
@@ -182,7 +182,7 @@ function pushUniqueImageUrl(out: string[], raw: string, max: number): void {
   out.push(u);
 }
 
-/** Start frame, then each element’s reference URLs, then optional end frame (Seedance / PiAPI order). */
+/** Start frame, then each element’s reference URLs, then optional end frame (Seedance provider order). */
 function buildSeedanceOrderedImageUrls(
   start: string,
   end: string | undefined,
@@ -388,26 +388,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: elementsNorm.error }, { status: 400 });
   }
 
-  if (useCompactSeedancePreviewRefs && elementsNorm.elements.length > 0) {
-    return NextResponse.json(
-      {
-        error:
-          "Do not combine `klingElements` with `seedancePreviewImageUrls`. Use only the compact reference image list (1–4 URLs).",
-      },
-      { status: 400 },
-    );
-  }
-
-  if (useSeedanceProOmniRefs && elementsNorm.elements.length > 0) {
-    return NextResponse.json(
-      {
-        error:
-          "Do not combine `klingElements` with `seedanceOmniMedia`. Use only the omni media list (images, videos, audio).",
-      },
-      { status: 400 },
-    );
-  }
-
   if (model === "kling-3.0/video" && elementsNorm.elements.length > 0 && !hasKieReferenceImage) {
     return NextResponse.json(
       {
@@ -418,14 +398,20 @@ export async function POST(req: Request) {
     );
   }
 
-  if (rawModel.startsWith("bytedance/seedance") && elementsNorm.elements.length > 0 && !hasKieReferenceImage) {
-    return NextResponse.json(
-      {
-        error:
-          "Seedance requires a start frame (`imageUrl`) when using reference elements (extra images use @image2, @image3, … in the prompt).",
-      },
-      { status: 400 },
-    );
+  if (rawModel.startsWith("bytedance/seedance") && elementsNorm.elements.length > 0) {
+    const hasSeedanceStart =
+      hasKieReferenceImage ||
+      (useCompactSeedancePreviewRefs && compactNorm.urls.length > 0) ||
+      (useSeedanceProOmniRefs && omniNorm.items.some((it) => it.type === "image"));
+    if (!hasSeedanceStart) {
+      return NextResponse.json(
+        {
+          error:
+            "Seedance requires at least one reference image for @image1 when using Elements: `imageUrl`, `seedancePreviewImageUrls`, or an image in `seedanceOmniMedia`.",
+        },
+        { status: 400 },
+      );
+    }
   }
 
   const effectivePrompt = kling30Multi && multiNorm?.ok ? multiNorm.shots[0]!.prompt : prompt;
@@ -599,11 +585,41 @@ export async function POST(req: Request) {
           else if (it.type === "video") videoOrder.push(it.url);
           else audioOrder.push(it.url);
         }
+        let imagesToMirror = imageOrder;
+        if (elementsNorm.elements.length > 0) {
+          if (!imageOrder.length) {
+            return NextResponse.json(
+              {
+                error:
+                  "Add at least one reference image in omni media when using Elements (needed for @image1).",
+              },
+              { status: 400 },
+            );
+          }
+          const merged: string[] = buildSeedanceOrderedImageUrls(
+            imageOrder[0]!,
+            undefined,
+            elementsNorm.elements,
+            maxImages,
+          );
+          for (let i = 1; i < imageOrder.length; i++) {
+            pushUniqueImageUrl(merged, imageOrder[i]!, maxImages);
+          }
+          if (merged.length > maxImages) {
+            return NextResponse.json(
+              {
+                error: `Too many Seedance reference images (${merged.length}). Maximum is ${maxImages} for this model.`,
+              },
+              { status: 400 },
+            );
+          }
+          imagesToMirror = merged;
+        }
         const mirroredImg: string[] = [];
         const mirroredVid: string[] = [];
         const mirroredAud: string[] = [];
         try {
-          for (const u of imageOrder) {
+          for (const u of imagesToMirror) {
             mirroredImg.push(await mirrorImageUrlForPiapiSeedance(u, user.id));
           }
           for (const u of videoOrder) {
@@ -634,6 +650,7 @@ export async function POST(req: Request) {
           videoUrls: mirroredVid.length ? mirroredVid : undefined,
           audioUrls: mirroredAud.length ? mirroredAud : undefined,
           preferOmniReference: true,
+          forceOmniReference: elementsNorm.elements.length > 0,
           duration,
           aspectRatio: seedanceAspectRatio,
           overrideApiKey: piapiKey,
@@ -647,7 +664,20 @@ export async function POST(req: Request) {
 
       let ordered: string[] = [];
       if (useCompactSeedancePreviewRefs) {
-        ordered = compactNorm.urls.slice(0, SEEDANCE_COMPACT_PREVIEW_MAX_IMAGE_URLS);
+        const compactUrls = compactNorm.urls.slice(0, SEEDANCE_COMPACT_PREVIEW_MAX_IMAGE_URLS);
+        if (elementsNorm.elements.length > 0) {
+          ordered = buildSeedanceOrderedImageUrls(
+            compactUrls[0]!,
+            undefined,
+            elementsNorm.elements,
+            maxImages,
+          );
+          for (let i = 1; i < compactUrls.length; i++) {
+            pushUniqueImageUrl(ordered, compactUrls[i]!, maxImages);
+          }
+        } else {
+          ordered = compactUrls;
+        }
       } else if (elementsNorm.elements.length > 0 || hasKieEndImage) {
         if (!hasKieReferenceImage) {
           return NextResponse.json(

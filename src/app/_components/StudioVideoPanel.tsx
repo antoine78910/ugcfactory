@@ -100,7 +100,7 @@ import {
 
 const LS_STUDIO_VIDEO_HISTORY = "ugc_studio_video_history_v1";
 
-/** PiAPI Seedance 2 Pro: reference videos must be MP4 or MOV (not WebM). */
+/** Seedance 2 Pro: reference videos must be MP4 or MOV (not WebM). */
 const SEEDANCE_PRO_OMNI_VIDEO_ACCEPT = "video/mp4,video/quicktime,.mp4,.mov";
 const SEEDANCE_PRO_OMNI_FILE_ACCEPT = `${STUDIO_IMAGE_FILE_ACCEPT},${SEEDANCE_PRO_OMNI_VIDEO_ACCEPT},${STUDIO_AUDIO_FILE_ACCEPT}`;
 
@@ -127,29 +127,42 @@ function promptUsesKlingElementTag(prompt: string, elementName: string): boolean
 
 type KlingElementPayloadRow = { name: string; description: string; element_input_urls: string[] };
 
-function countUniqueSeedanceReferenceUrls(
-  start: string | null | undefined,
-  end: string | null | undefined,
-  payload: KlingElementPayloadRow[] | undefined,
-): number {
+/** Union of Seedance reference images for slot limits (start / compact strip / omni images + elements + end). */
+function countUniqueSeedanceStudioRefs(opts: {
+  startUrl: string | null | undefined;
+  endUrl: string | null | undefined;
+  compactUrls: string[];
+  useCompact: boolean;
+  omniItems: SeedanceOmniRefItem[];
+  useOmni: boolean;
+  elements: KlingElementPayloadRow[] | undefined;
+}): number {
   const seen = new Set<string>();
   const add = (raw: string | null | undefined) => {
     const u = String(raw ?? "").trim();
     if (!u || seen.has(u)) return;
     seen.add(u);
   };
-  add(start);
-  for (const el of payload ?? []) {
+  if (opts.useCompact && opts.compactUrls.length) {
+    for (const u of opts.compactUrls) add(u);
+  } else if (opts.useOmni && opts.omniItems.length) {
+    for (const it of opts.omniItems) {
+      if (it.kind === "image") add(it.url);
+    }
+  } else {
+    add(opts.startUrl);
+  }
+  add(opts.endUrl);
+  for (const el of opts.elements ?? []) {
     for (const u of el.element_input_urls) add(u);
   }
-  add(end);
   return seen.size;
 }
 
 const KLING_ELEMENT_MEDIA_MAX_BYTES = 10 * 1024 * 1024;
 const KLING_ELEMENT_MEDIA_MIN_PX = 300;
 
-/** Kling 3.0 Market API requires 2+ refs per element; Seedance (PiAPI) allows a single ref per slot. */
+/** Kling 3.0: 2+ refs per element; Seedance: 1+ ref per element slot (provider rules). */
 function minReferenceUrlsPerVideoElement(modelId: string): number {
   return modelId.startsWith("bytedance/seedance") ? 1 : 2;
 }
@@ -2041,10 +2054,7 @@ export default function StudioVideoPanel({
     }
 
     const supportsReferenceElements =
-      modelId === "kling-3.0/video" ||
-      (modelId.startsWith("bytedance/seedance") &&
-        !compactSeedanceRefUploads &&
-        !seedanceProOmniRefUploads);
+      modelId === "kling-3.0/video" || modelId.startsWith("bytedance/seedance");
     const minElUrls = minReferenceUrlsPerVideoElement(modelId);
     const klingElementsPayloadEarly =
       supportsReferenceElements && klingElementDrafts.length
@@ -2056,20 +2066,40 @@ export default function StudioVideoPanel({
               element_input_urls: r.urls.slice(0, 4),
             }))
         : undefined;
-    if (supportsReferenceElements && klingElementsPayloadEarly?.length && !startUrl?.trim()) {
-      toast.error("Add a start frame image when using Elements.", {
-        description:
-          modelId === "kling-3.0/video"
-            ? "Kling 3.0 requires image_urls[0] for element references."
-            : "Seedance needs a start frame, then @image2, @image3, … in your prompt for extra references (see PiAPI Seedance docs).",
-      });
-      return;
+    const seedanceImageForElements =
+      String(startUrl ?? "").trim() ||
+      (compactSeedanceRefUploads ? String(seedanceCompactRefUrls[0] ?? "").trim() : "") ||
+      (seedanceProOmniRefUploads
+        ? String(seedanceProOmniItems.find((i) => i.kind === "image")?.url ?? "").trim()
+        : "");
+    if (supportsReferenceElements && klingElementsPayloadEarly?.length) {
+      if (modelId === "kling-3.0/video" && !String(startUrl ?? "").trim()) {
+        toast.error("Add a start frame image when using Elements.", {
+          description: "Kling 3.0 requires image_urls[0] for element references.",
+        });
+        return;
+      }
+      if (modelId.startsWith("bytedance/seedance") && !seedanceImageForElements) {
+        toast.error("Add a reference image for @image1 when using Elements.", {
+          description:
+            "Use the start frame, compact uploads, or at least one image in omni references, then @image2, @image3, … for extras.",
+        });
+        return;
+      }
     }
     if (modelId.startsWith("bytedance/seedance") && klingElementsPayloadEarly?.length) {
       const maxSlots = modelId.includes("preview")
         ? SEEDANCE_PREVIEW_MAX_IMAGE_URLS
         : SEEDANCE_PRO_MAX_IMAGE_URLS;
-      const n = countUniqueSeedanceReferenceUrls(startUrl, endUrl, klingElementsPayloadEarly);
+      const n = countUniqueSeedanceStudioRefs({
+        startUrl,
+        endUrl,
+        compactUrls: seedanceCompactRefUrls,
+        useCompact: compactSeedanceRefUploads,
+        omniItems: seedanceProOmniItems,
+        useOmni: seedanceProOmniRefUploads,
+        elements: klingElementsPayloadEarly,
+      });
       if (n > maxSlots) {
         toast.error(`Too many reference images (${n}).`, {
           description: `This Seedance model accepts at most ${maxSlots} unique URLs (start, optional end, and element images).`,
@@ -2358,11 +2388,7 @@ export default function StudioVideoPanel({
             duration: Math.round(Number(s.durationSec)),
           }));
         }
-        const supportsKlingElementsOnApi =
-          isKling30 ||
-          (snap.modelId.startsWith("bytedance/seedance") &&
-            !(Array.isArray(compactSnapRefs) && compactSnapRefs.length > 0) &&
-            !(Array.isArray(omniSnap) && omniSnap.length > 0));
+        const supportsKlingElementsOnApi = isKling30 || snap.modelId.startsWith("bytedance/seedance");
         if (supportsKlingElementsOnApi && snap.klingElementsPayload?.length) {
           klingGenerateBody.klingElements = snap.klingElementsPayload;
         }
@@ -2812,7 +2838,7 @@ export default function StudioVideoPanel({
                 <div>
                   <Label className="text-xs text-white/65">Reference media</Label>
                   <p className="mt-1 text-[10px] leading-snug text-white/40">
-                    Seedance 2 / Fast — optional omni references (PiAPI). Leave empty for text-only video.
+                    Seedance 2 / Fast — optional omni references (provider). Leave empty for text-only video.
                   </p>
                   <input
                     ref={seedanceProOmniFileRef}
@@ -2942,8 +2968,6 @@ export default function StudioVideoPanel({
                       klingElementDrafts.some((d) => d.name.trim() && d.urls.length >= minReferenceUrlsPerVideoElement(modelId))
                         ? "Describe the scene and use @element_name for each saved element (e.g. @product, @model)."
                         : modelId.startsWith("bytedance/seedance") &&
-                            !compactSeedanceRefUploads &&
-                            !seedanceProOmniRefUploads &&
                             klingElementDrafts.some(
                               (d) => d.name.trim() && d.urls.length >= minReferenceUrlsPerVideoElement(modelId),
                             )
@@ -2954,9 +2978,7 @@ export default function StudioVideoPanel({
                     rows={4}
                   />
                   {(modelId === "kling-3.0/video" && !klingCustomMulti) ||
-                  (modelId.startsWith("bytedance/seedance") &&
-                    !compactSeedanceRefUploads &&
-                    !seedanceProOmniRefUploads) ? (
+                  modelId.startsWith("bytedance/seedance") ? (
                     <div className="mt-3 space-y-2">
                       <div className="flex flex-wrap items-center gap-2">
                         <Button
@@ -2972,18 +2994,18 @@ export default function StudioVideoPanel({
                         <span className="max-w-[min(100%,20rem)] text-[10px] leading-snug text-white/38">
                           {modelId === "kling-3.0/video" ? (
                             <>
-                              Optional, 2–4 images per element (upload, avatar, or studio; Kling 3.0 API). Use{" "}
+                              Optional elements: 2–4 images each (upload, avatar, or studio — provider rule). Use{" "}
                               <span className="text-white/55">@name</span> in the prompt.
                             </>
                           ) : (
                             <>
-                              Optional, same library; PiAPI Seedance uses{" "}
-                              <span className="text-white/55">@image1</span> (start),{" "}
-                              <span className="text-white/55">@image2</span>… for refs (max{" "}
+                              Optional elements: same library. Start frame{" "}
+                              <span className="text-white/55">@image1</span>, extras{" "}
+                              <span className="text-white/55">@image2</span>… (max{" "}
                               {modelId.includes("preview")
                                 ? SEEDANCE_PREVIEW_MAX_IMAGE_URLS
                                 : SEEDANCE_PRO_MAX_IMAGE_URLS}{" "}
-                              images).
+                              images; provider may add tags if omitted).
                             </>
                           )}
                         </span>
@@ -3404,14 +3426,31 @@ export default function StudioVideoPanel({
 
             <div className="space-y-4 px-5 py-4">
               <Dialog.Description className="text-xs leading-relaxed text-white/45">
-                <span className="text-white/55">Kling 3.0:</span> use{" "}
-                <span className="text-white/65">@element_name</span> in the main or multi-shot prompts.{" "}
-                <span className="text-white/55">Seedance (PiAPI):</span> start frame is{" "}
-                <span className="text-white/65">@image1</span>; each extra image is <span className="text-white/65">@image2</span>,{" "}
-                <span className="text-white/65">@image3</span>… in order (start → element refs → optional end frame). Each
-                element can use 1–4 images. <span className="text-white/55">Kling 3.0</span> still requires 2–4 images per
-                element (provider rule). Up to 3 elements. Add refs via upload,{" "}
-                <span className="text-white/55">Avatar library</span>, or <span className="text-white/55">Studio images</span>.
+                {modelId === "kling-3.0/video" ? (
+                  <>
+                    <span className="text-white/55">Kling 3.0:</span> put{" "}
+                    <span className="text-white/65">@element_name</span> in your prompt (main or multi-shot). Each element
+                    needs <span className="text-white/65">2–4</span> images (provider rule). Up to{" "}
+                    <span className="text-white/65">3</span> elements — upload,{" "}
+                    <span className="text-white/55">Avatar library</span>, or{" "}
+                    <span className="text-white/55">Studio images</span>.
+                  </>
+                ) : modelId.startsWith("bytedance/seedance") ? (
+                  <>
+                    <span className="text-white/55">Seedance:</span> start frame is{" "}
+                    <span className="text-white/65">@image1</span>; extras <span className="text-white/65">@image2</span>,{" "}
+                    <span className="text-white/65">@image3</span>… in URL order. Up to{" "}
+                    <span className="text-white/65">3</span> named elements, <span className="text-white/65">1–4</span>{" "}
+                    images each. Provider can prepend tags if you skip <span className="text-white/65">@imageN</span>.
+                    Upload, <span className="text-white/55">Avatar library</span>, or{" "}
+                    <span className="text-white/55">Studio images</span>.
+                  </>
+                ) : (
+                  <>
+                    Use <span className="text-white/65">@element_name</span> or image tags as required by the selected
+                    model. Up to 3 elements.
+                  </>
+                )}
               </Dialog.Description>
 
               {klingElementDrafts.length > 0 ? (
