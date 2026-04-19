@@ -597,6 +597,7 @@ function LinkToAdStudioStyleCreditPill({
   compact?: boolean;
 }) {
   if (hideCredits) return null;
+  if (!Number.isFinite(amount) || amount <= 0) return null;
   return (
     <span
       className={
@@ -1238,7 +1239,7 @@ export default function LinkToAdUniverse({
   const photoInputRef = useRef<HTMLInputElement>(null);
   /** File input on the Store URL step (optional product photos before scan). */
   const earlyProductPhotosInputRef = useRef<HTMLInputElement>(null);
-  /** After user clicks "Generate video from this image", show video prompt + output panels (incl. errors). */
+  /** After user clicks "Generate the video prompt from this image", show video prompt + output panels (incl. errors). */
   const [userStartedVideoFromImage, setUserStartedVideoFromImage] = useState(false);
   /**
    * Split layout: compact reference strip + video column. Stays on when switching between the 3 images;
@@ -1341,8 +1342,6 @@ export default function LinkToAdUniverse({
   ]);
   /** Image prompt panels (0–2): collapsed by default to save vertical space. */
   const [nanoImagePromptOpen, setNanoImagePromptOpen] = useState<[boolean, boolean, boolean]>([false, false, false]);
-  /** Which sub-editor is open: `p0-person`, `p1-avatar`, `p2-full`, etc. Only one expanded field at a time. */
-  const [nanoImagePromptExpandedKey, setNanoImagePromptExpandedKey] = useState<string | null>(null);
   /** Per reference image (0–2): Kling video URL, task id, history, saved motion prompt. */
   const [klingByRef, setKlingByRef] = useState<KlingReferenceSlotV1[]>(() => createEmptyKlingByReference());
   /** Which reference index the active Kling poll belongs to (single global poll). */
@@ -5098,6 +5097,11 @@ export default function LinkToAdUniverse({
     () => (linkToAdTrialEconomy ? LINK_TO_AD_TRIAL_FINAL_VIDEO : ltaVideoOnlyCredits),
     [linkToAdTrialEconomy, ltaVideoOnlyCredits],
   );
+  /** Trial: render credits are debited on Kling only; the “video prompt” step does not spend. */
+  const ltaVideoPromptFromImageCreditsDisplay = useMemo(
+    () => (linkToAdTrialEconomy ? 0 : ltaVideoOnlyCredits),
+    [linkToAdTrialEconomy, ltaVideoOnlyCredits],
+  );
 
   /** Match product image resolution used for Nano prompts (preview or packshots), not only main preview URL. */
   const step1Done = Boolean(summaryText.trim() && resolveNanoProductImageUrl());
@@ -7062,11 +7066,6 @@ export default function LinkToAdUniverse({
                                 setNanoImagePromptOpen((prev) => {
                                   const next: [boolean, boolean, boolean] = [prev[0], prev[1], prev[2]];
                                   next[i] = !next[i];
-                                  if (!next[i]) {
-                                    setNanoImagePromptExpandedKey((k) =>
-                                      k?.startsWith(`p${i}-`) ? null : k,
-                                    );
-                                  }
                                   return next;
                                 });
                               }}
@@ -7088,82 +7087,60 @@ export default function LinkToAdUniverse({
                             </button>
                             {panelOpen ? (
                               parsed.isStructured ? (
-                                <div className="mt-1.5 space-y-2.5 pb-0.5">
+                                <div className="mt-1.5 space-y-3 pb-0.5">
                                   {(
                                     [
-                                      { key: "person" as const, label: "Avatar", value: parsed.person },
-                                      { key: "scene" as const, label: "Scene", value: parsed.scene },
-                                      { key: "product" as const, label: "Shot", value: parsed.product },
+                                      { key: "person" as const, label: "Avatar" },
+                                      { key: "scene" as const, label: "Scene" },
+                                      { key: "product" as const, label: "Shot" },
                                     ] as const
-                                  ).map(({ key, label, value }) => {
+                                  ).map(({ key, label }) => {
+                                    const value =
+                                      key === "person"
+                                        ? parsed.person
+                                        : key === "scene"
+                                          ? parsed.scene
+                                          : parsed.product;
                                     const rowKey = `p${i}-${key}`;
-                                    const expanded = nanoImagePromptExpandedKey === rowKey;
-                                    const display = value.trim();
                                     return (
-                                      <div key={rowKey} className="flex min-w-0 items-start gap-2">
-                                        <button
-                                          type="button"
-                                          onClick={() =>
-                                            setNanoImagePromptExpandedKey((k) => (k === rowKey ? null : rowKey))
-                                          }
-                                          className="w-[4.75rem] shrink-0 pt-0.5 text-left text-[10px] font-semibold uppercase tracking-wide text-white/40 transition hover:text-white/60"
-                                        >
+                                      <div key={rowKey} className="min-w-0 space-y-1">
+                                        <div className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
                                           {label}
-                                        </button>
-                                        <div className="min-w-0 flex-1">
-                                          {!expanded ? (
-                                            <button
-                                              type="button"
-                                              onClick={() => setNanoImagePromptExpandedKey(rowKey)}
-                                              className="w-full rounded-md px-1 py-0.5 text-left transition hover:bg-white/[0.03]"
-                                            >
-                                              <p className="line-clamp-3 whitespace-pre-wrap text-[11px] leading-snug text-white/60">
-                                                {display || "Tap to edit…"}
-                                              </p>
-                                            </button>
-                                          ) : (
-                                            <Textarea
-                                              value={value}
-                                              onChange={(e) => {
-                                                const v = e.target.value;
-                                                setNanoPromptDrafts((prev) => {
-                                                  const next: [string, string, string] = [
-                                                    prev[0],
-                                                    prev[1],
-                                                    prev[2],
-                                                  ];
-                                                  next[i] = patchNanoEditableSection(prev[i], key, v);
-                                                  setNanoBananaPromptsRaw(
-                                                    composeThreeLabeledPrompts([
-                                                      mergeNanoPromptForApi(
-                                                        next[0],
-                                                        nanoPromptTechnicalTails[0],
-                                                      ),
-                                                      mergeNanoPromptForApi(
-                                                        next[1],
-                                                        nanoPromptTechnicalTails[1],
-                                                      ),
-                                                      mergeNanoPromptForApi(
-                                                        next[2],
-                                                        nanoPromptTechnicalTails[2],
-                                                      ),
-                                                    ]),
-                                                  );
-                                                  return next;
-                                                });
-                                              }}
-                                              rows={Math.max(3, Math.min(12, value.split("\n").length + 2))}
-                                              spellCheck
-                                              onKeyDown={(e) => {
-                                                if (e.key === "Escape") {
-                                                  e.preventDefault();
-                                                  setNanoImagePromptExpandedKey(null);
-                                                }
-                                              }}
-                                              className="min-h-[4.5rem] w-full resize-y border-0 border-b border-white/[0.07] bg-transparent px-1 py-0.5 text-[11px] leading-snug text-white/80 shadow-none outline-none ring-0 focus-visible:border-violet-400/30 focus-visible:ring-0"
-                                            />
-                                          )}
                                         </div>
+                                        <Textarea
+                                          value={value}
+                                          onChange={(e) => {
+                                            const v = e.target.value;
+                                            setNanoPromptDrafts((prev) => {
+                                              const next: [string, string, string] = [
+                                                prev[0],
+                                                prev[1],
+                                                prev[2],
+                                              ];
+                                              next[i] = patchNanoEditableSection(prev[i], key, v);
+                                              setNanoBananaPromptsRaw(
+                                                composeThreeLabeledPrompts([
+                                                  mergeNanoPromptForApi(
+                                                    next[0],
+                                                    nanoPromptTechnicalTails[0],
+                                                  ),
+                                                  mergeNanoPromptForApi(
+                                                    next[1],
+                                                    nanoPromptTechnicalTails[1],
+                                                  ),
+                                                  mergeNanoPromptForApi(
+                                                    next[2],
+                                                    nanoPromptTechnicalTails[2],
+                                                  ),
+                                                ]),
+                                              );
+                                              return next;
+                                            });
+                                          }}
+                                          rows={Math.max(4, Math.min(14, value.split("\n").length + 3))}
+                                          spellCheck
+                                          className="min-h-[5.5rem] w-full resize-y border border-white/[0.08] bg-black/20 px-2 py-1.5 text-[11px] leading-snug text-white/85 shadow-none outline-none ring-0 focus-visible:border-violet-400/40 focus-visible:ring-0"
+                                        />
                                       </div>
                                     );
                                   })}
@@ -7229,7 +7206,8 @@ export default function LinkToAdUniverse({
                           Next step
                         </h3>
                         <p className="mt-2 text-sm leading-snug text-white/70">
-                          Pick a 1:1 reference below (or use the strip on the left), then generate your UGC video.
+                          Pick a 1:1 reference below (or use the strip on the left), then generate the video prompt and
+                          your UGC video.
                         </p>
                         {nanoHasThreeImages && !showVideoStageLayout ? (
                           <button
@@ -7357,10 +7335,10 @@ export default function LinkToAdUniverse({
                             </span>
                           ) : (
                             <span className="inline-flex min-w-0 items-center justify-center gap-2 text-base font-semibold leading-tight">
-                              <span className="min-w-0 truncate">Generate video from this image</span>
+                              <span className="min-w-0 truncate">Generate the video prompt from this image</span>
                               <Video className="h-5 w-5 shrink-0" aria-hidden />
                               <LinkToAdStudioStyleCreditPill
-                                amount={ltaVideoConfirmCreditsDisplay}
+                                amount={ltaVideoPromptFromImageCreditsDisplay}
                                 hideCredits={hideCredits}
                               />
                             </span>
@@ -7999,8 +7977,8 @@ export default function LinkToAdUniverse({
                           Image {(nanoBananaSelectedImageIndex ?? 0) + 1} selected
                         </p>
                         <p className="mx-auto mt-2 max-w-sm text-sm text-white/55">
-                          Generate a motion prompt and video from this frame, or pick another 1:1 reference (left strip or
-                          “Next step” column).
+                          Generate the video prompt from this frame first, then the UGC video, or pick another 1:1
+                          reference (left strip or “Next step” column).
                         </p>
                       </div>
                       <Button
@@ -8015,10 +7993,10 @@ export default function LinkToAdUniverse({
                         className={`flex h-auto min-h-12 items-center justify-center py-2.5 ${primaryBtnClass}`}
                       >
                         <span className="inline-flex min-w-0 items-center justify-center gap-2 text-base font-semibold leading-tight">
-                          <span className="min-w-0 truncate">Generate video from this image</span>
+                          <span className="min-w-0 truncate">Generate the video prompt from this image</span>
                           <Video className="h-5 w-5 shrink-0" aria-hidden />
                           <LinkToAdStudioStyleCreditPill
-                            amount={ltaVideoConfirmCreditsDisplay}
+                            amount={ltaVideoPromptFromImageCreditsDisplay}
                             hideCredits={hideCredits}
                           />
                         </span>
