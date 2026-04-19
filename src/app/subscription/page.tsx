@@ -10,7 +10,7 @@ import type { SubscriptionUpgradePreview } from "@/app/_components/SubscriptionU
 import { consumeCheckoutQueryParams, useCreditsPlan } from "@/app/_components/CreditsPlanContext";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { SUBSCRIPTIONS, subscriptionBonusCreditsVsStarter } from "@/lib/pricing";
+import { SUBSCRIPTIONS } from "@/lib/pricing";
 import { SubscriptionPlanFeatureList } from "@/app/_components/SubscriptionPlanFeatureList";
 import {
   subscriptionPlanSortIndex,
@@ -450,13 +450,9 @@ export default function SubscriptionPage() {
 
           <section>
             <div className={cn("mx-auto grid max-w-6xl items-stretch gap-5 pt-2", planGridClass)}>
-              {PLANS.map((plan, planArrayIdx) => {
+              {PLANS.map((plan) => {
                 const priceLabels = priceFor(plan);
                 const planIdx = subscriptionPlanSortIndex(plan.id as SubscriptionPlanId);
-                const starterBonusCredits =
-                  planArrayIdx > 0
-                    ? subscriptionBonusCreditsVsStarter(planArrayIdx as 1 | 2 | 3)?.bonusCredits
-                    : undefined;
                 const currentIdx = isSubscribed
                   ? subscriptionPlanSortIndex(planId as SubscriptionPlanId)
                   : -1;
@@ -581,11 +577,7 @@ export default function SubscriptionPage() {
                       )}
                     </Button>
 
-                    <SubscriptionPlanFeatureList
-                      planId={plan.id as SubscriptionPlanId}
-                      credits={plan.credits}
-                      starterBonusCredits={starterBonusCredits}
-                    />
+                    <SubscriptionPlanFeatureList planId={plan.id as SubscriptionPlanId} credits={plan.credits} />
                   </div>
                 );
               })}

@@ -5,11 +5,7 @@ import { ArrowRight, Check, Sparkles, Zap } from "lucide-react";
 import { SubscriptionPlanFeatureList } from "@/app/_components/SubscriptionPlanFeatureList";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import {
-  STRIPE_ONE_DOLLAR_TRIAL_CREDIT_GRANT,
-  SUBSCRIPTIONS,
-  subscriptionBonusCreditsVsStarter,
-} from "@/lib/pricing";
+import { STRIPE_ONE_DOLLAR_TRIAL_CREDIT_GRANT, SUBSCRIPTIONS } from "@/lib/pricing";
 import { formatMoneyAmount } from "@/lib/billing/formatMoney";
 import type { StripeDisplayPricesPayload } from "@/lib/billing/stripeDisplayTypes";
 import { buildUsdStripeDisplayPricesFallback } from "@/lib/billing/stripeDisplayFallback";
@@ -272,13 +268,9 @@ export default function SetupClient({ embedded = false }: SetupClientProps) {
 
         {/* Plan cards, 4 tiers (Starter → Scale) */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {PLANS.map((plan, planArrayIdx) => {
+          {PLANS.map((plan) => {
             const isHighlight = Boolean(plan.highlight);
             const badge = plan.badge;
-            const starterBonusCredits =
-              planArrayIdx > 0
-                ? subscriptionBonusCreditsVsStarter(planArrayIdx as 1 | 2 | 3)?.bonusCredits
-                : undefined;
 
             return (
               <div
@@ -314,11 +306,7 @@ export default function SetupClient({ embedded = false }: SetupClientProps) {
                   )}
                 </div>
 
-                <SubscriptionPlanFeatureList
-                  planId={plan.id}
-                  credits={plan.credits}
-                  starterBonusCredits={starterBonusCredits}
-                />
+                <SubscriptionPlanFeatureList planId={plan.id} credits={plan.credits} />
 
                 <button
                   type="button"

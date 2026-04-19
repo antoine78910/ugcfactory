@@ -5,6 +5,8 @@ import { Loader2, Sparkles } from "lucide-react";
 import { Dialog } from "radix-ui";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { SubscriptionPlanCreditsWithBonus } from "@/app/_components/SubscriptionPlanFeatureList";
+import { isSubscriptionPlanId } from "@/lib/stripe/subscriptionPrices";
 
 export type SubscriptionUpgradePreview = {
   current: { planId: string; name: string; billingLabel: string; priceUsd: number };
@@ -99,9 +101,20 @@ export function SubscriptionUpgradeDialog({
                       {preview.target.name} <span className="text-white/35">·</span>{" "}
                       <span className="font-medium text-violet-100/85">{preview.target.billingLabel.toLowerCase()}</span>
                     </p>
-                    <p className="mt-0.5 text-[11px] text-violet-200/65">
-                      {preview.target.creditsPerMonth.toLocaleString()} credits/mo
-                    </p>
+                    <div className="mt-1 min-w-0">
+                      {isSubscriptionPlanId(preview.target.planId) ? (
+                        <SubscriptionPlanCreditsWithBonus
+                          planId={preview.target.planId}
+                          credits={preview.target.creditsPerMonth}
+                          compact
+                          showCoins={false}
+                        />
+                      ) : (
+                        <p className="text-[11px] text-violet-200/65">
+                          {preview.target.creditsPerMonth.toLocaleString()} credits/mo
+                        </p>
+                      )}
+                    </div>
                     <p className="mt-1 text-xl font-bold tabular-nums text-white">
                       {formatMoneyMajor(preview.target.priceUsd, preview.currency)}
                       <span className="text-sm font-medium text-white/40">/mo</span>

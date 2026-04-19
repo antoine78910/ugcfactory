@@ -4,6 +4,8 @@ import { AlertTriangle, Loader2 } from "lucide-react";
 import { Dialog } from "radix-ui";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { SubscriptionPlanCreditsWithBonus } from "@/app/_components/SubscriptionPlanFeatureList";
+import { isSubscriptionPlanId } from "@/lib/stripe/subscriptionPrices";
 
 function formatMoneyMajor(amount: number, currency: string): string {
   const code = currency?.toLowerCase() === "eur" ? "EUR" : "USD";
@@ -85,9 +87,20 @@ export function SubscriptionDowngradeDialog({
                     <p className="mt-1.5 text-sm font-semibold text-white/95">
                       {preview.current.name}
                     </p>
-                    <p className="mt-0.5 text-[11px] text-white/50">
-                      {preview.current.creditsPerMonth.toLocaleString()} credits/mo
-                    </p>
+                    <div className="mt-1 min-w-0">
+                      {isSubscriptionPlanId(preview.current.planId) ? (
+                        <SubscriptionPlanCreditsWithBonus
+                          planId={preview.current.planId}
+                          credits={preview.current.creditsPerMonth}
+                          compact
+                          showCoins={false}
+                        />
+                      ) : (
+                        <p className="text-[11px] text-white/50">
+                          {preview.current.creditsPerMonth.toLocaleString()} credits/mo
+                        </p>
+                      )}
+                    </div>
                     <p className="mt-1 text-xl font-bold tabular-nums text-white">
                       {formatMoneyMajor(preview.current.priceUsd, preview.currency ?? "usd")}
                       <span className="text-sm font-medium text-white/40">/mo</span>
@@ -100,9 +113,20 @@ export function SubscriptionDowngradeDialog({
                     <p className="mt-1.5 text-sm font-semibold text-white">
                       {preview.target.name}
                     </p>
-                    <p className="mt-0.5 text-[11px] text-amber-200/60">
-                      {preview.target.creditsPerMonth.toLocaleString()} credits/mo
-                    </p>
+                    <div className="mt-1 min-w-0">
+                      {isSubscriptionPlanId(preview.target.planId) ? (
+                        <SubscriptionPlanCreditsWithBonus
+                          planId={preview.target.planId}
+                          credits={preview.target.creditsPerMonth}
+                          compact
+                          showCoins={false}
+                        />
+                      ) : (
+                        <p className="text-[11px] text-amber-200/60">
+                          {preview.target.creditsPerMonth.toLocaleString()} credits/mo
+                        </p>
+                      )}
+                    </div>
                     <p className="mt-1 text-xl font-bold tabular-nums text-white">
                       {formatMoneyMajor(preview.target.priceUsd, preview.currency ?? "usd")}
                       <span className="text-sm font-medium text-white/40">/mo</span>
@@ -119,13 +143,25 @@ export function SubscriptionDowngradeDialog({
                         and your current credits until{" "}
                         <span className="font-semibold text-white/95">{preview.effectiveAt}</span>.
                       </p>
-                      <p className="mt-1.5">
+                      <p className="mt-1.5 flex flex-wrap items-center gap-x-1 gap-y-1.5">
                         Starting then, your plan becomes{" "}
-                        <span className="font-semibold text-white/95">{preview.target.name}</span> with{" "}
-                        <span className="font-semibold text-white/95">
-                          {preview.target.creditsPerMonth.toLocaleString()} credits/mo
-                        </span>{" "}
-                        at {formatMoneyMajor(preview.target.priceUsd, preview.currency ?? "usd")}/mo.
+                        <span className="font-semibold text-white/95">{preview.target.name}</span>
+                        <span className="text-white/70">with</span>
+                        {isSubscriptionPlanId(preview.target.planId) ? (
+                          <SubscriptionPlanCreditsWithBonus
+                            planId={preview.target.planId}
+                            credits={preview.target.creditsPerMonth}
+                            compact
+                            showCoins={false}
+                          />
+                        ) : (
+                          <span className="font-semibold text-white/95">
+                            {preview.target.creditsPerMonth.toLocaleString()} credits/mo
+                          </span>
+                        )}
+                        <span className="text-white/70">
+                          at {formatMoneyMajor(preview.target.priceUsd, preview.currency ?? "usd")}/mo.
+                        </span>
                       </p>
                     </div>
                   </div>
