@@ -76,6 +76,7 @@ import {
   isPlatformCreditBypassActive,
 } from "@/app/_components/CreditsPlanContext";
 import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
+import { LtaTrialVideoUpgradeDialog } from "@/app/_components/LtaTrialVideoUpgradeDialog";
 import { LinkToAdUniverseStepper } from "@/app/_components/LinkToAdUniverseStepper";
 import { WebsiteScanChecklist } from "@/app/_components/WebsiteScanChecklist";
 import { WebsiteScanLoader } from "@/app/_components/WebsiteScanLoader";
@@ -1224,26 +1225,35 @@ export default function LinkToAdUniverse({
   const [ltaCreditModal, setLtaCreditModal] = useState<{
     required: number;
     current: number;
+    /** Trial final video: show all subscription tiers in one sheet instead of {@link StudioBillingDialog}. */
+    presentation?: "studio_billing" | "trial_plans_sheet";
   } | null>(null);
   /** Amount debited on "Generate" from URL (trial vs full pipeline); used for refunds on failure. */
   const lastLtaUrlGenerateChargeRef = useRef(0);
 
   /** Read-only balance gate (opens billing modal). Use immediately before any paid LTA step. */
-  const hasLtaCreditsFor = useCallback((cost: number): boolean => {
-    if (isPlatformCreditBypassActive()) return true;
-    const k = Math.max(0, Math.floor(cost));
-    if (k <= 0) return true;
-    if (creditsBalanceRef.current < k) {
-      setLtaCreditModal({ current: creditsBalanceRef.current, required: k });
-      return false;
-    }
-    return true;
-  }, []);
+  const hasLtaCreditsFor = useCallback(
+    (cost: number, opts?: { presentation?: "studio_billing" | "trial_plans_sheet" }): boolean => {
+      if (isPlatformCreditBypassActive()) return true;
+      const k = Math.max(0, Math.floor(cost));
+      if (k <= 0) return true;
+      if (creditsBalanceRef.current < k) {
+        setLtaCreditModal({
+          current: creditsBalanceRef.current,
+          required: k,
+          presentation: opts?.presentation ?? "studio_billing",
+        });
+        return false;
+      }
+      return true;
+    },
+    [],
+  );
 
   /** Deduct from wallet once on URL Generate; keep ref/frozen in sync with that charge. */
   const spendLtaCreditsIfEnough = useCallback(
-    (cost: number): boolean => {
-      if (!hasLtaCreditsFor(cost)) return false;
+    (cost: number, opts?: { presentation?: "studio_billing" | "trial_plans_sheet" }): boolean => {
+      if (!hasLtaCreditsFor(cost, opts)) return false;
       if (isPlatformCreditBypassActive()) return true;
       const k = Math.max(0, Math.floor(cost));
       if (k <= 0) return true;
@@ -4734,7 +4744,12 @@ export default function LinkToAdUniverse({
     if (videoSpend > 0) {
       const w0 = creditsBalanceRef.current;
       setLtaFrozenCredits(w0);
-      if (!spendLtaCreditsIfEnough(videoSpend)) {
+      if (
+        !spendLtaCreditsIfEnough(
+          videoSpend,
+          linkToAdTrialEconomy ? { presentation: "trial_plans_sheet" } : undefined,
+        )
+      ) {
         setLtaFrozenCredits(null);
         return;
       }
@@ -8188,7 +8203,8 @@ export default function LinkToAdUniverse({
                           </>
                         ) : null}
                         {nanoBananaImageUrl &&
-                        ugcVideoPromptGpt.trim() &&
+                        (mergedVideoPromptDraft.trim() || ugcVideoPromptGpt.trim()) &&
+                        !isVideoPromptLoading &&
                         !klingVideoUrl &&
                         !klingPollTaskId &&
                         !isKlingSubmitting ? (
@@ -8421,19 +8437,30 @@ export default function LinkToAdUniverse({
     ) : null}
 
     {ltaCreditModal ? (
-      <StudioBillingDialog
-        open
-        onOpenChange={(open) => {
-          if (!open) setLtaCreditModal(null);
-        }}
-        planId={planId}
-        studioMode="video"
-        variant={{
-          kind: "credits",
-          currentCredits: ltaCreditModal.current,
-          requiredCredits: ltaCreditModal.required,
-        }}
-      />
+      ltaCreditModal.presentation === "trial_plans_sheet" ? (
+        <LtaTrialVideoUpgradeDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setLtaCreditModal(null);
+          }}
+          currentCredits={ltaCreditModal.current}
+          requiredCredits={ltaCreditModal.required}
+        />
+      ) : (
+        <StudioBillingDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setLtaCreditModal(null);
+          }}
+          planId={planId}
+          studioMode="video"
+          variant={{
+            kind: "credits",
+            currentCredits: ltaCreditModal.current,
+            requiredCredits: ltaCreditModal.required,
+          }}
+        />
+      )
     ) : null}
     <AvatarPickerDialog
       open={avatarPickerOpen}
