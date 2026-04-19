@@ -49,7 +49,8 @@ export function starterPlanCreditsRatioTitle(currency: "usd" | "eur"): string {
  * One-line credits: base (total minus Starter-tier bonus) + gift pill for the bonus.
  * Used on plan cards, upgrade/downgrade dialogs, and the first row of `SubscriptionPlanFeatureList`.
  */
-const CREDITS_LINE_CLASS = "text-xs font-semibold tabular-nums leading-snug";
+/** `!text-xs` so parent `ul` sizes (e.g. `text-[11px]` on LTA) never shrink bonus vs base. */
+const CREDITS_LINE_CLASS = "!text-xs font-semibold tabular-nums leading-none";
 
 export function SubscriptionPlanCreditsWithBonus({
   planId,
@@ -71,7 +72,7 @@ export function SubscriptionPlanCreditsWithBonus({
   const pill = (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center gap-0.5 rounded-full border border-amber-400/40",
+        "inline-flex shrink-0 items-center gap-1 rounded-full border border-amber-400/40",
         "bg-gradient-to-r from-amber-500/25 via-amber-400/15 to-emerald-500/20",
         CREDITS_LINE_CLASS,
         "text-amber-100",
@@ -80,7 +81,7 @@ export function SubscriptionPlanCreditsWithBonus({
       title={`${credits.toLocaleString()} credits/mo total (${baseCredits.toLocaleString()} at Starter-tier value + ${bonus.toLocaleString()} bonus)`}
       aria-label={`Bonus ${bonus} credits per month. ${credits.toLocaleString()} credits per month total.`}
     >
-      <Gift className="h-2.5 w-2.5 shrink-0 text-amber-200/95" strokeWidth={2.5} aria-hidden />
+      <Gift className="h-3 w-3 shrink-0 text-amber-200/95" strokeWidth={2.25} aria-hidden />
       +{bonus.toLocaleString()} credits
     </span>
   );
