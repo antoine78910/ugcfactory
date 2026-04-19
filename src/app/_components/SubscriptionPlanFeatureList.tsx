@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Coins, X } from "lucide-react";
+import { Check, Coins, Gift, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   planRank,
@@ -28,12 +28,15 @@ export function SubscriptionPlanFeatureList({
 }: {
   planId: SubscriptionPlanId;
   credits: number;
-  /** Extra monthly credits vs Starter-tier value at this price (shown inline, minimal). */
+  /** Extra monthly credits vs Starter-tier value at this price (shown as a gift pill; main line shows total minus this). */
   starterBonusCredits?: number;
   className?: string;
 }) {
   const images = Number(upToEstimateAiImagesFromCredits(credits));
   const videos = Number(upToEstimateAiVideosFromCredits(credits));
+  const bonus =
+    starterBonusCredits != null && starterBonusCredits > 0 ? Math.round(starterBonusCredits) : 0;
+  const baseCredits = bonus > 0 ? Math.max(0, credits - bonus) : credits;
 
   return (
     <ul
@@ -46,15 +49,25 @@ export function SubscriptionPlanFeatureList({
         <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-violet-500/20 text-violet-200">
           <Coins className="h-3 w-3" aria-hidden />
         </span>
-        <span className="min-w-0">
-          <span className="font-semibold text-white">
-            {credits.toLocaleString()} credits
-            {starterBonusCredits != null && starterBonusCredits > 0 ? (
-              <span className="ml-1.5 text-[10px] font-medium tabular-nums text-emerald-400/75">
-                +{starterBonusCredits.toLocaleString()} credits
-              </span>
-            ) : null}
+        <span className="min-w-0 flex flex-col gap-1.5">
+          <span className="font-semibold tabular-nums text-white">
+            {baseCredits.toLocaleString()} credits
           </span>
+          {bonus > 0 ? (
+            <span
+              className={cn(
+                "inline-flex w-fit max-w-full items-center gap-1 rounded-full border border-amber-400/40",
+                "bg-gradient-to-r from-amber-500/25 via-amber-400/15 to-emerald-500/20 px-2 py-0.5",
+                "text-[10px] font-bold tabular-nums tracking-wide text-amber-100",
+                "shadow-[0_0_16px_rgba(251,191,36,0.12),inset_0_1px_0_rgba(255,255,255,0.08)]",
+              )}
+              title={`${credits.toLocaleString()} credits/mo total (${baseCredits.toLocaleString()} at Starter-tier value + ${bonus.toLocaleString()} bonus)`}
+              aria-label={`Bonus ${bonus} credits per month. ${credits.toLocaleString()} credits per month total.`}
+            >
+              <Gift className="h-3 w-3 shrink-0 text-amber-200/95" strokeWidth={2.25} aria-hidden />
+              +{bonus.toLocaleString()} credits
+            </span>
+          ) : null}
         </span>
       </li>
       <li className="pl-1 text-white/50">Up to {images.toLocaleString()} AI images (Nanobanana)</li>
