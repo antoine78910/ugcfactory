@@ -5,6 +5,7 @@ import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import { getUserCreditBalance } from "@/lib/creditGrants";
 import { isAllowedUser } from "@/lib/allowedUsers";
+import { sessionUserEmail } from "@/lib/sessionUserEmail";
 
 export type MeCreditsResponse = {
   balance: number;
@@ -16,7 +17,7 @@ export async function GET() {
   const auth = await requireSupabaseUser();
   if (auth.response) return auth.response;
 
-  if (isAllowedUser(auth.user.email)) {
+  if (isAllowedUser(sessionUserEmail(auth.user))) {
     return NextResponse.json({
       balance: 999_999,
       subscriptionCredits: 999_999,

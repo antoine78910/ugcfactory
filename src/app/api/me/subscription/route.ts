@@ -3,6 +3,7 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
+import { sessionUserEmail } from "@/lib/sessionUserEmail";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import { parseAccountPlan, type AccountPlanId } from "@/lib/subscriptionModelAccess";
 import { getPlanFromPriceId } from "@/lib/stripe/subscriptionPrices";
@@ -51,8 +52,10 @@ export async function GET() {
   const auth = await requireSupabaseUser();
   if (auth.response) return auth.response;
 
+  const email = sessionUserEmail(auth.user);
+
   // Allowlisted accounts get unlimited access, skip Stripe entirely.
-  if (isAllowedUser(auth.user.email)) {
+  if (isAllowedUser(email)) {
     return NextResponse.json({
       planId: "growth" as AccountPlanId,
       billing: null,
@@ -67,7 +70,7 @@ export async function GET() {
   const userId = auth.user.id;
 
   // Personal-API accounts use real DB credits but auto-enable their own provider keys.
-  if (isPersonalApiUser(auth.user.email)) {
+  if (isPersonalApiUser(email)) {
     const admin = createSupabaseServiceClient();
     let creditBalance = 0;
     if (admin) {
@@ -132,13 +135,13 @@ export async function GET() {
   const secret = process.env.STRIPE_SECRET_KEY?.trim();
 
   // ── 1. Query Stripe directly ──────────────────────────────────────────────
-  if (secret && auth.user.email) {
+  if (secret && email) {
     try {
       const stripe = new Stripe(secret, { apiVersion: "2026-02-25.clover" });
 
       // Find customers matching this email in Stripe
       const customers = await stripe.customers.list({
-        email: auth.user.email,
+        email,
         limit: 10,
       });
 

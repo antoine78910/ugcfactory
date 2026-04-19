@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { isPrimaryAdminEmail } from "@/lib/adminEmails";
+import { sessionUserEmail } from "@/lib/sessionUserEmail";
 
 export default async function AdminLayout({
   children,
@@ -12,8 +13,8 @@ export default async function AdminLayout({
     data: { user },
   } = await supabase.auth.getUser();
 
-  const email = user?.email?.toLowerCase().trim() ?? "";
   if (!user) redirect("/auth");
+  const email = sessionUserEmail(user)?.toLowerCase().trim() ?? "";
   if (!isPrimaryAdminEmail(email)) redirect("/link-to-ad");
 
   return children;

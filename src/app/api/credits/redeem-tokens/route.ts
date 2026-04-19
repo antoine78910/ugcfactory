@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import { isAllowedUser } from "@/lib/allowedUsers";
+import { sessionUserEmail } from "@/lib/sessionUserEmail";
 
 /**
  * POST /api/credits/redeem-tokens
@@ -15,7 +16,7 @@ export async function POST(req: Request) {
   const auth = await requireSupabaseUser();
   if (auth.response) return auth.response;
 
-  if (!isAllowedUser(auth.user.email)) {
+  if (!isAllowedUser(sessionUserEmail(auth.user))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -84,7 +85,7 @@ export async function GET() {
   const auth = await requireSupabaseUser();
   if (auth.response) return auth.response;
 
-  if (!isAllowedUser(auth.user.email)) {
+  if (!isAllowedUser(sessionUserEmail(auth.user))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
