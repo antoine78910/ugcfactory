@@ -5694,7 +5694,6 @@ export default function LinkToAdUniverse({
                     </div>
                   ) : null}
           </div>
-        </div>
 
         {!showBrandHeaderInsteadOfUrl ? (
           <div className="space-y-3">
