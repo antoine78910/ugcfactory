@@ -325,10 +325,14 @@ export async function POST(req: Request) {
       // Monthly renewal, grant subscription credits
       // -----------------------------------------------------------------------
       case "invoice.payment_succeeded": {
-        const invoice = event.data.object as Stripe.Invoice;
+        const invoice = event.data.object as Stripe.Invoice & {
+          /** Older API / webhook payloads exposed this at the top level. */
+          subscription?: string | Stripe.Subscription | null;
+        };
         if (invoice.billing_reason !== "subscription_cycle") break;
 
-        const subRef = invoice.subscription;
+        const subRef =
+          invoice.parent?.subscription_details?.subscription ?? invoice.subscription;
         const subId = typeof subRef === "string" ? subRef : subRef && typeof subRef === "object" ? subRef.id : null;
         if (!subId) break;
 
