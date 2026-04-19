@@ -38,6 +38,13 @@ export async function POST(req: Request) {
       : "monthly";
   const billing = billingRaw === "yearly" ? "yearly" : "monthly";
 
+  /** When true, `checkout.session.completed` will not call Dub `track.sale` (e.g. $1 paid trial). */
+  const skipDubPartnerSale =
+    typeof body === "object" &&
+    body !== null &&
+    "skipDubPartnerSale" in body &&
+    Boolean((body as { skipDubPartnerSale?: unknown }).skipDubPartnerSale);
+
   if (!isSubscriptionPlanId(planId)) {
     return NextResponse.json({ error: "Invalid plan" }, { status: 400 });
   }
@@ -75,6 +82,7 @@ export async function POST(req: Request) {
         user_id: auth.user.id,
         subscription_plan: planId,
         subscription_billing: billing,
+        ...(skipDubPartnerSale ? { dub_skip_sale: "1" } : {}),
         ...dubCheckoutSessionMetadata(auth.user.id),
         ...datafastMeta,
       },

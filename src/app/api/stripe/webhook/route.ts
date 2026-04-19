@@ -210,8 +210,7 @@ export async function POST(req: Request) {
         // --- Brevo: track payment event (non-blocking) ---
         try {
           const customerEmail =
-            (session.customer_details as any)?.email ??
-            (session.customer_email as string | null);
+            session.customer_details?.email ?? session.customer_email ?? null;
           let email = typeof customerEmail === "string" ? customerEmail.trim().toLowerCase() : "";
           if (!email) {
             const { data: authUser } = await admin.auth.admin.getUserById(userId);
@@ -219,7 +218,7 @@ export async function POST(req: Request) {
           }
           if (email) {
             const amountTotal = (session.amount_total ?? 0) / 100;
-            const currency = (session as any).currency ?? "usd";
+            const currency = session.currency ?? "usd";
             const isSubscription = session.mode === "subscription";
             const planId = session.metadata?.subscription_plan ?? "";
             const packKey = session.metadata?.credit_pack ?? "";
@@ -246,11 +245,22 @@ export async function POST(req: Request) {
         // --- Dub: track sale (non-blocking, server-side) ---
         try {
           const amountCents = session.amount_total ?? 0;
-          const currency = (session as any).currency ?? "usd";
+          const currency = session.currency ?? "usd";
           const isSubscription = session.mode === "subscription";
           const planId = session.metadata?.subscription_plan ?? "";
           const packKey = session.metadata?.credit_pack ?? "";
-          if (amountCents > 0) {
+          const dubSkipSaleRaw = session.metadata?.dub_skip_sale?.trim().toLowerCase() ?? "";
+          const skipDubPartnerSale =
+            dubSkipSaleRaw === "1" || dubSkipSaleRaw === "true" || dubSkipSaleRaw === "yes";
+          if (skipDubPartnerSale) {
+            serverLog("dub_trace_sale_track_skipped", {
+              traceId,
+              eventId: event.id,
+              sessionId: session.id,
+              userId,
+              reason: "metadata_dub_skip_sale",
+            });
+          } else if (amountCents > 0) {
             serverLog("dub_trace_sale_track_start", {
               traceId,
               eventId: event.id,
@@ -302,9 +312,10 @@ export async function POST(req: Request) {
       // -----------------------------------------------------------------------
       case "invoice.payment_succeeded": {
         const invoice = event.data.object as Stripe.Invoice;
-        if ((invoice as any).billing_reason !== "subscription_cycle") break;
+        if (invoice.billing_reason !== "subscription_cycle") break;
 
-        const subId = typeof (invoice as any).subscription === "string" ? (invoice as any).subscription : null;
+        const subRef = invoice.subscription;
+        const subId = typeof subRef === "string" ? subRef : subRef && typeof subRef === "object" ? subRef.id : null;
         if (!subId) break;
 
         const stripe = new Stripe(secret, { apiVersion: "2026-02-25.clover" });
