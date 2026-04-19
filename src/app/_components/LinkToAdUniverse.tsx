@@ -597,15 +597,22 @@ export type LinkToAdUniverseProps = {
  */
 type LtaTrialPeekSection = { label: string; body: string };
 
+/** Trial peek: never put real copy in the DOM (DevTools); keep whitespace for line / word shape. */
+function ltaObscureTrialPromptBody(raw: string): string {
+  if (!raw.trim()) return "█\n█\n█";
+  return raw.replace(/\S/gu, "█");
+}
+
 /** Trial: blurred multi-line preview (no footer). */
 function LtaTrialTextPeek({ body, className }: { body: string; className?: string }) {
+  const safe = ltaObscureTrialPromptBody(body);
   return (
     <div className={cn("relative overflow-hidden rounded-md border border-white/[0.08] bg-black/20", className)}>
       <div
         className="max-h-[14rem] overflow-hidden whitespace-pre-wrap px-2 py-1.5 text-[11px] leading-snug text-white/85 blur-[2px] opacity-[0.82] contrast-110 saturate-50 select-none"
         aria-hidden
       >
-        {body.trim() ? body : "…"}
+        {safe}
       </div>
       <div
         className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/[0.02] via-transparent to-black/12"
@@ -630,25 +637,8 @@ function LtaTrialPromptPeek({
 }) {
   return (
     <div className={cn("mt-1.5 space-y-3 pb-0.5", className)}>
-      {sections.map((s) => (
-        <div key={s.label} className="min-w-0 space-y-1">
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-white/55">{s.label}</div>
-          <div className="relative overflow-hidden rounded-md border border-white/[0.08] bg-black/20">
-            <div
-              className="max-h-[12.5rem] overflow-hidden px-2 py-1.5 text-[11px] leading-snug text-white/85 blur-[2px] opacity-[0.82] contrast-110 saturate-50 select-none"
-              aria-hidden
-            >
-              {s.body.trim() ? s.body : "…"}
-            </div>
-            <div
-              className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/[0.02] via-transparent to-black/12"
-              aria-hidden
-            />
-          </div>
-        </div>
-      ))}
       {showFooter ? (
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/[0.06] pt-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] pb-2">
           <div className="flex min-w-0 items-center gap-1.5 text-[10px] text-white/42">
             <Lock className="h-3 w-3 shrink-0 text-violet-300/70" aria-hidden />
             <span>Upgrade to read or edit the full wording.</span>
@@ -664,6 +654,26 @@ function LtaTrialPromptPeek({
           </Button>
         </div>
       ) : null}
+      {sections.map((s) => {
+        const safe = ltaObscureTrialPromptBody(s.body);
+        return (
+          <div key={s.label} className="min-w-0 space-y-1">
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-white/55">{s.label}</div>
+            <div className="relative overflow-hidden rounded-md border border-white/[0.08] bg-black/20">
+              <div
+                className="max-h-[12.5rem] overflow-hidden px-2 py-1.5 text-[11px] leading-snug text-white/85 blur-[2px] opacity-[0.82] contrast-110 saturate-50 select-none"
+                aria-hidden
+              >
+                {safe}
+              </div>
+              <div
+                className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/[0.02] via-transparent to-black/12"
+                aria-hidden
+              />
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
