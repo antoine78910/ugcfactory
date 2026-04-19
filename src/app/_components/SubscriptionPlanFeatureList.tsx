@@ -34,14 +34,16 @@ function starterBonusForPlan(planId: SubscriptionPlanId, credits: number): { bon
  * One-line credits: base (total minus Starter-tier bonus) + gift pill for the bonus.
  * Used on plan cards, upgrade/downgrade dialogs, and the first row of `SubscriptionPlanFeatureList`.
  */
+const CREDITS_LINE_CLASS = "text-sm font-semibold tabular-nums leading-snug";
+
 export function SubscriptionPlanCreditsWithBonus({
   planId,
   credits,
-  compact,
   showCoins = true,
 }: {
   planId: SubscriptionPlanId;
   credits: number;
+  /** Ignored: bonus line uses the same size as base credits (kept for existing call sites). */
   compact?: boolean;
   showCoins?: boolean;
 }) {
@@ -50,40 +52,29 @@ export function SubscriptionPlanCreditsWithBonus({
   const pill = (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center gap-0.5 rounded-full border border-amber-400/40",
+        "inline-flex shrink-0 items-center gap-1.5 rounded-full border border-amber-400/40",
         "bg-gradient-to-r from-amber-500/25 via-amber-400/15 to-emerald-500/20",
-        "font-bold tabular-nums leading-none tracking-wide text-amber-100",
-        "shadow-[0_0_12px_rgba(251,191,36,0.1),inset_0_1px_0_rgba(255,255,255,0.06)]",
-        compact ? "px-1 py-px text-[8px]" : "px-1.5 py-px text-[9px]",
+        CREDITS_LINE_CLASS,
+        "text-amber-100",
+        "px-2.5 py-1 shadow-[0_0_14px_rgba(251,191,36,0.12),inset_0_1px_0_rgba(255,255,255,0.08)]",
       )}
       title={`${credits.toLocaleString()} credits/mo total (${baseCredits.toLocaleString()} at Starter-tier value + ${bonus.toLocaleString()} bonus)`}
       aria-label={`Bonus ${bonus} credits per month. ${credits.toLocaleString()} credits per month total.`}
     >
-      <Gift
-        className={cn("shrink-0 text-amber-200/95", compact ? "h-2 w-2" : "h-2.5 w-2.5")}
-        strokeWidth={2.5}
-        aria-hidden
-      />
+      <Gift className="h-4 w-4 shrink-0 text-amber-200/95" strokeWidth={2.25} aria-hidden />
       +{bonus.toLocaleString()} credits
     </span>
   );
 
   const baseLabel = (
-    <span
-      className={cn(
-        "shrink-0 font-semibold tabular-nums text-white",
-        compact ? "text-[11px]" : "text-xs",
-      )}
-    >
-      {baseCredits.toLocaleString()} credits
-    </span>
+    <span className={cn("shrink-0 text-white", CREDITS_LINE_CLASS)}>{baseCredits.toLocaleString()} credits</span>
   );
 
   const textRow = (
     <span
       className={cn(
-        "flex min-w-0 items-center",
-        showCoins ? "flex-1 flex-nowrap gap-1.5 overflow-hidden" : "inline-flex max-w-full flex-wrap gap-1",
+        "flex min-w-0 items-center gap-2 whitespace-nowrap",
+        showCoins ? "min-w-0 flex-1" : "inline-flex max-w-full",
       )}
     >
       {baseLabel}
@@ -97,13 +88,8 @@ export function SubscriptionPlanCreditsWithBonus({
 
   return (
     <>
-      <span
-        className={cn(
-          "flex shrink-0 items-center justify-center rounded-md bg-violet-500/20 text-violet-200",
-          compact ? "h-4 w-4 rounded" : "h-5 w-5",
-        )}
-      >
-        <Coins className={cn(compact ? "h-2.5 w-2.5" : "h-3 w-3")} aria-hidden />
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-violet-500/20 text-violet-200">
+        <Coins className="h-4 w-4" aria-hidden />
       </span>
       {textRow}
     </>

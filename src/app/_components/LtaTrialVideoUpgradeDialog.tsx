@@ -149,8 +149,8 @@ export function LtaTrialVideoUpgradeDialog({
           <div className="px-4 py-5 sm:px-6 sm:py-6">
             <div
               className={cn(
-                "mx-auto grid max-w-6xl items-stretch gap-4 sm:gap-5",
-                "grid-cols-1 sm:grid-cols-2 xl:grid-cols-4",
+                "mx-auto grid max-w-7xl items-stretch gap-4 sm:gap-6",
+                "grid-cols-1 min-w-0 sm:grid-cols-2 xl:grid-cols-[repeat(4,minmax(15.75rem,1fr))]",
               )}
             >
               {PLAN_ROWS.map((plan, i) => {
@@ -167,7 +167,7 @@ export function LtaTrialVideoUpgradeDialog({
                   <div
                     key={plan.id}
                     className={cn(
-                      "relative flex min-h-[26rem] flex-col rounded-2xl border p-4 sm:p-5",
+                      "relative flex min-h-[26rem] min-w-0 flex-col rounded-2xl border p-4 sm:p-5",
                       plan.highlight
                         ? "border-violet-400/40 bg-gradient-to-b from-violet-600/[0.16] via-[#0b0914] to-[#06070d] shadow-[0_0_40px_rgba(139,92,246,0.12)] xl:scale-[1.01]"
                         : "border-white/10 bg-white/[0.03] hover:border-violet-500/20 hover:bg-white/[0.045]",

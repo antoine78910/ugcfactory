@@ -389,7 +389,8 @@ export default function SubscriptionPage() {
 
   const isSubscribed = planId !== "free";
 
-  const planGridClass = "grid-cols-1 sm:grid-cols-2 xl:grid-cols-4";
+  const planGridClass =
+    "grid-cols-1 min-w-0 sm:grid-cols-2 xl:grid-cols-[repeat(4,minmax(15.75rem,1fr))] sm:gap-6";
 
   return (
     <StudioShell>
@@ -397,7 +398,7 @@ export default function SubscriptionPage() {
         <div className="pointer-events-none absolute left-1/2 top-0 h-[480px] w-[960px] -translate-x-1/2 rounded-full bg-violet-600/14 blur-[130px]" />
         <div className="pointer-events-none absolute -left-24 top-1/4 h-64 w-64 rounded-full bg-indigo-600/10 blur-[90px]" />
 
-        <div className="relative mx-auto max-w-6xl space-y-14 px-5 py-10 md:px-8 md:py-12">
+        <div className="relative mx-auto max-w-7xl space-y-14 px-5 py-10 md:px-8 md:py-12">
           <header className="mx-auto max-w-2xl text-center">
             <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-violet-400/90">Subscription</p>
             <h1 className="mt-3 bg-gradient-to-b from-white via-white to-white/55 bg-clip-text text-3xl font-bold tracking-tight text-transparent sm:text-4xl md:text-[2.75rem] md:leading-[1.08]">
@@ -449,7 +450,7 @@ export default function SubscriptionPage() {
           </header>
 
           <section>
-            <div className={cn("mx-auto grid max-w-6xl items-stretch gap-5 pt-2", planGridClass)}>
+            <div className={cn("mx-auto grid max-w-7xl items-stretch gap-5 pt-2", planGridClass)}>
               {PLANS.map((plan) => {
                 const priceLabels = priceFor(plan);
                 const planIdx = subscriptionPlanSortIndex(plan.id as SubscriptionPlanId);
@@ -478,7 +479,7 @@ export default function SubscriptionPage() {
                   <div
                     key={plan.id}
                     className={cn(
-                      "relative flex h-full min-h-0 flex-col rounded-2xl border p-6 transition-all duration-300",
+                      "relative flex h-full min-h-0 min-w-0 flex-col rounded-2xl border p-6 transition-all duration-300",
                       isCurrentPlanCard
                         ? "border-emerald-400/45 bg-gradient-to-b from-emerald-600/[0.14] via-[#0b0914] to-[#06070d] shadow-[0_0_40px_rgba(16,185,129,0.12)]"
                         : plan.highlight

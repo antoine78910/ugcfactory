@@ -173,7 +173,7 @@ export default function SetupClient({ embedded = false }: SetupClientProps) {
         </div>
       ) : null}
 
-      <div className="relative w-full max-w-6xl">
+      <div className="relative w-full max-w-7xl">
         {/* Header */}
         <header className={cn("text-center", embedded ? "mb-8" : "mb-12")}>
           <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-violet-400/80">
@@ -267,7 +267,7 @@ export default function SetupClient({ embedded = false }: SetupClientProps) {
         </div>
 
         {/* Plan cards, 4 tiers (Starter → Scale) */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 xl:grid-cols-[repeat(4,minmax(15.75rem,1fr))]">
           {PLANS.map((plan) => {
             const isHighlight = Boolean(plan.highlight);
             const badge = plan.badge;
@@ -276,7 +276,7 @@ export default function SetupClient({ embedded = false }: SetupClientProps) {
               <div
                 key={plan.id}
                 className={cn(
-                  "relative flex h-full flex-col rounded-2xl border p-5 transition-all sm:p-6",
+                  "relative flex h-full min-w-0 flex-col rounded-2xl border p-5 transition-all sm:p-6",
                   isHighlight
                     ? "border-violet-400/40 bg-gradient-to-b from-violet-600/[0.16] via-[#0b0914] to-[#06070d] shadow-[0_0_48px_rgba(139,92,246,0.14)]"
                     : "border-white/10 bg-white/[0.03] hover:border-white/18",
