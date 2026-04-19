@@ -5,10 +5,19 @@ import { getCreditPackStripePriceId, isCreditPackKey } from "@/lib/stripe/credit
 import { dubCheckoutSessionMetadata } from "@/lib/dub/stripeSessionMetadata";
 import { getDataFastStripeMetadata } from "@/lib/stripe/datafastMetadata";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
+import { getUserPlan } from "@/lib/supabase/getUserPlan";
 
 export async function POST(req: Request) {
   const auth = await requireSupabaseUser();
   if (auth.response) return auth.response;
+
+  const plan = await getUserPlan(auth.user.id);
+  if (plan === "free") {
+    return NextResponse.json(
+      { error: "Credit packs are available once you have an active subscription. Upgrade first, then top up." },
+      { status: 403 },
+    );
+  }
 
   const secret = process.env.STRIPE_SECRET_KEY?.trim();
   if (!secret) {

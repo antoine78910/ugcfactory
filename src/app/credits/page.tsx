@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ArrowRight, Coins } from "lucide-react";
 import { toast } from "sonner";
 import StudioShell from "@/app/_components/StudioShell";
-import { consumeCheckoutQueryParams } from "@/app/_components/CreditsPlanContext";
+import { consumeCheckoutQueryParams, useCreditsPlan } from "@/app/_components/CreditsPlanContext";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -93,6 +93,8 @@ function PackCardDescription({ text }: { text: string }) {
 }
 
 export default function CreditsPage() {
+  const { planId } = useCreditsPlan();
+  const creditPacksRequirePaidPlan = planId === "free";
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const [displayPrices, setDisplayPrices] = useState<StripeDisplayPricesPayload | null>(null);
 
@@ -188,7 +190,7 @@ export default function CreditsPage() {
               Top up and keep creating
             </h1>
             <p className="mt-2.5 text-[11px] text-white/38">
-              One-off packs work with any plan. Prefer monthly credits?{" "}
+              One-off packs are available once you have an active subscription. Prefer monthly credits?{" "}
               <Link
                 href="/subscription"
                 className="font-medium text-violet-300/95 underline-offset-4 transition hover:text-violet-200 hover:underline"
@@ -197,6 +199,16 @@ export default function CreditsPage() {
               </Link>
             </p>
           </header>
+
+          {creditPacksRequirePaidPlan ? (
+            <p className="mx-auto max-w-xl rounded-lg border border-amber-400/25 bg-amber-500/10 px-4 py-3 text-center text-xs leading-snug text-amber-100/90">
+              Credit packs unlock after you subscribe.{" "}
+              <Link href="/subscription" className="font-semibold text-violet-200 underline-offset-4 hover:underline">
+                Choose a plan
+              </Link>{" "}
+              to top up or get included monthly credits.
+            </p>
+          ) : null}
 
           <section>
             <div className="mx-auto grid w-full max-w-6xl grid-cols-1 gap-3.5 sm:px-0 md:grid-cols-6 md:gap-4">
@@ -315,7 +327,7 @@ export default function CreditsPage() {
 
                       <Button
                         type="button"
-                        disabled={Boolean(checkoutLoading)}
+                        disabled={creditPacksRequirePaidPlan || Boolean(checkoutLoading)}
                         onClick={() => void buyPack(p.key)}
                         className={cn(
                           "h-9 w-full shrink-0 rounded-lg text-xs font-bold transition-all",

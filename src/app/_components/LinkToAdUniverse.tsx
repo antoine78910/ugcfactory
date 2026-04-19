@@ -100,6 +100,9 @@ import {
   creditsLinkToAdVideoFromImage,
   LINK_TO_AD_DEFAULT_VIDEO_MODEL,
   LINK_TO_AD_DEFAULT_VIDEO_DURATION_SEC,
+  LINK_TO_AD_TRIAL_FINAL_VIDEO,
+  LINK_TO_AD_TRIAL_INITIAL_GENERATE,
+  LINK_TO_AD_TRIAL_THREE_IMAGES,
   linkToAdSeedanceMarketModel,
   type LinkToAdSeedanceSpeed,
 } from "@/lib/linkToAd/generationCredits";
@@ -1060,7 +1063,9 @@ export default function LinkToAdUniverse({
   onSwitchLinkToAdRun,
 }: LinkToAdUniverseProps) {
   const reduceMotion = useReducedMotion();
-  const { planId, current: creditsBalance, spendCredits, grantCredits } = useCreditsPlan();
+  const { planId, current: creditsBalance, spendCredits, grantCredits, isTrial, isUnlimited } = useCreditsPlan();
+  /** $1 trial window: discounted Link to Ad steps; final video billed separately (see trial constants). */
+  const linkToAdTrialEconomy = Boolean(isTrial && !isUnlimited && !isPlatformCreditBypassActive());
   const supabaseClient = useSupabaseBrowserClient();
 
   const [_userEmail, _setUserEmail] = useState<string | null>(null);
@@ -1091,7 +1096,7 @@ export default function LinkToAdUniverse({
   const [ltaFrozenCredits, setLtaFrozenCredits] = useState<number | null>(null);
   const creditsBalanceRef = useRef(creditsBalance);
   creditsBalanceRef.current = creditsBalance;
-  /** When true, we already charged 10 credits once for regenerating the 3 Nano images. */
+  /** When true, we already charged the three-image batch price once for regenerating the Nano references. */
   const [ltaPrepaidThreeImagesRegen, setLtaPrepaidThreeImagesRegen] = useState(false);
   /** Previous images kept “warm” on the left when regenerating angles without recreating visuals. */
   const [ltaWarmReferenceImages, setLtaWarmReferenceImages] = useState<string[]>([]);
@@ -1100,6 +1105,8 @@ export default function LinkToAdUniverse({
     required: number;
     current: number;
   } | null>(null);
+  /** Amount debited on "Generate" from URL (trial vs full pipeline); used for refunds on failure. */
+  const lastLtaUrlGenerateChargeRef = useRef(0);
 
   /** Deduct from wallet once on URL Generate; keep ref/frozen in sync with that charge. */
   const spendLtaCreditsIfEnough = useCallback(
@@ -1206,6 +1213,9 @@ export default function LinkToAdUniverse({
   const [videoDuration, setVideoDuration] = useState<number>(10);
   /** Video generation speed tier (Fast vs Normal) for the Link to Ad Seedance pipeline. */
   const [ltaSeedanceSpeed, setLtaSeedanceSpeed] = useState<LinkToAdSeedanceSpeed>("normal");
+  useEffect(() => {
+    if (linkToAdTrialEconomy && ltaSeedanceSpeed === "vip") setLtaSeedanceSpeed("normal");
+  }, [linkToAdTrialEconomy, ltaSeedanceSpeed]);
   const seedancePriorityInfoText =
     "VIP pricing is x2 credits per generation.\n\nPeak hours: From 09:00 to 15:00 GMT, Seedance Preview experiences high traffic. During this period, queue times may extend to several hours.\n\nCurrently outside peak hours: Normal is usually 5-60 min. VIP (fast) is usually 3-5 min.";
   const linkToAdSeedancePreviewMaxPollMs = 12 * 60 * 60 * 1000;
@@ -3050,7 +3060,7 @@ export default function LinkToAdUniverse({
     }
     const wantsRegenImages = Boolean(opts?.regenImagesAlso);
     if (wantsRegenImages && !ltaPrepaidThreeImagesRegen) {
-      if (!spendLtaCreditsIfEnough(10)) {
+      if (!spendLtaCreditsIfEnough(ltaThreeImagesCharge)) {
         // Roll back the 2 credits if we cannot also pay the image refresh.
         if (!isPlatformCreditBypassActive()) {
           grantCredits(2);
@@ -3162,8 +3172,8 @@ export default function LinkToAdUniverse({
         grantCredits(2);
         creditsBalanceRef.current += 2;
         if (opts?.regenImagesAlso && ltaPrepaidThreeImagesRegen) {
-          grantCredits(10);
-          creditsBalanceRef.current += 10;
+          grantCredits(ltaThreeImagesCharge);
+          creditsBalanceRef.current += ltaThreeImagesCharge;
           setLtaPrepaidThreeImagesRegen(false);
         }
         setLtaFrozenCredits(null);
@@ -3231,25 +3241,27 @@ export default function LinkToAdUniverse({
 
     // New scan / fresh pipeline: wallet failure unlocks below (lock already set at scan start).
     const walletNow = creditsBalanceRef.current;
-    if (walletNow < ltaGenerateCredits) {
+    const initialCharge = ltaInitialGenerateCharge;
+    if (walletNow < initialCharge) {
       setIsWorking(false);
       setStage("idle");
       setLtaVideoDurationLocked(false);
       setLtaCreditModal({
         current: walletNow,
-        required: ltaGenerateCredits,
+        required: initialCharge,
       });
       return;
     }
     let chargedFullBundle = false;
     setLtaFrozenCredits(walletNow);
-    if (!spendLtaCreditsIfEnough(ltaGenerateCredits)) {
+    if (!spendLtaCreditsIfEnough(initialCharge)) {
       setIsWorking(false);
       setStage("idle");
       setLtaFrozenCredits(null);
       setLtaVideoDurationLocked(false);
       return;
     }
+    lastLtaUrlGenerateChargeRef.current = initialCharge;
     chargedFullBundle = true;
 
     const pipelineProductUrls = [...productOnlyImageUrls];
@@ -3369,8 +3381,9 @@ export default function LinkToAdUniverse({
         return;
       }
       if (chargedFullBundle) {
-        grantCredits(ltaGenerateCredits);
-        creditsBalanceRef.current += ltaGenerateCredits;
+        const refund = lastLtaUrlGenerateChargeRef.current || ltaInitialGenerateCharge;
+        grantCredits(refund);
+        creditsBalanceRef.current += refund;
         setLtaFrozenCredits(null);
       }
       setStage("error");
@@ -3909,7 +3922,7 @@ export default function LinkToAdUniverse({
     if (shouldCharge) {
       const walletNow = creditsBalanceRef.current;
       setLtaFrozenCredits(walletNow);
-      if (!spendLtaCreditsIfEnough(10)) {
+      if (!spendLtaCreditsIfEnough(ltaThreeImagesCharge)) {
         setLtaFrozenCredits(null);
         return;
       }
@@ -4141,8 +4154,8 @@ export default function LinkToAdUniverse({
     } catch (e) {
       if (e instanceof DOMException && e.name === "AbortError") return;
       if ((shouldCharge || usingPrepaid) && !isPlatformCreditBypassActive()) {
-        grantCredits(10);
-        creditsBalanceRef.current += 10;
+        grantCredits(ltaThreeImagesCharge);
+        creditsBalanceRef.current += ltaThreeImagesCharge;
         setLtaPrepaidThreeImagesRegen(false);
         setLtaFrozenCredits(null);
       }
@@ -4480,6 +4493,16 @@ export default function LinkToAdUniverse({
       }
     }
 
+    const videoSpend = ltaKlingVideoCharge;
+    if (videoSpend > 0) {
+      const w0 = creditsBalanceRef.current;
+      setLtaFrozenCredits(w0);
+      if (!spendLtaCreditsIfEnough(videoSpend)) {
+        setLtaFrozenCredits(null);
+        return;
+      }
+    }
+
     setIsKlingSubmitting(true);
     const klingPrompt = withAudioHint(stripEditSectionLabels(prompt));
     lastKlingVideoPromptRef.current = klingPrompt;
@@ -4487,10 +4510,11 @@ export default function LinkToAdUniverse({
       klingAbortRef.current?.abort();
       const controller = new AbortController();
       klingAbortRef.current = controller;
+      const effectiveSeedanceTier: LinkToAdSeedanceSpeed = linkToAdTrialEconomy ? "normal" : ltaSeedanceSpeed;
       const generatePayload = {
         linkToAd: true,
         accountPlan: planId,
-        marketModel: linkToAdSeedanceMarketModel(ltaSeedanceSpeed),
+        marketModel: linkToAdSeedanceMarketModel(effectiveSeedanceTier),
         prompt: klingPrompt,
         imageUrl: img,
         duration: apiDuration,
@@ -4587,8 +4611,21 @@ export default function LinkToAdUniverse({
         });
       }
       toast.success("Video generation started");
+      if (videoSpend > 0) setLtaFrozenCredits(null);
     } catch (e) {
-      if (e instanceof DOMException && e.name === "AbortError") return;
+      if (e instanceof DOMException && e.name === "AbortError") {
+        if (videoSpend > 0 && !isPlatformCreditBypassActive()) {
+          grantCredits(videoSpend);
+          creditsBalanceRef.current += videoSpend;
+          setLtaFrozenCredits(null);
+        }
+        return;
+      }
+      if (videoSpend > 0 && !isPlatformCreditBypassActive()) {
+        grantCredits(videoSpend);
+        creditsBalanceRef.current += videoSpend;
+        setLtaFrozenCredits(null);
+      }
       const errMsg = e instanceof Error ? e.message : "Unknown error";
       toast.error("Video", { description: errMsg });
       const angLabel =
@@ -5002,6 +5039,22 @@ export default function LinkToAdUniverse({
     () => creditsLinkToAdVideoFromImage(LINK_TO_AD_DEFAULT_VIDEO_MODEL, videoDuration, ltaSeedanceSpeed),
     [videoDuration, ltaSeedanceSpeed],
   );
+  const ltaInitialGenerateCharge = useMemo(
+    () => (linkToAdTrialEconomy ? LINK_TO_AD_TRIAL_INITIAL_GENERATE : ltaGenerateCredits),
+    [linkToAdTrialEconomy, ltaGenerateCredits],
+  );
+  const ltaThreeImagesCharge = useMemo(
+    () => (linkToAdTrialEconomy ? LINK_TO_AD_TRIAL_THREE_IMAGES : 10),
+    [linkToAdTrialEconomy],
+  );
+  const ltaKlingVideoCharge = useMemo(
+    () => (linkToAdTrialEconomy ? LINK_TO_AD_TRIAL_FINAL_VIDEO : 0),
+    [linkToAdTrialEconomy],
+  );
+  const ltaVideoConfirmCreditsDisplay = useMemo(
+    () => (linkToAdTrialEconomy ? LINK_TO_AD_TRIAL_FINAL_VIDEO : ltaVideoOnlyCredits),
+    [linkToAdTrialEconomy, ltaVideoOnlyCredits],
+  );
 
   /** Match product image resolution used for Nano prompts (preview or packshots), not only main preview URL. */
   const step1Done = Boolean(summaryText.trim() && resolveNanoProductImageUrl());
@@ -5251,7 +5304,9 @@ export default function LinkToAdUniverse({
                   >
                     <Sparkles className="mr-1.5 h-4 w-4 shrink-0" aria-hidden />
                     <span>Generate</span>
-                    {hideCredits ? null : <span className="ml-2 text-[11px] font-semibold text-black/60">{ltaGenerateCredits}</span>}
+                    {hideCredits ? null : (
+                      <span className="ml-2 text-[11px] font-semibold text-black/60">{ltaInitialGenerateCharge}</span>
+                    )}
                   </Button>
                 </div>
               </div>
@@ -5265,7 +5320,9 @@ export default function LinkToAdUniverse({
                 <ChevronRight className="h-3.5 w-3.5 transition-transform [[open]>&]:rotate-90" aria-hidden />
                 Settings
                 <span className="ml-auto text-[10px] font-normal text-white/35">
-                  {videoDuration}s · English · {ltaSeedanceSpeed === "vip" ? "VIP" : "Normal"} · {generationMode === "custom_ugc" ? "Custom" : "Auto"}
+                  {videoDuration}s · English ·{" "}
+                  {linkToAdTrialEconomy ? "Normal" : ltaSeedanceSpeed === "vip" ? "VIP" : "Normal"} ·{" "}
+                  {generationMode === "custom_ugc" ? "Custom" : "Auto"}
                 </span>
               </summary>
               <div className="space-y-3 px-4 pb-3">
@@ -5304,47 +5361,49 @@ export default function LinkToAdUniverse({
                       })}
                     </div>
                   </div>
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-1.5">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Priority</p>
-                      <div className="group relative">
-                        <button
-                          type="button"
-                          aria-label="Priority info"
-                          className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-white/20 text-[10px] font-bold text-white/55 transition hover:text-white/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/45"
-                        >
-                          ?
-                        </button>
-                        <div className="pointer-events-none absolute right-0 z-20 mt-1 hidden w-72 whitespace-pre-line rounded-lg border border-white/15 bg-[#111118] p-2.5 text-[10px] leading-snug text-white/80 shadow-xl group-hover:block group-focus-within:block">
-                          {seedancePriorityInfoText}
+                  {!linkToAdTrialEconomy ? (
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Priority</p>
+                        <div className="group relative">
+                          <button
+                            type="button"
+                            aria-label="Priority info"
+                            className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-white/20 text-[10px] font-bold text-white/55 transition hover:text-white/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/45"
+                          >
+                            ?
+                          </button>
+                          <div className="pointer-events-none absolute right-0 z-20 mt-1 hidden w-72 whitespace-pre-line rounded-lg border border-white/15 bg-[#111118] p-2.5 text-[10px] leading-snug text-white/80 shadow-xl group-hover:block group-focus-within:block">
+                            {seedancePriorityInfoText}
+                          </div>
                         </div>
                       </div>
+                      {ltaVideoDurationLocked ? (
+                        <p className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/80">
+                          {ltaSeedanceSpeed === "vip" ? "VIP" : "Normal"}{" "}
+                          <span className="font-normal text-white/45">(locked for this run)</span>
+                        </p>
+                      ) : (
+                        <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] p-1">
+                          {(["normal", "vip"] as const).map((tier) => (
+                            <button
+                              key={tier}
+                              type="button"
+                              onClick={() => setLtaSeedanceSpeed(tier)}
+                              className={cn(
+                                "rounded-md px-3 py-1.5 text-xs font-semibold transition",
+                                ltaSeedanceSpeed === tier
+                                  ? "border border-violet-400/60 bg-violet-500/15 text-white"
+                                  : "border border-white/10 bg-black/20 text-white/65 hover:border-white/20",
+                              )}
+                            >
+                              {tier === "normal" ? "Normal" : "VIP"}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                    {ltaVideoDurationLocked ? (
-                      <p className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/80">
-                        {ltaSeedanceSpeed === "vip" ? "VIP" : "Normal"}{" "}
-                        <span className="font-normal text-white/45">(locked for this run)</span>
-                      </p>
-                    ) : (
-                      <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] p-1">
-                        {(["normal", "vip"] as const).map((tier) => (
-                          <button
-                            key={tier}
-                            type="button"
-                            onClick={() => setLtaSeedanceSpeed(tier)}
-                            className={cn(
-                              "rounded-md px-3 py-1.5 text-xs font-semibold transition",
-                              ltaSeedanceSpeed === tier
-                                ? "border border-violet-400/60 bg-violet-500/15 text-white"
-                                : "border border-white/10 bg-black/20 text-white/65 hover:border-white/20",
-                            )}
-                          >
-                            {tier === "normal" ? "Normal" : "VIP"}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                  ) : null}
                 </div>
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-white/55">Mode</p>
@@ -5590,47 +5649,50 @@ export default function LinkToAdUniverse({
               </div>
             )}
           </div>
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-1.5">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Priority</p>
-                      <div className="group relative">
-                        <button
-                          type="button"
-                          aria-label="Priority info"
-                          className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-white/20 text-[10px] font-bold text-white/55 transition hover:text-white/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/45"
-                        >
-                          ?
-                        </button>
-                        <div className="pointer-events-none absolute right-0 z-20 mt-1 hidden w-72 whitespace-pre-line rounded-lg border border-white/15 bg-[#111118] p-2.5 text-[10px] leading-snug text-white/80 shadow-xl group-hover:block group-focus-within:block">
-                          {seedancePriorityInfoText}
+                  {!linkToAdTrialEconomy ? (
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Priority</p>
+                        <div className="group relative">
+                          <button
+                            type="button"
+                            aria-label="Priority info"
+                            className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-white/20 text-[10px] font-bold text-white/55 transition hover:text-white/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/45"
+                          >
+                            ?
+                          </button>
+                          <div className="pointer-events-none absolute right-0 z-20 mt-1 hidden w-72 whitespace-pre-line rounded-lg border border-white/15 bg-[#111118] p-2.5 text-[10px] leading-snug text-white/80 shadow-xl group-hover:block group-focus-within:block">
+                            {seedancePriorityInfoText}
+                          </div>
                         </div>
                       </div>
+                      {ltaVideoDurationLocked ? (
+                        <p className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/80">
+                          {ltaSeedanceSpeed === "vip" ? "VIP" : "Normal"}{" "}
+                          <span className="font-normal text-white/45">(locked for this run)</span>
+                        </p>
+                      ) : (
+                        <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] p-1">
+                          {(["normal", "vip"] as const).map((tier) => (
+                            <button
+                              key={tier}
+                              type="button"
+                              disabled={isWorking}
+                              onClick={() => setLtaSeedanceSpeed(tier)}
+                              className={cn(
+                                "rounded-md px-3 py-1.5 text-xs font-semibold transition",
+                                ltaSeedanceSpeed === tier
+                                  ? "border border-violet-400/60 bg-violet-500/15 text-white"
+                                  : "border border-white/10 bg-black/20 text-white/65 hover:border-white/20",
+                              )}
+                            >
+                              {tier === "vip" ? "VIP" : "Normal"}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
-            {ltaVideoDurationLocked ? (
-              <p className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/80">
-                {ltaSeedanceSpeed === "vip" ? "VIP" : "Normal"}{" "}
-                <span className="font-normal text-white/45">(locked for this run)</span>
-              </p>
-            ) : (
-              <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] p-1">
-                {(["normal", "vip"] as const).map((tier) => (
-                  <button
-                    key={tier}
-                    type="button"
-                    disabled={isWorking}
-                    onClick={() => setLtaSeedanceSpeed(tier)}
-                    className={cn(
-                      "rounded-md px-3 py-1.5 text-xs font-semibold transition",
-                      ltaSeedanceSpeed === tier
-                        ? "border border-violet-400/60 bg-violet-500/15 text-white"
-                        : "border border-white/10 bg-black/20 text-white/65 hover:border-white/20",
-                    )}
-                  >
-                    {tier === "vip" ? "VIP" : "Normal"}
-                  </button>
-                ))}
-              </div>
-            )}
+                  ) : null}
           </div>
         </div>
 
@@ -5749,7 +5811,7 @@ export default function LinkToAdUniverse({
                       </span>
                       {hideCredits ? null : (
                         <span className="text-[11px] font-semibold text-black/70">
-                          {ltaGenerateCredits} credits
+                          {ltaInitialGenerateCharge} credits
                         </span>
                       )}
                     </>
@@ -6761,7 +6823,7 @@ export default function LinkToAdUniverse({
                         >
                           <RefreshCw className="h-2.5 w-2.5 transition-transform group-hover/ri:rotate-90" aria-hidden />
                           Regen 3 images
-                          {hideCredits ? null : <CreditCostBadge amount={10} className="text-[9px]" />}
+                          {hideCredits ? null : <CreditCostBadge amount={ltaThreeImagesCharge} className="text-[9px]" />}
                         </button>
                       ) : null}
                     </div>
@@ -7135,7 +7197,7 @@ export default function LinkToAdUniverse({
                           >
                             <RefreshCw className="h-3 w-3 transition-transform group-hover/ri:rotate-90" aria-hidden />
                             Regenerate 3 images
-                            {hideCredits ? null : <CreditCostBadge amount={10} />}
+                            {hideCredits ? null : <CreditCostBadge amount={ltaThreeImagesCharge} />}
                           </button>
                         ) : null}
                       </div>
@@ -7862,6 +7924,9 @@ export default function LinkToAdUniverse({
                               <span className="inline-flex items-center justify-center gap-2 text-sm font-semibold leading-tight">
                                 <Video className="h-4 w-4 shrink-0" aria-hidden />
                                 Generate video from selected image
+                                {hideCredits ? null : (
+                                  <CreditCostBadge amount={ltaVideoConfirmCreditsDisplay} className="text-[9px]" />
+                                )}
                               </span>
                             </Button>
                           </div>
@@ -8032,7 +8097,9 @@ export default function LinkToAdUniverse({
               className="flex h-10 items-center justify-center gap-2 rounded-xl border border-violet-400/25 bg-violet-500/15 text-[13px] font-medium text-white/90 transition-all hover:border-violet-400/40 hover:bg-violet-500/25"
             >
               Regenerate images too
-              {hideCredits ? null : <CreditCostBadge amount={10} className="px-2" iconClassName="h-3 w-3" />}
+              {hideCredits ? null : (
+                <CreditCostBadge amount={ltaThreeImagesCharge} className="px-2" iconClassName="h-3 w-3" />
+              )}
             </button>
             <button
               type="button"
