@@ -1385,3 +1385,38 @@ export function branchUniverseForNewAd(snap: LinkToAdUniverseSnapshotV1): LinkTo
     ...UNIVERSE_PIPELINE_CLEAR,
   };
 }
+
+/**
+ * Product thumbnails suitable for Studio video "Elements" and similar pickers.
+ * Mirrors the Link to Ad UI strip intent: active hero preview + user-tagged product images from
+ * `productOnlyImageUrls` (user uploads are listed in `userPhotoUrls`). URLs are as stored in the snapshot
+ * (typically HTTPS after pipeline persist).
+ */
+export function linkToAdProductPhotoPickerUrls(snap: LinkToAdUniverseSnapshotV1): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const add = (u: string | null | undefined) => {
+    const t = String(u ?? "").trim();
+    if (!t || seen.has(t)) return;
+    seen.add(t);
+    out.push(t);
+  };
+
+  const neutral = String(snap.neutralUploadUrl ?? "").trim();
+  const firstProduct = snap.productOnlyImageUrls?.[0]?.trim() ?? "";
+  const hero =
+    neutral ||
+    firstProduct ||
+    String(snap.cleanCandidate?.url ?? "").trim() ||
+    String(snap.fallbackImageUrl ?? "").trim() ||
+    "";
+  add(hero);
+
+  const userSet = new Set((snap.userPhotoUrls ?? []).map((x) => String(x ?? "").trim()).filter(Boolean));
+  for (const raw of snap.productOnlyImageUrls ?? []) {
+    const t = String(raw ?? "").trim();
+    if (!t) continue;
+    if (userSet.has(t)) add(raw);
+  }
+  return out;
+}
