@@ -141,6 +141,11 @@ export function studioVideoIsSeedance2ProPickerId(pickerId: string): boolean {
   return pickerId === "bytedance/seedance-2" || pickerId === "bytedance/seedance-2-fast";
 }
 
+/** Create → Video: named Elements (@names + extra image URLs) for Kling 3.0 and Seedance 2 / Fast only (not Preview). */
+export function studioVideoSupportsReferenceElements(pickerId: string): boolean {
+  return pickerId === "kling-3.0/video" || studioVideoIsSeedance2ProPickerId(pickerId);
+}
+
 /**
  * Server-side duration guard for `/api/kling/generate`.
  * `resolvedModel` is after `resolveKieVideoPickerToMarketModel`.

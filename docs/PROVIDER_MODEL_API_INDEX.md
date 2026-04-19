@@ -98,7 +98,7 @@ Several pickers use **one UI id**; the backend resolves to **two KIE `model` str
 
 ---
 
-## Video — Seedance (PiAPI)
+## Video — Seedance (provider)
 
 Studio ids: `bytedance/seedance-2` (Pro), `bytedance/seedance-2-fast` (Fast), `bytedance/seedance-2-preview`, `bytedance/seedance-2-fast-preview`.
 
@@ -108,15 +108,15 @@ Studio ids: `bytedance/seedance-2` (Pro), `bytedance/seedance-2-fast` (Fast), `b
 | Seedance 2 Preview API | [seedance-2-preview](https://piapi.ai/docs/seedance-api/seedance-2-preview) |
 | Model comparison (pricing $/s, duration, modes) | [model-comparison](https://piapi.ai/docs/seedance-api/model-comparison) |
 
-**Reference images in prompts (PiAPI):** `@image1`, `@image2`, … match the **order** of `image_urls` (1-based). Seedance 2 Pro supports **`first_last_frames`** (1–2 images) and **`omni_reference`** (up to **12** total items across `image_urls`, `video_urls`, and `audio_urls` per docs — use `@imageN`, `@videoN`, `@audioN` in the prompt; `ensureSeedancePromptMediaTags` in `piapiSeedance.ts` can prepend missing tags). Preview supports up to **9** `image_urls` for the standard preview task types. The app mirrors frames to Supabase then sends public URLs (`mirrorImageUrlForPiapiSeedance`).
+**Reference images in prompts (provider):** `@image1`, `@image2`, … match the **order** of `image_urls` (1-based). Seedance 2 Pro supports **`first_last_frames`** (1–2 images) and **`omni_reference`** (up to **12** total items across `image_urls`, `video_urls`, and `audio_urls` per provider docs — use `@imageN`, `@videoN`, `@audioN` in the prompt; `ensureSeedancePromptMediaTags` in `piapiSeedance.ts` can prepend missing tags). Preview supports up to **9** `image_urls` for the standard preview task types. The app mirrors frames to Supabase then sends public URLs (`mirrorImageUrlForPiapiSeedance`).
 
-**Seedance 2 Preview vs VIP (PiAPI docs):** Standard preview / fast-preview flows in this app use **ordered reference images only** (no mixed video/audio strip in Studio for those pickers). **Preview VIP** task types add **`video_urls`** (max 3, total duration cap) and **`audio_urls`** (max 3, total duration cap; audio requires at least one image or video reference). Provider notes VIP audio support can lag — verify on PiAPI release notes if audio fails.
+**Seedance 2 Preview vs VIP (provider docs):** Standard preview / fast-preview flows in this app use **ordered reference images only** (no mixed video/audio strip in Studio for those pickers). **Preview VIP** task types add **`video_urls`** (max 3, total duration cap) and **`audio_urls`** (max 3, total duration cap; audio requires at least one image or video reference). VIP audio support can lag — verify on the provider’s release notes if audio fails.
 
-**Studio “Elements” for Seedance:** The same element library allows **1–4** URLs per element (PiAPI); **Kling 3.0** still requires **2–4** per element (KIE). URLs are flattened after the start frame and before the optional end frame; the Seedance request uses `omni_reference` when elements are present (or when there are more than two unique images). If the prompt omits `@imageN`, `ensureSeedancePromptImageTags` in `piapiSeedance.ts` prepends tags.
+**Studio “Elements” for Seedance:** **Seedance 2 / Fast** in Studio: **1–4** URLs per element (provider); **Kling 3.0** still requires **2–4** per element (provider). **Preview / Fast Preview** do not expose Elements in the Studio UI (compact images only). URLs are flattened after the start frame and before the optional end frame; the Seedance request uses `omni_reference` when elements are present (or when there are more than two unique images). If the prompt omits `@imageN`, `ensureSeedancePromptImageTags` in `piapiSeedance.ts` prepends tags.
 
-**Short copy for UI:** Preview models are the older preview pipeline; **Seedance 2** / **Seedance 2 Fast** use the current `seedance-2` / `seedance-2-fast` task types (higher quality vs lower cost — see comparison table). **Studio copy:** call out **Pro / Fast** for image+video+audio omni; **Preview** pickers for image-only compact frames unless using VIP queue + provider fields.
+**Short copy for UI:** Preview models are the older preview pipeline; **Seedance 2** / **Seedance 2 Fast** use the current `seedance-2` / `seedance-2-fast` task types (higher quality vs lower cost — see comparison table). **Studio copy:** **Pro / Fast** — image+video+audio omni + Elements; **Preview** — image-only compact frames (no Elements); VIP queue adds provider fields per docs.
 
-**Implementation:** `src/lib/piapiSeedance.ts` (`SEEDANCE_PRO_MAX_IMAGE_URLS`, `SEEDANCE_PREVIEW_MAX_IMAGE_URLS`, `ensureSeedancePromptImageTags`), `src/app/api/kling/generate/route.ts` (PiAPI branch).
+**Implementation:** `src/lib/piapiSeedance.ts` (`SEEDANCE_PRO_MAX_IMAGE_URLS`, `SEEDANCE_PREVIEW_MAX_IMAGE_URLS`, `ensureSeedancePromptImageTags`), `src/app/api/kling/generate/route.ts` (Seedance provider branch).
 
 ---
 

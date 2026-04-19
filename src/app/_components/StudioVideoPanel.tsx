@@ -98,6 +98,7 @@ import {
   studioVideoSupportsQualityPicker,
   studioVideoUsesSeedanceCompactReferenceUploads,
   studioVideoUsesSeedanceProOmniMediaUploads,
+  studioVideoSupportsReferenceElements,
   STUDIO_VEO_DURATION_HINT,
 } from "@/lib/studioVideoModelCapabilities";
 
@@ -406,7 +407,7 @@ const VIDEO_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
     icon: "seedance",
     resolution: "9:16 / 16:9 / 1:1",
     durationRange: studioVideoDurationRangeLabel("bytedance/seedance-2"),
-    searchText: "seedance 2 pro piapi",
+    searchText: "seedance 2 pro provider",
   },
   {
     id: "bytedance/seedance-2-fast",
@@ -415,7 +416,7 @@ const VIDEO_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
     icon: "seedance",
     resolution: "9:16 / 16:9 / 1:1",
     durationRange: studioVideoDurationRangeLabel("bytedance/seedance-2-fast"),
-    searchText: "seedance 2 fast piapi",
+    searchText: "seedance 2 fast provider",
   },
   {
     id: "veo3_lite",
@@ -742,7 +743,7 @@ function isSeedancePreviewModelId(id: string): boolean {
   return id === "bytedance/seedance-2-preview" || id === "bytedance/seedance-2-fast-preview";
 }
 
-/** PiAPI preview queue: VIP uses distinct `task_type` via `marketModel` on POST /api/kling/generate. */
+/** Preview queue: VIP uses distinct `task_type` via `marketModel` on POST /api/kling/generate. */
 function seedancePreviewMarketModelForApi(pickerId: string, priority: VideoPriority): string {
   if (priority !== "vip") return pickerId;
   if (pickerId === "bytedance/seedance-2-preview") return "bytedance/seedance-2-preview-vip";
@@ -1015,6 +1016,7 @@ export default function StudioVideoPanel({
     "VIP pricing is x2 credits per generation.\n\nPeak hours: From 09:00 to 15:00 GMT, Seedance Preview experiences high traffic. During this period, queue times may extend to several hours.\n\nCurrently outside peak hours: Normal is usually 5-60 min. VIP (fast) is usually 3-5 min.";
   /** Saved elements whose @name appears in the prompt — shown as thumbnail chips above the prompt. */
   const promptElementTagDrafts = useMemo(() => {
+    if (!studioVideoSupportsReferenceElements(modelId)) return [];
     const re = /@([a-zA-Z0-9_]+)\b/g;
     const found = new Set<string>();
     let m: RegExpExecArray | null;
@@ -1026,7 +1028,7 @@ export default function StudioVideoPanel({
       const n = d.name.trim().toLowerCase();
       return Boolean(n && found.has(n) && d.urls[0]?.trim());
     });
-  }, [prompt, klingElementDrafts]);
+  }, [prompt, klingElementDrafts, modelId]);
   /** Preview Seedance models need a start image; Seedance 2 / Fast support text-only. */
   const startFrameOptional =
     meta.family === "veo" ||
@@ -1101,6 +1103,13 @@ export default function StudioVideoPanel({
     } else {
       setSeedanceCompactRefUrls([]);
       setSeedanceProOmniItems([]);
+    }
+  }, [modelId]);
+
+  useEffect(() => {
+    if (!studioVideoSupportsReferenceElements(modelId)) {
+      setKlingElementsModalOpen(false);
+      setKlingElementForm(null);
     }
   }, [modelId]);
 
@@ -2233,8 +2242,7 @@ export default function StudioVideoPanel({
       return;
     }
 
-    const supportsReferenceElements =
-      modelId === "kling-3.0/video" || modelId.startsWith("bytedance/seedance");
+    const supportsReferenceElements = studioVideoSupportsReferenceElements(modelId);
     const minElUrls = minReferenceUrlsPerVideoElement(modelId);
     const klingElementsPayloadEarly =
       supportsReferenceElements && klingElementDrafts.length
@@ -2259,7 +2267,7 @@ export default function StudioVideoPanel({
         });
         return;
       }
-      if (modelId.startsWith("bytedance/seedance") && !seedanceImageForElements) {
+      if (studioVideoIsSeedance2ProPickerId(modelId) && !seedanceImageForElements) {
         toast.error("Add a reference image for @image1 when using Elements.", {
           description:
             "Use the start frame, compact uploads, or at least one image in omni references, then @image2, @image3, … for extras.",
@@ -2267,7 +2275,7 @@ export default function StudioVideoPanel({
         return;
       }
     }
-    if (modelId.startsWith("bytedance/seedance") && klingElementsPayloadEarly?.length) {
+    if (studioVideoIsSeedance2ProPickerId(modelId) && klingElementsPayloadEarly?.length) {
       const maxSlots = modelId.includes("preview")
         ? SEEDANCE_PREVIEW_MAX_IMAGE_URLS
         : SEEDANCE_PRO_MAX_IMAGE_URLS;
@@ -2568,7 +2576,8 @@ export default function StudioVideoPanel({
             duration: Math.round(Number(s.durationSec)),
           }));
         }
-        const supportsKlingElementsOnApi = isKling30 || snap.modelId.startsWith("bytedance/seedance");
+        const supportsKlingElementsOnApi =
+          isKling30 || studioVideoIsSeedance2ProPickerId(snap.modelId);
         if (supportsKlingElementsOnApi && snap.klingElementsPayload?.length) {
           klingGenerateBody.klingElements = snap.klingElementsPayload;
         }
@@ -2927,7 +2936,7 @@ export default function StudioVideoPanel({
                 <div>
                   <Label className="text-xs text-white/45">Background source</Label>
                   <p className="mt-0.5 text-[10px] leading-snug text-white/35">
-                    Kling 3.0 Motion Control, KIE <span className="text-white/55">background_source</span>.
+                    Kling 3.0 Motion Control — provider <span className="text-white/55">background_source</span>.
                   </p>
                   <Select
                     value={editSceneBackground}
@@ -2975,10 +2984,8 @@ export default function StudioVideoPanel({
                     Reference images <span className="text-rose-400" aria-hidden="true">*</span>
                   </Label>
                   <p className="mt-1 text-[10px] leading-snug text-white/40">
-                    Seedance Preview / Fast Preview: ordered reference <span className="text-white/55">images only</span>{" "}
-                    in this layout (1–4 uploads). Mixed video/audio for Preview uses provider VIP task types, not this
-                    strip — see docs. Use <span className="text-white/55">Seedance 2 / Fast</span> for image + video +
-                    audio in Reference media.
+                    Preview / Fast Preview: <span className="text-white/55">1–4 reference images</span> only. For mixed
+                    image + video + audio, use <span className="text-white/55">Seedance 2 / Fast</span> (Reference media).
                   </p>
                   <input
                     ref={seedanceCompactFileRef}
@@ -3021,11 +3028,11 @@ export default function StudioVideoPanel({
                 <div>
                   <Label className="text-xs text-white/65">Reference media</Label>
                   <p className="mt-1 text-[10px] leading-snug text-white/40">
-                    Seedance 2 / Fast — optional <span className="text-white/55">omni_reference</span> (provider): add{" "}
-                    <span className="text-white/55">images, short video (MP4/MOV), and audio (MP3/WAV)</span> together.
-                    Use <span className="text-white/55">@imageN</span>, <span className="text-white/55">@videoN</span>,{" "}
-                    <span className="text-white/55">@audioN</span> in the prompt, or tags are prepended when missing.
-                    Audio still needs at least one image or video. Leave empty for text-only video.
+                    Seedance 2 / Fast: optional <span className="text-white/55">images + MP4/MOV + MP3/WAV</span> (max{" "}
+                    {SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS} files, provider). Use{" "}
+                    <span className="text-white/55">@imageN</span> / <span className="text-white/55">@videoN</span> /{" "}
+                    <span className="text-white/55">@audioN</span> or tags are prepended. Audio needs an image or video.
+                    Empty = text-only.
                   </p>
                   <input
                     ref={seedanceProOmniFileRef}
@@ -3170,7 +3177,7 @@ export default function StudioVideoPanel({
                       modelId === "kling-3.0/video" &&
                       klingElementDrafts.some((d) => d.name.trim() && d.urls.length >= minReferenceUrlsPerVideoElement(modelId))
                         ? "Describe the scene and use @element_name for each saved element (e.g. @product, @model)."
-                        : modelId.startsWith("bytedance/seedance") &&
+                        : studioVideoIsSeedance2ProPickerId(modelId) &&
                             klingElementDrafts.some(
                               (d) => d.name.trim() && d.urls.length >= minReferenceUrlsPerVideoElement(modelId),
                             )
@@ -3184,7 +3191,7 @@ export default function StudioVideoPanel({
                     rows={4}
                   />
                   {(modelId === "kling-3.0/video" && !klingCustomMulti) ||
-                  modelId.startsWith("bytedance/seedance") ? (
+                  studioVideoSupportsReferenceElements(modelId) ? (
                     <div className="mt-3 space-y-2">
                       <div className="flex flex-wrap items-center gap-2">
                         <Button
@@ -3205,24 +3212,10 @@ export default function StudioVideoPanel({
                             </>
                           ) : (
                             <>
-                              Optional elements: image URLs only (1–4 per element).{" "}
-                              {studioVideoIsSeedance2ProPickerId(modelId) ? (
-                                <>
-                                  For mixed <span className="text-white/55">image + video + audio</span>, use Reference
-                                  media above — not inside Elements.
-                                </>
-                              ) : (
-                                <>
-                                  Preview path here is <span className="text-white/55">images only</span>; video/audio
-                                  on Preview follows provider VIP rules.
-                                </>
-                              )}{" "}
-                              Start frame <span className="text-white/55">@image1</span>, extras{" "}
-                              <span className="text-white/55">@image2</span>… (max{" "}
-                              {modelId.includes("preview")
-                                ? SEEDANCE_PREVIEW_MAX_IMAGE_URLS
-                                : SEEDANCE_PRO_MAX_IMAGE_URLS}{" "}
-                              images; provider may add tags if omitted).
+                              Optional: 1–4 images per element; <span className="text-white/55">@name</span> in prompt.{" "}
+                              <span className="text-white/55">@image1</span>… order (max {SEEDANCE_PRO_MAX_IMAGE_URLS}{" "}
+                              images). Mix video + audio in <span className="text-white/55">Reference media</span>, not
+                              Elements.
                             </>
                           )}
                         </span>
@@ -3655,17 +3648,13 @@ export default function StudioVideoPanel({
                     <span className="text-white/55">Link to Ad</span> product photos from saved runs. Images are checked for
                     HTTPS reachability and minimum size ({KLING_ELEMENT_MEDIA_MIN_PX}px).
                   </>
-                ) : modelId.startsWith("bytedance/seedance") ? (
+                ) : studioVideoIsSeedance2ProPickerId(modelId) ? (
                   <>
-                    <span className="text-white/55">Seedance elements:</span> same{" "}
-                    <span className="text-white/65">@image1</span> / <span className="text-white/65">@image2</span>… order
-                    as the flattened URL list. Up to <span className="text-white/65">3</span> named elements,{" "}
-                    <span className="text-white/65">1–4</span> images each.{" "}
-                    <span className="text-white/55">Seedance 2 / Fast (Pro)</span> also supports mixed{" "}
-                    <span className="text-white/65">image + video + audio</span> in the main Reference media strip (not
-                    inside Elements). <span className="text-white/55">Preview</span> models here use{" "}
-                    <span className="text-white/65">images only</span> for the compact frame list; video/audio on Preview
-                    requires provider VIP task types per PiAPI docs.
+                    <span className="text-white/55">Seedance 2 / Fast:</span> up to{" "}
+                    <span className="text-white/65">3</span> elements, <span className="text-white/65">1–4</span> images
+                    each; <span className="text-white/65">@image1</span> / <span className="text-white/65">@image2</span>…
+                    = flattened URL order. Mix <span className="text-white/65">video + audio</span> in{" "}
+                    <span className="text-white/55">Reference media</span> above, not Elements.
                   </>
                 ) : (
                   <>
@@ -3901,13 +3890,13 @@ export default function StudioVideoPanel({
                       Images: JPEG, PNG, WebP, or GIF, at least {KLING_ELEMENT_MEDIA_MIN_PX}×
                       {KLING_ELEMENT_MEDIA_MIN_PX}px, max {Math.round(KLING_ELEMENT_MEDIA_MAX_BYTES / (1024 * 1024))}MB
                       each.{" "}
-                      {modelId.startsWith("bytedance/seedance")
+                      {studioVideoIsSeedance2ProPickerId(modelId)
                         ? "1–4 images per element."
                         : "2–4 images per element (Kling 3.0)."}
                     </p>
                   </div>
 
-                  {modelId.startsWith("bytedance/seedance") ? (
+                  {studioVideoIsSeedance2ProPickerId(modelId) ? (
                     <details
                       key={`kling-el-adv-${klingElementForm.id}`}
                       className="group mt-3 rounded-lg border border-white/[0.08] bg-black/30"
