@@ -578,7 +578,11 @@ export default function SubscriptionPage() {
                       )}
                     </Button>
 
-                    <SubscriptionPlanFeatureList planId={plan.id as SubscriptionPlanId} credits={plan.credits} />
+                    <SubscriptionPlanFeatureList
+                      planId={plan.id as SubscriptionPlanId}
+                      credits={plan.credits}
+                      billingCurrency={displayPrices?.currency}
+                    />
                   </div>
                 );
               })}

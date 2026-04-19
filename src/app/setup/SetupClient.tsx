@@ -306,7 +306,11 @@ export default function SetupClient({ embedded = false }: SetupClientProps) {
                   )}
                 </div>
 
-                <SubscriptionPlanFeatureList planId={plan.id} credits={plan.credits} />
+                <SubscriptionPlanFeatureList
+                  planId={plan.id}
+                  credits={plan.credits}
+                  billingCurrency={currency}
+                />
 
                 <button
                   type="button"

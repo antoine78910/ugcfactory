@@ -92,6 +92,7 @@ export function SubscriptionDowngradeDialog({
                         <SubscriptionPlanCreditsWithBonus
                           planId={preview.current.planId}
                           credits={preview.current.creditsPerMonth}
+                          billingCurrency={preview.currency}
                           compact
                           showCoins={false}
                         />
@@ -118,6 +119,7 @@ export function SubscriptionDowngradeDialog({
                         <SubscriptionPlanCreditsWithBonus
                           planId={preview.target.planId}
                           credits={preview.target.creditsPerMonth}
+                          billingCurrency={preview.currency}
                           compact
                           showCoins={false}
                         />
@@ -151,6 +153,7 @@ export function SubscriptionDowngradeDialog({
                           <SubscriptionPlanCreditsWithBonus
                             planId={preview.target.planId}
                             credits={preview.target.creditsPerMonth}
+                            billingCurrency={preview.currency}
                             compact
                             showCoins={false}
                           />

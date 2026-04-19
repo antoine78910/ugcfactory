@@ -227,6 +227,7 @@ export function LtaTrialVideoUpgradeDialog({
                     <SubscriptionPlanFeatureList
                       planId={plan.id}
                       credits={tier.credits_per_month}
+                      billingCurrency={currency}
                       className="mt-3 min-h-0 flex-1 border-t border-white/10 pt-3 text-[11px] sm:text-xs"
                     />
                   </div>

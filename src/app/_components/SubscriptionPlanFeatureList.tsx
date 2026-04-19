@@ -8,7 +8,7 @@ import {
   type AccountPlanId,
 } from "@/lib/subscriptionModelAccess";
 import { subscriptionPlanSortIndex, type SubscriptionPlanId } from "@/lib/stripe/subscriptionPrices";
-import { subscriptionBonusCreditsVsStarter } from "@/lib/pricing";
+import { SUBSCRIPTIONS, subscriptionBonusCreditsVsStarter } from "@/lib/pricing";
 import {
   upToEstimateAiImagesFromCredits,
   upToEstimateAiVideosFromCredits,
@@ -30,50 +30,78 @@ function starterBonusForPlan(planId: SubscriptionPlanId, credits: number): { bon
   return { bonus, baseCredits };
 }
 
+export function normalizeSubscriptionBillingCurrency(raw?: string | null): "usd" | "eur" {
+  const c = String(raw ?? "").trim().toLowerCase();
+  if (c === "eur" || c === "€") return "eur";
+  return "usd";
+}
+
+/** Hover copy for non-bonus credits: Starter list ratio (same numbers as `SUBSCRIPTIONS[0]`). */
+export function starterPlanCreditsRatioTitle(currency: "usd" | "eur"): string {
+  const s = SUBSCRIPTIONS[0];
+  if (currency === "eur") {
+    return `Starter plan reference: €${s.price_usd}/mo for ${s.credits_per_month} credits (ratio used before your volume bonus).`;
+  }
+  return `Starter plan reference: $${s.price_usd}/mo for ${s.credits_per_month} credits (ratio used before your volume bonus).`;
+}
+
 /**
  * One-line credits: base (total minus Starter-tier bonus) + gift pill for the bonus.
  * Used on plan cards, upgrade/downgrade dialogs, and the first row of `SubscriptionPlanFeatureList`.
  */
-const CREDITS_LINE_CLASS = "text-sm font-semibold tabular-nums leading-snug";
+const CREDITS_LINE_CLASS = "text-xs font-semibold tabular-nums leading-snug";
 
 export function SubscriptionPlanCreditsWithBonus({
   planId,
   credits,
+  billingCurrency,
   showCoins = true,
 }: {
   planId: SubscriptionPlanId;
   credits: number;
-  /** Ignored: bonus line uses the same size as base credits (kept for existing call sites). */
+  /** Stripe/display region: affects Starter ratio hover ($ vs €). */
+  billingCurrency?: string | null;
+  /** Ignored: kept for existing call sites. */
   compact?: boolean;
   showCoins?: boolean;
 }) {
   const { bonus, baseCredits } = starterBonusForPlan(planId, credits);
+  const cur = normalizeSubscriptionBillingCurrency(billingCurrency);
 
   const pill = (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center gap-1.5 rounded-full border border-amber-400/40",
+        "inline-flex shrink-0 items-center gap-0.5 rounded-full border border-amber-400/40",
         "bg-gradient-to-r from-amber-500/25 via-amber-400/15 to-emerald-500/20",
         CREDITS_LINE_CLASS,
         "text-amber-100",
-        "px-2.5 py-1 shadow-[0_0_14px_rgba(251,191,36,0.12),inset_0_1px_0_rgba(255,255,255,0.08)]",
+        "px-1.5 py-px shadow-[0_0_12px_rgba(251,191,36,0.1),inset_0_1px_0_rgba(255,255,255,0.06)]",
       )}
       title={`${credits.toLocaleString()} credits/mo total (${baseCredits.toLocaleString()} at Starter-tier value + ${bonus.toLocaleString()} bonus)`}
       aria-label={`Bonus ${bonus} credits per month. ${credits.toLocaleString()} credits per month total.`}
     >
-      <Gift className="h-4 w-4 shrink-0 text-amber-200/95" strokeWidth={2.25} aria-hidden />
+      <Gift className="h-2.5 w-2.5 shrink-0 text-amber-200/95" strokeWidth={2.5} aria-hidden />
       +{bonus.toLocaleString()} credits
     </span>
   );
 
   const baseLabel = (
-    <span className={cn("shrink-0 text-white", CREDITS_LINE_CLASS)}>{baseCredits.toLocaleString()} credits</span>
+    <span
+      className={cn(
+        "shrink-0 text-white",
+        CREDITS_LINE_CLASS,
+        bonus > 0 && "cursor-help underline decoration-dotted decoration-white/30 underline-offset-2",
+      )}
+      title={bonus > 0 ? starterPlanCreditsRatioTitle(cur) : undefined}
+    >
+      {baseCredits.toLocaleString()} credits
+    </span>
   );
 
   const textRow = (
     <span
       className={cn(
-        "flex min-w-0 items-center gap-2 whitespace-nowrap",
+        "flex min-w-0 items-center gap-1.5 whitespace-nowrap",
         showCoins ? "min-w-0 flex-1" : "inline-flex max-w-full",
       )}
     >
@@ -88,8 +116,8 @@ export function SubscriptionPlanCreditsWithBonus({
 
   return (
     <>
-      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-violet-500/20 text-violet-200">
-        <Coins className="h-4 w-4" aria-hidden />
+      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-violet-500/20 text-violet-200">
+        <Coins className="h-3 w-3" aria-hidden />
       </span>
       {textRow}
     </>
@@ -99,10 +127,13 @@ export function SubscriptionPlanCreditsWithBonus({
 export function SubscriptionPlanFeatureList({
   planId,
   credits,
+  billingCurrency,
   className,
 }: {
   planId: SubscriptionPlanId;
   credits: number;
+  /** From Stripe display payload (`usd` / `eur`) for Starter-ratio hover on base credits. */
+  billingCurrency?: string | null;
   className?: string;
 }) {
   const images = Number(upToEstimateAiImagesFromCredits(credits));
@@ -116,7 +147,11 @@ export function SubscriptionPlanFeatureList({
       )}
     >
       <li className="flex items-center gap-2.5">
-        <SubscriptionPlanCreditsWithBonus planId={planId} credits={credits} />
+        <SubscriptionPlanCreditsWithBonus
+          planId={planId}
+          credits={credits}
+          billingCurrency={billingCurrency}
+        />
       </li>
       <li className="pl-1 text-white/50">Up to {images.toLocaleString()} AI images (Nanobanana)</li>
       <li className="pl-1 text-white/50">Up to {videos.toLocaleString()} AI videos (Sora 2)</li>

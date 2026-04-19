@@ -106,6 +106,7 @@ export function SubscriptionUpgradeDialog({
                         <SubscriptionPlanCreditsWithBonus
                           planId={preview.target.planId}
                           credits={preview.target.creditsPerMonth}
+                          billingCurrency={preview.currency}
                           compact
                           showCoins={false}
                         />
