@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { toast } from "sonner";
+import Link from "next/link";
 import {
   ArrowLeft,
   Check,
@@ -13,6 +14,7 @@ import {
   EyeOff,
   ImagePlus,
   Loader2,
+  Lock,
   Maximize2,
   Download,
   PenLine,
@@ -91,6 +93,12 @@ import {
   factorWordRulesForUgcDuration,
   normalizeUgcScriptVideoDurationSec,
 } from "@/lib/ugcAiScriptBrief";
+import {
+  mergeVideoHiddenTechnical,
+  parseLinkToAdPromptCleanResponse,
+  rebuildNanoBananaRawFromCleanSlots,
+  videoSectionsFromClean,
+} from "@/lib/ltaPromptCleanDisplay";
 import { parseUgcI2v30sParts } from "@/lib/ugcI2vParse";
 import { useSupabaseBrowserClient } from "@/lib/supabase/BrowserSupabaseProvider";
 import { LINK_TO_AD_LOADING_MESSAGES } from "@/lib/linkToAd/loadingMessageLoops";
@@ -587,6 +595,44 @@ export type LinkToAdUniverseProps = {
  * Same pattern as Studio Video Generate: one row, number-only pill (no “credits” label, no coin).
  * On LTA `bg-violet-400` + black label we use a dark translucent pill; studio uses `bg-white/15` on violet-500.
  */
+/** Trial: do not render prompt plaintext in the DOM (only this placeholder). */
+function LtaTrialPromptLockedCard({ className }: { className?: string }) {
+  return (
+    <div
+      className={cn(
+        "relative overflow-hidden rounded-lg border border-violet-500/25 bg-black/40 px-4 py-10 text-center",
+        className,
+      )}
+    >
+      <div
+        className="pointer-events-none absolute inset-0 opacity-[0.22] blur-2xl"
+        aria-hidden
+        style={{
+          background:
+            "repeating-linear-gradient(90deg, rgba(139,92,246,0.35) 0px, transparent 12px, rgba(255,255,255,0.08) 24px, transparent 36px)",
+        }}
+      />
+      <div className="relative z-10 mx-auto flex max-w-sm flex-col items-center gap-3">
+        <div className="flex h-11 w-11 items-center justify-center rounded-full border border-violet-400/35 bg-violet-500/15 text-violet-200">
+          <Lock className="h-5 w-5" aria-hidden />
+        </div>
+        <p className="text-sm font-semibold text-white/90">Upgrade to see the full prompt</p>
+        <p className="text-xs leading-snug text-white/45">
+          During trial your prompts still run in generation, but the exact wording stays hidden in the page.
+        </p>
+        <Button
+          asChild
+          type="button"
+          size="sm"
+          className="rounded-full border border-violet-300/40 bg-violet-400/90 px-4 text-xs font-semibold text-black hover:bg-violet-300"
+        >
+          <Link href="/subscription">View plans</Link>
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function LinkToAdStudioStyleCreditPill({
   amount,
   hideCredits,
@@ -1474,6 +1520,37 @@ export default function LinkToAdUniverse({
       setVideoPromptIsLegacyBlob(true);
       setVideoPromptSections({ motion: editable, dialogue: "", ambience: "" });
     }
+  }, []);
+
+  /** Optional GPT pass: classify creative vs hidden technical without changing marketing substance. */
+  const applyVideoPromptAiClean = useCallback(async (fullText: string, signal: AbortSignal) => {
+    const trimmed = fullText.replace(/\r\n/g, "\n").trim();
+    if (!trimmed) return;
+    const res = await fetch("/api/gpt/link-to-ad-prompt-clean", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal,
+      body: JSON.stringify({ kind: "video_prompt", text: trimmed }),
+    });
+    const j = (await res.json()) as { data?: string; error?: string };
+    if (!res.ok || !j.data) return;
+    const clean = parseLinkToAdPromptCleanResponse(j.data, "video_prompt");
+    if (!clean || Array.isArray(clean)) return;
+    const split = splitUgcVideoPromptForEditing(trimmed);
+    const mergedTail = mergeVideoHiddenTechnical(split.technicalTail, clean.hiddenTechnical);
+    if (clean.legacySingleField) {
+      setVideoPromptIsLegacyBlob(true);
+      setVideoPromptSections({ motion: clean.motion, dialogue: "", ambience: "" });
+    } else {
+      setVideoPromptIsLegacyBlob(false);
+      setVideoPromptSections(videoSectionsFromClean(clean));
+    }
+    const sections = videoSectionsFromClean(clean);
+    const editable = clean.legacySingleField
+      ? clean.motion.trim()
+      : composeVideoPromptForApi(sections).trim();
+    setVideoPromptTechnicalTail(mergedTail);
+    setUgcVideoPromptGpt(mergeNanoPromptForApi(editable, mergedTail).trim());
   }, []);
 
   const mergedVideoPromptDraft = useMemo(() => {
@@ -3474,7 +3551,27 @@ export default function LinkToAdUniverse({
       const json = (await res.json()) as { data?: string; error?: string };
       if (!res.ok || !json.data) throw new Error(json.error || "Image prompts failed");
       text = String(json.data);
-      setNanoBananaPromptsRaw(text);
+      let finalPromptsRaw = text;
+      try {
+        const bodies = parseThreeLabeledPrompts(text.replace(/\r\n/g, "\n"));
+        const cleanRes = await fetch("/api/gpt/link-to-ad-prompt-clean", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: controller.signal,
+          body: JSON.stringify({ kind: "image_slots", slots: bodies }),
+        });
+        const cleanJson = (await cleanRes.json()) as { data?: string; error?: string };
+        if (cleanRes.ok && cleanJson.data) {
+          const parsed = parseLinkToAdPromptCleanResponse(cleanJson.data, "image_slots");
+          if (Array.isArray(parsed) && parsed.length === 3) {
+            const rebuilt = rebuildNanoBananaRawFromCleanSlots(text, parsed);
+            if (rebuilt.trim()) finalPromptsRaw = rebuilt;
+          }
+        }
+      } catch {
+        /* keep model output */
+      }
+      setNanoBananaPromptsRaw(finalPromptsRaw);
       setNanoBananaSelectedPromptIndex(0);
       setNanoBananaImageUrl(null);
       setNanoBananaImageUrls([]);
@@ -3490,7 +3587,7 @@ export default function LinkToAdUniverse({
       ];
       triple[selPipelineIdx] = {
         ...emptyAnglePipeline(),
-        nanoBananaPromptsRaw: text,
+        nanoBananaPromptsRaw: finalPromptsRaw,
         nanoBananaSelectedPromptIndex: 0,
       };
       setPipelineByAngle(triple);
@@ -3498,12 +3595,12 @@ export default function LinkToAdUniverse({
       if (base && lastExtractedJson) {
         const snap = snapshotWithPersistTriple(base, triple, sel);
         await persistUniverse(universeRunId, url, extractedTitle, lastExtractedJson, snap, packshotsForSave(), {
-          imagePrompt: text,
+          imagePrompt: finalPromptsRaw,
         });
       }
       toast.success("3 image prompts saved.");
       nanoBananaPromptsSignatureRef.current = signature;
-      return text;
+      return finalPromptsRaw;
     } catch (e) {
       if (e instanceof DOMException && e.name === "AbortError") return null;
       toast.error("Image prompts", { description: e instanceof Error ? e.message : "Unknown error" });
@@ -4435,6 +4532,11 @@ export default function LinkToAdUniverse({
           ? String(json.part1)
           : text;
       hydrateVideoPromptFromStored(displayPrompt);
+      try {
+        await applyVideoPromptAiClean(displayPrompt, controller.signal);
+      } catch {
+        /* optional sanitize: keep hydrate output */
+      }
       // Keep the prompt panel visible even when prompt generation is triggered from retry actions.
       setVideoStageMode(true);
       setUserStartedVideoFromImage(true);
@@ -7081,12 +7183,14 @@ export default function LinkToAdUniverse({
                               </span>
                               {!panelOpen ? (
                                 <span className="min-w-0 flex-1 truncate text-[11px] leading-snug text-white/45">
-                                  {summaryPreview}
+                                  {linkToAdTrialEconomy ? "Upgrade to see the full prompt" : summaryPreview}
                                 </span>
                               ) : null}
                             </button>
                             {panelOpen ? (
-                              parsed.isStructured ? (
+                              linkToAdTrialEconomy ? (
+                                <LtaTrialPromptLockedCard className="mt-1.5" />
+                              ) : parsed.isStructured ? (
                                 <div className="mt-1.5 space-y-3 pb-0.5">
                                   {(
                                     [
@@ -7591,7 +7695,9 @@ export default function LinkToAdUniverse({
                           <p className="px-1 pb-1 text-[10px] font-bold uppercase tracking-wide text-violet-300/90">
                             Video prompt
                           </p>
-                          {videoPromptIsLegacyBlob ? (
+                          {linkToAdTrialEconomy ? (
+                            <LtaTrialPromptLockedCard className="mt-1" />
+                          ) : videoPromptIsLegacyBlob ? (
                             <div className="space-y-2">
                               <p className="px-1 text-[9px] font-semibold uppercase tracking-wide text-amber-200/75">
                                 Older prompt, regenerate the video prompt for Motion / Dialogue / Ambience

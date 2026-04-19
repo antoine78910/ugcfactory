@@ -746,6 +746,62 @@ export type NanoEditableSections = {
 };
 
 /**
+ * Removes trailing “camera / codec / artifact-avoidance” spam often appended after creative prose
+ * (same paragraph or following lines), without touching earlier marketing copy.
+ */
+export function stripTrailingProductionSpecLines(field: string): { creative: string; stripped: string } {
+  const raw = field.replace(/\r\n/g, "\n");
+  if (!raw.trim()) return { creative: "", stripped: "" };
+
+  const lineLooksTechnical = (line: string) => {
+    const t = line.trim();
+    if (!t) return false;
+    return (
+      /\b(?:4K|8K|6K|12K|120fps|60fps|240fps|fps|ProRes|RAW\b|Dolby(?:\s+Vision)?|HDR\+?|iPhone\s*\d+|Apple\s+Log|Log\s*3|Rec\.?\s*709|BT\.?2020|ACES\b|H\.?265|HEVC|AV1)\b/i.test(
+        t,
+      ) ||
+      /\b(?:tack\s+sharp|zero\s+grain|no\s+filter|film\s+grain|sharpen(?:ing)?)\b/i.test(t) ||
+      /\b(?:Avoid|avoid)\s+(?:jitter|flicker|warp|wobble|morph|melting|bent\s+limbs|distorted\s+hands|extra\s+fingers|deformed)\b/i.test(
+        t,
+      ) ||
+      /\b(?:hyper[-\s]?real|ultra[-\s]?sharp|CGI|AI[-\s]?look|plastic\s+skin|wax\s+figure)\b/i.test(t) ||
+      (t.length < 220 &&
+        /\b(?:codec|bitrate|bitrate|color\s+grade|LUT|ProRes\s+RAW|RAW\s+capture)\b/i.test(t))
+    );
+  };
+
+  const lines = raw.split("\n");
+  const strippedLines: string[] = [];
+  while (lines.length > 0) {
+    const last = lines[lines.length - 1];
+    if (!last.trim()) {
+      strippedLines.unshift(lines.pop() ?? "");
+      continue;
+    }
+    if (lineLooksTechnical(last)) {
+      strippedLines.unshift(lines.pop() ?? "");
+      continue;
+    }
+    break;
+  }
+
+  let creative = lines.join("\n").trimEnd();
+  const stripped = strippedLines.join("\n").trim();
+
+  // Same-line tail after last sentence: "…authentic. 4K 120fps …"
+  const sameLine = creative.match(
+    /^([\s\S]*?)(\.\s+|,\s+)((?:(?:4K|8K|ProRes|Dolby|HDR|RAW|iPhone\s*\d+|tack\s+sharp|zero\s+grain)[^\n.]*|(?:Avoid|avoid)\s+[^.\n]+))$/i,
+  );
+  if (sameLine && sameLine[1] && sameLine[3] && lineLooksTechnical(sameLine[3])) {
+    const rest = [stripped, sameLine[3].trim()].filter(Boolean).join("\n").trim();
+    creative = (sameLine[1] + (sameLine[2].trim().startsWith(".") ? "." : "")).trimEnd();
+    return { creative: creative.trim(), stripped: rest };
+  }
+
+  return { creative: creative.trim(), stripped };
+}
+
+/**
  * Cuts leaked TECHNICAL / NEGATIVE blocks from a single EDIT section body (model sometimes
  * inlines them before the next EDIT header). Handles plain and **markdown-bold** formats.
  */
@@ -785,6 +841,8 @@ const NANO_SECTION_END_LA =
   "\\n\\s*\\*{0,2}NEGATIVE\\s+PROMPT\\b|" +
   // Horizontal rule separator (e.g. "---") used between prompts
   "\\n\\s*---+\\s*\\n|" +
+  // Leaked codec / device line after creative (common model failure mode)
+  "\\n+\\s*(?:4K|8K|ProRes|Dolby|HDR|RAW|iPhone\\s*\\d+|Avoid\\s+jitter)\\b|" +
   // Markdown PROMPT N header (e.g. "# PROMPT 2")
   "\\n\\s*(?:[#*]+\\s*)?PROMPT\\s*[123]|" +
   // End of string
@@ -865,13 +923,20 @@ export function splitNanoPromptBodyForEditing(body: string): { editable: string;
     if (m && m.index !== undefined && m.index < cut) cut = m.index;
   }
 
+  let editable: string;
+  let technicalTail: string;
   if (cut >= t.length) {
-    return { editable: t.trim(), technicalTail: "" };
+    editable = t.trim();
+    technicalTail = "";
+  } else {
+    editable = t.slice(0, cut).trim();
+    technicalTail = t.slice(cut).trim();
   }
-
+  const st = stripTrailingProductionSpecLines(editable);
+  const mergedTail = [technicalTail, st.stripped].filter(Boolean).join("\n\n").trim();
   return {
-    editable: t.slice(0, cut).trim(),
-    technicalTail: t.slice(cut).trim(),
+    editable: st.creative.trim(),
+    technicalTail: mergedTail,
   };
 }
 
@@ -1122,31 +1187,28 @@ export function splitUgcVideoPromptForEditing(body: string): { editable: string;
   const t = body.replace(/\r\n/g, "\n");
   if (!t.trim()) return { editable: "", technicalTail: "" };
 
+  const mergeStrip = (editablePart: string, tailPart: string) => {
+    const st = stripTrailingProductionSpecLines(editablePart.trim());
+    const mergedTail = [tailPart.trim(), st.stripped].filter(Boolean).join("\n\n").trim();
+    return { editable: st.creative.trim(), technicalTail: mergedTail };
+  };
+
   const tech = /(?:^|\n)\s*(?:#\s*)?\*{0,2}TECHNICAL\*{0,2}\s*[—:*\s]/im.exec(t);
   if (tech && tech.index !== undefined) {
-    return {
-      editable: t.slice(0, tech.index).trim(),
-      technicalTail: t.slice(tech.index).trim(),
-    };
+    return mergeStrip(t.slice(0, tech.index), t.slice(tech.index));
   }
 
   const deviceLine = /\n(?=\s*(?:Shot on|Recorded with)\s+(?:an\s+)?iPhone\b)/i.exec(t);
   if (deviceLine && deviceLine.index !== undefined) {
-    return {
-      editable: t.slice(0, deviceLine.index).trim(),
-      technicalTail: t.slice(deviceLine.index).replace(/^\n+/, "").trim(),
-    };
+    return mergeStrip(t.slice(0, deviceLine.index), t.slice(deviceLine.index).replace(/^\n+/, ""));
   }
 
   const deviceInline = /(?<=\.)\s+(?=Shot on|Recorded with)\s*/i.exec(t);
   if (deviceInline && deviceInline.index !== undefined) {
-    return {
-      editable: t.slice(0, deviceInline.index + 1).trim(),
-      technicalTail: t.slice(deviceInline.index + 1).trim(),
-    };
+    return mergeStrip(t.slice(0, deviceInline.index + 1), t.slice(deviceInline.index + 1));
   }
 
-  return { editable: t.trim(), technicalTail: "" };
+  return mergeStrip(t.trim(), "");
 }
 
 /** Clears Nano → Kling pipeline fields (keeps summary, scripts, angles text, product refs). */
