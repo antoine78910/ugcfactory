@@ -4,7 +4,7 @@ import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Loader2, Sparkles } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
@@ -57,7 +57,7 @@ const chipDisabled = cn(
 
 /** Primary CTA — matches landing “Get started” (page.tsx). */
 const nextEnabledClass = cn(
-  "h-11 w-full max-w-sm rounded-2xl border border-violet-200/40 bg-violet-400 text-sm font-semibold text-black",
+  "h-10 w-full max-w-[200px] rounded-2xl border border-violet-200/40 bg-violet-400 text-sm font-semibold text-black",
   "shadow-[0_6px_0_0_rgba(76,29,149,0.9)] ring-offset-0 transition-all",
   "hover:-translate-y-[1px] hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9),0_0_28px_rgba(167,139,250,0.45)]",
   "focus-visible:border-violet-400/45 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-violet-400/55",
@@ -65,7 +65,7 @@ const nextEnabledClass = cn(
 );
 
 const nextDisabledClass = cn(
-  "h-11 w-full max-w-sm cursor-not-allowed rounded-2xl border border-white/10 bg-white/[0.05] text-sm font-semibold text-white/35",
+  "h-10 w-full max-w-[200px] cursor-not-allowed rounded-2xl border border-white/10 bg-white/[0.05] text-sm font-semibold text-white/35",
 );
 
 function payloadWorkType(workType: WorkType, otherText: string): string {
@@ -115,7 +115,7 @@ export default function OnboardingClient() {
     <div className="min-h-[100dvh] overflow-x-clip bg-[#050507] text-white antialiased selection:bg-violet-500/30">
       {/* Nav — same shell as landing (page.tsx header) */}
       <header className="sticky top-0 z-50 border-b border-white/[0.08] bg-[#050507]/85 backdrop-blur-md supports-[backdrop-filter]:bg-[#050507]/20">
-        <div className="mx-auto flex min-w-0 max-w-6xl items-center gap-3 px-5 py-4 sm:gap-4 sm:px-6 sm:py-5">
+        <div className="mx-auto flex min-w-0 max-w-6xl items-center gap-2 px-4 py-2.5 sm:px-5 sm:py-3">
           <Link
             href="/"
             className="flex shrink-0 items-center outline-none transition-opacity hover:opacity-95 focus-visible:rounded-lg focus-visible:ring-2 focus-visible:ring-violet-400/50"
@@ -125,7 +125,7 @@ export default function OnboardingClient() {
               alt="Youry"
               width={174}
               height={52}
-              className="h-11 w-auto sm:h-12 md:h-14"
+              className="h-8 w-auto sm:h-9"
               priority
             />
           </Link>
@@ -163,7 +163,7 @@ export default function OnboardingClient() {
               <span className="text-violet-400">Experience</span>
             </h1>
             <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-white/55 sm:text-[15px]">
-              Let&apos;s start with what brought you here — tell us a bit about why you&apos;re using Youry and what
+              Let&apos;s start with what brought you here, tell us a bit about why you&apos;re using Youry and what
               you&apos;re hoping to get out of it.
             </p>
           </div>
@@ -267,10 +267,7 @@ export default function OnboardingClient() {
                       <span className="text-black/80">Saving…</span>
                     </>
                   ) : (
-                    <>
-                      <Sparkles className="h-4 w-4 shrink-0 text-black/80" aria-hidden />
-                      Next
-                    </>
+                    "Next"
                   )}
                 </button>
               </div>
