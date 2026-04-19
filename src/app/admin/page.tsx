@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Activity,
@@ -33,6 +33,8 @@ type OnboardingAdminRow = {
   sub_status: string | null;
   is_subscriber: boolean;
   trial_active: boolean;
+  /** Display credits from ledger at load time (not historical). */
+  credit_balance: number | null;
 };
 
 type CreditRedeemTokenRow = {
@@ -88,6 +90,8 @@ type GenerationRow = {
   error_message: string | null;
   credits_charged: number;
   uses_personal_api: boolean;
+  /** Ledger balance (display credits) shortly after register; null if column missing or not set. */
+  credit_balance_after?: number | null;
 };
 
 type RunRow = {
@@ -153,6 +157,23 @@ function formatDurationMs(ms: number): string {
   const m = Math.floor(s / 60);
   const rs = s % 60;
   return `${m}m ${rs}s`;
+}
+
+function adminGenerationModelLabel(row: GenerationRow): string {
+  const m = row.model?.trim();
+  if (m) return m;
+  const k = row.kind?.toLowerCase() ?? "";
+  if (k === "motion_control") return "motion control";
+  if (k.includes("upscale")) return "upscale";
+  if (k.includes("video")) return "video (model not recorded)";
+  if (k.includes("image") || k === "avatar") return "image (model not recorded)";
+  return "-";
+}
+
+function formatCreditBalanceSnap(v: number | null | undefined): string {
+  if (v == null || !Number.isFinite(Number(v))) return "-";
+  const n = Number(v);
+  return Number.isInteger(n) ? String(n) : n.toFixed(2);
 }
 
 function durationForRow(row: GenerationRow): string {
@@ -882,7 +903,7 @@ export default function AdminPage() {
               Trial flag reflects app metadata (e.g. $1 trial) at load time.
             </p>
             <div className="overflow-x-auto rounded-xl border border-white/[0.08]">
-              <table className="w-full min-w-[960px] text-left text-xs">
+              <table className="w-full min-w-[1040px] text-left text-xs">
                 <thead>
                   <tr className="border-b border-white/10 text-[10px] uppercase tracking-wide text-white/40">
                     <th className="px-3 py-2.5 font-semibold">Email</th>
@@ -890,6 +911,7 @@ export default function AdminPage() {
                     <th className="px-3 py-2.5 font-semibold">Referral</th>
                     <th className="px-3 py-2.5 font-semibold">Completed</th>
                     <th className="px-3 py-2.5 font-semibold">Plan</th>
+                    <th className="px-3 py-2.5 font-semibold">Credits</th>
                     <th className="px-3 py-2.5 font-semibold">Sub status</th>
                     <th className="px-3 py-2.5 font-semibold">Paying</th>
                     <th className="px-3 py-2.5 font-semibold">Trial</th>
@@ -911,6 +933,9 @@ export default function AdminPage() {
                         {new Date(row.completed_at).toLocaleString()}
                       </td>
                       <td className="px-3 py-2.5 font-medium text-white/70">{row.plan_id ?? "-"}</td>
+                      <td className="px-3 py-2.5 tabular-nums font-medium text-amber-200/90">
+                        {row.credit_balance != null ? formatCreditBalanceSnap(row.credit_balance) : "-"}
+                      </td>
                       <td className="px-3 py-2.5 text-white/50">{row.sub_status ?? "-"}</td>
                       <td className="px-3 py-2.5">
                         <span
@@ -976,14 +1001,15 @@ export default function AdminPage() {
           </div>
         ) : tab === "generations" ? (
           <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[1040px] text-left text-xs">
+            <table className="w-full min-w-[1120px] text-left text-xs">
               <thead>
                 <tr className="border-b border-white/10 text-[10px] uppercase tracking-wide text-white/40">
                   <th className="px-3 py-2.5 font-semibold">User</th>
                   <th className="px-3 py-2.5 font-semibold">Type</th>
                   <th className="px-3 py-2.5 font-semibold">Link to Ad URL</th>
                   <th className="px-3 py-2.5 font-semibold">Status</th>
-                  <th className="px-3 py-2.5 font-semibold">Credits</th>
+                  <th className="px-3 py-2.5 font-semibold">Charged</th>
+                  <th className="px-3 py-2.5 font-semibold">Balance after</th>
                   <th className="px-3 py-2.5 font-semibold">Model</th>
                   <th className="px-3 py-2.5 font-semibold">App API</th>
                   <th className="px-3 py-2.5 font-semibold">Provider</th>
@@ -995,9 +1021,8 @@ export default function AdminPage() {
               </thead>
               <tbody>
                 {genRows.map((row) => (
-                  <>
+                  <Fragment key={row.id}>
                     <tr
-                      key={row.id}
                       className={cn(
                         "border-b border-white/5 transition hover:bg-white/[0.02] cursor-pointer",
                         expandedGenId === row.id && "bg-white/[0.03]",
@@ -1042,9 +1067,12 @@ export default function AdminPage() {
                             ? "API key"
                             : "-"}
                       </td>
+                      <td className="px-3 py-2.5 tabular-nums text-white/55" title="Ledger balance snapshot after this row was registered">
+                        {formatCreditBalanceSnap(row.credit_balance_after)}
+                      </td>
                       <td className="px-3 py-2.5">
-                        <span className="max-w-[180px] truncate block text-white/55" title={row.model || ""}>
-                          {row.model?.trim() ? row.model : "-"}
+                        <span className="max-w-[200px] truncate block text-white/55" title={adminGenerationModelLabel(row)}>
+                          {adminGenerationModelLabel(row)}
                         </span>
                       </td>
                       <td className="px-3 py-2.5">
@@ -1061,8 +1089,8 @@ export default function AdminPage() {
                       <td className="px-3 py-2.5 text-white/40 whitespace-nowrap">{relativeTime(row.created_at)}</td>
                     </tr>
                     {expandedGenId === row.id && (
-                      <tr key={`${row.id}-expand`} className="border-b border-white/5">
-                        <td colSpan={12} className="bg-white/[0.02] px-4 py-3">
+                      <tr className="border-b border-white/5">
+                        <td colSpan={13} className="bg-white/[0.02] px-4 py-3">
                           <div className="grid gap-3 sm:grid-cols-2">
                             <div>
                               <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Full Label / Prompt</p>
@@ -1088,7 +1116,13 @@ export default function AdminPage() {
                                   </p>
                                 ) : null}
                                 <p><span className="text-white/40">Created:</span> {new Date(row.created_at).toLocaleString()}</p>
-                                <p><span className="text-white/40">Model:</span> {row.model?.trim() ? row.model : "-"}</p>
+                                <p>
+                                  <span className="text-white/40">Model:</span> {adminGenerationModelLabel(row)}
+                                </p>
+                                <p>
+                                  <span className="text-white/40">Balance after register:</span>{" "}
+                                  {formatCreditBalanceSnap(row.credit_balance_after)}
+                                </p>
                                 <p><span className="text-white/40">App API:</span> <span className="font-mono">{row.app_endpoint?.trim() ? row.app_endpoint : "-"}</span></p>
                                 <p><span className="text-white/40">Duration:</span> {durationForRow(row)}</p>
                                 {row.error_message && (
@@ -1129,7 +1163,7 @@ export default function AdminPage() {
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                 ))}
               </tbody>
             </table>
@@ -1175,9 +1209,8 @@ export default function AdminPage() {
               </thead>
               <tbody>
                 {runRows.map((row) => (
-                  <>
+                  <Fragment key={row.id}>
                     <tr
-                      key={row.id}
                       className={cn(
                         "border-b border-white/5 transition hover:bg-white/[0.02] cursor-pointer",
                         expandedRunId === row.id && "bg-white/[0.03]",
@@ -1210,7 +1243,7 @@ export default function AdminPage() {
                       <td className="px-3 py-2.5 text-white/40 whitespace-nowrap">{relativeTime(row.updated_at)}</td>
                     </tr>
                     {expandedRunId === row.id && (
-                      <tr key={`${row.id}-expand`} className="border-b border-white/5">
+                      <tr className="border-b border-white/5">
                         <td colSpan={6} className="bg-white/[0.02] px-4 py-3">
                           <div className="grid gap-3 sm:grid-cols-2">
                             <div>
@@ -1250,7 +1283,7 @@ export default function AdminPage() {
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                 ))}
               </tbody>
             </table>

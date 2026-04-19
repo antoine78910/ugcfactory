@@ -12,3 +12,8 @@ export function isMissingModelColumnError(message: string): boolean {
   const m = message.toLowerCase();
   return m.includes("model") && (m.includes("column") || m.includes("schema cache"));
 }
+
+export function isMissingCreditBalanceAfterColumnError(message: string): boolean {
+  const m = message.toLowerCase();
+  return m.includes("credit_balance_after") && (m.includes("column") || m.includes("schema cache"));
+}

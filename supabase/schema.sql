@@ -125,6 +125,7 @@ create table if not exists public.studio_generations (
 );
 
 alter table public.studio_generations add column if not exists aspect_ratio text;
+alter table public.studio_generations add column if not exists credit_balance_after numeric;
 
 create index if not exists studio_generations_user_kind_created_idx
   on public.studio_generations (user_id, kind, created_at desc);

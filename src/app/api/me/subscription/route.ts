@@ -54,7 +54,7 @@ export async function GET() {
   // Allowlisted accounts get unlimited access, skip Stripe entirely.
   if (isAllowedUser(auth.user.email)) {
     return NextResponse.json({
-      planId: "scale" as AccountPlanId,
+      planId: "growth" as AccountPlanId,
       billing: null,
       userId: auth.user.id,
       unlimited: true,

@@ -6,8 +6,31 @@ import { displayCreditsToLedgerTicks } from "@/lib/creditLedgerTicks";
 import { serverLog } from "@/lib/serverLog";
 import {
   isMissingAspectRatioColumnError,
+  isMissingCreditBalanceAfterColumnError,
   isMissingModelColumnError,
 } from "@/lib/studioGenerationsSchemaCompat";
+import { createSupabaseServiceClient } from "@/lib/supabase/admin";
+import { getUserCreditBalance } from "@/lib/creditGrants";
+
+async function snapshotCreditBalanceAfterInsert(userId: string, rowIds: string[]): Promise<void> {
+  const uniq = [...new Set(rowIds.map((x) => x.trim()).filter(Boolean))];
+  if (uniq.length === 0) return;
+  const admin = createSupabaseServiceClient();
+  if (!admin) return;
+  try {
+    const { balance } = await getUserCreditBalance(admin, userId);
+    const snap = Math.round(balance * 1000) / 1000;
+    const { error } = await admin.from("studio_generations").update({ credit_balance_after: snap }).in("id", uniq);
+    if (error && isMissingCreditBalanceAfterColumnError(error.message)) return;
+    if (error) {
+      serverLog("studio_generations_credit_balance_snapshot_failed", { message: error.message });
+    }
+  } catch (e) {
+    serverLog("studio_generations_credit_balance_snapshot_failed", {
+      message: e instanceof Error ? e.message : String(e),
+    });
+  }
+}
 
 type Body = {
   kind?: string;
@@ -115,6 +138,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: error.message }, { status: 502 });
     }
     const row = Array.isArray(data) ? data[0] : data;
+    if (row?.id) {
+      await snapshotCreditBalanceAfterInsert(user.id, [String(row.id)]);
+    }
     serverLog("studio_generations_register_ok", { kind, rows: 1, provider });
     return NextResponse.json({
       data: {
@@ -191,6 +217,10 @@ export async function POST(req: Request) {
     const inserted = Array.isArray(data) ? data : [];
     for (const r of inserted) {
       rowsOut.push({ id: String(r.id), taskId: String(r.external_task_id) });
+    }
+    const newRowIds = inserted.map((r) => String(r.id)).filter(Boolean);
+    if (newRowIds.length > 0) {
+      await snapshotCreditBalanceAfterInsert(user.id, newRowIds);
     }
   }
 

@@ -1,14 +1,13 @@
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { NextResponse } from "next/server";
-
-const PRIMARY_ADMIN_EMAIL = "anto.delbos@gmail.com";
+import { isPrimaryAdminEmail } from "@/lib/adminEmails";
 
 export async function requireAdmin() {
   const auth = await requireSupabaseUser();
   if (auth.response) return auth;
 
   const email = auth.user.email?.toLowerCase().trim() ?? "";
-  if (email !== PRIMARY_ADMIN_EMAIL) {
+  if (!isPrimaryAdminEmail(email)) {
     return {
       ...auth,
       user: null as never,

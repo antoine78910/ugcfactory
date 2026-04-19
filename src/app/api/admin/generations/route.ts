@@ -13,7 +13,8 @@ function deriveAppEndpoint(row: Record<string, unknown>): string {
   if (kind === "studio_video" || kind === "studio_watermark" || kind === "link_to_ad_video") {
     return "/api/kling/generate";
   }
-  if (kind === "studio_image" || kind === "link_to_ad_image" || kind === "avatar") {
+  if (kind === "link_to_ad_image") return "/api/nanobanana/generate";
+  if (kind === "studio_image" || kind === "avatar") {
     return "/api/studio/generations/start";
   }
   if (kind === "studio_upscale") return "/api/kie/upscale";

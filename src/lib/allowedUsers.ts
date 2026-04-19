@@ -9,8 +9,9 @@
  *   requireSupabaseUser() which enforces this check.
  */
 
-/** Unlimited credits + admin bypass. Credits are hardcoded, not from DB. */
+/** Unlimited credits (no client deductions). Credits are hardcoded, not from DB. */
 const ALLOWED_USER_EMAILS = new Set<string>([
+  "anto.delbos@mail.com",
   "anto.delbos@gmail.com",
   "paulyaniskacou@gmail.com",
 ]);

@@ -3,6 +3,7 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/admin";
+import { getUserCreditBalance } from "@/lib/creditGrants";
 
 export type AdminOnboardingRow = {
   user_id: string;
@@ -15,6 +16,7 @@ export type AdminOnboardingRow = {
   sub_status: string | null;
   is_subscriber: boolean;
   trial_active: boolean;
+  credit_balance: number | null;
 };
 
 export async function GET(req: Request) {
@@ -98,6 +100,20 @@ export async function GET(req: Request) {
     }
   }
 
+  const balanceByUser = new Map<string, number>();
+  if (userIds.length > 0) {
+    await Promise.all(
+      userIds.map(async (uid) => {
+        try {
+          const b = await getUserCreditBalance(admin, uid);
+          balanceByUser.set(uid, b.balance);
+        } catch {
+          balanceByUser.set(uid, 0);
+        }
+      }),
+    );
+  }
+
   const enriched: AdminOnboardingRow[] = raw.map((r) => {
     const sub = subByUser.get(r.user_id);
     const status = sub?.status ?? null;
@@ -113,6 +129,7 @@ export async function GET(req: Request) {
       sub_status: status,
       is_subscriber: isSubscriber,
       trial_active: trialByUser.get(r.user_id) ?? false,
+      credit_balance: balanceByUser.has(r.user_id) ? balanceByUser.get(r.user_id)! : null,
     };
   });
 

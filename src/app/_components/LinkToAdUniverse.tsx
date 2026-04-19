@@ -1079,7 +1079,7 @@ export default function LinkToAdUniverse({
   }, [supabaseClient]);
   /** 30s = two chained 15s clips, disabled in UI until launch (“Soon”). */
   const _30sUnlocked = false;
-  const DEMO_EMAILS = new Set(["anto.delbos@gmail.com", "app@youry.com"]);
+  const DEMO_EMAILS = new Set(["anto.delbos@mail.com", "anto.delbos@gmail.com", "app@youry.com"]);
   const isDemoUser = Boolean(_userEmail && DEMO_EMAILS.has(_userEmail.toLowerCase()));
   const [hideCredits, setHideCredits] = useState(false);
   const [demoReplayActive, setDemoReplayActive] = useState(false);
@@ -1140,6 +1140,8 @@ export default function LinkToAdUniverse({
           label,
           taskId,
           provider: "kie-market",
+          model: "nanobanana_pro · 2K · 9:16",
+          aspectRatio: "9:16",
           creditsCharged: 0,
           personalApiKey: getPersonalApiKey(),
           ...(productUrl ? { inputUrls: [productUrl] } : {}),
@@ -1157,6 +1159,7 @@ export default function LinkToAdUniverse({
       kind: STUDIO_GENERATION_KIND_LINK_TO_AD_IMAGE,
       label,
       provider: "kie-market",
+      model: "nanobanana_pro · 2K · 9:16",
       errorMessage,
       ...(productUrl ? { inputUrls: [productUrl] } : {}),
     });
@@ -1168,6 +1171,7 @@ export default function LinkToAdUniverse({
       kind: STUDIO_GENERATION_KIND_LINK_TO_AD_VIDEO,
       label,
       provider: "piapi",
+      model: "seedance (PiAPI)",
       errorMessage,
       ...(productUrl ? { inputUrls: [productUrl] } : {}),
     });
@@ -4558,6 +4562,8 @@ export default function LinkToAdUniverse({
               label: angLabel,
               taskId: json.taskId,
               provider: "piapi",
+              model: generatePayload.marketModel,
+              aspectRatio: "9:16",
               creditsCharged: 0,
               personalApiKey: getPersonalApiKey(),
               piapiApiKey: getPersonalPiapiApiKey(),
