@@ -23,10 +23,13 @@ function isModelIncluded(planIdRaw: string, row: (typeof SUBSCRIPTION_MODEL_MATR
 export function SubscriptionPlanFeatureList({
   planId,
   credits,
+  starterBonusCredits,
   className,
 }: {
   planId: SubscriptionPlanId;
   credits: number;
+  /** Extra monthly credits vs Starter-tier value at this price (shown inline, minimal). */
+  starterBonusCredits?: number;
   className?: string;
 }) {
   const images = Number(upToEstimateAiImagesFromCredits(credits));
@@ -44,7 +47,14 @@ export function SubscriptionPlanFeatureList({
           <Coins className="h-3 w-3" aria-hidden />
         </span>
         <span className="min-w-0">
-          <span className="font-semibold text-white">{credits.toLocaleString()} credits</span>
+          <span className="font-semibold text-white">
+            {credits.toLocaleString()} credits
+            {starterBonusCredits != null && starterBonusCredits > 0 ? (
+              <span className="ml-1.5 text-[10px] font-medium tabular-nums text-emerald-400/75">
+                +{starterBonusCredits.toLocaleString()} credits
+              </span>
+            ) : null}
+          </span>
         </span>
       </li>
       <li className="pl-1 text-white/50">Up to {images.toLocaleString()} AI images (Nanobanana)</li>

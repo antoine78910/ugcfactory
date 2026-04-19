@@ -82,24 +82,6 @@ function PlanCardDescription({ plan }: { plan: PlanDef }) {
   return <p className="mt-1 min-h-0 text-sm leading-snug text-white/48">{plan.description}</p>;
 }
 
-function SubscriptionPlanStarterBonusCallout({ planId, credits }: { planId: string; credits: number }) {
-  const idx = PLANS.findIndex((p) => p.id === planId);
-  if (idx <= 0) return null;
-  const bonus = subscriptionBonusCreditsVsStarter(idx as 1 | 2 | 3);
-  if (!bonus) return null;
-  return (
-    <div className="mt-3 rounded-xl border border-emerald-500/30 bg-emerald-500/[0.09] px-3 py-2.5 text-center">
-      <p className="text-[13px] font-bold tabular-nums text-emerald-100">
-        +{bonus.bonusCredits.toLocaleString("en-US")} bonus credits/mo
-      </p>
-      <p className="mt-1 text-[10px] leading-snug text-emerald-200/70">
-        Starter-style value at this price would be ~{bonus.baselineCreditsIfStarterRate.toLocaleString("en-US")}{" "}
-        credits/mo — you get {credits.toLocaleString("en-US")}.
-      </p>
-    </div>
-  );
-}
-
 /** Minimal violet pill on the Yearly billing toggle only. */
 function YearlyToggleSaveBadge({ className }: { className?: string }) {
   return (
@@ -468,9 +450,13 @@ export default function SubscriptionPage() {
 
           <section>
             <div className={cn("mx-auto grid max-w-6xl items-stretch gap-5 pt-2", planGridClass)}>
-              {PLANS.map((plan) => {
+              {PLANS.map((plan, planArrayIdx) => {
                 const priceLabels = priceFor(plan);
                 const planIdx = subscriptionPlanSortIndex(plan.id as SubscriptionPlanId);
+                const starterBonusCredits =
+                  planArrayIdx > 0
+                    ? subscriptionBonusCreditsVsStarter(planArrayIdx as 1 | 2 | 3)?.bonusCredits
+                    : undefined;
                 const currentIdx = isSubscribed
                   ? subscriptionPlanSortIndex(planId as SubscriptionPlanId)
                   : -1;
@@ -538,8 +524,6 @@ export default function SubscriptionPage() {
                       )}
                     </div>
 
-                    <SubscriptionPlanStarterBonusCallout planId={plan.id} credits={plan.credits} />
-
                     <Button
                       type="button"
                       disabled={
@@ -597,7 +581,11 @@ export default function SubscriptionPage() {
                       )}
                     </Button>
 
-                    <SubscriptionPlanFeatureList planId={plan.id as SubscriptionPlanId} credits={plan.credits} />
+                    <SubscriptionPlanFeatureList
+                      planId={plan.id as SubscriptionPlanId}
+                      credits={plan.credits}
+                      starterBonusCredits={starterBonusCredits}
+                    />
                   </div>
                 );
               })}

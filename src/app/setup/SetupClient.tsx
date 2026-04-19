@@ -69,24 +69,6 @@ const PLANS: PlanDef[] = [
   },
 ];
 
-function SetupPlanStarterBonusCallout({ planId, credits }: { planId: string; credits: number }) {
-  const idx = PLANS.findIndex((p) => p.id === planId);
-  if (idx <= 0) return null;
-  const bonus = subscriptionBonusCreditsVsStarter(idx as 1 | 2 | 3);
-  if (!bonus) return null;
-  return (
-    <div className="mt-3 rounded-xl border border-emerald-500/30 bg-emerald-500/[0.09] px-2.5 py-2 text-center">
-      <p className="text-[12px] font-bold tabular-nums text-emerald-100">
-        +{bonus.bonusCredits.toLocaleString("en-US")} bonus credits/mo
-      </p>
-      <p className="mt-0.5 text-[9px] leading-snug text-emerald-200/70">
-        Starter-style value here ≈{bonus.baselineCreditsIfStarterRate.toLocaleString("en-US")}/mo — you get{" "}
-        {credits.toLocaleString("en-US")}.
-      </p>
-    </div>
-  );
-}
-
 export default function SetupClient({ embedded = false }: SetupClientProps) {
   const [currency, setCurrency] = useState<Currency>("usd");
   const [trialLoading, setTrialLoading] = useState(false);
@@ -290,9 +272,13 @@ export default function SetupClient({ embedded = false }: SetupClientProps) {
 
         {/* Plan cards, 4 tiers (Starter → Scale) */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {PLANS.map((plan) => {
+          {PLANS.map((plan, planArrayIdx) => {
             const isHighlight = Boolean(plan.highlight);
             const badge = plan.badge;
+            const starterBonusCredits =
+              planArrayIdx > 0
+                ? subscriptionBonusCreditsVsStarter(planArrayIdx as 1 | 2 | 3)?.bonusCredits
+                : undefined;
 
             return (
               <div
@@ -328,9 +314,11 @@ export default function SetupClient({ embedded = false }: SetupClientProps) {
                   )}
                 </div>
 
-                <SetupPlanStarterBonusCallout planId={plan.id} credits={plan.credits} />
-
-                <SubscriptionPlanFeatureList planId={plan.id} credits={plan.credits} />
+                <SubscriptionPlanFeatureList
+                  planId={plan.id}
+                  credits={plan.credits}
+                  starterBonusCredits={starterBonusCredits}
+                />
 
                 <button
                   type="button"
