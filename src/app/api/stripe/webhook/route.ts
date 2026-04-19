@@ -199,10 +199,16 @@ export async function POST(req: Request) {
         }
 
         if (session.mode === "payment") {
-          // $1 trial: grant 30 pack credits (expires in 3 months via add_pack_credits)
+          // $1 trial: grant 15 pack credits (expires in 3 months via add_pack_credits)
           if (session.metadata?.credit_trial === "1") {
-            const TRIAL_CREDITS = 30;
+            const TRIAL_CREDITS = 15;
             await addPackCreditsLedger(admin, userId, TRIAL_CREDITS);
+            // Mark user as trial in app_metadata (service-role only, not user-editable)
+            try {
+              await admin.auth.admin.updateUserById(userId, {
+                app_metadata: { trial_active: true },
+              });
+            } catch { /* non-blocking */ }
             serverLog("stripe_webhook_trial_credits_granted", { userId, credits: TRIAL_CREDITS });
           } else {
             const packKey = session.metadata?.credit_pack ?? "";

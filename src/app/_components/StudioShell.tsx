@@ -12,8 +12,10 @@ import {
   GitBranch,
   Image as ImageIcon,
   Link2,
+  Lock,
   Maximize2,
   Mic,
+  Sparkles,
   UserRound,
   Video,
   Joystick,
@@ -133,6 +135,39 @@ function sectionFromPathname(pathname: string): StudioNavSection {
   return SLUG_TO_SECTION[first] ?? "link_to_ad";
 }
 
+/** Overlay shown over non-link_to_ad sections when the user is on a $1 trial. */
+function TrialSectionLock({ sectionLabel }: { sectionLabel: string }) {
+  return (
+    <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-[#050507]/80 backdrop-blur-sm">
+      <div className="mx-auto max-w-sm rounded-2xl border border-white/10 bg-[#0b0912]/95 p-8 text-center shadow-[0_0_60px_rgba(139,92,246,0.15),inset_0_1px_0_rgba(255,255,255,0.06)]">
+        <div className="mb-4 flex justify-center">
+          <span className="flex h-14 w-14 items-center justify-center rounded-2xl border border-violet-500/30 bg-violet-500/10">
+            <Lock className="h-6 w-6 text-violet-300" />
+          </span>
+        </div>
+        <h2 className="text-lg font-bold text-white">{sectionLabel}</h2>
+        <p className="mt-2 text-sm leading-relaxed text-white/50">
+          Your $1 trial gives you access to <span className="font-semibold text-white/75">Link to Ad</span> only.
+          Upgrade to unlock all features.
+        </p>
+        <a
+          href="/subscription"
+          className="mt-6 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-violet-500 text-sm font-bold text-white shadow-[0_5px_0_0_rgba(76,29,149,0.9)] transition hover:bg-violet-400 hover:shadow-[0_7px_0_0_rgba(76,29,149,0.9)] active:translate-y-0.5 active:shadow-none"
+        >
+          <Sparkles className="h-4 w-4" />
+          Upgrade to unlock
+        </a>
+        <a
+          href="/link-to-ad"
+          className="mt-3 block text-xs text-white/30 underline-offset-4 transition hover:text-white/55 hover:underline"
+        >
+          Back to Link to Ad
+        </a>
+      </div>
+    </div>
+  );
+}
+
 function navRowIconClass(active: boolean): string {
   return active ? "text-black/80" : "text-violet-300/90";
 }
@@ -154,7 +189,7 @@ function StudioShellInner({
 }: Props) {
   const pathname = usePathname();
   const [email, setEmail] = useState("");
-  const { planDisplayName } = useCreditsPlan();
+  const { planDisplayName, isTrial } = useCreditsPlan();
   const [navCollapsed, setNavCollapsed] = useState(false);
   /** Last studio CREATE section when leaving the studio (e.g. credits page); not used as active highlight on /credits or /subscription. */
   const [persistedStudioSection, setPersistedStudioSection] =
@@ -500,7 +535,17 @@ function StudioShellInner({
           </div>
         </aside>
 
-        <div className="relative z-0 min-h-0 min-w-0">{children}</div>
+        <div className="relative z-0 min-h-0 min-w-0">
+          {children}
+          {isTrial && isStudioShell && activeSection !== "link_to_ad" && activeSection !== null ? (
+            <TrialSectionLock
+              sectionLabel={
+                CREATE_NAV.find((e) => e.kind === "route" && e.id === activeSection)?.label ??
+                (activeSection === "projects" ? "My Projects" : activeSection)
+              }
+            />
+          ) : null}
+        </div>
       </main>
 
       <StudioGenerationsBackgroundPoll />

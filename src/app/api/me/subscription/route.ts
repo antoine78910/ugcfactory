@@ -24,6 +24,11 @@ export type MeSubscriptionResponse = {
   autoEnablePersonalApi?: boolean;
   /** Server-authoritative credit balance from the ledger (sum of non-expired grants). */
   creditBalance?: number;
+  /**
+   * True when the user purchased the $1 trial (15 credits, Link to Ad only access).
+   * Set via app_metadata by the Stripe webhook — not user-editable.
+   */
+  isTrial?: boolean;
 };
 
 /**
@@ -79,6 +84,19 @@ export async function GET() {
       }
     } catch { /* non-critical */ }
     return { ...base, creditBalance: 0 };
+  }
+
+  // Detect trial users via app_metadata (set by webhook, not user-editable)
+  async function getIsTrial(): Promise<boolean> {
+    try {
+      const a = createSupabaseServiceClient();
+      if (!a) return false;
+      const { data } = await a.auth.admin.getUserById(userId);
+      const meta = data?.user?.app_metadata as Record<string, unknown> | null;
+      return meta?.trial_active === true;
+    } catch {
+      return false;
+    }
   }
 
   const free: MeSubscriptionResponse = { planId: "free", billing: null, userId };
@@ -174,7 +192,9 @@ export async function GET() {
         // non-critical
       }
 
-      return NextResponse.json(await withCreditBalance(free));
+      const isTrial = await getIsTrial();
+      const freeWithTrial: MeSubscriptionResponse = isTrial ? { ...free, isTrial: true } : free;
+      return NextResponse.json(await withCreditBalance(freeWithTrial));
     } catch (err) {
       console.error("[me/subscription] Stripe error:", err);
       // Fall through to DB fallback below
@@ -192,9 +212,13 @@ export async function GET() {
       .eq("user_id", auth.user.id)
       .maybeSingle();
 
-    if (error || !data) return NextResponse.json(await withCreditBalance(free));
+    if (error || !data) {
+      const isTrial = await getIsTrial();
+      return NextResponse.json(await withCreditBalance(isTrial ? { ...free, isTrial: true } : free));
+    }
     if (data.status !== "active" && data.status !== "trialing") {
-      return NextResponse.json(await withCreditBalance(free));
+      const isTrial = await getIsTrial();
+      return NextResponse.json(await withCreditBalance(isTrial ? { ...free, isTrial: true } : free));
     }
 
     const planId = parseAccountPlan(data.plan_id);

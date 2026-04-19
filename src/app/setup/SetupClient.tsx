@@ -11,7 +11,7 @@ import { buildUsdStripeDisplayPricesFallback } from "@/lib/billing/stripeDisplay
 import type { SubscriptionPlanId } from "@/lib/stripe/subscriptionPrices";
 
 /** Credits granted by the $1 trial */
-const TRIAL_CREDITS = 30;
+const TRIAL_CREDITS = 15;
 
 type Currency = "usd" | "eur";
 
@@ -181,7 +181,7 @@ export default function SetupClient() {
 
                 <ul className="mt-4 space-y-2">
                   {[
-                    `${TRIAL_CREDITS} credits (worth ${currency === "eur" ? "€4.50" : "$4.50"})`,
+                    `${TRIAL_CREDITS} credits (worth ${currency === "eur" ? "€2.25" : "$2.25"})`,
                     "Full Link to Ad workflow (scan → angles → images)",
                     "See your product transformed into UGC content",
                     "Upgrade to generate videos anytime",

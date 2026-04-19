@@ -243,6 +243,11 @@ type CreditsPlanContextValue = CreditsState & {
   percentRemaining: number;
   /** True when the server confirmed this account has unlimited access (no credit deduction). */
   isUnlimited: boolean;
+  /**
+   * True when the user is on the $1 trial (15 credits, Link to Ad access only).
+   * Other features are visible but their generate button is locked.
+   */
+  isTrial: boolean;
   setSubscriptionPlan: (planId: SubscriptionPlanId) => void;
   addPackCredits: (packKey: CreditPackKey) => void;
   spendCredits: (n: number) => void;
@@ -323,6 +328,7 @@ export function CreditsPlanProvider({
   const [resolvedUserId, setResolvedUserId] = useState<string | null>(userId ?? null);
   const [state, setState] = useState<CreditsState>(HYDRATION_SAFE_CREDITS_STATE);
   const [isUnlimited, setIsUnlimited] = useState(false);
+  const [isTrial, setIsTrial] = useState(false);
   const supabase = useSupabaseBrowserClient();
 
   // Hydrate from localStorage after SSR markup (same default as server) to avoid Sidebar / banner mismatches.
@@ -366,12 +372,17 @@ export function CreditsPlanProvider({
     if (!activeUserId) return;
     fetch("/api/me/subscription")
       .then((r) => (r.ok ? r.json() : null))
-      .then((data: { planId: string; userId?: string; unlimited?: boolean; autoEnablePersonalApi?: boolean; creditBalance?: number } | null) => {
+      .then((data: { planId: string; userId?: string; unlimited?: boolean; autoEnablePersonalApi?: boolean; creditBalance?: number; isTrial?: boolean } | null) => {
         if (!data) return;
 
         // Founder account: auto-enable stored personal API keys if they exist.
         if (data.autoEnablePersonalApi === true) {
           autoEnableFounderApiKeys();
+        }
+
+        // Trial users: flag them for UI gating.
+        if (data.isTrial === true) {
+          setIsTrial(true);
         }
 
         // Unlimited accounts: flag them and apply the top plan — never deduct credits.
@@ -583,6 +594,7 @@ export function CreditsPlanProvider({
       planDisplayName,
       percentRemaining,
       isUnlimited,
+      isTrial,
       setSubscriptionPlan,
       addPackCredits,
       spendCredits,
@@ -594,6 +606,7 @@ export function CreditsPlanProvider({
       planDisplayName,
       percentRemaining,
       isUnlimited,
+      isTrial,
       setSubscriptionPlan,
       addPackCredits,
       spendCredits,
