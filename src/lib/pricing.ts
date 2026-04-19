@@ -939,6 +939,12 @@ export const AD_GENERATION_ECONOMICS = {
   credits: AD_CREDITS,
 } as const;
 
+/**
+ * Credits granted on the Stripe $1 trial checkout (ledger pack).
+ * Client uses this as the sidebar / bar ceiling while `isTrial` so balance stays `current / 15`, not `current / current`.
+ */
+export const STRIPE_ONE_DOLLAR_TRIAL_CREDIT_GRANT = 15;
+
 // ---------------------------------------------------------------------------
 // Credit packs (one-off)
 // ---------------------------------------------------------------------------

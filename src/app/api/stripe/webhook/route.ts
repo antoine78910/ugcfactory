@@ -38,6 +38,7 @@ import {
   stripeSubscriptionPeriodEndIso,
 } from "@/lib/stripeSubscriptionPeriodEnd";
 import { trackDubSaleServer } from "@/lib/dub/trackSaleServer";
+import { STRIPE_ONE_DOLLAR_TRIAL_CREDIT_GRANT } from "@/lib/pricing";
 
 function subscriptionPeriodEndFallbackDate(): Date {
   return new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
@@ -201,8 +202,7 @@ export async function POST(req: Request) {
         if (session.mode === "payment") {
           // $1 trial: grant 15 pack credits (expires in 3 months via add_pack_credits)
           if (session.metadata?.credit_trial === "1") {
-            const TRIAL_CREDITS = 15;
-            await addPackCreditsLedger(admin, userId, TRIAL_CREDITS);
+            await addPackCreditsLedger(admin, userId, STRIPE_ONE_DOLLAR_TRIAL_CREDIT_GRANT);
             // Mark user as trial in app_metadata (service-role only, not user-editable)
             try {
               const started = new Date().toISOString();
@@ -210,7 +210,10 @@ export async function POST(req: Request) {
                 app_metadata: { trial_active: true, trial_started_at: started },
               });
             } catch { /* non-blocking */ }
-            serverLog("stripe_webhook_trial_credits_granted", { userId, credits: TRIAL_CREDITS });
+            serverLog("stripe_webhook_trial_credits_granted", {
+              userId,
+              credits: STRIPE_ONE_DOLLAR_TRIAL_CREDIT_GRANT,
+            });
           } else {
             const packKey = session.metadata?.credit_pack ?? "";
             if (isCreditPackKey(packKey)) {

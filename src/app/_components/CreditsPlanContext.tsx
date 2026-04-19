@@ -14,7 +14,7 @@ import {
   upToEstimateAiImagesFromCredits,
   upToEstimateAiVideosFromCredits,
 } from "@/lib/billing/creditUsageEstimates";
-import { CREDIT_PACKS, SUBSCRIPTIONS } from "@/lib/pricing";
+import { CREDIT_PACKS, STRIPE_ONE_DOLLAR_TRIAL_CREDIT_GRANT, SUBSCRIPTIONS } from "@/lib/pricing";
 import {
   CREDIT_PACK_KEYS,
   type CreditPackKey,
@@ -35,6 +35,8 @@ const LS_CREDITS = "ugc_demo_credits";
 const LS_PLAN = "ugc_demo_plan";
 /** Bucket ceiling for the % bar when plan is Free (one-off packs). */
 const LS_CAP = "ugc_demo_credits_cap";
+/** Set while server reports `isTrial` so balance events keep trial ceiling (see STRIPE_ONE_DOLLAR_TRIAL_CREDIT_GRANT). */
+const LS_TRIAL_ACTIVE = "ugc_trial_active";
 /** userId that owns the current credits/plan data. */
 const LS_OWNER = "ugc_demo_owner";
 /**
@@ -126,6 +128,7 @@ function clearPlanData() {
   lsRemove(LS_PLAN);
   lsRemove(LS_CREDITS);
   lsRemove(LS_CAP);
+  lsRemove(LS_TRIAL_ACTIVE);
   lsRemove(LS_OWNER);
   lsRemove(LS_CHECKOUT_TS);
 }
@@ -229,9 +232,13 @@ function readState(currentUserId?: string | null): CreditsState {
     return { planId, current, total };
   }
 
+  const trialActive = lsGet(LS_TRIAL_ACTIVE) === "1";
   const capRaw = Number(lsGet(LS_CAP));
   const cap = Number.isFinite(capRaw) && capRaw >= 0 ? capRaw : 0;
-  const total = cap > 0 ? cap : current;
+  let total = cap > 0 ? cap : current;
+  if (trialActive) {
+    total = STRIPE_ONE_DOLLAR_TRIAL_CREDIT_GRANT;
+  }
   return { planId: "free", current, total };
 }
 
@@ -424,6 +431,7 @@ export function CreditsPlanProvider({
           setIsUnlimited(true);
           setStudioAccessAllowed(true);
           setIsTrial(false);
+          lsRemove(LS_TRIAL_ACTIVE);
           const confirmedUid = data.userId ?? null;
           if (confirmedUid) lsSet(LS_OWNER, confirmedUid);
           setState({ planId: "scale", current: 999_999, total: 999_999 });
@@ -458,17 +466,32 @@ export function CreditsPlanProvider({
           // not have fired yet, keep the plan written by consumeCheckoutQueryParams.
           if (isCheckoutGracePeriodActive()) return;
 
+          if (data.isTrial === true) {
+            lsSet(LS_TRIAL_ACTIVE, "1");
+          } else {
+            lsRemove(LS_TRIAL_ACTIVE);
+          }
+
           // Server is authoritative: apply free plan with ledger balance.
           const localPlan = parseAccountPlan(lsGet(LS_PLAN));
           if (localPlan !== "free" || serverBalance !== null) {
             lsSet(LS_PLAN, "free");
             const bal = serverBalance ?? 0;
             lsSet(LS_CREDITS, String(bal));
-            lsSet(LS_CAP, String(bal));
-            setState(readState(confirmedUid));
+            lsSet(
+              LS_CAP,
+              data.isTrial === true
+                ? String(STRIPE_ONE_DOLLAR_TRIAL_CREDIT_GRANT)
+                : String(bal),
+            );
+          } else if (data.isTrial === true) {
+            lsSet(LS_CAP, String(STRIPE_ONE_DOLLAR_TRIAL_CREDIT_GRANT));
           }
+          setState(readState(confirmedUid));
           return;
         }
+
+        lsRemove(LS_TRIAL_ACTIVE);
 
         // Server confirms a paid plan, apply it with the authoritative ledger balance.
         const alloc = subscriptionCredits(serverPlan);
@@ -501,7 +524,11 @@ export function CreditsPlanProvider({
       const prev = readState(activeUserId);
       lsSet(LS_CREDITS, String(balance));
       if (prev.planId === "free") {
-        lsSet(LS_CAP, String(balance));
+        if (lsGet(LS_TRIAL_ACTIVE) === "1") {
+          lsSet(LS_CAP, String(STRIPE_ONE_DOLLAR_TRIAL_CREDIT_GRANT));
+        } else {
+          lsSet(LS_CAP, String(balance));
+        }
       }
       if (activeUserId) lsSet(LS_OWNER, activeUserId);
       setState(readState(activeUserId));
@@ -512,7 +539,9 @@ export function CreditsPlanProvider({
   useEffect(() => {
     syncFromStorage();
     const onStorage = (e: StorageEvent) => {
-      if (e.key === LS_CREDITS || e.key === LS_PLAN || e.key === LS_CAP) syncFromStorage();
+      if (e.key === LS_CREDITS || e.key === LS_PLAN || e.key === LS_CAP || e.key === LS_TRIAL_ACTIVE) {
+        syncFromStorage();
+      }
     };
     const onLocal = () => syncFromStorage();
     const onBalance = (e: Event) => {

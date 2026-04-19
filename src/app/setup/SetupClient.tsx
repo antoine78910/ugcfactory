@@ -5,14 +5,11 @@ import { ArrowRight, Check, Sparkles, Zap } from "lucide-react";
 import { SubscriptionPlanFeatureList } from "@/app/_components/SubscriptionPlanFeatureList";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { SUBSCRIPTIONS } from "@/lib/pricing";
+import { STRIPE_ONE_DOLLAR_TRIAL_CREDIT_GRANT, SUBSCRIPTIONS } from "@/lib/pricing";
 import { formatMoneyAmount } from "@/lib/billing/formatMoney";
 import type { StripeDisplayPricesPayload } from "@/lib/billing/stripeDisplayTypes";
 import { buildUsdStripeDisplayPricesFallback } from "@/lib/billing/stripeDisplayFallback";
 import type { SubscriptionPlanId } from "@/lib/stripe/subscriptionPrices";
-
-/** Credits granted by the $1 trial */
-const TRIAL_CREDITS = 15;
 
 type Currency = "usd" | "eur";
 
@@ -211,13 +208,13 @@ export default function SetupClient({ embedded = false }: SetupClientProps) {
                   </span>
                 </h2>
                 <p className="mt-1 text-sm text-white/50">
-                  Get {TRIAL_CREDITS} credits to explore the Link to Ad workflow, from product scan to
+                  Get {STRIPE_ONE_DOLLAR_TRIAL_CREDIT_GRANT} credits to explore the Link to Ad workflow, from product scan to
                   UGC images. No commitment.
                 </p>
 
                 <ul className="mt-4 space-y-2">
                   {[
-                    `${TRIAL_CREDITS} credits (worth ${currency === "eur" ? "€2.25" : "$2.25"})`,
+                    `${STRIPE_ONE_DOLLAR_TRIAL_CREDIT_GRANT} credits (worth ${currency === "eur" ? "€2.25" : "$2.25"})`,
                     "Full Link to Ad workflow (scan → angles → images)",
                     "See your product transformed into UGC content",
                     "Upgrade to generate videos anytime",
