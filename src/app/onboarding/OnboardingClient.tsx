@@ -5,7 +5,10 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Loader2, Sparkles } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+
+const OTHER_MAX_LEN = 160;
 
 const WORK_TYPES = [
   { id: "agency", label: "Agency" },
@@ -65,23 +68,42 @@ const nextDisabledClass = cn(
   "h-11 w-full max-w-sm cursor-not-allowed rounded-2xl border border-white/10 bg-white/[0.05] text-sm font-semibold text-white/35",
 );
 
+function payloadWorkType(workType: WorkType, otherText: string): string {
+  if (workType !== "other") return workType;
+  const t = otherText.trim();
+  return t.length ? `other:${t.slice(0, OTHER_MAX_LEN)}` : "other";
+}
+
+function payloadReferral(referral: ReferralSource, otherText: string): string {
+  if (referral !== "other") return referral;
+  const t = otherText.trim();
+  return t.length ? `other:${t.slice(0, OTHER_MAX_LEN)}` : "other";
+}
+
 export default function OnboardingClient() {
   const router = useRouter();
   const [workType, setWorkType] = useState<WorkType | null>(null);
+  const [workOtherText, setWorkOtherText] = useState("");
   const [referralSource, setReferralSource] = useState<ReferralSource | null>(null);
+  const [referralOtherText, setReferralOtherText] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const canSubmit = Boolean(workType && referralSource);
+  const workOtherOk = workType !== "other" || workOtherText.trim().length > 0;
+  const referralOtherOk = referralSource !== "other" || referralOtherText.trim().length > 0;
+  const canSubmit = Boolean(workType && referralSource && workOtherOk && referralOtherOk);
 
   async function handleSubmit() {
-    if (!workType || !referralSource) return;
+    if (!workType || !referralSource || !workOtherOk || !referralOtherOk) return;
     setLoading(true);
     try {
       await fetch("/api/onboarding", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ work_type: workType, referral_source: referralSource }),
+        body: JSON.stringify({
+          work_type: payloadWorkType(workType, workOtherText),
+          referral_source: payloadReferral(referralSource, referralOtherText),
+        }),
       });
     } catch {
       /* non-blocking */
@@ -149,18 +171,38 @@ export default function OnboardingClient() {
           <div className="rounded-2xl border border-white/[0.08] bg-white/[0.03] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] ring-1 ring-violet-500/10 md:p-6">
             <div className="text-center">
               <div className="mb-3 text-sm text-white/45">What best describes your work? *</div>
-              <div className="mb-8 flex flex-wrap justify-center gap-2">
+              <div className="flex flex-wrap justify-center gap-2">
                 {WORK_TYPES.map((w) => (
                   <button
                     key={w.id}
                     type="button"
-                    onClick={() => setWorkType(w.id)}
+                    onClick={() => {
+                      setWorkType(w.id);
+                      if (w.id !== "other") setWorkOtherText("");
+                    }}
                     className={workType === w.id ? chipSelected : chipIdle}
                   >
                     {w.label}
                   </button>
                 ))}
               </div>
+              {workType === "other" ? (
+                <div className="mx-auto mb-8 mt-3 max-w-md text-left">
+                  <label htmlFor="onboarding-work-other" className="mb-1.5 block text-xs font-medium text-white/50">
+                    Please specify
+                  </label>
+                  <Input
+                    id="onboarding-work-other"
+                    value={workOtherText}
+                    onChange={(e) => setWorkOtherText(e.target.value.slice(0, OTHER_MAX_LEN))}
+                    placeholder="e.g. Consultant, marketplace seller…"
+                    className="h-11 border-white/15 bg-black/30 text-white placeholder:text-white/30 focus-visible:border-violet-400/50 focus-visible:ring-violet-400/30"
+                    autoComplete="organization-title"
+                  />
+                </div>
+              ) : (
+                <div className="mb-8" />
+              )}
 
               <div className="mb-4 text-sm text-white/45">Where did you hear about us? *</div>
               <div className="flex flex-wrap justify-center gap-2">
@@ -171,7 +213,12 @@ export default function OnboardingClient() {
                       key={s.id}
                       type="button"
                       disabled={locked}
-                      onClick={() => !locked && setReferralSource(s.id)}
+                      onClick={() => {
+                        if (!locked) {
+                          setReferralSource(s.id);
+                          if (s.id !== "other") setReferralOtherText("");
+                        }
+                      }}
                       className={
                         locked
                           ? chipDisabled
@@ -185,6 +232,21 @@ export default function OnboardingClient() {
                   );
                 })}
               </div>
+              {referralSource === "other" && workType ? (
+                <div className="mx-auto mb-2 mt-3 max-w-md text-left">
+                  <label htmlFor="onboarding-referral-other" className="mb-1.5 block text-xs font-medium text-white/50">
+                    Please specify
+                  </label>
+                  <Input
+                    id="onboarding-referral-other"
+                    value={referralOtherText}
+                    onChange={(e) => setReferralOtherText(e.target.value.slice(0, OTHER_MAX_LEN))}
+                    placeholder="e.g. Podcast, newsletter, event…"
+                    className="h-11 border-white/15 bg-black/30 text-white placeholder:text-white/30 focus-visible:border-violet-400/50 focus-visible:ring-violet-400/30"
+                    autoComplete="off"
+                  />
+                </div>
+              ) : null}
 
               <div className="mt-10 flex flex-col items-center justify-center">
                 <button
