@@ -37,6 +37,9 @@ function isExcludedFromStudioRewrite(pathname: string): boolean {
     "redeem",
     /** Top-level `src/app/workflow/*` — must not rewrite to `/app/workflow` or `[...sections]` treats it as unknown and shows Link to Ad. */
     "workflow",
+    /** Onboarding + setup — standalone pages, not part of the studio shell. */
+    "onboarding",
+    "setup",
   ]).has(first);
 }
 

@@ -199,11 +199,18 @@ export async function POST(req: Request) {
         }
 
         if (session.mode === "payment") {
-          const packKey = session.metadata?.credit_pack ?? "";
-          if (isCreditPackKey(packKey)) {
-            const credits = CREDIT_PACK_CREDITS[packKey] ?? 0;
-            await addPackCreditsLedger(admin, userId, credits);
-            serverLog("stripe_webhook_credits_granted", { userId, packKey, credits });
+          // $1 trial: grant 30 pack credits (expires in 3 months via add_pack_credits)
+          if (session.metadata?.credit_trial === "1") {
+            const TRIAL_CREDITS = 30;
+            await addPackCreditsLedger(admin, userId, TRIAL_CREDITS);
+            serverLog("stripe_webhook_trial_credits_granted", { userId, credits: TRIAL_CREDITS });
+          } else {
+            const packKey = session.metadata?.credit_pack ?? "";
+            if (isCreditPackKey(packKey)) {
+              const credits = CREDIT_PACK_CREDITS[packKey] ?? 0;
+              await addPackCreditsLedger(admin, userId, credits);
+              serverLog("stripe_webhook_credits_granted", { userId, packKey, credits });
+            }
           }
         }
 

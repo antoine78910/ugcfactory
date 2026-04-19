@@ -60,6 +60,7 @@ export async function GET(req: NextRequest) {
 
   const homeUrl = new URL("/", url.origin);
   const signinUrl = new URL("/signin", url.origin);
+  const onboardingUrl = new URL("/onboarding", url.origin);
   const postAuthUrl = resolveSafeNextRedirect(url);
 
   /**
@@ -149,6 +150,17 @@ export async function GET(req: NextRequest) {
             SIGNUP_DATE: new Date().toISOString().slice(0, 10),
           });
           if (isNewUser) {
+            // Redirect new users to onboarding (unless a specific ?next= was requested)
+            const hasExplicitNext = Boolean(url.searchParams.get("next")?.trim());
+            if (!hasExplicitNext) {
+              // Preserve session cookies from the original response
+              const existingCookies = redirectResponse.cookies.getAll();
+              redirectResponse = NextResponse.redirect(onboardingUrl, 302);
+              for (const cookie of existingCookies) {
+                redirectResponse.cookies.set(cookie);
+              }
+            }
+
             void brevoTrackEvent(email, "signup", {
               eventProperties: { source: "app", method: "oauth_or_magic_link" },
             });
