@@ -3,7 +3,7 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
-import { resolveAuthUserEmail } from "@/lib/sessionUserEmail";
+import { resolveAuthUserEmail, sessionUserEmail } from "@/lib/sessionUserEmail";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import { parseAccountPlan, type AccountPlanId } from "@/lib/subscriptionModelAccess";
 import { getPlanFromPriceId } from "@/lib/stripe/subscriptionPrices";
@@ -57,7 +57,16 @@ export async function GET() {
   if (auth.response) return auth.response;
 
   const adminClient = createSupabaseServiceClient();
-  const email = await resolveAuthUserEmail(auth.user, adminClient);
+  let email = await resolveAuthUserEmail(auth.user, adminClient);
+  // OAuth / sparse JWT: second pass via Auth admin (same as resolveAuthUserEmail, belt-and-suspenders).
+  if (!email && adminClient) {
+    try {
+      const { data: row } = await adminClient.auth.admin.getUserById(auth.user.id);
+      if (row?.user) email = sessionUserEmail(row.user);
+    } catch {
+      /* ignore */
+    }
+  }
 
   // Allowlisted + primary admin accounts get unlimited access, skip Stripe entirely.
   if (isSubscriptionUnlimitedEmail(email)) {

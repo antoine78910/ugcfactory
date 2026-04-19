@@ -433,10 +433,30 @@ export function CreditsPlanProvider({
           setIsTrial(false);
           lsRemove(LS_TRIAL_ACTIVE);
           const confirmedUid = data.userId ?? null;
-          if (confirmedUid) lsSet(LS_OWNER, confirmedUid);
-          setState({ planId: "scale", current: 999_999, total: 999_999 });
+          if (confirmedUid) {
+            const storedOwner = lsGet(LS_OWNER);
+            if (storedOwner && storedOwner !== confirmedUid) {
+              clearPlanData();
+            }
+            lsSet(LS_OWNER, confirmedUid);
+          }
+          const unlimitedPlan = parseAccountPlan(data.planId);
+          const planId: AccountPlanId =
+            unlimitedPlan !== "free" ? unlimitedPlan : "growth";
+          const alloc = subscriptionCredits(planId);
+          const u = 999_999;
+          const nextState: CreditsState = {
+            planId,
+            current: u,
+            total: Math.max(alloc, u),
+          };
+          // Must persist: otherwise `syncFromStorage` / `readState` keeps free/0 from LS and overwrites React state.
+          persist(nextState, confirmedUid);
+          setState(nextState);
           return;
         }
+
+        setIsUnlimited(false);
 
         setStudioAccessAllowed(
           typeof data.studioAccessAllowed === "boolean" ? data.studioAccessAllowed : true,
