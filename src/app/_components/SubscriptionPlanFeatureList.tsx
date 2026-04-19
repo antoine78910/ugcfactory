@@ -45,26 +45,26 @@ export function SubscriptionPlanFeatureList({
         className,
       )}
     >
-      <li className="flex items-start gap-2.5">
-        <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-violet-500/20 text-violet-200">
+      <li className="flex items-center gap-2.5">
+        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-violet-500/20 text-violet-200">
           <Coins className="h-3 w-3" aria-hidden />
         </span>
-        <span className="min-w-0 flex flex-col gap-1.5">
-          <span className="font-semibold tabular-nums text-white">
+        <span className="flex min-w-0 flex-1 flex-nowrap items-center gap-1.5 overflow-hidden">
+          <span className="shrink-0 font-semibold tabular-nums text-white">
             {baseCredits.toLocaleString()} credits
           </span>
           {bonus > 0 ? (
             <span
               className={cn(
-                "inline-flex w-fit max-w-full items-center gap-1 rounded-full border border-amber-400/40",
-                "bg-gradient-to-r from-amber-500/25 via-amber-400/15 to-emerald-500/20 px-2 py-0.5",
-                "text-[10px] font-bold tabular-nums tracking-wide text-amber-100",
-                "shadow-[0_0_16px_rgba(251,191,36,0.12),inset_0_1px_0_rgba(255,255,255,0.08)]",
+                "inline-flex shrink-0 items-center gap-0.5 rounded-full border border-amber-400/40",
+                "bg-gradient-to-r from-amber-500/25 via-amber-400/15 to-emerald-500/20 px-1.5 py-px",
+                "text-[9px] font-bold tabular-nums leading-none tracking-wide text-amber-100",
+                "shadow-[0_0_12px_rgba(251,191,36,0.1),inset_0_1px_0_rgba(255,255,255,0.06)]",
               )}
               title={`${credits.toLocaleString()} credits/mo total (${baseCredits.toLocaleString()} at Starter-tier value + ${bonus.toLocaleString()} bonus)`}
               aria-label={`Bonus ${bonus} credits per month. ${credits.toLocaleString()} credits per month total.`}
             >
-              <Gift className="h-3 w-3 shrink-0 text-amber-200/95" strokeWidth={2.25} aria-hidden />
+              <Gift className="h-2.5 w-2.5 shrink-0 text-amber-200/95" strokeWidth={2.5} aria-hidden />
               +{bonus.toLocaleString()} credits
             </span>
           ) : null}
