@@ -14,7 +14,6 @@ import {
   useSupabaseBrowserClient,
 } from "@/lib/supabase/BrowserSupabaseProvider";
 import { getAuthCallbackUrl } from "@/lib/supabase/authRedirect";
-import { useAnalytics } from "@dub/analytics/react";
 
 type AuthMode = "signin" | "signup";
 
@@ -22,8 +21,6 @@ export default function AuthClient({ mode = "signin", redirectTo }: { mode?: Aut
   const router = useRouter();
   const supabaseReady = useBrowserSupabaseReady();
   const supabase = useSupabaseBrowserClient();
-  const { trackLead } = useAnalytics();
-
   const redirectQuery =
     redirectTo && redirectTo.startsWith("/") && !redirectTo.startsWith("//")
       ? `?redirect=${encodeURIComponent(redirectTo)}`
@@ -127,27 +124,15 @@ export default function AuthClient({ mode = "signin", redirectTo }: { mode?: Aut
           ? (new URLSearchParams(window.location.search).get("dub_id")?.trim() ?? "")
           : "";
       const dubClickId = dubClickFromCookie || dubClickFromUrl;
-      const customerExternalId = signUpData.user?.id?.trim() || cleanEmail;
       console.log("[Dub] signup – dub_id cookie:", dubClickFromCookie || "(none)");
       console.log("[Dub] signup – dub_id url param:", dubClickFromUrl || "(none)");
       console.log(
-        "[Dub] signup – using clickId:",
-        dubClickId || "(none)",
-        dubClickId ? "(server+client will attribute)" : "(deferred lead, no click id)",
+        "[Dub] signup – clickId for server attribution:",
+        dubClickId || "(none — deferred mode)",
       );
-      try {
-        trackLead({
-          eventName: "Sign Up",
-          customerExternalId,
-          customerEmail: cleanEmail,
-          customerName: cleanFirst,
-          ...(dubClickId ? { clickId: dubClickId } : {}),
-          ...(dubClickId ? { mode: "async" } : { mode: "deferred" }),
-        });
-        console.log("[Dub] client trackLead queued", { customerExternalId, hasClickId: Boolean(dubClickId) });
-      } catch (leadErr) {
-        console.warn("[Dub] client trackLead error:", leadErr);
-      }
+      // Server-side only: avoids the 403 that client-side trackLead triggers when
+      // app.youry.io is not in Dub's Allowed Hostnames list.
+      // The server uses DUB_API_KEY (no origin restriction) and is the single source of truth.
       fetch("/api/track/signup", {
         method: "POST",
         credentials: "include",
@@ -160,8 +145,12 @@ export default function AuthClient({ mode = "signin", redirectTo }: { mode?: Aut
         }),
       })
         .then(async (r) => {
-          const json = await r.json().catch(() => ({}));
-          console.log("[Dub] /api/track/signup response:", r.status, json);
+          const json = (await r.json().catch(() => ({}))) as { ok?: boolean; dubTracked?: boolean };
+          if (json.dubTracked === false) {
+            console.warn("[Dub] /api/track/signup – DUB_API_KEY missing or Dub API request failed. Check Vercel env vars.");
+          } else {
+            console.log("[Dub] /api/track/signup – lead attributed to Dub ✓", { status: r.status, clickId: dubClickId || "(deferred)" });
+          }
         })
         .catch((err) => {
           console.warn("[Dub] /api/track/signup failed:", err);

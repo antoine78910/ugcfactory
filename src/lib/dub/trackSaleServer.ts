@@ -1,23 +1,4 @@
-import type { Dub } from "dub";
-
-let dubClient: Dub | undefined;
-
-async function getDubClient(): Promise<Dub | null> {
-  if (dubClient !== undefined) return dubClient;
-  const token = process.env.DUB_API_KEY?.trim();
-  if (!token) {
-    console.warn("[Dub] DUB_API_KEY is not set — sale tracking disabled. Add it to your Vercel env vars.");
-    return null;
-  }
-  try {
-    const { Dub: DubClass } = await import("dub");
-    dubClient = new DubClass({ token });
-    return dubClient;
-  } catch (err) {
-    console.error("[Dub] Failed to initialise Dub SDK:", err instanceof Error ? err.message : err);
-    return null;
-  }
-}
+import { getDubApiToken, postDubTrackSale } from "@/lib/dub/dubApiClient";
 
 export type DubSaleParams = {
   customerExternalId: string;
@@ -41,8 +22,8 @@ export async function trackDubSaleServer(params: DubSaleParams): Promise<void> {
   const externalId = params.customerExternalId.trim();
   if (!externalId || params.amount <= 0) return;
 
-  const client = await getDubClient();
-  if (!client) return;
+  const token = getDubApiToken();
+  if (!token) return;
 
   const leadEventName = params.leadEventName?.trim() || "Sign Up";
 
@@ -55,15 +36,18 @@ export async function trackDubSaleServer(params: DubSaleParams): Promise<void> {
   });
 
   try {
-    await client.track.sale({
+    await postDubTrackSale({
       customerExternalId: externalId,
       amount: params.amount,
-      paymentProcessor: (params.paymentProcessor ?? "stripe") as "stripe",
+      paymentProcessor:
+        (params.paymentProcessor ?? "stripe") as "stripe" | "shopify" | "polar" | "paddle" | "revenuecat" | "custom",
       eventName: params.eventName?.trim() || "Purchase",
       leadEventName,
       ...(params.invoiceId ? { invoiceId: params.invoiceId } : {}),
       ...(params.currency ? { currency: params.currency } : {}),
       ...(params.metadata ? { metadata: params.metadata } : {}),
+    }, {
+      token,
     });
     console.log("[Dub] track.sale ✓ OK", { customerExternalId: externalId, amount: params.amount });
   } catch (err) {

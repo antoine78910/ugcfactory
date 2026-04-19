@@ -21,6 +21,9 @@ function isExcludedFromStudioRewrite(pathname: string): boolean {
   if (pathname.startsWith("/auth")) return true;
   const first = pathname.split("/").filter(Boolean)[0] ?? "";
   return new Set([
+    /** Never rewrite `/api/*` or `/monitoring` into `/app/*` (must stay aligned with `config.matcher`). */
+    "api",
+    "monitoring",
     "subscription",
     "credits",
     "signin",

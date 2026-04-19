@@ -63,7 +63,7 @@ export async function POST(req: Request) {
   // Await the Dub lead event so Vercel doesn't terminate the function before it completes.
   // With clickId → direct attribution to the affiliate click.
   // Without clickId → deferred mode: Dub retroactively matches a click if found later.
-  await trackDubLeadServer({
+  const dubTracked = await trackDubLeadServer({
     clickId: clickId || "",
     customerExternalId,
     customerEmail: email,
@@ -76,7 +76,8 @@ export async function POST(req: Request) {
     traceId,
     customerExternalId,
     mode,
+    dubTracked,
   });
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, dubTracked });
 }

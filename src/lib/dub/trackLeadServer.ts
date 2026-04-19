@@ -1,27 +1,4 @@
-import type { Dub } from "dub";
-
-/**
- * Lazy-load the Dub SDK so `next build` / "Collecting page data" never evaluates
- * the `dub` package at module init (avoids EBADF / fstat issues on Vercel + Turbopack).
- */
-let dubClient: Dub | undefined;
-
-async function getDubClient(): Promise<Dub | null> {
-  if (dubClient !== undefined) return dubClient;
-  const token = process.env.DUB_API_KEY?.trim();
-  if (!token) {
-    console.warn("[Dub] DUB_API_KEY is not set — lead tracking disabled. Add it to your Vercel env vars.");
-    return null;
-  }
-  try {
-    const { Dub: DubClass } = await import("dub");
-    dubClient = new DubClass({ token });
-    return dubClient;
-  } catch (err) {
-    console.error("[Dub] Failed to initialise Dub SDK:", err instanceof Error ? err.message : err);
-    return null;
-  }
-}
+import { getDubApiToken, postDubTrackLead } from "@/lib/dub/dubApiClient";
 
 export type DubLeadParams = {
   clickId: string;
@@ -47,12 +24,16 @@ export type DubLeadParams = {
  * No-op if `DUB_API_KEY` is unset or `customerExternalId` is empty.
  * Errors are logged and swallowed so auth/signup flows never fail.
  */
-export async function trackDubLeadServer(params: DubLeadParams): Promise<void> {
+/**
+ * Returns `true` if the lead was successfully sent to Dub, `false` otherwise
+ * (missing API key or Dub API error).
+ */
+export async function trackDubLeadServer(params: DubLeadParams): Promise<boolean> {
   const externalId = params.customerExternalId.trim();
-  if (!externalId) return;
+  if (!externalId) return false;
 
-  const client = await getDubClient();
-  if (!client) return;
+  const token = getDubApiToken();
+  if (!token) return false;
 
   const clickId = params.clickId.trim();
   const mode = params.mode ?? (clickId ? "async" : "deferred");
@@ -65,7 +46,7 @@ export async function trackDubLeadServer(params: DubLeadParams): Promise<void> {
   });
 
   try {
-    await client.track.lead({
+    await postDubTrackLead({
       clickId,
       eventName: params.eventName?.trim() || "Sign Up",
       customerExternalId: externalId,
@@ -73,9 +54,13 @@ export async function trackDubLeadServer(params: DubLeadParams): Promise<void> {
       customerName: params.customerName?.trim() || undefined,
       customerAvatar: params.customerAvatar?.trim() || undefined,
       mode,
+    }, {
+      token,
     });
     console.log("[Dub] track.lead ✓ OK", { customerExternalId: externalId, mode });
+    return true;
   } catch (err) {
     console.error("[Dub] track.lead ✗ FAILED", err instanceof Error ? err.message : err);
+    return false;
   }
 }
