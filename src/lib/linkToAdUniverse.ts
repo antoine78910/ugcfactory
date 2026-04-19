@@ -212,9 +212,11 @@ export function normalizePipelineByAngle(snap: LinkToAdUniverseSnapshotV1): [
     emptyAnglePipeline(),
   ];
   const sel = snap.selectedAngleIndex;
-  if (sel !== 0 && sel !== 1 && sel !== 2) return triple;
+  /** Fourth script card maps to pipeline slot 2 (same as elsewhere in LTA). */
+  if (sel !== 0 && sel !== 1 && sel !== 2 && sel !== 3) return triple;
+  const slot: 0 | 1 | 2 = sel === 3 ? 2 : (sel as 0 | 1 | 2);
   const k = snap.klingByReferenceIndex;
-  triple[sel] = {
+  triple[slot] = {
     nanoBananaPromptsRaw: snap.nanoBananaPromptsRaw ?? "",
     nanoBananaSelectedPromptIndex:
       snap.nanoBananaSelectedPromptIndex === 0 || snap.nanoBananaSelectedPromptIndex === 1 || snap.nanoBananaSelectedPromptIndex === 2

@@ -1522,10 +1522,10 @@ export default function LinkToAdUniverse({
     }
   }, []);
 
-  /** Optional GPT pass: classify creative vs hidden technical without changing marketing substance. */
-  const applyVideoPromptAiClean = useCallback(async (fullText: string, signal: AbortSignal) => {
+  /** Optional GPT pass: classify creative vs hidden technical without changing marketing substance. Returns full prompt for persist, or null if skipped. */
+  const applyVideoPromptAiClean = useCallback(async (fullText: string, signal: AbortSignal): Promise<string | null> => {
     const trimmed = fullText.replace(/\r\n/g, "\n").trim();
-    if (!trimmed) return;
+    if (!trimmed) return null;
     const res = await fetch("/api/gpt/link-to-ad-prompt-clean", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1533,9 +1533,9 @@ export default function LinkToAdUniverse({
       body: JSON.stringify({ kind: "video_prompt", text: trimmed }),
     });
     const j = (await res.json()) as { data?: string; error?: string };
-    if (!res.ok || !j.data) return;
+    if (!res.ok || !j.data) return null;
     const clean = parseLinkToAdPromptCleanResponse(j.data, "video_prompt");
-    if (!clean || Array.isArray(clean)) return;
+    if (!clean || Array.isArray(clean)) return null;
     const split = splitUgcVideoPromptForEditing(trimmed);
     const mergedTail = mergeVideoHiddenTechnical(split.technicalTail, clean.hiddenTechnical);
     if (clean.legacySingleField) {
@@ -1549,8 +1549,10 @@ export default function LinkToAdUniverse({
     const editable = clean.legacySingleField
       ? clean.motion.trim()
       : composeVideoPromptForApi(sections).trim();
+    const full = mergeNanoPromptForApi(editable, mergedTail).trim();
     setVideoPromptTechnicalTail(mergedTail);
-    setUgcVideoPromptGpt(mergeNanoPromptForApi(editable, mergedTail).trim());
+    setUgcVideoPromptGpt(full);
+    return full || null;
   }, []);
 
   const mergedVideoPromptDraft = useMemo(() => {
@@ -1839,6 +1841,13 @@ export default function LinkToAdUniverse({
     });
   }
 
+  /** Script angle 3 shares pipeline slot 2. */
+  function angleIndexToPipelineSlot(a: number | null | undefined): 0 | 1 | 2 {
+    if (a === 0 || a === 1 || a === 2) return a;
+    if (a === 3) return 2;
+    return 0;
+  }
+
   function captureActivePipeline(): LinkToAdAnglePipelineV1 {
     const imgIdx = nanoBananaSelectedImageIndex;
     const klingMerged = klingByRef.map((s, i) => ({
@@ -1926,10 +1935,14 @@ export default function LinkToAdUniverse({
       cloneAnglePipeline(pipelineByAngle[1]),
       cloneAnglePipeline(pipelineByAngle[2]),
     ];
-    const a = selectedAngleIndex;
-    if (a === 0 || a === 1 || a === 2) {
-      t[a] = { ...captureActivePipeline(), ...(patch ?? {}) };
-    }
+    const pipe =
+      selectedAngleIndex === 0 ||
+      selectedAngleIndex === 1 ||
+      selectedAngleIndex === 2 ||
+      selectedAngleIndex === 3
+        ? angleIndexToPipelineSlot(selectedAngleIndex)
+        : angleIndexToPipelineSlot(prevAngleRef.current);
+    t[pipe] = { ...captureActivePipeline(), ...(patch ?? {}) };
     return t;
   }
 
@@ -1997,8 +2010,13 @@ export default function LinkToAdUniverse({
       cloneAnglePipeline(pipelineByAngle[1]),
       cloneAnglePipeline(pipelineByAngle[2]),
     ];
-    if (selectedAngleIndex === 0 || selectedAngleIndex === 1 || selectedAngleIndex === 2) {
-      triple[selectedAngleIndex] = captureActivePipeline();
+    if (
+      selectedAngleIndex === 0 ||
+      selectedAngleIndex === 1 ||
+      selectedAngleIndex === 2 ||
+      selectedAngleIndex === 3
+    ) {
+      triple[angleIndexToPipelineSlot(selectedAngleIndex)] = captureActivePipeline();
     }
     latestSnapRef.current = {
       v: 1,
@@ -2436,13 +2454,29 @@ export default function LinkToAdUniverse({
         store_url?: string | null;
         title?: string | null;
         extracted?: unknown;
+        /** DB column; may hold the prompt when `extracted.__universe` was saved without it (legacy / edge cases). */
+        video_prompt?: string | null;
       },
       opts?: { silent?: boolean; preserveVideoDuration?: boolean; preserveScriptLanguage?: boolean },
     ) => {
-      const snap = readUniverseFromExtracted(run.extracted);
-      if (!snap) {
+      const snap0 = readUniverseFromExtracted(run.extracted);
+      if (!snap0) {
         toast.error("This run has no Link to Ad Universe data.");
         return;
+      }
+      const colVp = typeof run.video_prompt === "string" ? run.video_prompt.trim() : "";
+      let snap = snap0;
+      if (colVp && !(snap.ugcVideoPromptGpt ?? "").trim()) {
+        const tripleB = normalizePipelineByAngle(snap);
+        const sel = snap.selectedAngleIndex;
+        const pIdx = sel === 0 || sel === 1 || sel === 2 ? sel : sel === 3 ? 2 : 0;
+        const nextTriple: [LinkToAdAnglePipelineV1, LinkToAdAnglePipelineV1, LinkToAdAnglePipelineV1] = [
+          cloneAnglePipeline(tripleB[0]),
+          cloneAnglePipeline(tripleB[1]),
+          cloneAnglePipeline(tripleB[2]),
+        ];
+        nextTriple[pIdx] = { ...cloneAnglePipeline(tripleB[pIdx]), ugcVideoPromptGpt: colVp };
+        snap = { ...snap, ugcVideoPromptGpt: colVp, linkToAdPipelineByAngle: nextTriple };
       }
       setUniverseRunId(run.id);
       setStoreUrl(typeof run.store_url === "string" ? run.store_url : "");
@@ -4532,8 +4566,10 @@ export default function LinkToAdUniverse({
           ? String(json.part1)
           : text;
       hydrateVideoPromptFromStored(displayPrompt);
+      let persistVideoText = text;
       try {
-        await applyVideoPromptAiClean(displayPrompt, controller.signal);
+        const cleanedFull = await applyVideoPromptAiClean(displayPrompt, controller.signal);
+        if (cleanedFull?.trim()) persistVideoText = cleanedFull.trim();
       } catch {
         /* optional sanitize: keep hydrate output */
       }
@@ -4544,7 +4580,7 @@ export default function LinkToAdUniverse({
         const p30 =
           normalizeUgcScriptVideoDurationSec(videoDuration) === 30 && json.part1 && json.part2
             ? { ugcVideoPrompt: json.part1, ugcVideoPromptPart2: json.part2 }
-            : { ugcVideoPrompt: text };
+            : { ugcVideoPrompt: persistVideoText };
         patchKlingSlot(idx, p30);
       }
       // Keep active render polling untouched while editing/regenerating prompts.
@@ -4554,25 +4590,35 @@ export default function LinkToAdUniverse({
         setKlingPollImageIndex(null);
       }
       setIsKlingSubmitting(false);
-      const base = latestSnapRef.current;
-      if (base && lastExtractedJson) {
-        const nextSlots = klingByRef.map((s, i) => ({
-          videoUrl: s.videoUrl ?? null,
-          videoUrlPart2: s.videoUrlPart2 ?? null,
-          taskId: s.taskId ?? null,
-          history: [...(s.history || [])],
-          ugcVideoPrompt: i === idx ? text : s.ugcVideoPrompt,
-          ugcVideoPromptPart2: s.ugcVideoPromptPart2,
-        }));
+      const nextSlots = klingByRef.map((s, i) => ({
+        videoUrl: s.videoUrl ?? null,
+        videoUrlPart2: s.videoUrlPart2 ?? null,
+        taskId: s.taskId ?? null,
+        history: [...(s.history || [])],
+        ugcVideoPrompt: i === idx && (idx === 0 || idx === 1 || idx === 2) ? persistVideoText : s.ugcVideoPrompt,
+        ugcVideoPromptPart2: s.ugcVideoPromptPart2,
+      }));
+      const persistVideoSnapshot = async (base: LinkToAdUniverseSnapshotV1) => {
         const triple = buildPersistTriplePatchingActive({
-          ugcVideoPromptGpt: text,
+          ugcVideoPromptGpt: persistVideoText,
           klingByReferenceIndex: nextSlots,
         });
         setPipelineByAngle(triple);
         const snap = snapshotWithPersistTriple(base, triple);
         await persistUniverse(universeRunId, url, extractedTitle, lastExtractedJson, snap, packshotsForSave(), {
-          videoPrompt: text,
+          videoPrompt: persistVideoText,
         });
+      };
+      const base = latestSnapRef.current;
+      if (base && lastExtractedJson && universeRunId) {
+        await persistVideoSnapshot(base);
+      } else if (lastExtractedJson && universeRunId) {
+        // `latestSnapRef` is updated in an effect; retry once so we do not drop the save on fast paths.
+        window.setTimeout(() => {
+          const b = latestSnapRef.current;
+          if (!b) return;
+          void persistVideoSnapshot(b).catch(() => {});
+        }, 50);
       }
       toast.success("Video prompt saved");
       return text;
