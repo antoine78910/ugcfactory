@@ -595,40 +595,75 @@ export type LinkToAdUniverseProps = {
  * Same pattern as Studio Video Generate: one row, number-only pill (no “credits” label, no coin).
  * On LTA `bg-violet-400` + black label we use a dark translucent pill; studio uses `bg-white/15` on violet-500.
  */
-/** Trial: do not render prompt plaintext in the DOM (only this placeholder). */
-function LtaTrialPromptLockedCard({ className }: { className?: string }) {
+type LtaTrialPeekSection = { label: string; body: string };
+
+/** Trial: blurred multi-line preview (no footer). */
+function LtaTrialTextPeek({ body, className }: { body: string; className?: string }) {
   return (
-    <div
-      className={cn(
-        "relative overflow-hidden rounded-lg border border-violet-500/25 bg-black/40 px-4 py-10 text-center",
-        className,
-      )}
-    >
+    <div className={cn("relative overflow-hidden rounded-md border border-white/[0.08] bg-black/20", className)}>
       <div
-        className="pointer-events-none absolute inset-0 opacity-[0.22] blur-2xl"
+        className="max-h-[14rem] overflow-hidden whitespace-pre-wrap px-2 py-1.5 text-[11px] leading-snug text-white/85 blur-[2px] opacity-[0.82] contrast-110 saturate-50 select-none"
         aria-hidden
-        style={{
-          background:
-            "repeating-linear-gradient(90deg, rgba(139,92,246,0.35) 0px, transparent 12px, rgba(255,255,255,0.08) 24px, transparent 36px)",
-        }}
-      />
-      <div className="relative z-10 mx-auto flex max-w-sm flex-col items-center gap-3">
-        <div className="flex h-11 w-11 items-center justify-center rounded-full border border-violet-400/35 bg-violet-500/15 text-violet-200">
-          <Lock className="h-5 w-5" aria-hidden />
-        </div>
-        <p className="text-sm font-semibold text-white/90">Upgrade to see the full prompt</p>
-        <p className="text-xs leading-snug text-white/45">
-          During trial your prompts still run in generation, but the exact wording stays hidden in the page.
-        </p>
-        <Button
-          asChild
-          type="button"
-          size="sm"
-          className="rounded-full border border-violet-300/40 bg-violet-400/90 px-4 text-xs font-semibold text-black hover:bg-violet-300"
-        >
-          <Link href="/subscription">View plans</Link>
-        </Button>
+      >
+        {body.trim() ? body : "…"}
       </div>
+      <div
+        className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/[0.02] via-transparent to-black/12"
+        aria-hidden
+      />
+    </div>
+  );
+}
+
+/**
+ * Trial: show section titles + blurred bodies (line shapes visible, wording not readable).
+ * Text stays off accessible tree for assistive tech; upgrade CTA is compact.
+ */
+function LtaTrialPromptPeek({
+  className,
+  sections,
+  showFooter = true,
+}: {
+  className?: string;
+  sections: LtaTrialPeekSection[];
+  showFooter?: boolean;
+}) {
+  return (
+    <div className={cn("mt-1.5 space-y-3 pb-0.5", className)}>
+      {sections.map((s) => (
+        <div key={s.label} className="min-w-0 space-y-1">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-white/55">{s.label}</div>
+          <div className="relative overflow-hidden rounded-md border border-white/[0.08] bg-black/20">
+            <div
+              className="max-h-[12.5rem] overflow-hidden px-2 py-1.5 text-[11px] leading-snug text-white/85 blur-[2px] opacity-[0.82] contrast-110 saturate-50 select-none"
+              aria-hidden
+            >
+              {s.body.trim() ? s.body : "…"}
+            </div>
+            <div
+              className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/[0.02] via-transparent to-black/12"
+              aria-hidden
+            />
+          </div>
+        </div>
+      ))}
+      {showFooter ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/[0.06] pt-2">
+          <div className="flex min-w-0 items-center gap-1.5 text-[10px] text-white/42">
+            <Lock className="h-3 w-3 shrink-0 text-violet-300/70" aria-hidden />
+            <span>Upgrade to read or edit the full wording.</span>
+          </div>
+          <Button
+            asChild
+            type="button"
+            size="sm"
+            variant="secondary"
+            className="h-7 shrink-0 rounded-full border border-violet-400/25 bg-violet-500/15 px-3 text-[10px] font-semibold text-violet-200 hover:bg-violet-500/25"
+          >
+            <Link href="/subscription">Plans</Link>
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -6548,13 +6583,24 @@ export default function LinkToAdUniverse({
                         Angle {card.index + 1}
                       </span>
                     </div>
-                    <p className={cn(
-                      "mt-2.5 text-[13px] leading-snug transition-colors",
-                      selectedAngleIndex === card.index ? "text-white/90" : "text-white/65 group-hover/angle:text-white/80",
-                      !expandedAngleBriefs[card.index] && card.canExpand && "line-clamp-3",
-                    )}>
-                      {expandedAngleBriefs[card.index] ? card.fullLabel : card.label}
-                    </p>
+                    {expandedAngleBriefs[card.index] && linkToAdTrialEconomy ? (
+                      <LtaTrialTextPeek
+                        body={card.fullLabel}
+                        className="mt-2.5 text-[13px] leading-snug"
+                      />
+                    ) : (
+                      <p
+                        className={cn(
+                          "mt-2.5 text-[13px] leading-snug transition-colors",
+                          selectedAngleIndex === card.index
+                            ? "text-white/90"
+                            : "text-white/65 group-hover/angle:text-white/80",
+                          !expandedAngleBriefs[card.index] && card.canExpand && "line-clamp-3",
+                        )}
+                      >
+                        {expandedAngleBriefs[card.index] ? card.fullLabel : card.label}
+                      </p>
+                    )}
                     {card.canExpand ? (
                       <span
                         role="button"
@@ -7141,16 +7187,28 @@ export default function LinkToAdUniverse({
                             </button>
                             {expanded ? (
                               <div className="mt-2 space-y-2 border-t border-white/10 pt-2">
-                                <Textarea
-                                  value={angleSummaryDrafts[i] ?? summary}
-                                  onChange={(e) => {
-                                    const v = e.target.value;
-                                    setAngleSummaryDrafts((prev) => ({ ...prev, [i]: v }));
-                                    scheduleAngleSummaryPersist(i, v);
-                                  }}
-                                  className="min-h-[120px] border-white/10 bg-black/25 text-xs leading-relaxed text-white/85"
-                                  spellCheck
-                                />
+                                {linkToAdTrialEconomy ? (
+                                  <LtaTrialPromptPeek
+                                    showFooter
+                                    sections={[
+                                      {
+                                        label: "Summary",
+                                        body: angleSummaryDrafts[i] ?? summary,
+                                      },
+                                    ]}
+                                  />
+                                ) : (
+                                  <Textarea
+                                    value={angleSummaryDrafts[i] ?? summary}
+                                    onChange={(e) => {
+                                      const v = e.target.value;
+                                      setAngleSummaryDrafts((prev) => ({ ...prev, [i]: v }));
+                                      scheduleAngleSummaryPersist(i, v);
+                                    }}
+                                    className="min-h-[120px] border-white/10 bg-black/25 text-xs leading-relaxed text-white/85"
+                                    spellCheck
+                                  />
+                                )}
                               </div>
                             ) : null}
                           </div>
@@ -7185,10 +7243,7 @@ export default function LinkToAdUniverse({
                       </Button>
                     </div>
                   ) : null}
-                  {nanoBananaPromptsRaw.trim() &&
-                  !isNanoAllImagesSubmitting &&
-                  !isNanoPromptsLoading &&
-                  !nanoPollTaskId ? (
+                  {nanoBananaPromptsRaw.trim() && !isNanoAllImagesSubmitting && !nanoPollTaskId ? (
                     <div className="rounded-xl border border-white/10 bg-black/20 px-2.5 pb-2 pt-1">
                       {([0, 1, 2] as const).map((i) => {
                         const draft = nanoPromptDrafts[i];
@@ -7229,13 +7284,36 @@ export default function LinkToAdUniverse({
                               </span>
                               {!panelOpen ? (
                                 <span className="min-w-0 flex-1 truncate text-[11px] leading-snug text-white/45">
-                                  {linkToAdTrialEconomy ? "Upgrade to see the full prompt" : summaryPreview}
+                                  {linkToAdTrialEconomy
+                                    ? isNanoPromptsLoading || isNanoAllImagesSubmitting
+                                      ? "Generating…"
+                                      : "Avatar · Scene · Shot (preview blurred in trial)"
+                                    : summaryPreview}
                                 </span>
                               ) : null}
                             </button>
                             {panelOpen ? (
                               linkToAdTrialEconomy ? (
-                                <LtaTrialPromptLockedCard className="mt-1.5" />
+                                isNanoPromptsLoading ? (
+                                  <div className="mt-2 flex items-center gap-2 text-xs text-violet-200">
+                                    <Loader2 className="h-4 w-4 shrink-0 animate-spin text-violet-300" aria-hidden />
+                                    <span>Generating image prompts…</span>
+                                  </div>
+                                ) : parsed.isStructured ? (
+                                  <LtaTrialPromptPeek
+                                    className="mt-1.5"
+                                    sections={[
+                                      { label: "Avatar", body: parsed.person },
+                                      { label: "Scene", body: parsed.scene },
+                                      { label: "Shot", body: parsed.product },
+                                    ]}
+                                  />
+                                ) : (
+                                  <LtaTrialPromptPeek
+                                    className="mt-1.5"
+                                    sections={[{ label: "Image prompt", body: draft }]}
+                                  />
+                                )
                               ) : parsed.isStructured ? (
                                 <div className="mt-1.5 space-y-3 pb-0.5">
                                   {(
@@ -7741,8 +7819,27 @@ export default function LinkToAdUniverse({
                           <p className="px-1 pb-1 text-[10px] font-bold uppercase tracking-wide text-violet-300/90">
                             Video prompt
                           </p>
-                          {linkToAdTrialEconomy ? (
-                            <LtaTrialPromptLockedCard className="mt-1" />
+                          {isVideoPromptLoading ? (
+                            <div className="mt-2 flex items-center gap-2 text-xs text-violet-200">
+                              <Loader2 className="h-4 w-4 shrink-0 animate-spin text-violet-300" aria-hidden />
+                              <span>{LINK_TO_AD_LOADING_MESSAGES.video_prompt}</span>
+                            </div>
+                          ) : linkToAdTrialEconomy ? (
+                            videoPromptIsLegacyBlob ? (
+                              <LtaTrialPromptPeek
+                                className="mt-1"
+                                sections={[{ label: "Prompt", body: videoPromptSections.motion }]}
+                              />
+                            ) : (
+                              <LtaTrialPromptPeek
+                                className="mt-1"
+                                sections={[
+                                  { label: "Motion", body: videoPromptSections.motion },
+                                  { label: "Dialogue", body: videoPromptSections.dialogue },
+                                  { label: "Ambience", body: videoPromptSections.ambience },
+                                ]}
+                              />
+                            )
                           ) : videoPromptIsLegacyBlob ? (
                             <div className="space-y-2">
                               <p className="px-1 text-[9px] font-semibold uppercase tracking-wide text-amber-200/75">
@@ -7848,7 +7945,11 @@ export default function LinkToAdUniverse({
                         </div>
                       ) : null}
                       <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-                        {isVideoPromptLoading ? (
+                        {isVideoPromptLoading &&
+                        !(
+                          (mergedVideoPromptDraft.trim() || ugcVideoPromptGpt.trim()) &&
+                          !showKlingVideoGeneratingUi
+                        ) ? (
                           <div className="mt-3 flex items-center gap-2 text-xs text-violet-200">
                             <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
                             <span>{LINK_TO_AD_LOADING_MESSAGES.video_prompt}</span>
