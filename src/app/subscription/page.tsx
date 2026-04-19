@@ -10,7 +10,7 @@ import type { SubscriptionUpgradePreview } from "@/app/_components/SubscriptionU
 import { consumeCheckoutQueryParams, useCreditsPlan } from "@/app/_components/CreditsPlanContext";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { SUBSCRIPTIONS } from "@/lib/pricing";
+import { SUBSCRIPTIONS, subscriptionBonusCreditsVsStarter } from "@/lib/pricing";
 import { SubscriptionPlanFeatureList } from "@/app/_components/SubscriptionPlanFeatureList";
 import {
   subscriptionPlanSortIndex,
@@ -80,6 +80,24 @@ function SubscriptionPlanPriceSkeleton() {
 
 function PlanCardDescription({ plan }: { plan: PlanDef }) {
   return <p className="mt-1 min-h-0 text-sm leading-snug text-white/48">{plan.description}</p>;
+}
+
+function SubscriptionPlanStarterBonusCallout({ planId, credits }: { planId: string; credits: number }) {
+  const idx = PLANS.findIndex((p) => p.id === planId);
+  if (idx <= 0) return null;
+  const bonus = subscriptionBonusCreditsVsStarter(idx as 1 | 2 | 3);
+  if (!bonus) return null;
+  return (
+    <div className="mt-3 rounded-xl border border-emerald-500/30 bg-emerald-500/[0.09] px-3 py-2.5 text-center">
+      <p className="text-[13px] font-bold tabular-nums text-emerald-100">
+        +{bonus.bonusCredits.toLocaleString("en-US")} bonus credits/mo
+      </p>
+      <p className="mt-1 text-[10px] leading-snug text-emerald-200/70">
+        Starter-style value at this price would be ~{bonus.baselineCreditsIfStarterRate.toLocaleString("en-US")}{" "}
+        credits/mo — you get {credits.toLocaleString("en-US")}.
+      </p>
+    </div>
+  );
 }
 
 /** Minimal violet pill on the Yearly billing toggle only. */
@@ -519,6 +537,8 @@ export default function SubscriptionPage() {
                         <SubscriptionPlanPriceSkeleton />
                       )}
                     </div>
+
+                    <SubscriptionPlanStarterBonusCallout planId={plan.id} credits={plan.credits} />
 
                     <Button
                       type="button"

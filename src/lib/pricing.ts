@@ -968,6 +968,24 @@ export const SUBSCRIPTIONS = [
   { price_usd: 239, credits_per_month: 3200 },
 ] as const;
 
+export type SubscriptionTierIndex = 0 | 1 | 2 | 3;
+
+/**
+ * Extra monthly credits vs scaling the Starter plan’s price-to-credits ratio to this tier’s list price
+ * (marketing “economies of scale” vs buying Starter-equivalent value at the same spend).
+ */
+export function subscriptionBonusCreditsVsStarter(
+  tierIndex: SubscriptionTierIndex,
+): { bonusCredits: number; baselineCreditsIfStarterRate: number } | null {
+  if (tierIndex <= 0) return null;
+  const starter = SUBSCRIPTIONS[0];
+  const plan = SUBSCRIPTIONS[tierIndex];
+  const baseline = Math.round((plan.price_usd / starter.price_usd) * starter.credits_per_month);
+  const bonus = plan.credits_per_month - baseline;
+  if (bonus <= 0) return null;
+  return { bonusCredits: bonus, baselineCreditsIfStarterRate: baseline };
+}
+
 // ---------------------------------------------------------------------------
 // Marketing, approximate generation counts from a credit balance (UI copy only)
 // Nanobanana-class images: 0.5 cr each → count ≈ credits × 2.

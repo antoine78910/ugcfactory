@@ -5,7 +5,11 @@ import { ArrowRight, Check, Sparkles, Zap } from "lucide-react";
 import { SubscriptionPlanFeatureList } from "@/app/_components/SubscriptionPlanFeatureList";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { STRIPE_ONE_DOLLAR_TRIAL_CREDIT_GRANT, SUBSCRIPTIONS } from "@/lib/pricing";
+import {
+  STRIPE_ONE_DOLLAR_TRIAL_CREDIT_GRANT,
+  SUBSCRIPTIONS,
+  subscriptionBonusCreditsVsStarter,
+} from "@/lib/pricing";
 import { formatMoneyAmount } from "@/lib/billing/formatMoney";
 import type { StripeDisplayPricesPayload } from "@/lib/billing/stripeDisplayTypes";
 import { buildUsdStripeDisplayPricesFallback } from "@/lib/billing/stripeDisplayFallback";
@@ -64,6 +68,24 @@ const PLANS: PlanDef[] = [
     credits: SUBSCRIPTIONS[3].credits_per_month,
   },
 ];
+
+function SetupPlanStarterBonusCallout({ planId, credits }: { planId: string; credits: number }) {
+  const idx = PLANS.findIndex((p) => p.id === planId);
+  if (idx <= 0) return null;
+  const bonus = subscriptionBonusCreditsVsStarter(idx as 1 | 2 | 3);
+  if (!bonus) return null;
+  return (
+    <div className="mt-3 rounded-xl border border-emerald-500/30 bg-emerald-500/[0.09] px-2.5 py-2 text-center">
+      <p className="text-[12px] font-bold tabular-nums text-emerald-100">
+        +{bonus.bonusCredits.toLocaleString("en-US")} bonus credits/mo
+      </p>
+      <p className="mt-0.5 text-[9px] leading-snug text-emerald-200/70">
+        Starter-style value here ≈{bonus.baselineCreditsIfStarterRate.toLocaleString("en-US")}/mo — you get{" "}
+        {credits.toLocaleString("en-US")}.
+      </p>
+    </div>
+  );
+}
 
 export default function SetupClient({ embedded = false }: SetupClientProps) {
   const [currency, setCurrency] = useState<Currency>("usd");
@@ -305,6 +327,8 @@ export default function SetupClient({ embedded = false }: SetupClientProps) {
                     <div className="h-9 w-24 animate-pulse rounded-lg bg-white/10" />
                   )}
                 </div>
+
+                <SetupPlanStarterBonusCallout planId={plan.id} credits={plan.credits} />
 
                 <SubscriptionPlanFeatureList planId={plan.id} credits={plan.credits} />
 
