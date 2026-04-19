@@ -2095,6 +2095,7 @@ export default function LinkToAdUniverse({
       linkToAdPipelineByAngle: triple,
       ltaSeedanceSpeed,
       ltaVideoDurationSec: normalizeUgcScriptVideoDurationSec(videoDuration),
+      videoStageMode,
     };
   }, [
     cleanCandidate,
@@ -4644,12 +4645,15 @@ export default function LinkToAdUniverse({
         ugcVideoPromptPart2: s.ugcVideoPromptPart2,
       }));
       const persistVideoSnapshot = async (base: LinkToAdUniverseSnapshotV1) => {
+        // setVideoStageMode(true) was called earlier but React may not have re-rendered yet;
+        // pass videoStageMode: true explicitly so the stale closure value is not persisted.
         const triple = buildPersistTriplePatchingActive({
           ugcVideoPromptGpt: persistVideoText,
           klingByReferenceIndex: nextSlots,
+          videoStageMode: true,
         });
         setPipelineByAngle(triple);
-        const snap = snapshotWithPersistTriple(base, triple);
+        const snap = { ...snapshotWithPersistTriple(base, triple), videoStageMode: true };
         await persistUniverse(universeRunId, url, extractedTitle, lastExtractedJson, snap, packshotsForSave(), {
           videoPrompt: persistVideoText,
         });
