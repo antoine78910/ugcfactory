@@ -1911,7 +1911,24 @@ export default function StudioVideoPanel({
     toast.success("Image added to element");
   }, []);
 
+  /**
+   * Picker selections can happen while the Elements modal is closed (prompt-level flow).
+   * In that case, force a fresh visible form so adds do not target a hidden full/duplicate draft.
+   */
+  const prepareKlingElementFormForPickerAdd = useCallback(() => {
+    if (klingElementsModalOpen) return;
+    const nextName = `element_${Math.min(klingElementDrafts.length + 1, 3)}`;
+    setKlingElementForm({
+      id: crypto.randomUUID(),
+      name: nextName,
+      description: "",
+      urls: [],
+    });
+    setKlingElementsModalOpen(true);
+  }, [klingElementDrafts.length, klingElementsModalOpen]);
+
   const tryAddHttpsImageToKlingElementForm = useCallback(async (rawUrl: string): Promise<boolean> => {
+    prepareKlingElementFormForPickerAdd();
     const u = rawUrl.trim();
     if (!isKieServableReferenceImageUrl(u)) {
       toast.error("Invalid image URL", {
@@ -1941,11 +1958,12 @@ export default function StudioVideoPanel({
     if (added) toast.success("Image added to element");
     else toast.message("Could not add image", { description: "Slot full or duplicate URL." });
     return added;
-  }, [ensureActiveElementFormId, klingElementDrafts.length]);
+  }, [ensureActiveElementFormId, klingElementDrafts.length, prepareKlingElementFormForPickerAdd]);
 
   /** Unified adder for picker tiles: image/video/audio where the current provider supports it. */
   const tryAddReferenceUrlToKlingElementForm = useCallback(
     async (rawUrl: string): Promise<boolean> => {
+      prepareKlingElementFormForPickerAdd();
       const u = rawUrl.trim();
       if (!u) return false;
       const kind = inferSeedanceReferenceKindFromUrl(u);
@@ -1974,7 +1992,13 @@ export default function StudioVideoPanel({
       else toast.message("Could not add media", { description: "Slot full or duplicate URL." });
       return added;
     },
-    [ensureActiveElementFormId, klingElementDrafts.length, modelId, tryAddHttpsImageToKlingElementForm],
+    [
+      ensureActiveElementFormId,
+      klingElementDrafts.length,
+      modelId,
+      prepareKlingElementFormForPickerAdd,
+      tryAddHttpsImageToKlingElementForm,
+    ],
   );
 
   const beginElementRefPick = useCallback(
