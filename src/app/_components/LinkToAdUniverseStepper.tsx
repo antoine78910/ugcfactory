@@ -22,7 +22,7 @@ export function LinkToAdUniverseStepper({ currentStep }: LinkToAdUniverseStepper
 
   return (
     <div
-      className="mb-6 rounded-2xl border border-violet-500/20 bg-gradient-to-b from-violet-500/[0.07] to-transparent px-2 py-4 sm:px-4"
+      className="mb-4 rounded-xl border border-violet-500/20 bg-gradient-to-b from-violet-500/[0.06] to-transparent px-1.5 py-3 sm:mb-6 sm:rounded-2xl sm:px-4 sm:py-4"
       aria-label="Link to Ad progress"
     >
       <div className="flex w-full items-start justify-center">
@@ -91,7 +91,7 @@ export function LinkToAdUniverseStepper({ currentStep }: LinkToAdUniverseStepper
                 </motion.div>
                 <span
                   className={cn(
-                    "text-center text-[9px] font-semibold uppercase leading-tight tracking-wide sm:text-[10px]",
+                    "text-center text-[8px] font-semibold uppercase leading-tight tracking-wide sm:text-[10px]",
                     isCompleted && "text-emerald-200/90",
                     isCurrent && "text-violet-200",
                     isUpcoming && "text-white/35",

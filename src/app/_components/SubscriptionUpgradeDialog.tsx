@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { SubscriptionPlanCreditsWithBonus } from "@/app/_components/SubscriptionPlanFeatureList";
 import { isSubscriptionPlanId } from "@/lib/stripe/subscriptionPrices";
+import { formatMoneyAmount } from "@/lib/billing/formatMoney";
 
 export type SubscriptionUpgradePreview = {
   current: { planId: string; name: string; billingLabel: string; priceUsd: number };
@@ -27,13 +28,11 @@ export type SubscriptionUpgradePreview = {
 
 function formatMoneyCents(cents: number, currency: string): string {
   const v = Math.abs(cents) / 100;
-  const code = currency?.toLowerCase() === "eur" ? "EUR" : "USD";
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: code }).format(v);
+  return formatMoneyAmount(v, currency?.toLowerCase() === "eur" ? "eur" : "usd");
 }
 
 function formatMoneyMajor(amount: number, currency: string): string {
-  const code = currency?.toLowerCase() === "eur" ? "EUR" : "USD";
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: code }).format(amount);
+  return formatMoneyAmount(amount, currency?.toLowerCase() === "eur" ? "eur" : "usd");
 }
 
 type Props = {

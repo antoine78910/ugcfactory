@@ -275,15 +275,13 @@ export function ProjectLabSidebar({
     <aside className="flex w-[min(100%,280px)] shrink-0 flex-col border-r border-white/10 bg-black/55 backdrop-blur-md">
       <div className="border-b border-white/10 p-3">
         <p className="text-[10px] font-semibold uppercase tracking-wide text-cyan-300/90">Architecture</p>
-        <p className="mt-0.5 text-[10px] text-white/40">Tree of generated nodes plus your layout.</p>
       </div>
 
       <div className="studio-sidebar-scroll min-h-0 flex-1 overflow-y-auto p-2">
-        <p className="mb-1 px-1 text-[9px] font-semibold uppercase tracking-wide text-white/35">Project data</p>
+        <p className="mb-1 px-1 text-[9px] font-semibold uppercase tracking-wide text-white/35">Project</p>
         <TreeRow
           depth={0}
-          label="Product / runs"
-          sub="Link to Ad & classic"
+          label="Product / Runs"
           expanded={expanded.has("root")}
           onToggle={() => toggle("root")}
           hasChildren
@@ -295,10 +293,10 @@ export function ProjectLabSidebar({
         />
         {expanded.has("root") ? <div className="mt-0.5">{renderAutoBranch("root", 1)}</div> : null}
 
-        <p className="mb-1 mt-4 px-1 text-[9px] font-semibold uppercase tracking-wide text-white/35">Your space</p>
+        <p className="mb-1 mt-4 px-1 text-[9px] font-semibold uppercase tracking-wide text-white/35">Custom</p>
         <TreeRow
           depth={0}
-          label="Folders & custom angles"
+          label="Folders & Angles"
           expanded={expanded.has("lab-user-root")}
           onToggle={() => toggle("lab-user-root")}
           hasChildren={topFolders.length > 0 || orphanAngles.length > 0}
@@ -345,7 +343,7 @@ export function ProjectLabSidebar({
       </div>
 
       <div className="space-y-2 border-t border-white/10 p-3">
-        <p className="text-[9px] font-semibold uppercase text-white/40">Create</p>
+        <p className="text-[9px] font-semibold uppercase text-white/40">Add</p>
         <select
           className="h-8 w-full rounded-md border border-white/15 bg-white/[0.04] px-2 text-[11px] text-white"
           value={targetFolderId}
@@ -383,11 +381,11 @@ export function ProjectLabSidebar({
         />
         <Button type="button" size="sm" className="w-full gap-1 bg-violet-500/25 text-white" onClick={addAngle}>
           <Plus className="h-3.5 w-3.5" />
-          New angle
+          Add angle
         </Button>
         {artifacts.folders.length > 0 ? (
           <div className="space-y-1 pt-1">
-            <p className="text-[9px] text-white/35">Delete folder (clears linked angles)</p>
+            <p className="text-[9px] text-white/35">Delete folder</p>
             {artifacts.folders.map((f) => (
               <div key={f.id} className="flex items-center justify-between gap-1 rounded border border-white/10 bg-white/[0.02] px-2 py-1">
                 <span className="truncate text-[10px] text-white/70">{f.name}</span>

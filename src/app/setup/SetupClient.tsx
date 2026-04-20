@@ -19,10 +19,6 @@ export type SetupClientProps = {
   embedded?: boolean;
 };
 
-function CurrencySymbol({ currency }: { currency: Currency }) {
-  return <>{currency === "eur" ? "€" : "$"}</>;
-}
-
 type PlanDef = {
   id: SubscriptionPlanId;
   name: string;
@@ -171,6 +167,9 @@ export default function SetupClient({ embedded = false }: SetupClientProps) {
     return fmt ?? formatMoneyAmount(plan.monthly, currency);
   }
 
+  const trialAmountLabel = formatMoneyAmount(1, currency);
+  const trialCreditsWorthLabel = formatMoneyAmount(2.25, currency);
+
   const pricesReady = displayPrices !== null;
 
   return (
@@ -200,7 +199,7 @@ export default function SetupClient({ embedded = false }: SetupClientProps) {
           </h1>
           <p className="mt-3 text-sm text-white/40">
             Start with a <span className="font-semibold text-white/65">
-              {currency === "eur" ? "1€" : "$1"} trial
+              {trialAmountLabel} trial
             </span>, or go straight to a full subscription.
           </p>
         </header>
@@ -220,7 +219,7 @@ export default function SetupClient({ embedded = false }: SetupClientProps) {
                 <h2 className="mt-2 text-2xl font-extrabold text-white">
                   Try it for{" "}
                   <span className="text-violet-300">
-                    <CurrencySymbol currency={currency} />1
+                    {trialAmountLabel}
                   </span>
                 </h2>
                 <p className="mt-1 text-sm text-white/50">
@@ -230,7 +229,7 @@ export default function SetupClient({ embedded = false }: SetupClientProps) {
 
                 <ul className="mt-4 space-y-2">
                   {[
-                    `${STRIPE_ONE_DOLLAR_TRIAL_CREDIT_GRANT} credits (worth ${currency === "eur" ? "€2.25" : "$2.25"})`,
+                    `${STRIPE_ONE_DOLLAR_TRIAL_CREDIT_GRANT} credits (worth ${trialCreditsWorthLabel})`,
                     "Full Link to Ad workflow (scan → angles → images)",
                     "See your product transformed into UGC content",
                     "Upgrade to generate videos anytime",
@@ -248,7 +247,7 @@ export default function SetupClient({ embedded = false }: SetupClientProps) {
               <div className="shrink-0 text-center sm:text-right">
                 <div className="mb-4 inline-block">
                   <div className="text-5xl font-extrabold tabular-nums text-white">
-                    <CurrencySymbol currency={currency} />1
+                    {trialAmountLabel}
                   </div>
                   <div className="mt-0.5 text-xs text-white/35">one-time · no recurring charge</div>
                 </div>
@@ -263,7 +262,7 @@ export default function SetupClient({ embedded = false }: SetupClientProps) {
                   ) : (
                     <>
                       <Zap className="h-4 w-4" />
-                      Start for <CurrencySymbol currency={currency} />1
+                      Start for {trialAmountLabel}
                     </>
                   )}
                 </button>

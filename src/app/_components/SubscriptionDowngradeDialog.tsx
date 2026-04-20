@@ -6,10 +6,10 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { SubscriptionPlanCreditsWithBonus } from "@/app/_components/SubscriptionPlanFeatureList";
 import { isSubscriptionPlanId } from "@/lib/stripe/subscriptionPrices";
+import { formatMoneyAmount } from "@/lib/billing/formatMoney";
 
 function formatMoneyMajor(amount: number, currency: string): string {
-  const code = currency?.toLowerCase() === "eur" ? "EUR" : "USD";
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: code }).format(amount);
+  return formatMoneyAmount(amount, currency?.toLowerCase() === "eur" ? "eur" : "usd");
 }
 
 export type SubscriptionDowngradePreview = {

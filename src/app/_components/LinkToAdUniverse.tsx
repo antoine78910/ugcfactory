@@ -834,12 +834,6 @@ function LinkToAdRecentRunsChips({
               compact ? "rounded-lg px-2 py-1.5" : "rounded-xl px-3 py-2.5",
             )}
           >
-            {!compact ? (
-              <p className="text-[10px] leading-snug text-white/45">
-                All your Link to Ad generations are stored in your projects, switch between your last three here, or open
-                Projects for the full list.
-              </p>
-            ) : null}
             <div className={cn("flex flex-wrap gap-2", !compact && "mt-2")}>
               {recentLinkToAdRuns.map((r, i) => {
                 const active = (activeRunIdProp ?? universeRunId) === r.id;
@@ -5600,9 +5594,6 @@ export default function LinkToAdUniverse({
                   </Button>
                 </div>
               </div>
-              <p className="text-center text-[11px] leading-snug text-white/40">
-                Paste the exact product page URL, not just the shop homepage.
-              </p>
             </div>
             {/* Compact settings row: duration + speed + mode, collapsed */}
             <details className="w-full max-w-xl rounded-xl border border-white/8 bg-white/[0.02] text-white/60 [&[open]>summary]:mb-3">
@@ -5801,9 +5792,6 @@ export default function LinkToAdUniverse({
           <div className="mb-4">
             <div className="rounded-lg border border-violet-500/15 bg-violet-500/[0.05] px-2.5 py-2">
               <p className="text-[9px] font-semibold uppercase tracking-wide text-violet-200/85">Recent projects</p>
-              <p className="mt-0.5 text-[9px] leading-snug text-white/40">
-                Tap a project to continue where you left off, or enter a new URL below.
-              </p>
               <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-3">
                 <LinkToAdRecentRunsToggle
                   compact
@@ -6597,7 +6585,7 @@ export default function LinkToAdUniverse({
                 </div>
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-sm font-semibold tracking-tight text-white/90">
-                    Choose your AI UGC angle
+                    Choose angle
                   </p>
                   <button
                     type="button"
@@ -6617,7 +6605,7 @@ export default function LinkToAdUniverse({
                     type="button"
                     onClick={() => void onSelectAngle(card.index)}
                     className={cn(
-                      "group/angle relative rounded-2xl border px-4 py-4 text-left transition-all duration-200",
+                      "group/angle relative rounded-xl border px-3 py-3 text-left transition-all duration-200 sm:rounded-2xl sm:px-4 sm:py-4",
                       selectedAngleIndex === card.index
                         ? "border-violet-400/60 bg-violet-500/[0.12] shadow-[0_0_20px_rgba(139,92,246,0.15)]"
                         : "border-white/8 bg-white/[0.03] hover:border-violet-400/30 hover:bg-white/[0.06]",
@@ -6647,11 +6635,11 @@ export default function LinkToAdUniverse({
                     ) : (
                       <p
                         className={cn(
-                          "mt-2.5 text-[13px] leading-snug transition-colors",
+                          "mt-2 text-[12px] leading-snug transition-colors sm:mt-2.5 sm:text-[13px]",
                           selectedAngleIndex === card.index
                             ? "text-white/90"
                             : "text-white/65 group-hover/angle:text-white/80",
-                          !expandedAngleBriefs[card.index] && card.canExpand && "line-clamp-3",
+                          !expandedAngleBriefs[card.index] && card.canExpand && "line-clamp-2 sm:line-clamp-3",
                         )}
                       >
                         {expandedAngleBriefs[card.index] ? card.fullLabel : card.label}
@@ -6661,7 +6649,7 @@ export default function LinkToAdUniverse({
                       <span
                         role="button"
                         tabIndex={0}
-                        className="mt-2 inline-flex text-[11px] font-medium text-violet-300/70 transition hover:text-violet-200"
+                        className="mt-2 hidden text-[11px] font-medium text-violet-300/70 transition hover:text-violet-200 sm:inline-flex"
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
@@ -6675,16 +6663,16 @@ export default function LinkToAdUniverse({
                           }
                         }}
                       >
-                        {expandedAngleBriefs[card.index] ? "Show less" : "Show all"}
+                        {expandedAngleBriefs[card.index] ? "Collapse" : "Expand"}
                       </span>
                     ) : null}
                   </button>
                 ))}
                 </div>
                 <div className="rounded-xl border border-dashed border-white/15 bg-white/[0.02] p-3">
-                  <p className="mb-2 text-xs font-semibold text-white/50">
+                  <p className="mb-2 text-xs font-semibold text-white/70">
                     <Plus className="mr-1 inline h-3 w-3" />
-                    Add a custom angle
+                    Custom angle
                   </p>
                   <div className="flex gap-2">
                     <Input
@@ -6711,7 +6699,7 @@ export default function LinkToAdUniverse({
                   {pendingCustomAnglePreview ? (
                     <div className="mt-3 space-y-2 rounded-lg border border-violet-400/25 bg-violet-500/[0.08] p-3">
                       <p className="text-xs font-semibold text-violet-200">
-                        Generated angle, review before adding
+                        Review
                         {pendingCustomAngleEditing ? (
                           <span className="ml-1.5 font-normal text-violet-300/80">(editing)</span>
                         ) : null}
@@ -7162,9 +7150,6 @@ export default function LinkToAdUniverse({
                         </button>
                       ))}
                     </div>
-                    <p className="mt-2 text-[10px] leading-snug text-white/35">
-                      These are kept for reference when you regenerate angles.
-                    </p>
                   </div>
                 ) : null}
 
@@ -7206,7 +7191,7 @@ export default function LinkToAdUniverse({
                               <span className="text-[10px] font-bold uppercase tracking-wide text-violet-300">
                                 Angle {i + 1}
                                 {active ? (
-                                  <span className="ml-1.5 font-semibold normal-case text-violet-200/90">· active</span>
+                                  <span className="ml-1.5 hidden font-semibold normal-case text-violet-200/90 sm:inline">· active</span>
                                 ) : null}
                               </span>
                               <button
@@ -7233,7 +7218,7 @@ export default function LinkToAdUniverse({
                                 className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] font-semibold text-white/70 transition hover:border-violet-400/35 hover:bg-white/[0.07] hover:text-white"
                               >
                                 {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                                {expanded ? "Hide full script" : "View full script"}
+                                {expanded ? "Collapse" : "Expand"}
                               </button>
                             </div>
                             <button type="button" onClick={() => void onSelectAngle(i)} className="mt-1.5 w-full text-left">

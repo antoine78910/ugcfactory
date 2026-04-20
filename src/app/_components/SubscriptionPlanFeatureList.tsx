@@ -40,7 +40,7 @@ export function normalizeSubscriptionBillingCurrency(raw?: string | null): "usd"
 export function starterPlanCreditsRatioTitle(currency: "usd" | "eur"): string {
   const s = SUBSCRIPTIONS[0];
   if (currency === "eur") {
-    return `Starter plan reference: €${s.price_usd}/mo for ${s.credits_per_month} credits (ratio used before your volume bonus).`;
+    return `Starter plan reference: ${s.price_usd}€/mo for ${s.credits_per_month} credits (ratio used before your volume bonus).`;
   }
   return `Starter plan reference: $${s.price_usd}/mo for ${s.credits_per_month} credits (ratio used before your volume bonus).`;
 }
