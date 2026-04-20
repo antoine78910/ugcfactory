@@ -2,9 +2,16 @@
 
 import { useEffect } from "react";
 import { useSupabaseBrowserClient } from "@/lib/supabase/BrowserSupabaseProvider";
+import { loadOnFirstInteraction } from "./loadOnFirstInteraction";
 
 const CLARITY_PROJECT_ID = process.env.NEXT_PUBLIC_CLARITY_PROJECT_ID ?? "";
 
+/**
+ * Microsoft Clarity session-replay. Loads ~26 KiB of script + opens a long-lived
+ * connection. We don't need the very first 0-3s of the LP recorded, so we boot
+ * on first user interaction (or after a 12s fallback). Massive Total Blocking
+ * Time win on the marketing page.
+ */
 export default function ClarityInit() {
   const supabase = useSupabaseBrowserClient();
 
@@ -32,17 +39,10 @@ export default function ClarityInit() {
       }
     }
 
-    if (typeof window.requestIdleCallback === "function") {
-      const id = window.requestIdleCallback(() => void boot(), { timeout: 6000 });
-      return () => {
-        cancelled = true;
-        window.cancelIdleCallback(id);
-      };
-    }
-    const tid = window.setTimeout(() => void boot(), 3000);
+    const cleanup = loadOnFirstInteraction(() => void boot(), { fallbackMs: 12_000 });
     return () => {
       cancelled = true;
-      window.clearTimeout(tid);
+      cleanup();
     };
   }, [supabase]);
 
