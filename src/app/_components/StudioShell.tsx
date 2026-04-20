@@ -338,7 +338,7 @@ function StudioShellInner({
         <button
           type="button"
           onClick={() => setMobileNavOpen(false)}
-          className="md:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-[2px]"
+          className="md:hidden fixed inset-0 z-40 bg-black/60"
           aria-label="Close menu"
         />
       ) : null}
