@@ -6,6 +6,7 @@ import { SubscriptionPlanFeatureList } from "@/app/_components/SubscriptionPlanF
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { STRIPE_ONE_DOLLAR_TRIAL_CREDIT_GRANT, SUBSCRIPTIONS } from "@/lib/pricing";
+import { DATAFAST_GOALS, trackDatafastGoal } from "@/lib/analytics/datafastGoals";
 import { formatMoneyAmount } from "@/lib/billing/formatMoney";
 import type { StripeDisplayPricesPayload } from "@/lib/billing/stripeDisplayTypes";
 import { buildUsdStripeDisplayPricesFallback } from "@/lib/billing/stripeDisplayFallback";
@@ -98,8 +99,18 @@ export default function SetupClient({ embedded = false }: SetupClientProps) {
     }
   }, [embedded]);
 
+  useEffect(() => {
+    trackDatafastGoal(DATAFAST_GOALS.trial_view_setup, {
+      surface: embedded ? "onboarding" : "setup",
+    });
+  }, [embedded]);
+
   async function startTrialCheckout() {
     setTrialLoading(true);
+    trackDatafastGoal(DATAFAST_GOALS.trial_initiate_checkout, {
+      currency,
+      surface: embedded ? "onboarding" : "setup",
+    });
     try {
       const res = await fetch("/api/stripe/checkout/trial", {
         method: "POST",
@@ -123,6 +134,11 @@ export default function SetupClient({ embedded = false }: SetupClientProps) {
 
   async function startPlanCheckout(planId: string) {
     setPlanLoading(planId);
+    trackDatafastGoal(DATAFAST_GOALS.subscription_initiate_checkout, {
+      plan_id: planId,
+      billing: "monthly",
+      surface: embedded ? "onboarding" : "setup",
+    });
     try {
       const res = await fetch("/api/stripe/checkout/subscription", {
         method: "POST",

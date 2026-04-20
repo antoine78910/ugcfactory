@@ -20,6 +20,7 @@ import { openStripeBillingPortal } from "@/lib/stripe/openBillingPortalClient";
 import type { StripeDisplayPricesPayload } from "@/lib/billing/stripeDisplayTypes";
 import { formatMoneyAmount } from "@/lib/billing/formatMoney";
 import { buildUsdStripeDisplayPricesFallback } from "@/lib/billing/stripeDisplayFallback";
+import { DATAFAST_GOALS, trackDatafastGoal } from "@/lib/analytics/datafastGoals";
 
 type Billing = "monthly" | "yearly";
 const BILLING_PORTAL_URL =
@@ -302,6 +303,10 @@ export default function SubscriptionPage() {
     }
     if (c === "success") {
       const applied = consumeCheckoutQueryParams(window.location.pathname);
+      trackDatafastGoal(DATAFAST_GOALS.subscription_paid, {
+        plan_id: params.get("plan") ?? "unknown",
+        surface: "subscription_page",
+      });
       toast.success(
         applied ? "Subscription updated" : "Checkout completed",
         applied
@@ -335,6 +340,11 @@ export default function SubscriptionPage() {
 
   async function startSubscriptionCheckout(planIdCheckout: string) {
     setCheckoutLoading(planIdCheckout);
+    trackDatafastGoal(DATAFAST_GOALS.subscription_initiate_checkout, {
+      plan_id: planIdCheckout,
+      billing,
+      surface: "subscription_page",
+    });
     try {
       const res = await fetch("/api/stripe/checkout/subscription", {
         method: "POST",

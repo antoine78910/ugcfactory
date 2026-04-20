@@ -128,6 +128,7 @@ import {
   STUDIO_GENERATION_KIND_LINK_TO_AD_VIDEO,
 } from "@/lib/studioGenerationKinds";
 import { registerFailedStudioGeneration } from "@/lib/registerStudioGenerationClient";
+import { DATAFAST_GOALS, trackDatafastGoal } from "@/lib/analytics/datafastGoals";
 
 /** Same-origin API calls with session (mirrors server `createInternalFetchFromRequest`). */
 const browserPipelineFetch = ((path: string, init?: RequestInit) => fetch(path, init)) as InternalFetch;
@@ -3235,6 +3236,9 @@ export default function LinkToAdUniverse({
       }
       hydrateFromRun(getJson.data, { silent: true, preserveVideoDuration: true, preserveScriptLanguage: true });
       setStage("ready");
+      trackDatafastGoal(DATAFAST_GOALS.lta_angles_generated, {
+        source: "continue_scripts",
+      });
       toast.success("3 UGC scripts ready");
       onRunsChanged?.();
     } catch (err) {
@@ -3408,6 +3412,10 @@ export default function LinkToAdUniverse({
       toast.error("Missing URL");
       return;
     }
+    trackDatafastGoal(DATAFAST_GOALS.lta_url_submitted, {
+      bypass_saved: opts?.bypassSavedProject ? "1" : "0",
+      generation_mode: generationMode,
+    });
     const epochAtStart = linkToAdFlowEpochRef.current;
 
     /** Re-run step 1: do not reuse neutral upload (UI should clear like the brief). */
@@ -3565,6 +3573,10 @@ export default function LinkToAdUniverse({
         });
       }
       if (pipeResult.scriptsStepOk) {
+        trackDatafastGoal(DATAFAST_GOALS.lta_angles_generated, {
+          source: "initial_pipeline",
+          generation_mode: generationMode,
+        });
         toast.success("3 UGC scripts ready");
       } else if (pipeResult.scriptsError) {
         toast.warning("Scripts step failed", { description: pipeResult.scriptsError });
@@ -4334,6 +4346,12 @@ export default function LinkToAdUniverse({
       setIsNanoAllImagesSubmitting(false);
 
       const readyCount = urlsByPrompt.filter((u) => typeof u === "string" && u.trim().length > 0).length;
+      if (readyCount > 0) {
+        trackDatafastGoal(DATAFAST_GOALS.lta_image_generated, {
+          ready_count: String(readyCount),
+          partial: readyCount < 3 ? "1" : "0",
+        });
+      }
       if (readyCount === 3) {
         toast.success("3 images generated");
       } else {
@@ -4700,6 +4718,15 @@ export default function LinkToAdUniverse({
     if (!url || !lastExtractedJson || !img || idx === null) {
       toast.error("Reference image and video prompt are required.");
       return;
+    }
+
+    /** Only count the first user-initiated click, not the auto-chained part 2 of the 30s flow. */
+    if (!chainPart2Prompt) {
+      trackDatafastGoal(DATAFAST_GOALS.lta_video_generate_clicked, {
+        duration: String(videoDuration),
+        is_trial: linkToAdTrialEconomy ? "1" : "0",
+        plan_id: planId,
+      });
     }
 
     if (!chainPart2Prompt) {

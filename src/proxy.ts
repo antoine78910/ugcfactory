@@ -43,7 +43,7 @@ function isExcludedFromStudioRewrite(pathname: string): boolean {
   ]).has(first);
 }
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const url = req.nextUrl.clone();
   const host = (req.headers.get("host") ?? "").split(":")[0].toLowerCase();
   const { pathname } = url;
@@ -162,4 +162,3 @@ export const config = {
     "/((?!api|monitoring|_next/static|_next/image|favicon.ico|.*\\..*).*)",
   ],
 };
-

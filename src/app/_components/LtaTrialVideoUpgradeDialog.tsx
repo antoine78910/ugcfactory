@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog } from "radix-ui";
@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import type { SubscriptionPlanId } from "@/lib/stripe/subscriptionPrices";
 import { Button } from "@/components/ui/button";
 import { SubscriptionPlanFeatureList } from "@/app/_components/SubscriptionPlanFeatureList";
+import { DATAFAST_GOALS, trackDatafastGoal } from "@/lib/analytics/datafastGoals";
 
 const PLAN_ROWS: {
   id: SubscriptionPlanId;
@@ -68,8 +69,29 @@ export function LtaTrialVideoUpgradeDialog({
   const billingPricesReady = displayPrices !== null;
   const [checkoutLoading, setCheckoutLoading] = useState<SubscriptionPlanId | null>(null);
 
+  /** Fire view goal once per dialog open (re-fires if the user closes & reopens). */
+  useEffect(() => {
+    if (!open) return;
+    trackDatafastGoal(DATAFAST_GOALS.trial_upgrade_dialog_viewed, {
+      shortfall: String(shortfall),
+      required: String(requiredCredits),
+      current: String(currentCredits),
+      surface: "lta_video",
+    });
+  }, [open, shortfall, requiredCredits, currentCredits]);
+
   const startSubscriptionCheckout = useCallback(async (planIdCheckout: SubscriptionPlanId) => {
     setCheckoutLoading(planIdCheckout);
+    trackDatafastGoal(DATAFAST_GOALS.trial_upgrade_dialog_plan_clicked, {
+      plan_id: planIdCheckout,
+      billing: "monthly",
+      surface: "lta_video",
+    });
+    trackDatafastGoal(DATAFAST_GOALS.subscription_initiate_checkout, {
+      plan_id: planIdCheckout,
+      billing: "monthly",
+      surface: "lta_trial_dialog",
+    });
     try {
       const res = await fetch("/api/stripe/checkout/subscription", {
         method: "POST",

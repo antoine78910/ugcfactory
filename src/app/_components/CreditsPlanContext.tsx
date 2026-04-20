@@ -26,6 +26,7 @@ import {
 } from "@/lib/stripe/subscriptionPrices";
 import { useSupabaseBrowserClient } from "@/lib/supabase/BrowserSupabaseProvider";
 import { displayCreditsToLedgerTicks } from "@/lib/creditLedgerTicks";
+import { trackTrialPaid } from "@/lib/analytics/datafastGoals";
 
 // ---------------------------------------------------------------------------
 // localStorage keys, bare (no namespace).
@@ -399,6 +400,8 @@ export function CreditsPlanProvider({
       const sp = new URLSearchParams(window.location.search);
       if (sp.get("checkout") === "trial_success") {
         lsSet(LS_CHECKOUT_TS, String(Date.now()));
+        /** Fire DataFast funnel goal: 1$ vs 1€ paid (currency comes from the success_url). */
+        trackTrialPaid(sp.get("currency"));
         const path = window.location.pathname;
         const clean = path.includes("?") ? path.split("?")[0]! : path;
         window.history.replaceState({}, "", clean || "/");

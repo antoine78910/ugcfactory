@@ -2,7 +2,7 @@
  * OAuth (Google), magic link, and email-confirmation return URL.
  *
  * **Browser:** always `window.location.origin` + `/auth/callback` so the PKCE
- * `code_verifier` cookie matches the host that started the flow (see `middleware.ts`).
+ * `code_verifier` cookie matches the host that started the flow (see `proxy.ts`).
  * Using `NEXT_PUBLIC_APP_URL` here while the user is on another host (e.g. localhost
  * with prod env, or a preview URL) breaks `exchangeCodeForSession`.
  *

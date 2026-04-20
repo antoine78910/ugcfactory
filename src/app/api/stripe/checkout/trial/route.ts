@@ -51,7 +51,8 @@ export async function POST(req: Request) {
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
       line_items: [{ price: priceId, quantity: 1 }],
-      success_url: `${base.replace(/\/$/, "")}/?checkout=trial_success`,
+      /** `currency` is consumed client-side to fire the right DataFast goal (`trial_paid_usd` / `trial_paid_eur`). */
+      success_url: `${base.replace(/\/$/, "")}/?checkout=trial_success&currency=${currency}`,
       cancel_url: `${base.replace(/\/$/, "")}/onboarding?step=setup&checkout=cancel`,
       /** Show “Add promotion code” on Checkout (USD + EUR $1/1€ trial). */
       allow_promotion_codes: true,
