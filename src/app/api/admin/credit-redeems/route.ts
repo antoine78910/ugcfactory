@@ -82,8 +82,54 @@ export async function GET(req: Request) {
   }
 
   const url = new URL(req.url);
+  const activePlansOnly = url.searchParams.get("active_plans_only") === "1";
   const logPage = Math.max(1, Number(url.searchParams.get("log_page")) || 1);
   const logPerPage = Math.min(100, Math.max(10, Number(url.searchParams.get("log_per_page")) || 50));
+  const now = new Date();
+
+  if (activePlansOnly) {
+    const { data: activePlansRaw, error: activePlanErr } = await admin
+      .from("complimentary_subscriptions")
+      .select("id, user_id, plan_id, billing, source, granted_at, expires_at, revoked_at, token_id")
+      .is("revoked_at", null)
+      .gt("expires_at", now.toISOString())
+      .order("granted_at", { ascending: false })
+      .limit(300);
+
+    if (activePlanErr) {
+      console.error("[admin/credit-redeems] active plans only:", activePlanErr);
+      return NextResponse.json({ error: activePlanErr.message, activePlans: [] }, { status: 500 });
+    }
+
+    const activePlans = (activePlansRaw ?? []) as ActiveCompPlanRow[];
+    const userIds = [...new Set(activePlans.map((p) => p.user_id))];
+    const emailMap: Record<string, string> = {};
+    if (userIds.length > 0) {
+      const { data: users } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+      if (users?.users) {
+        for (const u of users.users) {
+          if (userIds.includes(u.id)) {
+            emailMap[u.id] = u.email ?? u.id;
+          }
+        }
+      }
+    }
+
+    return NextResponse.json({
+      activePlans: activePlans.map((p) => ({
+        id: p.id,
+        user_id: p.user_id,
+        email: emailMap[p.user_id] ?? p.user_id,
+        plan_id: p.plan_id,
+        billing: p.billing,
+        source: p.source,
+        granted_at: p.granted_at,
+        expires_at: p.expires_at,
+        token_id: p.token_id,
+        token_label: null,
+      })),
+    });
+  }
 
   const { data: tokensRaw, error: tokErr } = await admin
     .from("credit_redeem_tokens")
@@ -102,7 +148,6 @@ export async function GET(req: Request) {
   }
 
   const tokens = (tokensRaw ?? []) as TokenRow[];
-  const now = new Date();
 
   const logFrom = (logPage - 1) * logPerPage;
   const logTo = logFrom + logPerPage - 1;

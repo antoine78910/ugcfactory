@@ -314,6 +314,7 @@ export default function AdminPage() {
   const [creditLogPage, setCreditLogPage] = useState(1);
   const [creditLoading, setCreditLoading] = useState(false);
   const [creditError, setCreditError] = useState<string | null>(null);
+  const [partnerPlansLoading, setPartnerPlansLoading] = useState(false);
   const [revokePlanId, setRevokePlanId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
@@ -441,6 +442,20 @@ export default function AdminPage() {
     }
   }, [creditLogPage, creditLogPerPage]);
 
+  const fetchActivePartnerPlans = useCallback(async () => {
+    setPartnerPlansLoading(true);
+    try {
+      const r = await fetch("/api/admin/credit-redeems?active_plans_only=1");
+      const d = (await r.json()) as { error?: string; activePlans?: ActiveCompPlanRow[] };
+      if (!r.ok) throw new Error(d.error ?? `HTTP ${r.status}`);
+      setActiveCompPlans(d.activePlans ?? []);
+    } catch {
+      // Silent in non-credits tabs: this list is only for optional quick actions.
+    } finally {
+      setPartnerPlansLoading(false);
+    }
+  }, []);
+
   const revokeComplimentaryPlan = useCallback(async (planId: string) => {
     setRevokePlanId(planId);
     setCreditError(null);
@@ -454,12 +469,13 @@ export default function AdminPage() {
       const d = (await r.json()) as { error?: string };
       if (!r.ok) throw new Error(d.error ?? `HTTP ${r.status}`);
       await fetchCreditRedeems();
+      await fetchActivePartnerPlans();
     } catch (e) {
       setCreditError(e instanceof Error ? e.message : "Could not revoke plan");
     } finally {
       setRevokePlanId(null);
     }
-  }, [fetchCreditRedeems]);
+  }, [fetchCreditRedeems, fetchActivePartnerPlans]);
 
   useEffect(() => {
     if (tab === "generations") void fetchGenerations();
@@ -467,6 +483,12 @@ export default function AdminPage() {
     else if (tab === "credits") void fetchCreditRedeems();
     else if (tab === "onboarding") void fetchOnboarding();
   }, [tab, fetchGenerations, fetchRuns, fetchCreditRedeems, fetchOnboarding]);
+
+  useEffect(() => {
+    if (tab === "generations" && activeCompPlans.length === 0 && !partnerPlansLoading) {
+      void fetchActivePartnerPlans();
+    }
+  }, [tab, activeCompPlans.length, partnerPlansLoading, fetchActivePartnerPlans]);
 
   const genTotalPages = Math.max(1, Math.ceil(genTotal / perPage));
   const runTotalPages = Math.max(1, Math.ceil(runTotal / perPage));
@@ -552,6 +574,21 @@ export default function AdminPage() {
     if (!stats?.kindBreakdown) return [];
     return Object.keys(stats.kindBreakdown).sort();
   }, [stats]);
+
+  const activePlanByUserId = useMemo(() => {
+    const out: Record<string, ActiveCompPlanRow> = {};
+    for (const row of activeCompPlans) {
+      const existing = out[row.user_id];
+      if (!existing) {
+        out[row.user_id] = row;
+        continue;
+      }
+      const existingExpiry = Date.parse(existing.expires_at) || 0;
+      const nextExpiry = Date.parse(row.expires_at) || 0;
+      if (nextExpiry > existingExpiry) out[row.user_id] = row;
+    }
+    return out;
+  }, [activeCompPlans]);
 
   if (error === "Forbidden") {
     return (
@@ -1490,6 +1527,34 @@ export default function AdminPage() {
                                 </p>
                                 <p><span className="text-white/40">App API:</span> <span className="font-mono">{row.app_endpoint?.trim() ? row.app_endpoint : "-"}</span></p>
                                 <p><span className="text-white/40">Duration:</span> {durationForRow(row)}</p>
+                                {activePlanByUserId[row.user_id] && (
+                                  <div className="mt-2 rounded-md border border-violet-500/30 bg-violet-500/10 px-2 py-1.5">
+                                    <p className="text-[11px] text-violet-100">
+                                      <span className="text-violet-300/80">Partner plan:</span>{" "}
+                                      <span className="font-semibold capitalize">{activePlanByUserId[row.user_id].plan_id}</span>{" "}
+                                      ({activePlanByUserId[row.user_id].billing}) until{" "}
+                                      {new Date(activePlanByUserId[row.user_id].expires_at).toLocaleDateString()}
+                                    </p>
+                                    <button
+                                      type="button"
+                                      disabled={revokePlanId === activePlanByUserId[row.user_id].id}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        void revokeComplimentaryPlan(activePlanByUserId[row.user_id].id);
+                                      }}
+                                      className="mt-1 inline-flex items-center gap-1 rounded-md border border-red-500/35 bg-red-500/10 px-2 py-1 text-[10px] font-semibold text-red-200 transition hover:bg-red-500/20 disabled:opacity-50"
+                                    >
+                                      {revokePlanId === activePlanByUserId[row.user_id].id ? (
+                                        <>
+                                          <Loader2 className="h-3 w-3 animate-spin" />
+                                          Revoking…
+                                        </>
+                                      ) : (
+                                        "Cancel partner plan now"
+                                      )}
+                                    </button>
+                                  </div>
+                                )}
                                 {row.error_message && (
                                   <p className="text-red-300/80"><span className="text-white/40">Error:</span> {row.error_message}</p>
                                 )}
