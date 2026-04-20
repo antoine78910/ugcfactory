@@ -65,7 +65,11 @@ import {
 } from "@/app/_components/CreditsPlanContext";
 import { mergeStudioHistoryWithServer } from "@/lib/mergeStudioHistoryWithLocal";
 import { isKieServableReferenceImageUrl } from "@/lib/kieSoraReferenceImage";
-import { linkToAdProductPhotoPickerUrls, readUniverseFromExtracted } from "@/lib/linkToAdUniverse";
+import {
+  linkToAdProductPhotoPickerUrls,
+  normalizePipelineByAngle,
+  readUniverseFromExtracted,
+} from "@/lib/linkToAdUniverse";
 import { completeStudioTask, pollKlingVideo, pollVeoVideo } from "@/lib/studioKlingClientPoll";
 import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
 import { calculateVideoCredits } from "@/lib/linkToAd/generationCredits";
@@ -137,7 +141,12 @@ type KlingElementDraft = {
 
 type ElementLibraryTab = "uploads" | "image_generations" | "video_generations" | "elements" | "lta_generated";
 type ElementRefPickUploadRow = { url: string; createdAt: number };
-type ElementRefPickLtaGroup = { id: string; createdAt: number; urls: string[] };
+type ElementRefPickLtaGroup = {
+  id: string;
+  createdAt: number;
+  generatedUrls: string[];
+  productUrls: string[];
+};
 
 type ElementRefPickState =
   | { open: false }
@@ -884,6 +893,7 @@ export default function StudioVideoPanel({
   const FORCED_VIDEO_MODEL_ID: VideoModelId = "openai/sora-2";
   const [modelId, setModelId] = useState<VideoModelId>(VIDEO_MODEL_ACCESS_ORDER[0]!);
   const [videoPriority, setVideoPriority] = useState<VideoPriority>("normal");
+  const [seedancePriorityInfoOpen, setSeedancePriorityInfoOpen] = useState(false);
   const [duration, setDuration] = useState("10");
   const [aspect, setAspect] = useState("9:16");
   const [klingMode, setKlingMode] = useState<"std" | "pro">("std");
@@ -1056,6 +1066,9 @@ export default function StudioVideoPanel({
     "create_start" | "create_end" | "edit_motion" | "edit_elements" | "kling_element"
   >("create_start");
   const [elementRefPick, setElementRefPick] = useState<ElementRefPickState>({ open: false });
+  const [projectsPickModeByRunId, setProjectsPickModeByRunId] = useState<
+    Record<string, "generated" | "product">
+  >({});
   const videoElementsLoadedRef = useRef(false);
 
   const meta = MODEL_OPTIONS.find((m) => m.id === modelId)!;
@@ -1825,6 +1838,41 @@ export default function StudioVideoPanel({
     [],
   );
 
+  const moveSeedanceImageAsEndReference = useCallback((scope: "compact" | "omni", url: string) => {
+    if (scope === "compact") {
+      setSeedanceCompactRefUrls((prev) => {
+        const idx = prev.indexOf(url);
+        if (idx < 0 || idx === prev.length - 1) return prev;
+        const next = [...prev];
+        const [picked] = next.splice(idx, 1);
+        if (!picked) return prev;
+        next.push(picked);
+        return next;
+      });
+      return;
+    }
+    setSeedanceProOmniItems((prev) => {
+      const imageIndices = prev
+        .map((it, i) => ({ it, i }))
+        .filter(({ it }) => it.kind === "image")
+        .map(({ i }) => i);
+      const idx = prev.findIndex((it) => it.kind === "image" && it.url === url);
+      const lastImageIdx = imageIndices.length ? imageIndices[imageIndices.length - 1]! : -1;
+      if (idx < 0 || idx === lastImageIdx) return prev;
+      const next = [...prev];
+      const [picked] = next.splice(idx, 1);
+      if (!picked) return prev;
+      const refreshedImageIndices = next
+        .map((it, i) => ({ it, i }))
+        .filter(({ it }) => it.kind === "image")
+        .map(({ i }) => i);
+      if (!refreshedImageIndices.length) return prev;
+      const insertAfter = refreshedImageIndices[refreshedImageIndices.length - 1]!;
+      next.splice(insertAfter + 1, 0, picked);
+      return next;
+    });
+  }, []);
+
   const applyAvatarToStartFrame = useCallback((avatarUrl: string) => {
     const u = avatarUrl.trim();
     if (!u) return;
@@ -1999,25 +2047,45 @@ export default function StudioVideoPanel({
         for (const row of (runsJson.data ?? []).slice(0, 120)) {
           const snap = readUniverseFromExtracted(row.extracted);
           if (!snap) continue;
-          const urls = linkToAdProductPhotoPickerUrls(snap)
+          const productUrls = linkToAdProductPhotoPickerUrls(snap)
             .map((x) => x.trim())
             .filter((x) => x.length > 0)
             .slice(0, 3);
-          if (urls.length === 0) continue;
+          const generatedSet = new Set<string>();
+          const addGenerated = (u: string | null | undefined) => {
+            const t = String(u ?? "").trim();
+            if (!t) return;
+            generatedSet.add(t);
+          };
+          for (const u of snap.nanoBananaImageUrls ?? []) addGenerated(u);
+          addGenerated(snap.nanoBananaImageUrl);
+          const triple = normalizePipelineByAngle(snap);
+          for (const p of triple) {
+            for (const u of p.nanoBananaImageUrls ?? []) addGenerated(u);
+            addGenerated(p.nanoBananaImageUrl);
+          }
+          const generatedUrls = [...generatedSet].slice(0, 3);
+          if (productUrls.length === 0 && generatedUrls.length === 0) continue;
           const createdAt = row.created_at ? new Date(row.created_at).getTime() : 0;
           ltaGroups.push({
-            id: row.id || `lta-${createdAt}-${urls[0]}`,
+            id: row.id || `lta-${createdAt}-${generatedUrls[0] ?? productUrls[0] ?? "run"}`,
             createdAt: Number.isFinite(createdAt) ? createdAt : 0,
-            urls,
+            generatedUrls,
+            productUrls,
           });
         }
         ltaGroups.sort((a, b) => b.createdAt - a.createdAt);
+        const nextProjectsModeByRunId: Record<string, "generated" | "product"> = {};
+        for (const g of ltaGroups) {
+          nextProjectsModeByRunId[g.id] = g.generatedUrls.length > 0 ? "generated" : "product";
+        }
 
         setElementRefPick((prev) =>
           prev.open
             ? { ...prev, loading: false, uploads, imageItems, videoItems, ltaGroups }
             : prev,
         );
+        setProjectsPickModeByRunId(nextProjectsModeByRunId);
       } catch (e) {
         toast.error("Could not load media library", {
           description: userMessageFromCaughtError(e, "Try again."),
@@ -3457,7 +3525,7 @@ export default function StudioVideoPanel({
                           </button>
                           {startUrl === u || endUrl === u ? (
                             <span className="pointer-events-none absolute inset-x-0 bottom-0 rounded-b-xl bg-black/60 px-1 py-0.5 text-center text-[10px] font-semibold text-white/90">
-                              {startUrl === u && endUrl === u ? "Start/End" : startUrl === u ? "Start" : "End"}
+                              {endUrl === u ? "End" : "Start"}
                             </span>
                           ) : null}
                           
@@ -3540,11 +3608,7 @@ export default function StudioVideoPanel({
                           </button>
                           {it.kind === "image" && (startUrl === it.url || endUrl === it.url) ? (
                             <span className="pointer-events-none absolute inset-x-0 bottom-0 rounded-b-xl bg-black/60 px-1 py-0.5 text-center text-[10px] font-semibold text-white/90">
-                              {startUrl === it.url && endUrl === it.url
-                                ? "Start/End"
-                                : startUrl === it.url
-                                  ? "Start"
-                                  : "End"}
+                              {endUrl === it.url ? "End" : "Start"}
                             </span>
                           ) : null}
                           {it.kind === "image" ? (
@@ -3773,11 +3837,18 @@ export default function StudioVideoPanel({
                       <button
                         type="button"
                         aria-label="Priority info"
+                        aria-expanded={seedancePriorityInfoOpen}
+                        onClick={() => setSeedancePriorityInfoOpen((open) => !open)}
                         className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-white/20 text-[10px] font-bold text-white/55 transition hover:text-white/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/45"
                       >
                         ?
                       </button>
-                      <div className="pointer-events-none absolute left-0 z-20 mt-1 hidden w-72 whitespace-pre-line rounded-lg border border-white/15 bg-[#111118] p-2.5 text-[10px] leading-snug text-white/80 shadow-xl group-hover:block group-focus-within:block">
+                      <div
+                        className={cn(
+                          "pointer-events-none absolute left-0 z-20 mt-1 w-72 whitespace-pre-line rounded-lg border border-white/15 bg-[#111118] p-2.5 text-[10px] leading-snug text-white/80 shadow-xl",
+                          seedancePriorityInfoOpen ? "block" : "hidden group-hover:block group-focus-within:block",
+                        )}
+                      >
                         {seedancePriorityInfoText}
                       </div>
                     </div>
@@ -4539,7 +4610,7 @@ export default function StudioVideoPanel({
               </Dialog.Close>
             </div>
             <Dialog.Description className="sr-only">
-              Pick recent uploads, generations, elements, or Link to Ad generated images.
+              Pick recent uploads, generations, elements, or project images.
             </Dialog.Description>
             {!elementRefPick.open ? null : (
               <>
@@ -4562,7 +4633,7 @@ export default function StudioVideoPanel({
                       { id: "elements", label: "Elements", count: klingElementDrafts.length, icon: AtSign },
                       {
                         id: "lta_generated",
-                        label: "LTA Generated",
+                        label: "Projects",
                         count: elementRefPick.ltaGroups.length,
                         icon: Sparkles,
                       },
@@ -4726,10 +4797,45 @@ export default function StudioVideoPanel({
                       {elementRefPick.ltaGroups.map((group) => (
                         <div key={group.id} className="rounded-xl border border-white/10 bg-black/25 p-2.5">
                           <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-white/45">
-                            Link to Ad run
+                            Project
                           </p>
+                          <div className="mb-2 inline-flex items-center gap-1 rounded-lg border border-white/10 bg-black/25 p-1">
+                            <button
+                              type="button"
+                              className={cn(
+                                "rounded-md px-2 py-1 text-[10px] font-semibold transition",
+                                (projectsPickModeByRunId[group.id] ?? "generated") === "generated"
+                                  ? "border border-violet-400/60 bg-violet-500/15 text-white"
+                                  : "border border-white/10 bg-black/20 text-white/65 hover:border-white/20",
+                              )}
+                              onClick={() =>
+                                setProjectsPickModeByRunId((prev) => ({ ...prev, [group.id]: "generated" }))
+                              }
+                              disabled={group.generatedUrls.length === 0}
+                            >
+                              LTA generated
+                            </button>
+                            <button
+                              type="button"
+                              className={cn(
+                                "rounded-md px-2 py-1 text-[10px] font-semibold transition",
+                                (projectsPickModeByRunId[group.id] ?? "generated") === "product"
+                                  ? "border border-violet-400/60 bg-violet-500/15 text-white"
+                                  : "border border-white/10 bg-black/20 text-white/65 hover:border-white/20",
+                              )}
+                              onClick={() =>
+                                setProjectsPickModeByRunId((prev) => ({ ...prev, [group.id]: "product" }))
+                              }
+                              disabled={group.productUrls.length === 0}
+                            >
+                              Product scraped
+                            </button>
+                          </div>
                           <div className="grid grid-cols-3 gap-2">
-                            {group.urls.map((u) => (
+                            {((projectsPickModeByRunId[group.id] ?? "generated") === "generated"
+                              ? group.generatedUrls
+                              : group.productUrls
+                            ).map((u) => (
                               <button
                                 key={`${group.id}-${u}`}
                                 type="button"
@@ -4766,6 +4872,16 @@ export default function StudioVideoPanel({
             top: `${seedanceImageMenu.anchorY}px`,
           }}
         >
+          {(() => {
+            const menuUrl = seedanceImageMenu.url;
+            const isReferenceSelected =
+              seedanceImageMenu.scope === "compact"
+                ? seedanceCompactRefUrls[0] === menuUrl
+                : seedanceProOmniItems.find((x) => x.kind === "image")?.url === menuUrl;
+            const isStartSelected = startUrl === menuUrl;
+            const isEndSelected = endUrl === menuUrl;
+            return (
+              <>
           <button
             type="button"
             className="flex w-full items-center justify-between rounded-xl px-2.5 py-2 text-left text-sm text-white/90 hover:bg-white/[0.06]"
@@ -4775,29 +4891,35 @@ export default function StudioVideoPanel({
             }}
           >
             <span>Reference</span>
-            <Check className="h-3.5 w-3.5 text-lime-300" aria-hidden />
+            {isReferenceSelected ? <Check className="h-3.5 w-3.5 text-violet-300" aria-hidden /> : null}
           </button>
           <button
             type="button"
-            className="flex w-full items-center rounded-xl px-2.5 py-2 text-left text-sm text-white/90 hover:bg-white/[0.06]"
+            className="flex w-full items-center justify-between rounded-xl px-2.5 py-2 text-left text-sm text-white/90 hover:bg-white/[0.06]"
             onClick={() => {
+              moveSeedanceImageAsPrimaryReference(seedanceImageMenu.scope, seedanceImageMenu.url);
               setStartUrl(seedanceImageMenu.url);
+              if (endUrl === seedanceImageMenu.url) setEndUrl(null);
               setSeedanceImageMenu(null);
               toast.success("Start frame set");
             }}
           >
-            Start Frame
+            <span>Start Frame</span>
+            {isStartSelected ? <Check className="h-3.5 w-3.5 text-violet-300" aria-hidden /> : null}
           </button>
           <button
             type="button"
-            className="flex w-full items-center rounded-xl px-2.5 py-2 text-left text-sm text-white/90 hover:bg-white/[0.06]"
+            className="flex w-full items-center justify-between rounded-xl px-2.5 py-2 text-left text-sm text-white/90 hover:bg-white/[0.06]"
             onClick={() => {
+              moveSeedanceImageAsEndReference(seedanceImageMenu.scope, seedanceImageMenu.url);
               setEndUrl(seedanceImageMenu.url);
+              if (startUrl === seedanceImageMenu.url) setStartUrl(null);
               setSeedanceImageMenu(null);
               toast.success("End frame set");
             }}
           >
-            End Frame
+            <span>End Frame</span>
+            {isEndSelected ? <Check className="h-3.5 w-3.5 text-violet-300" aria-hidden /> : null}
           </button>
           <button
             type="button"
@@ -4809,6 +4931,9 @@ export default function StudioVideoPanel({
           >
             Full Screen
           </button>
+              </>
+            );
+          })()}
         </div>
       ) : null}
 

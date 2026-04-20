@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Check, Coins, Gift, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -68,6 +69,8 @@ export function SubscriptionPlanCreditsWithBonus({
 }) {
   const { bonus, baseCredits } = starterBonusForPlan(planId, credits);
   const cur = normalizeSubscriptionBillingCurrency(billingCurrency);
+  const [baseCreditsInfoOpen, setBaseCreditsInfoOpen] = useState(false);
+  const baseCreditsInfoText = starterPlanCreditsRatioTitle(cur);
 
   const pill = (
     <span
@@ -86,18 +89,37 @@ export function SubscriptionPlanCreditsWithBonus({
     </span>
   );
 
-  const baseLabel = (
-    <span
-      className={cn(
-        "shrink-0 text-white",
-        CREDITS_LINE_CLASS,
-        bonus > 0 && "cursor-help underline decoration-dotted decoration-white/30 underline-offset-2",
-      )}
-      title={bonus > 0 ? starterPlanCreditsRatioTitle(cur) : undefined}
-    >
-      {baseCredits.toLocaleString()} credits
-    </span>
-  );
+  const baseLabel =
+    bonus > 0 ? (
+      <span className="relative inline-flex shrink-0 items-center">
+        <button
+          type="button"
+          className={cn(
+            "shrink-0 text-white underline decoration-dotted decoration-white/30 underline-offset-2",
+            CREDITS_LINE_CLASS,
+          )}
+          title={baseCreditsInfoText}
+          aria-label="Starter ratio credits info"
+          aria-expanded={baseCreditsInfoOpen}
+          onClick={() => setBaseCreditsInfoOpen((open) => !open)}
+        >
+          {baseCredits.toLocaleString()} credits
+        </button>
+        <span
+          className={cn(
+            "pointer-events-none absolute left-0 top-full z-20 mt-1 w-64 rounded-lg border border-white/15 bg-[#111118] p-2.5 text-[10px] leading-snug text-white/80 shadow-xl",
+            baseCreditsInfoOpen ? "block" : "hidden",
+          )}
+          role="tooltip"
+        >
+          {baseCreditsInfoText}
+        </span>
+      </span>
+    ) : (
+      <span className={cn("shrink-0 text-white", CREDITS_LINE_CLASS)}>
+        {baseCredits.toLocaleString()} credits
+      </span>
+    );
 
   const textRow = (
     <span
