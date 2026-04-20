@@ -3762,34 +3762,7 @@ export default function StudioVideoPanel({
                           <AtSign className="h-3 w-3" aria-hidden />
                           Elements
                         </Button>
-                        <span className="max-w-[min(100%,20rem)] text-[10px] leading-snug text-white/38">
-                          {modelId === "kling-3.0/video" ? (
-                            <>
-                              Optional elements: 2–4 images each (upload, avatar, or studio — provider rule). Use{" "}
-                              <span className="text-white/55">@name</span> in the prompt.
-                            </>
-                          ) : (
-                            <>
-                              Optional: 1–4 images per element; <span className="text-white/55">@name</span> in prompt.{" "}
-                              <span className="text-white/55">@image1</span>… order (max {SEEDANCE_PRO_MAX_IMAGE_URLS}{" "}
-                              images). Mix video + audio in <span className="text-white/55">Reference media</span>, not
-                              Elements.
-                            </>
-                          )}
-                        </span>
                       </div>
-                      {klingElementDrafts.length > 0 ? (
-                        <div className="flex flex-wrap gap-1.5">
-                          {klingElementDrafts.map((el) => (
-                            <span
-                              key={el.id}
-                              className="rounded-md border border-violet-500/25 bg-violet-500/10 px-2 py-0.5 text-[10px] font-medium text-violet-200/90"
-                            >
-                              @{el.name.trim() || "-"}
-                            </span>
-                          ))}
-                        </div>
-                      ) : null}
                     </div>
                   ) : null}
                 </>
@@ -4845,10 +4818,17 @@ export default function StudioVideoPanel({
                                     if (ok) setElementRefPick({ open: false });
                                   })();
                                 }}
-                                className="group relative aspect-square overflow-hidden rounded-xl border border-white/12 bg-black/40 transition hover:border-violet-400/45"
+                                className="group relative aspect-square overflow-visible rounded-xl border border-white/12 bg-black/40 transition hover:border-violet-400/45"
                               >
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img src={u} alt="" className="h-full w-full object-cover" />
+                                <span className="pointer-events-none absolute inset-0 z-20 hidden items-center justify-center bg-black/45 text-[10px] font-semibold text-white/90 transition md:group-hover:flex">
+                                  Hover preview
+                                </span>
+                                <span className="pointer-events-none absolute left-1/2 top-1/2 z-30 hidden h-44 w-44 -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-xl border border-violet-300/45 bg-black shadow-[0_14px_40px_rgba(0,0,0,0.55)] md:block md:opacity-0 md:transition md:duration-150 md:group-hover:opacity-100">
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img src={u} alt="" className="h-full w-full object-cover" />
+                                </span>
                               </button>
                             ))}
                           </div>
