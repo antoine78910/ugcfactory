@@ -14,12 +14,14 @@ import {
   Link2,
   Lock,
   Maximize2,
+  Menu,
   Mic,
   Sparkles,
   UserRound,
   Video,
   Joystick,
   Languages,
+  X,
 } from "lucide-react";
 import { useSupabaseBrowserClient } from "@/lib/supabase/BrowserSupabaseProvider";
 import SidebarAccountMenu from "@/app/_components/SidebarAccountMenu";
@@ -190,7 +192,14 @@ function StudioShellInner({
   const pathname = usePathname();
   const [email, setEmail] = useState("");
   const { planDisplayName, isTrial } = useCreditsPlan();
-  const [navCollapsed, setNavCollapsed] = useState(false);
+  /** User preference for collapsed rail; applied only on md+ (see `navCollapsed` below). */
+  const [navCollapsedPref, setNavCollapsedPref] = useState(false);
+  /** Mobile off-canvas drawer; closed by default on every page load to maximize screen space on phones. */
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  /** Track md (>=768px) so the collapsed layout only applies on desktop, never inside the mobile drawer. */
+  const [isMdUp, setIsMdUp] = useState(true);
+  /** Effective collapsed state used by all render logic: off on mobile so the drawer always shows full labels. */
+  const navCollapsed = isMdUp && navCollapsedPref;
   /** Last studio CREATE section when leaving the studio (e.g. credits page); not used as active highlight on /credits or /subscription. */
   const [persistedStudioSection, setPersistedStudioSection] =
     useState<StudioNavSection>("link_to_ad");
@@ -198,7 +207,7 @@ function StudioShellInner({
 
   useEffect(() => {
     try {
-      setNavCollapsed(localStorage.getItem(SIDEBAR_COLLAPSED_LS) === "1");
+      setNavCollapsedPref(localStorage.getItem(SIDEBAR_COLLAPSED_LS) === "1");
     } catch {
       /* ignore */
     }
@@ -206,11 +215,37 @@ function StudioShellInner({
 
   useEffect(() => {
     try {
-      localStorage.setItem(SIDEBAR_COLLAPSED_LS, navCollapsed ? "1" : "0");
+      localStorage.setItem(SIDEBAR_COLLAPSED_LS, navCollapsedPref ? "1" : "0");
     } catch {
       /* ignore */
     }
-  }, [navCollapsed]);
+  }, [navCollapsedPref]);
+
+  /** Close the mobile drawer on any route change to avoid it staying open over new content. */
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mql = window.matchMedia("(min-width: 768px)");
+    const apply = () => setIsMdUp(mql.matches);
+    apply();
+    mql.addEventListener("change", apply);
+    return () => mql.removeEventListener("change", apply);
+  }, []);
+
+  /** Lock body scroll while the mobile drawer is open so taps on the backdrop feel correct. */
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    if (mobileNavOpen) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = prev;
+      };
+    }
+  }, [mobileNavOpen]);
 
   /** App host uses bare `/link-to-ad` (middleware rewrites to `/app/...`); pathname often has no `/app` prefix. */
   const isStudioShell =
@@ -273,19 +308,69 @@ function StudioShellInner({
   return (
     <div className="dark min-h-screen bg-[#050507] text-white">
       <div className="pointer-events-none fixed left-1/2 top-0 -z-0 h-[520px] w-[1000px] -translate-x-1/2 rounded-full bg-violet-600/15 blur-[150px]" />
+
+      {/* Mobile top bar: hamburger + logo; hidden on md+ where the sidebar is permanent. */}
+      <div className="md:hidden sticky top-0 z-40 flex h-14 items-center justify-between gap-2 border-b border-white/10 bg-[#06070d]/95 px-3 backdrop-blur-md">
+        <button
+          type="button"
+          onClick={() => setMobileNavOpen(true)}
+          className="flex h-10 w-10 items-center justify-center rounded-lg border border-white/10 bg-white/[0.06] text-white/80 transition hover:border-violet-400/35 hover:bg-white/[0.1] hover:text-white"
+          aria-label="Open menu"
+        >
+          <Menu className="h-5 w-5" aria-hidden />
+        </button>
+        <Link href="/link-to-ad" className="inline-flex min-w-0 items-center" title="Youry home">
+          <Image
+            src="/youry-logo.png"
+            alt="Youry"
+            width={140}
+            height={42}
+            className="h-7 w-auto"
+            priority
+          />
+        </Link>
+        {/* Spacer to visually balance the hamburger on the left. */}
+        <div className="h-10 w-10" aria-hidden />
+      </div>
+
+      {/* Mobile drawer backdrop. */}
+      {mobileNavOpen ? (
+        <button
+          type="button"
+          onClick={() => setMobileNavOpen(false)}
+          className="md:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-[2px]"
+          aria-label="Close menu"
+        />
+      ) : null}
+
       <main
         className={cn(
           "relative z-10 grid min-h-screen items-start transition-[grid-template-columns] duration-200 ease-out",
-          navCollapsed ? "grid-cols-[4rem_minmax(0,1fr)]" : "grid-cols-[248px_minmax(0,1fr)]",
+          // Mobile: single column (sidebar is off-canvas). md+: two columns with collapsible sidebar.
+          "grid-cols-[minmax(0,1fr)]",
+          navCollapsed ? "md:grid-cols-[4rem_minmax(0,1fr)]" : "md:grid-cols-[248px_minmax(0,1fr)]",
         )}
       >
         <aside
           className={cn(
-            "sticky top-0 z-30 flex h-screen flex-col overflow-visible border-r border-white/10 bg-[#06070d] py-4",
+            // Desktop: permanent, sticky sidebar; width is dictated by the grid track (4rem or 248px).
+            "md:sticky md:top-0 md:z-30 md:flex md:h-screen md:w-auto md:max-w-none md:translate-x-0 md:shadow-none",
+            // Mobile: off-canvas drawer, slides in from the left.
+            "fixed inset-y-0 left-0 z-50 flex h-dvh w-[17rem] max-w-[85vw] flex-col overflow-visible border-r border-white/10 bg-[#06070d] py-4 shadow-2xl transition-transform duration-200 ease-out md:transition-none",
+            mobileNavOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
             "select-none",
-            navCollapsed ? "px-1.5" : "px-3",
+            navCollapsed ? "md:px-1.5 px-3" : "px-3",
           )}
         >
+          {/* Mobile-only close button inside the drawer. */}
+          <button
+            type="button"
+            onClick={() => setMobileNavOpen(false)}
+            className="md:hidden absolute right-2 top-2 flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/[0.06] text-white/80 transition hover:bg-white/[0.1] hover:text-white"
+            aria-label="Close menu"
+          >
+            <X className="h-4 w-4" aria-hidden />
+          </button>
           <div
             className={cn(
               "shrink-0 pb-2",
@@ -313,7 +398,7 @@ function StudioShellInner({
                 </Link>
                 <button
                   type="button"
-                  onClick={() => setNavCollapsed(false)}
+                  onClick={() => setNavCollapsedPref(false)}
                   className={cn(
                     "absolute inset-0 z-10 flex items-center justify-center rounded-lg",
                     "border border-violet-400/45 bg-[#050507]/90 text-white shadow-sm backdrop-blur-sm",
@@ -346,7 +431,7 @@ function StudioShellInner({
                 </Link>
                 <button
                   type="button"
-                  onClick={() => setNavCollapsed(true)}
+                  onClick={() => setNavCollapsedPref(true)}
                   className={cn(
                     "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.06] text-white/70 transition hover:border-violet-400/35 hover:bg-white/[0.1] hover:text-white",
                   )}

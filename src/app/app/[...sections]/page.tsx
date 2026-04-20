@@ -2944,7 +2944,7 @@ export default function AppBrandWizard() {
         onStudioSectionChange={setAppSectionNav}
         studioProjectId={runId}
       >
-        <section className="space-y-6 px-6 py-6 md:px-8">
+        <section className="space-y-6 px-3 py-4 sm:px-6 sm:py-6 md:px-8">
           <div className="space-y-6">
             {appSection === "projects" ? (
               <div className="space-y-5">
@@ -4669,10 +4669,10 @@ export default function AppBrandWizard() {
             {keepAlivePanelsRef.current.avatar ? (
               <div className={appSection === "avatar" ? "contents" : "hidden"} aria-hidden={appSection !== "avatar"}>
                 <Card className="gap-2 border-white/10 bg-[#0b0912]/85 py-3 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
-                  <CardHeader className="space-y-0 px-6 pb-0 pt-2">
+                  <CardHeader className="space-y-0 px-3 pb-0 pt-2 sm:px-6">
                     <CardTitle className="text-sm">Avatar Creator</CardTitle>
                   </CardHeader>
-                  <CardContent className="px-6 pb-3 pt-0">
+                  <CardContent className="px-3 pb-3 pt-0 sm:px-6">
                     <StudioAvatarPanel onChangeVoice={handleChangeVoiceFromHistory} />
                   </CardContent>
                 </Card>
@@ -4681,10 +4681,10 @@ export default function AppBrandWizard() {
             {keepAlivePanelsRef.current.image ? (
               <div className={appSection === "image" ? "contents" : "hidden"} aria-hidden={appSection !== "image"}>
                 <Card className="gap-2 border-white/10 bg-[#0b0912]/85 py-3 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
-                  <CardHeader className="space-y-0 px-6 pb-0 pt-2">
+                  <CardHeader className="space-y-0 px-3 pb-0 pt-2 sm:px-6">
                     <CardTitle className="text-sm">Image</CardTitle>
                   </CardHeader>
-                  <CardContent className="px-6 pb-3 pt-0">
+                  <CardContent className="px-3 pb-3 pt-0 sm:px-6">
                     <StudioImagePanel />
                   </CardContent>
                 </Card>
@@ -4693,7 +4693,7 @@ export default function AppBrandWizard() {
             {keepAlivePanelsRef.current.video ? (
               <div className={appSection === "video" ? "contents" : "hidden"} aria-hidden={appSection !== "video"}>
                 <Card className="gap-2 border-white/10 bg-[#0b0912]/85 py-3 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
-                  <CardContent className="px-6 pb-3 pt-2">
+                  <CardContent className="px-3 pb-3 pt-2 sm:px-6">
                     <StudioVideoPanel onChangeVoice={handleChangeVoiceFromHistory} />
                   </CardContent>
                 </Card>
@@ -4702,10 +4702,10 @@ export default function AppBrandWizard() {
             {keepAlivePanelsRef.current.upscale ? (
               <div className={appSection === "upscale" ? "contents" : "hidden"} aria-hidden={appSection !== "upscale"}>
                 <Card className="min-h-0 gap-2 border-white/10 bg-[#0b0912]/85 py-3 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
-                  <CardHeader className="space-y-0 px-6 pb-0 pt-2">
+                  <CardHeader className="space-y-0 px-3 pb-0 pt-2 sm:px-6">
                     <CardTitle className="text-sm">Upscale</CardTitle>
                   </CardHeader>
-                  <CardContent className="min-h-0 px-6 pb-3 pt-0">
+                  <CardContent className="min-h-0 px-3 pb-3 pt-0 sm:px-6">
                     <StudioUpscalePanel />
                   </CardContent>
                 </Card>
