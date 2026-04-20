@@ -7,18 +7,46 @@ import { join } from "path";
 import { execFile } from "child_process";
 import { gunzipSync } from "zlib";
 import { randomUUID } from "crypto";
+import ffmpegStatic from "ffmpeg-static";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 
-const FFMPEG_BIN = join(tmpdir(), "ffmpeg");
+const FFMPEG_BIN = join(tmpdir(), process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg");
 const FFMPEG_GZ_URL =
   "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-linux-x64.gz";
 const MIN_BINARY_SIZE = 30 * 1024 * 1024;
 
+function verifyFfmpeg(bin: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    execFile(bin, ["-version"], { timeout: 10_000 }, (err) => {
+      resolve(!err);
+    });
+  });
+}
+
 async function ensureFfmpeg(): Promise<string> {
+  if (typeof ffmpegStatic === "string" && ffmpegStatic && existsSync(ffmpegStatic)) {
+    const ok = await verifyFfmpeg(ffmpegStatic);
+    if (ok) return ffmpegStatic;
+  }
+
+  // Local/dev fallback if ffmpeg is installed globally and available in PATH.
+  if (await verifyFfmpeg("ffmpeg")) return "ffmpeg";
+
   if (existsSync(FFMPEG_BIN)) {
     const size = statSync(FFMPEG_BIN).size;
-    if (size > MIN_BINARY_SIZE) return FFMPEG_BIN;
+    if (size > MIN_BINARY_SIZE) {
+      const ok = await verifyFfmpeg(FFMPEG_BIN);
+      if (ok) return FFMPEG_BIN;
+    }
   }
+
+  // Runtime download fallback is intentionally Linux-only for serverless envs.
+  if (process.platform !== "linux") {
+    throw new Error(
+      "ffmpeg not found on this system. Install ffmpeg or keep ffmpeg-static dependency available.",
+    );
+  }
+
   const res = await fetch(FFMPEG_GZ_URL, { redirect: "follow", cache: "no-store" });
   if (!res.ok) throw new Error(`ffmpeg download failed: HTTP ${res.status}`);
   const gz = Buffer.from(await res.arrayBuffer());
@@ -26,6 +54,8 @@ async function ensureFfmpeg(): Promise<string> {
   if (bin.length < MIN_BINARY_SIZE) throw new Error("ffmpeg binary too small");
   await writeFile(FFMPEG_BIN, bin);
   await chmod(FFMPEG_BIN, 0o755);
+  const ok = await verifyFfmpeg(FFMPEG_BIN);
+  if (!ok) throw new Error("ffmpeg downloaded but could not execute");
   return FFMPEG_BIN;
 }
 
@@ -65,37 +95,88 @@ export async function POST(req: Request) {
     const outExt = kind === "video" ? ".mp4" : ".mp3";
     const inPath = join(tmpdir(), `trim-in-${id}${inExt}`);
     const outPath = join(tmpdir(), `trim-out-${id}${outExt}`);
+    const durationSec = Math.max(0.01, endSec - startSec);
+    const startArg = String(startSec);
+    const durationArg = durationSec.toFixed(3);
     await writeFile(inPath, Buffer.from(await file.arrayBuffer()));
 
     try {
-      const baseArgs = ["-ss", String(startSec), "-to", String(endSec), "-i", inPath];
       if (kind === "video") {
-        await runFfmpeg(bin, [
-          ...baseArgs,
-          "-c:v",
-          "libx264",
-          "-preset",
-          "veryfast",
-          "-crf",
-          "23",
-          "-c:a",
-          "aac",
-          "-movflags",
-          "+faststart",
-          "-y",
-          outPath,
-        ]);
+        try {
+          // Fast path: stream copy (no re-encode) to keep trim in a few seconds.
+          await runFfmpeg(bin, [
+            "-ss",
+            startArg,
+            "-t",
+            durationArg,
+            "-i",
+            inPath,
+            "-map",
+            "0:v:0?",
+            "-map",
+            "0:a:0?",
+            "-c",
+            "copy",
+            "-avoid_negative_ts",
+            "make_zero",
+            "-y",
+            outPath,
+          ]);
+        } catch {
+          // Fallback: re-encode only if copy mode fails on edge codecs/containers.
+          await runFfmpeg(bin, [
+            "-ss",
+            startArg,
+            "-t",
+            durationArg,
+            "-i",
+            inPath,
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-crf",
+            "28",
+            "-c:a",
+            "aac",
+            "-tune",
+            "fastdecode",
+            "-y",
+            outPath,
+          ]);
+        }
       } else {
-        await runFfmpeg(bin, [
-          ...baseArgs,
-          "-vn",
-          "-c:a",
-          "libmp3lame",
-          "-b:a",
-          "192k",
-          "-y",
-          outPath,
-        ]);
+        try {
+          await runFfmpeg(bin, [
+            "-ss",
+            startArg,
+            "-t",
+            durationArg,
+            "-i",
+            inPath,
+            "-vn",
+            "-c:a",
+            "copy",
+            "-y",
+            outPath,
+          ]);
+        } catch {
+          await runFfmpeg(bin, [
+            "-ss",
+            startArg,
+            "-t",
+            durationArg,
+            "-i",
+            inPath,
+            "-vn",
+            "-c:a",
+            "libmp3lame",
+            "-b:a",
+            "160k",
+            "-y",
+            outPath,
+          ]);
+        }
       }
 
       const out = await readFile(outPath);

@@ -116,6 +116,46 @@ export function ensureSeedancePromptMediaTags(
   return `${parts.join(" ")}, ${p}`.trim();
 }
 
+function validateSeedancePromptMaterialReferences(
+  prompt: string,
+  counts: { image: number; video: number; audio: number },
+): void {
+  const p = (prompt ?? "").trim();
+  if (!p) return;
+
+  const maxRef = (patterns: RegExp[]): number => {
+    let max = 0;
+    for (const re of patterns) {
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(p)) !== null) {
+        const n = Number(m[1]);
+        if (Number.isFinite(n) && n > max) max = n;
+      }
+    }
+    return max;
+  };
+
+  const imageMax = maxRef([/@image(\d+)\b/gi, /【\s*@图片(\d+)\s*】/gi]);
+  const videoMax = maxRef([/@video(\d+)\b/gi, /【\s*@视频(\d+)\s*】/gi]);
+  const audioMax = maxRef([/@audio(\d+)\b/gi, /【\s*@音频(\d+)\s*】/gi]);
+
+  if (imageMax > counts.image) {
+    throw new Error(
+      `Prompt references @image${imageMax}, but only ${counts.image} image reference${counts.image === 1 ? "" : "s"} provided.`,
+    );
+  }
+  if (videoMax > counts.video) {
+    throw new Error(
+      `Prompt references @video${videoMax}, but only ${counts.video} video reference${counts.video === 1 ? "" : "s"} provided.`,
+    );
+  }
+  if (audioMax > counts.audio) {
+    throw new Error(
+      `Prompt references @audio${audioMax}, but only ${counts.audio} audio reference${counts.audio === 1 ? "" : "s"} provided.`,
+    );
+  }
+}
+
 export type PiapiSeedanceAspectRatio =
   | "16:9"
   | "9:16"
@@ -174,6 +214,11 @@ export async function piapiCreateSeedanceTask(opts: {
           audio: audioUrls.length,
         })
       : opts.prompt.trim();
+  validateSeedancePromptMaterialReferences(finalPrompt, {
+    image: urls.length,
+    video: videoUrls.length,
+    audio: audioUrls.length,
+  });
 
   const input: Record<string, unknown> = {
     prompt: finalPrompt,

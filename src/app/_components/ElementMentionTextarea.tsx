@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AtSign } from "lucide-react";
+import { AtSign, Music2, VideoIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type MentionElementOption = {
@@ -9,6 +9,7 @@ export type MentionElementOption = {
   name: string;
   description?: string;
   previewUrl?: string;
+  previewKind?: "image" | "video" | "audio";
 };
 
 type Props = {
@@ -44,6 +45,24 @@ function extractMentionAtCursor(
   return null;
 }
 
+function findMentionRangeAroundCursor(
+  value: string,
+  cursor: number,
+): { start: number; end: number; token: string } | null {
+  const mentionRe = /@([a-zA-Z0-9_]+)\b/g;
+  let m: RegExpExecArray | null;
+  while ((m = mentionRe.exec(value)) !== null) {
+    const full = m[0]!;
+    const token = m[1]!;
+    const start = m.index;
+    const end = start + full.length;
+    if (cursor >= start && cursor <= end + 1) {
+      return { start, end, token };
+    }
+  }
+  return null;
+}
+
 /**
  * Textarea with an `@mention` autocomplete for saved video Elements (Higgsfield-style).
  *
@@ -66,6 +85,8 @@ export default function ElementMentionTextarea({
   const [activeIdx, setActiveIdx] = useState(0);
   const [token, setToken] = useState("");
   const [tokenStart, setTokenStart] = useState<number | null>(null);
+  const [overlayScrollTop, setOverlayScrollTop] = useState(0);
+  const [overlayScrollLeft, setOverlayScrollLeft] = useState(0);
 
   const filtered = useMemo(() => {
     const items = elements.filter((e) => e.name.trim().length > 0);
@@ -136,6 +157,31 @@ export default function ElementMentionTextarea({
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    const ta = e.currentTarget;
+    const selStart = ta.selectionStart ?? value.length;
+    const selEnd = ta.selectionEnd ?? selStart;
+    const hasSelection = selEnd > selStart;
+
+    if (!hasSelection && (e.key === "Backspace" || e.key === "Delete")) {
+      const probeCursor = e.key === "Backspace" ? selStart : selStart + 1;
+      const mention = findMentionRangeAroundCursor(value, probeCursor);
+      if (mention && mentionByName.has(mention.token.toLowerCase())) {
+        e.preventDefault();
+        const removeStart = mention.start;
+        let removeEnd = mention.end;
+        if (value[removeEnd] === " ") removeEnd += 1;
+        const next = value.slice(0, removeStart) + value.slice(removeEnd);
+        onChange(next);
+        closeMenu();
+        requestAnimationFrame(() => {
+          if (!textareaRef.current) return;
+          textareaRef.current.focus();
+          textareaRef.current.setSelectionRange(removeStart, removeStart);
+        });
+        return;
+      }
+    }
+
     if (!open) return;
     if (filtered.length === 0 && e.key !== "Escape") return;
     if (e.key === "ArrowDown") {
@@ -163,8 +209,106 @@ export default function ElementMentionTextarea({
   const showMenu =
     open && (filtered.length > 0 || (!hasAnyElements && token.length === 0));
 
+  const mentionByName = useMemo(
+    () => new Map(elements.map((el) => [el.name.trim().toLowerCase(), el] as const)),
+    [elements],
+  );
+
+  const formatMentionLabel = useCallback((name: string) => {
+    const n = name.trim();
+    const seedance = /^(image|video|audio)(\d+)$/i.exec(n);
+    if (seedance) {
+      const kind = seedance[1]!;
+      return `${kind[0]!.toUpperCase()}${kind.slice(1).toLowerCase()} ${seedance[2]}`;
+    }
+    return n;
+  }, []);
+
+  const renderedOverlay = useMemo(() => {
+    if (!value) return null;
+    const nodes: React.ReactNode[] = [];
+    const mentionRe = /@([a-zA-Z0-9_]+)\b/g;
+    let cursor = 0;
+    let m: RegExpExecArray | null;
+    while ((m = mentionRe.exec(value)) !== null) {
+      const atIndex = m.index;
+      const full = m[0]!;
+      const rawName = m[1]!;
+      if (atIndex > cursor) {
+        nodes.push(
+          <span key={`txt-${cursor}`}>{value.slice(cursor, atIndex)}</span>,
+        );
+      }
+      const opt = mentionByName.get(rawName.toLowerCase());
+      if (!opt) {
+        nodes.push(<span key={`raw-${atIndex}`}>{full}</span>);
+      } else {
+        const kind = opt.previewKind ?? "image";
+        const chipClass =
+          "inline-flex h-5 items-center gap-0.5 rounded-md bg-white/[0.06] px-0.5 align-middle";
+        const labelClass = "whitespace-nowrap text-[12px] font-medium tracking-[-0.01em] text-white/92";
+        nodes.push(
+          <span key={`chip-wrap-${atIndex}-${opt.id}`} className="relative inline-block align-baseline">
+            {/* Reserve exactly the raw token width used by the real textarea caret. */}
+            <span className="invisible">{full}</span>
+            <span className={`pointer-events-none absolute left-0 top-1/2 flex h-5 w-full -translate-y-1/2 items-center overflow-hidden ${chipClass}`}>
+              <span className="relative h-3 w-3 shrink-0 overflow-hidden rounded-[3px] bg-black/45">
+                {opt.previewUrl && kind === "video" ? (
+                  // eslint-disable-next-line jsx-a11y/media-has-caption
+                  <video
+                    src={opt.previewUrl}
+                    className="h-full w-full object-cover"
+                    muted
+                    playsInline
+                    preload="metadata"
+                  />
+                ) : opt.previewUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={opt.previewUrl} alt="" className="h-full w-full object-cover" />
+                ) : kind === "audio" ? (
+                  <span className="flex h-full w-full items-center justify-center text-white/70">
+                    <Music2 className="h-2.5 w-2.5" aria-hidden />
+                  </span>
+                ) : kind === "video" ? (
+                  <span className="flex h-full w-full items-center justify-center text-white/70">
+                    <VideoIcon className="h-2.5 w-2.5" aria-hidden />
+                  </span>
+                ) : (
+                  <span className="flex h-full w-full items-center justify-center text-white/70">
+                    <AtSign className="h-2.5 w-2.5" aria-hidden />
+                  </span>
+                )}
+              </span>
+              <span className={`min-w-0 truncate ${labelClass}`}>{formatMentionLabel(opt.name)}</span>
+            </span>
+          </span>,
+        );
+      }
+      cursor = atIndex + full.length;
+    }
+    if (cursor < value.length) {
+      nodes.push(<span key={`txt-tail-${cursor}`}>{value.slice(cursor)}</span>);
+    }
+    return nodes;
+  }, [formatMentionLabel, mentionByName, value]);
+
   return (
     <div className="relative">
+      {value ? (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 z-0 overflow-hidden rounded-md"
+        >
+          <div
+            className="whitespace-pre-wrap break-words px-3 py-2 text-base leading-6 text-white md:text-sm"
+            style={{
+              transform: `translate(${-overlayScrollLeft}px, ${-overlayScrollTop}px)`,
+            }}
+          >
+            {renderedOverlay}
+          </div>
+        </div>
+      ) : null}
       <textarea
         ref={textareaRef}
         value={value}
@@ -172,6 +316,10 @@ export default function ElementMentionTextarea({
         onKeyDown={handleKeyDown}
         onKeyUp={refreshFromCaret}
         onClick={refreshFromCaret}
+        onScroll={(e) => {
+          setOverlayScrollTop(e.currentTarget.scrollTop);
+          setOverlayScrollLeft(e.currentTarget.scrollLeft);
+        }}
         onBlur={() => {
           /** Delay so a click inside the dropdown can land before we close. */
           window.setTimeout(closeMenu, 120);
@@ -182,6 +330,7 @@ export default function ElementMentionTextarea({
         className={cn(
           "border-input placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:bg-input/30 flex field-sizing-content min-h-16 w-full rounded-md border bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
           className,
+          value ? "relative z-10 text-transparent caret-white selection:bg-white/25" : "relative z-10",
         )}
       />
       {showMenu ? (
@@ -207,13 +356,30 @@ export default function ElementMentionTextarea({
                     onClick={() => handleSelect(el)}
                   >
                     <span className="relative h-9 w-9 shrink-0 overflow-hidden rounded-md border border-white/10 bg-black/50">
-                      {el.previewUrl ? (
+                      {el.previewUrl && el.previewKind === "video" ? (
+                        // eslint-disable-next-line jsx-a11y/media-has-caption
+                        <video
+                          src={el.previewUrl}
+                          className="h-full w-full object-cover"
+                          muted
+                          playsInline
+                          preload="metadata"
+                        />
+                      ) : el.previewUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={el.previewUrl}
                           alt=""
                           className="h-full w-full object-cover"
                         />
+                      ) : el.previewKind === "audio" ? (
+                        <span className="flex h-full w-full items-center justify-center text-white/40">
+                          <Music2 className="h-3.5 w-3.5" aria-hidden />
+                        </span>
+                      ) : el.previewKind === "video" ? (
+                        <span className="flex h-full w-full items-center justify-center text-white/40">
+                          <VideoIcon className="h-3.5 w-3.5" aria-hidden />
+                        </span>
                       ) : (
                         <span className="flex h-full w-full items-center justify-center text-white/40">
                           <AtSign className="h-3.5 w-3.5" aria-hidden />

@@ -3302,19 +3302,17 @@ export default function AppBrandWizard() {
                                                   <img
                                                     src={src}
                                                     alt=""
-                                                    className="h-full w-full object-cover transition-transform duration-300 group-hover/img:scale-105"
+                                                    className="h-full w-full object-cover"
                                                     referrerPolicy="no-referrer"
                                                   />
                                                   <div className="pointer-events-none absolute inset-0 bg-black/0 transition-all duration-200 group-hover/img:bg-black/30" />
                                                   <button
                                                     type="button"
                                                     onClick={() => setLightboxUrl(src)}
-                                                    className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover/img:opacity-100"
+                                                    className="absolute right-1 top-1 z-10 flex h-7 w-7 items-center justify-center rounded-lg bg-black/60 text-white opacity-0 shadow transition-opacity duration-200 hover:bg-black/70 hover:text-white/90 group-hover/img:opacity-100"
                                                     aria-label="View fullscreen"
                                                   >
-                                                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-black/60 backdrop-blur-sm transition hover:bg-black/80">
-                                                      <Maximize2 className="h-3.5 w-3.5 text-white" />
-                                                    </span>
+                                                    <Maximize2 className="h-4 w-4" aria-hidden />
                                                   </button>
                                                 </div>
                                               ))}

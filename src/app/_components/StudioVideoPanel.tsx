@@ -10,8 +10,12 @@ import {
   Expand,
   HelpCircle,
   ImageIcon,
+  Maximize2,
   Music2,
+  Pause,
   Pin,
+  Play,
+  Loader2,
   Check,
   Shrink,
   Sparkles,
@@ -128,6 +132,7 @@ const KLING_SHOT_DURATION_OPTIONS = Array.from(
   { length: KLING_MULTI_SHOT_SEC_MAX - KLING_MULTI_SHOT_SEC_MIN + 1 },
   (_, i) => String(KLING_MULTI_SHOT_SEC_MIN + i),
 );
+const ELEMENT_PICKER_CACHE_TTL_MS = 45_000;
 
 type KlingShotRow = { id: string; prompt: string; durationSec: number };
 type KlingElementDraft = {
@@ -141,11 +146,12 @@ type KlingElementDraft = {
 
 type ElementLibraryTab = "uploads" | "image_generations" | "video_generations" | "elements" | "lta_generated";
 type ElementRefPickUploadRow = { url: string; createdAt: number };
+type ElementRefPickLtaMedia = { url: string; kind: "image" | "video" };
 type ElementRefPickLtaGroup = {
   id: string;
   createdAt: number;
-  generatedUrls: string[];
-  productUrls: string[];
+  generatedMedia: ElementRefPickLtaMedia[];
+  productMedia: ElementRefPickLtaMedia[];
 };
 
 type ElementRefPickState =
@@ -159,6 +165,15 @@ type ElementRefPickState =
       videoItems: StudioHistoryItem[];
       ltaGroups: ElementRefPickLtaGroup[];
     };
+
+type ElementRefPickCache = {
+  loadedAtMs: number;
+  uploads: ElementRefPickUploadRow[];
+  imageItems: StudioHistoryItem[];
+  videoItems: StudioHistoryItem[];
+  ltaGroups: ElementRefPickLtaGroup[];
+  projectsModeByRunId: Record<string, "generated" | "product">;
+};
 
 type SeedanceTrimState = {
   file: File;
@@ -852,6 +867,22 @@ export default function StudioVideoPanel({
   /** Opened automatically when an audio/video upload would exceed the 15s Seedance omni budget. */
   const [seedanceTrimState, setSeedanceTrimState] = useState<SeedanceTrimState | null>(null);
   const [seedanceTrimPreviewUrl, setSeedanceTrimPreviewUrl] = useState<string | null>(null);
+  /** CapCut-style inline timeline: sampled frame thumbnails and drag state. */
+  const [seedanceTrimThumbs, setSeedanceTrimThumbs] = useState<string[]>([]);
+  /** Keeps the last visible scrub frame to avoid blank preview flicker. */
+  const [seedanceTrimLastVisualUrl, setSeedanceTrimLastVisualUrl] = useState<string | null>(null);
+  const [seedanceTrimPlaying, setSeedanceTrimPlaying] = useState(false);
+  const [seedanceTrimDragHandle, setSeedanceTrimDragHandle] = useState<
+    "start" | "end" | null
+  >(null);
+  /** Current scrub position in seconds; drives which filmstrip frame is shown in the preview. */
+  const [seedanceTrimScrubSec, setSeedanceTrimScrubSec] = useState(0);
+  const seedanceTrimVideoRef = useRef<HTMLMediaElement | null>(null);
+  const seedanceTrimTimelineRef = useRef<HTMLDivElement | null>(null);
+  const seedanceTrimScrubRafRef = useRef<number | null>(null);
+  const seedanceTrimScrubTargetRef = useRef<number | null>(null);
+  const seedanceTrimUiRafRef = useRef<number | null>(null);
+  const seedanceTrimPendingPointerRef = useRef<{ clientX: number; handle: "start" | "end" } | null>(null);
   const [seedanceOmniPreview, setSeedanceOmniPreview] = useState<SeedanceOmniRefItem | null>(null);
   const [seedanceImageMenu, setSeedanceImageMenu] = useState<{
     scope: "compact" | "omni";
@@ -892,6 +923,7 @@ export default function StudioVideoPanel({
   const HIDE_VIDEO_EDIT_TAB = true;
   const FORCED_VIDEO_MODEL_ID: VideoModelId = "openai/sora-2";
   const [modelId, setModelId] = useState<VideoModelId>(VIDEO_MODEL_ACCESS_ORDER[0]!);
+  const elementPickerSupportsVideoAudio = studioVideoIsSeedance2ProPickerId(modelId);
   const [videoPriority, setVideoPriority] = useState<VideoPriority>("normal");
   const [seedancePriorityInfoOpen, setSeedancePriorityInfoOpen] = useState(false);
   const [duration, setDuration] = useState("10");
@@ -1066,6 +1098,8 @@ export default function StudioVideoPanel({
     "create_start" | "create_end" | "edit_motion" | "edit_elements" | "kling_element"
   >("create_start");
   const [elementRefPick, setElementRefPick] = useState<ElementRefPickState>({ open: false });
+  const elementRefPickCacheRef = useRef<ElementRefPickCache | null>(null);
+  const elementRefPickRequestSeqRef = useRef(0);
   const [projectsPickModeByRunId, setProjectsPickModeByRunId] = useState<
     Record<string, "generated" | "product">
   >({});
@@ -1084,35 +1118,95 @@ export default function StudioVideoPanel({
       : null;
   const seedancePriorityInfoText =
     "VIP pricing is x2 credits per generation.\n\nPeak hours: From 09:00 to 15:00 GMT, Seedance Preview experiences high traffic. During this period, queue times may extend to several hours.\n\nCurrently outside peak hours: Normal is usually 5-60 min. VIP (fast) is usually 3-5 min.";
-  /** Higgsfield-style autocomplete list for the prompt @mention picker (only when the current model supports Elements). */
+  /** Prompt @mention picker: saved Elements + live Seedance upload tags (@imageN/@videoN/@audioN). */
   const mentionElementOptions = useMemo<MentionElementOption[]>(() => {
-    if (!studioVideoSupportsReferenceElements(modelId)) return [];
+    const supportsElements = studioVideoSupportsReferenceElements(modelId);
+    const supportsSeedanceUploads =
+      studioVideoUsesSeedanceCompactReferenceUploads(modelId) ||
+      studioVideoUsesSeedanceProOmniMediaUploads(modelId);
+    if (!supportsElements && !supportsSeedanceUploads) return [];
+
     const minUrls = minReferenceUrlsPerVideoElement(modelId);
-    return klingElementDrafts
+    const savedElements = supportsElements
+      ? klingElementDrafts
       .filter((d) => d.name.trim().length > 0 && d.urls.length >= minUrls)
       .map((d) => ({
         id: d.id,
         name: d.name,
         description: d.description,
         previewUrl: d.urls[0],
-      }));
-  }, [klingElementDrafts, modelId]);
+        previewKind: "image" as const,
+      }))
+      : [];
 
-  /** Saved elements whose @name appears in the prompt — shown as thumbnail chips above the prompt. */
-  const promptElementTagDrafts = useMemo(() => {
-    if (!studioVideoSupportsReferenceElements(modelId)) return [];
-    const re = /@([a-zA-Z0-9_]+)\b/g;
-    const found = new Set<string>();
-    let m: RegExpExecArray | null;
-    const p = prompt;
-    while ((m = re.exec(p)) !== null) {
-      found.add(m[1]!.toLowerCase());
+    if (!supportsSeedanceUploads) return savedElements;
+
+    const seedanceMentions: MentionElementOption[] = [];
+    const seenImageUrls = new Set<string>();
+    let imageIdx = 1;
+    let videoIdx = 1;
+    let audioIdx = 1;
+
+    const pushImageRef = (urlRaw: string) => {
+      const url = urlRaw.trim();
+      if (!url || seenImageUrls.has(url)) return;
+      seenImageUrls.add(url);
+      seedanceMentions.push({
+        id: `seedance-image-${imageIdx}-${url.slice(-20)}`,
+        name: `image${imageIdx}`,
+        description: `Image ${imageIdx} (uploaded reference)`,
+        previewUrl: url,
+        previewKind: "image",
+      });
+      imageIdx += 1;
+    };
+
+    const compactRefs = studioVideoUsesSeedanceCompactReferenceUploads(modelId)
+      ? seedanceCompactRefUrls
+      : [];
+    for (const u of compactRefs) pushImageRef(u);
+
+    if (studioVideoUsesSeedanceProOmniMediaUploads(modelId)) {
+      // Seedance omni ordering: image tags first, then video, then audio.
+      const startRef = String(startUrl ?? "").trim();
+      if (startRef) pushImageRef(startRef);
+      for (const it of seedanceProOmniItems) {
+        if (it.kind === "image") pushImageRef(it.url);
+      }
+      for (const it of seedanceProOmniItems) {
+        if (it.kind !== "video") continue;
+        seedanceMentions.push({
+          id: `seedance-video-${videoIdx}-${it.url.slice(-20)}`,
+          name: `video${videoIdx}`,
+          description: `Video ${videoIdx} (uploaded reference)`,
+          previewUrl: it.url,
+          previewKind: "video",
+        });
+        videoIdx += 1;
+      }
+      for (const it of seedanceProOmniItems) {
+        if (it.kind !== "audio") continue;
+        seedanceMentions.push({
+          id: `seedance-audio-${audioIdx}-${it.url.slice(-20)}`,
+          name: `audio${audioIdx}`,
+          description: `Audio ${audioIdx} (uploaded reference)`,
+          previewKind: "audio",
+        });
+        audioIdx += 1;
+      }
     }
-    return klingElementDrafts.filter((d) => {
-      const n = d.name.trim().toLowerCase();
-      return Boolean(n && found.has(n) && d.urls[0]?.trim());
-    });
-  }, [prompt, klingElementDrafts, modelId]);
+
+    const out: MentionElementOption[] = [];
+    const seenNames = new Set<string>();
+    for (const item of [...seedanceMentions, ...savedElements]) {
+      const key = item.name.trim().toLowerCase();
+      if (!key || seenNames.has(key)) continue;
+      seenNames.add(key);
+      out.push(item);
+    }
+    return out;
+  }, [klingElementDrafts, modelId, seedanceCompactRefUrls, seedanceProOmniItems, startUrl]);
+
   /** Preview Seedance models need a start image; Seedance 2 / Fast support text-only. */
   const startFrameOptional =
     meta.family === "veo" ||
@@ -1290,6 +1384,166 @@ export default function StudioVideoPanel({
     };
   }, [seedanceTrimState]);
 
+  /**
+   * Extract ~12 evenly-spaced JPEG thumbnails from the uploaded video to render
+   * the CapCut-style filmstrip. Runs off-DOM via a detached <video> + <canvas>
+   * so it doesn't affect the preview playback. Reset + re-run every time a new
+   * trim modal opens for a video source.
+   */
+  useEffect(() => {
+    if (!seedanceTrimState || seedanceTrimState.kind !== "video" || !seedanceTrimPreviewUrl) {
+      setSeedanceTrimThumbs([]);
+      return;
+    }
+    let cancelled = false;
+    setSeedanceTrimThumbs([]);
+
+    const THUMB_COUNT = 24;
+    const video = document.createElement("video");
+    video.muted = true;
+    video.preload = "auto";
+    video.playsInline = true;
+    video.src = seedanceTrimPreviewUrl;
+
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const seekTo = (t: number) =>
+      new Promise<void>((resolve) => {
+        let settled = false;
+        const cleanup = () => {
+          video.removeEventListener("seeked", onSeeked);
+          window.clearTimeout(timer);
+        };
+        const onSeeked = () => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          resolve();
+        };
+        const timer = window.setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          resolve();
+        }, 400);
+        video.addEventListener("seeked", onSeeked);
+        try {
+          video.currentTime = t;
+        } catch {
+          settled = true;
+          cleanup();
+          resolve();
+        }
+      });
+
+    const extract = async () => {
+      if (video.readyState < 2) {
+        await new Promise<void>((resolve) => {
+          let settled = false;
+          const cleanup = () => {
+            video.removeEventListener("loadeddata", onLoaded);
+            video.removeEventListener("canplay", onLoaded);
+            video.removeEventListener("error", onError);
+            window.clearTimeout(timer);
+          };
+          const onLoaded = () => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            resolve();
+          };
+          const onError = () => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            resolve();
+          };
+          const timer = window.setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            resolve();
+          }, 1500);
+          video.addEventListener("loadeddata", onLoaded);
+          video.addEventListener("canplay", onLoaded);
+          video.addEventListener("error", onError);
+        });
+      }
+
+      const dur = seedanceTrimState.sourceDurationSec || video.duration || 0;
+      if (!dur) return;
+      const w = 360;
+      const ratio = video.videoHeight && video.videoWidth ? video.videoHeight / video.videoWidth : 9 / 16;
+      const h = Math.max(80, Math.round(w * ratio));
+      canvas.width = w;
+      canvas.height = h;
+
+      const collected: string[] = [];
+      for (let i = 0; i < THUMB_COUNT; i++) {
+        if (cancelled) return;
+        const t = Math.min(Math.max(0, dur - 0.05), (dur * (i + 0.5)) / THUMB_COUNT);
+        try {
+          await seekTo(t);
+          await new Promise((r) => window.setTimeout(r, 18));
+        } catch {
+          break;
+        }
+        if (cancelled) return;
+        try {
+          ctx.drawImage(video, 0, 0, w, h);
+          collected.push(canvas.toDataURL("image/jpeg", 0.55));
+        } catch {
+          break;
+        }
+        if (!cancelled) setSeedanceTrimThumbs([...collected]);
+      }
+    };
+
+    void extract().catch(() => {
+      /* thumbnail extraction is best-effort */
+    });
+
+    return () => {
+      cancelled = true;
+      video.src = "";
+    };
+  }, [seedanceTrimState, seedanceTrimPreviewUrl]);
+
+  useEffect(() => {
+    if (!seedanceTrimState) {
+      setSeedanceTrimPlaying(false);
+      setSeedanceTrimDragHandle(null);
+      setSeedanceTrimScrubSec(0);
+      setSeedanceTrimLastVisualUrl(null);
+      return;
+    }
+    setSeedanceTrimScrubSec(seedanceTrimState.startSec);
+  }, [seedanceTrimState]);
+
+  useEffect(() => {
+    if (!seedanceTrimState || seedanceTrimState.kind !== "video") return;
+    if (seedanceTrimThumbs.length === 0) return;
+    const dur = Math.max(0.01, seedanceTrimState.sourceDurationSec);
+    const ratio = Math.max(0, Math.min(1, seedanceTrimScrubSec / dur));
+    const idx = Math.max(0, Math.min(seedanceTrimThumbs.length - 1, Math.floor(ratio * seedanceTrimThumbs.length)));
+    const candidate = seedanceTrimThumbs[idx] ?? seedanceTrimThumbs[0] ?? null;
+    if (!candidate) return;
+    setSeedanceTrimLastVisualUrl((prev) => (prev === candidate ? prev : candidate));
+  }, [seedanceTrimState, seedanceTrimThumbs, seedanceTrimScrubSec]);
+
+  useEffect(() => {
+    return () => {
+      if (seedanceTrimScrubRafRef.current != null) {
+        cancelAnimationFrame(seedanceTrimScrubRafRef.current);
+      }
+      if (seedanceTrimUiRafRef.current != null) {
+        cancelAnimationFrame(seedanceTrimUiRafRef.current);
+      }
+    };
+  }, []);
+
   useEffect(() => {
     if (!seedanceImageMenu) return;
     const onPointerDown = (e: MouseEvent) => {
@@ -1436,6 +1690,14 @@ export default function StudioVideoPanel({
       isEdit ? klingElementDrafts.map((d) => (d.id === id ? committed : d)) : [...klingElementDrafts, committed],
     );
     setKlingElementDrafts(next);
+    // Auto-mention newly saved element in the main prompt input.
+    // Prevent duplicates if the tag already exists.
+    const elementTag = `@${name}`;
+    setPrompt((prev) => {
+      if (promptUsesKlingElementTag(prev, name)) return prev;
+      const base = prev.trimEnd();
+      return base ? `${base} ${elementTag}` : elementTag;
+    });
     toast.success(isEdit ? "Element updated" : "Element saved");
     if (next.length >= 3) {
       setKlingElementsModalOpen(false);
@@ -1448,7 +1710,7 @@ export default function StudioVideoPanel({
         urls: [],
       });
     }
-  }, [klingElementForm, klingElementDrafts, modelId]);
+  }, [klingElementForm, klingElementDrafts, modelId, setPrompt]);
 
   const onKlingElementFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1777,8 +2039,111 @@ export default function StudioVideoPanel({
     seedanceProOmniItems.length,
   ]);
 
-  const seedanceTrimSelectedDurationSec =
-    seedanceTrimState ? Math.max(0, seedanceTrimState.endSec - seedanceTrimState.startSec) : 0;
+  /**
+   * Pointer-driven drag for the start/end handles on the CapCut-style timeline.
+   * Keeps the same budget/capping logic as the original sliders (selection
+   * cannot exceed remainingBudgetSec, handles cannot cross, min 0.1s spread).
+   */
+  const scheduleSeedanceTrimPreviewSeek = useCallback((timeSec: number) => {
+    const safeTime = Number.isFinite(timeSec) ? Math.max(0, timeSec) : 0;
+    setSeedanceTrimScrubSec(safeTime);
+    const media = seedanceTrimVideoRef.current;
+    if (!media) return;
+    seedanceTrimScrubTargetRef.current = safeTime;
+    /**
+     * Pause immediately so the browser can honour the forthcoming
+     * currentTime seek synchronously (scrubbing while playing can
+     * otherwise let the next frame tick overwrite the seek target and
+     * feel laggy).
+     */
+    try {
+      if (!media.paused) {
+        media.pause();
+        setSeedanceTrimPlaying(false);
+      }
+    } catch {
+      /* best-effort */
+    }
+    /**
+     * Try to commit the seek synchronously on the very first scrub
+     * event so the video paints a fresh frame ASAP. The RAF throttle
+     * below coalesces further updates within the same frame so we
+     * don't overload the seek pipeline when the user drags quickly.
+     */
+    if (media.readyState >= 2) {
+      try {
+        media.currentTime = safeTime;
+      } catch {
+        /* noop */
+      }
+    }
+    if (seedanceTrimScrubRafRef.current != null) return;
+    seedanceTrimScrubRafRef.current = window.requestAnimationFrame(() => {
+      seedanceTrimScrubRafRef.current = null;
+      const el = seedanceTrimVideoRef.current;
+      const t = seedanceTrimScrubTargetRef.current;
+      if (!el || t == null) return;
+      try {
+        el.currentTime = t;
+      } catch {
+        // Non-blocking: scrub preview is best-effort.
+      }
+    });
+  }, []);
+
+  const updateSeedanceTrimFromPointer = useCallback(
+    (clientX: number, handle: "start" | "end") => {
+      const track = seedanceTrimTimelineRef.current;
+      if (!track) return;
+      const rect = track.getBoundingClientRect();
+      if (rect.width <= 0) return;
+      const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      let previewSec: number | null = null;
+      setSeedanceTrimState((prev) => {
+        if (!prev) return prev;
+        const t = ratio * prev.sourceDurationSec;
+        if (handle === "start") {
+          const cappedStart = Math.min(t, Math.max(0, prev.endSec - 0.1));
+          const maxEnd = Math.min(prev.sourceDurationSec, cappedStart + prev.remainingBudgetSec);
+          const end = Math.min(prev.endSec, maxEnd);
+          const next = { ...prev, startSec: cappedStart, endSec: Math.max(end, cappedStart + 0.1) };
+          previewSec = next.startSec;
+          return next;
+        }
+        const cappedEnd = Math.max(t, prev.startSec + 0.1);
+        const maxEnd = Math.min(prev.sourceDurationSec, prev.startSec + prev.remainingBudgetSec);
+        const next = { ...prev, endSec: Math.min(cappedEnd, maxEnd) };
+        previewSec = next.endSec;
+        return next;
+      });
+      if (previewSec != null) scheduleSeedanceTrimPreviewSeek(previewSec);
+    },
+    [scheduleSeedanceTrimPreviewSeek],
+  );
+
+  const queueSeedanceTrimPointerUpdate = useCallback(
+    (clientX: number, handle: "start" | "end") => {
+      seedanceTrimPendingPointerRef.current = { clientX, handle };
+      if (seedanceTrimUiRafRef.current != null) return;
+      seedanceTrimUiRafRef.current = window.requestAnimationFrame(() => {
+        seedanceTrimUiRafRef.current = null;
+        const pending = seedanceTrimPendingPointerRef.current;
+        if (!pending) return;
+        updateSeedanceTrimFromPointer(pending.clientX, pending.handle);
+      });
+    },
+    [updateSeedanceTrimFromPointer],
+  );
+
+  const toggleSeedanceTrimPlayback = useCallback(() => {
+    const el = seedanceTrimVideoRef.current;
+    if (!el) return;
+    if (el.paused) {
+      void el.play().catch(() => undefined);
+    } else {
+      el.pause();
+    }
+  }, []);
 
   const saveSeedanceTrim = useCallback(async () => {
     if (!seedanceTrimState) return;
@@ -1943,22 +2308,42 @@ export default function StudioVideoPanel({
       });
       return false;
     }
-    let added = false;
     const fallbackId = ensureActiveElementFormId();
     const fallbackName = `element_${Math.min(klingElementDrafts.length + 1, 3)}`;
-    setKlingElementForm((prev) => {
-      if (!prev) {
-        added = true;
-        return { id: fallbackId, name: fallbackName, description: "", urls: [u] };
+    const currentForm = klingElementForm;
+    if (!currentForm) {
+      setKlingElementForm({ id: fallbackId, name: fallbackName, description: "", urls: [u] });
+      toast.success("Image added to element");
+      return true;
+    }
+    if (currentForm.urls.includes(u)) {
+      toast.message("Could not add image", { description: "Duplicate URL in this element." });
+      return false;
+    }
+    if (currentForm.urls.length >= 4) {
+      if (klingElementDrafts.length >= 3) {
+        toast.message("Could not add image", { description: "This element is full (max 4 URLs)." });
+        return false;
       }
-      if (prev.urls.length >= 4 || prev.urls.includes(u)) return prev;
-      added = true;
-      return { ...prev, urls: [...prev.urls, u] };
-    });
-    if (added) toast.success("Image added to element");
-    else toast.message("Could not add image", { description: "Slot full or duplicate URL." });
-    return added;
-  }, [ensureActiveElementFormId, klingElementDrafts.length, prepareKlingElementFormForPickerAdd]);
+      const nextFormName = `element_${Math.min(klingElementDrafts.length + 1, 3)}`;
+      setKlingElementForm({
+        id: crypto.randomUUID(),
+        name: nextFormName,
+        description: "",
+        urls: [u],
+      });
+      toast.success("Image added to new element");
+      return true;
+    }
+    setKlingElementForm({ ...currentForm, urls: [...currentForm.urls, u] });
+    toast.success("Image added to element");
+    return true;
+  }, [
+    ensureActiveElementFormId,
+    klingElementDrafts.length,
+    klingElementForm,
+    prepareKlingElementFormForPickerAdd,
+  ]);
 
   /** Unified adder for picker tiles: image/video/audio where the current provider supports it. */
   const tryAddReferenceUrlToKlingElementForm = useCallback(
@@ -1976,42 +2361,196 @@ export default function StudioVideoPanel({
         toast.error("Only images are supported for this model");
         return false;
       }
-      let added = false;
       const fallbackId = ensureActiveElementFormId();
       const fallbackName = `element_${Math.min(klingElementDrafts.length + 1, 3)}`;
-      setKlingElementForm((prev) => {
-        if (!prev) {
-          added = true;
-          return { id: fallbackId, name: fallbackName, description: "", urls: [u] };
+      const currentForm = klingElementForm;
+      if (!currentForm) {
+        setKlingElementForm({ id: fallbackId, name: fallbackName, description: "", urls: [u] });
+        toast.success(`${kind === "video" ? "Video" : "Audio"} added to element`);
+        return true;
+      }
+      if (currentForm.urls.includes(u)) {
+        toast.message("Could not add media", { description: "Duplicate URL in this element." });
+        return false;
+      }
+      if (currentForm.urls.length >= 4) {
+        if (klingElementDrafts.length >= 3) {
+          toast.message("Could not add media", { description: "This element is full (max 4 URLs)." });
+          return false;
         }
-        if (prev.urls.length >= 4 || prev.urls.includes(u)) return prev;
-        added = true;
-        return { ...prev, urls: [...prev.urls, u] };
-      });
-      if (added) toast.success(`${kind === "video" ? "Video" : "Audio"} added to element`);
-      else toast.message("Could not add media", { description: "Slot full or duplicate URL." });
-      return added;
+        const nextFormName = `element_${Math.min(klingElementDrafts.length + 1, 3)}`;
+        setKlingElementForm({
+          id: crypto.randomUUID(),
+          name: nextFormName,
+          description: "",
+          urls: [u],
+        });
+        toast.success(`${kind === "video" ? "Video" : "Audio"} added to new element`);
+        return true;
+      }
+      setKlingElementForm({ ...currentForm, urls: [...currentForm.urls, u] });
+      toast.success(`${kind === "video" ? "Video" : "Audio"} added to element`);
+      return true;
     },
     [
       ensureActiveElementFormId,
       klingElementDrafts.length,
+      klingElementForm,
       modelId,
       prepareKlingElementFormForPickerAdd,
       tryAddHttpsImageToKlingElementForm,
     ],
   );
 
+  const appendPromptMentionToken = useCallback((token: string) => {
+    const t = token.trim();
+    if (!t) return;
+    setPrompt((prev) => `${prev}${prev && !/\s$/.test(prev) ? " " : ""}${t} `);
+  }, []);
+
+  const tryAddSeedanceReferenceFromLibrary = useCallback(
+    (rawUrl: string): boolean => {
+      const u = rawUrl.trim();
+      if (!u) return false;
+      const kind = inferSeedanceReferenceKindFromUrl(u);
+      if (!kind) {
+        toast.error("Unsupported media URL");
+        return false;
+      }
+
+      if (compactSeedanceRefUploads) {
+        if (kind !== "image") {
+          toast.error("Only images are supported for this model");
+          return false;
+        }
+        const existingIdx = seedanceCompactRefUrls.findIndex((x) => x === u);
+        if (existingIdx >= 0) {
+          appendPromptMentionToken(`@image${existingIdx + 1}`);
+          return true;
+        }
+        if (seedanceCompactRefUrls.length >= SEEDANCE_COMPACT_PREVIEW_MAX_IMAGE_URLS) {
+          toast.error(`At most ${SEEDANCE_COMPACT_PREVIEW_MAX_IMAGE_URLS} images.`);
+          return false;
+        }
+        const nextIdx = seedanceCompactRefUrls.length + 1;
+        setSeedanceCompactRefUrls((prev) => [...prev, u]);
+        appendPromptMentionToken(`@image${nextIdx}`);
+        toast.success("Reference added");
+        return true;
+      }
+
+      if (!seedanceProOmniRefUploads) return false;
+
+      const currentTotalRefs = (startUrl ? 1 : 0) + seedanceProOmniItems.length;
+      if (!startUrl && kind === "image") {
+        setStartUrl(u);
+        appendPromptMentionToken("@image1");
+        toast.success("Reference added");
+        return true;
+      }
+      if (currentTotalRefs >= SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS) {
+        toast.error(`At most ${SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS} media files.`);
+        return false;
+      }
+
+      if (kind === "image") {
+        if (startUrl === u) {
+          appendPromptMentionToken("@image1");
+          return true;
+        }
+        const imageItems = seedanceProOmniItems.filter((it) => it.kind === "image");
+        const imageIdxInOmni = imageItems.findIndex((it) => it.url === u);
+        if (imageIdxInOmni >= 0) {
+          appendPromptMentionToken(`@image${(startUrl ? 1 : 0) + imageIdxInOmni + 1}`);
+          return true;
+        }
+        const nextImageIdx = (startUrl ? 1 : 0) + imageItems.length + 1;
+        setSeedanceProOmniItems((prev) => [...prev, { kind: "image", url: u }]);
+        appendPromptMentionToken(`@image${nextImageIdx}`);
+        toast.success("Reference added");
+        return true;
+      }
+
+      if (kind === "video") {
+        const vids = seedanceProOmniItems.filter((it) => it.kind === "video");
+        const idx = vids.findIndex((it) => it.url === u);
+        if (idx >= 0) {
+          appendPromptMentionToken(`@video${idx + 1}`);
+          return true;
+        }
+        setSeedanceProOmniItems((prev) => [...prev, { kind: "video", url: u }]);
+        appendPromptMentionToken(`@video${vids.length + 1}`);
+        toast.success("Reference added");
+        return true;
+      }
+
+      const auds = seedanceProOmniItems.filter((it) => it.kind === "audio");
+      const idx = auds.findIndex((it) => it.url === u);
+      if (idx >= 0) {
+        appendPromptMentionToken(`@audio${idx + 1}`);
+        return true;
+      }
+      setSeedanceProOmniItems((prev) => [...prev, { kind: "audio", url: u }]);
+      appendPromptMentionToken(`@audio${auds.length + 1}`);
+      toast.success("Reference added");
+      return true;
+    },
+    [
+      appendPromptMentionToken,
+      compactSeedanceRefUploads,
+      seedanceCompactRefUrls,
+      seedanceProOmniItems,
+      seedanceProOmniRefUploads,
+      startUrl,
+    ],
+  );
+
+  const handlePickReferenceFromLibrary = useCallback(
+    async (url: string): Promise<boolean> => {
+      if (compactSeedanceRefUploads || seedanceProOmniRefUploads) {
+        return tryAddSeedanceReferenceFromLibrary(url);
+      }
+      return tryAddReferenceUrlToKlingElementForm(url);
+    },
+    [
+      compactSeedanceRefUploads,
+      seedanceProOmniRefUploads,
+      tryAddReferenceUrlToKlingElementForm,
+      tryAddSeedanceReferenceFromLibrary,
+    ],
+  );
+
   const beginElementRefPick = useCallback(
     async (initialTab: ElementLibraryTab) => {
+      const reqId = ++elementRefPickRequestSeqRef.current;
+      const now = Date.now();
+      const cached = elementRefPickCacheRef.current;
+      const hasFreshCache = Boolean(cached && now - cached.loadedAtMs <= ELEMENT_PICKER_CACHE_TTL_MS);
+
+      if (hasFreshCache && cached) {
+        setElementRefPick({
+          open: true,
+          loading: false,
+          activeTab: initialTab,
+          uploads: cached.uploads,
+          imageItems: cached.imageItems,
+          videoItems: cached.videoItems,
+          ltaGroups: cached.ltaGroups,
+        });
+        setProjectsPickModeByRunId(cached.projectsModeByRunId);
+        return;
+      }
+
       setElementRefPick({
         open: true,
         loading: true,
         activeTab: initialTab,
-        uploads: [],
-        imageItems: [],
-        videoItems: [],
-        ltaGroups: [],
+        uploads: cached?.uploads ?? [],
+        imageItems: cached?.imageItems ?? [],
+        videoItems: cached?.videoItems ?? [],
+        ltaGroups: cached?.ltaGroups ?? [],
       });
+      if (cached) setProjectsPickModeByRunId(cached.projectsModeByRunId);
 
       try {
         const [studioRes, runsRes] = await Promise.all([
@@ -2071,39 +2610,54 @@ export default function StudioVideoPanel({
         for (const row of (runsJson.data ?? []).slice(0, 120)) {
           const snap = readUniverseFromExtracted(row.extracted);
           if (!snap) continue;
-          const productUrls = linkToAdProductPhotoPickerUrls(snap)
+          const productMedia = linkToAdProductPhotoPickerUrls(snap)
             .map((x) => x.trim())
             .filter((x) => x.length > 0)
-            .slice(0, 3);
-          const generatedSet = new Set<string>();
-          const addGenerated = (u: string | null | undefined) => {
+            .slice(0, 3)
+            .map((url) => ({ url, kind: "image" as const }));
+          const generatedMap = new Map<string, ElementRefPickLtaMedia>();
+          const addGenerated = (u: string | null | undefined, kind: "image" | "video") => {
             const t = String(u ?? "").trim();
             if (!t) return;
-            generatedSet.add(t);
+            const key = `${kind}:${t}`;
+            if (generatedMap.has(key)) return;
+            generatedMap.set(key, { url: t, kind });
           };
-          for (const u of snap.nanoBananaImageUrls ?? []) addGenerated(u);
-          addGenerated(snap.nanoBananaImageUrl);
+          for (const u of snap.nanoBananaImageUrls ?? []) addGenerated(u, "image");
+          addGenerated(snap.nanoBananaImageUrl, "image");
           const triple = normalizePipelineByAngle(snap);
           for (const p of triple) {
-            for (const u of p.nanoBananaImageUrls ?? []) addGenerated(u);
-            addGenerated(p.nanoBananaImageUrl);
+            for (const u of p.nanoBananaImageUrls ?? []) addGenerated(u, "image");
+            addGenerated(p.nanoBananaImageUrl, "image");
+            addGenerated(p.videoUrl, "video");
+            addGenerated(p.videoUrlPart2, "video");
           }
-          const generatedUrls = [...generatedSet].slice(0, 3);
-          if (productUrls.length === 0 && generatedUrls.length === 0) continue;
+          addGenerated(snap.klingVideoUrl, "video");
+          const generatedMedia = [...generatedMap.values()].slice(0, 6);
+          if (productMedia.length === 0 && generatedMedia.length === 0) continue;
           const createdAt = row.created_at ? new Date(row.created_at).getTime() : 0;
           ltaGroups.push({
-            id: row.id || `lta-${createdAt}-${generatedUrls[0] ?? productUrls[0] ?? "run"}`,
+            id: row.id || `lta-${createdAt}-${generatedMedia[0]?.url ?? productMedia[0]?.url ?? "run"}`,
             createdAt: Number.isFinite(createdAt) ? createdAt : 0,
-            generatedUrls,
-            productUrls,
+            generatedMedia,
+            productMedia,
           });
         }
         ltaGroups.sort((a, b) => b.createdAt - a.createdAt);
         const nextProjectsModeByRunId: Record<string, "generated" | "product"> = {};
         for (const g of ltaGroups) {
-          nextProjectsModeByRunId[g.id] = g.generatedUrls.length > 0 ? "generated" : "product";
+          nextProjectsModeByRunId[g.id] = g.generatedMedia.length > 0 ? "generated" : "product";
         }
 
+        if (reqId !== elementRefPickRequestSeqRef.current) return;
+        elementRefPickCacheRef.current = {
+          loadedAtMs: Date.now(),
+          uploads,
+          imageItems,
+          videoItems,
+          ltaGroups,
+          projectsModeByRunId: nextProjectsModeByRunId,
+        };
         setElementRefPick((prev) =>
           prev.open
             ? { ...prev, loading: false, uploads, imageItems, videoItems, ltaGroups }
@@ -2111,6 +2665,7 @@ export default function StudioVideoPanel({
         );
         setProjectsPickModeByRunId(nextProjectsModeByRunId);
       } catch (e) {
+        if (reqId !== elementRefPickRequestSeqRef.current) return;
         toast.error("Could not load media library", {
           description: userMessageFromCaughtError(e, "Try again."),
         });
@@ -3615,7 +4170,7 @@ export default function StudioVideoPanel({
                             </span>
                           )}
                           {(it.kind === "video" || it.kind === "audio") && Number.isFinite(it.durationSec ?? NaN) ? (
-                            <span className="pointer-events-none absolute bottom-1 left-1 rounded-md bg-black/65 px-1 py-0.5 text-[9px] font-semibold text-lime-300">
+                            <span className="pointer-events-none absolute bottom-1 left-1 rounded-md bg-black/65 px-1 py-0.5 text-[9px] font-semibold text-violet-300">
                               {formatSecClock(it.durationSec ?? 0)}
                             </span>
                           ) : null}
@@ -3657,8 +4212,25 @@ export default function StudioVideoPanel({
                                   <Ellipsis className="h-4 w-4" aria-hidden />
                                 </span>
                               </button>
-                              
                             </>
+                          ) : null}
+                          {it.kind === "video" ? (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setSeedanceOmniPreview({
+                                  kind: "video",
+                                  url: it.url,
+                                })
+                              }
+                              className="absolute inset-0 z-[1] flex items-center justify-center opacity-0 transition group-hover:opacity-100"
+                              title="View large"
+                              aria-label="View large video"
+                            >
+                              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-transparent text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.65)] transition hover:scale-105">
+                                <Maximize2 className="h-3 w-3" aria-hidden />
+                              </span>
+                            </button>
                           ) : null}
                         </div>
                       ))}
@@ -3736,22 +4308,6 @@ export default function StudioVideoPanel({
                 </p>
               ) : (
                 <>
-                  {promptElementTagDrafts.length > 0 ? (
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {promptElementTagDrafts.map((el) => (
-                        <div
-                          key={el.id}
-                          className="inline-flex max-w-full items-center gap-2 rounded-lg border border-white/14 bg-black/45 py-1 pl-1 pr-2.5 shadow-sm"
-                        >
-                          <span className="relative h-8 w-8 shrink-0 overflow-hidden rounded-md border border-white/10 bg-black/50">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={el.urls[0]!} alt="" className="h-full w-full object-cover" />
-                          </span>
-                          <span className="truncate text-xs font-medium text-white/88">{el.name.trim()}</span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
                   <ElementMentionTextarea
                     value={prompt}
                     onChange={setPrompt}
@@ -3766,10 +4322,7 @@ export default function StudioVideoPanel({
                             ? "Describe your video, and type @ to reference a saved Element."
                             : "Describe your video, like 'A woman walking through a neon-lit city'."
                     }
-                    className={cn(
-                      "min-h-[120px] w-full resize-none border-white/10 bg-[#0a0a0d] px-3 py-3 text-sm text-white placeholder:text-white/35 focus-visible:ring-0",
-                      promptElementTagDrafts.length > 0 ? "mt-2" : "mt-4",
-                    )}
+                    className="mt-4 min-h-[120px] w-full resize-none border-white/10 bg-[#0a0a0d] px-3 py-3 text-sm text-white placeholder:text-white/35 focus-visible:ring-0"
                     rows={4}
                   />
                   {(modelId === "kling-3.0/video" && !klingCustomMulti) ||
@@ -4012,7 +4565,7 @@ export default function StudioVideoPanel({
                           "text-[11px] tabular-nums",
                           klingMultiTotalSec >= 3 && klingMultiTotalSec <= 15
                             ? "text-emerald-300/90"
-                            : "text-amber-200/90",
+                            : "text-violet-300/90",
                         )}
                       >
                             Total {klingMultiTotalSec}s, each shot 1–12s; sum must be 3–15s (Kling 3.0 API).
@@ -4205,8 +4758,7 @@ export default function StudioVideoPanel({
                     needs <span className="text-white/65">2–4</span> images (provider rule). Up to{" "}
                     <span className="text-white/65">3</span> elements. Add references via upload,{" "}
                     <span className="text-white/55">Avatar library</span>,{" "}
-                    <span className="text-white/55">Create → Image</span>,{" "}
-                    <span className="text-white/55">Create → Video</span> (poster frame), or{" "}
+                      <span className="text-white/55">Create → Image</span>, or{" "}
                     <span className="text-white/55">Link to Ad</span> product photos from saved runs. Images are checked for
                     HTTPS reachability and minimum size ({KLING_ELEMENT_MEDIA_MIN_PX}px).
                   </>
@@ -4276,7 +4828,7 @@ export default function StudioVideoPanel({
                               size="sm"
                               className={cn(
                                 "h-8 w-8 p-0 text-white/55 hover:bg-white/[0.06]",
-                                el.pinned && "text-amber-300/95",
+                                el.pinned && "text-violet-300/95",
                               )}
                               title={el.pinned ? "Unpin" : "Pin to top"}
                               aria-label={el.pinned ? "Unpin element" : "Pin element"}
@@ -4402,20 +4954,22 @@ export default function StudioVideoPanel({
                       >
                         Studio images
                       </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-8 rounded-lg border-white/15 bg-black/30 px-2.5 text-[11px] text-white/75 hover:bg-white/[0.06]"
-                        disabled={
-                          klingElementUploadBusy ||
-                          (elementRefPick.open && elementRefPick.loading) ||
-                          klingElementForm.urls.length >= 4
-                        }
-                        onClick={() => void beginElementRefPick("video_generations")}
-                      >
-                        Video posters
-                      </Button>
+                      {elementPickerSupportsVideoAudio ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8 rounded-lg border-white/15 bg-black/30 px-2.5 text-[11px] text-white/75 hover:bg-white/[0.06]"
+                          disabled={
+                            klingElementUploadBusy ||
+                            (elementRefPick.open && elementRefPick.loading) ||
+                            klingElementForm.urls.length >= 4
+                          }
+                          onClick={() => void beginElementRefPick("video_generations")}
+                        >
+                          Video posters
+                        </Button>
+                      ) : null}
                       <Button
                         type="button"
                         variant="outline"
@@ -4485,8 +5039,8 @@ export default function StudioVideoPanel({
                                 <Expand className="h-4 w-4" aria-hidden />
                               </span>
                             </button>
-                            <span className="pointer-events-none absolute -bottom-4 left-1/2 inline-flex -translate-x-1/2 items-center gap-1 rounded-lg border border-lime-300/35 bg-[#1a1d23]/95 px-1.5 py-0.5 text-[10px] font-medium text-white/88 shadow-[0_6px_14px_rgba(0,0,0,0.35)]">
-                              <span className="inline-flex h-3 w-3 items-center justify-center rounded-full bg-[#0f1116] text-lime-300">
+                            <span className="pointer-events-none absolute -bottom-4 left-1/2 inline-flex -translate-x-1/2 items-center gap-1 rounded-lg border border-violet-300/35 bg-[#1a1d23]/95 px-1.5 py-0.5 text-[10px] font-medium text-white/88 shadow-[0_6px_14px_rgba(0,0,0,0.35)]">
+                              <span className="inline-flex h-3 w-3 items-center justify-center rounded-full bg-[#0f1116] text-violet-300">
                                 <X className="h-2.5 w-2.5" aria-hidden />
                               </span>
                               <span className="max-w-[3.4rem] truncate">{descBadge}</span>
@@ -4621,12 +5175,16 @@ export default function StudioVideoPanel({
                         count: elementRefPick.imageItems.length,
                         icon: ImageIcon,
                       },
-                      {
-                        id: "video_generations",
-                        label: "Video Generations",
-                        count: elementRefPick.videoItems.length,
-                        icon: VideoIcon,
-                      },
+                      ...(elementPickerSupportsVideoAudio
+                        ? [
+                            {
+                              id: "video_generations",
+                              label: "Video Generations",
+                              count: elementRefPick.videoItems.length,
+                              icon: VideoIcon,
+                            },
+                          ]
+                        : []),
                       { id: "elements", label: "Elements", count: klingElementDrafts.length, icon: AtSign },
                       {
                         id: "lta_generated",
@@ -4675,9 +5233,16 @@ export default function StudioVideoPanel({
                         className="flex aspect-square flex-col items-center justify-center rounded-xl border border-dashed border-white/20 bg-black/35 text-white/65 transition hover:border-violet-400/45 hover:text-white"
                       >
                         <Upload className="h-6 w-6" aria-hidden />
-                        <span className="mt-2 text-xs font-semibold">Upload media</span>
+                        <span className="mt-2 text-xs font-semibold">
+                          {elementPickerSupportsVideoAudio ? "Upload media" : "Upload images"}
+                        </span>
                       </button>
-                      {elementRefPick.uploads.map((row) => {
+                      {elementRefPick.uploads
+                        .filter((row) => {
+                          if (elementPickerSupportsVideoAudio) return true;
+                          return inferSeedanceReferenceKindFromUrl(row.url) === "image";
+                        })
+                        .map((row) => {
                         const kind = inferSeedanceReferenceKindFromUrl(row.url);
                         return (
                           <button
@@ -4685,7 +5250,7 @@ export default function StudioVideoPanel({
                             type="button"
                             onClick={() => {
                               void (async () => {
-                                const ok = await tryAddReferenceUrlToKlingElementForm(row.url);
+                                const ok = await handlePickReferenceFromLibrary(row.url);
                                 if (ok) setElementRefPick({ open: false });
                               })();
                             }}
@@ -4718,7 +5283,7 @@ export default function StudioVideoPanel({
                             type="button"
                             onClick={() => {
                               void (async () => {
-                                const ok = await tryAddReferenceUrlToKlingElementForm(u);
+                                const ok = await handlePickReferenceFromLibrary(u);
                                 if (ok) setElementRefPick({ open: false });
                               })();
                             }}
@@ -4741,7 +5306,7 @@ export default function StudioVideoPanel({
                             type="button"
                             onClick={() => {
                               void (async () => {
-                                const ok = await tryAddReferenceUrlToKlingElementForm(u);
+                                const ok = await handlePickReferenceFromLibrary(u);
                                 if (ok) setElementRefPick({ open: false });
                               })();
                             }}
@@ -4761,13 +5326,16 @@ export default function StudioVideoPanel({
                       {sortKlingElementDrafts(klingElementDrafts).map((el) => {
                         const head = el.urls[0]?.trim();
                         if (!head) return null;
+                        if (!elementPickerSupportsVideoAudio && inferSeedanceReferenceKindFromUrl(head) !== "image") {
+                          return null;
+                        }
                         return (
                           <button
                             key={el.id}
                             type="button"
                             onClick={() => {
                               void (async () => {
-                                const ok = await tryAddReferenceUrlToKlingElementForm(head);
+                                const ok = await handlePickReferenceFromLibrary(head);
                                 if (ok) setElementRefPick({ open: false });
                               })();
                             }}
@@ -4808,7 +5376,7 @@ export default function StudioVideoPanel({
                               onClick={() =>
                                 setProjectsPickModeByRunId((prev) => ({ ...prev, [group.id]: "generated" }))
                               }
-                              disabled={group.generatedUrls.length === 0}
+                              disabled={group.generatedMedia.length === 0}
                             >
                               LTA generated
                             </button>
@@ -4823,36 +5391,71 @@ export default function StudioVideoPanel({
                               onClick={() =>
                                 setProjectsPickModeByRunId((prev) => ({ ...prev, [group.id]: "product" }))
                               }
-                              disabled={group.productUrls.length === 0}
+                              disabled={group.productMedia.length === 0}
                             >
                               Product scraped
                             </button>
                           </div>
-                          <div className="grid grid-cols-3 gap-2">
+                          <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-5 lg:grid-cols-7">
                             {((projectsPickModeByRunId[group.id] ?? "generated") === "generated"
-                              ? group.generatedUrls
-                              : group.productUrls
-                            ).map((u) => (
+                              ? group.generatedMedia
+                              : group.productMedia
+                            ).map((media) => (
                               <button
-                                key={`${group.id}-${u}`}
+                                key={`${group.id}-${media.kind}-${media.url}`}
                                 type="button"
                                 onClick={() => {
                                   void (async () => {
-                                    const ok = await tryAddReferenceUrlToKlingElementForm(u);
+                                    const ok = await handlePickReferenceFromLibrary(media.url);
                                     if (ok) setElementRefPick({ open: false });
                                   })();
                                 }}
-                                className="group relative aspect-square overflow-visible rounded-xl border border-white/12 bg-black/40 transition hover:border-violet-400/45"
+                                className="group relative aspect-square overflow-hidden rounded-lg border border-white/12 bg-black/40 transition hover:border-violet-400/45"
                               >
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src={u} alt="" className="h-full w-full object-cover" />
-                                <span className="pointer-events-none absolute inset-0 z-20 hidden items-center justify-center bg-black/45 text-[10px] font-semibold text-white/90 transition md:group-hover:flex">
-                                  Hover preview
-                                </span>
-                                <span className="pointer-events-none absolute left-1/2 top-1/2 z-30 hidden h-44 w-44 -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-xl border border-violet-300/45 bg-black shadow-[0_14px_40px_rgba(0,0,0,0.55)] md:block md:opacity-0 md:transition md:duration-150 md:group-hover:opacity-100">
-                                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                                  <img src={u} alt="" className="h-full w-full object-cover" />
-                                </span>
+                                {media.kind === "image" ? (
+                                  <img
+                                    src={media.url}
+                                    alt=""
+                                    className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-110"
+                                  />
+                                ) : (
+                                  // eslint-disable-next-line jsx-a11y/media-has-caption
+                                  <video
+                                    src={media.url}
+                                    className="h-full w-full object-cover"
+                                    muted
+                                    playsInline
+                                    preload="metadata"
+                                  />
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setSeedanceOmniPreview({
+                                      kind: media.kind,
+                                      url: media.url,
+                                    });
+                                  }}
+                                  className="absolute right-1.5 top-1.5 inline-flex h-6 w-6 items-center justify-center rounded-md border border-white/20 bg-black/55 text-white/80 opacity-100 transition hover:bg-black/70 hover:text-white sm:opacity-0 sm:group-hover:opacity-100"
+                                  aria-label={media.kind === "video" ? "Preview video" : "Preview image"}
+                                  title={media.kind === "video" ? "Preview video" : "Preview image"}
+                                >
+                                  <Maximize2 className="h-3.5 w-3.5" aria-hidden />
+                                </button>
+                                {media.kind === "video" ? (
+                                  <>
+                                    <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                                      <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-black/55 text-white/90">
+                                        <Play className="h-3.5 w-3.5 translate-x-[1px]" aria-hidden />
+                                      </span>
+                                    </span>
+                                    <span className="pointer-events-none absolute left-1.5 top-1.5 rounded-md bg-black/55 px-1 py-0.5 text-[10px] font-semibold text-white/90">
+                                      Video
+                                    </span>
+                                  </>
+                                ) : null}
                               </button>
                             ))}
                           </div>
@@ -4950,11 +5553,13 @@ export default function StudioVideoPanel({
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 z-[230] bg-black/55 backdrop-blur-[2px] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
           <Dialog.Content className="fixed left-1/2 top-1/2 z-[231] flex w-[min(96vw,760px)] max-h-[92vh] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#090b12] p-0 shadow-[0_28px_90px_rgba(0,0,0,0.75)] outline-none">
-            <div className="flex items-start justify-between gap-3 px-6 pb-3 pt-5">
+            <div className="flex items-start justify-between gap-3 px-4 pb-2 pt-3.5 sm:px-6 sm:pb-3 sm:pt-5">
               <div>
-                <Dialog.Title className="text-3xl font-semibold tracking-tight text-white">Trim media</Dialog.Title>
-                <p className="mt-1 text-base text-white/55">
-                  Total media budget:{" "}
+                <Dialog.Title className="text-xl font-semibold tracking-tight text-white sm:text-2xl">
+                  {seedanceTrimState?.kind === "audio" ? "Trim audio" : "Trim video"}
+                </Dialog.Title>
+                <p className="mt-0.5 text-xs text-white/55 sm:mt-1 sm:text-sm">
+                  {seedanceTrimState?.kind === "audio" ? "Total audio budget" : "Total video budget"}:{" "}
                   {seedanceTrimState
                     ? `${Math.max(0, seedanceTrimState.remainingBudgetSec).toFixed(1)}s remaining`
                     : "0.0s remaining"}
@@ -4971,87 +5576,228 @@ export default function StudioVideoPanel({
                 </button>
               </Dialog.Close>
             </div>
-            <div className="px-6 pb-3">
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-2 sm:px-6 sm:pb-3">
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-2.5 sm:p-4">
                 {seedanceTrimState && seedanceTrimPreviewUrl ? (
-                  seedanceTrimState.kind === "video" ? (
-                    <video
-                      src={seedanceTrimPreviewUrl}
-                      controls
-                      className="mx-auto max-h-[44vh] w-full rounded-xl bg-black object-contain"
-                    />
-                  ) : (
+                  seedanceTrimState.kind === "video" ? (() => {
+                    const dur = Math.max(0.01, seedanceTrimState.sourceDurationSec);
+                    const scrubRatio = Math.max(0, Math.min(1, seedanceTrimScrubSec / dur));
+                    const nearestThumbIdx = seedanceTrimThumbs.length
+                      ? Math.max(0, Math.min(seedanceTrimThumbs.length - 1, Math.floor(scrubRatio * seedanceTrimThumbs.length)))
+                      : -1;
+                    const nearestThumb = nearestThumbIdx >= 0 ? seedanceTrimThumbs[nearestThumbIdx] : null;
+                    const stableFallbackThumb = nearestThumb ?? seedanceTrimLastVisualUrl ?? seedanceTrimThumbs[0] ?? null;
+                    return (
+                      <div
+                        className="relative mx-auto aspect-[9/16] w-[min(100%,220px)] max-h-[30vh] overflow-hidden rounded-xl bg-[#0b0d14] sm:w-[min(100%,260px)] sm:max-h-[38vh]"
+                        onClick={toggleSeedanceTrimPlayback}
+                      >
+                        {stableFallbackThumb ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={stableFallbackThumb}
+                            alt=""
+                            draggable={false}
+                            className="pointer-events-none absolute inset-0 h-full w-full select-none object-cover"
+                          />
+                        ) : (
+                          <div className="h-40 w-full animate-pulse rounded-xl bg-white/5" />
+                        )}
+                        <video
+                          ref={seedanceTrimVideoRef}
+                          src={seedanceTrimPreviewUrl}
+                          playsInline
+                          preload="auto"
+                          onLoadedData={(e) => {
+                            if (!seedanceTrimState) return;
+                            const el = e.currentTarget;
+                            if (seedanceTrimPlaying) return;
+                            const target = Math.max(
+                              0,
+                              Math.min(seedanceTrimState.sourceDurationSec, seedanceTrimScrubSec || seedanceTrimState.startSec),
+                            );
+                            try {
+                              el.currentTime = target;
+                            } catch {
+                              // no-op
+                            }
+                          }}
+                          onPlay={() => setSeedanceTrimPlaying(true)}
+                          onPause={() => setSeedanceTrimPlaying(false)}
+                          className="absolute inset-0 z-10 h-full w-full cursor-pointer rounded-xl bg-transparent object-cover"
+                        />
+                      </div>
+                    );
+                  })() : (
                     <audio
+                      ref={seedanceTrimVideoRef as unknown as React.RefObject<HTMLAudioElement>}
                       src={seedanceTrimPreviewUrl}
-                      controls
-                      className="w-full rounded-xl"
+                      onPlay={() => setSeedanceTrimPlaying(true)}
+                      onPause={() => setSeedanceTrimPlaying(false)}
+                      className="hidden"
                     />
                   )
                 ) : null}
-                {seedanceTrimState ? (
-                  <div className="mt-4 rounded-xl bg-black/35 p-3">
-                    <div className="mb-2 flex items-center justify-between text-xs text-white/60">
-                      <span>
-                        Start {formatSecClock(seedanceTrimState.startSec)}
-                      </span>
-                      <span>
-                        End {formatSecClock(seedanceTrimState.endSec)}
-                      </span>
-                    </div>
-                    <div className="space-y-2">
-                      <input
-                        type="range"
-                        min={0}
-                        max={Math.max(0, seedanceTrimState.sourceDurationSec)}
-                        step={0.1}
-                        value={seedanceTrimState.startSec}
-                        onChange={(e) => {
-                          const nextStart = Number(e.target.value);
-                          setSeedanceTrimState((prev) => {
-                            if (!prev) return prev;
-                            const cappedStart = Math.min(nextStart, Math.max(0, prev.endSec - 0.1));
-                            const maxEnd = Math.min(prev.sourceDurationSec, cappedStart + prev.remainingBudgetSec);
-                            const end = Math.min(prev.endSec, maxEnd);
-                            return { ...prev, startSec: cappedStart, endSec: Math.max(end, cappedStart + 0.1) };
-                          });
+                {seedanceTrimState ? (() => {
+                  const dur = Math.max(0.01, seedanceTrimState.sourceDurationSec);
+                  const startPct = Math.min(100, Math.max(0, (seedanceTrimState.startSec / dur) * 100));
+                  const endPct = Math.min(100, Math.max(0, (seedanceTrimState.endSec / dur) * 100));
+                  const selSec = Math.max(0, seedanceTrimState.endSec - seedanceTrimState.startSec);
+                  return (
+                    <div className="mt-2.5 flex items-center gap-2 rounded-2xl bg-black/45 p-2 sm:mt-4 sm:gap-3 sm:p-3">
+                      <button
+                        type="button"
+                        onClick={toggleSeedanceTrimPlayback}
+                        aria-label={seedanceTrimPlaying ? "Pause preview" : "Play preview"}
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/15 bg-white/[0.06] text-white/90 transition hover:border-violet-400/60 hover:bg-white/[0.12] sm:h-10 sm:w-10"
+                      >
+                        {seedanceTrimPlaying ? (
+                          <Pause className="h-4 w-4" aria-hidden />
+                        ) : (
+                          <Play className="h-4 w-4 translate-x-[1px]" aria-hidden />
+                        )}
+                      </button>
+                      <div
+                        ref={seedanceTrimTimelineRef}
+                        className="relative flex h-11 flex-1 select-none items-stretch overflow-hidden rounded-xl border border-white/10 bg-black/60 sm:h-14"
+                        onPointerMove={(e) => {
+                          if (seedanceTrimDragHandle) {
+                            queueSeedanceTrimPointerUpdate(e.clientX, seedanceTrimDragHandle);
+                          }
                         }}
-                        className="h-2 w-full cursor-pointer accent-lime-400"
-                      />
-                      <input
-                        type="range"
-                        min={0}
-                        max={Math.max(0, seedanceTrimState.sourceDurationSec)}
-                        step={0.1}
-                        value={seedanceTrimState.endSec}
-                        onChange={(e) => {
-                          const nextEnd = Number(e.target.value);
-                          setSeedanceTrimState((prev) => {
-                            if (!prev) return prev;
-                            const cappedEnd = Math.max(nextEnd, prev.startSec + 0.1);
-                            const maxEnd = Math.min(prev.sourceDurationSec, prev.startSec + prev.remainingBudgetSec);
-                            return { ...prev, endSec: Math.min(cappedEnd, maxEnd) };
-                          });
-                        }}
-                        className="h-2 w-full cursor-pointer accent-lime-400"
-                      />
-                    </div>
-                    <div className="mt-3 flex items-center justify-between text-sm">
-                      <span className="text-white/65">
-                        Selected: <span className="font-semibold text-lime-300">{seedanceTrimSelectedDurationSec.toFixed(1)}s</span>
+                        onPointerUp={() => setSeedanceTrimDragHandle(null)}
+                        onPointerLeave={() => setSeedanceTrimDragHandle(null)}
+                      >
+                        <div className="pointer-events-none absolute inset-0 flex">
+                          {seedanceTrimState.kind === "video" ? (
+                            seedanceTrimThumbs.length > 0 ? (
+                              seedanceTrimThumbs.map((src, i) => (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  key={`trim-thumb-${i}`}
+                                  src={src}
+                                  alt=""
+                                  className="h-full flex-1 object-cover opacity-70"
+                                  draggable={false}
+                                />
+                              ))
+                            ) : (
+                              <div className="h-full flex-1 animate-pulse bg-white/5" />
+                            )
+                          ) : (
+                            <div className="flex h-full w-full items-center gap-1 px-3 opacity-70">
+                              {Array.from({ length: 48 }).map((_, i) => (
+                                <span
+                                  key={`wf-${i}`}
+                                  className="inline-block w-[3px] rounded-full bg-violet-300/70"
+                                  style={{
+                                    height: `${24 + Math.abs(Math.sin(i * 0.7)) * 22}px`,
+                                  }}
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <div
+                          className="pointer-events-none absolute inset-y-0 bg-black/55"
+                          style={{ left: 0, width: `${startPct}%` }}
+                        />
+                        <div
+                          className="pointer-events-none absolute inset-y-0 bg-black/55"
+                          style={{ left: `${endPct}%`, right: 0 }}
+                        />
+                        <div
+                          className="pointer-events-none absolute inset-y-0 border-y-2 border-violet-400"
+                          style={{ left: `${startPct}%`, width: `${Math.max(0, endPct - startPct)}%` }}
+                        />
+                        <div
+                          role="slider"
+                          aria-label="Trim start"
+                          aria-valuemin={0}
+                          aria-valuemax={seedanceTrimState.sourceDurationSec}
+                          aria-valuenow={seedanceTrimState.startSec}
+                          tabIndex={0}
+                          onPointerDown={(e) => {
+                            e.preventDefault();
+                            (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                            const media = seedanceTrimVideoRef.current;
+                            if (media && !media.paused) {
+                              media.pause();
+                              setSeedanceTrimPlaying(false);
+                            }
+                            if (seedanceTrimState) {
+                              scheduleSeedanceTrimPreviewSeek(seedanceTrimState.startSec);
+                            }
+                            setSeedanceTrimDragHandle("start");
+                          }}
+                          onPointerMove={(e) => {
+                            if (seedanceTrimDragHandle === "start") {
+                              queueSeedanceTrimPointerUpdate(e.clientX, "start");
+                            }
+                          }}
+                          onPointerUp={(e) => {
+                            (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+                            setSeedanceTrimDragHandle(null);
+                          }}
+                          className="absolute inset-y-0 flex w-4 -translate-x-1/2 cursor-ew-resize items-center justify-center rounded-l-md bg-violet-400 shadow-[0_0_0_1px_rgba(0,0,0,0.35)] hover:bg-violet-300"
+                          style={{ left: `${startPct}%` }}
+                        >
+                          <span className="block h-5 w-[2px] rounded-full bg-black/55" />
+                        </div>
+                        <div
+                          role="slider"
+                          aria-label="Trim end"
+                          aria-valuemin={0}
+                          aria-valuemax={seedanceTrimState.sourceDurationSec}
+                          aria-valuenow={seedanceTrimState.endSec}
+                          tabIndex={0}
+                          onPointerDown={(e) => {
+                            e.preventDefault();
+                            (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                            const media = seedanceTrimVideoRef.current;
+                            if (media && !media.paused) {
+                              media.pause();
+                              setSeedanceTrimPlaying(false);
+                            }
+                            if (seedanceTrimState) {
+                              scheduleSeedanceTrimPreviewSeek(seedanceTrimState.endSec);
+                            }
+                            setSeedanceTrimDragHandle("end");
+                          }}
+                          onPointerMove={(e) => {
+                            if (seedanceTrimDragHandle === "end") {
+                              queueSeedanceTrimPointerUpdate(e.clientX, "end");
+                            }
+                          }}
+                          onPointerUp={(e) => {
+                            (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+                            setSeedanceTrimDragHandle(null);
+                          }}
+                          className="absolute inset-y-0 flex w-4 -translate-x-1/2 cursor-ew-resize items-center justify-center rounded-r-md bg-violet-400 shadow-[0_0_0_1px_rgba(0,0,0,0.35)] hover:bg-violet-300"
+                          style={{ left: `${endPct}%` }}
+                        >
+                          <span className="block h-5 w-[2px] rounded-full bg-black/55" />
+                        </div>
+                        <span
+                          className="pointer-events-none absolute top-1 rounded-md bg-black/70 px-1.5 py-0.5 text-[10px] font-semibold text-violet-300"
+                          style={{ left: `calc(${startPct}% + 8px)` }}
+                        >
+                          {formatSecClock(seedanceTrimState.startSec)}
+                        </span>
+                      </div>
+                      <span className="shrink-0 text-sm font-semibold tabular-nums text-white/80">
+                        {formatSecClock(selSec)}
                       </span>
-                      <span className="text-white/45">
-                        Source: {seedanceTrimState.sourceDurationSec.toFixed(1)}s
-                      </span>
                     </div>
-                  </div>
-                ) : null}
+                  );
+                })() : null}
               </div>
             </div>
-            <div className="flex justify-end gap-3 border-t border-white/10 px-6 py-4">
+            <div className="flex justify-end gap-2 border-t border-white/10 px-4 py-3 sm:gap-3 sm:px-6 sm:py-4">
               <Button
                 type="button"
                 variant="outline"
-                className="h-12 rounded-2xl border-white/15 bg-white/[0.03] px-6 text-white/80 hover:bg-white/[0.08]"
+                className="h-10 rounded-xl border-white/15 bg-white/[0.03] px-4 text-white/80 hover:bg-white/[0.08] sm:h-12 sm:rounded-2xl sm:px-6"
                 disabled={seedanceProOmniUploadBusy}
                 onClick={() => setSeedanceTrimState(null)}
               >
@@ -5059,11 +5805,18 @@ export default function StudioVideoPanel({
               </Button>
               <Button
                 type="button"
-                className="h-12 rounded-2xl border border-lime-300/45 bg-lime-400 px-7 text-black shadow-[0_6px_0_0_rgba(101,163,13,0.8)] hover:bg-lime-300 active:translate-y-0.5 active:shadow-none"
+                className="h-10 rounded-xl border border-violet-300/45 bg-violet-400 px-5 text-black shadow-[0_6px_0_0_rgba(124,58,237,0.55)] hover:bg-violet-300 active:translate-y-0.5 active:shadow-none sm:h-12 sm:rounded-2xl sm:px-7"
                 disabled={seedanceProOmniUploadBusy || !seedanceTrimState}
                 onClick={() => void saveSeedanceTrim()}
               >
-                Save
+                {seedanceProOmniUploadBusy ? (
+                  <span className="inline-flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                    Trimming...
+                  </span>
+                ) : (
+                  "Save"
+                )}
               </Button>
             </div>
           </Dialog.Content>
