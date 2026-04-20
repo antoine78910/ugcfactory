@@ -69,6 +69,19 @@ type CreditRedeemLogRow = {
   plan_expires_at: string | null;
 };
 
+type ActiveCompPlanRow = {
+  id: string;
+  user_id: string;
+  email: string;
+  plan_id: string;
+  billing: "monthly" | "yearly";
+  source: string;
+  granted_at: string;
+  expires_at: string;
+  token_id: string | null;
+  token_label: string | null;
+};
+
 type CreditRedeemStats = {
   tokensTotal: number;
   tokensActive: number;
@@ -293,10 +306,12 @@ export default function AdminPage() {
   const [creditTokens, setCreditTokens] = useState<CreditRedeemTokenRow[]>([]);
   const [creditLogs, setCreditLogs] = useState<CreditRedeemLogRow[]>([]);
   const [creditStats, setCreditStats] = useState<CreditRedeemStats | null>(null);
+  const [activeCompPlans, setActiveCompPlans] = useState<ActiveCompPlanRow[]>([]);
   const [creditLogTotal, setCreditLogTotal] = useState(0);
   const [creditLogPage, setCreditLogPage] = useState(1);
   const [creditLoading, setCreditLoading] = useState(false);
   const [creditError, setCreditError] = useState<string | null>(null);
+  const [revokePlanId, setRevokePlanId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Create token form
@@ -401,12 +416,14 @@ export default function AdminPage() {
         error?: string;
         tokens?: CreditRedeemTokenRow[];
         logs?: CreditRedeemLogRow[];
+        activePlans?: ActiveCompPlanRow[];
         stats?: CreditRedeemStats;
         logTotal?: number;
       };
       if (!r.ok) throw new Error(d.error ?? `HTTP ${r.status}`);
       setCreditTokens(d.tokens ?? []);
       setCreditLogs(d.logs ?? []);
+      setActiveCompPlans(d.activePlans ?? []);
       setCreditStats(d.stats ?? null);
       setCreditLogTotal(d.logTotal ?? 0);
     } catch (e) {
@@ -415,6 +432,26 @@ export default function AdminPage() {
       setCreditLoading(false);
     }
   }, [creditLogPage, creditLogPerPage]);
+
+  const revokeComplimentaryPlan = useCallback(async (planId: string) => {
+    setRevokePlanId(planId);
+    setCreditError(null);
+    try {
+      const r = await fetch("/api/admin/credit-redeems", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "revoke_plan", planId }),
+      });
+      const d = (await r.json()) as { error?: string };
+      if (!r.ok) throw new Error(d.error ?? `HTTP ${r.status}`);
+      await fetchCreditRedeems();
+    } catch (e) {
+      setCreditError(e instanceof Error ? e.message : "Could not revoke plan");
+    } finally {
+      setRevokePlanId(null);
+    }
+  }, [fetchCreditRedeems]);
 
   useEffect(() => {
     if (tab === "generations") void fetchGenerations();
@@ -962,6 +999,72 @@ export default function AdminPage() {
               {creditTokens.length === 0 && !creditLoading && (
                 <p className="py-8 text-center text-sm text-white/30">No tokens yet, create one via POST /api/credits/redeem-tokens</p>
               )}
+            </div>
+
+            <div>
+              <h2 className="mb-3 text-sm font-semibold text-white/80">Active partner plans</h2>
+              <p className="mb-3 text-[11px] leading-relaxed text-white/40">
+                Revoke access instantly if needed. This stops plan-gated features right away and does not touch Stripe (these plans are complimentary links).
+              </p>
+              <div className="overflow-x-auto rounded-xl border border-white/[0.08]">
+                <table className="w-full min-w-[920px] text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-white/10 text-[10px] uppercase tracking-wide text-white/40">
+                      <th className="px-3 py-2.5 font-semibold">User</th>
+                      <th className="px-3 py-2.5 font-semibold">Plan</th>
+                      <th className="px-3 py-2.5 font-semibold">Billing</th>
+                      <th className="px-3 py-2.5 font-semibold">Granted</th>
+                      <th className="px-3 py-2.5 font-semibold">Expires</th>
+                      <th className="px-3 py-2.5 font-semibold">Source</th>
+                      <th className="px-3 py-2.5 font-semibold">Token</th>
+                      <th className="px-3 py-2.5 font-semibold">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {activeCompPlans.map((row) => (
+                      <tr key={row.id} className="border-b border-white/5 transition hover:bg-white/[0.02]">
+                        <td className="max-w-[220px] truncate px-3 py-2.5 text-violet-200/90" title={row.email}>
+                          {row.email}
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <span className="font-semibold capitalize text-violet-200">{row.plan_id}</span>
+                        </td>
+                        <td className="px-3 py-2.5 text-white/55">{row.billing}</td>
+                        <td className="whitespace-nowrap px-3 py-2.5 text-white/45">
+                          {new Date(row.granted_at).toLocaleString()}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2.5 text-white/45">
+                          {new Date(row.expires_at).toLocaleString()}
+                        </td>
+                        <td className="px-3 py-2.5 text-white/50">{row.source}</td>
+                        <td className="max-w-[180px] truncate px-3 py-2.5 text-white/55" title={row.token_label ?? ""}>
+                          {row.token_label?.trim() ? row.token_label : row.token_id ? `${row.token_id.slice(0, 8)}…` : "-"}
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <button
+                            type="button"
+                            disabled={revokePlanId === row.id}
+                            onClick={() => void revokeComplimentaryPlan(row.id)}
+                            className="inline-flex items-center gap-1 rounded-md border border-red-500/35 bg-red-500/10 px-2 py-1 text-[10px] font-semibold text-red-200 transition hover:bg-red-500/20 disabled:opacity-50"
+                          >
+                            {revokePlanId === row.id ? (
+                              <>
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                                Revoking…
+                              </>
+                            ) : (
+                              "Cancel now"
+                            )}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {activeCompPlans.length === 0 && !creditLoading && (
+                  <p className="py-8 text-center text-sm text-white/30">No active complimentary plans</p>
+                )}
+              </div>
             </div>
 
             <div>

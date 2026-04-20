@@ -42,6 +42,18 @@ type LogRow = {
   credit_redeem_tokens: TokenEmbed | TokenEmbed[] | null;
 };
 
+type ActiveCompPlanRow = {
+  id: string;
+  user_id: string;
+  plan_id: string;
+  billing: "monthly" | "yearly";
+  source: string;
+  granted_at: string;
+  expires_at: string;
+  revoked_at: string | null;
+  token_id: string | null;
+};
+
 function embedToken(embed: LogRow["credit_redeem_tokens"]): TokenEmbed | null {
   if (!embed) return null;
   return Array.isArray(embed) ? embed[0] ?? null : embed;
@@ -81,7 +93,7 @@ export async function GET(req: Request) {
   if (tokErr) {
     console.error("[admin/credit-redeems] tokens:", tokErr);
     return NextResponse.json(
-      { error: tokErr.message, tokens: [], logs: [], stats: null },
+      { error: tokErr.message, tokens: [], logs: [], activePlans: [], stats: null },
       { status: 500 },
     );
   }
@@ -115,13 +127,32 @@ export async function GET(req: Request) {
   if (logErr) {
     console.error("[admin/credit-redeems] logs:", logErr);
     return NextResponse.json(
-      { error: logErr.message, tokens, logs: [], stats: null, logTotal: 0 },
+      { error: logErr.message, tokens, logs: [], activePlans: [], stats: null, logTotal: 0 },
       { status: 500 },
     );
   }
 
   const logs = (logsRaw ?? []) as LogRow[];
-  const userIds = [...new Set(logs.map((l) => l.user_id))];
+  const { data: activePlansRaw, error: activePlanErr } = await admin
+    .from("complimentary_subscriptions")
+    .select("id, user_id, plan_id, billing, source, granted_at, expires_at, revoked_at, token_id")
+    .is("revoked_at", null)
+    .gt("expires_at", now.toISOString())
+    .order("granted_at", { ascending: false })
+    .limit(300);
+
+  if (activePlanErr) {
+    console.error("[admin/credit-redeems] active plans:", activePlanErr);
+    return NextResponse.json(
+      { error: activePlanErr.message, tokens, logs: [], activePlans: [], stats: null, logTotal: 0 },
+      { status: 500 },
+    );
+  }
+
+  const activePlans = (activePlansRaw ?? []) as ActiveCompPlanRow[];
+  const userIds = [
+    ...new Set([...logs.map((l) => l.user_id), ...activePlans.map((p) => p.user_id)]),
+  ];
   const emailMap: Record<string, string> = {};
   if (userIds.length > 0) {
     const { data: users } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
@@ -190,9 +221,77 @@ export async function GET(req: Request) {
         plan_expires_at: l.plan_expires_at ?? null,
       };
     }),
+    activePlans: activePlans.map((p) => {
+      const token = p.token_id ? tokens.find((t) => t.id === p.token_id) : null;
+      return {
+        id: p.id,
+        user_id: p.user_id,
+        email: emailMap[p.user_id] ?? p.user_id,
+        plan_id: p.plan_id,
+        billing: p.billing,
+        source: p.source,
+        granted_at: p.granted_at,
+        expires_at: p.expires_at,
+        token_id: p.token_id,
+        token_label: token?.label ?? null,
+      };
+    }),
     logTotal: logTotal ?? 0,
     logPage,
     logPerPage,
     stats,
   });
+}
+
+/**
+ * PATCH /api/admin/credit-redeems
+ * Primary admin only, revoke an active complimentary plan immediately.
+ * Body: { action: "revoke_plan", planId: string }
+ */
+export async function PATCH(req: Request) {
+  const { response } = await requireAdmin();
+  if (response) return response;
+
+  const admin = createSupabaseServiceClient();
+  if (!admin) {
+    return NextResponse.json({ error: "Service role not configured" }, { status: 500 });
+  }
+
+  let body: { action?: string; planId?: string };
+  try {
+    body = (await req.json()) as { action?: string; planId?: string };
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  if (body.action !== "revoke_plan") {
+    return NextResponse.json({ error: "Unsupported action" }, { status: 400 });
+  }
+
+  const planId = typeof body.planId === "string" ? body.planId.trim() : "";
+  if (!planId) {
+    return NextResponse.json({ error: "Missing planId" }, { status: 400 });
+  }
+
+  const nowIso = new Date().toISOString();
+  const { data: updated, error } = await admin
+    .from("complimentary_subscriptions")
+    .update({ revoked_at: nowIso })
+    .eq("id", planId)
+    .is("revoked_at", null)
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    console.error("[admin/credit-redeems] revoke plan:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+  if (!updated) {
+    return NextResponse.json(
+      { error: "Plan not found or already revoked" },
+      { status: 404 },
+    );
+  }
+
+  return NextResponse.json({ success: true, planId, revokedAt: nowIso });
 }
