@@ -6,11 +6,13 @@ import {
   ChevronDown,
   CirclePlus,
   Clock,
+  Ellipsis,
   Expand,
   HelpCircle,
   ImageIcon,
   Music2,
   Pin,
+  Check,
   Shrink,
   Sparkles,
   Trash2,
@@ -842,6 +844,10 @@ export default function StudioVideoPanel({
   const [seedanceTrimState, setSeedanceTrimState] = useState<SeedanceTrimState | null>(null);
   const [seedanceTrimPreviewUrl, setSeedanceTrimPreviewUrl] = useState<string | null>(null);
   const [seedanceOmniPreview, setSeedanceOmniPreview] = useState<SeedanceOmniRefItem | null>(null);
+  const [seedanceImageMenu, setSeedanceImageMenu] = useState<{
+    scope: "compact" | "omni";
+    url: string;
+  } | null>(null);
   const [prompt, setPrompt] = useState("");
   const [multiShot, setMultiShot] = useState(false);
   /** Kling 3.0 multi-shot: per-shot prompts via provider `multi_prompt`. */
@@ -1255,6 +1261,18 @@ export default function StudioVideoPanel({
       URL.revokeObjectURL(blobUrl);
     };
   }, [seedanceTrimState]);
+
+  useEffect(() => {
+    if (!seedanceImageMenu) return;
+    const onPointerDown = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target?.closest("[data-seedance-image-menu]")) {
+        setSeedanceImageMenu(null);
+      }
+    };
+    window.addEventListener("pointerdown", onPointerDown);
+    return () => window.removeEventListener("pointerdown", onPointerDown);
+  }, [seedanceImageMenu]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1760,6 +1778,33 @@ export default function StudioVideoPanel({
       setSeedanceProOmniUploadBusy(false);
     }
   }, [addSeedanceProOmniUploadedFile, seedanceTrimState, trimMediaFileOnServer]);
+
+  const moveSeedanceImageAsPrimaryReference = useCallback(
+    (scope: "compact" | "omni", url: string) => {
+      if (scope === "compact") {
+        setSeedanceCompactRefUrls((prev) => {
+          const idx = prev.indexOf(url);
+          if (idx <= 0) return prev;
+          const next = [...prev];
+          const [picked] = next.splice(idx, 1);
+          if (!picked) return prev;
+          next.unshift(picked);
+          return next;
+        });
+        return;
+      }
+      setSeedanceProOmniItems((prev) => {
+        const idx = prev.findIndex((it) => it.kind === "image" && it.url === url);
+        if (idx <= 0) return prev;
+        const next = [...prev];
+        const [picked] = next.splice(idx, 1);
+        if (!picked) return prev;
+        next.unshift(picked);
+        return next;
+      });
+    },
+    [],
+  );
 
   const applyAvatarToStartFrame = useCallback((avatarUrl: string) => {
     const u = avatarUrl.trim();
@@ -3349,19 +3394,95 @@ export default function StudioVideoPanel({
                   <div className="mt-2 rounded-2xl border border-white/10 bg-[#14141a]/75 p-3">
                     <div className="flex min-h-[5rem] items-center justify-center gap-2 overflow-x-auto studio-params-scroll">
                       {seedanceCompactRefUrls.map((u, ui) => (
-                        <button
+                        <div
                           key={`seed-compact-${ui}-${u.slice(-32)}`}
-                          type="button"
-                          className="group relative h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-white/12 bg-black/40"
-                          onClick={() => setSeedanceCompactRefUrls((prev) => prev.filter((_, j) => j !== ui))}
-                          title="Remove image"
+                          className="group relative h-14 w-14 shrink-0 overflow-visible rounded-xl border border-white/12 bg-black/40"
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={u} alt="" className="h-full w-full object-cover" />
-                          <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 text-[10px] font-semibold text-white/0 transition group-hover:bg-black/45 group-hover:text-white/90">
-                            Remove
-                          </span>
-                        </button>
+                          <img src={u} alt="" className="h-full w-full rounded-xl object-cover" />
+                          <div className="pointer-events-none absolute inset-0 rounded-xl bg-black/0 transition group-hover:bg-black/45" />
+                          <button
+                            type="button"
+                            onClick={() => setSeedanceOmniPreview({ kind: "image", url: u })}
+                            className="absolute inset-0 flex items-center justify-center opacity-0 transition group-hover:opacity-100"
+                            title="View large"
+                          >
+                            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-black/65 text-white/90">
+                              <Expand className="h-4 w-4" aria-hidden />
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full border border-white/20 bg-[#3d3d40] text-white/85 opacity-0 transition hover:bg-[#55555a] group-hover:opacity-100"
+                            onClick={() => setSeedanceCompactRefUrls((prev) => prev.filter((_, j) => j !== ui))}
+                            title="Remove"
+                            aria-label="Remove image"
+                          >
+                            <X className="h-3 w-3" aria-hidden />
+                          </button>
+                          <button
+                            type="button"
+                            className="absolute -right-1 top-5 flex h-5 w-5 items-center justify-center rounded-full border border-white/20 bg-[#3d3d40] text-white/85 opacity-0 transition hover:bg-[#55555a] group-hover:opacity-100"
+                            onClick={() => setSeedanceImageMenu({ scope: "compact", url: u })}
+                            title="More options"
+                            aria-label="Open image options"
+                            data-seedance-image-menu
+                          >
+                            <Ellipsis className="h-3 w-3" aria-hidden />
+                          </button>
+                          {startUrl === u || endUrl === u ? (
+                            <span className="pointer-events-none absolute inset-x-0 bottom-0 rounded-b-xl bg-black/60 px-1 py-0.5 text-center text-[10px] font-semibold text-white/90">
+                              {startUrl === u && endUrl === u ? "Start/End" : startUrl === u ? "Start" : "End"}
+                            </span>
+                          ) : null}
+                          {seedanceImageMenu?.scope === "compact" && seedanceImageMenu.url === u ? (
+                            <div data-seedance-image-menu className="absolute bottom-[calc(100%+8px)] left-0 z-20 w-44 overflow-hidden rounded-2xl border border-white/12 bg-[#15161d]/98 p-1.5 shadow-[0_16px_40px_rgba(0,0,0,0.55)] backdrop-blur">
+                              <button
+                                type="button"
+                                className="flex w-full items-center justify-between rounded-xl px-2.5 py-2 text-left text-sm text-white/90 hover:bg-white/[0.06]"
+                                onClick={() => {
+                                  moveSeedanceImageAsPrimaryReference("compact", u);
+                                  setSeedanceImageMenu(null);
+                                }}
+                              >
+                                <span>Reference</span>
+                                <Check className="h-3.5 w-3.5 text-lime-300" aria-hidden />
+                              </button>
+                              <button
+                                type="button"
+                                className="flex w-full items-center rounded-xl px-2.5 py-2 text-left text-sm text-white/90 hover:bg-white/[0.06]"
+                                onClick={() => {
+                                  setStartUrl(u);
+                                  setSeedanceImageMenu(null);
+                                  toast.success("Start frame set");
+                                }}
+                              >
+                                Start Frame
+                              </button>
+                              <button
+                                type="button"
+                                className="flex w-full items-center rounded-xl px-2.5 py-2 text-left text-sm text-white/90 hover:bg-white/[0.06]"
+                                onClick={() => {
+                                  setEndUrl(u);
+                                  setSeedanceImageMenu(null);
+                                  toast.success("End frame set");
+                                }}
+                              >
+                                End Frame
+                              </button>
+                              <button
+                                type="button"
+                                className="mt-1 flex w-full items-center rounded-xl px-2.5 py-2 text-left text-sm text-white/90 hover:bg-white/[0.06]"
+                                onClick={() => {
+                                  setSeedanceOmniPreview({ kind: "image", url: u });
+                                  setSeedanceImageMenu(null);
+                                }}
+                              >
+                                Full Screen
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
                       ))}
                       {seedanceCompactRefUrls.length < SEEDANCE_COMPACT_PREVIEW_MAX_IMAGE_URLS ? (
                         <button
@@ -3447,6 +3568,78 @@ export default function StudioVideoPanel({
                           >
                             <X className="h-3 w-3" aria-hidden />
                           </button>
+                          {it.kind === "image" && (startUrl === it.url || endUrl === it.url) ? (
+                            <span className="pointer-events-none absolute inset-x-0 bottom-0 rounded-b-xl bg-black/60 px-1 py-0.5 text-center text-[10px] font-semibold text-white/90">
+                              {startUrl === it.url && endUrl === it.url
+                                ? "Start/End"
+                                : startUrl === it.url
+                                  ? "Start"
+                                  : "End"}
+                            </span>
+                          ) : null}
+                          {it.kind === "image" ? (
+                            <>
+                              <button
+                                type="button"
+                                className="absolute -right-1 top-5 flex h-5 w-5 items-center justify-center rounded-full border border-white/20 bg-[#3d3d40] text-white/85 opacity-0 transition hover:bg-[#55555a] group-hover:opacity-100"
+                                onClick={() =>
+                                  setSeedanceImageMenu({ scope: "omni", url: it.url })
+                                }
+                                title="More options"
+                                aria-label="Open image options"
+                                data-seedance-image-menu
+                              >
+                                <Ellipsis className="h-3 w-3" aria-hidden />
+                              </button>
+                              {seedanceImageMenu?.scope === "omni" && seedanceImageMenu.url === it.url ? (
+                                <div data-seedance-image-menu className="absolute bottom-[calc(100%+8px)] left-0 z-20 w-44 overflow-hidden rounded-2xl border border-white/12 bg-[#15161d]/98 p-1.5 shadow-[0_16px_40px_rgba(0,0,0,0.55)] backdrop-blur">
+                                  <button
+                                    type="button"
+                                    className="flex w-full items-center justify-between rounded-xl px-2.5 py-2 text-left text-sm text-white/90 hover:bg-white/[0.06]"
+                                    onClick={() => {
+                                      moveSeedanceImageAsPrimaryReference("omni", it.url);
+                                      setSeedanceImageMenu(null);
+                                    }}
+                                  >
+                                    <span>Reference</span>
+                                    <Check className="h-3.5 w-3.5 text-lime-300" aria-hidden />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="flex w-full items-center rounded-xl px-2.5 py-2 text-left text-sm text-white/90 hover:bg-white/[0.06]"
+                                    onClick={() => {
+                                      setStartUrl(it.url);
+                                      setSeedanceImageMenu(null);
+                                      toast.success("Start frame set");
+                                    }}
+                                  >
+                                    Start Frame
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="flex w-full items-center rounded-xl px-2.5 py-2 text-left text-sm text-white/90 hover:bg-white/[0.06]"
+                                    onClick={() => {
+                                      setEndUrl(it.url);
+                                      setSeedanceImageMenu(null);
+                                      toast.success("End frame set");
+                                    }}
+                                  >
+                                    End Frame
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="mt-1 flex w-full items-center rounded-xl px-2.5 py-2 text-left text-sm text-white/90 hover:bg-white/[0.06]"
+                                    onClick={() => {
+                                      setSeedanceOmniPreview({ kind: "image", url: it.url });
+                                      setSeedanceImageMenu(null);
+                                    }}
+                                  >
+                                    Full Screen
+                                  </button>
+                                </div>
+                              ) : null}
+                            </>
+                          ) : null}
                         </div>
                       ))}
                       {seedanceProOmniItems.length < SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS ? (
@@ -4241,21 +4434,16 @@ export default function StudioVideoPanel({
                     <div className="flex flex-wrap gap-2">
                       {klingElementForm.urls.map((u, ui) => {
                         const rk = inferSeedanceReferenceKindFromUrl(u);
+                        const descBadge = (klingElementForm.description.trim() || klingElementForm.name.trim() || "Element")
+                          .slice(0, 24);
                         return (
-                          <button
+                          <div
                             key={`${klingElementForm.id}-ref-${ui}`}
-                            type="button"
-                            className="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/10 bg-black/40"
-                            onClick={() =>
-                              setKlingElementForm((f) =>
-                                f ? { ...f, urls: f.urls.filter((_, j) => j !== ui) } : f,
-                              )
-                            }
-                            title="Remove file"
+                            className="group relative flex h-16 w-16 shrink-0 items-center justify-center overflow-visible rounded-lg border border-white/10 bg-black/40"
                           >
                             {rk === "image" ? (
                               // eslint-disable-next-line @next/next/no-img-element
-                              <img src={u} alt="" className="h-full w-full object-cover" />
+                              <img src={u} alt="" className="h-full w-full rounded-lg object-cover" />
                             ) : rk === "video" ? (
                               <>
                                 <VideoIcon className="h-7 w-7 text-white/55" aria-hidden />
@@ -4267,7 +4455,43 @@ export default function StudioVideoPanel({
                                 <span className="sr-only">Audio</span>
                               </>
                             )}
-                          </button>
+                            <div className="pointer-events-none absolute inset-0 rounded-lg bg-black/0 transition group-hover:bg-black/45" />
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setKlingElementForm((f) =>
+                                  f ? { ...f, urls: f.urls.filter((_, j) => j !== ui) } : f,
+                                )
+                              }
+                              className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full border border-white/20 bg-[#3d3d40] text-white/85 opacity-0 transition hover:bg-[#55555a] group-hover:opacity-100"
+                              title="Remove"
+                              aria-label="Remove file"
+                            >
+                              <X className="h-3 w-3" aria-hidden />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setSeedanceOmniPreview({
+                                  kind: rk ?? "image",
+                                  url: u,
+                                })
+                              }
+                              className="absolute inset-0 flex items-center justify-center opacity-0 transition group-hover:opacity-100"
+                              title="View large"
+                              aria-label="View large"
+                            >
+                              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-black/65 text-white/90">
+                                <Expand className="h-4 w-4" aria-hidden />
+                              </span>
+                            </button>
+                            <span className="pointer-events-none absolute -bottom-4 left-1/2 inline-flex -translate-x-1/2 items-center gap-1 rounded-lg border border-lime-300/35 bg-[#1a1d23]/95 px-1.5 py-0.5 text-[10px] font-medium text-white/88 shadow-[0_6px_14px_rgba(0,0,0,0.35)]">
+                              <span className="inline-flex h-3 w-3 items-center justify-center rounded-full bg-[#0f1116] text-lime-300">
+                                <X className="h-2.5 w-2.5" aria-hidden />
+                              </span>
+                              <span className="max-w-[3.4rem] truncate">{descBadge}</span>
+                            </span>
+                          </div>
                         );
                       })}
                       {klingElementForm.urls.length < 4 ? (
