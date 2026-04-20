@@ -2629,8 +2629,10 @@ export default function StudioVideoPanel({
           for (const p of triple) {
             for (const u of p.nanoBananaImageUrls ?? []) addGenerated(u, "image");
             addGenerated(p.nanoBananaImageUrl, "image");
-            addGenerated(p.videoUrl, "video");
-            addGenerated(p.videoUrlPart2, "video");
+            for (const slot of p.klingByReferenceIndex ?? []) {
+              addGenerated(slot?.videoUrl, "video");
+              addGenerated(slot?.videoUrlPart2, "video");
+            }
           }
           addGenerated(snap.klingVideoUrl, "video");
           const generatedMedia = [...generatedMap.values()].slice(0, 6);
