@@ -333,16 +333,6 @@ function StudioShellInner({
         <div className="h-10 w-10" aria-hidden />
       </div>
 
-      {/* Mobile drawer backdrop. */}
-      {mobileNavOpen ? (
-        <button
-          type="button"
-          onClick={() => setMobileNavOpen(false)}
-          className="md:hidden fixed inset-0 z-40 bg-black/60"
-          aria-label="Close menu"
-        />
-      ) : null}
-
       <main
         className={cn(
           "relative z-10 grid min-h-screen items-start transition-[grid-template-columns] duration-200 ease-out",
@@ -362,15 +352,6 @@ function StudioShellInner({
             navCollapsed ? "md:px-1.5 px-3" : "px-3",
           )}
         >
-          {/* Mobile-only close button inside the drawer. */}
-          <button
-            type="button"
-            onClick={() => setMobileNavOpen(false)}
-            className="md:hidden absolute right-2 top-2 flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/[0.06] text-white/80 transition hover:bg-white/[0.1] hover:text-white"
-            aria-label="Close menu"
-          >
-            <X className="h-4 w-4" aria-hidden />
-          </button>
           <div
             className={cn(
               "shrink-0 pb-2",
@@ -431,22 +412,26 @@ function StudioShellInner({
                 </Link>
                 <button
                   type="button"
-                  onClick={() => setNavCollapsedPref(true)}
+                  onClick={() => (isMdUp ? setNavCollapsedPref(true) : setMobileNavOpen(false))}
                   className={cn(
                     "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.06] text-white/70 transition hover:border-violet-400/35 hover:bg-white/[0.1] hover:text-white",
                   )}
-                  title="Collapse menu"
-                  aria-expanded={true}
-                  aria-label="Collapse menu"
+                  title={isMdUp ? "Collapse menu" : "Close menu"}
+                  aria-expanded={isMdUp ? true : mobileNavOpen}
+                  aria-label={isMdUp ? "Collapse menu" : "Close menu"}
                 >
-                  <ChevronLeft className="h-3.5 w-3.5" aria-hidden />
+                  {isMdUp ? (
+                    <ChevronLeft className="h-3.5 w-3.5" aria-hidden />
+                  ) : (
+                    <X className="h-3.5 w-3.5" aria-hidden />
+                  )}
                 </button>
               </div>
             )}
             <SidebarCreditsBar collapsed={navCollapsed} />
           </div>
 
-          <div className="studio-sidebar-scroll min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
+          <div className="studio-sidebar-scroll min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain touch-pan-y">
             <div
               className={cn(
                 "rounded-xl border border-white/10 bg-[#0b0912]/85",
