@@ -149,6 +149,15 @@ type ElementRefPickState =
       ltaGroups: ElementRefPickLtaGroup[];
     };
 
+type SeedanceTrimState = {
+  file: File;
+  kind: "video" | "audio";
+  sourceDurationSec: number;
+  remainingBudgetSec: number;
+  startSec: number;
+  endSec: number;
+};
+
 function parseKlingElementDraftsFromJson(raw: string | null): KlingElementDraft[] {
   if (!raw) return [];
   try {
@@ -198,7 +207,12 @@ function probeHttpsImageMinDimensions(url: string, minW: number, minH: number): 
     img.src = url;
   });
 }
-type SeedanceOmniRefItem = { kind: "image" | "video" | "audio"; url: string };
+type SeedanceOmniRefItem = {
+  kind: "image" | "video" | "audio";
+  url: string;
+  /** For audio/video refs, used to enforce a 15s cumulative budget on Seedance omni uploads. */
+  durationSec?: number;
+};
 
 /** True if the prompt contains `@name` (case-insensitive) for Kling element references. */
 function promptUsesKlingElementTag(prompt: string, elementName: string): boolean {
@@ -247,6 +261,13 @@ const KLING_ELEMENT_MEDIA_MIN_PX = 300;
 /** Kling 3.0: 2+ refs per element; Seedance: 1+ ref per element slot (provider rules). */
 function minReferenceUrlsPerVideoElement(modelId: string): number {
   return modelId.startsWith("bytedance/seedance") ? 1 : 2;
+}
+
+function formatSecClock(sec: number): string {
+  const s = Math.max(0, Math.floor(sec));
+  const mm = Math.floor(s / 60);
+  const ss = s % 60;
+  return `${mm}:${String(ss).padStart(2, "0")}`;
 }
 
 async function imageFileMeetsMinDimensions(file: File, minW: number, minH: number): Promise<boolean> {
@@ -817,6 +838,10 @@ export default function StudioVideoPanel({
   const [seedanceProOmniItems, setSeedanceProOmniItems] = useState<SeedanceOmniRefItem[]>([]);
   const [seedanceProOmniUploadBusy, setSeedanceProOmniUploadBusy] = useState(false);
   const seedanceProOmniFileRef = useRef<HTMLInputElement>(null);
+  /** Opened automatically when an audio/video upload would exceed the 15s Seedance omni budget. */
+  const [seedanceTrimState, setSeedanceTrimState] = useState<SeedanceTrimState | null>(null);
+  const [seedanceTrimPreviewUrl, setSeedanceTrimPreviewUrl] = useState<string | null>(null);
+  const [seedanceOmniPreview, setSeedanceOmniPreview] = useState<SeedanceOmniRefItem | null>(null);
   const [prompt, setPrompt] = useState("");
   const [multiShot, setMultiShot] = useState(false);
   /** Kling 3.0 multi-shot: per-shot prompts via provider `multi_prompt`. */
@@ -1214,6 +1239,24 @@ export default function StudioVideoPanel({
   }, [elementUploadPreviewBlob]);
 
   useEffect(() => {
+    if (!seedanceTrimState) {
+      setSeedanceTrimPreviewUrl((prev) => {
+        if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
+        return null;
+      });
+      return;
+    }
+    const blobUrl = URL.createObjectURL(seedanceTrimState.file);
+    setSeedanceTrimPreviewUrl((prev) => {
+      if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
+      return blobUrl;
+    });
+    return () => {
+      URL.revokeObjectURL(blobUrl);
+    };
+  }, [seedanceTrimState]);
+
+  useEffect(() => {
     let cancelled = false;
     void (async () => {
       const urls = await loadAvatarUrls();
@@ -1474,6 +1517,81 @@ export default function StudioVideoPanel({
     }
   }, [modelId]);
 
+  const seedanceOmniUsedDurationSec = useMemo(
+    () =>
+      seedanceProOmniItems.reduce(
+        (sum, it) => (it.kind === "video" || it.kind === "audio" ? sum + Math.max(0, it.durationSec ?? 0) : sum),
+        0,
+      ),
+    [seedanceProOmniItems],
+  );
+
+  const readMediaDurationSec = useCallback(
+    async (file: File, kind: "video" | "audio"): Promise<number> => {
+      const objectUrl = URL.createObjectURL(file);
+      try {
+        const el = document.createElement(kind);
+        el.preload = "metadata";
+        el.src = objectUrl;
+        const duration = await new Promise<number>((resolve, reject) => {
+          el.onloadedmetadata = () => resolve(Number(el.duration || 0));
+          el.onerror = () => reject(new Error("Could not read media duration."));
+        });
+        return Number.isFinite(duration) && duration > 0 ? duration : 0;
+      } finally {
+        URL.revokeObjectURL(objectUrl);
+      }
+    },
+    [],
+  );
+
+  const trimMediaFileOnServer = useCallback(
+    async (
+      file: File,
+      kind: "video" | "audio",
+      startSec: number,
+      endSec: number,
+    ): Promise<File> => {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("kind", kind);
+      fd.append("startSec", String(startSec));
+      fd.append("endSec", String(endSec));
+      const res = await fetch("/api/media/trim", { method: "POST", body: fd });
+      if (!res.ok) {
+        const t = await res.text().catch(() => "");
+        throw new Error(t || `HTTP ${res.status}`);
+      }
+      const b = await res.blob();
+      const ext = kind === "video" ? ".mp4" : ".mp3";
+      const base = file.name.replace(/\.[^/.]+$/, "");
+      return new File([b], `${base}-trim${ext}`, { type: b.type || file.type || "application/octet-stream" });
+    },
+    [],
+  );
+
+  const addSeedanceProOmniUploadedFile = useCallback(
+    async (file: File, kind: UploadFileKind, durationSec?: number) => {
+      const u = await uploadStudioMediaFile(file, kind);
+      const mediaKind = kind === "image" ? "image" : kind === "video" ? "video" : "audio";
+      setSeedanceProOmniItems((prev) =>
+        prev.length >= SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS
+          ? prev
+          : [
+              ...prev,
+              {
+                kind: mediaKind,
+                url: u,
+                ...(mediaKind === "video" || mediaKind === "audio"
+                  ? { durationSec: Number.isFinite(durationSec ?? 0) ? durationSec : undefined }
+                  : {}),
+              },
+            ],
+      );
+    },
+    [],
+  );
+
   const onSeedanceCompactFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = "";
@@ -1564,12 +1682,36 @@ export default function StudioVideoPanel({
 
     setSeedanceProOmniUploadBusy(true);
     try {
-      const u = await uploadStudioMediaFile(file, kind);
-      setSeedanceProOmniItems((prev) =>
-        prev.length >= SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS
-          ? prev
-          : [...prev, { kind: inferred === "image" ? "image" : inferred === "video" ? "video" : "audio", url: u }],
-      );
+      if (kind === "image") {
+        await addSeedanceProOmniUploadedFile(file, kind);
+        toast.success("Media added");
+        return;
+      }
+
+      const sourceDuration = await readMediaDurationSec(file, kind === "video" ? "video" : "audio");
+      if (!Number.isFinite(sourceDuration) || sourceDuration <= 0) {
+        toast.error("Could not read media duration.");
+        return;
+      }
+      const remaining = Math.max(0, 15 - seedanceOmniUsedDurationSec);
+      if (remaining <= 0) {
+        toast.error("15s budget reached", {
+          description: "Remove a video/audio reference or trim one before adding more.",
+        });
+        return;
+      }
+      if (sourceDuration > remaining + 0.01) {
+        setSeedanceTrimState({
+          file,
+          kind: kind === "video" ? "video" : "audio",
+          sourceDurationSec: sourceDuration,
+          remainingBudgetSec: remaining,
+          startSec: 0,
+          endSec: Math.min(sourceDuration, remaining),
+        });
+        return;
+      }
+      await addSeedanceProOmniUploadedFile(file, kind, sourceDuration);
       toast.success("Media added");
     } catch (err) {
       toast.error("Upload failed", {
@@ -1578,7 +1720,46 @@ export default function StudioVideoPanel({
     } finally {
       setSeedanceProOmniUploadBusy(false);
     }
-  }, [seedanceProOmniItems.length]);
+  }, [
+    addSeedanceProOmniUploadedFile,
+    readMediaDurationSec,
+    seedanceOmniUsedDurationSec,
+    seedanceProOmniItems.length,
+  ]);
+
+  const seedanceTrimSelectedDurationSec =
+    seedanceTrimState ? Math.max(0, seedanceTrimState.endSec - seedanceTrimState.startSec) : 0;
+
+  const saveSeedanceTrim = useCallback(async () => {
+    if (!seedanceTrimState) return;
+    const selected = Math.max(0, seedanceTrimState.endSec - seedanceTrimState.startSec);
+    if (selected <= 0.05) {
+      toast.error("Choose a valid range.");
+      return;
+    }
+    if (selected > seedanceTrimState.remainingBudgetSec + 0.01) {
+      toast.error("Selected range exceeds remaining budget.");
+      return;
+    }
+    setSeedanceProOmniUploadBusy(true);
+    try {
+      const trimmed = await trimMediaFileOnServer(
+        seedanceTrimState.file,
+        seedanceTrimState.kind,
+        seedanceTrimState.startSec,
+        seedanceTrimState.endSec,
+      );
+      await addSeedanceProOmniUploadedFile(trimmed, seedanceTrimState.kind, selected);
+      setSeedanceTrimState(null);
+      toast.success("Media trimmed and added");
+    } catch (err) {
+      toast.error("Trim failed", {
+        description: userMessageFromCaughtError(err, "Try another range."),
+      });
+    } finally {
+      setSeedanceProOmniUploadBusy(false);
+    }
+  }, [addSeedanceProOmniUploadedFile, seedanceTrimState, trimMediaFileOnServer]);
 
   const applyAvatarToStartFrame = useCallback((avatarUrl: string) => {
     const u = avatarUrl.trim();
@@ -2387,6 +2568,16 @@ export default function StudioVideoPanel({
         });
         return;
       }
+      const totalMediaDurationSec = seedanceProOmniItems.reduce(
+        (sum, x) => (x.kind === "video" || x.kind === "audio" ? sum + Math.max(0, x.durationSec ?? 0) : sum),
+        0,
+      );
+      if (totalMediaDurationSec > 15.01) {
+        toast.error("Total video/audio refs exceed 15s", {
+          description: "Trim or remove some media to stay within a 15s total budget.",
+        });
+        return;
+      }
       if (seedanceProOmniItems.length > SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS) {
         toast.error(`At most ${SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS} media files.`);
         return;
@@ -3155,34 +3346,40 @@ export default function StudioVideoPanel({
                     className="hidden"
                     onChange={onSeedanceCompactFileChange}
                   />
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {seedanceCompactRefUrls.map((u, ui) => (
-                      <button
-                        key={`seed-compact-${ui}-${u.slice(-32)}`}
-                        type="button"
-                        className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-white/10"
-                        onClick={() => setSeedanceCompactRefUrls((prev) => prev.filter((_, j) => j !== ui))}
-                        title="Remove image"
-                      >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={u} alt="" className="h-full w-full object-cover" />
-                      </button>
-                    ))}
-                    {seedanceCompactRefUrls.length < SEEDANCE_COMPACT_PREVIEW_MAX_IMAGE_URLS ? (
-                      <button
-                        type="button"
-                        disabled={seedanceCompactUploadBusy}
-                        onClick={() => seedanceCompactFileRef.current?.click()}
-                        className="flex min-h-[120px] min-w-[min(100%,280px)] flex-1 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/20 bg-[#0c0c10] px-4 py-6 text-white/45 transition hover:border-violet-400/35 hover:bg-white/[0.02] hover:text-white/65 disabled:opacity-50"
-                      >
-                        <Upload className="h-8 w-8 opacity-70" strokeWidth={1.5} aria-hidden />
-                        <span className="text-center text-sm font-medium text-white/70">
-                          {seedanceCompactRefUrls.length === 0
-                            ? "Click to upload (1–4 images)"
-                            : `Add image (${seedanceCompactRefUrls.length}/${SEEDANCE_COMPACT_PREVIEW_MAX_IMAGE_URLS})`}
-                        </span>
-                      </button>
-                    ) : null}
+                  <div className="mt-2 rounded-2xl border border-white/10 bg-[#14141a]/75 p-3">
+                    <div className="flex min-h-[5rem] items-center justify-center gap-2 overflow-x-auto studio-params-scroll">
+                      {seedanceCompactRefUrls.map((u, ui) => (
+                        <button
+                          key={`seed-compact-${ui}-${u.slice(-32)}`}
+                          type="button"
+                          className="group relative h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-white/12 bg-black/40"
+                          onClick={() => setSeedanceCompactRefUrls((prev) => prev.filter((_, j) => j !== ui))}
+                          title="Remove image"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={u} alt="" className="h-full w-full object-cover" />
+                          <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 text-[10px] font-semibold text-white/0 transition group-hover:bg-black/45 group-hover:text-white/90">
+                            Remove
+                          </span>
+                        </button>
+                      ))}
+                      {seedanceCompactRefUrls.length < SEEDANCE_COMPACT_PREVIEW_MAX_IMAGE_URLS ? (
+                        <button
+                          type="button"
+                          disabled={seedanceCompactUploadBusy}
+                          onClick={() => seedanceCompactFileRef.current?.click()}
+                          className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-white/12 bg-white/[0.04] text-white/45 transition hover:border-violet-400/45 hover:bg-white/[0.08] hover:text-white/80 disabled:opacity-50"
+                          title={`Add image (${seedanceCompactRefUrls.length}/${SEEDANCE_COMPACT_PREVIEW_MAX_IMAGE_URLS})`}
+                        >
+                          <CirclePlus className="h-5 w-5" aria-hidden />
+                        </button>
+                      ) : null}
+                    </div>
+                    <p className="mt-2 text-center text-[10px] leading-snug text-white/40">
+                      {seedanceCompactRefUrls.length === 0
+                        ? "Upload 1-4 reference images."
+                        : `${seedanceCompactRefUrls.length}/${SEEDANCE_COMPACT_PREVIEW_MAX_IMAGE_URLS} images uploaded`}
+                    </p>
                   </div>
                 </div>
               ) : seedanceProOmniRefUploads ? (
@@ -3202,63 +3399,74 @@ export default function StudioVideoPanel({
                     className="hidden"
                     onChange={onSeedanceProOmniFileChange}
                   />
-                  <button
-                    type="button"
-                    disabled={
-                      seedanceProOmniUploadBusy ||
-                      seedanceProOmniItems.length >= SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS
-                    }
-                    onClick={() => seedanceProOmniFileRef.current?.click()}
-                    className="relative mt-2 flex min-h-[132px] w-full flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-white/22 bg-[#0c0c10] px-4 py-5 text-white/45 transition hover:border-violet-400/35 hover:bg-white/[0.02] hover:text-white/65 disabled:opacity-50"
-                  >
-                    <span className="flex items-center justify-center">
-                      <span className="-mr-1 flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-black/55">
-                        <ImageIcon className="h-[18px] w-[18px] text-white/70" aria-hidden />
-                      </span>
-                      <span className="z-[1] flex h-11 w-11 items-center justify-center rounded-full border border-white/18 bg-black/70">
-                        <VideoIcon className="h-5 w-5 text-white/78" aria-hidden />
-                      </span>
-                      <span className="-ml-1 flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-black/55">
-                        <Music2 className="h-[18px] w-[18px] text-white/70" aria-hidden />
-                      </span>
-                    </span>
-                    <span className="text-sm font-semibold text-white/80">Upload media</span>
-                    <span className="text-xs font-medium text-white/50">Image, video or audio</span>
-                    <span className="max-w-[20rem] text-center text-[10px] leading-snug text-white/35">
-                      Images (JPEG/PNG/WebP/GIF), video MP4/MOV, audio MP3/WAV — max{" "}
-                      {SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS} files. Audio requires at least one image or video.
-                    </span>
-                  </button>
-                  {seedanceProOmniItems.length > 0 ? (
-                    <div className="mt-2 flex flex-wrap gap-2">
+                  <div className="mt-2 rounded-2xl border border-white/10 bg-[#14141a]/75 p-3">
+                    <div className="flex min-h-[5rem] items-center justify-center gap-2 overflow-x-auto studio-params-scroll">
                       {seedanceProOmniItems.map((it, ui) => (
-                        <button
+                        <div
                           key={`seed-omni-${ui}-${it.url.slice(-28)}`}
-                          type="button"
-                          className="relative flex h-[4.5rem] w-[4.5rem] shrink-0 flex-col items-center justify-center overflow-hidden rounded-lg border border-white/10 bg-black/45"
-                          onClick={() => setSeedanceProOmniItems((prev) => prev.filter((_, j) => j !== ui))}
-                          title="Remove"
+                          className="group relative h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-white/12 bg-black/45"
                         >
                           {it.kind === "image" ? (
-                            <>
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={it.url} alt="" className="h-full w-full object-cover" />
-                            </>
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={it.url} alt="" className="h-full w-full object-cover" />
                           ) : it.kind === "video" ? (
-                            <>
-                              <VideoIcon className="h-7 w-7 text-white/55" aria-hidden />
-                              <span className="mt-0.5 text-[9px] text-white/42">Video</span>
-                            </>
+                            <video
+                              src={it.url}
+                              muted
+                              preload="metadata"
+                              playsInline
+                              className="h-full w-full object-cover"
+                            />
                           ) : (
-                            <>
-                              <Music2 className="h-7 w-7 text-white/55" aria-hidden />
-                              <span className="mt-0.5 text-[9px] text-white/42">Audio</span>
-                            </>
+                            <span className="flex h-full w-full items-center justify-center">
+                              <Music2 className="h-6 w-6 text-white/65" aria-hidden />
+                            </span>
                           )}
-                        </button>
+                          {(it.kind === "video" || it.kind === "audio") && Number.isFinite(it.durationSec ?? NaN) ? (
+                            <span className="pointer-events-none absolute bottom-1 left-1 rounded-md bg-black/65 px-1 py-0.5 text-[9px] font-semibold text-lime-300">
+                              {formatSecClock(it.durationSec ?? 0)}
+                            </span>
+                          ) : null}
+                          <div className="pointer-events-none absolute inset-0 bg-black/0 transition group-hover:bg-black/45" />
+                          <button
+                            type="button"
+                            onClick={() => setSeedanceOmniPreview(it)}
+                            className="absolute inset-0 flex items-center justify-center opacity-0 transition group-hover:opacity-100"
+                            title="View large"
+                          >
+                            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-black/65 text-white/90">
+                              <Expand className="h-4 w-4" aria-hidden />
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSeedanceProOmniItems((prev) => prev.filter((_, j) => j !== ui))}
+                            className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full border border-white/20 bg-[#3d3d40] text-white/85 opacity-0 transition hover:bg-[#55555a] group-hover:opacity-100"
+                            title="Remove"
+                            aria-label="Remove media"
+                          >
+                            <X className="h-3 w-3" aria-hidden />
+                          </button>
+                        </div>
                       ))}
+                      {seedanceProOmniItems.length < SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS ? (
+                        <button
+                          type="button"
+                          disabled={seedanceProOmniUploadBusy}
+                          onClick={() => seedanceProOmniFileRef.current?.click()}
+                          className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-white/12 bg-white/[0.04] text-white/45 transition hover:border-violet-400/45 hover:bg-white/[0.08] hover:text-white/80 disabled:opacity-50"
+                          title={`Upload media (${seedanceProOmniItems.length}/${SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS})`}
+                        >
+                          <CirclePlus className="h-5 w-5" aria-hidden />
+                        </button>
+                      ) : null}
                     </div>
-                  ) : null}
+                    <p className="mt-2 text-center text-[10px] leading-snug text-white/40">
+                      {seedanceProOmniItems.length === 0
+                        ? "Upload images, videos or sounds."
+                        : `${seedanceProOmniItems.length}/${SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS} files uploaded · ${Math.max(0, 15 - seedanceOmniUsedDurationSec).toFixed(1)}s video/audio remaining`}
+                    </p>
+                  </div>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
@@ -4390,6 +4598,188 @@ export default function StudioVideoPanel({
                 </div>
               </>
             )}
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+
+      <Dialog.Root
+        open={Boolean(seedanceTrimState)}
+        onOpenChange={(open) => {
+          if (!open && !seedanceProOmniUploadBusy) setSeedanceTrimState(null);
+        }}
+      >
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-[230] bg-black/55 backdrop-blur-[2px] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-[231] flex w-[min(96vw,760px)] max-h-[92vh] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#090b12] p-0 shadow-[0_28px_90px_rgba(0,0,0,0.75)] outline-none">
+            <div className="flex items-start justify-between gap-3 px-6 pb-3 pt-5">
+              <div>
+                <Dialog.Title className="text-3xl font-semibold tracking-tight text-white">Trim media</Dialog.Title>
+                <p className="mt-1 text-base text-white/55">
+                  Total media budget:{" "}
+                  {seedanceTrimState
+                    ? `${Math.max(0, seedanceTrimState.remainingBudgetSec).toFixed(1)}s remaining`
+                    : "0.0s remaining"}
+                </p>
+              </div>
+              <Dialog.Close asChild>
+                <button
+                  type="button"
+                  className="rounded-lg p-1.5 text-white/50 transition hover:bg-white/[0.06] hover:text-white"
+                  disabled={seedanceProOmniUploadBusy}
+                  aria-label="Close trim modal"
+                >
+                  <X className="h-5 w-5" aria-hidden />
+                </button>
+              </Dialog.Close>
+            </div>
+            <div className="px-6 pb-3">
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                {seedanceTrimState && seedanceTrimPreviewUrl ? (
+                  seedanceTrimState.kind === "video" ? (
+                    <video
+                      src={seedanceTrimPreviewUrl}
+                      controls
+                      className="mx-auto max-h-[44vh] w-full rounded-xl bg-black object-contain"
+                    />
+                  ) : (
+                    <audio
+                      src={seedanceTrimPreviewUrl}
+                      controls
+                      className="w-full rounded-xl"
+                    />
+                  )
+                ) : null}
+                {seedanceTrimState ? (
+                  <div className="mt-4 rounded-xl bg-black/35 p-3">
+                    <div className="mb-2 flex items-center justify-between text-xs text-white/60">
+                      <span>
+                        Start {formatSecClock(seedanceTrimState.startSec)}
+                      </span>
+                      <span>
+                        End {formatSecClock(seedanceTrimState.endSec)}
+                      </span>
+                    </div>
+                    <div className="space-y-2">
+                      <input
+                        type="range"
+                        min={0}
+                        max={Math.max(0, seedanceTrimState.sourceDurationSec)}
+                        step={0.1}
+                        value={seedanceTrimState.startSec}
+                        onChange={(e) => {
+                          const nextStart = Number(e.target.value);
+                          setSeedanceTrimState((prev) => {
+                            if (!prev) return prev;
+                            const cappedStart = Math.min(nextStart, Math.max(0, prev.endSec - 0.1));
+                            const maxEnd = Math.min(prev.sourceDurationSec, cappedStart + prev.remainingBudgetSec);
+                            const end = Math.min(prev.endSec, maxEnd);
+                            return { ...prev, startSec: cappedStart, endSec: Math.max(end, cappedStart + 0.1) };
+                          });
+                        }}
+                        className="h-2 w-full cursor-pointer accent-lime-400"
+                      />
+                      <input
+                        type="range"
+                        min={0}
+                        max={Math.max(0, seedanceTrimState.sourceDurationSec)}
+                        step={0.1}
+                        value={seedanceTrimState.endSec}
+                        onChange={(e) => {
+                          const nextEnd = Number(e.target.value);
+                          setSeedanceTrimState((prev) => {
+                            if (!prev) return prev;
+                            const cappedEnd = Math.max(nextEnd, prev.startSec + 0.1);
+                            const maxEnd = Math.min(prev.sourceDurationSec, prev.startSec + prev.remainingBudgetSec);
+                            return { ...prev, endSec: Math.min(cappedEnd, maxEnd) };
+                          });
+                        }}
+                        className="h-2 w-full cursor-pointer accent-lime-400"
+                      />
+                    </div>
+                    <div className="mt-3 flex items-center justify-between text-sm">
+                      <span className="text-white/65">
+                        Selected: <span className="font-semibold text-lime-300">{seedanceTrimSelectedDurationSec.toFixed(1)}s</span>
+                      </span>
+                      <span className="text-white/45">
+                        Source: {seedanceTrimState.sourceDurationSec.toFixed(1)}s
+                      </span>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 border-t border-white/10 px-6 py-4">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-12 rounded-2xl border-white/15 bg-white/[0.03] px-6 text-white/80 hover:bg-white/[0.08]"
+                disabled={seedanceProOmniUploadBusy}
+                onClick={() => setSeedanceTrimState(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                className="h-12 rounded-2xl border border-lime-300/45 bg-lime-400 px-7 text-black shadow-[0_6px_0_0_rgba(101,163,13,0.8)] hover:bg-lime-300 active:translate-y-0.5 active:shadow-none"
+                disabled={seedanceProOmniUploadBusy || !seedanceTrimState}
+                onClick={() => void saveSeedanceTrim()}
+              >
+                Save
+              </Button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+
+      <Dialog.Root
+        open={Boolean(seedanceOmniPreview)}
+        onOpenChange={(open) => {
+          if (!open) setSeedanceOmniPreview(null);
+        }}
+      >
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-[232] bg-black/65 backdrop-blur-[2px] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-[233] w-[min(96vw,900px)] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-2xl border border-white/10 bg-[#090b12] p-0 shadow-[0_24px_80px_rgba(0,0,0,0.7)] outline-none">
+            <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+              <Dialog.Title className="text-sm font-semibold text-white">Preview upload</Dialog.Title>
+              <Dialog.Close asChild>
+                <button
+                  type="button"
+                  className="rounded-lg p-1.5 text-white/45 transition hover:bg-white/[0.06] hover:text-white"
+                  aria-label="Close preview"
+                >
+                  <X className="h-4 w-4" aria-hidden />
+                </button>
+              </Dialog.Close>
+            </div>
+            <div className="p-4">
+              {seedanceOmniPreview?.kind === "image" ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={seedanceOmniPreview.url}
+                  alt=""
+                  className="max-h-[75vh] w-full rounded-xl object-contain"
+                />
+              ) : seedanceOmniPreview?.kind === "video" ? (
+                <video
+                  src={seedanceOmniPreview.url}
+                  controls
+                  autoPlay
+                  playsInline
+                  className="max-h-[75vh] w-full rounded-xl bg-black object-contain"
+                />
+              ) : seedanceOmniPreview?.kind === "audio" ? (
+                <div className="rounded-xl border border-white/10 bg-black/35 p-6">
+                  <p className="mb-3 text-sm text-white/70">Audio preview</p>
+                  <audio
+                    src={seedanceOmniPreview.url}
+                    controls
+                    autoPlay
+                    className="w-full"
+                  />
+                </div>
+              ) : null}
+            </div>
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
