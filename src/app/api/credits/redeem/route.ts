@@ -72,6 +72,23 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "DB not configured" }, { status: 503 });
   }
 
+  const markRedeemAccessGranted = async () => {
+    try {
+      const { data } = await admin.auth.admin.getUserById(auth.user.id);
+      const currentMeta = (data?.user?.app_metadata ?? {}) as Record<string, unknown>;
+      await admin.auth.admin.updateUserById(auth.user.id, {
+        app_metadata: {
+          ...currentMeta,
+          redeem_access_granted: true,
+          redeem_access_granted_at: new Date().toISOString(),
+        },
+      });
+    } catch (err) {
+      console.error("[redeem] could not update app_metadata redeem_access_granted:", err);
+      // Non-blocking on purpose: redeem should not fail if metadata update fails.
+    }
+  };
+
   const { data: tokenRaw, error: fetchErr } = await admin
     .from("credit_redeem_tokens")
     .select(
@@ -155,6 +172,7 @@ export async function POST(req: Request) {
     }
 
     await addPackCredits(admin, auth.user.id, token.amount);
+    await markRedeemAccessGranted();
 
     const { balance } = await getUserCreditBalance(admin, auth.user.id);
 
@@ -220,6 +238,7 @@ export async function POST(req: Request) {
   if (monthlyCredits > 0) {
     await addPackCredits(admin, auth.user.id, monthlyCredits);
   }
+  await markRedeemAccessGranted();
 
   serverLog("redeem_plan_granted", {
     userId: auth.user.id,
