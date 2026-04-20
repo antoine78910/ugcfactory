@@ -134,9 +134,9 @@ export default function LandingPage() {
         <section className="relative z-10 min-h-[min(92svh,1040px)] sm:min-h-[min(100svh,1040px)]">
         <div className="relative z-10 mx-auto w-full max-w-5xl px-4 pb-16 pt-4 text-center sm:px-6 sm:pb-24 sm:pt-7 md:pb-28 md:pt-8">
           <LandingSeedanceTopButton />
-          <h1 className="mx-auto max-w-4xl px-1 text-[clamp(1.35rem,min(1.05rem+2.1vw,3.5rem))] font-extrabold leading-[1.12] tracking-[-0.02em] sm:px-4 sm:text-5xl sm:leading-[1.1] md:text-6xl md:leading-[1.08] lg:text-[3.5rem] lg:leading-[1.06]">
+          <h1 className="mx-auto max-w-4xl px-3 text-[2.35rem] font-extrabold tracking-tight leading-[1.12] sm:px-6 sm:text-5xl md:text-6xl lg:text-[3.5rem] lg:leading-[1.08]">
             <span className="block">Realistic AI UGC for</span>
-            <span className="mt-0.5 block sm:mt-1">
+            <span className="mt-1 block sm:mt-1.5">
               <span className="text-violet-400">high-converting</span> ads
             </span>
           </h1>
@@ -164,7 +164,8 @@ export default function LandingPage() {
                 >
                   <Sparkles className="h-4 w-4 shrink-0 sm:h-4 sm:w-4" aria-hidden />
                   <span className="text-balance">
-                    Create your Ad For<LandingTrialPriceText className="inline" />
+                    Create your Ad For{" "}
+                    <LandingTrialPriceText className="inline" />
                   </span>
                 </Link>
               </Button>
@@ -236,7 +237,10 @@ export default function LandingPage() {
           <Link href={studioAppPath("/signup")} prefetch={false} className="inline-flex items-center justify-center gap-2">
             <Sparkles className="h-4 w-4 shrink-0" />
             <span>
-              Start your<LandingTrialPriceText className="inline" /> trial
+              Start your{" "}
+              <LandingTrialPriceText className="inline" />
+              {" "}
+              trial
             </span>
             <ArrowRight className="h-4 w-4 shrink-0" />
           </Link>
@@ -262,7 +266,8 @@ export default function LandingPage() {
           >
             <Link href={studioAppPath("/signup")} prefetch={false} className="inline-flex items-center justify-center gap-1.5">
               <Sparkles className="h-4 w-4 shrink-0" />
-              Try for<LandingTrialPriceText className="inline" />
+              Try for{" "}
+              <LandingTrialPriceText className="inline" />
             </Link>
           </Button>
         </div>

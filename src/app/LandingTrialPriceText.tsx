@@ -17,7 +17,7 @@ type Props = {
  * the server, so SEO / hero LCP is unaffected.
  */
 export function LandingTrialPriceText({ fallback = "$1", className }: Props) {
-  const [price, setPrice] = useState(fallback);
+  const [price, setPrice] = useState(() => fallback.trim());
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -29,8 +29,8 @@ export function LandingTrialPriceText({ fallback = "$1", className }: Props) {
         });
         if (!res.ok) return;
         const data = (await res.json()) as { price?: string };
-        if (typeof data.price === "string" && data.price.length > 0 && data.price !== fallback) {
-          setPrice(data.price);
+        if (typeof data.price === "string" && data.price.trim().length > 0 && data.price.trim() !== fallback) {
+          setPrice(data.price.trim());
         }
       } catch {
         /* ignore network/abort: fallback already rendered */
@@ -39,5 +39,5 @@ export function LandingTrialPriceText({ fallback = "$1", className }: Props) {
     return () => ctrl.abort();
   }, [fallback]);
 
-  return <span className={className}>{price}</span>;
+  return <span className={className}>{price.trim()}</span>;
 }
