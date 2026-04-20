@@ -94,8 +94,13 @@ export default function AuthClient({ mode = "signin", redirectTo }: { mode?: Aut
       }
       const cleanEmail = email.trim();
       const fromProps = redirectTo?.trim();
+      /**
+       * Read from localStorage so a redeem flow started in another tab (or
+       * pre-existing account with the token saved before a browser restart)
+       * still carries the pending token into the email-verification URL.
+       */
       const pending =
-        typeof window !== "undefined" ? sessionStorage.getItem("redeem_token_pending") : null;
+        typeof window !== "undefined" ? localStorage.getItem("redeem_token_pending") : null;
       const resumePath =
         fromProps && fromProps.startsWith("/") && !fromProps.startsWith("//")
           ? fromProps

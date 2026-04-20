@@ -228,7 +228,15 @@ function RedeemPageContent() {
   const [showContent, setShowContent] = useState(false);
 
   useEffect(() => {
-    const pending = typeof window !== "undefined" ? sessionStorage.getItem("redeem_token_pending") : null;
+    /**
+     * localStorage (not sessionStorage): the email verification link is almost
+     * always opened in a different tab (mail client / new browser tab) from the
+     * one that started signup, so a sessionStorage-scoped token would be
+     * invisible there and the RedeemTokenGuard could not resume the flow,
+     * dumping the creator on /onboarding instead of /redeem.
+     */
+    const pending =
+      typeof window !== "undefined" ? localStorage.getItem("redeem_token_pending") : null;
     const effectiveToken = token || pending || "";
 
     if (!effectiveToken) {
@@ -245,7 +253,7 @@ function RedeemPageContent() {
     }
 
     if (token) {
-      sessionStorage.removeItem("redeem_token_pending");
+      localStorage.removeItem("redeem_token_pending");
     }
 
     if (!token && effectiveToken) {
@@ -262,7 +270,7 @@ function RedeemPageContent() {
       if (!user) {
         const secret = token;
         if (typeof window !== "undefined") {
-          sessionStorage.setItem("redeem_token_pending", secret);
+          localStorage.setItem("redeem_token_pending", secret);
           const back = `/redeem?token=${encodeURIComponent(secret)}`;
           router.replace(`/signin?redirect=${encodeURIComponent(back)}`);
         }

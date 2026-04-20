@@ -20,13 +20,21 @@ export function RedeemTokenGuard() {
 
   useEffect(() => {
     if (!ready || pathname?.startsWith("/redeem")) return;
-    const pending = sessionStorage.getItem("redeem_token_pending");
+    /**
+     * localStorage (not sessionStorage): the email verification link is almost
+     * always opened in a new tab, and sessionStorage is tab-scoped so a
+     * pending token saved in the original tab would be invisible here. With
+     * localStorage the guard can still catch a freshly-authenticated user who
+     * landed on `/onboarding` (new-user branch of auth/callback) and reroute
+     * them to the redeem page they originally started from.
+     */
+    const pending = localStorage.getItem("redeem_token_pending");
     if (!pending) return;
     if (supabase === null) return;
 
     void supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return;
-      sessionStorage.removeItem("redeem_token_pending");
+      localStorage.removeItem("redeem_token_pending");
       router.replace(`/redeem?token=${encodeURIComponent(pending)}`);
     });
   }, [pathname, ready, supabase, router]);
