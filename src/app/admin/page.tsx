@@ -51,6 +51,9 @@ type CreditRedeemTokenRow = {
   plan_id: string | null;
   plan_billing: string | null;
   plan_duration_days: number | null;
+  bundle_plan_id: string | null;
+  bundle_plan_billing: string | null;
+  bundle_plan_duration_days: number | null;
 };
 
 type CreditRedeemLogRow = {
@@ -323,6 +326,11 @@ export default function AdminPage() {
   const [createPlanId, setCreatePlanId] = useState<string>("growth");
   const [createPlanBilling, setCreatePlanBilling] = useState<"monthly" | "yearly">("monthly");
   const [createPlanDuration, setCreatePlanDuration] = useState("30");
+  // Partner-bundle (credits link that ALSO grants comp plan access).
+  const [createBundleEnabled, setCreateBundleEnabled] = useState(true);
+  const [createBundlePlanId, setCreateBundlePlanId] = useState<string>("scale");
+  const [createBundleBilling, setCreateBundleBilling] = useState<"monthly" | "yearly">("monthly");
+  const [createBundleDuration, setCreateBundleDuration] = useState("30");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [newLink, setNewLink] = useState<string | null>(null);
@@ -493,6 +501,13 @@ export default function AdminPage() {
         const amount = Math.round(Number(createAmount) || 0);
         if (amount <= 0) throw new Error("Credits amount must be ≥ 1");
         body.amount = amount;
+        if (createBundleEnabled) {
+          const bundleDuration = Math.round(Number(createBundleDuration) || 0);
+          if (bundleDuration <= 0) throw new Error("Bundle plan duration must be ≥ 1 day");
+          body.bundlePlanId = createBundlePlanId;
+          body.bundlePlanBilling = createBundleBilling;
+          body.bundlePlanDurationDays = bundleDuration;
+        }
       } else {
         const duration = Math.round(Number(createPlanDuration) || 0);
         if (duration <= 0) throw new Error("Plan duration must be ≥ 1 day");
@@ -526,6 +541,10 @@ export default function AdminPage() {
     createPlanId,
     createPlanBilling,
     createPlanDuration,
+    createBundleEnabled,
+    createBundlePlanId,
+    createBundleBilling,
+    createBundleDuration,
     fetchCreditRedeems,
   ]);
 
@@ -865,6 +884,63 @@ export default function AdminPage() {
                 )}
               </div>
 
+              {createGrantType === "credits" && (
+                <div className="mt-4 rounded-lg border border-violet-500/25 bg-violet-500/[0.06] p-3">
+                  <label className="flex cursor-pointer items-start gap-2">
+                    <input
+                      type="checkbox"
+                      checked={createBundleEnabled}
+                      onChange={(e) => setCreateBundleEnabled(e.target.checked)}
+                      className="mt-0.5 h-3.5 w-3.5 accent-violet-500"
+                    />
+                    <span className="flex-1 text-[12px] font-semibold text-violet-100">
+                      Bundle partner plan access with this credit link
+                      <span className="ml-1 text-[11px] font-normal text-white/55">
+                        (recipient also unlocks the chosen plan tier for the configured duration — bypasses the trial)
+                      </span>
+                    </span>
+                  </label>
+                  {createBundleEnabled && (
+                    <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Plan</label>
+                        <select
+                          value={createBundlePlanId}
+                          onChange={(e) => setCreateBundlePlanId(e.target.value)}
+                          className="rounded-lg border border-white/10 bg-[#0b0912] px-3 py-2 text-xs text-white/90 outline-none focus:border-violet-500/60"
+                        >
+                          {PLAN_OPTIONS.map((p) => (
+                            <option key={p.id} value={p.id}>{p.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Billing</label>
+                        <select
+                          value={createBundleBilling}
+                          onChange={(e) => setCreateBundleBilling(e.target.value === "yearly" ? "yearly" : "monthly")}
+                          className="rounded-lg border border-white/10 bg-[#0b0912] px-3 py-2 text-xs text-white/90 outline-none focus:border-violet-500/60"
+                        >
+                          <option value="monthly">Monthly</option>
+                          <option value="yearly">Yearly</option>
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Plan access (days)</label>
+                        <input
+                          type="number"
+                          min={1}
+                          placeholder="30"
+                          value={createBundleDuration}
+                          onChange={(e) => setCreateBundleDuration(e.target.value)}
+                          className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-xs text-white placeholder-white/30 outline-none focus:border-violet-500/60"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {createGrantType === "plan" && (
                 <p className="mt-3 text-[11px] leading-relaxed text-white/45">
                   Plan links grant access to the selected tier without any Stripe charge (for partners without a card).
@@ -958,7 +1034,17 @@ export default function AdminPage() {
                             </span>
                           </span>
                         ) : (
-                          <span className="font-semibold text-amber-200/90">{row.amount}</span>
+                          <div className="flex flex-col">
+                            <span className="font-semibold text-amber-200/90">{row.amount}</span>
+                            {row.bundle_plan_id && (
+                              <span className="mt-0.5 text-[10px] text-violet-200/80">
+                                + <span className="font-semibold capitalize">{row.bundle_plan_id}</span>
+                                <span className="ml-1 text-white/40">
+                                  ({row.bundle_plan_billing}, {row.bundle_plan_duration_days}d)
+                                </span>
+                              </span>
+                            )}
+                          </div>
                         )}
                       </td>
                       <td className="px-3 py-2.5 tabular-nums text-white/55">

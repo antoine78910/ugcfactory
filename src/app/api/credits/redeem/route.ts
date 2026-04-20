@@ -30,6 +30,10 @@ type TokenRow = {
   plan_id: string | null;
   plan_billing: string | null;
   plan_duration_days: number | null;
+  /** Optional partner-bundle: also grant comp plan on a credits token. */
+  bundle_plan_id: string | null;
+  bundle_plan_billing: string | null;
+  bundle_plan_duration_days: number | null;
 };
 
 /**
@@ -92,7 +96,7 @@ export async function POST(req: Request) {
   const { data: tokenRaw, error: fetchErr } = await admin
     .from("credit_redeem_tokens")
     .select(
-      "id, amount, max_uses, used_count, expires_at, grant_type, plan_id, plan_billing, plan_duration_days",
+      "id, amount, max_uses, used_count, expires_at, grant_type, plan_id, plan_billing, plan_duration_days, bundle_plan_id, bundle_plan_billing, bundle_plan_duration_days",
     )
     .eq("secret", secret)
     .single();
@@ -160,11 +164,67 @@ export async function POST(req: Request) {
 
   // --- Credits grant ---------------------------------------------------------
   if (token.grant_type === "credits") {
+    // Validate optional partner-bundle BEFORE granting anything so we can
+    // 410 cleanly without spending the use on an inconsistent row.
+    const hasBundle =
+      token.bundle_plan_id != null ||
+      token.bundle_plan_billing != null ||
+      token.bundle_plan_duration_days != null;
+
+    let bundlePlanId: "starter" | "growth" | "pro" | "scale" | null = null;
+    let bundleBilling: "monthly" | "yearly" | null = null;
+    let bundleDuration = 0;
+    if (hasBundle) {
+      if (
+        !token.bundle_plan_id ||
+        !isSubscriptionPlanId(token.bundle_plan_id) ||
+        (token.bundle_plan_billing !== "monthly" && token.bundle_plan_billing !== "yearly") ||
+        !token.bundle_plan_duration_days ||
+        token.bundle_plan_duration_days < 1
+      ) {
+        console.error("[redeem] malformed bundle on credits token", { tokenId: token.id });
+        return NextResponse.json({ error: "Invalid bundle on token" }, { status: 500 });
+      }
+      bundlePlanId = token.bundle_plan_id;
+      bundleBilling = token.bundle_plan_billing;
+      bundleDuration = token.bundle_plan_duration_days;
+    }
+
+    let bundleCompId: string | null = null;
+    let bundleExpiresAt: string | null = null;
+    if (hasBundle && bundlePlanId && bundleBilling) {
+      try {
+        const row = await insertComplimentaryPlan(admin, {
+          userId: auth.user.id,
+          planId: bundlePlanId,
+          billing: bundleBilling,
+          durationDays: bundleDuration,
+          tokenId: token.id,
+          source: "partner_link",
+        });
+        bundleCompId = row.id;
+        bundleExpiresAt = row.expiresAt;
+      } catch (err) {
+        console.error("[redeem] bundle comp insert error:", err);
+        // Best-effort rollback of the used_count bump so the link can be
+        // retried (no partial grant).
+        await admin
+          .from("credit_redeem_tokens")
+          .update({ used_count: token.used_count })
+          .eq("id", token.id)
+          .eq("used_count", token.used_count + 1);
+        return NextResponse.json({ error: "Could not grant bundled plan" }, { status: 500 });
+      }
+    }
+
     const { error: logErr } = await admin.from("credit_redeem_logs").insert({
       token_id: token.id,
       user_id: auth.user.id,
       amount: displayCreditsToLedgerTicks(token.amount),
       grant_type: "credits",
+      plan_id: bundlePlanId,
+      plan_billing: bundleBilling,
+      plan_expires_at: bundleExpiresAt,
     });
     if (logErr) {
       console.error("[redeem] log insert error:", logErr);
@@ -174,6 +234,16 @@ export async function POST(req: Request) {
     await addPackCredits(admin, auth.user.id, token.amount);
     await markRedeemAccessGranted();
 
+    if (hasBundle) {
+      serverLog("redeem_bundle_plan_granted", {
+        userId: auth.user.id,
+        planId: bundlePlanId,
+        billing: bundleBilling,
+        durationDays: bundleDuration,
+        tokenId: token.id,
+      });
+    }
+
     const { balance } = await getUserCreditBalance(admin, auth.user.id);
 
     return NextResponse.json({
@@ -181,6 +251,10 @@ export async function POST(req: Request) {
       grantType: "credits",
       credited: token.amount,
       balance,
+      bundlePlanId,
+      bundlePlanBilling: bundleBilling,
+      bundlePlanExpiresAt: bundleExpiresAt,
+      complimentarySubscriptionId: bundleCompId,
     });
   }
 

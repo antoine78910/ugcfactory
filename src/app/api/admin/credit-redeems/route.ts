@@ -18,6 +18,9 @@ type TokenRow = {
   plan_id: string | null;
   plan_billing: string | null;
   plan_duration_days: number | null;
+  bundle_plan_id: string | null;
+  bundle_plan_billing: string | null;
+  bundle_plan_duration_days: number | null;
 };
 
 type TokenEmbed = {
@@ -85,7 +88,7 @@ export async function GET(req: Request) {
   const { data: tokensRaw, error: tokErr } = await admin
     .from("credit_redeem_tokens")
     .select(
-      "id, secret, label, amount, max_uses, used_count, expires_at, created_at, grant_type, plan_id, plan_billing, plan_duration_days",
+      "id, secret, label, amount, max_uses, used_count, expires_at, created_at, grant_type, plan_id, plan_billing, plan_duration_days, bundle_plan_id, bundle_plan_billing, bundle_plan_duration_days",
     )
     .order("created_at", { ascending: false })
     .limit(300);

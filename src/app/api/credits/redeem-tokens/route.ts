@@ -50,6 +50,10 @@ export async function POST(req: Request) {
     planId?: string;
     planBilling?: string;
     planDurationDays?: number;
+    /** Optional partner-bundle: also grants comp plan on a credits token. */
+    bundlePlanId?: string;
+    bundlePlanBilling?: string;
+    bundlePlanDurationDays?: number;
   };
   try {
     body = (await req.json()) as typeof body;
@@ -60,7 +64,15 @@ export async function POST(req: Request) {
   const grantTypeRaw = (body.grantType ?? "credits").toString().trim();
   const grantType: GrantType = grantTypeRaw === "plan" ? "plan" : "credits";
 
-  if (grantType === "plan" && !isPrimaryAdminEmail(email)) {
+  // A bundle attaches comp plan access to a credits token. Treat it with the
+  // same financial-impact restriction as a pure plan grant.
+  const bundleRequested =
+    grantType === "credits" &&
+    (body.bundlePlanId != null ||
+      body.bundlePlanBilling != null ||
+      body.bundlePlanDurationDays != null);
+
+  if ((grantType === "plan" || bundleRequested) && !isPrimaryAdminEmail(email)) {
     return NextResponse.json(
       { error: "Only the primary admin can create plan-grant links." },
       { status: 403 },
@@ -94,6 +106,37 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "amount must be 1–10 000" }, { status: 400 });
     }
     insertPayload = { ...insertPayload, amount };
+
+    // Optional partner-bundle: validate all three fields together.
+    if (bundleRequested) {
+      const bundlePlanRaw = String(body.bundlePlanId ?? "").trim();
+      if (!isSubscriptionPlanId(bundlePlanRaw)) {
+        return NextResponse.json(
+          { error: "bundlePlanId must be one of starter|growth|pro|scale" },
+          { status: 400 },
+        );
+      }
+      const bundleBillingRaw = String(body.bundlePlanBilling ?? "").trim();
+      if (bundleBillingRaw !== "monthly" && bundleBillingRaw !== "yearly") {
+        return NextResponse.json(
+          { error: "bundlePlanBilling must be 'monthly' or 'yearly'" },
+          { status: 400 },
+        );
+      }
+      const bundleDuration = Math.round(Number(body.bundlePlanDurationDays) || 0);
+      if (!Number.isFinite(bundleDuration) || bundleDuration < 1 || bundleDuration > 3650) {
+        return NextResponse.json(
+          { error: "bundlePlanDurationDays must be 1–3650" },
+          { status: 400 },
+        );
+      }
+      insertPayload = {
+        ...insertPayload,
+        bundle_plan_id: bundlePlanRaw as SubscriptionPlanId,
+        bundle_plan_billing: bundleBillingRaw,
+        bundle_plan_duration_days: bundleDuration,
+      };
+    }
   } else {
     const planIdRaw = String(body.planId ?? "").trim();
     if (!isSubscriptionPlanId(planIdRaw)) {
@@ -135,7 +178,7 @@ export async function POST(req: Request) {
     .from("credit_redeem_tokens")
     .insert(insertPayload)
     .select(
-      "secret, amount, max_uses, expires_at, grant_type, plan_id, plan_billing, plan_duration_days",
+      "secret, amount, max_uses, expires_at, grant_type, plan_id, plan_billing, plan_duration_days, bundle_plan_id, bundle_plan_billing, bundle_plan_duration_days",
     )
     .single();
 
@@ -157,6 +200,9 @@ export async function POST(req: Request) {
       planId: data.plan_id,
       planBilling: data.plan_billing,
       planDurationDays: data.plan_duration_days,
+      bundlePlanId: data.bundle_plan_id,
+      bundlePlanBilling: data.bundle_plan_billing,
+      bundlePlanDurationDays: data.bundle_plan_duration_days,
       url: `${origin}/redeem?token=${data.secret}`,
     },
   });
@@ -184,7 +230,7 @@ export async function GET() {
   const { data, error } = await admin
     .from("credit_redeem_tokens")
     .select(
-      "id, secret, label, amount, max_uses, used_count, expires_at, created_at, grant_type, plan_id, plan_billing, plan_duration_days",
+      "id, secret, label, amount, max_uses, used_count, expires_at, created_at, grant_type, plan_id, plan_billing, plan_duration_days, bundle_plan_id, bundle_plan_billing, bundle_plan_duration_days",
     )
     .order("created_at", { ascending: false })
     .limit(200);

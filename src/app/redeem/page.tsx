@@ -218,6 +218,8 @@ function RedeemPageContent() {
   const [grantType, setGrantType] = useState<GrantType>("credits");
   const [planId, setPlanId] = useState<string | null>(null);
   const [planExpiresAt, setPlanExpiresAt] = useState<string | null>(null);
+  const [bundlePlanId, setBundlePlanId] = useState<string | null>(null);
+  const [bundlePlanExpiresAt, setBundlePlanExpiresAt] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
   const attempted = useRef(false);
   const [showContent, setShowContent] = useState(false);
@@ -279,6 +281,8 @@ function RedeemPageContent() {
           grantType?: GrantType;
           planId?: string;
           planExpiresAt?: string;
+          bundlePlanId?: string | null;
+          bundlePlanExpiresAt?: string | null;
         };
 
         if (res.ok && json.success) {
@@ -286,6 +290,8 @@ function RedeemPageContent() {
           setGrantType(json.grantType === "plan" ? "plan" : "credits");
           setPlanId(json.planId ?? null);
           setPlanExpiresAt(json.planExpiresAt ?? null);
+          setBundlePlanId(json.bundlePlanId ?? null);
+          setBundlePlanExpiresAt(json.bundlePlanExpiresAt ?? null);
           setStatus("success");
           if (
             typeof json.balance === "number" &&
@@ -404,6 +410,22 @@ function RedeemPageContent() {
               <p className="mt-1 text-[18px] font-bold tracking-tight text-white/90">
                 credit{credited !== 1 ? "s" : ""}
               </p>
+              {bundlePlanId && (
+                <div className="mx-auto mt-4 max-w-[300px] rounded-xl border border-violet-500/30 bg-violet-500/[0.08] px-4 py-3">
+                  <p className="text-[12px] font-semibold uppercase tracking-wide text-violet-300/90">
+                    Bonus
+                  </p>
+                  <p className="mt-1 text-[15px] font-bold text-white/95">
+                    {PLAN_DISPLAY[bundlePlanId] ?? bundlePlanId} plan unlocked
+                  </p>
+                  <p className="mt-1 text-[12px] text-white/55">
+                    {bundlePlanExpiresAt
+                      ? `Full access until ${new Date(bundlePlanExpiresAt).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })}.`
+                      : "Full access included."}
+                    {" "}No card required.
+                  </p>
+                </div>
+              )}
               <p className="mx-auto mt-4 max-w-[280px] text-[13px] leading-relaxed text-white/45">
                 Ready to use, they expire in 3 months. Go create something amazing.
               </p>
