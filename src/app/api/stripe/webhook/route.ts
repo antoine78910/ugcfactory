@@ -471,6 +471,37 @@ export async function POST(req: Request) {
           .update({ status: "canceled" })
           .eq("stripe_subscription_id", sub.id);
 
+        /**
+         * Zero out every remaining subscription credit for this user: the
+         * monthly allowance is tied to the subscription, so canceling must not
+         * leave a usable balance behind (would let a former customer keep
+         * generating for free until period end). Pack credits (one-time
+         * purchases) and complimentary-plan credits are kept since they were
+         * paid for / granted separately. The `sync_user_credits_balance`
+         * trigger on user_credit_grants keeps the legacy `user_credits.balance`
+         * mirror in sync automatically.
+         */
+        if (canceledRow?.user_id) {
+          const { error: zeroErr } = await admin
+            .from("user_credit_grants")
+            .update({ remaining: 0 })
+            .eq("user_id", canceledRow.user_id)
+            .eq("source", "subscription")
+            .gt("remaining", 0);
+          if (zeroErr) {
+            serverLog("stripe_webhook_zero_subscription_credits_error", {
+              userId: canceledRow.user_id,
+              subId: sub.id,
+              error: zeroErr.message,
+            });
+          } else {
+            serverLog("stripe_webhook_subscription_credits_zeroed", {
+              userId: canceledRow.user_id,
+              subId: sub.id,
+            });
+          }
+        }
+
         serverLog("stripe_webhook_subscription_canceled", { subId: sub.id });
 
         try {
