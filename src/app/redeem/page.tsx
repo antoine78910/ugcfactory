@@ -8,7 +8,10 @@ import {
   useBrowserSupabaseReady,
   useSupabaseBrowserClient,
 } from "@/lib/supabase/BrowserSupabaseProvider";
-import { dispatchAuthoritativeCreditBalance } from "@/app/_components/CreditsPlanContext";
+import {
+  dispatchAuthoritativeCreditBalance,
+  dispatchSubscriptionRefresh,
+} from "@/app/_components/CreditsPlanContext";
 
 type Status = "loading" | "success" | "error" | "no-token";
 type GrantType = "credits" | "plan";
@@ -299,6 +302,17 @@ function RedeemPageContent() {
             json.balance >= 0
           ) {
             dispatchAuthoritativeCreditBalance(json.balance);
+          }
+          /**
+           * Plan or bundle link: a complimentary subscription was just inserted
+           * server-side. Ask the provider to refetch `/api/me/subscription` so
+           * `planId`, `studioAccessAllowed` (and the sidebar plan badge) reflect
+           * the new comp plan. Without this, `StudioAccessGuard` keeps the stale
+           * `studioAccessAllowed=false` from the fresh-account initial fetch and
+           * bounces the creator to `/onboarding?step=setup` on "Open the App".
+           */
+          if (json.grantType === "plan" || json.bundlePlanId) {
+            dispatchSubscriptionRefresh();
           }
         } else {
           setErrorMsg(json.error ?? "Redemption failed");

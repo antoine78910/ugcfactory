@@ -70,6 +70,20 @@ export function dispatchAuthoritativeCreditBalance(balance: number) {
   );
 }
 
+/**
+ * Dispatched when plan-level data changes server-side (e.g. redeeming a plan link
+ * or a bundle token that grants a complimentary subscription). The provider then
+ * re-fetches `/api/me/subscription` so `planId`, `studioAccessAllowed`, etc. reflect
+ * the new comp plan without requiring a full page reload.
+ */
+export const UGC_SUBSCRIPTION_REFRESH_EVENT = "ugc-subscription-refresh";
+
+/** Ask `CreditsPlanProvider` to refetch `/api/me/subscription` and re-apply it. */
+export function dispatchSubscriptionRefresh() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(UGC_SUBSCRIPTION_REFRESH_EVENT));
+}
+
 function lsGet(key: string): string | null {
   try {
     return localStorage.getItem(key);
@@ -380,7 +394,7 @@ export function CreditsPlanProvider({
   const activeUserId = resolvedUserId ?? null;
 
   // ---------------------------------------------------------------------------
-  // DB sync, runs once on mount.
+  // DB sync.
   //
   // Always fetches the authoritative plan from the server.
   // The API also returns the confirmed userId, which is used to:
@@ -389,23 +403,16 @@ export function CreditsPlanProvider({
   //
   // Grace period: if a checkout happened < 5 min ago and the server still says
   // "free" (webhook not yet processed), we keep the plan from consumeCheckoutQueryParams.
+  //
+  // Runs once on mount (and when `activeUserId` changes). Also re-runs when a
+  // server-side plan change fires `UGC_SUBSCRIPTION_REFRESH_EVENT` (e.g. after
+  // redeeming a plan or bundle link) so the client picks up the new comp plan
+  // and `studioAccessAllowed=true` without a full page reload.
   // ---------------------------------------------------------------------------
-  useEffect(() => {
+  const fetchAndApplyServerSubscription = useCallback(() => {
     if (!activeUserId) {
       setStudioAccessAllowed(true);
       return;
-    }
-
-    if (typeof window !== "undefined") {
-      const sp = new URLSearchParams(window.location.search);
-      if (sp.get("checkout") === "trial_success") {
-        lsSet(LS_CHECKOUT_TS, String(Date.now()));
-        /** Fire DataFast funnel goal: 1$ vs 1€ paid (currency comes from the success_url). */
-        trackTrialPaid(sp.get("currency"));
-        const path = window.location.pathname;
-        const clean = path.includes("?") ? path.split("?")[0]! : path;
-        window.history.replaceState({}, "", clean || "/");
-      }
     }
 
     fetch("/api/me/subscription")
@@ -535,6 +542,21 @@ export function CreditsPlanProvider({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeUserId]);
 
+  useEffect(() => {
+    if (typeof window !== "undefined" && activeUserId) {
+      const sp = new URLSearchParams(window.location.search);
+      if (sp.get("checkout") === "trial_success") {
+        lsSet(LS_CHECKOUT_TS, String(Date.now()));
+        /** Fire DataFast funnel goal: 1$ vs 1€ paid (currency comes from the success_url). */
+        trackTrialPaid(sp.get("currency"));
+        const path = window.location.pathname;
+        const clean = path.includes("?") ? path.split("?")[0]! : path;
+        window.history.replaceState({}, "", clean || "/");
+      }
+    }
+    fetchAndApplyServerSubscription();
+  }, [activeUserId, fetchAndApplyServerSubscription]);
+
   const syncFromStorage = useCallback(() => {
     setState(readState(activeUserId));
   }, [activeUserId]);
@@ -574,15 +596,26 @@ export function CreditsPlanProvider({
         applyAuthoritativeServerBalance(b);
       }
     };
+    /**
+     * Fired after redeeming a plan or bundle link — the server has inserted a new
+     * complimentary subscription, so we must refetch `/api/me/subscription` to
+     * update `planId`, `studioAccessAllowed`, etc. Otherwise the StudioAccessGuard
+     * keeps the stale `studioAccessAllowed=false` from the new-user initial fetch
+     * and bounces the creator to `/onboarding?step=setup` even though they now
+     * hold (e.g.) a Scale comp plan.
+     */
+    const onSubscriptionRefresh = () => fetchAndApplyServerSubscription();
     window.addEventListener("storage", onStorage);
     window.addEventListener("ugc-credits-storage", onLocal);
     window.addEventListener(UGC_CREDITS_BALANCE_EVENT, onBalance);
+    window.addEventListener(UGC_SUBSCRIPTION_REFRESH_EVENT, onSubscriptionRefresh);
     return () => {
       window.removeEventListener("storage", onStorage);
       window.removeEventListener("ugc-credits-storage", onLocal);
       window.removeEventListener(UGC_CREDITS_BALANCE_EVENT, onBalance);
+      window.removeEventListener(UGC_SUBSCRIPTION_REFRESH_EVENT, onSubscriptionRefresh);
     };
-  }, [syncFromStorage, applyAuthoritativeServerBalance]);
+  }, [syncFromStorage, applyAuthoritativeServerBalance, fetchAndApplyServerSubscription]);
 
   const commit = useCallback(
     (next: CreditsState) => {
