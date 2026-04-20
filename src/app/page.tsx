@@ -163,10 +163,7 @@ export default function LandingPage() {
                   className="inline-flex items-center justify-center gap-1.5"
                 >
                   <Sparkles className="h-4 w-4 shrink-0 sm:h-4 sm:w-4" aria-hidden />
-                  <span className="text-balance">
-                    Create your Ad For{" "}
-                    <LandingTrialPriceText className="inline" />
-                  </span>
+                  <span className="text-balance">Create your Ad For <LandingTrialPriceText className="inline" /></span>
                 </Link>
               </Button>
             </div>
@@ -236,12 +233,7 @@ export default function LandingPage() {
         >
           <Link href={studioAppPath("/signup")} prefetch={false} className="inline-flex items-center justify-center gap-2">
             <Sparkles className="h-4 w-4 shrink-0" />
-            <span>
-              Start your{" "}
-              <LandingTrialPriceText className="inline" />
-              {" "}
-              trial
-            </span>
+            <span>Start your <LandingTrialPriceText className="inline" /> trial</span>
             <ArrowRight className="h-4 w-4 shrink-0" />
           </Link>
         </Button>
@@ -266,8 +258,7 @@ export default function LandingPage() {
           >
             <Link href={studioAppPath("/signup")} prefetch={false} className="inline-flex items-center justify-center gap-1.5">
               <Sparkles className="h-4 w-4 shrink-0" />
-              Try for{" "}
-              <LandingTrialPriceText className="inline" />
+              <span className="inline">Try for <LandingTrialPriceText className="inline" /></span>
             </Link>
           </Button>
         </div>
