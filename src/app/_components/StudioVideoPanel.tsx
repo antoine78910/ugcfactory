@@ -5606,7 +5606,7 @@ export default function StudioVideoPanel({
                           <div className="h-40 w-full animate-pulse rounded-xl bg-white/5" />
                         )}
                         <video
-                          ref={seedanceTrimVideoRef}
+                          ref={seedanceTrimVideoRef as unknown as React.RefObject<HTMLVideoElement>}
                           src={seedanceTrimPreviewUrl}
                           playsInline
                           preload="auto"
