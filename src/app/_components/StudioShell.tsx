@@ -313,9 +313,10 @@ function StudioShellInner({
       <div className="md:hidden sticky top-0 z-40 flex h-14 items-center justify-between gap-2 border-b border-white/10 bg-[#06070d]/95 px-3 backdrop-blur-md">
         <button
           type="button"
-          onClick={() => setMobileNavOpen(true)}
+          onClick={() => setMobileNavOpen((open) => !open)}
           className="flex h-10 w-10 items-center justify-center rounded-lg border border-white/10 bg-white/[0.06] text-white/80 transition hover:border-violet-400/35 hover:bg-white/[0.1] hover:text-white"
-          aria-label="Open menu"
+          aria-label={mobileNavOpen ? "Close menu" : "Open menu"}
+          aria-expanded={mobileNavOpen}
         >
           <Menu className="h-5 w-5" aria-hidden />
         </button>
