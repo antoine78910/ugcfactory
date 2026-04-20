@@ -97,6 +97,17 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        {/*
+          Preconnect to cross-origin endpoints we hit very early:
+          - app.youry.io: every CTA on the LP navigates here (signin/signup)
+          - dubcdn.com:   first-party analytics script (`Dub`)
+          - datafa.st:    `<Script>` already uses lazyOnload but preconnect saves one RTT
+        */}
+        <link rel="preconnect" href="https://app.youry.io" crossOrigin="anonymous" />
+        <link rel="preconnect" href="https://www.dubcdn.com" crossOrigin="anonymous" />
+        <link rel="dns-prefetch" href="https://datafa.st" />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >

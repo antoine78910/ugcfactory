@@ -1,19 +1,30 @@
 import Link from "next/link";
 import Image from "next/image";
-import { headers } from "next/headers";
+import nextDynamic from "next/dynamic";
 import { studioAppPath } from "@/lib/studioAppOrigin";
-import {
-  landingCountryFromHeaders,
-  landingTrialCurrencyFromCountry,
-  landingTrialPriceSnippet,
-} from "@/lib/landingTrialPrice";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { HeroVideoCarousel3D } from "./HeroVideoCarousel3D";
 import { LandingSeedanceTopButton } from "./LandingSeedanceTopButton";
-import { LandingRevealCarousel } from "./LandingRevealCarousel";
-import { LandingFaq } from "./LandingFaq";
+import { LandingTrialPriceText } from "./LandingTrialPriceText";
 import { ArrowRight, Sparkles } from "lucide-react";
+
+/**
+ * Below-the-fold sections; code-split off the LP initial JS bundle.
+ * Both keep SSR (default) so SEO / OG crawlers still see the markup.
+ */
+const LandingRevealCarousel = nextDynamic(() =>
+  import("./LandingRevealCarousel").then((m) => m.LandingRevealCarousel),
+);
+const LandingFaq = nextDynamic(() => import("./LandingFaq").then((m) => m.LandingFaq));
+
+/**
+ * Force-static: TTFB drops from ~13s (per-request `headers()` geo lookup) to
+ * an edge-cached HTML response. The trial price `$1`/`1€` is rendered by a tiny
+ * client component (`LandingTrialPriceText`) talking to `/api/landing/trial-currency`.
+ */
+export const dynamic = "force-static";
+export const revalidate = 3600;
 
 const STEPS = [
   {
@@ -56,11 +67,7 @@ const HERO_STUDIO_VIDEOS = [
   "/studio/0328(10).mp4",
 ] as const;
 
-export default async function LandingPage() {
-  const h = await headers();
-  const country = landingCountryFromHeaders((name) => h.get(name));
-  const trialPrice = landingTrialPriceSnippet(landingTrialCurrencyFromCountry(country));
-
+export default function LandingPage() {
   return (
     <div className="min-h-screen overflow-x-clip bg-[#050507] text-white selection:bg-violet-500/30">
       {/*
@@ -159,7 +166,9 @@ export default async function LandingPage() {
                   className="inline-flex items-center justify-center gap-1.5"
                 >
                   <Sparkles className="h-4 w-4 shrink-0" aria-hidden />
-                  <span>Create your Ad For {trialPrice}</span>
+                  <span>
+                    Create your Ad For <LandingTrialPriceText />
+                  </span>
                 </Link>
               </Button>
             </div>
@@ -229,7 +238,7 @@ export default async function LandingPage() {
         >
           <Link href={studioAppPath("/signup")} prefetch={false}>
             <Sparkles className="mr-2 h-4 w-4" />
-            Start your {trialPrice} trial
+            Start your <LandingTrialPriceText /> trial
             <ArrowRight className="ml-2 h-4 w-4" />
           </Link>
         </Button>
@@ -254,7 +263,7 @@ export default async function LandingPage() {
           >
             <Link href={studioAppPath("/signup")} prefetch={false}>
               <Sparkles className="mr-1.5 h-4 w-4" />
-              Try for {trialPrice}
+              Try for <LandingTrialPriceText />
             </Link>
           </Button>
         </div>

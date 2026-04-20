@@ -7,6 +7,21 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.join(__dirname),
   },
+  /**
+   * Tree-shake icon / animation libs we touch from many client components so the
+   * marketing page (and every page) only ships the icons it actually renders.
+   * Cuts ~50-100 KB of unused JS reported by Lighthouse on the LP.
+   */
+  experimental: {
+    optimizePackageImports: [
+      "lucide-react",
+      "framer-motion",
+      "motion",
+      "radix-ui",
+      "sonner",
+      "@dub/analytics",
+    ],
+  },
   async headers() {
     return [
       {
