@@ -14,12 +14,19 @@ type TokenRow = {
   used_count: number;
   expires_at: string | null;
   created_at: string;
+  grant_type: "credits" | "plan" | null;
+  plan_id: string | null;
+  plan_billing: string | null;
+  plan_duration_days: number | null;
 };
 
 type TokenEmbed = {
   label: string | null;
   secret: string;
   amount: number;
+  grant_type: string | null;
+  plan_id: string | null;
+  plan_billing: string | null;
 };
 
 type LogRow = {
@@ -28,6 +35,10 @@ type LogRow = {
   amount: number;
   redeemed_at: string;
   token_id: string;
+  grant_type: string | null;
+  plan_id: string | null;
+  plan_billing: string | null;
+  plan_expires_at: string | null;
   credit_redeem_tokens: TokenEmbed | TokenEmbed[] | null;
 };
 
@@ -61,7 +72,9 @@ export async function GET(req: Request) {
 
   const { data: tokensRaw, error: tokErr } = await admin
     .from("credit_redeem_tokens")
-    .select("id, secret, label, amount, max_uses, used_count, expires_at, created_at")
+    .select(
+      "id, secret, label, amount, max_uses, used_count, expires_at, created_at, grant_type, plan_id, plan_billing, plan_duration_days",
+    )
     .order("created_at", { ascending: false })
     .limit(300);
 
@@ -88,7 +101,11 @@ export async function GET(req: Request) {
       amount,
       redeemed_at,
       token_id,
-      credit_redeem_tokens ( label, secret, amount )
+      grant_type,
+      plan_id,
+      plan_billing,
+      plan_expires_at,
+      credit_redeem_tokens ( label, secret, amount, grant_type, plan_id, plan_billing )
     `,
       { count: "exact" },
     )
@@ -126,8 +143,17 @@ export async function GET(req: Request) {
     .from("credit_redeem_logs")
     .select("id", { count: "exact", head: true });
 
-  /** Each redemption grants the token's display `amount`; used_count tracks redemptions. */
-  const creditsIssuedViaLinks = tokens.reduce((sum, t) => sum + t.amount * t.used_count, 0);
+  /** Only credit-grant tokens contribute to the "credits issued" tally. */
+  const creditsIssuedViaLinks = tokens.reduce((sum, t) => {
+    if ((t.grant_type ?? "credits") !== "credits") return sum;
+    return sum + t.amount * t.used_count;
+  }, 0);
+
+  const { count: plansGrantedCount } = await admin
+    .from("complimentary_subscriptions")
+    .select("id", { count: "exact", head: true })
+    .is("revoked_at", null)
+    .gt("expires_at", now.toISOString());
 
   const stats = {
     tokensTotal: tokens.length,
@@ -136,15 +162,18 @@ export async function GET(req: Request) {
     redemptionsTotal: redemptionCount ?? 0,
     creditsIssuedViaLinks: Math.round(creditsIssuedViaLinks * 100) / 100,
     creditsOnLogPage: Math.round(creditsOnLogPage * 100) / 100,
+    plansActive: plansGrantedCount ?? 0,
   };
 
   return NextResponse.json({
     tokens: tokens.map((t) => ({
       ...t,
+      grant_type: t.grant_type ?? "credits",
       active: isTokenActive(t, now),
     })),
     logs: logs.map((l) => {
       const t = embedToken(l.credit_redeem_tokens);
+      const grantType = (l.grant_type ?? t?.grant_type ?? "credits") as "credits" | "plan";
       return {
         id: l.id,
         user_id: l.user_id,
@@ -155,6 +184,10 @@ export async function GET(req: Request) {
         token_label: t?.label ?? null,
         token_secret_prefix: t?.secret ? `${t.secret.slice(0, 8)}…` : null,
         token_offer_amount: t?.amount ?? null,
+        grant_type: grantType,
+        plan_id: l.plan_id ?? t?.plan_id ?? null,
+        plan_billing: l.plan_billing ?? t?.plan_billing ?? null,
+        plan_expires_at: l.plan_expires_at ?? null,
       };
     }),
     logTotal: logTotal ?? 0,

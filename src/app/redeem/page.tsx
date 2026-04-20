@@ -11,6 +11,14 @@ import {
 import { dispatchAuthoritativeCreditBalance } from "@/app/_components/CreditsPlanContext";
 
 type Status = "loading" | "success" | "error" | "no-token";
+type GrantType = "credits" | "plan";
+
+const PLAN_DISPLAY: Record<string, string> = {
+  starter: "Starter",
+  growth: "Growth",
+  pro: "Pro",
+  scale: "Scale",
+};
 
 /* ---------- confetti / particles canvas ---------- */
 
@@ -207,6 +215,9 @@ function RedeemPageContent() {
   const supabaseReady = useBrowserSupabaseReady();
   const [status, setStatus] = useState<Status>("loading");
   const [credited, setCredited] = useState(0);
+  const [grantType, setGrantType] = useState<GrantType>("credits");
+  const [planId, setPlanId] = useState<string | null>(null);
+  const [planExpiresAt, setPlanExpiresAt] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
   const attempted = useRef(false);
   const [showContent, setShowContent] = useState(false);
@@ -265,10 +276,16 @@ function RedeemPageContent() {
           credited?: number;
           balance?: number;
           error?: string;
+          grantType?: GrantType;
+          planId?: string;
+          planExpiresAt?: string;
         };
 
         if (res.ok && json.success) {
           setCredited(json.credited ?? 0);
+          setGrantType(json.grantType === "plan" ? "plan" : "credits");
+          setPlanId(json.planId ?? null);
+          setPlanExpiresAt(json.planExpiresAt ?? null);
           setStatus("success");
           if (
             typeof json.balance === "number" &&
@@ -353,19 +370,45 @@ function RedeemPageContent() {
           </div>
 
           {/* Counter */}
-          <p className="text-[14px] font-semibold uppercase tracking-widest text-violet-300/80">
-            You received
-          </p>
-          <p className="mt-2 bg-gradient-to-r from-violet-200 via-white to-fuchsia-200 bg-clip-text text-[56px] font-extrabold leading-none text-transparent drop-shadow-[0_0_20px_rgba(167,139,250,0.3)]">
-            <AnimatedCounter target={credited} />
-          </p>
-          <p className="mt-1 text-[18px] font-bold tracking-tight text-white/90">
-            credit{credited !== 1 ? "s" : ""}
-          </p>
-
-          <p className="mx-auto mt-4 max-w-[280px] text-[13px] leading-relaxed text-white/45">
-            Ready to use, they expire in 3 months. Go create something amazing.
-          </p>
+          {grantType === "plan" ? (
+            <>
+              <p className="text-[14px] font-semibold uppercase tracking-widest text-violet-300/80">
+                You&apos;re on
+              </p>
+              <p className="mt-2 bg-gradient-to-r from-violet-200 via-white to-fuchsia-200 bg-clip-text text-[44px] font-extrabold leading-none text-transparent drop-shadow-[0_0_20px_rgba(167,139,250,0.3)]">
+                {planId ? PLAN_DISPLAY[planId] ?? planId : "your plan"}
+              </p>
+              <p className="mt-2 text-[15px] font-semibold tracking-tight text-white/85">
+                Full plan access unlocked
+              </p>
+              {credited > 0 && (
+                <p className="mt-3 text-[13px] text-white/60">
+                  + <span className="font-semibold text-amber-200">{credited}</span> credits added
+                </p>
+              )}
+              <p className="mx-auto mt-4 max-w-[300px] text-[13px] leading-relaxed text-white/45">
+                {planExpiresAt
+                  ? `Access is valid until ${new Date(planExpiresAt).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })}.`
+                  : "Enjoy your plan access."}
+                {" "}No card required.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-[14px] font-semibold uppercase tracking-widest text-violet-300/80">
+                You received
+              </p>
+              <p className="mt-2 bg-gradient-to-r from-violet-200 via-white to-fuchsia-200 bg-clip-text text-[56px] font-extrabold leading-none text-transparent drop-shadow-[0_0_20px_rgba(167,139,250,0.3)]">
+                <AnimatedCounter target={credited} />
+              </p>
+              <p className="mt-1 text-[18px] font-bold tracking-tight text-white/90">
+                credit{credited !== 1 ? "s" : ""}
+              </p>
+              <p className="mx-auto mt-4 max-w-[280px] text-[13px] leading-relaxed text-white/45">
+                Ready to use, they expire in 3 months. Go create something amazing.
+              </p>
+            </>
+          )}
 
           {/* CTA */}
           <Link

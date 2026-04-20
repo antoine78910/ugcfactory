@@ -47,6 +47,10 @@ type CreditRedeemTokenRow = {
   expires_at: string | null;
   created_at: string;
   active: boolean;
+  grant_type: "credits" | "plan";
+  plan_id: string | null;
+  plan_billing: string | null;
+  plan_duration_days: number | null;
 };
 
 type CreditRedeemLogRow = {
@@ -59,6 +63,10 @@ type CreditRedeemLogRow = {
   token_label: string | null;
   token_secret_prefix: string | null;
   token_offer_amount: number | null;
+  grant_type: "credits" | "plan";
+  plan_id: string | null;
+  plan_billing: string | null;
+  plan_expires_at: string | null;
 };
 
 type CreditRedeemStats = {
@@ -68,7 +76,16 @@ type CreditRedeemStats = {
   redemptionsTotal: number;
   creditsIssuedViaLinks: number;
   creditsOnLogPage: number;
+  plansActive: number;
 };
+
+type GrantTypeUi = "credits" | "plan";
+const PLAN_OPTIONS = [
+  { id: "starter", label: "Starter" },
+  { id: "growth", label: "Growth" },
+  { id: "pro", label: "Pro" },
+  { id: "scale", label: "Scale" },
+] as const;
 
 type GenerationRow = {
   id: string;
@@ -287,6 +304,10 @@ export default function AdminPage() {
   const [createAmount, setCreateAmount] = useState("100");
   const [createMaxUses, setCreateMaxUses] = useState("1");
   const [createExpiry, setCreateExpiry] = useState("30");
+  const [createGrantType, setCreateGrantType] = useState<GrantTypeUi>("credits");
+  const [createPlanId, setCreatePlanId] = useState<string>("growth");
+  const [createPlanBilling, setCreatePlanBilling] = useState<"monthly" | "yearly">("monthly");
+  const [createPlanDuration, setCreatePlanDuration] = useState("30");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [newLink, setNewLink] = useState<string | null>(null);
@@ -424,13 +445,25 @@ export default function AdminPage() {
     setCreateError(null);
     setNewLink(null);
     try {
-      const amount = Math.round(Number(createAmount) || 0);
       const maxUses = createMaxUses === "" ? null : Math.max(1, Math.round(Number(createMaxUses) || 1));
       const expiresInDays = createExpiry === "" ? null : Math.max(1, Math.round(Number(createExpiry) || 30));
-      const body: Record<string, unknown> = { amount };
+      const body: Record<string, unknown> = { grantType: createGrantType };
       if (createLabel.trim()) body.label = createLabel.trim();
       if (maxUses !== null) body.maxUses = maxUses;
       if (expiresInDays !== null) body.expiresInDays = expiresInDays;
+
+      if (createGrantType === "credits") {
+        const amount = Math.round(Number(createAmount) || 0);
+        if (amount <= 0) throw new Error("Credits amount must be ≥ 1");
+        body.amount = amount;
+      } else {
+        const duration = Math.round(Number(createPlanDuration) || 0);
+        if (duration <= 0) throw new Error("Plan duration must be ≥ 1 day");
+        body.planId = createPlanId;
+        body.planBilling = createPlanBilling;
+        body.planDurationDays = duration;
+      }
+
       const r = await fetch("/api/credits/redeem-tokens", {
         method: "POST",
         credentials: "include",
@@ -447,7 +480,17 @@ export default function AdminPage() {
     } finally {
       setCreating(false);
     }
-  }, [createAmount, createLabel, createMaxUses, createExpiry, fetchCreditRedeems]);
+  }, [
+    createAmount,
+    createLabel,
+    createMaxUses,
+    createExpiry,
+    createGrantType,
+    createPlanId,
+    createPlanBilling,
+    createPlanDuration,
+    fetchCreditRedeems,
+  ]);
 
   const uniqueKinds = useMemo(() => {
     if (!stats?.kindBreakdown) return [];
@@ -540,7 +583,7 @@ export default function AdminPage() {
           <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard label="Redeem tokens" value={creditStats.tokensTotal} icon={Gift} accent="bg-fuchsia-500/20 text-fuchsia-300" />
             <StatCard label="Active links" value={creditStats.tokensActive} icon={Zap} accent="bg-emerald-500/20 text-emerald-300" />
-            <StatCard label="Total redemptions" value={creditStats.redemptionsTotal} icon={Users} accent="bg-blue-500/20 text-blue-300" />
+            <StatCard label="Active plan grants" value={creditStats.plansActive ?? 0} icon={Users} accent="bg-violet-500/20 text-violet-300" />
             <StatCard
               label="Credits issued (links)"
               value={creditStats.creditsIssuedViaLinks}
@@ -669,28 +712,85 @@ export default function AdminPage() {
                 <Gift className="h-4 w-4 text-violet-400" />
                 Create a gift link
               </h2>
+
+              {/* Grant type toggle */}
+              <div className="mb-4 inline-flex rounded-lg border border-white/10 bg-white/[0.04] p-1">
+                <button
+                  type="button"
+                  onClick={() => setCreateGrantType("credits")}
+                  className={cn(
+                    "rounded-md px-3 py-1.5 text-[11px] font-semibold transition",
+                    createGrantType === "credits"
+                      ? "bg-violet-500 text-white shadow"
+                      : "text-white/60 hover:text-white/90",
+                  )}
+                >
+                  Free credits
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCreateGrantType("plan")}
+                  className={cn(
+                    "rounded-md px-3 py-1.5 text-[11px] font-semibold transition",
+                    createGrantType === "plan"
+                      ? "bg-violet-500 text-white shadow"
+                      : "text-white/60 hover:text-white/90",
+                  )}
+                >
+                  Plan access (partner)
+                </button>
+              </div>
+
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-col gap-1 sm:col-span-2">
                   <label className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Label</label>
                   <input
                     type="text"
-                    placeholder="e.g. Welcome gift"
+                    placeholder={createGrantType === "credits" ? "e.g. Welcome gift" : "e.g. Partner, Jane's free Growth"}
                     value={createLabel}
                     onChange={(e) => setCreateLabel(e.target.value)}
                     className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-xs text-white placeholder-white/30 outline-none focus:border-violet-500/60"
                   />
                 </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Credits</label>
-                  <input
-                    type="number"
-                    min={1}
-                    placeholder="100"
-                    value={createAmount}
-                    onChange={(e) => setCreateAmount(e.target.value)}
-                    className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-xs text-white placeholder-white/30 outline-none focus:border-violet-500/60"
-                  />
-                </div>
+                {createGrantType === "credits" ? (
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Credits</label>
+                    <input
+                      type="number"
+                      min={1}
+                      placeholder="100"
+                      value={createAmount}
+                      onChange={(e) => setCreateAmount(e.target.value)}
+                      className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-xs text-white placeholder-white/30 outline-none focus:border-violet-500/60"
+                    />
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Plan</label>
+                      <select
+                        value={createPlanId}
+                        onChange={(e) => setCreatePlanId(e.target.value)}
+                        className="rounded-lg border border-white/10 bg-[#0b0912] px-3 py-2 text-xs text-white/90 outline-none focus:border-violet-500/60"
+                      >
+                        {PLAN_OPTIONS.map((p) => (
+                          <option key={p.id} value={p.id}>{p.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Billing</label>
+                      <select
+                        value={createPlanBilling}
+                        onChange={(e) => setCreatePlanBilling(e.target.value === "yearly" ? "yearly" : "monthly")}
+                        className="rounded-lg border border-white/10 bg-[#0b0912] px-3 py-2 text-xs text-white/90 outline-none focus:border-violet-500/60"
+                      >
+                        <option value="monthly">Monthly</option>
+                        <option value="yearly">Yearly</option>
+                      </select>
+                    </div>
+                  </>
+                )}
                 <div className="flex flex-col gap-1">
                   <label className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Max uses</label>
                   <input
@@ -703,7 +803,7 @@ export default function AdminPage() {
                   />
                 </div>
                 <div className="flex flex-col gap-1">
-                  <label className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Expires (days)</label>
+                  <label className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Link expires (days)</label>
                   <input
                     type="number"
                     min={1}
@@ -713,12 +813,37 @@ export default function AdminPage() {
                     className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-xs text-white placeholder-white/30 outline-none focus:border-violet-500/60"
                   />
                 </div>
+                {createGrantType === "plan" && (
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Plan access (days)</label>
+                    <input
+                      type="number"
+                      min={1}
+                      placeholder="30"
+                      value={createPlanDuration}
+                      onChange={(e) => setCreatePlanDuration(e.target.value)}
+                      className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-xs text-white placeholder-white/30 outline-none focus:border-violet-500/60"
+                    />
+                  </div>
+                )}
               </div>
+
+              {createGrantType === "plan" && (
+                <p className="mt-3 text-[11px] leading-relaxed text-white/45">
+                  Plan links grant access to the selected tier without any Stripe charge (for partners without a card).
+                  They also credit one month of that tier&apos;s allowance on redemption. Access auto-expires after the chosen number of days — no auto-renewal.
+                </p>
+              )}
+
               <div className="mt-4 flex items-center gap-3">
                 <button
                   type="button"
                   onClick={() => void createToken()}
-                  disabled={creating || !createAmount}
+                  disabled={
+                    creating ||
+                    (createGrantType === "credits" && !createAmount) ||
+                    (createGrantType === "plan" && (!createPlanId || !createPlanDuration))
+                  }
                   className="flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-violet-500 disabled:opacity-50"
                 >
                   {creating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Gift className="h-3.5 w-3.5" />}
@@ -756,11 +881,12 @@ export default function AdminPage() {
               </button>
             </div>
             <div className="overflow-x-auto rounded-xl border border-white/[0.08]">
-              <table className="w-full min-w-[900px] text-left text-xs">
+              <table className="w-full min-w-[980px] text-left text-xs">
                 <thead>
                   <tr className="border-b border-white/10 text-[10px] uppercase tracking-wide text-white/40">
                     <th className="px-3 py-2.5 font-semibold">Label</th>
-                    <th className="px-3 py-2.5 font-semibold">Credits</th>
+                    <th className="px-3 py-2.5 font-semibold">Type</th>
+                    <th className="px-3 py-2.5 font-semibold">Grant</th>
                     <th className="px-3 py-2.5 font-semibold">Uses</th>
                     <th className="px-3 py-2.5 font-semibold">Status</th>
                     <th className="px-3 py-2.5 font-semibold">Expires</th>
@@ -775,7 +901,29 @@ export default function AdminPage() {
                       <td className="max-w-[180px] truncate px-3 py-2.5 text-white/70" title={row.label ?? ""}>
                         {row.label?.trim() ? row.label : "-"}
                       </td>
-                      <td className="px-3 py-2.5 tabular-nums font-semibold text-amber-200/90">{row.amount}</td>
+                      <td className="px-3 py-2.5">
+                        {row.grant_type === "plan" ? (
+                          <span className="rounded-full border border-violet-500/40 bg-violet-500/15 px-2 py-0.5 text-[10px] font-semibold text-violet-200">
+                            Plan
+                          </span>
+                        ) : (
+                          <span className="rounded-full border border-amber-500/40 bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200">
+                            Credits
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 tabular-nums text-white/75">
+                        {row.grant_type === "plan" ? (
+                          <span>
+                            <span className="font-semibold capitalize text-violet-200">{row.plan_id ?? "-"}</span>
+                            <span className="ml-1 text-white/40">
+                              ({row.plan_billing}, {row.plan_duration_days}d)
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="font-semibold text-amber-200/90">{row.amount}</span>
+                        )}
+                      </td>
                       <td className="px-3 py-2.5 tabular-nums text-white/55">
                         {row.used_count}
                         {row.max_uses != null ? ` / ${row.max_uses}` : " / ∞"}
@@ -822,12 +970,13 @@ export default function AdminPage() {
                 Every successful claim is logged with user email and token reference. Watch for unusual spikes or unknown emails.
               </p>
               <div className="overflow-x-auto rounded-xl border border-white/[0.08]">
-                <table className="w-full min-w-[720px] text-left text-xs">
+                <table className="w-full min-w-[860px] text-left text-xs">
                   <thead>
                     <tr className="border-b border-white/10 text-[10px] uppercase tracking-wide text-white/40">
                       <th className="px-3 py-2.5 font-semibold">When</th>
                       <th className="px-3 py-2.5 font-semibold">User</th>
-                      <th className="px-3 py-2.5 font-semibold">Credits</th>
+                      <th className="px-3 py-2.5 font-semibold">Type</th>
+                      <th className="px-3 py-2.5 font-semibold">Grant</th>
                       <th className="px-3 py-2.5 font-semibold">Token label</th>
                       <th className="px-3 py-2.5 font-semibold">Token id (prefix)</th>
                     </tr>
@@ -841,7 +990,34 @@ export default function AdminPage() {
                         <td className="max-w-[220px] truncate px-3 py-2.5 text-violet-200/90" title={row.email}>
                           {row.email}
                         </td>
-                        <td className="px-3 py-2.5 tabular-nums font-medium text-amber-200/90">{row.credits}</td>
+                        <td className="px-3 py-2.5">
+                          {row.grant_type === "plan" ? (
+                            <span className="rounded-full border border-violet-500/40 bg-violet-500/15 px-2 py-0.5 text-[10px] font-semibold text-violet-200">
+                              Plan
+                            </span>
+                          ) : (
+                            <span className="rounded-full border border-amber-500/40 bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200">
+                              Credits
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2.5 text-white/75">
+                          {row.grant_type === "plan" ? (
+                            <span>
+                              <span className="font-semibold capitalize text-violet-200">{row.plan_id ?? "-"}</span>
+                              {row.plan_billing && (
+                                <span className="ml-1 text-white/40">({row.plan_billing})</span>
+                              )}
+                              {row.plan_expires_at && (
+                                <span className="ml-2 text-[10px] text-white/35">
+                                  until {new Date(row.plan_expires_at).toLocaleDateString()}
+                                </span>
+                              )}
+                            </span>
+                          ) : (
+                            <span className="tabular-nums font-medium text-amber-200/90">{row.credits}</span>
+                          )}
+                        </td>
                         <td className="max-w-[160px] truncate px-3 py-2.5 text-white/55" title={row.token_label ?? ""}>
                           {row.token_label?.trim() ? row.token_label : "-"}
                         </td>

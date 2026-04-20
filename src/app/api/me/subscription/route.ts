@@ -20,6 +20,11 @@ import {
   isTrialTimeWindowOpen,
   type TrialAppMetadata,
 } from "@/lib/studioAccessPolicy";
+import {
+  getActiveComplimentaryPlan,
+  type ActiveComplimentaryPlan,
+} from "@/lib/complimentarySubscription";
+import { planRank } from "@/lib/subscriptionModelAccess";
 
 export type MeSubscriptionResponse = {
   planId: AccountPlanId;
@@ -117,6 +122,35 @@ export async function GET() {
     return { ...base, creditBalance: 0 };
   }
 
+  /**
+   * If an admin has granted a complimentary plan (partner giveaway) and it
+   * outranks whatever Stripe reports, bump the response accordingly. Never
+   * downgrades a real Stripe plan.
+   */
+  async function fetchComplimentaryPlan(): Promise<ActiveComplimentaryPlan | null> {
+    try {
+      const a = createSupabaseServiceClient();
+      if (!a) return null;
+      return await getActiveComplimentaryPlan(a, userId);
+    } catch {
+      return null;
+    }
+  }
+
+  function applyComplimentaryPlan(
+    base: MeSubscriptionResponse,
+    comp: ActiveComplimentaryPlan | null,
+  ): MeSubscriptionResponse {
+    if (!comp) return base;
+    if (planRank(comp.planId) <= planRank(base.planId)) return base;
+    return {
+      ...base,
+      planId: comp.planId,
+      billing: comp.billing,
+      studioAccessAllowed: true,
+    };
+  }
+
   async function getTrialAppMetadata(): Promise<TrialAppMetadata> {
     try {
       const a = createSupabaseServiceClient();
@@ -132,16 +166,21 @@ export async function GET() {
     base: MeSubscriptionResponse,
     trialMeta: TrialAppMetadata,
   ): Promise<MeSubscriptionResponse> {
-    const withBal = await withCreditBalance(base);
+    const comp = await fetchComplimentaryPlan();
+    const promoted = applyComplimentaryPlan(base, comp);
+    const withBal = await withCreditBalance(promoted);
     const credits = typeof withBal.creditBalance === "number" && Number.isFinite(withBal.creditBalance)
       ? withBal.creditBalance
       : 0;
     const trialUi = isTrialMetadataActive(trialMeta) && isTrialTimeWindowOpen(trialMeta);
-    const studioAccessAllowed = computeStudioAccessAllowed({
-      planId: withBal.planId,
-      trialMeta,
-      creditBalance: credits,
-    });
+    // Comp plans already force studioAccessAllowed=true; keep that override.
+    const studioAccessAllowed =
+      withBal.studioAccessAllowed ??
+      computeStudioAccessAllowed({
+        planId: withBal.planId,
+        trialMeta,
+        creditBalance: credits,
+      });
     return { ...withBal, isTrial: trialUi, studioAccessAllowed };
   }
 
@@ -214,13 +253,15 @@ export async function GET() {
               }
             } catch { /* non-critical */ }
 
-            return NextResponse.json({
+            const comp = await fetchComplimentaryPlan();
+            const base: MeSubscriptionResponse = {
               planId,
               billing,
               userId: auth.user.id,
               creditBalance,
               studioAccessAllowed: true,
-            } satisfies MeSubscriptionResponse);
+            };
+            return NextResponse.json(applyComplimentaryPlan(base, comp));
           }
         }
       }
@@ -274,13 +315,15 @@ export async function GET() {
     const raw = data.billing;
     const billing = raw === "yearly" ? "yearly" : raw === "monthly" ? "monthly" : null;
 
+    const comp = await fetchComplimentaryPlan();
+    const base: MeSubscriptionResponse = {
+      planId,
+      billing: planId === "free" ? null : billing,
+      userId: auth.user.id,
+      studioAccessAllowed: true,
+    };
     return NextResponse.json(
-      await withCreditBalance({
-        planId,
-        billing: planId === "free" ? null : billing,
-        userId: auth.user.id,
-        studioAccessAllowed: true,
-      }),
+      await withCreditBalance(applyComplimentaryPlan(base, comp)),
     );
   } catch (err) {
     console.error("[me/subscription] DB fallback error:", err);
