@@ -84,7 +84,7 @@ import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
 import { readStudioHistoryLocal, writeStudioHistoryLocal } from "@/lib/studioHistoryLocalStorage";
 import { uploadFileToCdn, type UploadFileKind } from "@/lib/uploadBlobUrlToCdn";
 import { cn } from "@/lib/utils";
-import { STUDIO_GENERATION_KIND_STUDIO_IMAGE, STUDIO_VIDEO_TAB_KINDS } from "@/lib/studioGenerationKinds";
+import { STUDIO_VIDEO_TAB_KINDS } from "@/lib/studioGenerationKinds";
 import {
   SEEDANCE_COMPACT_PREVIEW_MAX_IMAGE_URLS,
   SEEDANCE_PREVIEW_MAX_IMAGE_URLS,
@@ -133,14 +133,20 @@ type KlingElementDraft = {
   pinned?: boolean;
 };
 
+type ElementLibraryTab = "uploads" | "image_generations" | "video_generations" | "elements" | "lta_generated";
+type ElementRefPickUploadRow = { url: string; createdAt: number };
+type ElementRefPickLtaGroup = { id: string; createdAt: number; urls: string[] };
+
 type ElementRefPickState =
   | { open: false }
   | {
       open: true;
-      variant: "studio_image" | "studio_video_poster" | "lta_product";
       loading: boolean;
-      studioItems: StudioHistoryItem[];
-      ltaUrls: string[];
+      activeTab: ElementLibraryTab;
+      uploads: ElementRefPickUploadRow[];
+      imageItems: StudioHistoryItem[];
+      videoItems: StudioHistoryItem[];
+      ltaGroups: ElementRefPickLtaGroup[];
     };
 
 function parseKlingElementDraftsFromJson(raw: string | null): KlingElementDraft[] {
@@ -260,6 +266,7 @@ async function imageFileMeetsMinDimensions(file: File, minW: number, minH: numbe
 }
 
 const STUDIO_VIDEO_LIBRARY_KIND_PARAM = STUDIO_VIDEO_TAB_KINDS.join(",");
+const STUDIO_ELEMENT_PICKER_KIND_PARAM = `${STUDIO_VIDEO_LIBRARY_KIND_PARAM},studio_image,studio_upscale`;
 
 type VideoTab = "create" | "edit";
 type VideoPriority = "normal" | "vip";
@@ -1637,81 +1644,137 @@ export default function StudioVideoPanel({
     return added;
   }, []);
 
+  /** Unified adder for picker tiles: image/video/audio where the current provider supports it. */
+  const tryAddReferenceUrlToKlingElementForm = useCallback(
+    async (rawUrl: string): Promise<boolean> => {
+      const u = rawUrl.trim();
+      if (!u) return false;
+      const kind = inferSeedanceReferenceKindFromUrl(u);
+      if (!kind) {
+        toast.error("Unsupported media URL");
+        return false;
+      }
+      if (kind === "image") return tryAddHttpsImageToKlingElementForm(u);
+      if (!studioVideoIsSeedance2ProPickerId(modelId)) {
+        toast.error("Only images are supported for this model");
+        return false;
+      }
+      let added = false;
+      setKlingElementForm((prev) => {
+        if (!prev || prev.urls.length >= 4 || prev.urls.includes(u)) return prev;
+        added = true;
+        return { ...prev, urls: [...prev.urls, u] };
+      });
+      if (added) toast.success(`${kind === "video" ? "Video" : "Audio"} added to element`);
+      else toast.message("Could not add media", { description: "Slot full or duplicate URL." });
+      return added;
+    },
+    [modelId, tryAddHttpsImageToKlingElementForm],
+  );
+
   const beginElementRefPick = useCallback(
-    async (variant: "studio_image" | "studio_video_poster" | "lta_product") => {
+    async (initialTab: ElementLibraryTab) => {
       if (!klingElementForm) {
         toast.error("Add or edit an element first.", { description: "Open the element form below." });
         return;
       }
       if (klingElementForm.urls.length >= 4) return;
 
-      setElementRefPick({ open: true, variant, loading: true, studioItems: [], ltaUrls: [] });
+      setElementRefPick({
+        open: true,
+        loading: true,
+        activeTab: initialTab,
+        uploads: [],
+        imageItems: [],
+        videoItems: [],
+        ltaGroups: [],
+      });
 
       try {
-        if (variant === "lta_product") {
-          const res = await fetch("/api/runs/list", { cache: "no-store" });
-          if (!res.ok) {
-            const t = await res.text().catch(() => "");
-            throw new Error(t || `HTTP ${res.status}`);
-          }
-          const json = (await res.json()) as { data?: { extracted?: unknown }[] };
-          const rows = json.data ?? [];
-          const urlSet = new Set<string>();
-          for (const row of rows.slice(0, 120)) {
-            const snap = readUniverseFromExtracted(row.extracted);
-            if (!snap) continue;
-            for (const x of linkToAdProductPhotoPickerUrls(snap)) {
-              const t = x.trim();
-              if (t) urlSet.add(t);
-            }
-          }
-          setElementRefPick((prev) =>
-            prev.open && prev.variant === variant
-              ? { ...prev, loading: false, ltaUrls: [...urlSet], studioItems: [] }
-              : prev,
-          );
-          return;
+        const [studioRes, runsRes] = await Promise.all([
+          fetch(`/api/studio/generations?kind=${encodeURIComponent(STUDIO_ELEMENT_PICKER_KIND_PARAM)}`, {
+            cache: "no-store",
+          }),
+          fetch("/api/runs/list", { cache: "no-store" }),
+        ]);
+        if (!studioRes.ok) {
+          const t = await studioRes.text().catch(() => "");
+          throw new Error(t || `HTTP ${studioRes.status}`);
+        }
+        if (!runsRes.ok) {
+          const t = await runsRes.text().catch(() => "");
+          throw new Error(t || `HTTP ${runsRes.status}`);
         }
 
-        const kind =
-          variant === "studio_image" ? STUDIO_GENERATION_KIND_STUDIO_IMAGE : ("studio_video" as const);
-        const res = await fetch(`/api/studio/generations?kind=${encodeURIComponent(kind)}`, {
-          cache: "no-store",
-        });
-        if (!res.ok) {
-          const t = await res.text().catch(() => "");
-          throw new Error(t || `HTTP ${res.status}`);
+        const studioJson = (await studioRes.json()) as { data?: StudioHistoryItem[] };
+        const studioRows = (studioJson.data ?? []).sort((a, b) => b.createdAt - a.createdAt);
+        const imageItems = studioRows.filter(
+          (r) =>
+            r.kind === "image" &&
+            r.status === "ready" &&
+            Boolean(r.mediaUrl?.trim()) &&
+            !isProbablyVideoUrl(r.mediaUrl),
+        );
+        const videoItems = studioRows.filter(
+          (r) =>
+            r.kind === "video" &&
+            r.status === "ready" &&
+            Boolean(r.posterUrl?.trim()) &&
+            isKieServableReferenceImageUrl(r.posterUrl),
+        );
+
+        const uploadMap = new Map<string, number>();
+        for (const row of studioRows) {
+          for (const raw of row.inputUrls ?? []) {
+            const u = raw.trim();
+            if (!u) continue;
+            const prev = uploadMap.get(u) ?? 0;
+            uploadMap.set(u, Math.max(prev, row.createdAt || 0));
+          }
         }
-        const json = (await res.json()) as { data?: StudioHistoryItem[] };
-        const rows = json.data ?? [];
-        const picks =
-          variant === "studio_image"
-            ? rows.filter(
-                (r) =>
-                  r.kind === "image" &&
-                  r.status === "ready" &&
-                  Boolean(r.mediaUrl?.trim()) &&
-                  !isProbablyVideoUrl(r.mediaUrl),
-              )
-            : rows.filter(
-                (r) =>
-                  r.kind === "video" &&
-                  r.status === "ready" &&
-                  Boolean(r.posterUrl?.trim()) &&
-                  isKieServableReferenceImageUrl(r.posterUrl),
-              );
+        for (const raw of avatarUrls) {
+          const u = raw.trim();
+          if (!u || uploadMap.has(u)) continue;
+          uploadMap.set(u, 0);
+        }
+        const uploads: ElementRefPickUploadRow[] = [...uploadMap.entries()]
+          .map(([url, createdAt]) => ({ url, createdAt }))
+          .sort((a, b) => b.createdAt - a.createdAt);
+
+        const runsJson = (await runsRes.json()) as {
+          data?: { id?: string; created_at?: string; extracted?: unknown }[];
+        };
+        const ltaGroups: ElementRefPickLtaGroup[] = [];
+        for (const row of (runsJson.data ?? []).slice(0, 120)) {
+          const snap = readUniverseFromExtracted(row.extracted);
+          if (!snap) continue;
+          const urls = linkToAdProductPhotoPickerUrls(snap)
+            .map((x) => x.trim())
+            .filter((x) => x.length > 0)
+            .slice(0, 3);
+          if (urls.length === 0) continue;
+          const createdAt = row.created_at ? new Date(row.created_at).getTime() : 0;
+          ltaGroups.push({
+            id: row.id || `lta-${createdAt}-${urls[0]}`,
+            createdAt: Number.isFinite(createdAt) ? createdAt : 0,
+            urls,
+          });
+        }
+        ltaGroups.sort((a, b) => b.createdAt - a.createdAt);
+
         setElementRefPick((prev) =>
-          prev.open && prev.variant === variant ? { ...prev, loading: false, studioItems: picks, ltaUrls: [] } : prev,
+          prev.open
+            ? { ...prev, loading: false, uploads, imageItems, videoItems, ltaGroups }
+            : prev,
         );
       } catch (e) {
-        toast.error(
-          variant === "lta_product" ? "Could not load Link to Ad photos" : "Could not load library",
-          { description: userMessageFromCaughtError(e, "Try again.") },
-        );
+        toast.error("Could not load media library", {
+          description: userMessageFromCaughtError(e, "Try again."),
+        });
         setElementRefPick({ open: false });
       }
     },
-    [klingElementForm],
+    [avatarUrls, klingElementForm],
   );
 
   const toggleElementPin = useCallback((id: string) => {
@@ -3297,7 +3360,7 @@ export default function StudioVideoPanel({
                           variant="outline"
                           size="sm"
                           className="h-9 gap-1.5 rounded-full border-white/15 bg-black/30 px-3 text-[11px] text-white/80 hover:bg-white/[0.06]"
-                          onClick={openKlingElementsModal}
+                          onClick={() => void beginElementRefPick("elements")}
                         >
                           <AtSign className="h-3 w-3" aria-hidden />
                           Elements
@@ -3500,7 +3563,7 @@ export default function StudioVideoPanel({
                                   variant="outline"
                                   size="sm"
                                   className="h-8 gap-1 rounded-full border-white/15 bg-black/30 px-2.5 text-[11px] text-white/80 hover:bg-white/[0.06]"
-                                  onClick={openKlingElementsModal}
+                                  onClick={() => void beginElementRefPick("elements")}
                                 >
                                   <AtSign className="h-3 w-3" aria-hidden />
                                   Elements
@@ -3934,7 +3997,7 @@ export default function StudioVideoPanel({
                           (elementRefPick.open && elementRefPick.loading) ||
                           klingElementForm.urls.length >= 4
                         }
-                        onClick={() => void beginElementRefPick("studio_image")}
+                        onClick={() => void beginElementRefPick("image_generations")}
                       >
                         Studio images
                       </Button>
@@ -3948,7 +4011,7 @@ export default function StudioVideoPanel({
                           (elementRefPick.open && elementRefPick.loading) ||
                           klingElementForm.urls.length >= 4
                         }
-                        onClick={() => void beginElementRefPick("studio_video_poster")}
+                        onClick={() => void beginElementRefPick("video_generations")}
                       >
                         Video posters
                       </Button>
@@ -3962,7 +4025,7 @@ export default function StudioVideoPanel({
                           (elementRefPick.open && elementRefPick.loading) ||
                           klingElementForm.urls.length >= 4
                         }
-                        onClick={() => void beginElementRefPick("lta_product")}
+                        onClick={() => void beginElementRefPick("lta_generated")}
                       >
                         Link to Ad products
                       </Button>
@@ -4003,14 +4066,14 @@ export default function StudioVideoPanel({
                         <button
                           type="button"
                           disabled={klingElementUploadBusy}
-                          onClick={() => pickKlingElementImage(klingElementForm.id)}
+                          onClick={() => void beginElementRefPick("uploads")}
                           className="flex min-h-[120px] min-w-[min(100%,280px)] flex-1 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/20 bg-[#0c0c10] px-4 py-6 text-white/45 transition hover:border-violet-400/35 hover:bg-white/[0.02] hover:text-white/65 disabled:opacity-50"
                         >
                           <Upload className="h-8 w-8 opacity-70" strokeWidth={1.5} aria-hidden />
                           <span className="text-center text-sm font-medium text-white/70">
                             {studioVideoIsSeedance2ProPickerId(modelId)
-                              ? "Click to upload (image, video, or audio)"
-                              : "Click to upload images"}
+                              ? "Upload media"
+                              : "Upload images"}
                           </span>
                         </button>
                       ) : null}
@@ -4097,18 +4160,10 @@ export default function StudioVideoPanel({
         }}
       >
         <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-[225] bg-black/70 backdrop-blur-[3px] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 z-[226] w-[min(92vw,480px)] max-h-[min(85vh,560px)] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-2xl border border-white/[0.08] bg-[#101014] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.65)] outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-[0.98] data-[state=open]:zoom-in-[0.98]">
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <Dialog.Title className="text-base font-semibold text-white">
-                {elementRefPick.open
-                  ? elementRefPick.variant === "studio_image"
-                    ? "Studio images"
-                    : elementRefPick.variant === "studio_video_poster"
-                      ? "Studio videos (posters)"
-                      : "Link to Ad product photos"
-                  : "Pick reference"}
-              </Dialog.Title>
+          <Dialog.Overlay className="fixed inset-0 z-[225] bg-black/35 backdrop-blur-[1px] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-[226] flex h-[min(88vh,760px)] w-[min(96vw,980px)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-[#101014]/96 shadow-[0_24px_80px_rgba(0,0,0,0.65)] outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-[0.98] data-[state=open]:zoom-in-[0.98]">
+            <div className="flex items-center justify-between gap-2 border-b border-white/10 px-4 py-3 sm:px-5">
+              <Dialog.Title className="text-base font-semibold text-white">Media library</Dialog.Title>
               <Dialog.Close asChild>
                 <button
                   type="button"
@@ -4120,87 +4175,220 @@ export default function StudioVideoPanel({
               </Dialog.Close>
             </div>
             <Dialog.Description className="sr-only">
-              Pick an image URL to attach to the current element. Remote images are checked for HTTPS reachability and
-              minimum dimensions when possible.
+              Pick recent uploads, generations, elements, or Link to Ad generated images.
             </Dialog.Description>
-            {!elementRefPick.open ? null : elementRefPick.loading ? (
-              <p className="py-8 text-center text-sm text-white/50">Loading…</p>
-            ) : elementRefPick.variant === "lta_product" ? (
-              elementRefPick.ltaUrls.length === 0 ? (
-                <p className="py-6 text-sm leading-relaxed text-white/55">
-                  No Link to Ad product thumbnails found on recent runs. Finish a Link to Ad flow (product preview +
-                  photos), then try again.
-                </p>
-              ) : (
-                <div className="max-h-[min(52vh,380px)] overflow-y-auto studio-params-scroll pr-1">
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                    {elementRefPick.ltaUrls.map((u) => (
-                      <button
-                        key={u}
-                        type="button"
-                        onClick={() => {
-                          void (async () => {
-                            const ok = await tryAddHttpsImageToKlingElementForm(u);
-                            if (ok) setElementRefPick({ open: false });
-                          })();
-                        }}
-                        className="group relative aspect-square overflow-hidden rounded-xl border border-white/12 bg-black/40 transition hover:border-violet-400/45"
-                      >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={u} alt="" className="h-full w-full object-cover" />
-                        <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 to-transparent px-2 py-1.5 text-[10px] font-medium text-white/90 opacity-0 transition group-hover:opacity-100">
-                          Add
-                        </span>
-                      </button>
-                    ))}
+            {!elementRefPick.open ? null : (
+              <>
+                <div className="border-b border-white/8 px-2 py-2 sm:px-3">
+                  <div className="flex items-center gap-1 overflow-x-auto studio-params-scroll">
+                    {[
+                      { id: "uploads", label: "Uploads", count: elementRefPick.uploads.length, icon: Upload },
+                      {
+                        id: "image_generations",
+                        label: "Image Generations",
+                        count: elementRefPick.imageItems.length,
+                        icon: ImageIcon,
+                      },
+                      {
+                        id: "video_generations",
+                        label: "Video Generations",
+                        count: elementRefPick.videoItems.length,
+                        icon: VideoIcon,
+                      },
+                      { id: "elements", label: "Elements", count: klingElementDrafts.length, icon: AtSign },
+                      {
+                        id: "lta_generated",
+                        label: "LTA Generated",
+                        count: elementRefPick.ltaGroups.length,
+                        icon: Sparkles,
+                      },
+                    ].map((tab) => {
+                      const Icon = tab.icon;
+                      const active = elementRefPick.activeTab === tab.id;
+                      return (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          className={cn(
+                            "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition",
+                            active
+                              ? "border-violet-300/40 bg-white text-black"
+                              : "border-white/10 bg-black/20 text-white/75 hover:bg-white/[0.06]",
+                          )}
+                          onClick={() =>
+                            setElementRefPick((prev) =>
+                              prev.open ? { ...prev, activeTab: tab.id as ElementLibraryTab } : prev,
+                            )
+                          }
+                        >
+                          <Icon className="h-3.5 w-3.5" aria-hidden />
+                          {tab.label}
+                          <span className="rounded-full bg-black/15 px-1.5 py-0.5 text-[10px]">{tab.count}</span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
-              )
-            ) : elementRefPick.studioItems.length === 0 ? (
-              <p className="py-6 text-sm leading-relaxed text-white/55">
-                {elementRefPick.variant === "studio_image" ? (
-                  <>
-                    No completed studio images yet. Generate images in{" "}
-                    <span className="font-medium text-white/75">Create → Image</span>, then try again.
-                  </>
-                ) : (
-                  <>
-                    No completed studio videos with a poster yet. Generate video in{" "}
-                    <span className="font-medium text-white/75">Create → Video</span>, then pick its poster here.
-                  </>
-                )}
-              </p>
-            ) : (
-              <div className="max-h-[min(52vh,380px)] overflow-y-auto studio-params-scroll pr-1">
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                  {elementRefPick.studioItems.map((item) => {
-                    const u =
-                      elementRefPick.variant === "studio_video_poster"
-                        ? (item.posterUrl ?? "").trim()
-                        : (item.mediaUrl ?? "").trim();
-                    if (!u) return null;
-                    return (
+                <div className="flex-1 overflow-y-auto p-3 studio-params-scroll sm:p-4">
+                  {elementRefPick.loading ? (
+                    <p className="py-8 text-center text-sm text-white/50">Loading…</p>
+                  ) : elementRefPick.activeTab === "uploads" ? (
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
                       <button
-                        key={item.id}
                         type="button"
+                        disabled={klingElementUploadBusy || !klingElementForm || klingElementForm.urls.length >= 4}
                         onClick={() => {
-                          void (async () => {
-                            const ok = await tryAddHttpsImageToKlingElementForm(u);
-                            if (ok) setElementRefPick({ open: false });
-                          })();
+                          if (!klingElementForm) return;
+                          pickKlingElementImage(klingElementForm.id);
                         }}
-                        className="group relative aspect-square overflow-hidden rounded-xl border border-white/12 bg-black/40 transition hover:border-violet-400/45"
+                        className="flex aspect-square flex-col items-center justify-center rounded-xl border border-dashed border-white/20 bg-black/35 text-white/65 transition hover:border-violet-400/45 hover:text-white"
                       >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={u} alt="" className="h-full w-full object-cover" />
-                        <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 to-transparent px-2 py-1.5 text-[10px] font-medium text-white/90 opacity-0 transition group-hover:opacity-100">
-                          Add
-                        </span>
+                        <Upload className="h-6 w-6" aria-hidden />
+                        <span className="mt-2 text-xs font-semibold">Upload media</span>
                       </button>
-                    );
-                  })}
+                      {elementRefPick.uploads.map((row) => {
+                        const kind = inferSeedanceReferenceKindFromUrl(row.url);
+                        return (
+                          <button
+                            key={row.url}
+                            type="button"
+                            onClick={() => {
+                              void (async () => {
+                                const ok = await tryAddReferenceUrlToKlingElementForm(row.url);
+                                if (ok) setElementRefPick({ open: false });
+                              })();
+                            }}
+                            className="group relative aspect-square overflow-hidden rounded-xl border border-white/12 bg-black/40 transition hover:border-violet-400/45"
+                          >
+                            {kind === "image" ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={row.url} alt="" className="h-full w-full object-cover" />
+                            ) : (
+                              <span className="flex h-full w-full items-center justify-center">
+                                {kind === "video" ? (
+                                  <VideoIcon className="h-8 w-8 text-white/65" aria-hidden />
+                                ) : (
+                                  <Music2 className="h-8 w-8 text-white/65" aria-hidden />
+                                )}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : elementRefPick.activeTab === "image_generations" ? (
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+                      {elementRefPick.imageItems.map((item) => {
+                        const u = (item.mediaUrl ?? "").trim();
+                        if (!u) return null;
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => {
+                              void (async () => {
+                                const ok = await tryAddReferenceUrlToKlingElementForm(u);
+                                if (ok) setElementRefPick({ open: false });
+                              })();
+                            }}
+                            className="group relative aspect-square overflow-hidden rounded-xl border border-white/12 bg-black/40 transition hover:border-violet-400/45"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={u} alt="" className="h-full w-full object-cover" />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : elementRefPick.activeTab === "video_generations" ? (
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+                      {elementRefPick.videoItems.map((item) => {
+                        const u = (item.posterUrl ?? "").trim();
+                        if (!u) return null;
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => {
+                              void (async () => {
+                                const ok = await tryAddReferenceUrlToKlingElementForm(u);
+                                if (ok) setElementRefPick({ open: false });
+                              })();
+                            }}
+                            className="group relative aspect-square overflow-hidden rounded-xl border border-white/12 bg-black/40 transition hover:border-violet-400/45"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={u} alt="" className="h-full w-full object-cover" />
+                            <span className="pointer-events-none absolute left-2 top-2 rounded-md bg-black/55 px-1.5 py-0.5 text-[10px] font-semibold text-white/90">
+                              Video
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : elementRefPick.activeTab === "elements" ? (
+                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                      {sortKlingElementDrafts(klingElementDrafts).map((el) => {
+                        const head = el.urls[0]?.trim();
+                        if (!head) return null;
+                        return (
+                          <button
+                            key={el.id}
+                            type="button"
+                            onClick={() => {
+                              void (async () => {
+                                const ok = await tryAddReferenceUrlToKlingElementForm(head);
+                                if (ok) setElementRefPick({ open: false });
+                              })();
+                            }}
+                            className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/30 p-2 text-left transition hover:border-violet-400/45"
+                          >
+                            <span className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg border border-white/12">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={head} alt="" className="h-full w-full object-cover" />
+                            </span>
+                            <span className="min-w-0">
+                              <span className="block truncate text-xs font-semibold text-white/90">
+                                @{el.name.trim()}
+                              </span>
+                              <span className="block truncate text-[10px] text-white/45">
+                                {el.description.trim() || "Saved element"}
+                              </span>
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {elementRefPick.ltaGroups.map((group) => (
+                        <div key={group.id} className="rounded-xl border border-white/10 bg-black/25 p-2.5">
+                          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-white/45">
+                            Link to Ad run
+                          </p>
+                          <div className="grid grid-cols-3 gap-2">
+                            {group.urls.map((u) => (
+                              <button
+                                key={`${group.id}-${u}`}
+                                type="button"
+                                onClick={() => {
+                                  void (async () => {
+                                    const ok = await tryAddReferenceUrlToKlingElementForm(u);
+                                    if (ok) setElementRefPick({ open: false });
+                                  })();
+                                }}
+                                className="group relative aspect-square overflow-hidden rounded-xl border border-white/12 bg-black/40 transition hover:border-violet-400/45"
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={u} alt="" className="h-full w-full object-cover" />
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              </div>
+              </>
             )}
           </Dialog.Content>
         </Dialog.Portal>
