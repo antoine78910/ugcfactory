@@ -25,6 +25,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import ElementMentionTextarea, {
+  type MentionElementOption,
+} from "@/app/_components/ElementMentionTextarea";
 import { AvatarInputCornerBadge } from "@/app/_components/AvatarInputCornerBadge";
 import { StudioEmptyExamples, StudioOutputPane } from "@/app/_components/StudioEmptyExamples";
 import { StudioGenerationsHistory } from "@/app/_components/StudioGenerationsHistory";
@@ -1015,6 +1018,20 @@ export default function StudioVideoPanel({
       : null;
   const seedancePriorityInfoText =
     "VIP pricing is x2 credits per generation.\n\nPeak hours: From 09:00 to 15:00 GMT, Seedance Preview experiences high traffic. During this period, queue times may extend to several hours.\n\nCurrently outside peak hours: Normal is usually 5-60 min. VIP (fast) is usually 3-5 min.";
+  /** Higgsfield-style autocomplete list for the prompt @mention picker (only when the current model supports Elements). */
+  const mentionElementOptions = useMemo<MentionElementOption[]>(() => {
+    if (!studioVideoSupportsReferenceElements(modelId)) return [];
+    const minUrls = minReferenceUrlsPerVideoElement(modelId);
+    return klingElementDrafts
+      .filter((d) => d.name.trim().length > 0 && d.urls.length >= minUrls)
+      .map((d) => ({
+        id: d.id,
+        name: d.name,
+        description: d.description,
+        previewUrl: d.urls[0],
+      }));
+  }, [klingElementDrafts, modelId]);
+
   /** Saved elements whose @name appears in the prompt — shown as thumbnail chips above the prompt. */
   const promptElementTagDrafts = useMemo(() => {
     if (!studioVideoSupportsReferenceElements(modelId)) return [];
@@ -3251,19 +3268,19 @@ export default function StudioVideoPanel({
                       ))}
                     </div>
                   ) : null}
-                  <Textarea
+                  <ElementMentionTextarea
                     value={prompt}
-                    onChange={(e) => setPrompt(e.target.value)}
+                    onChange={setPrompt}
+                    elements={mentionElementOptions}
+                    onCreateNew={openKlingElementsModal}
                     placeholder={
-                      modelId === "kling-3.0/video" &&
-                      klingElementDrafts.some((d) => d.name.trim() && d.urls.length >= minReferenceUrlsPerVideoElement(modelId))
+                      modelId === "kling-3.0/video" && mentionElementOptions.length > 0
                         ? "Describe the scene and use @element_name for each saved element (e.g. @product, @model)."
-                        : studioVideoIsSeedance2ProPickerId(modelId) &&
-                            klingElementDrafts.some(
-                              (d) => d.name.trim() && d.urls.length >= minReferenceUrlsPerVideoElement(modelId),
-                            )
+                        : studioVideoIsSeedance2ProPickerId(modelId) && mentionElementOptions.length > 0
                           ? "Describe the video. Reference extra images with @image2, @image3, … (start frame is @image1), or we prepend tags if you omit them."
-                          : "Describe your video, like 'A woman walking through a neon-lit city'."
+                          : studioVideoSupportsReferenceElements(modelId)
+                            ? "Describe your video, and type @ to reference a saved Element."
+                            : "Describe your video, like 'A woman walking through a neon-lit city'."
                     }
                     className={cn(
                       "min-h-[120px] w-full resize-none border-white/10 bg-[#0a0a0d] px-3 py-3 text-sm text-white placeholder:text-white/35 focus-visible:ring-0",
@@ -3434,20 +3451,20 @@ export default function StudioVideoPanel({
                             <div className="text-[11px] font-medium text-violet-300/85">
                               Shot {idx + 1}
                             </div>
-                            <Textarea
+                            <ElementMentionTextarea
                               value={row.prompt}
-                              onChange={(e) => {
-                                const v = e.target.value;
+                              onChange={(v) =>
                                 setKlingShots((prev) =>
-                                  prev.map((s) => (s.id === row.id ? { ...s, prompt: v } : s)),
-                                );
-                              }}
+                                  prev.map((s) => (s.id === row.id ? { ...s, prompt: v.slice(0, 500) } : s)),
+                                )
+                              }
+                              elements={mentionElementOptions}
+                              onCreateNew={openKlingElementsModal}
                               placeholder={
                                 idx === 0
-                                  ? "Describe the first scene you imagine, with details."
+                                  ? "Describe the first scene, use @ to reference a saved Element."
                                   : `Describe scene ${idx + 1}…`
                               }
-                              maxLength={500}
                               rows={3}
                               className="min-h-[72px] w-full resize-none border-white/10 bg-[#0a0a0d] px-2.5 py-2 text-xs text-white placeholder:text-white/35 focus-visible:ring-0"
                             />
