@@ -25,6 +25,9 @@ type Props = {
   onCreateNew?: () => void;
 };
 
+/** Padding + type scale shared by textarea and highlight overlay so the caret stays aligned (twMerge with className). */
+const TEXTAREA_INNER_LAYOUT = "px-3 py-2 text-base md:text-sm";
+
 /**
  * Walks backwards from `cursor` to find an in-progress `@token` at the caret.
  * Returns the token (without `@`) and the index of the `@` if the caret is within one; otherwise null.
@@ -300,7 +303,12 @@ export default function ElementMentionTextarea({
           className="pointer-events-none absolute inset-0 z-0 overflow-hidden rounded-md"
         >
           <div
-            className="whitespace-pre-wrap break-words px-3 py-2 text-base leading-6 text-white md:text-sm"
+            className={cn(
+              "w-full whitespace-pre-wrap break-words text-white",
+              TEXTAREA_INNER_LAYOUT,
+              className,
+              "pointer-events-none min-h-0 max-h-none border-0 bg-transparent shadow-none ring-0 outline-none focus-visible:ring-0",
+            )}
             style={{
               transform: `translate(${-overlayScrollLeft}px, ${-overlayScrollTop}px)`,
             }}
@@ -317,8 +325,9 @@ export default function ElementMentionTextarea({
         onKeyUp={refreshFromCaret}
         onClick={refreshFromCaret}
         onScroll={(e) => {
-          setOverlayScrollTop(e.currentTarget.scrollTop);
-          setOverlayScrollLeft(e.currentTarget.scrollLeft);
+          const t = e.currentTarget;
+          setOverlayScrollTop(t.scrollTop);
+          setOverlayScrollLeft(t.scrollLeft);
         }}
         onBlur={() => {
           /** Delay so a click inside the dropdown can land before we close. */
@@ -330,13 +339,16 @@ export default function ElementMentionTextarea({
           if (!canScroll) return;
           e.preventDefault();
           el.scrollTop += e.deltaY;
+          setOverlayScrollTop(el.scrollTop);
+          setOverlayScrollLeft(el.scrollLeft);
           e.stopPropagation();
         }}
         placeholder={placeholder}
         rows={rows}
         data-slot="textarea"
         className={cn(
-          "border-input placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:bg-input/30 flex min-h-16 w-full overflow-y-auto studio-minimal-scrollbar rounded-md border bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
+          "border-input placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:bg-input/30 flex min-h-16 w-full overflow-y-auto studio-minimal-scrollbar rounded-md border bg-transparent shadow-xs transition-[color,box-shadow] outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50",
+          TEXTAREA_INNER_LAYOUT,
           className,
           value ? "relative z-10 text-transparent caret-white selection:bg-white/25" : "relative z-10",
         )}
