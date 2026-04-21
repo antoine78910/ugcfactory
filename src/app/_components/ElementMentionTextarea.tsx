@@ -323,70 +323,74 @@ export default function ElementMentionTextarea({
   }, [formatMentionLabel, mentionByName, value]);
 
   return (
-    <div className="relative">
-      {value ? (
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-px z-0 overflow-hidden rounded-[calc(var(--radius-md)-1px)]"
-        >
+    <div className="relative isolate">
+      {/**
+       * Single grid cell stacks textarea + highlight so they share the same content box (padding
+       * from `className` applies once). Absolute overlay + inset-* breaks as soon as the parent
+       * has padding — caret/scroll no longer match.
+       */}
+      <div
+        className={cn(
+          "grid grid-cols-1 grid-rows-1 overflow-hidden rounded-md border border-input bg-transparent shadow-xs transition-[color,box-shadow] min-h-16",
+          TEXTAREA_INNER_LAYOUT,
+          className,
+        )}
+      >
+        {value ? (
           <div
-            className={cn(
-              "box-border w-full whitespace-pre-wrap break-words text-white",
-              TEXTAREA_INNER_LAYOUT,
-              className,
-              "pointer-events-none min-h-0 max-h-none border-0 bg-transparent shadow-none ring-0 outline-none focus-visible:ring-0",
-            )}
-            style={{
-              transform: `translate(${-overlayScrollLeft}px, ${-overlayScrollTop}px)`,
-            }}
+            aria-hidden="true"
+            className="col-start-1 row-start-1 z-0 h-full min-h-0 min-w-0 overflow-hidden pointer-events-none"
           >
             <div
-              className="min-h-0 min-w-0"
-              style={{ paddingRight: scrollbarReserveX }}
+              className="w-full whitespace-pre-wrap break-words text-white [font:inherit]"
+              style={{
+                transform: `translate(${-overlayScrollLeft}px, ${-overlayScrollTop}px)`,
+                paddingRight: scrollbarReserveX,
+              }}
             >
               {renderedOverlay}
             </div>
           </div>
-        </div>
-      ) : null}
-      <textarea
-        ref={textareaRef}
-        value={value}
-        onChange={handleChange}
-        onKeyDown={handleKeyDown}
-        onKeyUp={refreshFromCaret}
-        onClick={refreshFromCaret}
-        onScroll={(e) => {
-          const t = e.currentTarget;
-          setOverlayScrollTop(t.scrollTop);
-          setOverlayScrollLeft(t.scrollLeft);
-          measureScrollbarReserve();
-        }}
-        onBlur={() => {
-          /** Delay so a click inside the dropdown can land before we close. */
-          window.setTimeout(closeMenu, 120);
-        }}
-        onWheelCapture={(e) => {
-          const el = e.currentTarget;
-          const canScroll = el.scrollHeight > el.clientHeight;
-          if (!canScroll) return;
-          e.preventDefault();
-          el.scrollTop += e.deltaY;
-          setOverlayScrollTop(el.scrollTop);
-          setOverlayScrollLeft(el.scrollLeft);
-          measureScrollbarReserve();
-          e.stopPropagation();
-        }}
-        placeholder={placeholder}
-        rows={rows}
-        data-slot="textarea"
-        className={cn(
-          "border-input placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:bg-input/30 box-border block min-h-16 w-full overflow-y-auto studio-minimal-scrollbar rounded-md border bg-transparent shadow-xs transition-[color,box-shadow] outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50 [scrollbar-gutter:stable]",
-          TEXTAREA_INNER_LAYOUT,
-          className,
-          value ? "relative z-10 text-transparent caret-white selection:bg-white/25" : "relative z-10",
-        )}
-      />
+        ) : null}
+        <textarea
+          ref={textareaRef}
+          value={value}
+          onChange={handleChange}
+          onKeyDown={handleKeyDown}
+          onKeyUp={refreshFromCaret}
+          onClick={refreshFromCaret}
+          onScroll={(e) => {
+            const t = e.currentTarget;
+            setOverlayScrollTop(t.scrollTop);
+            setOverlayScrollLeft(t.scrollLeft);
+            measureScrollbarReserve();
+          }}
+          onBlur={() => {
+            /** Delay so a click inside the dropdown can land before we close. */
+            window.setTimeout(closeMenu, 120);
+          }}
+          onWheelCapture={(e) => {
+            const el = e.currentTarget;
+            const canScroll = el.scrollHeight > el.clientHeight;
+            if (!canScroll) return;
+            e.preventDefault();
+            el.scrollTop += e.deltaY;
+            setOverlayScrollTop(el.scrollTop);
+            setOverlayScrollLeft(el.scrollLeft);
+            measureScrollbarReserve();
+            e.stopPropagation();
+          }}
+          placeholder={placeholder}
+          rows={rows}
+          data-slot="textarea"
+          className={cn(
+            "col-start-1 row-start-1 z-10 h-full min-h-16 min-w-0 box-border block w-full resize-none overflow-y-auto bg-transparent p-0 shadow-none outline-none ring-0 studio-minimal-scrollbar [scrollbar-gutter:stable]",
+            "border-0 placeholder:text-muted-foreground focus-visible:border-transparent focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-transparent dark:bg-transparent",
+            "focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50",
+            value ? "text-transparent caret-white selection:bg-white/25" : "",
+          )}
+        />
+      </div>
       {showMenu ? (
         <div
           className="absolute left-0 right-0 top-full z-40 mt-1 overflow-hidden rounded-xl border border-white/12 bg-[#0b0912]/98 shadow-[0_12px_40px_rgba(0,0,0,0.55)] backdrop-blur"
