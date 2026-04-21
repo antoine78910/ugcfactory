@@ -370,7 +370,7 @@ const APP_VALID_SECTIONS: AppSection[] = [
 ];
 
 /** URL slug ↔ internal section id. Exported so StudioShell can share the mapping. */
-export const SECTION_TO_SLUG: Record<AppSection, string> = {
+const SECTION_TO_SLUG: Record<AppSection, string> = {
   link_to_ad: "link-to-ad",
   avatar: "avatar",
   ad_clone: "translate",
@@ -426,7 +426,7 @@ const VOICE_CHANGE_UPLOAD_ACCEPT = [
 ].join(",");
 
 /** Derive the active section from the browser pathname (e.g. "/link-to-ad" or legacy "/app/..."). */
-export function sectionFromPathname(pathname: string): AppSection {
+function sectionFromPathname(pathname: string): AppSection {
   const stripped = pathname.replace(/^\/app\/?/, "");
   const first = stripped.split("/").filter(Boolean)[0] ?? "";
   if (first === "watermark") return "video";

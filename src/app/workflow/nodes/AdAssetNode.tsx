@@ -1080,6 +1080,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           const cloneData = self.data as AdAssetNodeData;
           return {
             ...self,
+            type: "adAsset" as const,
             id: cloneId,
             selected: false,
             position: { x: self.position.x + (idx + 1) * xStep, y: self.position.y },

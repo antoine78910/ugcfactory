@@ -259,9 +259,8 @@ export function collectLinkedImageUrl(nodes: Node[], edges: Edge[], targetNodeId
       const kind = promptListOutputKind(d);
       if (!(srcHandle === "outImage" || srcHandle === "out" || kind === "image")) continue;
       for (const line of (d.lines ?? []).map((x) => x.trim()).filter(Boolean)) {
-        if (!isProbablyImageUrl(line) || seen.has(line)) continue;
-        seen.add(line);
-        urls.push(line);
+        if (!isProbablyImageUrl(line)) continue;
+        return line;
       }
       continue;
     }

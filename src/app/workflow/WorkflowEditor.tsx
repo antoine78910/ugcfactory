@@ -2514,7 +2514,7 @@ function WorkflowFlowWorkspace({
         const ow = oi?.measured?.width ?? other.width ?? 0;
         const oh = oi?.measured?.height ?? other.height ?? 0;
         if (!ow || !oh) continue;
-        const oPos = oi?.positionAbsolute ?? other.position;
+        const oPos = oi?.internals.positionAbsolute ?? other.position;
         const ox = [oPos.x, oPos.x + ow / 2, oPos.x + ow];
         const oy = [oPos.y, oPos.y + oh / 2, oPos.y + oh];
 
