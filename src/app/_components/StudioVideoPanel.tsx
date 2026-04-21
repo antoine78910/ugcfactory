@@ -94,6 +94,7 @@ import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
 import { readStudioHistoryLocal, writeStudioHistoryLocal } from "@/lib/studioHistoryLocalStorage";
 import { uploadFileToCdn, type UploadFileKind } from "@/lib/uploadBlobUrlToCdn";
 import { cn } from "@/lib/utils";
+import { proxiedMediaSrc } from "@/lib/mediaProxyUrl";
 import { STUDIO_VIDEO_TAB_KINDS } from "@/lib/studioGenerationKinds";
 import {
   SEEDANCE_COMPACT_PREVIEW_MAX_IMAGE_URLS,
@@ -146,7 +147,7 @@ type KlingElementDraft = {
 
 type ElementLibraryTab = "uploads" | "image_generations" | "video_generations" | "elements" | "lta_generated";
 type ElementRefPickUploadRow = { url: string; createdAt: number };
-type ElementRefPickLtaMedia = { url: string; kind: "image" | "video" };
+type ElementRefPickLtaMedia = { url: string; kind: "image" | "video"; posterUrl?: string };
 type ElementRefPickLtaGroup = {
   id: string;
   createdAt: number;
@@ -238,6 +239,8 @@ type SeedanceOmniRefItem = {
   url: string;
   /** For audio/video refs, used to enforce a 15s cumulative budget on Seedance omni uploads. */
   durationSec?: number;
+  /** Optional still (e.g. NanoBanana frame) for video preview / fullscreen when the decoder shows a black first frame. */
+  posterUrl?: string;
 };
 
 /** True if the prompt contains `@name` (case-insensitive) for Kling element references. */
@@ -2581,8 +2584,8 @@ export default function StudioVideoPanel({
           (r) =>
             r.kind === "video" &&
             r.status === "ready" &&
-            Boolean(r.posterUrl?.trim()) &&
-            isKieServableReferenceImageUrl(r.posterUrl),
+            Boolean(r.mediaUrl?.trim()) &&
+            isKieServableReferenceImageUrl(r.mediaUrl),
         );
 
         const uploadMap = new Map<string, number>();
@@ -2616,12 +2619,20 @@ export default function StudioVideoPanel({
             .slice(0, 3)
             .map((url) => ({ url, kind: "image" as const }));
           const generatedMap = new Map<string, ElementRefPickLtaMedia>();
-          const addGenerated = (u: string | null | undefined, kind: "image" | "video") => {
+          const addGenerated = (
+            u: string | null | undefined,
+            kind: "image" | "video",
+            videoPosterUrl?: string | null,
+          ) => {
             const t = String(u ?? "").trim();
             if (!t) return;
             const key = `${kind}:${t}`;
             if (generatedMap.has(key)) return;
-            generatedMap.set(key, { url: t, kind });
+            const poster = videoPosterUrl?.trim();
+            generatedMap.set(
+              key,
+              kind === "video" && poster ? { url: t, kind, posterUrl: poster } : { url: t, kind },
+            );
           };
           for (const u of snap.nanoBananaImageUrls ?? []) addGenerated(u, "image");
           addGenerated(snap.nanoBananaImageUrl, "image");
@@ -2629,12 +2640,24 @@ export default function StudioVideoPanel({
           for (const p of triple) {
             for (const u of p.nanoBananaImageUrls ?? []) addGenerated(u, "image");
             addGenerated(p.nanoBananaImageUrl, "image");
-            for (const slot of p.klingByReferenceIndex ?? []) {
-              addGenerated(slot?.videoUrl, "video");
-              addGenerated(slot?.videoUrlPart2, "video");
+            const slots = p.klingByReferenceIndex ?? [];
+            for (let si = 0; si < slots.length; si++) {
+              const slot = slots[si];
+              const frameUrl =
+                (Array.isArray(p.nanoBananaImageUrls) && p.nanoBananaImageUrls[si]?.trim()) ||
+                p.nanoBananaImageUrl?.trim() ||
+                undefined;
+              addGenerated(slot?.videoUrl, "video", frameUrl);
+              addGenerated(slot?.videoUrlPart2, "video", frameUrl);
             }
           }
-          addGenerated(snap.klingVideoUrl, "video");
+          const selIdx = snap.nanoBananaSelectedImageIndex ?? 0;
+          const klingPoster =
+            snap.nanoBananaImageUrls?.[selIdx]?.trim() ||
+            snap.nanoBananaImageUrl?.trim() ||
+            snap.nanoBananaImageUrls?.[0]?.trim() ||
+            undefined;
+          addGenerated(snap.klingVideoUrl, "video", klingPoster);
           const generatedMedia = [...generatedMap.values()].slice(0, 6);
           if (productMedia.length === 0 && generatedMedia.length === 0) continue;
           const createdAt = row.created_at ? new Date(row.created_at).getTime() : 0;
@@ -4077,7 +4100,7 @@ export default function StudioVideoPanel({
                           <div className="pointer-events-none absolute inset-0 rounded-xl bg-black/0 transition group-hover:bg-black/45" />
                           <button
                             type="button"
-                            className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full border border-white/20 bg-[#3d3d40] text-white/85 opacity-0 transition hover:bg-[#55555a] group-hover:opacity-100"
+                            className="absolute -right-1 -top-1 z-20 flex h-5 w-5 items-center justify-center rounded-full border border-white/20 bg-[#3d3d40] text-white/85 opacity-0 transition hover:bg-[#55555a] group-hover:opacity-100"
                             onClick={() => setSeedanceCompactRefUrls((prev) => prev.filter((_, j) => j !== ui))}
                             title="Remove"
                             aria-label="Remove image"
@@ -4086,7 +4109,7 @@ export default function StudioVideoPanel({
                           </button>
                           <button
                             type="button"
-                            className="absolute inset-0 flex items-center justify-center opacity-0 transition group-hover:opacity-100"
+                            className="absolute bottom-1 left-1/2 z-[1] flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full opacity-0 transition group-hover:opacity-100 hover:bg-white/10"
                             onClick={(e) => {
                               const r = e.currentTarget.getBoundingClientRect();
                               setSeedanceImageMenu({
@@ -4181,7 +4204,7 @@ export default function StudioVideoPanel({
                           <button
                             type="button"
                             onClick={() => setSeedanceProOmniItems((prev) => prev.filter((_, j) => j !== ui))}
-                            className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full border border-white/20 bg-[#3d3d40] text-white/85 opacity-0 transition hover:bg-[#55555a] group-hover:opacity-100"
+                            className="absolute -right-1 -top-1 z-20 flex h-5 w-5 items-center justify-center rounded-full border border-white/20 bg-[#3d3d40] text-white/85 opacity-0 transition hover:bg-[#55555a] group-hover:opacity-100"
                             title="Remove"
                             aria-label="Remove media"
                           >
@@ -4196,7 +4219,7 @@ export default function StudioVideoPanel({
                             <>
                               <button
                                 type="button"
-                                className="absolute inset-0 flex items-center justify-center opacity-0 transition group-hover:opacity-100"
+                                className="absolute bottom-1 left-1/2 z-[1] flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full opacity-0 transition group-hover:opacity-100 hover:bg-white/10"
                                 onClick={(e) => {
                                   const r = e.currentTarget.getBoundingClientRect();
                                   setSeedanceImageMenu({
@@ -4225,11 +4248,11 @@ export default function StudioVideoPanel({
                                   url: it.url,
                                 })
                               }
-                              className="absolute inset-0 z-[1] flex items-center justify-center opacity-0 transition group-hover:opacity-100"
+                              className="absolute bottom-1 right-1 z-[1] flex h-8 w-8 items-center justify-center rounded-full opacity-0 transition group-hover:opacity-100 hover:bg-white/10"
                               title="View large"
                               aria-label="View large video"
                             >
-                              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-transparent text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.65)] transition hover:scale-105">
+                              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-black/55 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.65)] transition hover:scale-105">
                                 <Maximize2 className="h-3 w-3" aria-hidden />
                               </span>
                             </button>
@@ -5019,7 +5042,7 @@ export default function StudioVideoPanel({
                                   f ? { ...f, urls: f.urls.filter((_, j) => j !== ui) } : f,
                                 )
                               }
-                              className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full border border-white/20 bg-[#3d3d40] text-white/85 opacity-0 transition hover:bg-[#55555a] group-hover:opacity-100"
+                              className="absolute -right-1 -top-1 z-20 flex h-5 w-5 items-center justify-center rounded-full border border-white/20 bg-[#3d3d40] text-white/85 opacity-0 transition hover:bg-[#55555a] group-hover:opacity-100"
                               title="Remove"
                               aria-label="Remove file"
                             >
@@ -5033,7 +5056,7 @@ export default function StudioVideoPanel({
                                   url: u,
                                 })
                               }
-                              className="absolute inset-0 flex items-center justify-center opacity-0 transition group-hover:opacity-100"
+                              className="absolute bottom-1 left-1/2 z-[1] flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full opacity-0 transition group-hover:opacity-100 hover:bg-white/10"
                               title="View large"
                               aria-label="View large"
                             >
@@ -5300,22 +5323,29 @@ export default function StudioVideoPanel({
                   ) : elementRefPick.activeTab === "video_generations" ? (
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
                       {elementRefPick.videoItems.map((item) => {
-                        const u = (item.posterUrl ?? "").trim();
-                        if (!u) return null;
+                        const pickUrl = (item.mediaUrl ?? "").trim();
+                        const thumbUrl = (item.posterUrl ?? "").trim();
+                        if (!pickUrl) return null;
                         return (
                           <button
                             key={item.id}
                             type="button"
                             onClick={() => {
                               void (async () => {
-                                const ok = await handlePickReferenceFromLibrary(u);
+                                const ok = await handlePickReferenceFromLibrary(pickUrl);
                                 if (ok) setElementRefPick({ open: false });
                               })();
                             }}
                             className="group relative aspect-square overflow-hidden rounded-xl border border-white/12 bg-black/40 transition hover:border-violet-400/45"
                           >
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={u} alt="" className="h-full w-full object-cover" />
+                            {thumbUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={thumbUrl} alt="" className="h-full w-full object-cover" />
+                            ) : (
+                              <span className="flex h-full w-full items-center justify-center">
+                                <VideoIcon className="h-8 w-8 text-white/65" aria-hidden />
+                              </span>
+                            )}
                             <span className="pointer-events-none absolute left-2 top-2 rounded-md bg-black/55 px-1.5 py-0.5 text-[10px] font-semibold text-white/90">
                               Video
                             </span>
@@ -5416,18 +5446,34 @@ export default function StudioVideoPanel({
                               >
                                 {media.kind === "image" ? (
                                   <img
-                                    src={media.url}
+                                    src={proxiedMediaSrc(media.url)}
                                     alt=""
                                     className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-110"
                                   />
                                 ) : (
                                   // eslint-disable-next-line jsx-a11y/media-has-caption
                                   <video
-                                    src={media.url}
+                                    src={proxiedMediaSrc(media.url)}
+                                    poster={media.posterUrl ? proxiedMediaSrc(media.posterUrl) : undefined}
                                     className="h-full w-full object-cover"
                                     muted
                                     playsInline
-                                    preload="metadata"
+                                    preload={media.posterUrl ? "metadata" : "auto"}
+                                    onLoadedData={
+                                      media.posterUrl
+                                        ? undefined
+                                        : (e) => {
+                                            const v = e.currentTarget;
+                                            try {
+                                              v.pause();
+                                              const d = Number(v.duration);
+                                              v.currentTime =
+                                                Number.isFinite(d) && d > 0 ? Math.min(0.05, d * 0.01) : 0.001;
+                                            } catch {
+                                              /* ignore */
+                                            }
+                                          }
+                                    }
                                   />
                                 )}
                                 <button
@@ -5435,10 +5481,15 @@ export default function StudioVideoPanel({
                                   onClick={(e) => {
                                     e.preventDefault();
                                     e.stopPropagation();
-                                    setSeedanceOmniPreview({
-                                      kind: media.kind,
-                                      url: media.url,
-                                    });
+                                    setSeedanceOmniPreview(
+                                      media.kind === "video"
+                                        ? {
+                                            kind: "video",
+                                            url: media.url,
+                                            ...(media.posterUrl ? { posterUrl: media.posterUrl } : {}),
+                                          }
+                                        : { kind: "image", url: media.url },
+                                    );
                                   }}
                                   className="absolute right-1.5 top-1.5 inline-flex h-6 w-6 items-center justify-center rounded-md border border-white/20 bg-black/55 text-white/80 opacity-100 transition hover:bg-black/70 hover:text-white sm:opacity-0 sm:group-hover:opacity-100"
                                   aria-label={media.kind === "video" ? "Preview video" : "Preview image"}
@@ -5850,13 +5901,18 @@ export default function StudioVideoPanel({
               {seedanceOmniPreview?.kind === "image" ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={seedanceOmniPreview.url}
+                  src={proxiedMediaSrc(seedanceOmniPreview.url)}
                   alt=""
                   className="max-h-[75vh] w-full rounded-xl object-contain"
                 />
               ) : seedanceOmniPreview?.kind === "video" ? (
                 <video
-                  src={seedanceOmniPreview.url}
+                  src={proxiedMediaSrc(seedanceOmniPreview.url)}
+                  poster={
+                    seedanceOmniPreview.posterUrl
+                      ? proxiedMediaSrc(seedanceOmniPreview.posterUrl)
+                      : undefined
+                  }
                   controls
                   autoPlay
                   playsInline
@@ -5866,7 +5922,7 @@ export default function StudioVideoPanel({
                 <div className="rounded-xl border border-white/10 bg-black/35 p-6">
                   <p className="mb-3 text-sm text-white/70">Audio preview</p>
                   <audio
-                    src={seedanceOmniPreview.url}
+                    src={proxiedMediaSrc(seedanceOmniPreview.url)}
                     controls
                     autoPlay
                     className="w-full"
