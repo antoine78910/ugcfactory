@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AtSign, Music2, VideoIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -26,7 +26,15 @@ type Props = {
 };
 
 /** Padding + type scale shared by textarea and highlight overlay so the caret stays aligned (twMerge with className). */
-const TEXTAREA_INNER_LAYOUT = "px-3 py-2 text-base md:text-sm";
+const TEXTAREA_INNER_LAYOUT = "px-3 py-2 text-base leading-normal md:text-sm md:leading-normal";
+
+/** Vertical scrollbar consumes width inside the textarea but not in the mirror layer — line wraps drift without this. */
+function verticalScrollbarReserveX(el: HTMLTextAreaElement): number {
+  const style = getComputedStyle(el);
+  const bl = parseFloat(style.borderLeftWidth) || 0;
+  const br = parseFloat(style.borderRightWidth) || 0;
+  return Math.max(0, Math.round(el.offsetWidth - el.clientWidth - bl - br));
+}
 
 /**
  * Walks backwards from `cursor` to find an in-progress `@token` at the caret.
@@ -90,6 +98,25 @@ export default function ElementMentionTextarea({
   const [tokenStart, setTokenStart] = useState<number | null>(null);
   const [overlayScrollTop, setOverlayScrollTop] = useState(0);
   const [overlayScrollLeft, setOverlayScrollLeft] = useState(0);
+  const [scrollbarReserveX, setScrollbarReserveX] = useState(0);
+
+  const measureScrollbarReserve = useCallback(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    setScrollbarReserveX(verticalScrollbarReserveX(el));
+  }, []);
+
+  useLayoutEffect(() => {
+    measureScrollbarReserve();
+  }, [measureScrollbarReserve, value]);
+
+  useLayoutEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => measureScrollbarReserve());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [measureScrollbarReserve]);
 
   const filtered = useMemo(() => {
     const items = elements.filter((e) => e.name.trim().length > 0);
@@ -300,11 +327,11 @@ export default function ElementMentionTextarea({
       {value ? (
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 z-0 overflow-hidden rounded-md"
+          className="pointer-events-none absolute inset-px z-0 overflow-hidden rounded-[calc(var(--radius-md)-1px)]"
         >
           <div
             className={cn(
-              "w-full whitespace-pre-wrap break-words text-white",
+              "box-border w-full whitespace-pre-wrap break-words text-white",
               TEXTAREA_INNER_LAYOUT,
               className,
               "pointer-events-none min-h-0 max-h-none border-0 bg-transparent shadow-none ring-0 outline-none focus-visible:ring-0",
@@ -313,7 +340,12 @@ export default function ElementMentionTextarea({
               transform: `translate(${-overlayScrollLeft}px, ${-overlayScrollTop}px)`,
             }}
           >
-            {renderedOverlay}
+            <div
+              className="min-h-0 min-w-0"
+              style={{ paddingRight: scrollbarReserveX }}
+            >
+              {renderedOverlay}
+            </div>
           </div>
         </div>
       ) : null}
@@ -328,6 +360,7 @@ export default function ElementMentionTextarea({
           const t = e.currentTarget;
           setOverlayScrollTop(t.scrollTop);
           setOverlayScrollLeft(t.scrollLeft);
+          measureScrollbarReserve();
         }}
         onBlur={() => {
           /** Delay so a click inside the dropdown can land before we close. */
@@ -341,13 +374,14 @@ export default function ElementMentionTextarea({
           el.scrollTop += e.deltaY;
           setOverlayScrollTop(el.scrollTop);
           setOverlayScrollLeft(el.scrollLeft);
+          measureScrollbarReserve();
           e.stopPropagation();
         }}
         placeholder={placeholder}
         rows={rows}
         data-slot="textarea"
         className={cn(
-          "border-input placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:bg-input/30 flex min-h-16 w-full overflow-y-auto studio-minimal-scrollbar rounded-md border bg-transparent shadow-xs transition-[color,box-shadow] outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50",
+          "border-input placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:bg-input/30 box-border block min-h-16 w-full overflow-y-auto studio-minimal-scrollbar rounded-md border bg-transparent shadow-xs transition-[color,box-shadow] outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50 [scrollbar-gutter:stable]",
           TEXTAREA_INNER_LAYOUT,
           className,
           value ? "relative z-10 text-transparent caret-white selection:bg-white/25" : "relative z-10",
