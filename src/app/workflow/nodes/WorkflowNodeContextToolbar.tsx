@@ -2,7 +2,7 @@
 
 import { NodeToolbar, Position, useReactFlow, useStore } from "@xyflow/react";
 import { ChevronDown, Copy, MoreHorizontal, Play, Spline, Trash2 } from "lucide-react";
-import { useCallback } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
@@ -19,6 +19,7 @@ const splitChev = cn(btn, "w-7 px-0");
 type WorkflowNodeContextToolbarProps = {
   nodeId: string;
   onRun: () => void;
+  onRunFromHere?: () => void;
   /** Sticky notes only need duplicate / delete, no run or path controls. */
   variant?: "module" | "sticky";
 };
@@ -30,9 +31,11 @@ function ToolbarDivider() {
 export function WorkflowNodeContextToolbar({
   nodeId,
   onRun,
+  onRunFromHere,
   variant = "module",
 }: WorkflowNodeContextToolbarProps) {
   const { getNodes, getEdges, setNodes, setEdges } = useReactFlow();
+  const [runMenuOpen, setRunMenuOpen] = useState(false);
   const soleSelection = useStore(
     (s) => {
       const sel = s.nodes.filter((n) => n.selected);
@@ -83,6 +86,30 @@ export function WorkflowNodeContextToolbar({
     toast.success("Duplicated");
   }, [getEdges, getNodes, nodeId, setEdges, setNodes]);
 
+  const hasDownstream = useMemo(() => {
+    const edges = getEdges();
+    return edges.some((e) => e.source === nodeId);
+  }, [getEdges, nodeId]);
+
+  const triggerRunMain = useCallback(() => {
+    if (!hasDownstream) {
+      onRun();
+      return;
+    }
+    setRunMenuOpen((v) => !v);
+  }, [hasDownstream, onRun]);
+
+  const triggerRunThisOnly = useCallback(() => {
+    setRunMenuOpen(false);
+    onRun();
+  }, [onRun]);
+
+  const triggerRunFromHere = useCallback(() => {
+    setRunMenuOpen(false);
+    if (onRunFromHere) onRunFromHere();
+    else onRun();
+  }, [onRun, onRunFromHere]);
+
   return (
     <NodeToolbar
       isVisible={soleSelection}
@@ -98,19 +125,41 @@ export function WorkflowNodeContextToolbar({
         {variant === "module" ? (
           <>
             <div className="relative flex items-center">
-              <button type="button" className={splitMain} title="Run" onClick={onRun}>
+              <button type="button" className={splitMain} title="Run" onClick={triggerRunMain}>
                 <Play className="h-3.5 w-3.5 fill-white text-white" strokeWidth={0} />
               </button>
               <button
                 type="button"
                 className={splitChev}
                 title="Run options"
-                onClick={() =>
-                  toast.message("Coming soon", { description: "Queue, presets, and batch runs will live here." })
-                }
+                onClick={() => setRunMenuOpen((v) => !v)}
               >
                 <ChevronDown className="h-3.5 w-3.5 text-white/70" strokeWidth={2.5} />
               </button>
+              {runMenuOpen ? (
+                <div className="absolute left-0 top-[calc(100%+6px)] z-50 min-w-[170px] rounded-xl border border-white/12 bg-[#14141a]/95 p-1.5 shadow-[0_12px_36px_rgba(0,0,0,0.6)] backdrop-blur-md">
+                  <button
+                    type="button"
+                    className="flex w-full items-center rounded-lg px-2.5 py-2 text-left text-[12px] font-medium text-white/90 transition hover:bg-white/[0.08]"
+                    onClick={triggerRunThisOnly}
+                  >
+                    This node only
+                  </button>
+                  <button
+                    type="button"
+                    className={cn(
+                      "flex w-full items-center rounded-lg px-2.5 py-2 text-left text-[12px] font-medium transition",
+                      hasDownstream
+                        ? "text-white/90 hover:bg-white/[0.08]"
+                        : "cursor-not-allowed text-white/40",
+                    )}
+                    onClick={triggerRunFromHere}
+                    disabled={!hasDownstream}
+                  >
+                    Run from here
+                  </button>
+                </div>
+              ) : null}
             </div>
 
             <ToolbarDivider />

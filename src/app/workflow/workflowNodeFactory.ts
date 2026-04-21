@@ -3,6 +3,8 @@ import type { XYPosition } from "@xyflow/react";
 import type { AdAssetNodeData, AdAssetNodeType } from "./nodes/AdAssetNode";
 import type { ImageRefNodeData, ImageRefNodeType } from "./nodes/ImageRefNode";
 import type { TextPromptNodeType } from "./nodes/TextPromptNode";
+import type { PromptListNodeType } from "./workflowPromptListTypes";
+import { PROMPT_LIST_DEFAULT_DATA } from "./workflowPromptListTypes";
 import type { StickyNoteNodeType } from "./workflowStickyNoteTypes";
 import { aspectRatioStringFromIntrinsic } from "./workflowMediaAspect";
 import { STICKY_NOTE_DEFAULT_DATA } from "./workflowStickyNoteTypes";
@@ -25,31 +27,44 @@ export type BuildAdAssetNodeOptions = {
 
 function genDefaultsForKind(
   kind: WorkflowDragNodeKind,
-): Pick<AdAssetNodeData, "prompt" | "model" | "aspectRatio" | "resolution" | "quantity"> {
+): Pick<AdAssetNodeData, "prompt" | "model" | "aspectRatio" | "resolution" | "quantity" | "generatorExportMode"> {
   if (kind === "video") {
     return {
       prompt: "",
-      model: "auto",
+      model: "kling-3.0/video",
       aspectRatio: "9:16",
       resolution: "720p",
       quantity: 1,
+      generatorExportMode: "list",
     };
   }
   if (kind === "variation" || kind === "assistant") {
     return {
       prompt: "",
-      model: "auto",
+      model: "creative",
       aspectRatio: "1:1",
       resolution: "1024",
       quantity: 1,
+      generatorExportMode: "list",
+    };
+  }
+  if (kind === "website") {
+    return {
+      prompt: "",
+      model: "nano",
+      aspectRatio: "1:1",
+      resolution: "1024",
+      quantity: 1,
+      generatorExportMode: "list",
     };
   }
   return {
     prompt: "",
-    model: "auto",
+    model: "nano",
     aspectRatio: "1:1",
     resolution: "1024",
     quantity: 1,
+    generatorExportMode: "list",
   };
 }
 
@@ -65,6 +80,7 @@ export function buildAdAssetNode(
     variation: "Variation",
     assistant: "Assistant",
     upscale: "Image Upscaler",
+    website: "Website",
   };
 
   const genDefaults = genDefaultsForKind(kind);
@@ -77,6 +93,12 @@ export function buildAdAssetNode(
     data.assistantModel = "claude-sonnet-4-5";
     data.assistantMode = "input";
     data.assistantOutput = "";
+    data.assistantExportMode = "text";
+  }
+  if (kind === "website") {
+    data.websiteUrl = "";
+    data.websiteOutputMode = "full_flow";
+    data.websiteProductImageCount = 3;
   }
 
   if (options?.prompt !== undefined) data.prompt = options.prompt;
@@ -114,6 +136,27 @@ export function buildTextPromptNode(position: XYPosition): TextPromptNodeType {
     position,
     zIndex: 1,
     data: { prompt: "" },
+  };
+}
+
+export type BuildPromptListNodeOptions = {
+  label?: string;
+  lines?: string[];
+  mode?: "prompts" | "results";
+};
+
+export function buildPromptListNode(position: XYPosition, options?: BuildPromptListNodeOptions): PromptListNodeType {
+  return {
+    id: crypto.randomUUID(),
+    type: "promptList",
+    position,
+    zIndex: 1,
+    data: {
+      ...PROMPT_LIST_DEFAULT_DATA,
+      label: options?.label ?? PROMPT_LIST_DEFAULT_DATA.label,
+      lines: options?.lines?.length ? [...options.lines] : [],
+      mode: options?.mode ?? "prompts",
+    },
   };
 }
 

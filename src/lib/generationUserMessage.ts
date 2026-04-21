@@ -50,16 +50,16 @@ export function userFacingProviderError(raw: string | null | undefined): string 
     /\b(aspect|resolution|dimensions?|width|height)\b.*\b(invalid|unsupported|not supported|not allowed|exceed|too large|too small)\b/i.test(lower) ||
     /\bwrong\b.*\b(aspect|ratio|resolution)\b/i.test(lower)
   ) {
-    return "Le modèle a refusé les paramètres (format d’image, ratio ou durée). Pour Sora 2 / Sora 2 Pro : durée 10 s ou 15 s, ratio portrait ou paysage cohérent ; avec image de départ, utilise une image nette (souvent 9:16 ou 16:9). Réessaie après ajustement.";
+    return "The model rejected these settings (image shape, aspect ratio, or duration). For Sora 2 / Sora 2 Pro: use 10s or 15s, keep portrait or landscape consistent, and use a clear start image (often 9:16 or 16:9). Adjust and try again.";
   }
-  // Upload / payload too large, keep Motion & Translate caps as examples for those flows only when it’s clearly a file-size issue.
+  // Upload / payload too large; limits differ by feature (Studio vs Translate URL import vs Motion).
   if (
     /\b413\b|request entity too large|payload too large|body too large|content[- ]length|multipart/i.test(lower) ||
     /file too large|file size|max(imum)? upload|upload (size|limit)|maximum (file|video) size|video (file )?too large/i.test(lower) ||
     (/too large/i.test(lower) && /\b(file|upload|video|asset|media|attachment|blob)\b/i.test(lower)) ||
     /exceeds (the )?(maximum |max )?(file |upload )?size/i.test(lower)
   ) {
-    return "Fichier trop lourd ou non pris en charge. Formats courants : MP4, MOV ou WebM. Réduis la taille (dans l’app : Translate ≤ 300 Mo, Motion control ≤ 100 Mo) et privilégie 720p–1080p si besoin.";
+    return "This file is too large or the format is not supported. Common video types: MP4, MOV, or WebM. Size limits in this app: Studio uploads (Create, references, elements) up to 100 MB per file; Translate (import by URL) up to 300 MB; Motion control reference videos up to 100 MB. Use a shorter clip, 720p–1080p, or a lower bitrate, then try again.";
   }
   if (/invalid|bad request|\b400\b|malformed|parameter error|validation failed/.test(lower)) {
     return "Invalid parameters or inputs. Adjust settings and retry.";

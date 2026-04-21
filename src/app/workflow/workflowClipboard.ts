@@ -3,6 +3,7 @@ import type { Edge } from "@xyflow/react";
 import type { AdAssetNodeType } from "./nodes/AdAssetNode";
 import type { ImageRefNodeType } from "./nodes/ImageRefNode";
 import type { TextPromptNodeType } from "./nodes/TextPromptNode";
+import type { PromptListNodeType } from "./workflowPromptListTypes";
 import type { StickyNoteNodeType } from "./workflowStickyNoteTypes";
 import type { WorkflowGroupNodeType } from "./nodes/WorkflowGroupNode";
 import type { WorkflowCanvasNode } from "./workflowFlowTypes";
@@ -145,6 +146,20 @@ export function remapPastedWorkflowPayload(payload: WorkflowClipboardPayloadV1):
         zIndex: t.zIndex ?? 1,
       } satisfies TextPromptNodeType;
     }
+    if (n.type === "promptList") {
+      const l = n as PromptListNodeType;
+      return {
+        ...l,
+        id: newId,
+        selected: false,
+        position: {
+          x: l.position.x + PASTE_DX,
+          y: l.position.y + PASTE_DY,
+        },
+        data: structuredClone(l.data),
+        zIndex: l.zIndex ?? 1,
+      } satisfies PromptListNodeType;
+    }
     const a = n as AdAssetNodeType;
     const mappedParent = a.parentId ? idMap.get(a.parentId) : undefined;
     if (mappedParent) {
@@ -176,7 +191,7 @@ export function remapPastedWorkflowPayload(payload: WorkflowClipboardPayloadV1):
   }
   for (const n of nodesToAdd) {
     if ((n.type === "adAsset" || n.type === "imageRef") && !n.parentId) selectIds.push(n.id);
-    if (n.type === "stickyNote" || n.type === "textPrompt") selectIds.push(n.id);
+    if (n.type === "stickyNote" || n.type === "textPrompt" || n.type === "promptList") selectIds.push(n.id);
   }
   if (selectIds.length === 0 && nodesToAdd[0]) {
     selectIds.push(nodesToAdd[0].id);

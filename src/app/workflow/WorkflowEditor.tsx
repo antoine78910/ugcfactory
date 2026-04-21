@@ -27,6 +27,7 @@ import {
   CopyPlus,
   Eye,
   FolderKanban,
+  Globe2,
   GripVertical,
   Hand,
   Image as ImageIconLucide,
@@ -35,6 +36,7 @@ import {
   Layers,
   Lock,
   MessageSquare,
+  ListOrdered,
   MoreHorizontal,
   MousePointer2,
   Plus,
@@ -72,10 +74,11 @@ import { uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
-import { AdAssetNode, type AdAssetNodeData, type AdAssetNodeType } from "./nodes/AdAssetNode";
+import { AdAssetNode, type AdAssetNodeData } from "./nodes/AdAssetNode";
 import { ImageRefNode } from "./nodes/ImageRefNode";
 import { StickyNoteNode } from "./nodes/StickyNoteNode";
 import { TextPromptNode, type TextPromptNodeData } from "./nodes/TextPromptNode";
+import { PromptListNode, type PromptListNodeData } from "./nodes/PromptListNode";
 import {
   GROUP_COLOR_PRESETS,
   WorkflowGroupNode,
@@ -117,6 +120,7 @@ import {
 import {
   buildAdAssetNode,
   buildImageRefNode,
+  buildPromptListNode,
   buildStickyNoteNode,
   buildTextPromptNode,
   WORKFLOW_NODE_DND,
@@ -142,6 +146,7 @@ const nodeTypes = {
   workflowGroup: WorkflowGroupNode,
   stickyNote: StickyNoteNode,
   textPrompt: TextPromptNode,
+  promptList: PromptListNode,
 };
 
 /** Vertically centered on the canvas; React Flow’s `center-left` adds a −15px Y offset meant for default margin, which misaligns when margin is 0. */
@@ -263,10 +268,103 @@ const WORKFLOW_AD_ASSET_DRAG_KINDS: WorkflowDragNodeKind[] = [
   "variation",
   "assistant",
   "upscale",
+  "website",
 ];
 
 function isWorkflowAdAssetDragKind(raw: string): raw is WorkflowDragNodeKind {
   return WORKFLOW_AD_ASSET_DRAG_KINDS.includes(raw as WorkflowDragNodeKind);
+}
+
+function isRunnableWorkflowAdAssetKind(kind: AdAssetNodeData["kind"]): boolean {
+  return kind === "image" || kind === "video" || kind === "assistant";
+}
+
+type WorkflowConnectionDataKind = "text" | "image" | "video" | "media";
+
+function isProbablyImageUrl(s: string): boolean {
+  const u = s.trim().toLowerCase();
+  if (!u.startsWith("http")) return false;
+  return /\.(png|jpe?g|webp|gif)(\?|$)/i.test(u) || u.includes("/image");
+}
+
+function isProbablyVideoUrl(s: string): boolean {
+  const u = s.trim().toLowerCase();
+  if (!u.startsWith("http")) return false;
+  return /\.(mp4|webm|mov)(\?|$)/i.test(u);
+}
+
+function inferPromptListKind(data: PromptListNodeData): WorkflowConnectionDataKind {
+  if (data.contentKind === "media") {
+    const lines = (data.lines ?? []).map((x) => x.trim()).filter(Boolean);
+    const imageCount = lines.filter((u) => isProbablyImageUrl(u)).length;
+    const videoCount = lines.filter((u) => isProbablyVideoUrl(u)).length;
+    return videoCount > imageCount ? "video" : "image";
+  }
+  const lines = (data.lines ?? []).map((x) => x.trim()).filter(Boolean);
+  if (!lines.length) return "text";
+  const imageCount = lines.filter((u) => isProbablyImageUrl(u)).length;
+  const videoCount = lines.filter((u) => isProbablyVideoUrl(u)).length;
+  const imageMajority = imageCount >= Math.ceil(lines.length * 0.6);
+  const videoMajority = videoCount >= Math.ceil(lines.length * 0.6);
+  if (videoMajority && videoCount >= imageCount) return "video";
+  if (imageMajority) return "image";
+  return "text";
+}
+
+function sourceKindFromNodeHandle(
+  node: WorkflowCanvasNode | undefined,
+  handleId: string | null | undefined,
+): WorkflowConnectionDataKind | null {
+  if (!node) return null;
+  const h = (handleId ?? "out").trim() || "out";
+  if (node.type === "textPrompt" || node.type === "stickyNote") return "text";
+  if (node.type === "imageRef") {
+    const d = node.data as any;
+    return d.mediaKind === "video" ? "video" : "image";
+  }
+  if (node.type === "promptList") {
+    if (h === "outText") return "text";
+    if (h === "outImage") return "image";
+    if (h === "outVideo") return "video";
+    return inferPromptListKind(node.data as PromptListNodeData);
+  }
+  if (node.type === "adAsset") {
+    const d = node.data as AdAssetNodeData;
+    if (h === "videoFirst" || h === "videoLast" || h === "generated") return "image";
+    if (h !== "out") return null;
+    if (d.kind === "assistant") return "text";
+    if (d.kind === "video") return "video";
+    if (d.kind === "image" || d.kind === "variation" || d.kind === "upscale") return "image";
+    return null;
+  }
+  return null;
+}
+
+function targetKindFromNodeHandle(
+  node: WorkflowCanvasNode | undefined,
+  handleId: string | null | undefined,
+): WorkflowConnectionDataKind | null {
+  if (!node) return null;
+  const h = (handleId ?? "in").trim() || "in";
+  if (h === "text" || h === "inText") return "text";
+  if (h === "references" || h === "startImage" || h === "endImage" || h === "inImage") return "image";
+  if (h === "inVideo") return "video";
+  if (node.type === "imageRef" && h === "in") return "media";
+  if (node.type === "promptList" && h === "in") return "text";
+  if (node.type === "adAsset" && h === "in") return "text";
+  return null;
+}
+
+function canConnectByDataKind(
+  sourceKind: WorkflowConnectionDataKind | null,
+  targetKind: WorkflowConnectionDataKind | null,
+): boolean {
+  if (!sourceKind || !targetKind) return true;
+  if (sourceKind === "text") return targetKind === "text";
+  if (sourceKind === "image") return targetKind === "image" || targetKind === "media";
+  if (sourceKind === "video") return targetKind === "video" || targetKind === "media";
+  if (sourceKind === "media") return targetKind === "media" || targetKind === "image" || targetKind === "video";
+  return true;
 }
 
 function WorkflowAddPaletteRow({
@@ -383,7 +481,7 @@ function WorkflowPagesPanel({
   }
 
   return (
-    <div className="pointer-events-auto absolute bottom-2 left-2 z-30 w-[min(100%,170px)] sm:bottom-3 sm:left-3">
+    <div className="pointer-events-auto absolute left-2 top-2 z-20 w-[min(100%,170px)] sm:left-3 sm:top-3">
       <div className="overflow-hidden rounded-lg border border-white/[0.1] bg-[#0b0912]/90 shadow-[0_8px_24px_rgba(0,0,0,0.4)] backdrop-blur-md">
         <div className="flex items-center justify-between gap-2 border-b border-white/[0.08] px-2 py-1.5">
           <span className="text-[11px] font-semibold text-white/90">Pages</span>
@@ -525,7 +623,7 @@ function WorkflowReactFlowChrome({
   const [groupColorDraft, setGroupColorDraft] = useState<string>(GROUP_COLOR_PRESETS[0].value);
 
   const eligibleForGroup = useMemo(
-    () => selectedNodes.filter((n): n is AdAssetNodeType => n.type === "adAsset" && !n.parentId),
+    () => selectedNodes.filter((n): n is WorkflowCanvasNode => n.type !== "workflowGroup" && !n.parentId),
     [selectedNodes],
   );
   const canGroup = eligibleForGroup.length >= 2;
@@ -722,6 +820,17 @@ function WorkflowReactFlowChrome({
     setAddOpen(false);
     setFrameOpen(false);
     toast.success("Prompt text added");
+  }, [screenToFlowPosition, setNodes, setAddOpen, setFrameOpen]);
+
+  const addPromptListNode = useCallback(() => {
+    const position = screenToFlowPosition({
+      x: window.innerWidth / 2,
+      y: window.innerHeight / 2,
+    });
+    setNodes((prev) => [...prev, buildPromptListNode(position)]);
+    setAddOpen(false);
+    setFrameOpen(false);
+    toast.success("List added");
   }, [screenToFlowPosition, setNodes, setAddOpen, setFrameOpen]);
 
   const [addPlusTab, setAddPlusTab] = useState<"basics" | "upload" | "projects">("basics");
@@ -1008,7 +1117,7 @@ function WorkflowReactFlowChrome({
 
       <Panel
         position="top-left"
-        className="z-10 flex !w-auto"
+        className="z-40 flex !w-auto"
         style={WORKFLOW_LEFT_TOOLS_PANEL_STYLE}
       >
         <div
@@ -1033,7 +1142,7 @@ function WorkflowReactFlowChrome({
               <Plus className={barIcon} strokeWidth={2.25} />
             </button>
             {addOpen ? (
-              <div className="absolute left-[calc(100%+10px)] top-0 z-[80] w-[min(100vw-20px,300px)] overflow-hidden rounded-xl border border-white/10 bg-[#0b0912] shadow-xl">
+              <div className="absolute left-[calc(100%+10px)] top-0 z-[260] w-[min(100vw-20px,300px)] overflow-hidden rounded-xl border border-white/10 bg-[#0b0912] shadow-xl">
                 <div className="flex border-b border-white/[0.08]">
                   <button
                     type="button"
@@ -1104,6 +1213,18 @@ function WorkflowReactFlowChrome({
                       onClick={() => addTextPromptNode()}
                     />
                     <WorkflowAddPaletteRow
+                      icon={ListOrdered}
+                      label="List"
+                      iconShellClass="border-fuchsia-500/45 bg-fuchsia-950/80"
+                      draggable
+                      onDragStart={(e) => {
+                        setDragPayload(e, "promptList");
+                        setAddOpen(false);
+                        setFrameOpen(false);
+                      }}
+                      onClick={() => addPromptListNode()}
+                    />
+                    <WorkflowAddPaletteRow
                       icon={MessageSquare}
                       label="Canvas note"
                       iconShellClass="border-amber-500/40 bg-amber-950/70"
@@ -1140,6 +1261,18 @@ function WorkflowReactFlowChrome({
                       onClick={() => addNode("video")}
                     />
                     <WorkflowAddPaletteRow
+                      icon={Globe2}
+                      label="Website"
+                      iconShellClass="border-cyan-500/45 bg-cyan-950/80"
+                      draggable
+                      onDragStart={(e) => {
+                        setDragPayload(e, "website");
+                        setAddOpen(false);
+                        setFrameOpen(false);
+                      }}
+                      onClick={() => addNode("website")}
+                    />
+                    <WorkflowAddPaletteRow
                       icon={Sparkles}
                       label="Assistant"
                       iconShellClass="border-emerald-400/40 bg-emerald-950/75"
@@ -1163,14 +1296,16 @@ function WorkflowReactFlowChrome({
                       }}
                       onClick={() => addNode("upscale")}
                     />
-                    <button
-                      type="button"
-                      onClick={() => setAvatarPickerOpen(true)}
-                      className="flex w-full items-center rounded-lg border border-white/10 bg-black/30 px-2.5 py-1.5 text-left text-[12px] font-medium text-white/90 transition hover:bg-white/[0.08]"
-                    >
-                      <UserRound className="mr-2 h-4 w-4 shrink-0 text-white/75" strokeWidth={2} aria-hidden />
-                      Avatar
-                    </button>
+                    <WorkflowAddPaletteRow
+                      icon={UserRound}
+                      label="Avatar"
+                      iconShellClass="border-sky-500/45 bg-sky-950/80"
+                      onClick={() => {
+                        setAvatarPickerOpen(true);
+                        setAddOpen(false);
+                        setFrameOpen(false);
+                      }}
+                    />
                   </div>
                 ) : addPlusTab === "upload" ? (
                   <div className="space-y-3 p-3">
@@ -1781,7 +1916,7 @@ function WorkflowFlowWorkspace({
   onUseTemplate,
   useTemplateBusy = false,
 }: FlowWorkspaceProps) {
-  const { screenToFlowPosition, getInternalNode, getNodes, getViewport } = useReactFlow();
+  const { screenToFlowPosition, flowToScreenPosition, getInternalNode, getNodes, getViewport } = useReactFlow();
   const activePage = useMemo(
     () => project.pages.find((p) => p.id === project.activePageId) ?? project.pages[0],
     [project.pages, project.activePageId],
@@ -1789,6 +1924,9 @@ function WorkflowFlowWorkspace({
 
   const [nodes, setNodes, onNodesChange] = useNodesState<WorkflowCanvasNode>(activePage?.nodes ?? []);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(activePage?.edges ?? []);
+  const [alignGuides, setAlignGuides] = useState<{ x: number | null; y: number | null }>({ x: null, y: null });
+  const alignHoldCandidateRef = useRef<{ nodeId: string; guideX: number | null; guideY: number | null; sinceMs: number } | null>(null);
+  const lastAlignTargetRef = useRef<{ nodeId: string; x: number | null; y: number | null } | null>(null);
   const [tool, setTool] = useState<Tool>(readOnly ? "pan" : "select");
   const [addOpen, setAddOpen] = useState(false);
   const [frameOpen, setFrameOpen] = useState(false);
@@ -1952,6 +2090,11 @@ function WorkflowFlowWorkspace({
         toast.success("Node added");
         return;
       }
+      if (raw === "promptList") {
+        setNodes((prev) => [...prev, buildPromptListNode(flowPos)]);
+        toast.success("Node added");
+        return;
+      }
       if (isWorkflowAdAssetDragKind(raw)) {
         setNodes((prev) => [...prev, buildAdAssetNode(raw, flowPos)]);
         toast.success("Node added");
@@ -2098,19 +2241,22 @@ function WorkflowFlowWorkspace({
   }, [placementPicker]);
 
   const placeNodeAtPicker = useCallback(
-    (kind: WorkflowDragNodeKind | "sticky" | "textPrompt", options?: BuildAdAssetNodeOptions) => {
+    (kind: WorkflowDragNodeKind | "sticky" | "textPrompt" | "promptList", options?: BuildAdAssetNodeOptions) => {
       if (!placementPicker) return;
       const newNode =
         kind === "sticky"
           ? buildStickyNoteNode(placementPicker.flow)
           : kind === "textPrompt"
             ? buildTextPromptNode(placementPicker.flow)
+            : kind === "promptList"
+              ? buildPromptListNode(placementPicker.flow)
             : buildAdAssetNode(kind, placementPicker.flow, options);
       const from = placementPicker.connectFrom;
       const to = placementPicker.connectTo;
       setNodes((prev) => [...prev, newNode]);
       const connectableFrom = newNode.type === "adAsset";
-      const connectableTo = newNode.type === "adAsset" || newNode.type === "textPrompt";
+      const connectableTo =
+        newNode.type === "adAsset" || newNode.type === "textPrompt" || newNode.type === "promptList";
       if (from && connectableFrom) {
         const defaultTargetHandle =
           newNode.type === "adAsset"
@@ -2242,10 +2388,20 @@ function WorkflowFlowWorkspace({
   const onConnect = useCallback(
     (params: Connection) => {
       if (readOnly) return;
-      const { target, targetHandle } = params;
-      if (!target) return;
+      const { source, sourceHandle, target, targetHandle } = params;
+      if (!target || !source) return;
+      const allNodes = getNodes() as WorkflowCanvasNode[];
+      const sourceNode = allNodes.find((n) => n.id === source);
+      const targetNode = allNodes.find((n) => n.id === target);
+      const srcKind = sourceKindFromNodeHandle(sourceNode, sourceHandle);
+      const dstKind = targetKindFromNodeHandle(targetNode, targetHandle);
+      if (!canConnectByDataKind(srcKind, dstKind)) {
+        toast.error("Incompatible connection", {
+          description: "This output type can only connect to a matching input type.",
+        });
+        return;
+      }
       const handleId = targetHandle ?? "";
-      const targetNode = (getNodes() as WorkflowCanvasNode[]).find((n) => n.id === target);
       let replaceSameHandle = false;
       if (targetNode?.type === "adAsset") {
         const kind = (targetNode.data as AdAssetNodeData).kind;
@@ -2272,6 +2428,25 @@ function WorkflowFlowWorkspace({
   const onNodeDragStop = useCallback(
     (_event: unknown, node: WorkflowCanvasNode) => {
       if (readOnly) return;
+
+      const last = lastAlignTargetRef.current;
+      alignHoldCandidateRef.current = null;
+      setAlignGuides({ x: null, y: null });
+
+      // Replace: when the snap target was computed during drag, ensure the final position is exactly on the guide.
+      if (last && last.nodeId === node.id && (last.x != null || last.y != null)) {
+        setNodes((prev) =>
+          prev.map((n) => {
+            if (n.id !== node.id) return n;
+            return {
+              ...n,
+              position: { x: last.x ?? n.position.x, y: last.y ?? n.position.y },
+            } as WorkflowCanvasNode;
+          }),
+        );
+      }
+      lastAlignTargetRef.current = null;
+
       if (node.type !== "adAsset" && node.type !== "imageRef") return;
       const all = getNodes() as WorkflowCanvasNode[];
       const selectedConnectable = all.filter((n) => n.selected && (n.type === "adAsset" || n.type === "imageRef"));
@@ -2298,7 +2473,117 @@ function WorkflowFlowWorkspace({
       };
       requestAnimationFrame(() => requestAnimationFrame(tryLink));
     },
-    [readOnly, getInternalNode, getNodes, setEdges],
+    [readOnly, getInternalNode, getNodes, setEdges, setAlignGuides],
+  );
+
+  const onNodeDrag = useCallback(
+    (_event: unknown, node: WorkflowCanvasNode) => {
+      if (readOnly) return;
+      if (node.type === "workflowGroup") return;
+      const ALIGN_HOLD_MS = 280;
+      const selected = (getNodes() as WorkflowCanvasNode[]).filter((n) => n.selected);
+      if (selected.length !== 1 || selected[0]?.id !== node.id) {
+        alignHoldCandidateRef.current = null;
+        setAlignGuides({ x: null, y: null });
+        return;
+      }
+
+      const dragInternal = getInternalNode(node.id);
+      const dragW = dragInternal?.measured?.width ?? node.width ?? 0;
+      const dragH = dragInternal?.measured?.height ?? node.height ?? 0;
+      if (!dragW || !dragH) {
+        alignHoldCandidateRef.current = null;
+        setAlignGuides({ x: null, y: null });
+        return;
+      }
+
+      const snapThreshold = 8;
+      const dragLeft = node.position.x;
+      const dragTop = node.position.y;
+      const dragXAnchors = [dragLeft, dragLeft + dragW / 2, dragLeft + dragW];
+      const dragYAnchors = [dragTop, dragTop + dragH / 2, dragTop + dragH];
+
+      let bestX: { delta: number; guide: number } | null = null;
+      let bestY: { delta: number; guide: number } | null = null;
+
+      const all = getNodes() as WorkflowCanvasNode[];
+      for (const other of all) {
+        if (other.id === node.id) continue;
+        if (other.parentId && node.parentId && other.parentId !== node.parentId) continue;
+        const oi = getInternalNode(other.id);
+        const ow = oi?.measured?.width ?? other.width ?? 0;
+        const oh = oi?.measured?.height ?? other.height ?? 0;
+        if (!ow || !oh) continue;
+        const oPos = oi?.positionAbsolute ?? other.position;
+        const ox = [oPos.x, oPos.x + ow / 2, oPos.x + ow];
+        const oy = [oPos.y, oPos.y + oh / 2, oPos.y + oh];
+
+        for (const da of dragXAnchors) {
+          for (const oa of ox) {
+            const d = oa - da;
+            const ad = Math.abs(d);
+            if (ad > snapThreshold) continue;
+            if (!bestX || ad < Math.abs(bestX.delta)) bestX = { delta: d, guide: oa };
+          }
+        }
+        for (const da of dragYAnchors) {
+          for (const oa of oy) {
+            const d = oa - da;
+            const ad = Math.abs(d);
+            if (ad > snapThreshold) continue;
+            if (!bestY || ad < Math.abs(bestY.delta)) bestY = { delta: d, guide: oa };
+          }
+        }
+      }
+
+      if (!bestX && !bestY) {
+        alignHoldCandidateRef.current = null;
+        setAlignGuides({ x: null, y: null });
+        return;
+      }
+
+      const now = Date.now();
+      const hold = alignHoldCandidateRef.current;
+      const sameGuide = (a: number | null | undefined, b: number | null | undefined) => {
+        if (a == null && b == null) return true;
+        if (a == null || b == null) return false;
+        return Math.abs(a - b) < 0.5;
+      };
+      const isSameCandidate =
+        hold &&
+        hold.nodeId === node.id &&
+        sameGuide(hold.guideX, bestX?.guide) &&
+        sameGuide(hold.guideY, bestY?.guide);
+      if (!isSameCandidate) {
+        alignHoldCandidateRef.current = { nodeId: node.id, guideX: bestX?.guide ?? null, guideY: bestY?.guide ?? null, sinceMs: now };
+        setAlignGuides({ x: null, y: null });
+        return;
+      }
+      if (now - hold.sinceMs < ALIGN_HOLD_MS) {
+        setAlignGuides({ x: null, y: null });
+        return;
+      }
+
+      const nextX = bestX ? node.position.x + bestX.delta : node.position.x;
+      const nextY = bestY ? node.position.y + bestY.delta : node.position.y;
+      if (nextX !== node.position.x || nextY !== node.position.y) {
+        setNodes((prev) =>
+          prev.map((n) =>
+            n.id === node.id
+              ? ({
+                  ...n,
+                  position: { x: nextX, y: nextY },
+                } as WorkflowCanvasNode)
+              : n,
+          ),
+        );
+      }
+      const guideX = bestX?.guide ?? null;
+      const guideY = bestY?.guide ?? null;
+      lastAlignTargetRef.current = { nodeId: node.id, x: guideX, y: guideY };
+      setAlignGuides({ x: guideX, y: guideY });
+    },
+    [readOnly, getNodes, getInternalNode, setNodes],
   );
 
   const onConnectEnd = useCallback(
@@ -2347,10 +2632,100 @@ function WorkflowFlowWorkspace({
     [readOnly, screenToFlowPosition, armPlacementPickerAgainstPaneClick],
   );
 
+  useEffect(() => {
+    if (readOnly) return;
+    const RUN_TIMEOUT_MS = 20 * 60 * 1000;
+
+    const waitForNodeRun = (nodeId: string): Promise<boolean> =>
+      new Promise((resolve) => {
+        let done = false;
+        const finish = (ok: boolean) => {
+          if (done) return;
+          done = true;
+          window.clearTimeout(timer);
+          window.removeEventListener("workflow:node-run-finished", onFinished as EventListener);
+          resolve(ok);
+        };
+        const onFinished = (ev: Event) => {
+          const detail = (ev as CustomEvent<{ nodeId?: string; success?: boolean }>).detail;
+          if (!detail?.nodeId || detail.nodeId !== nodeId) return;
+          finish(detail.success === true);
+        };
+        const timer = window.setTimeout(() => finish(false), RUN_TIMEOUT_MS);
+        window.addEventListener("workflow:node-run-finished", onFinished as EventListener);
+      });
+
+    const onRunFromHere = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ nodeId?: string }>).detail;
+      const startId = detail?.nodeId?.trim();
+      if (!startId) return;
+
+      const byId = new Map(nodes.map((n) => [n.id, n]));
+      if (!byId.has(startId)) return;
+      const outgoing = new Map<string, string[]>();
+      for (const e of edges) {
+        if (!outgoing.has(e.source)) outgoing.set(e.source, []);
+        outgoing.get(e.source)!.push(e.target);
+      }
+
+      const seen = new Set<string>();
+      const queue = [startId];
+      const reachable: string[] = [];
+      while (queue.length) {
+        const cur = queue.shift()!;
+        if (seen.has(cur)) continue;
+        seen.add(cur);
+        reachable.push(cur);
+        for (const nxt of outgoing.get(cur) ?? []) {
+          if (!seen.has(nxt)) queue.push(nxt);
+        }
+      }
+
+      const runIds = reachable.filter((nid) => {
+        const n = byId.get(nid);
+        return n?.type === "adAsset" && isRunnableWorkflowAdAssetKind((n.data as AdAssetNodeData).kind);
+      });
+      if (!runIds.length) {
+        toast.message("Nothing runnable downstream", {
+          description: "No runnable generator nodes were found from this point.",
+        });
+        return;
+      }
+
+      void (async () => {
+        toast.message("Run from here", { description: `${runIds.length} node(s) queued.` });
+        for (let i = 0; i < runIds.length; i++) {
+          const nodeId = runIds[i]!;
+          window.dispatchEvent(new CustomEvent("workflow:run-node", { detail: { nodeId } }));
+          const ok = await waitForNodeRun(nodeId);
+          if (!ok) {
+            toast.error("Run chain stopped", {
+              description: `Node ${i + 1}/${runIds.length} failed or timed out.`,
+            });
+            return;
+          }
+        }
+        toast.success("Run chain completed");
+      })();
+    };
+
+    window.addEventListener("workflow:run-from-here", onRunFromHere as EventListener);
+    return () => window.removeEventListener("workflow:run-from-here", onRunFromHere as EventListener);
+  }, [edges, nodes, readOnly]);
+
   const activeName = activePage?.name ?? "Page";
 
   const patchNodeData = useCallback(
-    (nodeId: string, patch: Partial<AdAssetNodeData & WorkflowGroupNodeData & StickyNoteNodeData & TextPromptNodeData>) => {
+    (
+      nodeId: string,
+      patch: Partial<
+        AdAssetNodeData &
+          WorkflowGroupNodeData &
+          StickyNoteNodeData &
+          TextPromptNodeData &
+          PromptListNodeData
+      >,
+    ) => {
       setNodes((nds) =>
         nds.map((n) =>
           n.id === nodeId ? ({ ...n, data: { ...n.data, ...patch } } as WorkflowCanvasNode) : n,
@@ -2660,6 +3035,7 @@ function WorkflowFlowWorkspace({
           onConnectEnd={readOnly ? undefined : onConnectEnd}
           connectionDragThreshold={0}
           connectionRadius={WORKFLOW_CONNECTION_RADIUS}
+          onNodeDrag={readOnly ? undefined : onNodeDrag}
           onNodeDragStop={readOnly ? undefined : onNodeDragStop}
           onDragOver={readOnly ? undefined : onDragOver}
           onDrop={readOnly ? undefined : onDrop}
@@ -2671,6 +3047,7 @@ function WorkflowFlowWorkspace({
           nodeTypes={nodeTypes}
           colorMode="dark"
           fitView={false}
+          minZoom={0.1}
           panOnDrag={readOnly ? true : tool === "pan"}
           selectionOnDrag={readOnly ? false : tool === "select"}
           selectionMode={SelectionMode.Partial}
@@ -2678,10 +3055,21 @@ function WorkflowFlowWorkspace({
             if (readOnly || tool !== "cutTarget") return;
             event.preventDefault();
             event.stopPropagation();
-            void edge;
+            const ok = cutEdgeAtPointer(edge.id);
+            if (!ok) return;
+            const x = event.clientX;
+            const y = event.clientY;
+            setCutSnipFx({ x, y });
+            if (cutSnipClearTimerRef.current) clearTimeout(cutSnipClearTimerRef.current);
+            cutSnipClearTimerRef.current = setTimeout(() => {
+              cutSnipClearTimerRef.current = null;
+              setCutSnipFx(null);
+            }, 650);
+            setHoveredEdgeScissors(null);
+            setHoveredEdgeId(null);
           }}
           onEdgeMouseEnter={readOnly ? undefined : (_ev, edge) => {
-            if (tool !== "select") return;
+            if (tool !== "cutTarget") return;
             setHoveredEdgeId(edge.id);
             setHoveredEdgeScissors(null);
             if (edgeHoverTimerRef.current) clearTimeout(edgeHoverTimerRef.current);
@@ -2693,7 +3081,7 @@ function WorkflowFlowWorkspace({
             }, 1000);
           }}
           onEdgeMouseMove={readOnly ? undefined : (ev) => {
-            if (tool !== "select") return;
+            if (tool !== "cutTarget") return;
             lastEdgePointerRef.current = { x: ev.clientX, y: ev.clientY };
             // If the scissors is already visible, keep it glued to the pointer.
             if (hoveredEdgeScissors) {
@@ -2721,6 +3109,7 @@ function WorkflowFlowWorkspace({
             setFrameOpen(false);
             setSelectionBarExpanded(false);
             setPlacementPicker(null);
+            setAlignGuides({ x: null, y: null });
             if (!readOnly && tool === "cutTarget") {
               if (cutTrailJustFinishedRef.current) {
                 cutTrailJustFinishedRef.current = false;
@@ -2856,6 +3245,33 @@ function WorkflowFlowWorkspace({
 
       {!readOnly && cutSnipFx ? <WorkflowCutSnipFx x={cutSnipFx.x} y={cutSnipFx.y} /> : null}
 
+      {!readOnly && (alignGuides.x != null || alignGuides.y != null) && workspaceRootRef.current ? (
+        <>
+          {alignGuides.x != null ? (
+            <div
+              className="pointer-events-none fixed z-[125] w-px bg-white/35 shadow-[0_0_0_1px_rgba(255,255,255,0.08)]"
+              style={{
+                left: flowToScreenPosition({ x: alignGuides.x, y: 0 }).x,
+                top: workspaceRootRef.current.getBoundingClientRect().top,
+                height: workspaceRootRef.current.getBoundingClientRect().height,
+              }}
+              aria-hidden
+            />
+          ) : null}
+          {alignGuides.y != null ? (
+            <div
+              className="pointer-events-none fixed z-[125] h-px bg-white/35 shadow-[0_0_0_1px_rgba(255,255,255,0.08)]"
+              style={{
+                top: flowToScreenPosition({ x: 0, y: alignGuides.y }).y,
+                left: workspaceRootRef.current.getBoundingClientRect().left,
+                width: workspaceRootRef.current.getBoundingClientRect().width,
+              }}
+              aria-hidden
+            />
+          ) : null}
+        </>
+      ) : null}
+
       {readOnly && showTemplateUseCta && onUseTemplate ? (
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center px-4 pb-5 pt-8">
           <div className="pointer-events-auto flex max-w-[min(100%,560px)] items-center gap-3 rounded-full border border-white/[0.1] bg-[#14141a]/95 py-2.5 pl-4 pr-2 shadow-[0_12px_40px_rgba(0,0,0,0.5)] backdrop-blur-md sm:gap-4 sm:pl-5">
@@ -2951,9 +3367,23 @@ function WorkflowFlowWorkspace({
                 <button
                   type="button"
                   className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
+                  onClick={() => placeNodeAtPicker("promptList")}
+                >
+                  List
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
                   onClick={() => placeNodeAtPicker("sticky")}
                 >
                   Canvas note
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
+                  onClick={() => placeNodeAtPicker("website")}
+                >
+                  Website
                 </button>
                 <button
                   type="button"
@@ -3030,6 +3460,13 @@ function WorkflowFlowWorkspace({
                   onClick={() => placeNodeAtPicker("textPrompt")}
                 >
                   Prompt text
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
+                  onClick={() => placeNodeAtPicker("promptList")}
+                >
+                  List
                 </button>
                 <button
                   type="button"

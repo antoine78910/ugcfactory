@@ -10,6 +10,8 @@ import {
   type NodeProps,
 } from "@xyflow/react";
 import {
+  Coins,
+  ArrowRight,
   Clapperboard,
   ImageIcon,
   Images,
@@ -19,9 +21,10 @@ import {
   Play,
   Plus,
   RotateCcw,
-  Settings,
   Sparkles,
+  Globe2,
   Trash2,
+  Type,
   Wand2,
   X,
 } from "lucide-react";
@@ -48,7 +51,9 @@ import {
 import { cn } from "@/lib/utils";
 
 import { useWorkflowNodePatch } from "../workflowNodePatchContext";
+import { buildWorkflowProjectPipelineFromRun } from "../workflowProjectPipeline";
 import {
+  collectWorkflowBatchPrompts,
   collectLinkedImageUrlsForHandles,
   collectLinkedPromptTexts,
   collectLinkedPromptTextsForHandles,
@@ -60,12 +65,16 @@ import {
   workflowImageChargeCredits,
   workflowVideoChargeCredits,
   WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX,
+  splitIntoPromptLines,
 } from "../workflowNodeRun";
 import { WorkflowNodeContextToolbar } from "./WorkflowNodeContextToolbar";
+import { buildPromptListNode } from "../workflowNodeFactory";
+import { buildImageRefNode } from "../workflowNodeFactory";
+import { linkToAdProductPhotoPickerUrls, readUniverseFromExtracted, splitAllScriptOptions } from "@/lib/linkToAdUniverse";
 
 export type AdAssetNodeData = {
   label: string;
-  kind: "image" | "video" | "variation" | "assistant" | "upscale";
+  kind: "image" | "video" | "variation" | "assistant" | "upscale" | "website";
   /** Generation prompt */
   prompt?: string;
   /** Model id (workflow-local; studio wiring later) */
@@ -74,6 +83,8 @@ export type AdAssetNodeData = {
   resolution?: string;
   /** Image / variation batch count */
   quantity?: number;
+  /** Image/Video batch output behavior. */
+  generatorExportMode?: "list" | "modules";
   /** width ÷ height, when set, module frame matches this exact shape */
   intrinsicAspect?: number;
   /** Object URL or remote URL shown inside the preview */
@@ -89,6 +100,16 @@ export type AdAssetNodeData = {
   assistantOutput?: string;
   /** Assistant tab state. */
   assistantMode?: "input" | "output";
+  /** Assistant run export behavior. */
+  assistantExportMode?: "text" | "list";
+  /** Website module URL input. */
+  websiteUrl?: string;
+  /** Website module output behavior after run. */
+  websiteOutputMode?: "product_images" | "angles" | "full_flow";
+  /** Product image nodes to emit when `websiteOutputMode=product_images`. */
+  websiteProductImageCount?: 1 | 3 | 5;
+  /** Website module has successfully run at least once. */
+  websiteLastRunAt?: string;
   /** Video-specific selected start/end frames. */
   videoStartImageUrl?: string;
   videoEndImageUrl?: string;
@@ -137,10 +158,15 @@ const kindConfig = {
     title: "Image Upscaler",
     promptPlaceholder: "Describe how to upscale or refine the image…",
   },
+  website: {
+    icon: Globe2,
+    previewTint: "from-cyan-500/[0.08] via-transparent to-black/40",
+    title: "Website",
+    promptPlaceholder: "Paste a product URL to extract Link-to-Ad assets…",
+  },
 } as const;
 
 const IMAGE_MODELS: { value: string; label: string }[] = [
-  { value: "auto", label: "Auto" },
   { value: "pro", label: "NanoBanana Pro" },
   { value: "nano", label: "NanoBanana 2" },
   { value: "seedream_45", label: "Seedream 4.5" },
@@ -149,7 +175,6 @@ const IMAGE_MODELS: { value: string; label: string }[] = [
 ];
 
 const VIDEO_MODELS: { value: string; label: string }[] = [
-  { value: "auto", label: "Auto" },
   { value: "kling-3.0/video", label: "Kling 3.0" },
   { value: "kling-2.6/video", label: "Kling 2.6" },
   { value: "openai/sora-2", label: "Sora 2" },
@@ -168,8 +193,27 @@ const ASSISTANT_MODELS: Array<{ value: "claude-sonnet-4-5" | "gpt-5o"; label: st
   { value: "gpt-5o", label: "GPT 5o" },
 ];
 
+const ASSISTANT_EXPORT_MODES: Array<{ value: "text" | "list"; label: string }> = [
+  { value: "text", label: "Export as Text" },
+  { value: "list", label: "Export as List" },
+];
+
+const GENERATOR_EXPORT_MODES: Array<{ value: "list" | "modules"; label: string }> = [
+  { value: "list", label: "Export as List" },
+  { value: "modules", label: "Export as Modules" },
+];
+
+const WEBSITE_OUTPUT_MODES: Array<{
+  value: "product_images" | "angles" | "full_flow";
+  label: string;
+  hint: string;
+}> = [
+  { value: "full_flow", label: "Build full flow", hint: "Creates a full Link-to-Ad workflow branch." },
+  { value: "angles", label: "Extract 3 angles", hint: "Exports script angles into a List node." },
+  { value: "product_images", label: "Extract product images", hint: "Creates media nodes from product photos." },
+];
+
 const VARIATION_MODELS: { value: string; label: string }[] = [
-  { value: "auto", label: "Auto" },
   { value: "creative", label: "Creative" },
   { value: "faithful", label: "Faithful" },
 ];
@@ -184,9 +228,30 @@ const VARIATION_RESOLUTIONS = ["1024", "1536", "2K"] as const;
 
 const WORKFLOW_SEEDANCE_PREVIEW_PRIORITY_INFO =
   "VIP uses faster PiAPI queue and costs 2× credits vs Normal for Seedance Preview / Fast Preview.";
+const WORKFLOW_ASSISTANT_CREDITS_BY_MODEL: Record<"claude-sonnet-4-5" | "gpt-5o", number> = {
+  "claude-sonnet-4-5": 2,
+  "gpt-5o": 0,
+};
+
+function keepWheelInsideTextarea(e: React.WheelEvent<HTMLTextAreaElement>) {
+  const el = e.currentTarget;
+  // Force wheel ownership to textarea when focused, so canvas/page never steals the wheel.
+  // This is especially important inside React Flow where wheel events are globally captured.
+  if (document.activeElement === el) {
+    e.preventDefault();
+    el.scrollTop += e.deltaY;
+    e.stopPropagation();
+    return;
+  }
+  const canScroll = el.scrollHeight > el.clientHeight;
+  if (!canScroll) return;
+  e.preventDefault();
+  el.scrollTop += e.deltaY;
+  e.stopPropagation();
+}
 
 const selectTriggerClass =
-  "nodrag nopan h-8 max-h-8 min-h-8 shrink-0 rounded-full border-white/12 bg-[#1c1c1f] text-[11px] font-medium text-white/90 shadow-none hover:bg-[#252528] focus:ring-1 focus:ring-violet-500/35 data-[size=default]:h-8 px-2.5 gap-1";
+  "nodrag nopan h-6 max-h-6 min-h-6 shrink-0 rounded-full border-white/12 bg-[#1c1c1f] text-[9px] font-medium text-white/90 shadow-none hover:bg-[#252528] focus:ring-1 focus:ring-violet-500/35 data-[size=default]:h-6 px-1.5 gap-0.5";
 
 const selectContentClass = "max-h-[min(240px,50vh)] border-white/10 bg-[#1a1a1c] text-white";
 
@@ -297,7 +362,7 @@ async function extractVideoFrameJpegDataUrl(video: HTMLVideoElement, end: boolea
   return canvas.toDataURL("image/jpeg", 0.88);
 }
 /** Horizontal padding from `px-3` on the card (left + right). */
-const CARD_PAD_X_PX = 24;
+const CARD_PAD_X_PX = 0;
 
 /**
  * Preview frame size in px: exact aspect ratio, longest side = OUTPUT_FRAME_MAX_LONG.
@@ -336,8 +401,6 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   creditsRef.current = creditsBalance;
   const cfg = kindConfig[data.kind];
   const Icon = cfg.icon;
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const settingsRef = useRef<HTMLDivElement>(null);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantDescribe, setAssistantDescribe] = useState("");
   const [assistantResult, setAssistantResult] = useState("");
@@ -353,7 +416,6 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   const leaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const modelMenuOpenRef = useRef(false);
   const aspectMenuOpenRef = useRef(false);
-  const settingsOpenRef = useRef(false);
   const assistantOpenRef = useRef(false);
   const promptFocusedRef = useRef(false);
   const previewVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -514,19 +576,17 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   useEffect(() => () => clearHoverLeaveTimer(), []);
   modelMenuOpenRef.current = modelMenuOpen;
   aspectMenuOpenRef.current = aspectMenuOpen;
-  settingsOpenRef.current = settingsOpen;
   assistantOpenRef.current = assistantOpen;
   promptFocusedRef.current = promptFocused;
 
   useEffect(() => {
-    if (modelMenuOpen || aspectMenuOpen || settingsOpen) clearHoverLeaveTimer();
-  }, [modelMenuOpen, aspectMenuOpen, settingsOpen]);
+    if (modelMenuOpen || aspectMenuOpen) clearHoverLeaveTimer();
+  }, [modelMenuOpen, aspectMenuOpen]);
 
   const showEditLayer =
     cardHovered ||
     modelMenuOpen ||
     aspectMenuOpen ||
-    settingsOpen ||
     assistantOpen ||
     promptFocused ||
     promptEditorOpen ||
@@ -644,7 +704,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       !generating,
     [data.kind, data.outputMediaKind, data.outputPreviewUrl, generating],
   );
-  /** Card width matches preview width + padding so the module hugs every aspect ratio (no side gutters). */
+  /** Card width follows preview width exactly for image/video generators. */
   const cardWidthPx = frame.width + CARD_PAD_X_PX;
 
   /**
@@ -668,7 +728,6 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     "nodrag nopan !absolute !inset-0 !z-[2] !box-border !h-8 !w-8 !min-h-8 !min-w-8 !max-h-8 !max-w-8 !rounded-full !border-0 !bg-transparent opacity-0 !transform-none";
 
   useLayoutEffect(() => {
-    if (data.kind === "assistant") return;
     updateNodeInternals(id);
     // Second pass after layout/paint, avoids stale handle bounds when flex/card size settles.
     const t = requestAnimationFrame(() => updateNodeInternals(id));
@@ -691,6 +750,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   const defaultRes = data.kind === "video" ? "720p" : "1024";
   const resolution = data.resolution ?? defaultRes;
   const quantity = Math.min(4, Math.max(1, data.quantity ?? 1));
+  const generatorExportMode = data.generatorExportMode ?? "list";
 
   const models = useMemo(() => {
     if (data.kind === "video") return VIDEO_MODELS;
@@ -698,8 +758,9 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     return IMAGE_MODELS;
   }, [data.kind]);
 
-  const rawModel = data.model ?? "auto";
-  const model = models.some((m) => m.value === rawModel) ? rawModel : "auto";
+  const modelDefault = models[0]?.value ?? "nano";
+  const rawModel = data.model ?? modelDefault;
+  const model = models.some((m) => m.value === rawModel) ? rawModel : modelDefault;
 
   const aspects = useMemo(() => {
     if (data.kind === "video") return VIDEO_ASPECTS;
@@ -733,18 +794,33 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
 
   const videoPriorityEffective: "normal" | "vip" =
     data.kind === "video" && data.videoPriority === "vip" ? "vip" : "normal";
+  const assistantModel = data.assistantModel ?? "claude-sonnet-4-5";
+  const assistantMode = data.assistantMode ?? "input";
+  const assistantOutput = data.assistantOutput ?? "";
+  const assistantExportMode = data.assistantExportMode ?? "text";
+  const websiteUrl = (data.websiteUrl ?? "").trim();
+  const websiteOutputMode = data.websiteOutputMode ?? "full_flow";
+  const websiteProductImageCount = data.websiteProductImageCount ?? 3;
 
   const estimatedCredits = useMemo(() => {
     if (data.kind === "image") {
+      if (generatorExportMode === "modules" && quantity > 1) {
+        const oneNode = workflowImageChargeCredits({ model, resolution, quantity: 1 });
+        return oneNode * quantity;
+      }
       return workflowImageChargeCredits({ model, resolution, quantity });
     }
     if (data.kind === "video") {
-      return workflowVideoChargeCredits({
+      const oneVideo = workflowVideoChargeCredits({
         model,
         resolution,
         durationSec: data.videoDurationSec,
         seedancePriority: videoPriorityEffective,
       });
+      if (generatorExportMode === "modules" && quantity > 1) {
+        return oneVideo * quantity;
+      }
+      return oneVideo;
     }
     return 0;
   }, [
@@ -755,7 +831,15 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     quantity,
     resolution,
     videoPriorityEffective,
+    generatorExportMode,
   ]);
+  const assistantEstimatedCredits = useMemo(
+    () => (data.kind === "assistant" ? WORKFLOW_ASSISTANT_CREDITS_BY_MODEL[assistantModel] ?? 5 : 0),
+    [assistantModel, data.kind],
+  );
+  const hasGeneratedOutput = Boolean(data.outputPreviewUrl?.trim());
+  const hasAssistantOutput = Boolean(assistantOutput.trim());
+  const hasWebsiteRun = Boolean(data.websiteLastRunAt?.trim());
 
   useEffect(() => {
     if (data.kind !== "video") return;
@@ -766,9 +850,12 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     }
   }, [data.kind, data.videoDurationSec, id, model, patch]);
 
-  const assistantModel = data.assistantModel ?? "claude-sonnet-4-5";
-  const assistantMode = data.assistantMode ?? "input";
-  const assistantOutput = data.assistantOutput ?? "";
+  const emitRunFinished = useCallback(
+    (ok: boolean) => {
+      window.dispatchEvent(new CustomEvent("workflow:node-run-finished", { detail: { nodeId: id, success: ok } }));
+    },
+    [id],
+  );
   const onGenerate = useCallback(async () => {
     if (generating) return;
 
@@ -778,24 +865,40 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       data.kind === "image" || data.kind === "video"
         ? collectLinkedPromptTextsForHandles(nodes, edges, id, ["text"])
         : collectLinkedPromptTexts(nodes, edges, id);
+    const linkedAssistantImageRefs =
+      data.kind === "assistant"
+        ? collectLinkedImageUrlsForHandles(nodes, edges, id, ["references"])
+        : [];
     const effectivePrompt = composeWorkflowPrompt(prompt, linkedPrompts);
-    if (!effectivePrompt.trim()) {
+    const batchContext =
+      data.kind === "image" || data.kind === "video"
+        ? collectWorkflowBatchPrompts(nodes, edges, id, ["text"], prompt)
+        : { batch: null, composedSingle: effectivePrompt };
+    const batchPrompts = batchContext.batch?.map((x) => x.trim()).filter(Boolean) ?? null;
+    const singlePrompt = (batchContext.composedSingle || effectivePrompt).trim();
+    if (!(batchPrompts?.length || singlePrompt)) {
       toast.error("Add a prompt", {
         description: linkedPrompts.length
           ? "Linked nodes had no usable text. Type a prompt in the module or put text in the connected canvas note."
-          : "Type the prompt inside the module, or connect the T (prompt) port to a canvas note whose text should be included.",
+          : "Type the prompt inside the module, or connect the text prompt port to a canvas note whose text should be included.",
       });
+      emitRunFinished(false);
       return;
     }
 
     if (data.kind === "assistant") {
       setGenerating(true);
+      let ok = false;
       try {
+        const promptWithRefs =
+          linkedAssistantImageRefs.length > 0
+            ? `${singlePrompt}\n\nReference image URLs:\n${linkedAssistantImageRefs.map((u) => `- ${u}`).join("\n")}`
+            : singlePrompt;
         const res = await fetch("/api/gpt/workflow-assistant-chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            prompt: effectivePrompt,
+            prompt: promptWithRefs,
             model: assistantModel,
           }),
         });
@@ -807,20 +910,210 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           assistantOutput: json.output.trim(),
           assistantMode: "output",
         });
+        if (assistantExportMode === "list") {
+          const lines = splitIntoPromptLines(json.output.trim());
+          if (lines.length) {
+            const self = nodes.find((n) => n.id === id);
+            if (self) {
+              const listNode = buildPromptListNode(
+                { x: self.position.x + 420, y: self.position.y + 8 },
+                { label: "Assistant prompts", lines, mode: "prompts" },
+              );
+              setNodes((prev) => [...prev, listNode]);
+              setEdges((prev) => [
+                ...prev,
+                {
+                  id: `e-${id}-${listNode.id}-${crypto.randomUUID().slice(0, 8)}`,
+                  source: id,
+                  sourceHandle: "out",
+                  target: listNode.id,
+                  targetHandle: "in",
+                  style: { stroke: "rgba(167, 139, 250, 0.5)", strokeWidth: 2 },
+                },
+              ]);
+              toast.success(`Assistant list created (${lines.length})`);
+            }
+          }
+        }
         toast.success("Assistant response ready");
+        patch(id, { websiteLastRunAt: new Date().toISOString() });
+        ok = true;
       } catch (e) {
         toast.error("Assistant failed", {
           description: e instanceof Error ? e.message : "Try again.",
         });
       } finally {
         setGenerating(false);
+        emitRunFinished(ok);
+      }
+      return;
+    }
+
+    if (data.kind === "website") {
+      if (!/^https?:\/\//i.test(websiteUrl)) {
+        toast.error("Enter a valid website URL", {
+          description: "Use a full URL starting with http:// or https://",
+        });
+        emitRunFinished(false);
+        return;
+      }
+      setGenerating(true);
+      let ok = false;
+      try {
+        const startRes = await fetch("/api/link-to-ad/initial-pipeline", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ storeUrl: websiteUrl }),
+        });
+        const startJson = (await startRes.json()) as { runId?: string; error?: string };
+        if (!startRes.ok || !startJson.runId) {
+          throw new Error(startJson.error || "Website pipeline failed.");
+        }
+
+        const getRes = await fetch(`/api/runs/get?runId=${encodeURIComponent(startJson.runId)}`, {
+          cache: "no-store",
+        });
+        const getJson = (await getRes.json()) as {
+          data?: { id: string; store_url?: string | null; title?: string | null; extracted?: unknown };
+          error?: string;
+        };
+        if (!getRes.ok || !getJson.data) {
+          throw new Error(getJson.error || "Could not load pipeline result.");
+        }
+
+        const self = nodes.find((n) => n.id === id);
+        if (!self) throw new Error("Could not find node position.");
+
+        if (websiteOutputMode === "full_flow") {
+          const built = buildWorkflowProjectPipelineFromRun(
+            { x: self.position.x + 540, y: self.position.y + 120 },
+            {
+              id: getJson.data.id,
+              title: getJson.data.title ?? undefined,
+              store_url: getJson.data.store_url ?? undefined,
+              extracted: getJson.data.extracted,
+            },
+          );
+          setNodes((prev) => [...prev, ...built.nodes]);
+          setEdges((prev) => [...prev, ...built.edges]);
+          toast.success("Website flow created");
+        } else {
+          const snap = readUniverseFromExtracted(getJson.data.extracted);
+          if (!snap) throw new Error("Could not parse extracted website data.");
+          if (websiteOutputMode === "angles") {
+            const lines = splitAllScriptOptions(snap.scriptsText ?? "").map((x) => x.trim()).filter(Boolean).slice(0, 3);
+            if (!lines.length) throw new Error("No script angles found.");
+            const listNode = buildPromptListNode(
+              { x: self.position.x + 420, y: self.position.y + 8 },
+              { label: "Website angles", lines, mode: "prompts" },
+            );
+            setNodes((prev) => [...prev, listNode]);
+            setEdges((prev) => [
+              ...prev,
+              {
+                id: `e-${id}-${listNode.id}-${crypto.randomUUID().slice(0, 8)}`,
+                source: id,
+                sourceHandle: "out",
+                target: listNode.id,
+                targetHandle: "in",
+                style: { stroke: "rgba(167, 139, 250, 0.5)", strokeWidth: 2 },
+              },
+            ]);
+            toast.success("3 angles exported");
+          } else {
+            const urls = linkToAdProductPhotoPickerUrls(snap).slice(0, websiteProductImageCount);
+            if (!urls.length) throw new Error("No product images found.");
+            const refs = urls.map((u, i) =>
+              buildImageRefNode(
+                { x: self.position.x + 360 + i * 220, y: self.position.y + 12 },
+                { label: `Product ${i + 1}`, imageUrl: u, source: "upload", mediaKind: "image" },
+              ),
+            );
+            setNodes((prev) => [...prev, ...refs]);
+            setEdges((prev) => [
+              ...prev,
+              ...refs.map((r) => ({
+                id: `e-${id}-${r.id}-${crypto.randomUUID().slice(0, 8)}`,
+                source: id,
+                sourceHandle: "out",
+                target: r.id,
+                targetHandle: "in",
+                style: { stroke: "rgba(167, 139, 250, 0.5)", strokeWidth: 2 },
+              })),
+            ]);
+            toast.success(`${refs.length} product image${refs.length > 1 ? "s" : ""} extracted`);
+          }
+        }
+        ok = true;
+      } catch (e) {
+        toast.error("Website module failed", {
+          description: userMessageFromCaughtError(e, "Try another product URL."),
+        });
+      } finally {
+        setGenerating(false);
+        emitRunFinished(ok);
       }
       return;
     }
 
     if (data.kind !== "image" && data.kind !== "video") {
       toast.message("Coming soon", { description: "Run is available for Image and Video generators." });
+      emitRunFinished(false);
       return;
+    }
+
+    const shouldFanOutAsModules =
+      (data.kind === "image" || data.kind === "video") &&
+      generatorExportMode === "modules" &&
+      quantity > 1 &&
+      !(batchPrompts?.length && batchPrompts.length > 1);
+    const perNodeQuantity = shouldFanOutAsModules ? 1 : quantity;
+
+    if (shouldFanOutAsModules) {
+      const self = nodes.find((n) => n.id === id);
+      if (self?.type === "adAsset") {
+        const cloneCount = Math.max(0, quantity - 1);
+        const incomingToSelf = edges.filter((e) => e.target === id);
+        const xStep = Math.max(320, cardWidthPx + 26);
+        const clones: AdAssetNodeType[] = Array.from({ length: cloneCount }, (_, idx) => {
+          const cloneId = crypto.randomUUID();
+          const cloneData = self.data as AdAssetNodeData;
+          return {
+            ...self,
+            id: cloneId,
+            selected: false,
+            position: { x: self.position.x + (idx + 1) * xStep, y: self.position.y },
+            data: {
+              ...cloneData,
+              quantity: 1,
+              outputPreviewUrl: undefined,
+              outputMediaKind: undefined,
+              videoExtractedFirstFrameUrl: undefined,
+              videoExtractedLastFrameUrl: undefined,
+            },
+          };
+        });
+        const cloneEdges = clones.flatMap((clone) =>
+          incomingToSelf.map((e) => ({
+            ...e,
+            id: `e-${e.source}-${clone.id}-${crypto.randomUUID().slice(0, 8)}`,
+            target: clone.id,
+            selected: false,
+          })),
+        );
+        setNodes((prev) => [...prev, ...clones]);
+        if (cloneEdges.length) {
+          setEdges((prev) => [...prev, ...cloneEdges]);
+        }
+        setTimeout(() => {
+          clones.forEach((clone) => {
+            window.dispatchEvent(new CustomEvent("workflow:run-node", { detail: { nodeId: clone.id } }));
+          });
+        }, 60);
+        toast.success(`${quantity} generators started`, {
+          description: "Generated modules were duplicated and wired to the same inputs.",
+        });
+      }
     }
 
     const personalKey = getPersonalApiKey()?.trim() || undefined;
@@ -842,13 +1135,16 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         });
         refsForJob = refsForJob.slice(0, WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX);
       }
-      const charge = workflowImageChargeCredits({
+      const perRunCharge = workflowImageChargeCredits({
         model,
         resolution,
-        quantity,
+        quantity: perNodeQuantity,
       });
+      const runCount = Math.max(1, batchPrompts?.length ?? 1);
+      const charge = perRunCharge * runCount;
       if (!creditBypass && creditsRef.current < charge) {
         toast.error("Not enough credits", { description: `You need ${charge} credits for this run.` });
+        emitRunFinished(false);
         return;
       }
       const platformCharge = creditBypass ? 0 : charge;
@@ -857,41 +1153,77 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         creditsRef.current = Math.max(0, creditsRef.current - platformCharge);
       }
       setGenerating(true);
+      let ok = false;
       try {
-        const { imageUrl } = await runWorkflowImageJob({
-          planId,
-          personalApiKey: personalKey,
-          prompt: effectivePrompt,
-          model,
-          aspectRatio,
-          resolution,
-          quantity,
-          referenceImageUrls: refsForJob.length ? refsForJob : undefined,
-        });
+        const promptsForRun = batchPrompts?.length ? batchPrompts : [singlePrompt];
+        const imageResults = await Promise.all(
+          promptsForRun.map(async (p) => {
+            const { imageUrl } = await runWorkflowImageJob({
+              planId,
+              personalApiKey: personalKey,
+              prompt: p,
+              model,
+              aspectRatio,
+              resolution,
+              quantity: perNodeQuantity,
+              referenceImageUrls: refsForJob.length ? refsForJob : undefined,
+            });
+            return imageUrl;
+          }),
+        );
+        const imageUrl = imageResults[0] ?? "";
         patch(id, {
           outputPreviewUrl: imageUrl,
           outputMediaKind: "image",
         });
-        toast.success("Image ready");
+        const nodeRef = nodes.find((n) => n.id === id);
+        if ((batchPrompts?.length ?? 0) > 1 && nodeRef) {
+          const listNode = buildPromptListNode(
+            { x: nodeRef.position.x + 380, y: nodeRef.position.y + 18 },
+            { label: "Image results", lines: imageResults, mode: "results" },
+          );
+          setNodes((prev) => [...prev, listNode]);
+          setEdges((prev) => [
+            ...prev,
+            {
+              id: `e-${id}-${listNode.id}-${crypto.randomUUID().slice(0, 8)}`,
+              source: id,
+              sourceHandle: "out",
+              target: listNode.id,
+              targetHandle: "in",
+              style: { stroke: "rgba(167, 139, 250, 0.5)", strokeWidth: 2 },
+            },
+          ]);
+          toast.success(`Batch done (${imageResults.length})`, {
+            description: "A new List node was created with all generated image URLs.",
+          });
+        } else {
+          toast.success("Image ready");
+        }
+        ok = true;
       } catch (e) {
         const msg = userMessageFromCaughtError(e, "Image generation failed. Try again.");
         refundPlatformCredits(platformCharge, grantCredits, creditsRef);
         toast.error(msg);
       } finally {
         setGenerating(false);
+        emitRunFinished(ok);
       }
       return;
     }
 
     /* video */
-    const vCharge = workflowVideoChargeCredits({
+    const perVideoCharge = workflowVideoChargeCredits({
       model,
       resolution,
       durationSec: data.videoDurationSec,
       seedancePriority: data.videoPriority === "vip" ? "vip" : "normal",
     });
+    const runCount = Math.max(1, batchPrompts?.length ?? 1);
+    const vCharge = perVideoCharge * runCount;
     if (!creditBypass && creditsRef.current < vCharge) {
       toast.error("Not enough credits", { description: `You need ${vCharge} credits for this run.` });
+      emitRunFinished(false);
       return;
     }
     const vPlatformCharge = creditBypass ? 0 : vCharge;
@@ -900,6 +1232,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       creditsRef.current = Math.max(0, creditsRef.current - vPlatformCharge);
     }
     setGenerating(true);
+    let ok = false;
     try {
       const linkedFromStartPort = collectLinkedImageUrlsForHandles(nodes, edges, id, ["startImage"]);
       const linkedFromEndPort = collectLinkedImageUrlsForHandles(nodes, edges, id, ["endImage"]);
@@ -919,34 +1252,66 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         (u) => u !== startFrame && u !== endFrame,
       );
 
-      const { videoUrl } = await runWorkflowVideoJob({
-        planId,
-        personalApiKey: personalKey,
-        piapiApiKey: piapiKey,
-        prompt: effectivePrompt,
-        model,
-        aspectRatio,
-        resolution,
-        durationSec: data.videoDurationSec,
-        seedancePriority: data.videoPriority === "vip" ? "vip" : "normal",
-        linkedImageUrl: startFrame,
-        referenceImageUrl: undefined,
-        endImageUrl: endFrame,
-        referenceImageUrls: referenceOnly.length ? referenceOnly : undefined,
-      });
+      const promptsForRun = batchPrompts?.length ? batchPrompts : [singlePrompt];
+      const videoResults = await Promise.all(
+        promptsForRun.map(async (p) => {
+          const { videoUrl } = await runWorkflowVideoJob({
+            planId,
+            personalApiKey: personalKey,
+            piapiApiKey: piapiKey,
+            prompt: p,
+            model,
+            aspectRatio,
+            resolution,
+            durationSec: data.videoDurationSec,
+            seedancePriority: data.videoPriority === "vip" ? "vip" : "normal",
+            linkedImageUrl: startFrame,
+            referenceImageUrl: undefined,
+            endImageUrl: endFrame,
+            referenceImageUrls: referenceOnly.length ? referenceOnly : undefined,
+          });
+          return videoUrl;
+        }),
+      );
+      const videoUrl = videoResults[0] ?? "";
       patch(id, {
         outputPreviewUrl: videoUrl,
         outputMediaKind: "video",
         videoExtractedFirstFrameUrl: undefined,
         videoExtractedLastFrameUrl: undefined,
       });
-      toast.success("Video ready");
+      const nodeRef = nodes.find((n) => n.id === id);
+      if ((batchPrompts?.length ?? 0) > 1 && nodeRef) {
+        const listNode = buildPromptListNode(
+          { x: nodeRef.position.x + 380, y: nodeRef.position.y + 18 },
+          { label: "Video results", lines: videoResults, mode: "results" },
+        );
+        setNodes((prev) => [...prev, listNode]);
+        setEdges((prev) => [
+          ...prev,
+          {
+            id: `e-${id}-${listNode.id}-${crypto.randomUUID().slice(0, 8)}`,
+            source: id,
+            sourceHandle: "out",
+            target: listNode.id,
+            targetHandle: "in",
+            style: { stroke: "rgba(167, 139, 250, 0.5)", strokeWidth: 2 },
+          },
+        ]);
+        toast.success(`Batch done (${videoResults.length})`, {
+          description: "A new List node was created with all generated video URLs.",
+        });
+      } else {
+        toast.success("Video ready");
+      }
+      ok = true;
     } catch (e) {
       const msg = userMessageFromCaughtError(e, "Video generation failed. Try again.");
       refundPlatformCredits(vPlatformCharge, grantCredits, creditsRef);
       toast.error(msg);
     } finally {
       setGenerating(false);
+      emitRunFinished(ok);
     }
   }, [
     data.kind,
@@ -965,48 +1330,252 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     aspectRatio,
     resolution,
     quantity,
+    generatorExportMode,
+    cardWidthPx,
     patch,
     planId,
     prompt,
     spendCredits,
+    setNodes,
+    setEdges,
     assistantModel,
+    assistantExportMode,
+    websiteUrl,
+    websiteOutputMode,
+    websiteProductImageCount,
+    emitRunFinished,
   ]);
+
+  const runThisNodeOnly = useCallback(() => {
+    void onGenerate();
+  }, [onGenerate]);
+  const runFromHere = useCallback(() => {
+    window.dispatchEvent(new CustomEvent("workflow:run-from-here", { detail: { nodeId: id } }));
+  }, [id]);
+
+  useEffect(() => {
+    const onRunNode = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ nodeId?: string }>).detail;
+      if (!detail?.nodeId || detail.nodeId !== id) return;
+      void onGenerate();
+    };
+    window.addEventListener("workflow:run-node", onRunNode as EventListener);
+    return () => window.removeEventListener("workflow:run-node", onRunNode as EventListener);
+  }, [id, onGenerate]);
+
+  if (data.kind === "website") {
+    const websiteCardWidth = Math.max(cardWidthPx, 520);
+    const modeMeta = WEBSITE_OUTPUT_MODES.find((m) => m.value === websiteOutputMode);
+    return (
+      <>
+        <WorkflowNodeContextToolbar nodeId={id} onRun={runThisNodeOnly} onRunFromHere={runFromHere} />
+        <div
+          className={cn(
+            "relative overflow-visible rounded-2xl border border-white/[0.08] bg-[#121212]/98 px-3 pb-3 pt-2.5 shadow-[0_12px_40px_rgba(0,0,0,0.5)] backdrop-blur-sm",
+            selected ? "ring-2 ring-violet-500/85 ring-offset-2 ring-offset-[#06070d]" : "",
+          )}
+          style={{ width: websiteCardWidth }}
+          onPointerDown={(e) => e.stopPropagation()}
+          onMouseEnter={() => window.dispatchEvent(new CustomEvent("workflow:hover-node", { detail: { nodeId: id } }))}
+          onMouseLeave={() => window.dispatchEvent(new CustomEvent("workflow:unhover-node"))}
+        >
+          <Handle id="in" type="target" position={Position.Left} className="!h-3 !w-3 !border-2 !border-violet-500/45 !bg-[#06070d]" />
+          <Handle id="out" type="source" position={Position.Right} className="!h-3 !w-3 !border-2 !border-violet-500/45 !bg-[#06070d]" />
+
+          <div className="mb-2 flex items-center gap-2">
+            <Icon className="h-4 w-4 shrink-0 text-white/75" strokeWidth={2} aria-hidden />
+            <p className="min-w-0 truncate text-[13px] font-semibold tracking-tight text-white">Website module #{displayIndex}</p>
+          </div>
+
+          <div className="space-y-2">
+            <div>
+              <p className="mb-1 text-[11px] font-medium text-white/60">Website URL</p>
+              <input
+                value={websiteUrl}
+                onChange={(e) => patch(id, { websiteUrl: e.target.value })}
+                placeholder="https://your-store.com/product-page"
+                className="nodrag nopan h-9 w-full rounded-lg border border-white/12 bg-black/35 px-3 text-[13px] text-white/90 outline-none focus:border-violet-500/40"
+              />
+            </div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <div>
+                <p className="mb-1 text-[11px] font-medium text-white/60">Output</p>
+                <Select
+                  value={websiteOutputMode}
+                  onValueChange={(v) =>
+                    patch(id, { websiteOutputMode: v as "product_images" | "angles" | "full_flow" })
+                  }
+                >
+                  <SelectTrigger size="sm" className={cn(selectTriggerClass, "w-full")}>
+                    <SelectValue placeholder="Output mode" />
+                  </SelectTrigger>
+                  <SelectContent className={selectContentClass} position="popper">
+                    {WEBSITE_OUTPUT_MODES.map((m) => (
+                      <SelectItem key={m.value} value={m.value} className="text-[12px] focus:bg-violet-500/20">
+                        {m.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {websiteOutputMode === "product_images" ? (
+                <div>
+                  <p className="mb-1 text-[11px] font-medium text-white/60">Image count</p>
+                  <Select
+                    value={String(websiteProductImageCount)}
+                    onValueChange={(v) => patch(id, { websiteProductImageCount: Number(v) as 1 | 3 | 5 })}
+                  >
+                    <SelectTrigger size="sm" className={cn(selectTriggerClass, "w-full")}>
+                      <SelectValue placeholder="Count" />
+                    </SelectTrigger>
+                    <SelectContent className={selectContentClass} position="popper">
+                      <SelectItem value="1" className="text-[12px] focus:bg-violet-500/20">1 image</SelectItem>
+                      <SelectItem value="3" className="text-[12px] focus:bg-violet-500/20">3 images</SelectItem>
+                      <SelectItem value="5" className="text-[12px] focus:bg-violet-500/20">5 images</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-white/10 bg-black/25 px-2.5 py-2 text-[11px] text-white/55">
+                  {modeMeta?.hint ?? ""}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-2 flex items-center gap-2">
+            <button
+              type="button"
+              title={generating ? "Running website module…" : "Run website module"}
+              disabled={generating}
+              className="nodrag nopan ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-zinc-900 shadow-md transition hover:bg-white/95 disabled:cursor-not-allowed disabled:opacity-55"
+              onClick={() => void onGenerate()}
+            >
+              {generating ? (
+                <Loader2 className="h-4 w-4 animate-spin text-zinc-900" aria-hidden />
+              ) : hasWebsiteRun ? (
+                <RotateCcw className="h-4 w-4 text-zinc-900" strokeWidth={2.25} />
+              ) : (
+                <ArrowRight className="h-4 w-4 text-zinc-900" strokeWidth={2.25} />
+              )}
+            </button>
+          </div>
+        </div>
+      </>
+    );
+  }
 
   if (data.kind === "assistant") {
     const assistantCardWidth = Math.max(cardWidthPx, 520);
     return (
       <>
-        <WorkflowNodeContextToolbar nodeId={id} onRun={() => void onGenerate()} />
+        <WorkflowNodeContextToolbar nodeId={id} onRun={runThisNodeOnly} onRunFromHere={runFromHere} />
         <div
-          className={cn(
-            "relative overflow-hidden rounded-2xl border border-white/[0.08] bg-[#121212]/98 px-3 pb-3 pt-2.5 shadow-[0_12px_40px_rgba(0,0,0,0.5)] backdrop-blur-sm",
-            selected ? "ring-2 ring-violet-500/85 ring-offset-2 ring-offset-[#06070d]" : "",
-          )}
-          style={{ width: assistantCardWidth }}
-          onPointerDown={(e) => e.stopPropagation()}
+          className="relative flex items-end gap-1"
           onMouseEnter={() => window.dispatchEvent(new CustomEvent("workflow:hover-node", { detail: { nodeId: id } }))}
           onMouseLeave={() => window.dispatchEvent(new CustomEvent("workflow:unhover-node"))}
         >
-          <Handle
-            id="in"
-            type="target"
-            position={Position.Left}
-            className="!h-3 !w-3 !border-2 !border-violet-500/45 !bg-[#06070d]"
-          />
-          <Handle
-            id="out"
-            type="source"
-            position={Position.Right}
-            className="!h-3 !w-3 !border-2 !border-violet-500/45 !bg-[#06070d]"
-          />
-
-          <div className="mb-2 flex items-center gap-2">
+          <div className="nodrag nopan absolute -top-7 left-2 z-[8] flex min-w-0 items-center gap-2.5 pr-2" onPointerDown={(e) => e.stopPropagation()}>
             <Icon className="h-4 w-4 shrink-0 text-white/75" strokeWidth={2} aria-hidden />
-            <p className="min-w-0 truncate text-[13px] font-semibold tracking-tight text-white">
-              Assistant #{displayIndex}
-            </p>
+            {titleEditing ? (
+              <input
+                value={titleDraft}
+                onChange={(e) => setTitleDraft(e.target.value)}
+                onBlur={commitTitle}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    commitTitle();
+                  }
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    setTitleDraft(data.label || cfg.title);
+                    setTitleEditing(false);
+                  }
+                }}
+                autoFocus
+                className="nodrag nopan min-w-0 flex-1 rounded border border-white/20 bg-black/35 px-2 py-0.5 text-[12px] font-semibold tracking-tight text-white outline-none focus:border-violet-400/60"
+              />
+            ) : (
+              <button
+                type="button"
+                className="nodrag nopan min-w-0 truncate text-left text-[13px] font-semibold tracking-tight text-white"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setTitleEditing(true);
+                }}
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  setTitleEditing(true);
+                }}
+                title="Rename"
+              >
+                {displayTitle}
+              </button>
+            )}
           </div>
-
+          <div className="nodrag nopan flex shrink-0 flex-col gap-1 pb-3">
+            <div className={cn(workflowPortBubbleShellClass, "nodrag nopan")}>
+              <Handle
+                id="text"
+                type="target"
+                position={Position.Left}
+                className={workflowPortTargetHandleClass}
+                aria-label="Assistant text input"
+              />
+              <button
+                type="button"
+                onPointerDown={(e) => handleInputBubblePointerDown(e, "text")}
+                title="Assistant prompt text input."
+                className={cn(
+                  workflowPortBubbleHitClass,
+                  "text-white/65 hover:text-white",
+                )}
+              >
+                <Type className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
+              </button>
+            </div>
+            <div className={cn(workflowPortBubbleShellClass, "nodrag nopan")}>
+              <Handle
+                id="references"
+                type="target"
+                position={Position.Left}
+                className={workflowPortTargetHandleClass}
+                aria-label="Reference images input"
+              />
+              <button
+                type="button"
+                onPointerDown={(e) => handleInputBubblePointerDown(e, "references")}
+                title="Reference images for Assistant context."
+                className={cn(workflowPortBubbleHitClass, "text-white/65 hover:text-white")}
+              >
+                <Images className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+          <div
+            className={cn(
+              "relative overflow-visible rounded-2xl border border-white/[0.08] bg-[#121212]/98 px-3 pb-3 pt-6 shadow-[0_12px_40px_rgba(0,0,0,0.5)] backdrop-blur-sm",
+              selected ? "ring-2 ring-violet-500/85 ring-offset-2 ring-offset-[#06070d]" : "",
+            )}
+            style={{ width: assistantCardWidth }}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+          <div className="nodrag nopan absolute -right-10 top-2 z-[7]">
+            <div className={cn(workflowPortBubbleShellClass, "nodrag nopan relative border-violet-400/35 bg-[#15151a]/95")}>
+              <Handle
+                id="out"
+                type="source"
+                position={Position.Right}
+                className={workflowPortSourceBubbleHandleClass}
+                aria-label="Assistant text output"
+                title="Assistant text output"
+              />
+              <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-[11px] font-bold leading-none text-violet-200/90">
+                <Type className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
+              </span>
+            </div>
+          </div>
           <div className="mb-2 flex items-center gap-1 rounded-xl border border-white/10 bg-[#0d0d10] p-1">
             <button
               type="button"
@@ -1054,6 +1623,21 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
 
           <div className="mt-2 flex items-center gap-2">
             <Select
+              value={assistantExportMode}
+              onValueChange={(v) => patch(id, { assistantExportMode: v as "text" | "list" })}
+            >
+              <SelectTrigger size="sm" className={cn(selectTriggerClass, "min-w-[11rem]")}>
+                <SelectValue placeholder="Export mode" />
+              </SelectTrigger>
+              <SelectContent className={selectContentClass} position="popper">
+                {ASSISTANT_EXPORT_MODES.map((m) => (
+                  <SelectItem key={m.value} value={m.value} className="text-[12px] focus:bg-violet-500/20">
+                    {m.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
               value={assistantModel}
               onValueChange={(v) => patch(id, { assistantModel: v as AdAssetNodeData["assistantModel"] })}
             >
@@ -1068,20 +1652,36 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 ))}
               </SelectContent>
             </Select>
+            <span
+              className="inline-flex h-8 items-center gap-1.5 rounded-full border border-violet-400/35 bg-violet-500/12 px-2.5 text-[11px] font-semibold tabular-nums text-white shadow-[0_8px_24px_rgba(0,0,0,0.35)]"
+              title="Estimated credits for this run"
+            >
+              <Coins className="h-3.5 w-3.5 text-violet-200" strokeWidth={2.2} aria-hidden />
+              {assistantEstimatedCredits}
+            </span>
             <button
               type="button"
-              title={generating ? "Running assistant…" : "Run assistant"}
+              title={
+                generating
+                  ? "Running assistant…"
+                  : hasAssistantOutput
+                    ? "Regenerate assistant response"
+                    : "Run assistant"
+              }
               disabled={generating}
               className="nodrag nopan ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-zinc-900 shadow-md transition hover:bg-white/95 disabled:cursor-not-allowed disabled:opacity-55"
               onClick={() => void onGenerate()}
             >
               {generating ? (
                 <Loader2 className="h-4 w-4 animate-spin text-zinc-900" aria-hidden />
-              ) : (
+              ) : hasAssistantOutput ? (
                 <RotateCcw className="h-4 w-4 text-zinc-900" strokeWidth={2.25} />
+              ) : (
+                <ArrowRight className="h-4 w-4 text-zinc-900" strokeWidth={2.25} />
               )}
             </button>
           </div>
+        </div>
         </div>
       </>
     );
@@ -1089,7 +1689,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
 
   return (
     <>
-      <WorkflowNodeContextToolbar nodeId={id} onRun={() => void onGenerate()} />
+      <WorkflowNodeContextToolbar nodeId={id} onRun={runThisNodeOnly} onRunFromHere={runFromHere} />
       <div
         className="relative flex gap-1 items-stretch"
         onMouseEnter={() => window.dispatchEvent(new CustomEvent("workflow:hover-node", { detail: { nodeId: id } }))}
@@ -1113,10 +1713,10 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               title="Prompt text, one incoming wire; compose the main prompt inside the module."
               className={cn(
                 workflowPortBubbleHitClass,
-                "text-[12px] font-bold leading-none text-white/65 hover:text-white",
+                "text-white/65 hover:text-white",
               )}
             >
-              T
+              <Type className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
             </button>
           </div>
 
@@ -1190,10 +1790,10 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               title="Prompt text, one incoming wire; compose the main prompt inside the module."
               className={cn(
                 workflowPortBubbleHitClass,
-                "text-[12px] font-bold leading-none text-white/65 hover:text-white",
+                "text-white/65 hover:text-white",
               )}
             >
-              T
+              <Type className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
             </button>
           </div>
 
@@ -1235,7 +1835,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             className="flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-[#1a1a1c]/95 text-[11px] font-bold text-white/65 transition hover:border-violet-500/35 hover:text-white"
             onClick={() => toast.message("Coming soon", { description: "Attach reference text to this node." })}
           >
-            T
+            <Type className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
           </button>
           <button
             type="button"
@@ -1296,7 +1896,8 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         </div>
       <div
         className={cn(
-          "group/card relative overflow-hidden rounded-2xl border border-white/[0.08] bg-[#121212]/98 px-3 pb-3 pt-2.5 shadow-[0_12px_40px_rgba(0,0,0,0.5)] backdrop-blur-sm transition-[width,border-color] duration-200 ease-out",
+            "group/card relative overflow-hidden rounded-2xl border border-white/[0.08] bg-[#121212]/98 shadow-[0_12px_40px_rgba(0,0,0,0.5)] backdrop-blur-sm transition-[width,border-color] duration-200 ease-out",
+            data.kind === "image" || data.kind === "video" ? "px-0 pb-0 pt-0" : "px-3 pb-3 pt-2.5",
           selected ? "ring-2 ring-violet-500/85 ring-offset-2 ring-offset-[#06070d]" : "",
           generating && (data.kind === "image" || data.kind === "video") && "workflow-generator-card--busy",
         )}
@@ -1311,7 +1912,6 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             if (
               !modelMenuOpenRef.current &&
               !aspectMenuOpenRef.current &&
-              !settingsOpenRef.current &&
               !assistantOpenRef.current &&
               !promptFocusedRef.current
             ) {
@@ -1331,8 +1931,8 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
 
         <div
           className={cn(
-            "relative w-full overflow-hidden rounded-xl",
-            hasPreviewMedia ? "mt-0" : "mt-2",
+            "relative w-full overflow-hidden",
+            data.kind === "image" || data.kind === "video" ? "rounded-none mt-0" : hasPreviewMedia ? "mt-0 rounded-xl" : "mt-2 rounded-xl",
             generating && (data.kind === "image" || data.kind === "video") && "workflow-generator-preview--busy",
           )}
           style={{ aspectRatio: `${frame.width} / ${frame.height}` }}
@@ -1404,7 +2004,10 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           {hasPreviewMedia ? (
             <button
               type="button"
-              className="nodrag nopan absolute inset-x-2 bottom-14 z-[4] rounded-lg border border-white/15 bg-black/35 px-2.5 py-2 text-left text-[12px] leading-snug text-white/92 backdrop-blur-sm transition hover:border-violet-400/45 hover:bg-black/50"
+              className={cn(
+                "nodrag nopan absolute bottom-14 z-[4] border border-white/15 bg-black/35 px-2.5 py-2 text-left text-[12px] leading-snug text-white/92 backdrop-blur-sm transition hover:border-violet-400/45 hover:bg-black/50",
+                data.kind === "image" || data.kind === "video" ? "inset-x-0 rounded-none border-x-0" : "inset-x-2 rounded-lg",
+              )}
               onClick={() => setPromptEditorOpen(true)}
               onPointerDown={(e) => e.stopPropagation()}
               title="Click to edit prompt"
@@ -1426,7 +2029,8 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
 
           <div
             className={cn(
-              "absolute inset-x-0 bottom-0 z-[5] rounded-b-[10px] px-2 pb-2 pt-10 transition-opacity duration-200",
+              "absolute inset-x-0 bottom-0 z-[5] px-2 pb-2 pt-10 transition-opacity duration-200",
+              data.kind === "image" || data.kind === "video" ? "rounded-b-none" : "rounded-b-[10px]",
               "bg-gradient-to-t from-[#0c0c0c] via-[#0c0c0c]/92 to-transparent",
               showEditLayer ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0",
             )}
@@ -1437,10 +2041,16 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                   value={prompt}
                   onChange={(e) => patch(id, { prompt: e.target.value })}
                   placeholder={cfg.promptPlaceholder}
-                  rows={2}
+                  rows={data.kind === "video" ? 4 : 2}
+                  onWheelCapture={keepWheelInsideTextarea}
                   onFocus={() => setPromptFocused(true)}
                   onBlur={() => setPromptFocused(false)}
-                  className="min-h-[42px] w-full resize-none rounded-lg border border-white/10 bg-black/55 px-2 py-1.5 pr-8 text-[11px] leading-snug text-white/88 placeholder:text-white/26 outline-none focus:border-violet-500/40 focus:ring-1 focus:ring-violet-500/25"
+                  className={cn(
+                    "nodrag nopan nowheel w-full resize-none rounded-lg border border-white/10 bg-black/55 px-2 py-1.5 pr-8 text-[11px] leading-snug text-white/88 placeholder:text-white/26 outline-none focus:border-violet-500/40 focus:ring-1 focus:ring-violet-500/25",
+                    data.kind === "video"
+                      ? "min-h-[86px] max-h-[148px] overflow-y-scroll studio-params-scroll"
+                      : "min-h-[42px]",
+                  )}
                 />
               ) : null}
               <button
@@ -1464,19 +2074,19 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               onPointerDown={(e) => e.stopPropagation()}
             >
               {showQuantity ? (
-                <div className="flex h-8 items-center gap-0.5 rounded-full border border-white/12 bg-[#1c1c1f] px-1 text-[11px] font-semibold text-white/88">
+                <div className="flex h-7 items-center gap-0.5 rounded-full border border-white/12 bg-[#1c1c1f] px-1 text-[10px] font-semibold text-white/88">
                   <button
                     type="button"
-                    className="flex h-6 w-6 items-center justify-center rounded-full text-white/55 hover:bg-white/[0.08] hover:text-white"
+                    className="flex h-5 w-5 items-center justify-center rounded-full text-white/55 hover:bg-white/[0.08] hover:text-white"
                     aria-label="Decrease count"
                     onClick={() => patch(id, { quantity: Math.max(1, quantity - 1) })}
                   >
                     <Minus className="h-3 w-3" strokeWidth={2.5} />
                   </button>
-                  <span className="min-w-[2.25rem] text-center tabular-nums">×{quantity}</span>
+                  <span className="min-w-[2rem] text-center tabular-nums">×{quantity}</span>
                   <button
                     type="button"
-                    className="flex h-6 w-6 items-center justify-center rounded-full text-white/55 hover:bg-white/[0.08] hover:text-white"
+                    className="flex h-5 w-5 items-center justify-center rounded-full text-white/55 hover:bg-white/[0.08] hover:text-white"
                     aria-label="Increase count"
                     onClick={() => patch(id, { quantity: Math.min(4, quantity + 1) })}
                   >
@@ -1484,13 +2094,30 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                   </button>
                 </div>
               ) : null}
+              {showQuantity ? (
+                <Select
+                  value={generatorExportMode}
+                  onValueChange={(v) => patch(id, { generatorExportMode: v as "list" | "modules" })}
+                >
+                  <SelectTrigger size="sm" className={cn(selectTriggerClass, "min-w-[6.9rem] max-w-[8rem]")}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className={selectContentClass} position="popper">
+                    {GENERATOR_EXPORT_MODES.map((m) => (
+                      <SelectItem key={m.value} value={m.value} className="text-[12px] focus:bg-violet-500/20">
+                        {m.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : null}
 
               <Select
                 value={model}
                 onValueChange={(v) => patch(id, { model: v })}
                 onOpenChange={setModelMenuOpen}
               >
-                <SelectTrigger size="sm" className={cn(selectTriggerClass, "min-w-[4.5rem] max-w-[7rem]")}>
+                <SelectTrigger size="sm" className={cn(selectTriggerClass, "min-w-[4rem] max-w-[6rem]")}>
                   <SelectValue placeholder="Model" />
                 </SelectTrigger>
                 <SelectContent className={selectContentClass} position="popper">
@@ -1506,7 +2133,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 <div
                   className={cn(
                     selectTriggerClass,
-                    "pointer-events-none min-w-[4.25rem] cursor-default opacity-95",
+                    "pointer-events-none min-w-[3.5rem] cursor-default opacity-95",
                   )}
                   title="Aspect follows uploaded or avatar media"
                 >
@@ -1521,7 +2148,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                   onValueChange={(v) => patch(id, { aspectRatio: v })}
                   onOpenChange={setAspectMenuOpen}
                 >
-                  <SelectTrigger size="sm" className={cn(selectTriggerClass, "min-w-[4.25rem]")}>
+                  <SelectTrigger size="sm" className={cn(selectTriggerClass, "min-w-[3.5rem]")}>
                     <span className="mr-0.5 text-[10px] text-white/45" aria-hidden>
                       {aspectIcon(aspectRatio)}
                     </span>
@@ -1537,122 +2164,86 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 </Select>
               )}
 
-              <div className="relative" ref={settingsRef}>
-                <button
-                  type="button"
-                  title="Resolution & output"
-                  aria-expanded={settingsOpen}
-                  className={cn(
-                    "nodrag nopan flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/12 bg-[#1c1c1f] text-white/65 transition hover:bg-[#252528] hover:text-white",
-                    settingsOpen && "border-violet-500/35 bg-violet-500/10 text-violet-100",
-                  )}
-                  onClick={() => setSettingsOpen((o) => !o)}
+              <Select value={resolution} onValueChange={(v) => patch(id, { resolution: v })}>
+                <SelectTrigger size="sm" className={cn(selectTriggerClass, "min-w-[3.9rem] max-w-[5.5rem]")}>
+                  <SelectValue placeholder="Resolution" />
+                </SelectTrigger>
+                <SelectContent className={selectContentClass} position="popper">
+                  {resolutions.map((r) => (
+                    <SelectItem key={r} value={r} className="text-[12px] focus:bg-violet-500/20">
+                      {r}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {data.kind === "video" && videoDurationOptions.length > 0 ? (
+                <Select
+                  value={String(coerceWorkflowVideoDurationSec(model, data.videoDurationSec))}
+                  onValueChange={(v) => patch(id, { videoDurationSec: Number(v) })}
                 >
-                  <Settings className="h-3.5 w-3.5" strokeWidth={2} />
-                </button>
-                {settingsOpen ? (
-                  <div className="absolute bottom-[calc(100%+6px)] left-0 z-20 w-[min(240px,calc(100vw-2rem))] max-h-[min(70vh,26rem)] overflow-y-auto rounded-xl border border-white/10 bg-[#1a1a1c] p-2.5 shadow-xl">
-                    <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-white/45">
-                      Resolution
-                    </p>
-                    <Select value={resolution} onValueChange={(v) => patch(id, { resolution: v })}>
-                      <SelectTrigger size="sm" className={cn(selectTriggerClass, "h-9 w-full max-w-none rounded-lg")}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className={selectContentClass} position="popper">
-                        {resolutions.map((r) => (
-                          <SelectItem key={r} value={r} className="text-[12px] focus:bg-violet-500/20">
-                            {r}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {data.kind === "video" && videoDurationOptions.length > 0 ? (
-                      <>
-                        <p className="mb-1.5 mt-2.5 text-[10px] font-semibold uppercase tracking-wide text-white/45">
-                          Duration
-                        </p>
-                        <Select
-                          value={String(coerceWorkflowVideoDurationSec(model, data.videoDurationSec))}
-                          onValueChange={(v) => patch(id, { videoDurationSec: Number(v) })}
-                        >
-                          <SelectTrigger size="sm" className={cn(selectTriggerClass, "h-9 w-full max-w-none rounded-lg")}>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent className={selectContentClass} position="popper">
-                            {videoDurationOptions.map((r) => (
-                              <SelectItem key={r} value={r} className="text-[12px] focus:bg-violet-500/20">
-                                {r}s
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </>
-                    ) : data.kind === "video" && videoDurationOptions.length === 0 ? (
-                      <p className="mt-2.5 text-[10px] leading-snug text-white/40">
-                        Veo uses a fixed clip length on the provider (~8s). Duration is not adjustable here.
-                      </p>
-                    ) : null}
-                    {showWorkflowSeedancePreviewPriority ? (
-                      <div className="mt-2.5 space-y-1">
-                        <div className="flex items-center gap-1">
-                          <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Priority</p>
-                          <span
-                            className="inline-flex h-3.5 w-3.5 cursor-help items-center justify-center rounded-full border border-white/18 text-[9px] font-bold text-white/45"
-                            title={WORKFLOW_SEEDANCE_PREVIEW_PRIORITY_INFO}
-                          >
-                            ?
-                          </span>
-                        </div>
-                        <div className="flex gap-1 rounded-lg border border-white/10 bg-black/25 p-1">
-                          {(["normal", "vip"] as const).map((tier) => (
-                            <button
-                              key={tier}
-                              type="button"
-                              onClick={() => patch(id, { videoPriority: tier })}
-                              className={cn(
-                                "nodrag nopan flex-1 rounded-md px-2 py-1 text-[10px] font-semibold transition",
-                                (data.videoPriority ?? "normal") === tier
-                                  ? "border border-violet-400/55 bg-violet-500/15 text-white"
-                                  : "border border-white/8 bg-black/20 text-white/55 hover:text-white/75",
-                              )}
-                            >
-                              {tier === "vip" ? "VIP" : "Normal"}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
+                  <SelectTrigger size="sm" className={cn(selectTriggerClass, "min-w-[3.9rem] max-w-[5.2rem]")}>
+                    <SelectValue placeholder="Duration" />
+                  </SelectTrigger>
+                  <SelectContent className={selectContentClass} position="popper">
+                    {videoDurationOptions.map((r) => (
+                      <SelectItem key={r} value={r} className="text-[12px] focus:bg-violet-500/20">
+                        {r}s
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : data.kind === "video" ? (
+                <span className="inline-flex h-7 items-center rounded-full border border-white/10 bg-black/25 px-2 text-[10px] text-white/45">
+                  Duration fixed
+                </span>
+              ) : null}
+              {showWorkflowSeedancePreviewPriority ? (
+                <div className="flex h-7 items-center gap-1 rounded-full border border-white/12 bg-[#1c1c1f] px-1">
+                  {(["normal", "vip"] as const).map((tier) => (
                     <button
+                      key={tier}
                       type="button"
-                      className="mt-2 w-full rounded-lg py-1.5 text-[11px] text-white/45 hover:bg-white/[0.05] hover:text-white/70"
-                      onClick={() => setSettingsOpen(false)}
+                      title={WORKFLOW_SEEDANCE_PREVIEW_PRIORITY_INFO}
+                      onClick={() => patch(id, { videoPriority: tier })}
+                      className={cn(
+                        "nodrag nopan rounded-full px-1.5 py-0.5 text-[9px] font-semibold transition",
+                        (data.videoPriority ?? "normal") === tier
+                          ? "border border-violet-400/55 bg-violet-500/15 text-white"
+                          : "border border-white/8 bg-black/20 text-white/55 hover:text-white/75",
+                      )}
                     >
-                      Close
+                      {tier === "vip" ? "VIP" : "Normal"}
                     </button>
-                  </div>
-                ) : null}
-              </div>
+                  ))}
+                </div>
+              ) : null}
 
               <div className={cn("nodrag nopan group/run ml-auto flex shrink-0 items-center gap-1.5", hasPreviewMedia && "absolute bottom-2 right-2 z-20 ml-0")}>
                 {estimatedCredits > 0 ? (
-                  <span className={cn("rounded-md border border-white/10 bg-[#1a1a1c] px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-white/65 shadow-sm", hasPreviewMedia && "border-white/15 bg-[#0f0f13]/90 backdrop-blur-sm")}>
-                    {estimatedCredits} cr
+                  <span
+                    className={cn(
+                      "inline-flex h-8 items-center gap-1.5 rounded-full border border-violet-400/35 bg-violet-500/12 px-2.5 text-[11px] font-semibold tabular-nums text-white shadow-[0_8px_24px_rgba(0,0,0,0.35)]",
+                      hasPreviewMedia && "border-violet-300/45 bg-[#0f0f13]/90 backdrop-blur-sm",
+                    )}
+                    title="Estimated credits for this run"
+                  >
+                    <Coins className="h-3.5 w-3.5 text-violet-200" strokeWidth={2.2} aria-hidden />
+                    {estimatedCredits}
                   </span>
                 ) : null}
                 <button
                   type="button"
-                  title={generating ? "Generating…" : hasPreviewMedia ? "Regenerate" : "Generate"}
+                  title={generating ? "Generating…" : hasGeneratedOutput ? "Regenerate" : "Generate"}
                   disabled={generating}
                   className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-zinc-900 shadow-md transition hover:bg-white/95 disabled:cursor-not-allowed disabled:opacity-55"
                   onClick={() => void onGenerate()}
                 >
                   {generating ? (
                     <Loader2 className="h-4 w-4 animate-spin text-zinc-900" aria-hidden />
-                  ) : hasPreviewMedia ? (
+                  ) : hasGeneratedOutput ? (
                     <RotateCcw className="h-4 w-4 text-zinc-900" strokeWidth={2.25} />
                   ) : (
-                    <Play className="h-4 w-4 text-zinc-900" strokeWidth={2.25} fill="currentColor" />
+                    <ArrowRight className="h-4 w-4 text-zinc-900" strokeWidth={2.25} />
                   )}
                 </button>
               </div>
@@ -1679,10 +2270,16 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                   value={prompt}
                   onChange={(e) => patch(id, { prompt: e.target.value })}
                   placeholder={cfg.promptPlaceholder}
-                  rows={7}
+                  rows={data.kind === "video" ? 10 : 7}
+                  onWheelCapture={keepWheelInsideTextarea}
                   onFocus={() => setPromptFocused(true)}
                   onBlur={() => setPromptFocused(false)}
-                  className="min-h-[160px] w-full resize-y rounded-xl border border-white/15 bg-black/45 px-3 py-2 text-[13px] leading-relaxed text-white/92 placeholder:text-white/35 outline-none focus:border-violet-500/40 focus:ring-1 focus:ring-violet-500/25"
+                  className={cn(
+                    "nodrag nopan nowheel w-full resize-y rounded-xl border border-white/15 bg-black/45 px-3 py-2 text-[13px] leading-relaxed text-white/92 placeholder:text-white/35 outline-none focus:border-violet-500/40 focus:ring-1 focus:ring-violet-500/25",
+                    data.kind === "video"
+                      ? "min-h-[220px] max-h-[52vh] overflow-y-scroll studio-params-scroll"
+                      : "min-h-[160px]",
+                  )}
                 />
               </div>
             </div>
@@ -1789,96 +2386,74 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           </div>
         ) : null}
 
-        <Handle
-          id="out"
-          type="source"
-          position={Position.Right}
-          className="!h-3 !w-3 !border-2 !border-violet-500/45 !bg-[#06070d]"
-        />
+        {data.kind !== "video" ? (
+          <Handle
+            id="out"
+            type="source"
+            position={Position.Right}
+            className="!h-3 !w-3 !border-2 !border-violet-500/45 !bg-[#06070d]"
+          />
+        ) : null}
       </div>
       </div>
       </div>
       </div>
-      {showVideoOutputBubbles || showImageGeneratedChainBubble ? (
+  {showVideoOutputBubbles ? (
         <div className="nodrag nopan relative z-[5] flex shrink-0 flex-col gap-1 self-start pt-5">
-          {showVideoOutputBubbles ? (
-            <>
-              <div
-                className={cn(
-                  workflowPortBubbleShellClass,
-                  "nodrag nopan relative",
-                  data.videoExtractedFirstFrameUrl && "border-emerald-400/35",
-                )}
-              >
-                <Handle
-                  id="videoFirst"
-                  type="source"
-                  position={Position.Right}
-                  className={workflowPortSourceBubbleHandleClass}
-                  aria-label="First frame output"
-                  title="First frame, double-click to capture from this video, drag to connect"
-                  onDoubleClick={(e) => {
-                    e.stopPropagation();
-                    void onExtractVideoFrame("first");
-                  }}
-                />
-                <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/65">
-                  {frameExtractBusy === "first" ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} aria-hidden />
-                  ) : (
-                    <ImageIcon className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-                  )}
-                </span>
-              </div>
-              <div
-                className={cn(
-                  workflowPortBubbleShellClass,
-                  "nodrag nopan relative",
-                  data.videoExtractedLastFrameUrl && "border-emerald-400/35",
-                )}
-              >
-                <Handle
-                  id="videoLast"
-                  type="source"
-                  position={Position.Right}
-                  className={workflowPortSourceBubbleHandleClass}
-                  aria-label="Last frame output"
-                  title="Last frame, double-click to capture, drag to the next clip’s start port"
-                  onDoubleClick={(e) => {
-                    e.stopPropagation();
-                    void onExtractVideoFrame("last");
-                  }}
-                />
-                <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/65">
-                  {frameExtractBusy === "last" ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} aria-hidden />
-                  ) : (
-                    <ImageIcon className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-                  )}
-                </span>
-              </div>
-            </>
-          ) : null}
-          {showImageGeneratedChainBubble ? (
-            <div
-              className={cn(workflowPortBubbleShellClass, "nodrag nopan relative border-violet-400/35")}
-              title="Generated image, drag to connect another module"
-            >
-              <Handle
-                id="generated"
-                type="source"
-                position={Position.Right}
-                className={workflowPortSourceBubbleHandleClass}
-                aria-label="Generated image output"
-              />
-              <span className="pointer-events-none absolute inset-0 z-[1] flex flex-col items-center justify-center gap-0.5 px-0.5 text-center">
-                <ImageIcon className="h-3 w-3 text-violet-200/90" strokeWidth={2} aria-hidden />
-                <span className="max-w-[2.1rem] text-[7px] font-semibold uppercase leading-[1.05] tracking-wide text-violet-200/75">
-                  Gen
-                </span>
-              </span>
-            </div>
-          ) : null}
+          <div
+            className={cn(
+              workflowPortBubbleShellClass,
+              "nodrag nopan relative",
+              data.videoExtractedFirstFrameUrl && "border-emerald-400/35",
+            )}
+          >
+            <Handle
+              id="videoFirst"
+              type="source"
+              position={Position.Right}
+              className={workflowPortSourceBubbleHandleClass}
+              aria-label="First frame output"
+              title="First frame, double-click to capture from this video, drag to connect"
+              onDoubleClick={(e) => {
+                e.stopPropagation();
+                void onExtractVideoFrame("first");
+              }}
+            />
+            <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/65">
+              {frameExtractBusy === "first" ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} aria-hidden />
+              ) : (
+                <ImageIcon className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+              )}
+            </span>
+          </div>
+          <div
+            className={cn(
+              workflowPortBubbleShellClass,
+              "nodrag nopan relative",
+              data.videoExtractedLastFrameUrl && "border-emerald-400/35",
+            )}
+          >
+            <Handle
+              id="videoLast"
+              type="source"
+              position={Position.Right}
+              className={workflowPortSourceBubbleHandleClass}
+              aria-label="Last frame output"
+              title="Last frame, double-click to capture, drag to the next clip’s start port"
+              onDoubleClick={(e) => {
+                e.stopPropagation();
+                void onExtractVideoFrame("last");
+              }}
+            />
+            <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/65">
+              {frameExtractBusy === "last" ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} aria-hidden />
+              ) : (
+                <ImageIcon className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+              )}
+            </span>
+          </div>
         </div>
       ) : null}
       </div>

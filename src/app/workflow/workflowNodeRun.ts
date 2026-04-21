@@ -3,6 +3,7 @@ import type { Edge, Node } from "@xyflow/react";
 import type { AdAssetNodeData } from "@/app/workflow/nodes/AdAssetNode";
 import type { ImageRefNodeData } from "@/app/workflow/nodes/ImageRefNode";
 import type { TextPromptNodeData } from "@/app/workflow/nodes/TextPromptNode";
+import type { PromptListNodeData } from "@/app/workflow/workflowPromptListTypes";
 import type { StickyNoteNodeData } from "@/app/workflow/workflowStickyNoteTypes";
 import { calculateVideoCredits } from "@/lib/linkToAd/generationCredits";
 import { studioImageCreditsChargedTotal } from "@/lib/pricing";
@@ -53,9 +54,136 @@ function textFromUpstreamNode(n: Node): string {
   }
   if (n.type === "adAsset") {
     const d = n.data as AdAssetNodeData;
+    if (d.kind === "assistant") {
+      const out = (d.assistantOutput ?? "").trim();
+      if (out) return out;
+    }
     return (d.prompt ?? "").trim();
   }
+  if (n.type === "promptList") {
+    const d = n.data as PromptListNodeData;
+    return (d.lines ?? []).map((x) => x.trim()).filter(Boolean).join("\n\n");
+  }
   return "";
+}
+
+function isProbablyImageUrl(s: string): boolean {
+  const u = s.trim().toLowerCase();
+  if (!u.startsWith("http") && !u.startsWith("blob:") && !u.startsWith("data:")) return false;
+  return /\.(png|jpe?g|webp|gif)(\?|$)/i.test(u) || u.includes("/image");
+}
+
+function isProbablyVideoUrl(s: string): boolean {
+  const u = s.trim().toLowerCase();
+  if (!u.startsWith("http") && !u.startsWith("blob:") && !u.startsWith("data:")) return false;
+  return /\.(mp4|webm|mov)(\?|$)/i.test(u);
+}
+
+function promptListOutputKind(d: PromptListNodeData): "text" | "image" | "video" {
+  if (d.contentKind === "media") {
+    const lines = (d.lines ?? []).map((x) => x.trim()).filter(Boolean);
+    const images = lines.filter((u) => isProbablyImageUrl(u)).length;
+    const videos = lines.filter((u) => isProbablyVideoUrl(u)).length;
+    if (videos > images) return "video";
+    return "image";
+  }
+  const lines = (d.lines ?? []).map((x) => x.trim()).filter(Boolean);
+  if (!lines.length) return "text";
+  const images = lines.filter((u) => isProbablyImageUrl(u)).length;
+  const videos = lines.filter((u) => isProbablyVideoUrl(u)).length;
+  const imageMajority = images >= Math.ceil(lines.length * 0.6);
+  const videoMajority = videos >= Math.ceil(lines.length * 0.6);
+  if (videoMajority && videos >= images) return "video";
+  if (imageMajority) return "image";
+  return "text";
+}
+
+/** Split pasted / assistant text into discrete prompts (max 50). */
+export function splitIntoPromptLines(raw: string): string[] {
+  const t = raw.replace(/\r\n/g, "\n").trim();
+  if (!t) return [];
+  const blocks = t
+    .split(/\n{3,}/)
+    .map((b) => b.trim())
+    .filter(Boolean);
+  const chunks = blocks.length > 1 ? blocks : t.split("\n").map((l) => l.trim()).filter(Boolean);
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const c of chunks) {
+    if (!c || seen.has(c)) continue;
+    seen.add(c);
+    out.push(c);
+  }
+  return out.slice(0, 50);
+}
+
+/**
+ * When a **Prompt list** is wired to the generator’s `text` port, each list line becomes its own job
+ * (parallel batch). Otherwise behaves like the classic `composeWorkflowPrompt` merge.
+ */
+export function collectWorkflowBatchPrompts(
+  nodes: Node[],
+  edges: Edge[],
+  targetNodeId: string,
+  targetHandles: string[],
+  localPrompt: string,
+): { batch: string[] | null; composedSingle: string } {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const wanted = new Set(targetHandles);
+  const incoming = edges.filter((e) => {
+    if (e.target !== targetNodeId) return false;
+    const h = e.targetHandle ?? "";
+    return wanted.has(h);
+  });
+
+  const appendLocal = (chunk: string) => {
+    const loc = localPrompt.trim();
+    const ch = chunk.trim();
+    if (!loc) return ch;
+    if (!ch) return loc;
+    return `${ch}\n\n${loc}`;
+  };
+
+  let hasList = false;
+  const flat: string[] = [];
+  for (const e of incoming) {
+    const src = byId.get(e.source);
+    if (!src) continue;
+    if (src.type === "promptList") {
+      const srcHandle = e.sourceHandle ?? "out";
+      const srcKind = promptListOutputKind(src.data as PromptListNodeData);
+      const canEmitText = srcHandle === "outText" || (srcHandle === "out" && srcKind === "text");
+      if (!canEmitText) continue;
+      hasList = true;
+      const d = src.data as PromptListNodeData;
+      for (const line of (d.lines ?? []).map((x) => x.trim()).filter(Boolean)) {
+        flat.push(appendLocal(line));
+      }
+      continue;
+    }
+    const t = textFromUpstreamNode(src).trim();
+    if (t) flat.push(appendLocal(t));
+  }
+
+  if (hasList && flat.length) {
+    return { batch: flat, composedSingle: "" };
+  }
+
+  const linkedParts: string[] = [];
+  for (const e of incoming) {
+    const src = byId.get(e.source);
+    if (!src) continue;
+    if (src.type === "promptList") {
+      const srcHandle = e.sourceHandle ?? "out";
+      const srcKind = promptListOutputKind(src.data as PromptListNodeData);
+      const canEmitText = srcHandle === "outText" || (srcHandle === "out" && srcKind === "text");
+      if (!canEmitText) continue;
+    }
+    const t = textFromUpstreamNode(src).trim();
+    if (t) linkedParts.push(t);
+  }
+  const composedSingle = composeWorkflowPrompt(localPrompt, linkedParts);
+  return { batch: null, composedSingle };
 }
 
 /** Collect non-empty text from nodes connected to this node's target handle `in`. */
@@ -68,6 +196,12 @@ export function collectLinkedPromptTexts(nodes: Node[], edges: Edge[], targetNod
   for (const e of incoming) {
     const src = byId.get(e.source);
     if (!src) continue;
+    if (src.type === "promptList") {
+      const srcHandle = e.sourceHandle ?? "out";
+      const srcKind = promptListOutputKind(src.data as PromptListNodeData);
+      const canEmitText = srcHandle === "outText" || (srcHandle === "out" && srcKind === "text");
+      if (!canEmitText) continue;
+    }
     const t = textFromUpstreamNode(src).trim();
     if (t) parts.push(t);
   }
@@ -92,6 +226,12 @@ export function collectLinkedPromptTextsForHandles(
   for (const e of incoming) {
     const src = byId.get(e.source);
     if (!src) continue;
+    if (src.type === "promptList") {
+      const srcHandle = e.sourceHandle ?? "out";
+      const srcKind = promptListOutputKind(src.data as PromptListNodeData);
+      const canEmitText = srcHandle === "outText" || (srcHandle === "out" && srcKind === "text");
+      if (!canEmitText) continue;
+    }
     const t = textFromUpstreamNode(src).trim();
     if (t) parts.push(t);
   }
@@ -113,6 +253,18 @@ export function collectLinkedImageUrl(nodes: Node[], edges: Edge[], targetNodeId
   for (const e of incoming) {
     const src = byId.get(e.source);
     if (!src) continue;
+    if (src.type === "promptList") {
+      const d = src.data as PromptListNodeData;
+      const srcHandle = e.sourceHandle ?? "out";
+      const kind = promptListOutputKind(d);
+      if (!(srcHandle === "outImage" || srcHandle === "out" || kind === "image")) continue;
+      for (const line of (d.lines ?? []).map((x) => x.trim()).filter(Boolean)) {
+        if (!isProbablyImageUrl(line) || seen.has(line)) continue;
+        seen.add(line);
+        urls.push(line);
+      }
+      continue;
+    }
     if (src.type === "imageRef") {
       const d = src.data as ImageRefNodeData;
       if (d.mediaKind === "video") continue;
@@ -143,6 +295,18 @@ export function collectLinkedImageUrls(nodes: Node[], edges: Edge[], targetNodeI
   for (const e of incoming) {
     const src = byId.get(e.source);
     if (!src) continue;
+    if (src.type === "promptList") {
+      const d = src.data as PromptListNodeData;
+      const srcHandle = e.sourceHandle ?? "out";
+      const kind = promptListOutputKind(d);
+      if (!(srcHandle === "outImage" || srcHandle === "out" || kind === "image")) continue;
+      for (const line of (d.lines ?? []).map((x) => x.trim()).filter(Boolean)) {
+        if (!isProbablyImageUrl(line) || seen.has(line)) continue;
+        seen.add(line);
+        urls.push(line);
+      }
+      continue;
+    }
     if (src.type === "imageRef") {
       const d = src.data as ImageRefNodeData;
       if (d.mediaKind === "video") continue;
@@ -233,6 +397,60 @@ export function collectLinkedImageUrlsForHandles(
     if (!url || seen.has(url)) continue;
     if (kind === "video") continue;
     if (d.kind === "video" && d.referenceMediaKind !== "image" && !out) continue;
+    seen.add(url);
+    urls.push(url);
+  }
+  return urls;
+}
+
+/** Linked video URLs filtered by target handles on the destination node. */
+export function collectLinkedVideoUrlsForHandles(
+  nodes: Node[],
+  edges: Edge[],
+  targetNodeId: string,
+  targetHandles: string[],
+): string[] {
+  const wanted = new Set(targetHandles);
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const incoming = edges.filter((e) => {
+    if (e.target !== targetNodeId) return false;
+    const h = e.targetHandle ?? "in";
+    return wanted.has(h);
+  });
+  const urls: string[] = [];
+  const seen = new Set<string>();
+  for (const e of incoming) {
+    const src = byId.get(e.source);
+    if (!src) continue;
+    if (src.type === "promptList") {
+      const d = src.data as PromptListNodeData;
+      const srcHandle = e.sourceHandle ?? "out";
+      const kind = promptListOutputKind(d);
+      if (!(srcHandle === "outVideo" || (srcHandle === "out" && kind === "video"))) continue;
+      for (const line of (d.lines ?? []).map((x) => x.trim()).filter(Boolean)) {
+        if (!isProbablyVideoUrl(line) || seen.has(line)) continue;
+        seen.add(line);
+        urls.push(line);
+      }
+      continue;
+    }
+    if (src.type === "imageRef") {
+      const d = src.data as ImageRefNodeData;
+      if (d.mediaKind !== "video") continue;
+      const url = d.imageUrl?.trim();
+      if (!url || seen.has(url)) continue;
+      seen.add(url);
+      urls.push(url);
+      continue;
+    }
+    if (src.type !== "adAsset") continue;
+    const d = src.data as AdAssetNodeData;
+    const out = d.outputPreviewUrl?.trim();
+    const ref = d.referencePreviewUrl?.trim();
+    const url = out || ref;
+    if (!url || seen.has(url)) continue;
+    const kind = d.outputMediaKind ?? d.referenceMediaKind;
+    if (kind !== "video") continue;
     seen.add(url);
     urls.push(url);
   }

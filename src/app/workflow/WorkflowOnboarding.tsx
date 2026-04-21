@@ -12,7 +12,7 @@ const genDefaults = (kind: AdAssetNodeData["kind"]): Pick<
   "prompt" | "model" | "aspectRatio" | "resolution" | "quantity"
 > => ({
   prompt: "",
-  model: "auto",
+  model: kind === "video" ? "kling-3.0/video" : kind === "assistant" ? "creative" : "nano",
   aspectRatio: kind === "video" ? "9:16" : "1:1",
   resolution: kind === "video" ? "720p" : "1024",
   quantity: 1,

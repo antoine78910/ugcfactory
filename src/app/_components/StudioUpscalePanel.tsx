@@ -33,7 +33,7 @@ import { userMessageFromCaughtError } from "@/lib/generationUserMessage";
 import { uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
 import {
   assertStudioVideoUpload,
-  FORMAT_HINT_VIDEO_FR,
+  FORMAT_HINT_VIDEO,
   STUDIO_IMAGE_FILE_ACCEPT,
   STUDIO_VIDEO_FILE_ACCEPT,
 } from "@/lib/studioUploadValidation";
@@ -225,7 +225,7 @@ export default function StudioUpscalePanel() {
       assertStudioVideoUpload(f);
     } catch (err) {
       toast.error("Vidéo non prise en charge", {
-        description: userMessageFromCaughtError(err, FORMAT_HINT_VIDEO_FR),
+        description: userMessageFromCaughtError(err, FORMAT_HINT_VIDEO),
       });
       return;
     }

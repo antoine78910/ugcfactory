@@ -37,7 +37,7 @@ export async function POST(req: Request) {
     try {
       assertGenericMultipartUpload(file);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Format de fichier non pris en charge.";
+      const msg = err instanceof Error ? err.message : "Unsupported file format.";
       return NextResponse.json({ error: msg }, { status: 400 });
     }
 

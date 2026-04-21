@@ -1,6 +1,6 @@
 /**
  * Shared upload rules (Studio, Link to Ad, motion, API /uploads).
- * HEIC/HEIF are rejected with an explicit French message (common iPhone issue).
+ * HEIC/HEIF are rejected with an explicit message (common iPhone issue).
  */
 
 export const STUDIO_IMAGE_FILE_ACCEPT =
@@ -32,15 +32,26 @@ const HEIC_MIMES = new Set([
 
 const HEIC_EXTS = new Set([".heic", ".heif"]);
 
-export const FORMAT_HINT_IMAGE_FR =
-  "Formats acceptés : JPEG, PNG, WebP ou GIF (pas HEIC, convertis depuis l’iPhone ou un outil en ligne).";
+export const FORMAT_HINT_IMAGE =
+  "Allowed: JPEG, PNG, WebP, or GIF (not HEIC—export as “Most Compatible” on iPhone or convert online).";
 
-export const FORMAT_HINT_VIDEO_FR = "Formats acceptés : MP4, MOV ou WebM.";
+export const FORMAT_HINT_VIDEO = "Allowed: MP4, MOV, or WebM.";
 
-export const FORMAT_HINT_AUDIO_FR = "Formats acceptés : MP3 ou WAV (max ~15 s recommandé pour Seedance).";
+/** @deprecated Use {@link FORMAT_HINT_VIDEO} */
+export const FORMAT_HINT_VIDEO_FR = FORMAT_HINT_VIDEO;
 
-export const HEIC_NOT_SUPPORTED_FR =
-  "Le format HEIC / HEIF n’est pas pris en charge. Exporte en JPEG ou PNG (Réglages iPhone > Appareil photo > Formats > « Le plus compatible »), ou convertis le fichier avant l’envoi.";
+export const FORMAT_HINT_AUDIO =
+  "Allowed: MP3 or WAV (about 15 seconds or less is recommended for Seedance audio references).";
+
+export const HEIC_NOT_SUPPORTED_MESSAGE =
+  "HEIC / HEIF is not supported. On iPhone: Settings → Camera → Formats → “Most Compatible”, or export to JPEG/PNG before uploading.";
+
+/** @deprecated Use {@link FORMAT_HINT_IMAGE} */
+export const FORMAT_HINT_IMAGE_FR = FORMAT_HINT_IMAGE;
+/** @deprecated Use {@link FORMAT_HINT_AUDIO} */
+export const FORMAT_HINT_AUDIO_FR = FORMAT_HINT_AUDIO;
+/** @deprecated Use {@link HEIC_NOT_SUPPORTED_MESSAGE} */
+export const HEIC_NOT_SUPPORTED_FR = HEIC_NOT_SUPPORTED_MESSAGE;
 
 export function normalizeMime(mime: string): string {
   const m = mime.toLowerCase().trim();
@@ -82,17 +93,17 @@ export function isAllowedStudioAudioFile(file: File): boolean {
 
 export function assertStudioImageUpload(file: File): void {
   if (isHeicLike(file)) {
-    throw new Error(HEIC_NOT_SUPPORTED_FR);
+    throw new Error(HEIC_NOT_SUPPORTED_MESSAGE);
   }
   if (isAllowedStudioImageFile(file)) return;
   const ext = fileExtensionLower(file);
   const mime = normalizeMime(file.type || "");
   if (mime.startsWith("image/") || ext) {
     throw new Error(
-      `Format d’image non pris en charge (${ext || mime || "?"}). ${FORMAT_HINT_IMAGE_FR}`,
+      `Unsupported image format (${ext || mime || "?"}). ${FORMAT_HINT_IMAGE}`,
     );
   }
-  throw new Error(`Impossible de reconnaître l’image. ${FORMAT_HINT_IMAGE_FR}`);
+  throw new Error(`Could not detect a valid image. ${FORMAT_HINT_IMAGE}`);
 }
 
 export function assertStudioAudioUpload(file: File): void {
@@ -100,26 +111,24 @@ export function assertStudioAudioUpload(file: File): void {
   const ext = fileExtensionLower(file);
   const mime = normalizeMime(file.type || "");
   if (mime.startsWith("audio/") || AUDIO_EXTS.has(ext)) {
-    throw new Error(`Format audio non pris en charge (${ext || mime || "?"}). ${FORMAT_HINT_AUDIO_FR}`);
+    throw new Error(`Unsupported audio format (${ext || mime || "?"}). ${FORMAT_HINT_AUDIO}`);
   }
-  throw new Error(`Format audio non reconnu. ${FORMAT_HINT_AUDIO_FR}`);
+  throw new Error(`Unrecognized audio file. ${FORMAT_HINT_AUDIO}`);
 }
 
 export function assertStudioVideoUpload(file: File): void {
   if (isHeicLike(file)) {
-    throw new Error(
-      "Ce fichier ressemble à une photo HEIC, pas à une vidéo. " + HEIC_NOT_SUPPORTED_FR,
-    );
+    throw new Error("This file looks like a HEIC photo, not a video. " + HEIC_NOT_SUPPORTED_MESSAGE);
   }
   if (isAllowedStudioVideoFile(file)) return;
   const ext = fileExtensionLower(file);
   const mime = normalizeMime(file.type || "");
   if (mime.startsWith("video/") || ext === ".m4v" || ext === ".avi") {
     throw new Error(
-      `Format vidéo non pris en charge (${ext || mime || "?"}). ${FORMAT_HINT_VIDEO_FR}`,
+      `Unsupported video format (${ext || mime || "?"}). ${FORMAT_HINT_VIDEO}`,
     );
   }
-  throw new Error(`Format vidéo non reconnu. ${FORMAT_HINT_VIDEO_FR}`);
+  throw new Error(`Unrecognized video file. ${FORMAT_HINT_VIDEO}`);
 }
 
 export function assertStudioUploadForKind(file: File, kind: "image" | "video" | "audio"): void {
@@ -139,7 +148,7 @@ export function inferStudioUploadKind(file: File): "image" | "video" | "audio" {
 /** `/api/uploads`: multipart file must be an allowed image or video. */
 export function assertGenericMultipartUpload(file: File): void {
   if (isHeicLike(file)) {
-    throw new Error(HEIC_NOT_SUPPORTED_FR);
+    throw new Error(HEIC_NOT_SUPPORTED_MESSAGE);
   }
   if (isAllowedStudioVideoFile(file)) return;
   if (isAllowedStudioAudioFile(file)) return;
@@ -154,18 +163,18 @@ export function assertGenericMultipartUpload(file: File): void {
 
   if (looksVideo) {
     throw new Error(
-      `Format vidéo non pris en charge (${ext || mime}). ${FORMAT_HINT_VIDEO_FR}`,
+      `Unsupported video format (${ext || mime}). ${FORMAT_HINT_VIDEO}`,
     );
   }
   if (looksAudio) {
     throw new Error(
-      `Format audio non pris en charge (${ext || mime}). ${FORMAT_HINT_AUDIO_FR}`,
+      `Unsupported audio format (${ext || mime}). ${FORMAT_HINT_AUDIO}`,
     );
   }
   if (looksImage) {
     throw new Error(
-      `Format d’image non pris en charge (${ext || mime}). ${FORMAT_HINT_IMAGE_FR}`,
+      `Unsupported image format (${ext || mime}). ${FORMAT_HINT_IMAGE}`,
     );
   }
-  throw new Error(`${FORMAT_HINT_IMAGE_FR} ${FORMAT_HINT_VIDEO_FR} ${FORMAT_HINT_AUDIO_FR}`);
+  throw new Error(`${FORMAT_HINT_IMAGE} ${FORMAT_HINT_VIDEO} ${FORMAT_HINT_AUDIO}`);
 }

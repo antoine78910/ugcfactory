@@ -3,6 +3,7 @@ import type { Edge } from "@xyflow/react";
 import type { AdAssetNodeType } from "./nodes/AdAssetNode";
 import type { ImageRefNodeType } from "./nodes/ImageRefNode";
 import type { TextPromptNodeType } from "./nodes/TextPromptNode";
+import type { PromptListNodeType } from "./workflowPromptListTypes";
 import type { StickyNoteNodeType } from "./workflowStickyNoteTypes";
 import type { WorkflowGroupNodeType } from "./nodes/WorkflowGroupNode";
 import type { WorkflowCanvasNode } from "./workflowFlowTypes";
@@ -92,6 +93,15 @@ export function collectWorkflowSelectionNodeRefs(
   for (const t of selectedTextPrompts) {
     if (addedIds.has(t.id)) continue;
     const nodeRef = allNodes.find((x) => x.id === t.id) ?? t;
+    if (!addedIds.has(nodeRef.id)) {
+      out.push(nodeRef);
+      addedIds.add(nodeRef.id);
+    }
+  }
+  const selectedPromptLists = selected.filter((n): n is PromptListNodeType => n.type === "promptList");
+  for (const l of selectedPromptLists) {
+    if (addedIds.has(l.id)) continue;
+    const nodeRef = allNodes.find((x) => x.id === l.id) ?? l;
     if (!addedIds.has(nodeRef.id)) {
       out.push(nodeRef);
       addedIds.add(nodeRef.id);
@@ -240,6 +250,21 @@ export function cloneWorkflowSelection(
       data: structuredClone(t.data),
       selected: false,
       zIndex: t.zIndex ?? 1,
+    });
+    selectIds.push(newId);
+  }
+  const selectedPromptLists = refs.filter((n): n is PromptListNodeType => n.type === "promptList");
+  for (const l of selectedPromptLists) {
+    if (idMap.has(l.id)) continue;
+    const newId = crypto.randomUUID();
+    idMap.set(l.id, newId);
+    nodesToAdd.push({
+      id: newId,
+      type: "promptList",
+      position: { x: l.position.x + DX, y: l.position.y + DY },
+      data: structuredClone(l.data),
+      selected: false,
+      zIndex: l.zIndex ?? 1,
     });
     selectIds.push(newId);
   }

@@ -281,6 +281,26 @@
   height: 0;
 }
 
+/* Minimal visible scrollbar: only appears when content overflows. */
+.studio-minimal-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+.studio-minimal-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.studio-minimal-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.studio-minimal-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+}
+.studio-minimal-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.26);
+}
+
 /* Native <audio controls>: dark panel + violet-500 accents (not pink/rose) */
 .studio-native-audio {
   accent-color: rgb(139 92 246);
@@ -425,6 +445,18 @@
 /* Let port bubbles sit outside the card without being clipped. */
 .workflow-flow .react-flow__node {
   overflow: visible;
+}
+
+/* Workflow selects: keep option text readable on hover/focus/highlight. */
+.workflow-flow [data-slot="select-content"] [data-slot="select-item"] {
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.workflow-flow [data-slot="select-content"] [data-slot="select-item"]:hover,
+.workflow-flow [data-slot="select-content"] [data-slot="select-item"]:focus,
+.workflow-flow [data-slot="select-content"] [data-slot="select-item"]:focus-visible,
+.workflow-flow [data-slot="select-content"] [data-slot="select-item"][data-highlighted] {
+  color: rgba(255, 255, 255, 0.96) !important;
 }
 
 /* Workflow template preview: nodes are view-only; pan/zoom still work on the pane. */
