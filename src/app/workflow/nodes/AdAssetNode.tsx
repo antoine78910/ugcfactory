@@ -251,7 +251,11 @@ function keepWheelInsideTextarea(e: React.WheelEvent<HTMLTextAreaElement>) {
 }
 
 const selectTriggerClass =
-  "nodrag nopan h-6 max-h-6 min-h-6 shrink-0 rounded-full border-white/12 bg-[#1c1c1f] text-[9px] font-medium text-white/90 shadow-none hover:bg-[#252528] focus:ring-1 focus:ring-violet-500/35 data-[size=default]:h-6 px-1.5 gap-0.5";
+  "nodrag nopan h-6 max-h-6 min-h-6 shrink-0 rounded-full border-white/12 bg-[#1c1c1f] text-[9px] font-medium text-white/90 shadow-none hover:bg-[#252528] focus:ring-1 focus:ring-violet-500/35 data-[size=default]:h-6 data-[size=sm]:h-6 px-1.5 gap-0.5 [&>svg:last-of-type]:h-3 [&>svg:last-of-type]:w-3 [&>svg:last-of-type]:opacity-45";
+
+/** Tighter selects in the image/video generator bottom strip (single-line layout). */
+const generatorSelectTriggerExtras =
+  "[&_[data-slot=select-value]]:max-w-[4.25rem] [&_[data-slot=select-value]]:truncate [&_[data-slot=select-value]]:text-left";
 
 const selectContentClass = "max-h-[min(240px,50vh)] border-white/10 bg-[#1a1a1c] text-white";
 
@@ -2030,7 +2034,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
 
           <div
             className={cn(
-              "absolute inset-x-0 bottom-0 z-[5] px-2 pb-2 pt-10 transition-opacity duration-200",
+              "absolute inset-x-0 bottom-0 z-[5] px-2 pb-1.5 pt-7 transition-opacity duration-200",
               data.kind === "image" || data.kind === "video" ? "rounded-b-none" : "rounded-b-[10px]",
               "bg-gradient-to-t from-[#0c0c0c] via-[#0c0c0c]/92 to-transparent",
               showEditLayer ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0",
@@ -2042,15 +2046,15 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                   value={prompt}
                   onChange={(e) => patch(id, { prompt: e.target.value })}
                   placeholder={cfg.promptPlaceholder}
-                  rows={data.kind === "video" ? 4 : 2}
+                  rows={data.kind === "video" ? 3 : 2}
                   onWheelCapture={keepWheelInsideTextarea}
                   onFocus={() => setPromptFocused(true)}
                   onBlur={() => setPromptFocused(false)}
                   className={cn(
-                    "nodrag nopan nowheel w-full resize-none rounded-lg border border-white/10 bg-black/55 px-2 py-1.5 pr-8 text-[11px] leading-snug text-white/88 placeholder:text-white/26 outline-none focus:border-violet-500/40 focus:ring-1 focus:ring-violet-500/25",
+                    "nodrag nopan nowheel w-full resize-none rounded-lg border border-white/10 bg-black/55 px-2 py-1 pr-7 text-[10px] leading-snug text-white/88 placeholder:text-white/26 outline-none focus:border-violet-500/40 focus:ring-1 focus:ring-violet-500/25",
                     data.kind === "video"
-                      ? "min-h-[86px] max-h-[148px] overflow-y-scroll studio-params-scroll"
-                      : "min-h-[42px]",
+                      ? "min-h-[72px] max-h-[120px] overflow-y-scroll studio-params-scroll"
+                      : "min-h-[34px] max-h-[72px] overflow-y-scroll studio-params-scroll",
                   )}
                 />
               ) : null}
@@ -2059,7 +2063,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 title="Prompt assistant, describe what you want"
                 className={cn(
                   "rounded-md p-1 text-violet-300/85 transition hover:bg-violet-500/15 hover:text-violet-100",
-                  hasPreviewMedia ? "absolute right-1 top-1" : "absolute bottom-1.5 right-1",
+                  hasPreviewMedia ? "absolute right-0.5 top-0.5" : "absolute bottom-1 right-0.5",
                 )}
                 onClick={() => {
                   setAssistantOpen(true);
@@ -2071,164 +2075,173 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             </div>
 
             <div
-              className="nodrag nopan mt-1.5 flex min-w-0 w-full flex-wrap items-center gap-1"
+              className="nodrag nopan mt-1 flex min-w-0 w-full flex-nowrap items-center gap-1"
               onPointerDown={(e) => e.stopPropagation()}
             >
-              {showQuantity ? (
-                <div className="flex h-7 items-center gap-0.5 rounded-full border border-white/12 bg-[#1c1c1f] px-1 text-[10px] font-semibold text-white/88">
-                  <button
-                    type="button"
-                    className="flex h-5 w-5 items-center justify-center rounded-full text-white/55 hover:bg-white/[0.08] hover:text-white"
-                    aria-label="Decrease count"
-                    onClick={() => patch(id, { quantity: Math.max(1, quantity - 1) })}
+              <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-0.5 overflow-x-auto overflow-y-visible py-0.5 studio-params-scroll">
+                {showQuantity ? (
+                  <div className="flex h-6 shrink-0 items-center gap-px rounded-full border border-white/12 bg-[#1c1c1f] px-0.5 text-[9px] font-semibold text-white/88">
+                    <button
+                      type="button"
+                      className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-white/55 hover:bg-white/[0.08] hover:text-white"
+                      aria-label="Decrease count"
+                      onClick={() => patch(id, { quantity: Math.max(1, quantity - 1) })}
+                    >
+                      <Minus className="h-2.5 w-2.5" strokeWidth={2.5} />
+                    </button>
+                    <span className="min-w-[1.35rem] text-center tabular-nums">×{quantity}</span>
+                    <button
+                      type="button"
+                      className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-white/55 hover:bg-white/[0.08] hover:text-white"
+                      aria-label="Increase count"
+                      onClick={() => patch(id, { quantity: Math.min(4, quantity + 1) })}
+                    >
+                      <Plus className="h-2.5 w-2.5" strokeWidth={2.5} />
+                    </button>
+                  </div>
+                ) : null}
+                {showQuantity ? (
+                  <Select
+                    value={generatorExportMode}
+                    onValueChange={(v) => patch(id, { generatorExportMode: v as "list" | "modules" })}
                   >
-                    <Minus className="h-3 w-3" strokeWidth={2.5} />
-                  </button>
-                  <span className="min-w-[2rem] text-center tabular-nums">×{quantity}</span>
-                  <button
-                    type="button"
-                    className="flex h-5 w-5 items-center justify-center rounded-full text-white/55 hover:bg-white/[0.08] hover:text-white"
-                    aria-label="Increase count"
-                    onClick={() => patch(id, { quantity: Math.min(4, quantity + 1) })}
+                    <SelectTrigger
+                      size="sm"
+                      className={cn(selectTriggerClass, generatorSelectTriggerExtras, "min-w-0 max-w-[5.75rem] shrink-0")}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className={selectContentClass} position="popper">
+                      {GENERATOR_EXPORT_MODES.map((m) => (
+                        <SelectItem key={m.value} value={m.value} className="text-[12px] focus:bg-violet-500/20">
+                          {m.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : null}
+
+                <Select value={model} onValueChange={(v) => patch(id, { model: v })} onOpenChange={setModelMenuOpen}>
+                  <SelectTrigger
+                    size="sm"
+                    className={cn(selectTriggerClass, generatorSelectTriggerExtras, "min-w-0 max-w-[5.25rem] shrink-0")}
                   >
-                    <Plus className="h-3 w-3" strokeWidth={2.5} />
-                  </button>
-                </div>
-              ) : null}
-              {showQuantity ? (
-                <Select
-                  value={generatorExportMode}
-                  onValueChange={(v) => patch(id, { generatorExportMode: v as "list" | "modules" })}
-                >
-                  <SelectTrigger size="sm" className={cn(selectTriggerClass, "min-w-[6.9rem] max-w-[8rem]")}>
-                    <SelectValue />
+                    <SelectValue placeholder="Model" />
                   </SelectTrigger>
                   <SelectContent className={selectContentClass} position="popper">
-                    {GENERATOR_EXPORT_MODES.map((m) => (
+                    {models.map((m) => (
                       <SelectItem key={m.value} value={m.value} className="text-[12px] focus:bg-violet-500/20">
                         {m.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-              ) : null}
 
-              <Select
-                value={model}
-                onValueChange={(v) => patch(id, { model: v })}
-                onOpenChange={setModelMenuOpen}
-              >
-                <SelectTrigger size="sm" className={cn(selectTriggerClass, "min-w-[4rem] max-w-[6rem]")}>
-                  <SelectValue placeholder="Model" />
-                </SelectTrigger>
-                <SelectContent className={selectContentClass} position="popper">
-                  {models.map((m) => (
-                    <SelectItem key={m.value} value={m.value} className="text-[12px] focus:bg-violet-500/20">
-                      {m.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {aspectLocked ? (
-                <div
-                  className={cn(
-                    selectTriggerClass,
-                    "pointer-events-none min-w-[3.5rem] cursor-default opacity-95",
-                  )}
-                  title="Aspect follows uploaded or avatar media"
-                >
-                  <span className="mr-0.5 text-[10px] text-white/45" aria-hidden>
-                    {aspectIcon(aspectRatio)}
-                  </span>
-                  <span className="truncate text-[10px] text-white/75">{aspectRatio}</span>
-                </div>
-              ) : (
-                <Select
-                  value={aspectRatio}
-                  onValueChange={(v) => patch(id, { aspectRatio: v })}
-                  onOpenChange={setAspectMenuOpen}
-                >
-                  <SelectTrigger size="sm" className={cn(selectTriggerClass, "min-w-[3.5rem]")}>
-                    <span className="mr-0.5 text-[10px] text-white/45" aria-hidden>
+                {aspectLocked ? (
+                  <div
+                    className={cn(
+                      selectTriggerClass,
+                      "pointer-events-none min-w-0 max-w-[3.25rem] shrink-0 cursor-default opacity-95",
+                    )}
+                    title="Aspect follows uploaded or avatar media"
+                  >
+                    <span className="mr-0.5 shrink-0 text-[9px] text-white/45" aria-hidden>
                       {aspectIcon(aspectRatio)}
                     </span>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className={selectContentClass} position="popper">
-                    {aspects.map((r) => (
-                      <SelectItem key={r} value={r} className="text-[12px] focus:bg-violet-500/20">
-                        {aspectIcon(r)} {r}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-
-              <Select value={resolution} onValueChange={(v) => patch(id, { resolution: v })}>
-                <SelectTrigger size="sm" className={cn(selectTriggerClass, "min-w-[3.9rem] max-w-[5.5rem]")}>
-                  <SelectValue placeholder="Resolution" />
-                </SelectTrigger>
-                <SelectContent className={selectContentClass} position="popper">
-                  {resolutions.map((r) => (
-                    <SelectItem key={r} value={r} className="text-[12px] focus:bg-violet-500/20">
-                      {r}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {data.kind === "video" && videoDurationOptions.length > 0 ? (
-                <Select
-                  value={String(coerceWorkflowVideoDurationSec(model, data.videoDurationSec))}
-                  onValueChange={(v) => patch(id, { videoDurationSec: Number(v) })}
-                >
-                  <SelectTrigger size="sm" className={cn(selectTriggerClass, "min-w-[3.9rem] max-w-[5.2rem]")}>
-                    <SelectValue placeholder="Duration" />
-                  </SelectTrigger>
-                  <SelectContent className={selectContentClass} position="popper">
-                    {videoDurationOptions.map((r) => (
-                      <SelectItem key={r} value={r} className="text-[12px] focus:bg-violet-500/20">
-                        {r}s
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : data.kind === "video" ? (
-                <span className="inline-flex h-7 items-center rounded-full border border-white/10 bg-black/25 px-2 text-[10px] text-white/45">
-                  Duration fixed
-                </span>
-              ) : null}
-              {showWorkflowSeedancePreviewPriority ? (
-                <div className="flex h-7 items-center gap-1 rounded-full border border-white/12 bg-[#1c1c1f] px-1">
-                  {(["normal", "vip"] as const).map((tier) => (
-                    <button
-                      key={tier}
-                      type="button"
-                      title={WORKFLOW_SEEDANCE_PREVIEW_PRIORITY_INFO}
-                      onClick={() => patch(id, { videoPriority: tier })}
-                      className={cn(
-                        "nodrag nopan rounded-full px-1.5 py-0.5 text-[9px] font-semibold transition",
-                        (data.videoPriority ?? "normal") === tier
-                          ? "border border-violet-400/55 bg-violet-500/15 text-white"
-                          : "border border-white/8 bg-black/20 text-white/55 hover:text-white/75",
-                      )}
+                    <span className="truncate text-[9px] text-white/75">{aspectRatio}</span>
+                  </div>
+                ) : (
+                  <Select value={aspectRatio} onValueChange={(v) => patch(id, { aspectRatio: v })} onOpenChange={setAspectMenuOpen}>
+                    <SelectTrigger
+                      size="sm"
+                      className={cn(selectTriggerClass, generatorSelectTriggerExtras, "min-w-0 max-w-[3.35rem] shrink-0")}
                     >
-                      {tier === "vip" ? "VIP" : "Normal"}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
+                      <span className="mr-0.5 shrink-0 text-[9px] text-white/45" aria-hidden>
+                        {aspectIcon(aspectRatio)}
+                      </span>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className={selectContentClass} position="popper">
+                      {aspects.map((r) => (
+                        <SelectItem key={r} value={r} className="text-[12px] focus:bg-violet-500/20">
+                          {aspectIcon(r)} {r}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
 
-              <div className={cn("nodrag nopan group/run ml-auto flex shrink-0 items-center gap-1.5", hasPreviewMedia && "absolute bottom-2 right-2 z-20 ml-0")}>
+                <Select value={resolution} onValueChange={(v) => patch(id, { resolution: v })}>
+                  <SelectTrigger
+                    size="sm"
+                    className={cn(selectTriggerClass, generatorSelectTriggerExtras, "min-w-0 max-w-[4.25rem] shrink-0")}
+                  >
+                    <SelectValue placeholder="Res" />
+                  </SelectTrigger>
+                  <SelectContent className={selectContentClass} position="popper">
+                    {resolutions.map((r) => (
+                      <SelectItem key={r} value={r} className="text-[12px] focus:bg-violet-500/20">
+                        {r}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {data.kind === "video" && videoDurationOptions.length > 0 ? (
+                  <Select
+                    value={String(coerceWorkflowVideoDurationSec(model, data.videoDurationSec))}
+                    onValueChange={(v) => patch(id, { videoDurationSec: Number(v) })}
+                  >
+                    <SelectTrigger
+                      size="sm"
+                      className={cn(selectTriggerClass, generatorSelectTriggerExtras, "min-w-0 max-w-[3.75rem] shrink-0")}
+                    >
+                      <SelectValue placeholder="Dur" />
+                    </SelectTrigger>
+                    <SelectContent className={selectContentClass} position="popper">
+                      {videoDurationOptions.map((r) => (
+                        <SelectItem key={r} value={r} className="text-[12px] focus:bg-violet-500/20">
+                          {r}s
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : data.kind === "video" ? (
+                  <span className="inline-flex h-6 shrink-0 items-center rounded-full border border-white/10 bg-black/25 px-1.5 text-[8px] text-white/45">
+                    Fixed
+                  </span>
+                ) : null}
+                {showWorkflowSeedancePreviewPriority ? (
+                  <div className="flex h-6 shrink-0 items-center gap-px rounded-full border border-white/12 bg-[#1c1c1f] px-0.5">
+                    {(["normal", "vip"] as const).map((tier) => (
+                      <button
+                        key={tier}
+                        type="button"
+                        title={WORKFLOW_SEEDANCE_PREVIEW_PRIORITY_INFO}
+                        onClick={() => patch(id, { videoPriority: tier })}
+                        className={cn(
+                          "nodrag nopan rounded-full px-1 py-px text-[8px] font-semibold transition",
+                          (data.videoPriority ?? "normal") === tier
+                            ? "border border-violet-400/55 bg-violet-500/15 text-white"
+                            : "border border-white/8 bg-black/20 text-white/55 hover:text-white/75",
+                        )}
+                      >
+                        {tier === "vip" ? "VIP" : "Std"}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="nodrag nopan group/run flex shrink-0 items-center gap-1">
                 {estimatedCredits > 0 ? (
                   <span
                     className={cn(
-                      "inline-flex h-8 items-center gap-1.5 rounded-full border border-violet-400/35 bg-violet-500/12 px-2.5 text-[11px] font-semibold tabular-nums text-white shadow-[0_8px_24px_rgba(0,0,0,0.35)]",
+                      "inline-flex h-6 items-center gap-1 rounded-full border border-violet-400/35 bg-violet-500/12 px-1.5 text-[9px] font-semibold tabular-nums text-white shadow-[0_4px_14px_rgba(0,0,0,0.35)]",
                       hasPreviewMedia && "border-violet-300/45 bg-[#0f0f13]/90 backdrop-blur-sm",
                     )}
                     title="Estimated credits for this run"
                   >
-                    <Coins className="h-3.5 w-3.5 text-violet-200" strokeWidth={2.2} aria-hidden />
+                    <Coins className="h-3 w-3 text-violet-200" strokeWidth={2.2} aria-hidden />
                     {estimatedCredits}
                   </span>
                 ) : null}
@@ -2236,15 +2249,15 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                   type="button"
                   title={generating ? "Generating…" : hasGeneratedOutput ? "Regenerate" : "Generate"}
                   disabled={generating}
-                  className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-zinc-900 shadow-md transition hover:bg-white/95 disabled:cursor-not-allowed disabled:opacity-55"
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white text-zinc-900 shadow-md transition hover:bg-white/95 disabled:cursor-not-allowed disabled:opacity-55"
                   onClick={() => void onGenerate()}
                 >
                   {generating ? (
-                    <Loader2 className="h-4 w-4 animate-spin text-zinc-900" aria-hidden />
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-zinc-900" aria-hidden />
                   ) : hasGeneratedOutput ? (
-                    <RotateCcw className="h-4 w-4 text-zinc-900" strokeWidth={2.25} />
+                    <RotateCcw className="h-3.5 w-3.5 text-zinc-900" strokeWidth={2.25} />
                   ) : (
-                    <ArrowRight className="h-4 w-4 text-zinc-900" strokeWidth={2.25} />
+                    <ArrowRight className="h-3.5 w-3.5 text-zinc-900" strokeWidth={2.25} />
                   )}
                 </button>
               </div>
