@@ -65,6 +65,7 @@ import {
   workflowImageChargeCredits,
   workflowVideoChargeCredits,
   WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX,
+  splitAssistantOutputToListLines,
   splitIntoPromptLines,
 } from "../workflowNodeRun";
 import { WorkflowNodeContextToolbar } from "./WorkflowNodeContextToolbar";
@@ -915,10 +916,26 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           assistantMode: "output",
         });
         if (assistantExportMode === "list") {
-          const lines = splitIntoPromptLines(json.output.trim());
+          const lines = splitAssistantOutputToListLines(json.output.trim());
           if (lines.length) {
             const self = nodes.find((n) => n.id === id);
-            if (self) {
+            const outEdges = edges.filter(
+              (e) =>
+                e.source === id &&
+                (e.sourceHandle ?? "out") === "out" &&
+                (e.targetHandle === "inText" || e.targetHandle === "in" || !e.targetHandle),
+            );
+            const linkedListId = outEdges
+              .map((e) => e.target)
+              .find((tid) => nodes.some((n) => n.id === tid && n.type === "promptList"));
+
+            if (linkedListId) {
+              patch(linkedListId, {
+                lines,
+                mode: "prompts",
+                contentKind: "text",
+              });
+            } else if (self) {
               const listNode = buildPromptListNode(
                 { x: self.position.x + 420, y: self.position.y + 8 },
                 { label: "Assistant prompts", lines, mode: "prompts" },
@@ -931,15 +948,18 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                   source: id,
                   sourceHandle: "out",
                   target: listNode.id,
-                  targetHandle: "in",
+                  targetHandle: "inText",
                   style: { stroke: "rgba(167, 139, 250, 0.5)", strokeWidth: 2 },
                 },
               ]);
-              toast.success(`Assistant list created (${lines.length})`);
             }
+            toast.success(`Assistant ready — ${lines.length} prompt${lines.length > 1 ? "s" : ""} in list`);
+          } else {
+            toast.success("Assistant response ready");
           }
+        } else {
+          toast.success("Assistant response ready");
         }
-        toast.success("Assistant response ready");
         patch(id, { websiteLastRunAt: new Date().toISOString() });
         ok = true;
       } catch (e) {
@@ -1686,6 +1706,12 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               )}
             </button>
           </div>
+          {assistantExportMode === "list" ? (
+            <p className="mt-1 px-0.5 text-[10px] leading-snug text-white/42">
+              Connect the assistant output (right) to a List node&apos;s text input: each run fills that list with one
+              item per script. If no List is wired yet, one is created once and linked automatically.
+            </p>
+          ) : null}
         </div>
         </div>
       </>

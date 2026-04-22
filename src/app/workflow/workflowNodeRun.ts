@@ -117,6 +117,61 @@ export function splitIntoPromptLines(raw: string): string[] {
   return out.slice(0, 50);
 }
 
+const ASSISTANT_LIST_ITEM_START =
+  /^\s*(?:\d{1,2}\s*[.)]\s+|(?:Script|Prompt|Angle|Sujet|Scene)\s*\d+\s*[:\-.]\s*)/i;
+
+function dedupeBlocksPreserveOrder(blocks: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const b of blocks) {
+    const s = b.trim();
+    if (!s || seen.has(s)) continue;
+    seen.add(s);
+    out.push(s);
+  }
+  return out;
+}
+
+/** Split multi-script assistant output into one list row per prompt (numbered / labeled blocks, ---, else blank lines). */
+export function splitAssistantOutputToListLines(raw: string): string[] {
+  const t = raw.replace(/\r\n/g, "\n").trim();
+  if (!t) return [];
+
+  const lines = t.split("\n");
+  const blocks: string[] = [];
+  let cur: string[] = [];
+  for (const line of lines) {
+    if (ASSISTANT_LIST_ITEM_START.test(line) && cur.length > 0) {
+      const joined = cur.join("\n").trim();
+      if (joined) blocks.push(joined);
+      cur = [];
+    }
+    cur.push(line);
+  }
+  const last = cur.join("\n").trim();
+  if (last) blocks.push(last);
+
+  let numbered = dedupeBlocksPreserveOrder(blocks);
+  if (numbered.length >= 2) {
+    const firstLine = numbered[0].split("\n")[0] ?? "";
+    if (!ASSISTANT_LIST_ITEM_START.test(firstLine) && numbered[1]) {
+      const intro = numbered.shift()!;
+      numbered[0] = `${intro}\n\n${numbered[0]}`.trim();
+    }
+    return numbered.slice(0, 50);
+  }
+
+  const dashed = dedupeBlocksPreserveOrder(
+    t
+      .split(/\n-{3,}\n/)
+      .map((s) => s.trim())
+      .filter(Boolean),
+  );
+  if (dashed.length >= 2) return dashed.slice(0, 50);
+
+  return splitIntoPromptLines(t);
+}
+
 /**
  * When a **Prompt list** is wired to the generator’s `text` port, each list line becomes its own job
  * (parallel batch). Otherwise behaves like the classic `composeWorkflowPrompt` merge.
