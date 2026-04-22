@@ -384,10 +384,13 @@ export default function ElementMentionTextarea({
           rows={rows}
           data-slot="textarea"
           className={cn(
-            "col-start-1 row-start-1 z-10 h-full min-h-16 min-w-0 box-border block w-full resize-none overflow-y-auto bg-transparent p-0 shadow-none outline-none ring-0 studio-minimal-scrollbar [scrollbar-gutter:stable]",
+            "col-start-1 row-start-1 z-10 h-full min-h-16 min-w-0 box-border block w-full resize-none overflow-y-auto bg-transparent p-0 shadow-none outline-none ring-0 studio-params-scroll",
             "border-0 placeholder:text-muted-foreground focus-visible:border-transparent focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-transparent dark:bg-transparent",
             "focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50",
-            value ? "text-transparent caret-white selection:bg-white/25" : "",
+            /** Hidden scrollbar: thin thumb looked like a second caret; wheel/trackpad still scrolls. */
+            value
+              ? "text-transparent [-webkit-text-fill-color:transparent] caret-white selection:bg-white/25"
+              : "",
           )}
         />
       </div>
