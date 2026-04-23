@@ -946,6 +946,7 @@ function WorkflowReactFlowChrome({
       }
       const isVideo = file.type.startsWith("video/");
       const objectUrl = URL.createObjectURL(file);
+      let tempNodeId: string | null = null;
       void (async () => {
         try {
           const ar = isVideo
@@ -956,21 +957,21 @@ function WorkflowReactFlowChrome({
             y: pendingConnect != null ? pendingConnect.flow.y : window.innerHeight / 2,
           });
           const baseName = file.name.replace(/\.[^.]+$/, "") || (isVideo ? "Video" : "Image");
-          const hostedUrl = await uploadFileToCdn(file, { kind: isVideo ? "video" : "image" });
-          const nextNode = buildImageRefNode(position, {
-            imageUrl: hostedUrl,
+          const tempNode = buildImageRefNode(position, {
+            imageUrl: objectUrl,
             source: "upload",
             mediaKind: isVideo ? "video" : "image",
             intrinsicAspect: ar,
-            label: baseName,
+            label: `${baseName} (uploading...)`,
           });
-          setNodes((prev) => [...prev, nextNode]);
+          tempNodeId = tempNode.id;
+          setNodes((prev) => [...prev, tempNode]);
           if (pendingConnect) {
             setEdges((eds) =>
               addEdge(
                 {
-                  id: `e-${nextNode.id}-${pendingConnect.targetNodeId}-${crypto.randomUUID().slice(0, 8)}`,
-                  source: nextNode.id,
+                  id: `e-${tempNode.id}-${pendingConnect.targetNodeId}-${crypto.randomUUID().slice(0, 8)}`,
+                  source: tempNode.id,
                   sourceHandle: "out",
                   target: pendingConnect.targetNodeId,
                   targetHandle: pendingConnect.targetHandleId,
@@ -983,10 +984,33 @@ function WorkflowReactFlowChrome({
           }
           setAddOpen(false);
           setFrameOpen(false);
+
+          const hostedUrl = await uploadFileToCdn(file, { kind: isVideo ? "video" : "image" });
+          setNodes((prev) =>
+            prev.map((n) =>
+              n.id === tempNode.id
+                ? {
+                    ...n,
+                    data: {
+                      ...n.data,
+                      imageUrl: hostedUrl,
+                      label: baseName,
+                      source: "upload",
+                      mediaKind: isVideo ? "video" : "image",
+                      intrinsicAspect: ar,
+                    },
+                  }
+                : n,
+            ),
+          );
           toast.success("Node added");
           URL.revokeObjectURL(objectUrl);
         } catch {
           updatePendingImageRefConnect(null);
+          if (tempNodeId) {
+            setNodes((prev) => prev.filter((n) => n.id !== tempNodeId));
+            setEdges((eds) => eds.filter((e2) => e2.source !== tempNodeId && e2.target !== tempNodeId));
+          }
           URL.revokeObjectURL(objectUrl);
           toast.error("Could not read file", { description: "Try another image or video." });
         }
@@ -3845,15 +3869,16 @@ export function WorkflowTemplatePreview({ templateId }: { templateId: string }) 
   }, [sb]);
 
   useEffect(() => {
-    const p = buildTemplateProject(resolvedId);
+    if (storageScope === null) return;
+    const p = buildTemplateProject(resolvedId, storageScope);
     if (!p) {
       router.replace("/workflow");
       return;
     }
     setProject(p);
-  }, [resolvedId, router]);
+  }, [resolvedId, router, storageScope]);
 
-  const templateMeta = getWorkflowTemplateMeta(resolvedId);
+  const templateMeta = getWorkflowTemplateMeta(resolvedId, storageScope);
   const title = templateMeta?.name ?? "Template";
 
   const onUseTemplate = useCallback(() => {

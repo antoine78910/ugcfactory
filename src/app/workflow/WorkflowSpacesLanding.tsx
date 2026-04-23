@@ -14,10 +14,15 @@ import {
   createSpaceFromTemplate,
   deleteSpace,
   getWorkflowStorageScope,
+  loadProjectForSpace,
   loadSpacesIndex,
   type WorkflowSpaceMeta,
 } from "./workflowSpacesStorage";
-import { WORKFLOW_TEMPLATE_LIST } from "./workflowTemplates";
+import {
+  deleteTemporaryWorkflowTemplate,
+  listWorkflowTemplates,
+  saveTemporaryWorkflowTemplate,
+} from "./workflowTemplates";
 
 type TabId = "my" | "shared" | "templates";
 
@@ -41,6 +46,7 @@ export function WorkflowSpacesLanding() {
   const sb = useSupabaseBrowserClient();
   const [storageScope, setStorageScope] = useState<string | null>(null);
   const [spaces, setSpaces] = useState<WorkflowSpaceMeta[]>([]);
+  const [templatesTick, setTemplatesTick] = useState(0);
   const [hydrated, setHydrated] = useState(false);
   const [tab, setTab] = useState<TabId>("my");
   const [query, setQuery] = useState("");
@@ -78,11 +84,12 @@ export function WorkflowSpacesLanding() {
 
   const filteredTemplates = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return WORKFLOW_TEMPLATE_LIST;
-    return WORKFLOW_TEMPLATE_LIST.filter(
+    const all = listWorkflowTemplates(storageScope);
+    if (!q) return all;
+    return all.filter(
       (t) => t.name.toLowerCase().includes(q) || t.blurb.toLowerCase().includes(q),
     );
-  }, [query]);
+  }, [query, storageScope, templatesTick]);
 
   const onNewSpace = () => {
     if (storageScope === null) return;
@@ -112,6 +119,26 @@ export function WorkflowSpacesLanding() {
     if (storageScope === null) return;
     deleteSpace(storageScope, id);
     refresh(storageScope);
+  };
+  const pushTemporaryTemplateFromSpace = (e: MouseEvent, space: WorkflowSpaceMeta) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (storageScope === null) return;
+    const project = loadProjectForSpace(storageScope, space.id);
+    saveTemporaryWorkflowTemplate(storageScope, {
+      project,
+      name: `${space.name} (temp)`,
+      blurb: "Temporary template pushed from workflow.",
+    });
+    setTemplatesTick((n) => n + 1);
+  };
+  const removeTemplate = (e: MouseEvent, templateId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (storageScope === null) return;
+    const removed = deleteTemporaryWorkflowTemplate(storageScope, templateId);
+    if (!removed) return;
+    setTemplatesTick((n) => n + 1);
   };
 
   return (
@@ -245,13 +272,24 @@ export function WorkflowSpacesLanding() {
                       <p className="mt-2 text-[13px] leading-relaxed text-white/45">{t.blurb}</p>
                       <div className="mt-3 flex items-center justify-between gap-2">
                         <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-300/70">View preview</p>
-                        <button
-                          type="button"
-                          onClick={(e) => duplicateTemplateToMyWorkflows(e, t.id)}
-                          className="rounded-full border border-violet-400/35 bg-violet-500/12 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-violet-100 transition hover:border-violet-300/50 hover:bg-violet-500/20"
-                        >
-                          Duplicate
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          {t.source === "custom" ? (
+                            <button
+                              type="button"
+                              onClick={(e) => removeTemplate(e, t.id)}
+                              className="rounded-full border border-red-400/35 bg-red-500/12 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-red-100 transition hover:border-red-300/50 hover:bg-red-500/20"
+                            >
+                              Delete
+                            </button>
+                          ) : null}
+                          <button
+                            type="button"
+                            onClick={(e) => duplicateTemplateToMyWorkflows(e, t.id)}
+                            className="rounded-full border border-violet-400/35 bg-violet-500/12 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-violet-100 transition hover:border-violet-300/50 hover:bg-violet-500/20"
+                          >
+                            Duplicate
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -289,6 +327,14 @@ export function WorkflowSpacesLanding() {
                     </div>
                   </div>
                 </div>
+                <button
+                  type="button"
+                  title="Push temporary template"
+                  onClick={(e) => pushTemporaryTemplateFromSpace(e, s)}
+                  className="pointer-events-none absolute bottom-4 right-[4.75rem] z-10 rounded-lg px-2 py-1 text-[11px] font-semibold text-white/35 opacity-0 transition hover:bg-violet-500/15 hover:text-violet-200 group-hover:pointer-events-auto group-hover:opacity-100"
+                >
+                  Push template
+                </button>
                 <button
                   type="button"
                   title="Delete workflow"

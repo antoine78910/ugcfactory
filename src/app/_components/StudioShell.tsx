@@ -344,13 +344,14 @@ function StudioShellInner({
       >
         <aside
           className={cn(
-            // Desktop: permanent, sticky sidebar; width is dictated by the grid track (4rem or 248px).
-            "md:sticky md:top-0 md:z-30 md:flex md:h-screen md:w-auto md:max-w-none md:translate-x-0 md:shadow-none",
+            // Desktop: permanently fixed sidebar (never scrolls away).
+            "md:fixed md:left-0 md:top-0 md:z-30 md:flex md:h-dvh md:max-w-none md:translate-x-0 md:shadow-none",
             // Mobile: off-canvas drawer, slides in from the left.
             "fixed inset-y-0 left-0 z-50 flex h-dvh w-[17rem] max-w-[85vw] flex-col overflow-visible border-r border-white/10 bg-[#06070d] py-4 shadow-2xl transition-transform duration-200 ease-out md:transition-none",
             mobileNavOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
             "select-none",
             navCollapsed ? "md:px-1.5 px-3" : "px-3",
+            navCollapsed ? "md:w-16" : "md:w-[248px]",
           )}
         >
           <div

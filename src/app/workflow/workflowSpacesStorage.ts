@@ -229,9 +229,9 @@ export function saveProjectForSpace(scope: string, spaceId: string, state: Workf
 
 /** Creates a new space and copies the template project into it. */
 export function createSpaceFromTemplate(scope: string, templateId: string): WorkflowSpaceMeta | null {
-  const project = cloneTemplateProjectForNewSpace(templateId);
+  const project = cloneTemplateProjectForNewSpace(templateId, scope);
   if (!project) return null;
-  const metaTpl = getWorkflowTemplateMeta(templateId);
+  const metaTpl = getWorkflowTemplateMeta(templateId, scope);
   const meta = createSpace(scope, metaTpl?.name ? `${metaTpl.name} (copy)` : "From template");
   saveWorkflowProjectRaw(scope, meta.id, project);
   touchSpaceUpdated(scope, meta.id);
