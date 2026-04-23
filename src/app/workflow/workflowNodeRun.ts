@@ -778,6 +778,7 @@ export type WorkflowRunImageParams = {
   resolution: string;
   quantity: number;
   referenceImageUrls?: string[];
+  onTaskStarted?: (taskId: string) => void;
 };
 
 function isLocalOnlyWorkflowMediaUrl(url: string): boolean {
@@ -830,7 +831,7 @@ async function resolveLocalWorkflowMediaUrlsForServer(urls: string[] | undefined
   return out;
 }
 
-export async function runWorkflowImageJob(params: WorkflowRunImageParams): Promise<{ imageUrl: string }> {
+export async function runWorkflowImageJob(params: WorkflowRunImageParams): Promise<{ imageUrl: string; taskId: string }> {
   const pickerModel = resolveWorkflowImagePickerModel(params.model);
   if (!params.personalApiKey && !canUseStudioImagePickerModel(params.planId, pickerModel)) {
     throw new Error(
@@ -875,10 +876,11 @@ export async function runWorkflowImageJob(params: WorkflowRunImageParams): Promi
   const taskId =
     (startJson.data?.taskId ?? startJson.data?.rows?.[0]?.taskId)?.trim() ?? "";
   if (!taskId) throw new Error("No task id from server");
+  params.onTaskStarted?.(taskId);
 
   const providerUrl = await pollNanoBananaTask(taskId, params.personalApiKey);
   const imageUrl = await completeStudioGenerationTask(taskId, providerUrl);
-  return { imageUrl };
+  return { imageUrl, taskId };
 }
 
 export type WorkflowRunVideoParams = {
@@ -897,9 +899,10 @@ export type WorkflowRunVideoParams = {
   referenceImageUrl?: string;
   endImageUrl?: string;
   referenceImageUrls?: string[];
+  onTaskStarted?: (taskId: string) => void;
 };
 
-export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promise<{ videoUrl: string }> {
+export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promise<{ videoUrl: string; taskId: string }> {
   const modelId = resolveWorkflowVideoModelId(params.model);
   const pKey = params.personalApiKey;
   const piKey = params.piapiApiKey;
@@ -959,6 +962,7 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
     });
     const json = (await res.json()) as { taskId?: string; provider?: string; error?: string };
     if (!res.ok || !json.taskId) throw new Error(json.error || "Veo failed");
+    params.onTaskStarted?.(json.taskId);
     await registerStudioVideoTask({
       label: workflowHistoryLabel(params.prompt.slice(0, 120)),
       taskId: json.taskId,
@@ -970,7 +974,7 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
     });
     const url = await pollVeoVideo(json.taskId, pKey);
     const finalUrl = await completeStudioGenerationTask(json.taskId, url);
-    return { videoUrl: finalUrl };
+    return { videoUrl: finalUrl, taskId: json.taskId };
   }
 
   if (!pKey && !piKey && !canUseStudioVideoModel(params.planId, modelId)) {
@@ -1022,6 +1026,7 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
   });
   const genJson = (await genRes.json()) as { taskId?: string; provider?: string; error?: string };
   if (!genRes.ok || !genJson.taskId) throw new Error(genJson.error || "Video task failed");
+  params.onTaskStarted?.(genJson.taskId);
 
   await registerStudioVideoTask({
     label: workflowHistoryLabel(params.prompt.slice(0, 120)),
@@ -1036,7 +1041,7 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
 
   const url = await pollKlingVideo(genJson.taskId, pKey, piKey);
   const finalUrl = await completeStudioGenerationTask(genJson.taskId, url);
-  return { videoUrl: finalUrl };
+  return { videoUrl: finalUrl, taskId: genJson.taskId };
 }
 
 export function workflowImageChargeCredits(params: {

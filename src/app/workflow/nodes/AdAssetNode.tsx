@@ -131,6 +131,16 @@ export type AdAssetNodeData = {
    */
   videoExtractedFirstFrameUrl?: string;
   videoExtractedLastFrameUrl?: string;
+  /**
+   * Durable in-flight run metadata so image/video runs can resume after reload/navigation.
+   */
+  pendingWorkflowRun?: {
+    mediaKind: "image" | "video";
+    taskIds: string[];
+    progressListId?: string | null;
+    listLabel?: string;
+    updatedAt: number;
+  };
 };
 
 export type AdAssetNodeType = Node<AdAssetNodeData, "adAsset">;
@@ -239,6 +249,14 @@ const WORKFLOW_ASSISTANT_CREDITS_BY_MODEL: Record<"claude-sonnet-4-5" | "gpt-5o"
 };
 const WORKFLOW_TEXT_INPUT_HANDLES = ["text", "in", "inText"] as const;
 const WORKFLOW_PENDING_MEDIA_PREFIX = "__workflow_pending_media__:";
+const WORKFLOW_PENDING_POLL_MS = 3500;
+
+type WorkflowPollHistoryItem = {
+  externalTaskId?: string;
+  status?: "ready" | "failed" | "generating";
+  mediaUrl?: string;
+  errorMessage?: string;
+};
 
 /**
  * List node already wired from this generator's media output (Assistant reuses text lists the same way).
@@ -660,6 +678,31 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     },
     [getNodes, normalizeCompletedMediaLines, patch],
   );
+  const setPendingWorkflowRun = useCallback(
+    (
+      run: {
+        mediaKind: "image" | "video";
+        taskIds: string[];
+        progressListId?: string | null;
+        listLabel?: string;
+      } | null,
+    ) => {
+      if (!run) {
+        patch(id, { pendingWorkflowRun: undefined });
+        return;
+      }
+      patch(id, {
+        pendingWorkflowRun: {
+          mediaKind: run.mediaKind,
+          taskIds: run.taskIds.filter((t) => t.trim()),
+          progressListId: run.progressListId ?? null,
+          listLabel: run.listLabel,
+          updatedAt: Date.now(),
+        },
+      });
+    },
+    [id, patch],
+  );
 
   useEffect(() => () => clearHoverLeaveTimer(), []);
   modelMenuOpenRef.current = modelMenuOpen;
@@ -845,6 +888,104 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [outputPreviewLightbox]);
+
+  useEffect(() => {
+    if (data.kind !== "image" && data.kind !== "video") return;
+    const pending = data.pendingWorkflowRun;
+    const taskIds = pending?.taskIds?.map((t) => t.trim()).filter(Boolean) ?? [];
+    if (!taskIds.length) return;
+    const pendingMediaKind = pending?.mediaKind ?? (data.kind === "video" ? "video" : "image");
+
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    setGenerating(true);
+
+    const poll = async () => {
+      try {
+        const res = await fetch("/api/studio/generations/poll", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            kind: "all",
+            personalApiKey: getPersonalApiKey()?.trim() || undefined,
+            piapiApiKey: getPersonalPiapiApiKey()?.trim() || undefined,
+          }),
+        });
+        const json = (await res.json().catch(() => ({}))) as {
+          data?: WorkflowPollHistoryItem[];
+          error?: string;
+        };
+        if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
+        if (!alive) return;
+
+        const byTask = new Map<string, WorkflowPollHistoryItem>();
+        for (const item of json.data ?? []) {
+          const tid = (item.externalTaskId ?? "").trim();
+          if (!tid) continue;
+          byTask.set(tid, item);
+        }
+
+        const orderedUrls = taskIds.map((tid) => byTask.get(tid)?.mediaUrl?.trim() || "");
+        const completedUrls = orderedUrls.filter(Boolean);
+        const statuses = taskIds.map((tid) => byTask.get(tid)?.status ?? "generating");
+        const allTerminal = statuses.every((s) => s === "ready" || s === "failed");
+
+        if (pending?.progressListId) {
+          patch(pending.progressListId, {
+            ...(pending.listLabel?.trim() ? { label: pending.listLabel.trim() } : {}),
+            lines: taskIds.map((_, idx) => orderedUrls[idx] || `${WORKFLOW_PENDING_MEDIA_PREFIX}${idx}`),
+            mode: "results",
+            contentKind: "media",
+          });
+          if (allTerminal) {
+            finalizeProgressMediaList(
+              pending.progressListId,
+              completedUrls,
+              pending.listLabel,
+            );
+          }
+        }
+
+        if (allTerminal) {
+          if (completedUrls.length) {
+            const last = completedUrls.at(-1) ?? "";
+            patch(id, {
+              outputPreviewUrl: last,
+              outputMediaKind: pendingMediaKind,
+              ...(pendingMediaKind === "video"
+                ? { videoExtractedFirstFrameUrl: undefined, videoExtractedLastFrameUrl: undefined }
+                : {}),
+            });
+          }
+          setPendingWorkflowRun(null);
+          setGenerating(false);
+          window.dispatchEvent(
+            new CustomEvent("workflow:node-run-finished", {
+              detail: { nodeId: id, success: completedUrls.length > 0 },
+            }),
+          );
+          return;
+        }
+      } catch {
+        // Keep trying while task metadata exists; transient errors should not break resume.
+      } finally {
+        if (alive) timer = setTimeout(poll, WORKFLOW_PENDING_POLL_MS);
+      }
+    };
+
+    void poll();
+    return () => {
+      alive = false;
+      if (timer) clearTimeout(timer);
+    };
+  }, [
+    data.kind,
+    data.pendingWorkflowRun,
+    finalizeProgressMediaList,
+    id,
+    patch,
+    setPendingWorkflowRun,
+  ]);
 
   const showImageGeneratorOutputBubble = data.kind === "image";
   const imageGeneratorOutputReady = useMemo(
@@ -1401,6 +1542,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       let promptsForRun: string[] = [];
       let progressListId: string | null = null;
       const progressiveImageUrls: string[] = [];
+      let pendingImageTaskIds: string[] = [];
       try {
         promptsForRun = batchPrompts?.length ? batchPrompts : [singlePrompt];
         const shouldBuildProgressList = fromPromptList && promptsForRun.length > 1;
@@ -1437,6 +1579,13 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             ]);
           }
         }
+        pendingImageTaskIds = Array.from({ length: promptsForRun.length }, () => "");
+        setPendingWorkflowRun({
+          mediaKind: "image",
+          taskIds: pendingImageTaskIds,
+          progressListId,
+          listLabel: imageResultsListLabel,
+        });
         const imageResults = await Promise.all(
           promptsForRun.map(async (p, idx) => {
             const { imageUrl } = await runWorkflowImageJob({
@@ -1448,6 +1597,15 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               resolution,
               quantity: perNodeQuantity,
               referenceImageUrls: refsForJob.length ? refsForJob : undefined,
+              onTaskStarted: (taskId) => {
+                pendingImageTaskIds[idx] = taskId;
+                setPendingWorkflowRun({
+                  mediaKind: "image",
+                  taskIds: pendingImageTaskIds,
+                  progressListId,
+                  listLabel: imageResultsListLabel,
+                });
+              },
             });
             primeRemoteMediaForDisplay(imageUrl);
             if (progressListId) {
@@ -1517,6 +1675,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           toast.success("Image ready");
         }
         ok = true;
+        setPendingWorkflowRun(null);
       } catch (e) {
         const msg = userMessageFromCaughtError(e, "Image generation failed. Try again.");
         if (progressListId) {
@@ -1528,6 +1687,9 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         refundPlatformCredits(platformCharge, grantCredits, creditsRef);
         toast.error(msg);
       } finally {
+        if (!ok && !pendingImageTaskIds.some((t) => t.trim())) {
+          setPendingWorkflowRun(null);
+        }
         setGenerating(false);
         emitRunFinished(ok);
       }
@@ -1559,6 +1721,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     let promptsForRun: string[] = [];
     let progressListId: string | null = null;
     const progressiveVideoUrls: string[] = [];
+    let pendingVideoTaskIds: string[] = [];
     try {
       const linkedFromStartPort = collectLinkedImageUrlsForHandles(nodes, edges, id, ["startImage"]);
       const linkedFromEndPort = collectLinkedImageUrlsForHandles(nodes, edges, id, ["endImage"]);
@@ -1625,6 +1788,13 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           ]);
         }
       }
+      pendingVideoTaskIds = Array.from({ length: promptsForRun.length }, () => "");
+      setPendingWorkflowRun({
+        mediaKind: "video",
+        taskIds: pendingVideoTaskIds,
+        progressListId,
+        listLabel: videoResultsListLabel,
+      });
       const videoResults = await Promise.all(
         promptsForRun.map(async (p, idx) => {
           const indexedStartFrame = pickByIndex(indexedStartImages, idx, startFrame);
@@ -1643,6 +1813,15 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             referenceImageUrl: undefined,
             endImageUrl: endFrame,
             referenceImageUrls: indexedReferenceOnly.length ? indexedReferenceOnly : undefined,
+            onTaskStarted: (taskId) => {
+              pendingVideoTaskIds[idx] = taskId;
+              setPendingWorkflowRun({
+                mediaKind: "video",
+                taskIds: pendingVideoTaskIds,
+                progressListId,
+                listLabel: videoResultsListLabel,
+              });
+            },
           });
           primeRemoteMediaForDisplay(videoUrl);
           if (progressListId) {
@@ -1680,6 +1859,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         toast.success("Video ready");
       }
       ok = true;
+      setPendingWorkflowRun(null);
     } catch (e) {
       const msg = userMessageFromCaughtError(e, "Video generation failed. Try again.");
       if (progressListId) {
@@ -1691,6 +1871,9 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       refundPlatformCredits(vPlatformCharge, grantCredits, creditsRef);
       toast.error(msg);
     } finally {
+      if (!ok && !pendingVideoTaskIds.some((t) => t.trim())) {
+        setPendingWorkflowRun(null);
+      }
       setGenerating(false);
       emitRunFinished(ok);
     }
@@ -1724,6 +1907,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     websiteOutputMode,
     websiteProductImageCount,
     emitRunFinished,
+    setPendingWorkflowRun,
   ]);
 
   const runThisNodeOnly = useCallback(() => {
