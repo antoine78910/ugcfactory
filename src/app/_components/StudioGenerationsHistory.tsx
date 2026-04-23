@@ -206,7 +206,9 @@ export function StudioGenerationsHistory({
     if (editModel === "nano") return [...imageLightboxEdit.nanoAspectOptions];
     if (editModel === "pro") return [...imageLightboxEdit.proAspectOptions];
     if (isStudioSeedreamImagePickerId(editModel)) return [...imageLightboxEdit.seedreamAspectOptions];
-    if (editModel === "google_nano_banana") return [...imageLightboxEdit.nanoAspectOptions];
+    if (editModel === "google_nano_banana" || editModel === "gpt_image_2") {
+      return [...imageLightboxEdit.nanoAspectOptions];
+    }
     return [...imageLightboxEdit.nanoAspectOptions];
   }, [editModel, imageLightboxEdit]);
 
@@ -215,7 +217,7 @@ export function StudioGenerationsHistory({
     const allowed = new Set(editAspectOptions as readonly string[]);
     if (allowed.size > 0 && !allowed.has(editAspect)) {
       setEditAspect(
-        editModel === "nano" || editModel === "google_nano_banana"
+        editModel === "nano" || editModel === "google_nano_banana" || editModel === "gpt_image_2"
           ? "auto"
           : "3:4",
       );

@@ -399,6 +399,7 @@ type VideoPriority = "normal" | "vip";
 
 type VideoModelId =
   | "kling-3.0/video"
+  | "kling-2.5-turbo/video"
   | "kling-2.6/video"
   | "openai/sora-2"
   | "openai/sora-2-pro"
@@ -430,6 +431,7 @@ const SEEDANCE_PREVIEW_POLL_MAX_ROUNDS = Math.ceil((12 * 60 * 60 * 1000) / 4000)
 
 const MODEL_OPTIONS: { id: VideoModelId; label: string; family: VideoFamily }[] = [
   { id: "kling-3.0/video", label: "Kling 3.0", family: "kie" },
+  { id: "kling-2.5-turbo/video", label: "Kling 2.5 Turbo", family: "kie" },
   { id: "kling-2.6/video", label: "Kling 2.6", family: "kie" },
   { id: "openai/sora-2", label: "Sora 2", family: "sora" },
   { id: "openai/sora-2-pro", label: "Sora 2 Pro", family: "sora" },
@@ -495,6 +497,14 @@ const VIDEO_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
     hasAudio: true,
     resolution: "720p / 1080p",
     durationRange: studioVideoDurationRangeLabel("kling-3.0/video"),
+  },
+  {
+    id: "kling-2.5-turbo/video",
+    label: "Kling 2.5 Turbo",
+    icon: "kling",
+    hasAudio: true,
+    resolution: "720p / 1080p",
+    durationRange: studioVideoDurationRangeLabel("kling-2.5-turbo/video"),
   },
   {
     id: "kling-2.6/video",
@@ -587,6 +597,7 @@ const VIDEO_EDIT_PICKER_ACCESS_ORDER = [...STUDIO_VIDEO_EDIT_PICKER_IDS];
 
 /** Cheapest first; used to pick a valid model after plan change. */
 const VIDEO_MODEL_ACCESS_ORDER: VideoModelId[] = [
+  "kling-2.5-turbo/video",
   "kling-2.6/video",
   "bytedance/seedance-2-fast-preview",
   "bytedance/seedance-2-fast",
@@ -1291,6 +1302,7 @@ export default function StudioVideoPanel({
     meta.family === "veo" ||
     meta.family === "sora" ||
     modelId === "kling-3.0/video" ||
+    modelId === "kling-2.5-turbo/video" ||
     modelId === "kling-2.6/video" ||
     studioVideoIsSeedance2ProPickerId(modelId);
   const durationChoices = studioVideoDurationSecOptions(modelId);
@@ -3345,6 +3357,7 @@ export default function StudioVideoPanel({
     if (
       meta.family === "kie" &&
       modelId !== "kling-3.0/video" &&
+      modelId !== "kling-2.5-turbo/video" &&
       modelId !== "kling-2.6/video" &&
       !startUrl &&
       !studioVideoIsSeedance2ProPickerId(modelId) &&
@@ -3685,6 +3698,7 @@ export default function StudioVideoPanel({
         }
 
         const isKling30 = snap.modelId === "kling-3.0/video";
+        const isKling25Turbo = snap.modelId === "kling-2.5-turbo/video";
         const isKling26 = snap.modelId === "kling-2.6/video";
         const isSora2Pro = snap.modelId === "openai/sora-2-pro";
         const kling30MultiActive =
@@ -3703,7 +3717,7 @@ export default function StudioVideoPanel({
           prompt: snap.prompt,
           duration: klingDurationSec,
           aspectRatio:
-            (isKling30 || isKling26) && !snap.startUrl
+            (isKling30 || isKling25Turbo || isKling26) && !snap.startUrl
               ? snap.aspect
               : studioVideoIsSeedancePickerId(snap.modelId) &&
                   (Boolean(snap.startUrl) ||
@@ -3713,7 +3727,7 @@ export default function StudioVideoPanel({
                 ? snap.aspect
                 : undefined,
           sound: studioVideoSupportsNativeAudio(snap.modelId) ? snap.soundOn : undefined,
-          mode: isKling30 || isKling26 || isSora2Pro ? snap.klingMode : undefined,
+          mode: isKling30 || isKling25Turbo || isKling26 || isSora2Pro ? snap.klingMode : undefined,
           personalApiKey: pKey,
           piapiApiKey: piKey,
         };

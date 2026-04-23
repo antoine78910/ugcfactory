@@ -112,6 +112,13 @@ const IMAGE_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
     ...studioImagePickerCardHints("google_nano_banana"),
     searchText: "google nano banana text to image image to image",
   },
+  {
+    id: "gpt_image_2",
+    label: "GPT Image 2",
+    icon: "google",
+    ...studioImagePickerCardHints("gpt_image_2"),
+    searchText: "gpt image 2 openai text to image image to image",
+  },
 ];
 
 // These pickers are now enabled for Growth+ (and above).
@@ -123,6 +130,7 @@ const STUDIO_LIGHTBOX_EDIT_MODEL_OPTIONS: StudioImageLightboxEditModelOption[] =
   { value: "seedream_45", label: "Seedream 4.5" },
   { value: "seedream_50_lite", label: "Seedream 5.0 Lite" },
   { value: "google_nano_banana", label: "Google Nano Banana" },
+  { value: "gpt_image_2", label: "GPT Image 2" },
 ];
 
 async function uploadReferenceFile(file: File): Promise<string> {

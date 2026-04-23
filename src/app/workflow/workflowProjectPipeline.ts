@@ -12,13 +12,17 @@ import {
 
 const EDGE_STYLE = { stroke: "rgba(167, 139, 250, 0.5)", strokeWidth: 2 };
 
-function makeEdge(source: string, target: string): Edge {
+function makeEdge(
+  source: string,
+  target: string,
+  opts?: { sourceHandle?: string; targetHandle?: string },
+): Edge {
   return {
     id: `e-proj-${source.slice(0, 8)}-${target.slice(0, 8)}-${crypto.randomUUID().slice(0, 6)}`,
     source,
-    sourceHandle: "out",
+    sourceHandle: opts?.sourceHandle ?? "out",
     target,
-    targetHandle: "in",
+    targetHandle: opts?.targetHandle ?? "in",
     style: EDGE_STYLE,
   };
 }
@@ -62,7 +66,7 @@ export function buildWorkflowProjectPipeline(origin: XYPosition): {
     },
   );
   nodes.push(product, persona, brief);
-  edges.push(makeEdge(product.id, brief.id), makeEdge(persona.id, brief.id));
+  edges.push(makeEdge(product.id, brief.id, { sourceHandle: "generated" }), makeEdge(persona.id, brief.id));
 
   const angleDefs = [
     { label: "Angle A", y: oy - 40, hint: "First hook or story beat to test (problem, desire, or proof)." },
@@ -111,7 +115,7 @@ export function buildWorkflowProjectPipeline(origin: XYPosition): {
     },
   );
   nodes.push(vidPrompt);
-  edges.push(makeEdge(images.id, vidPrompt.id));
+  edges.push(makeEdge(images.id, vidPrompt.id, { sourceHandle: "generated" }));
 
   const video = buildAdAssetNode(
     "video",
@@ -180,7 +184,8 @@ export function buildWorkflowProjectPipelineFromRun(
   const oy = origin.y - 120;
   const nodes: WorkflowCanvasNode[] = [];
   const edges: Edge[] = [];
-  const pushEdge = (source: string, target: string) => edges.push(makeEdge(source, target));
+  const pushEdge = (source: string, target: string, opts?: { sourceHandle?: string; targetHandle?: string }) =>
+    edges.push(makeEdge(source, target, opts));
 
   const productImageUrl = preferredProductImage(run);
   const scripts = splitAllScriptOptions(snap.scriptsText ?? "");
@@ -286,8 +291,8 @@ export function buildWorkflowProjectPipelineFromRun(
     },
   );
   nodes.push(selectedNano);
-  pushEdge(imageGen1.id, selectedNano.id);
-  pushEdge(imageGen2.id, selectedNano.id);
+  pushEdge(imageGen1.id, selectedNano.id, { sourceHandle: "generated" });
+  pushEdge(imageGen2.id, selectedNano.id, { sourceHandle: "generated" });
 
   // 6) Video generator with imported prompt.
   const videoPromptText = firstNonEmpty(selectedPipe.ugcVideoPromptGpt, "No video prompt found");

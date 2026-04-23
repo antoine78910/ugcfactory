@@ -27,7 +27,7 @@ export type BuildAdAssetNodeOptions = {
 
 function genDefaultsForKind(
   kind: WorkflowDragNodeKind,
-): Pick<AdAssetNodeData, "prompt" | "model" | "aspectRatio" | "resolution" | "quantity" | "generatorExportMode"> {
+): Pick<AdAssetNodeData, "prompt" | "model" | "aspectRatio" | "resolution" | "quantity"> {
   if (kind === "video") {
     return {
       prompt: "",
@@ -35,7 +35,6 @@ function genDefaultsForKind(
       aspectRatio: "9:16",
       resolution: "720p",
       quantity: 1,
-      generatorExportMode: "list",
     };
   }
   if (kind === "variation" || kind === "assistant") {
@@ -45,7 +44,6 @@ function genDefaultsForKind(
       aspectRatio: "1:1",
       resolution: "1024",
       quantity: 1,
-      generatorExportMode: "list",
     };
   }
   if (kind === "website") {
@@ -55,7 +53,6 @@ function genDefaultsForKind(
       aspectRatio: "1:1",
       resolution: "1024",
       quantity: 1,
-      generatorExportMode: "list",
     };
   }
   return {
@@ -64,7 +61,6 @@ function genDefaultsForKind(
     aspectRatio: "1:1",
     resolution: "1024",
     quantity: 1,
-    generatorExportMode: "list",
   };
 }
 
@@ -90,7 +86,7 @@ export function buildAdAssetNode(
     ...genDefaults,
   };
   if (kind === "assistant") {
-    data.assistantModel = "claude-sonnet-4-5";
+    data.assistantModel = "gpt-5o";
     data.assistantMode = "input";
     data.assistantOutput = "";
     data.assistantExportMode = "text";

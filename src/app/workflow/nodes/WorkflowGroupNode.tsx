@@ -23,7 +23,7 @@ export type WorkflowGroupNodeType = Node<WorkflowGroupNodeData, "workflowGroup">
 
 export const GROUP_COLOR_PRESETS = [
   { value: "#a78bfa", label: "Violet" },
-  { value: "#60a5fa", label: "Blue" },
+  { value: "#8b5cf6", label: "Deep Violet" },
   { value: "#34d399", label: "Emerald" },
   { value: "#fbbf24", label: "Amber" },
   { value: "#fb7185", label: "Rose" },

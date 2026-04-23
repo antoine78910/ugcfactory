@@ -37,6 +37,11 @@ export function studioImagePickerCardHints(id: StudioImageKiePickerModelId): {
         resolution: "Google pipeline",
         durationRange: "Text or image guided",
       };
+    case "gpt_image_2":
+      return {
+        resolution: "GPT Image 2, high",
+        durationRange: "Text or reference image",
+      };
     default: {
       const s = id as string;
       if (s.includes("seedream_45")) {

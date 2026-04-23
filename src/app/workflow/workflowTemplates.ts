@@ -25,13 +25,17 @@ export const WORKFLOW_TEMPLATE_LIST: WorkflowTemplateMeta[] = [
 
 const edgeStyle = { stroke: "rgba(167, 139, 250, 0.5)", strokeWidth: 2 };
 
-function makeEdge(source: string, target: string): Edge {
+function makeEdge(
+  source: string,
+  target: string,
+  opts?: { sourceHandle?: string; targetHandle?: string },
+): Edge {
   return {
     id: `e-${source}-${target}`,
     source,
-    sourceHandle: "out",
+    sourceHandle: opts?.sourceHandle ?? "out",
     target,
-    targetHandle: "in",
+    targetHandle: opts?.targetHandle ?? "in",
     style: edgeStyle,
   };
 }
@@ -65,7 +69,7 @@ function buildUgcPipeline(): WorkflowProjectStateV1 {
         id: pageId,
         name: "Pipeline",
         nodes: [img, vid, varn],
-        edges: [makeEdge(img.id, vid.id), makeEdge(vid.id, varn.id)],
+        edges: [makeEdge(img.id, vid.id, { sourceHandle: "generated" }), makeEdge(vid.id, varn.id)],
       },
     ],
   };
@@ -100,7 +104,7 @@ function buildDualHook(): WorkflowProjectStateV1 {
         id: pageId,
         name: "Launch",
         nodes: [a, b, v],
-        edges: [makeEdge(a.id, v.id), makeEdge(b.id, v.id)],
+        edges: [makeEdge(a.id, v.id, { sourceHandle: "generated" }), makeEdge(b.id, v.id, { sourceHandle: "generated" })],
       },
     ],
   };

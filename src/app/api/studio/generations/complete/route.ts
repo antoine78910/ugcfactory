@@ -80,5 +80,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 502 });
   }
 
-  return NextResponse.json({ ok: true, archived: isStudioMediaPublicUrl(finalUrl) });
+  return NextResponse.json({ ok: true, archived: isStudioMediaPublicUrl(finalUrl), resultUrl: finalUrl });
 }

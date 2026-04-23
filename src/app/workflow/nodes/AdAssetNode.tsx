@@ -6,6 +6,7 @@ import {
   useReactFlow,
   useStore,
   useUpdateNodeInternals,
+  type Edge,
   type Node,
   type NodeProps,
 } from "@xyflow/react";
@@ -23,12 +24,14 @@ import {
   RotateCcw,
   Sparkles,
   Globe2,
+  Maximize2,
   Trash2,
   Type,
   Wand2,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { toast } from "sonner";
 
 import {
@@ -62,13 +65,16 @@ import {
   resolveWorkflowVideoModelId,
   runWorkflowImageJob,
   runWorkflowVideoJob,
+  estimateWorkflowAdAssetRunCredits,
   workflowImageChargeCredits,
   workflowVideoChargeCredits,
   WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX,
   splitAssistantOutputToListLines,
   splitIntoPromptLines,
+  primeRemoteMediaForDisplay,
 } from "../workflowNodeRun";
 import { WorkflowNodeContextToolbar } from "./WorkflowNodeContextToolbar";
+import type { ImageRefNodeData } from "./ImageRefNode";
 import { buildPromptListNode } from "../workflowNodeFactory";
 import { buildImageRefNode } from "../workflowNodeFactory";
 import { linkToAdProductPhotoPickerUrls, readUniverseFromExtracted, splitAllScriptOptions } from "@/lib/linkToAdUniverse";
@@ -173,10 +179,12 @@ const IMAGE_MODELS: { value: string; label: string }[] = [
   { value: "seedream_45", label: "Seedream 4.5" },
   { value: "seedream_50_lite", label: "Seedream 5.0 Lite" },
   { value: "google_nano_banana", label: "Google Nano Banana" },
+  { value: "gpt_image_2", label: "GPT Image 2" },
 ];
 
 const VIDEO_MODELS: { value: string; label: string }[] = [
   { value: "kling-3.0/video", label: "Kling 3.0" },
+  { value: "kling-2.5-turbo/video", label: "Kling 2.5 Turbo" },
   { value: "kling-2.6/video", label: "Kling 2.6" },
   { value: "openai/sora-2", label: "Sora 2" },
   { value: "openai/sora-2-pro", label: "Sora 2 Pro" },
@@ -199,11 +207,6 @@ const ASSISTANT_EXPORT_MODES: Array<{ value: "text" | "list"; label: string }> =
   { value: "list", label: "Export as List" },
 ];
 
-const GENERATOR_EXPORT_MODES: Array<{ value: "list" | "modules"; label: string }> = [
-  { value: "list", label: "Export as List" },
-  { value: "modules", label: "Export as Modules" },
-];
-
 const WEBSITE_OUTPUT_MODES: Array<{
   value: "product_images" | "angles" | "full_flow";
   label: string;
@@ -223,7 +226,7 @@ const IMAGE_ASPECTS = ["1:1", "4:5", "9:16", "16:9", "3:2"] as const;
 const VIDEO_ASPECTS = ["9:16", "16:9", "1:1"] as const;
 const VARIATION_ASPECTS = ["1:1", "4:5", "9:16", "16:9"] as const;
 
-const IMAGE_RESOLUTIONS = ["1024", "1536", "2K"] as const;
+const IMAGE_RESOLUTIONS = ["1K", "2K", "4K"] as const;
 const VIDEO_RESOLUTIONS = ["720p", "1080p"] as const;
 const VARIATION_RESOLUTIONS = ["1024", "1536", "2K"] as const;
 
@@ -233,6 +236,32 @@ const WORKFLOW_ASSISTANT_CREDITS_BY_MODEL: Record<"claude-sonnet-4-5" | "gpt-5o"
   "claude-sonnet-4-5": 2,
   "gpt-5o": 0,
 };
+const WORKFLOW_TEXT_INPUT_HANDLES = ["text", "in", "inText"] as const;
+const WORKFLOW_PENDING_MEDIA_PREFIX = "__workflow_pending_media__:";
+
+/**
+ * List node already wired from this generator's media output (Assistant reuses text lists the same way).
+ */
+function findLinkedWorkflowMediaResultsListId(
+  nodes: Node[],
+  edges: Edge[],
+  sourceId: string,
+  media: "image" | "video",
+): string | null {
+  const targetHandle = media === "image" ? "inImage" : "inVideo";
+  const linkedId = edges
+    .filter((e) => {
+      if (e.source !== sourceId || e.targetHandle !== targetHandle) return false;
+      const sh = e.sourceHandle ?? "out";
+      if (media === "image") {
+        return sh === "generated" || sh === "out";
+      }
+      return sh === "out";
+    })
+    .map((e) => e.target)
+    .find((tid) => nodes.some((n) => n.id === tid && n.type === "promptList"));
+  return linkedId ?? null;
+}
 
 function keepWheelInsideTextarea(e: React.WheelEvent<HTMLTextAreaElement>) {
   const el = e.currentTarget;
@@ -370,30 +399,31 @@ async function extractVideoFrameJpegDataUrl(video: HTMLVideoElement, end: boolea
 const CARD_PAD_X_PX = 0;
 
 /**
- * Preview frame size in px: exact aspect ratio, longest side = OUTPUT_FRAME_MAX_LONG.
+ * Preview frame size in px: exact aspect ratio, with 1:1 as the minimum base size.
+ * Wider/taller ratios expand the other side instead of shrinking.
  */
 function outputFrameDimensions(ratio: string, intrinsicAspect?: number): { width: number; height: number } {
   if (intrinsicAspect != null && Number.isFinite(intrinsicAspect) && intrinsicAspect > 0) {
     const ar = intrinsicAspect;
     if (ar >= 1) {
-      const width = OUTPUT_FRAME_MAX_LONG;
-      const height = Math.max(80, Math.round(OUTPUT_FRAME_MAX_LONG / ar));
+      const height = OUTPUT_FRAME_MAX_LONG;
+      const width = Math.max(80, Math.round(OUTPUT_FRAME_MAX_LONG * ar));
       return { width, height };
     }
-    const height = OUTPUT_FRAME_MAX_LONG;
-    const width = Math.max(80, Math.round(OUTPUT_FRAME_MAX_LONG * ar));
+    const width = OUTPUT_FRAME_MAX_LONG;
+    const height = Math.max(80, Math.round(OUTPUT_FRAME_MAX_LONG / ar));
     return { width, height };
   }
   const { w: rw, h: rh } = parseAspectParts(ratio);
   const ar = rw / rh;
   if (!Number.isFinite(ar) || ar <= 0) return { width: OUTPUT_FRAME_MAX_LONG, height: OUTPUT_FRAME_MAX_LONG };
   if (ar >= 1) {
-    const width = OUTPUT_FRAME_MAX_LONG;
-    const height = Math.max(80, Math.round(OUTPUT_FRAME_MAX_LONG / ar));
+    const height = OUTPUT_FRAME_MAX_LONG;
+    const width = Math.max(80, Math.round(OUTPUT_FRAME_MAX_LONG * ar));
     return { width, height };
   }
-  const height = OUTPUT_FRAME_MAX_LONG;
-  const width = Math.max(80, Math.round(OUTPUT_FRAME_MAX_LONG * ar));
+  const width = OUTPUT_FRAME_MAX_LONG;
+  const height = Math.max(80, Math.round(OUTPUT_FRAME_MAX_LONG / ar));
   return { width, height };
 }
 
@@ -410,6 +440,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   const [assistantDescribe, setAssistantDescribe] = useState("");
   const [assistantResult, setAssistantResult] = useState("");
   const [assistantLoading, setAssistantLoading] = useState(false);
+  const [runChoiceOpen, setRunChoiceOpen] = useState(false);
   const [cardHovered, setCardHovered] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
@@ -424,7 +455,9 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   const assistantOpenRef = useRef(false);
   const promptFocusedRef = useRef(false);
   const previewVideoRef = useRef<HTMLVideoElement | null>(null);
+  const previewImageRef = useRef<HTMLImageElement | null>(null);
   const [frameExtractBusy, setFrameExtractBusy] = useState<null | "first" | "last">(null);
+  const [outputPreviewLightbox, setOutputPreviewLightbox] = useState(false);
 
   const clearHoverLeaveTimer = () => {
     if (leaveTimerRef.current) {
@@ -577,6 +610,31 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     },
     [id, patch],
   );
+  const openOutputPreviewLightbox = useCallback(() => {
+    const outputUrl = (data.outputPreviewUrl ?? data.referencePreviewUrl ?? "").trim();
+    if (!outputUrl) return;
+    setOutputPreviewLightbox(true);
+  }, [data.outputPreviewUrl, data.referencePreviewUrl]);
+  const normalizeCompletedMediaLines = useCallback((lines: string[]): string[] => {
+    return lines
+      .map((x) => x.trim())
+      .filter((x) => x.length > 0 && !x.startsWith(WORKFLOW_PENDING_MEDIA_PREFIX));
+  }, []);
+  const finalizeProgressMediaList = useCallback(
+    (listId: string, preferredLines?: string[]) => {
+      const fromNode = getNodes().find((n) => n.id === listId);
+      const currentLines = Array.isArray(fromNode?.data?.lines)
+        ? (fromNode?.data?.lines as string[])
+        : [];
+      const cleaned = normalizeCompletedMediaLines(preferredLines ?? currentLines);
+      patch(listId, {
+        lines: cleaned,
+        mode: "results",
+        contentKind: "media",
+      });
+    },
+    [getNodes, normalizeCompletedMediaLines, patch],
+  );
 
   useEffect(() => () => clearHoverLeaveTimer(), []);
   modelMenuOpenRef.current = modelMenuOpen;
@@ -662,6 +720,9 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     const i = same.findIndex((n) => n.id === id);
     return i < 0 ? 1 : i + 1;
   });
+  const hasDownstreamModules = useStore(
+    useCallback((s) => s.edges.some((e) => e.source === id), [id]),
+  );
 
   /** Incoming wires counted like `collectLinkedImageUrlsForHandles(..., ["references","in"])`. */
   const imageReferenceWireCount = useStore(
@@ -673,6 +734,58 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           const h = e.targetHandle ?? "in";
           return h === "references" || h === "in";
         }).length;
+      },
+      [data.kind, id],
+    ),
+  );
+  /** Assistant: number of image wires connected to `references`. */
+  const assistantReferenceWireCount = useStore(
+    useCallback(
+      (s) => {
+        if (data.kind !== "assistant") return 0;
+        return s.edges.filter((e) => {
+          if (e.target !== id) return false;
+          const h = e.targetHandle ?? "";
+          return h === "references";
+        }).length;
+      },
+      [data.kind, id],
+    ),
+  );
+  /** Assistant: linked reference image URLs (for visual preview in card header). */
+  const assistantLinkedReferencePreviewUrls = useStore(
+    useCallback(
+      (s) => {
+        if (data.kind !== "assistant") return [] as string[];
+        const byId = new Map(s.nodes.map((n) => [n.id, n]));
+        const out: string[] = [];
+        const seen = new Set<string>();
+        for (const e of s.edges) {
+          if (e.target !== id) continue;
+          const h = e.targetHandle ?? "";
+          if (h !== "references") continue;
+          const src = byId.get(e.source);
+          if (!src) continue;
+          if (src.type === "imageRef") {
+            const d = src.data as ImageRefNodeData;
+            if (d.mediaKind === "video") continue;
+            const u = (d.imageUrl ?? "").trim();
+            if (!u || seen.has(u)) continue;
+            seen.add(u);
+            out.push(u);
+            continue;
+          }
+          if (src.type === "adAsset") {
+            const d = src.data as AdAssetNodeData;
+            const k = d.outputMediaKind ?? d.referenceMediaKind;
+            if (k === "video") continue;
+            const u = (d.outputPreviewUrl ?? d.referencePreviewUrl ?? "").trim();
+            if (!u || seen.has(u)) continue;
+            seen.add(u);
+            out.push(u);
+          }
+        }
+        return out;
       },
       [data.kind, id],
     ),
@@ -691,24 +804,34 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   const previewUrl = data.outputPreviewUrl ?? data.referencePreviewUrl;
   const previewMediaKind = data.outputMediaKind ?? data.referenceMediaKind;
   const hasPreviewMedia = Boolean(previewUrl);
-  const showImageGeneratedChainBubble = useMemo(() => {
-    if (data.kind !== "image" || generating) return false;
-    const out = data.outputPreviewUrl?.trim();
-    if (!out) return false;
-    // Prefer explicit kind; still show if missing (older saves) as long as output exists.
-    const kind = data.outputMediaKind;
-    if (kind === "video") return false;
-    return true;
-  }, [data.kind, data.outputMediaKind, data.outputPreviewUrl, generating]);
+  const previewLightboxIsVideo =
+    previewMediaKind === "video" ||
+    (data.kind === "video" && previewMediaKind !== "image");
 
-  const showVideoOutputBubbles = useMemo(
+  useEffect(() => {
+    if (!previewUrl) setOutputPreviewLightbox(false);
+  }, [previewUrl]);
+
+  useEffect(() => {
+    if (!outputPreviewLightbox) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOutputPreviewLightbox(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [outputPreviewLightbox]);
+
+  const showImageGeneratorOutputBubble = data.kind === "image";
+  const imageGeneratorOutputReady = useMemo(
     () =>
-      data.kind === "video" &&
+      data.kind === "image" &&
       Boolean(data.outputPreviewUrl?.trim()) &&
-      data.outputMediaKind !== "image" &&
+      (data.outputMediaKind ?? "image") !== "video" &&
       !generating,
     [data.kind, data.outputMediaKind, data.outputPreviewUrl, generating],
   );
+
+  const showVideoOutputBubbles = data.kind === "video";
   /** Card width follows preview width exactly for image/video generators. */
   const cardWidthPx = frame.width + CARD_PAD_X_PX;
 
@@ -746,16 +869,23 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     frame.width,
     frame.height,
     hasPreviewMedia,
-    showImageGeneratedChainBubble,
+    showImageGeneratorOutputBubble,
+    imageGeneratorOutputReady,
     showVideoOutputBubbles,
   ]);
 
   const aspectLocked =
     data.intrinsicAspect != null && Number.isFinite(data.intrinsicAspect) && data.intrinsicAspect > 0;
   const defaultRes = data.kind === "video" ? "720p" : "1024";
-  const resolution = data.resolution ?? defaultRes;
-  const quantity = Math.min(4, Math.max(1, data.quantity ?? 1));
-  const generatorExportMode = data.generatorExportMode ?? "list";
+  const resolution = useMemo(() => {
+    const raw = data.resolution ?? defaultRes;
+    if (data.kind === "image") {
+      if (raw === "1024") return "1K";
+      if (raw === "1536") return "2K";
+    }
+    return raw;
+  }, [data.kind, data.resolution, defaultRes]);
+  const quantity = Math.min(10, Math.max(1, data.quantity ?? 1));
 
   const models = useMemo(() => {
     if (data.kind === "video") return VIDEO_MODELS;
@@ -799,21 +929,40 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
 
   const videoPriorityEffective: "normal" | "vip" =
     data.kind === "video" && data.videoPriority === "vip" ? "vip" : "normal";
-  const assistantModel = data.assistantModel ?? "claude-sonnet-4-5";
+  const assistantModel = data.assistantModel ?? "gpt-5o";
   const assistantMode = data.assistantMode ?? "input";
   const assistantOutput = data.assistantOutput ?? "";
   const assistantExportMode = data.assistantExportMode ?? "text";
   const websiteUrl = (data.websiteUrl ?? "").trim();
   const websiteOutputMode = data.websiteOutputMode ?? "full_flow";
   const websiteProductImageCount = data.websiteProductImageCount ?? 3;
+  const batchPromptCount = useStore(
+    useCallback(
+      (s) => {
+        if (data.kind !== "image" && data.kind !== "video") return 0;
+        const { batch } = collectWorkflowBatchPrompts(
+          s.nodes,
+          s.edges,
+          id,
+          [...WORKFLOW_TEXT_INPUT_HANDLES],
+          prompt,
+        );
+        return batch?.length ?? 0;
+      },
+      [data.kind, id, prompt],
+    ),
+  );
 
   const estimatedCredits = useMemo(() => {
+    const runCount = Math.max(1, batchPromptCount);
+    const multiBatchFromList = batchPromptCount > 1;
+
     if (data.kind === "image") {
-      if (generatorExportMode === "modules" && quantity > 1) {
+      if (quantity > 1 && !multiBatchFromList) {
         const oneNode = workflowImageChargeCredits({ model, resolution, quantity: 1 });
-        return oneNode * quantity;
+        return oneNode * quantity * runCount;
       }
-      return workflowImageChargeCredits({ model, resolution, quantity });
+      return workflowImageChargeCredits({ model, resolution, quantity }) * runCount;
     }
     if (data.kind === "video") {
       const oneVideo = workflowVideoChargeCredits({
@@ -822,13 +971,14 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         durationSec: data.videoDurationSec,
         seedancePriority: videoPriorityEffective,
       });
-      if (generatorExportMode === "modules" && quantity > 1) {
-        return oneVideo * quantity;
+      if (quantity > 1 && !multiBatchFromList) {
+        return oneVideo * quantity * runCount;
       }
-      return oneVideo;
+      return oneVideo * runCount;
     }
     return 0;
   }, [
+    batchPromptCount,
     data.kind,
     data.videoDurationSec,
     data.videoPriority,
@@ -836,8 +986,38 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     quantity,
     resolution,
     videoPriorityEffective,
-    generatorExportMode,
   ]);
+
+  const runFromHereEstimatedCredits = useStore(
+    useCallback(
+      (s) => {
+        const byId = new Map(s.nodes.map((n) => [n.id, n]));
+        if (!byId.has(id)) return 0;
+        const outgoing = new Map<string, string[]>();
+        for (const e of s.edges) {
+          if (!outgoing.has(e.source)) outgoing.set(e.source, []);
+          outgoing.get(e.source)!.push(e.target);
+        }
+        const seen = new Set<string>();
+        const queue = [id];
+        let total = 0;
+        while (queue.length) {
+          const cur = queue.shift()!;
+          if (seen.has(cur)) continue;
+          seen.add(cur);
+          const n = byId.get(cur);
+          if (n?.type === "adAsset") {
+            total += estimateWorkflowAdAssetRunCredits(n.data as AdAssetNodeData, n.id, s.nodes, s.edges);
+          }
+          for (const nxt of outgoing.get(cur) ?? []) {
+            if (!seen.has(nxt)) queue.push(nxt);
+          }
+        }
+        return Math.max(0, Math.round(total));
+      },
+      [id],
+    ),
+  );
   const assistantEstimatedCredits = useMemo(
     () => (data.kind === "assistant" ? WORKFLOW_ASSISTANT_CREDITS_BY_MODEL[assistantModel] ?? 5 : 0),
     [assistantModel, data.kind],
@@ -868,7 +1048,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     const edges = getEdges();
     const linkedPrompts =
       data.kind === "image" || data.kind === "video"
-        ? collectLinkedPromptTextsForHandles(nodes, edges, id, ["text"])
+        ? collectLinkedPromptTextsForHandles(nodes, edges, id, [...WORKFLOW_TEXT_INPUT_HANDLES])
         : collectLinkedPromptTexts(nodes, edges, id);
     const linkedAssistantImageRefs =
       data.kind === "assistant"
@@ -877,10 +1057,11 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     const effectivePrompt = composeWorkflowPrompt(prompt, linkedPrompts);
     const batchContext =
       data.kind === "image" || data.kind === "video"
-        ? collectWorkflowBatchPrompts(nodes, edges, id, ["text"], prompt)
-        : { batch: null, composedSingle: effectivePrompt };
+        ? collectWorkflowBatchPrompts(nodes, edges, id, [...WORKFLOW_TEXT_INPUT_HANDLES], prompt)
+        : { batch: null, composedSingle: effectivePrompt, fromPromptList: false };
     const batchPrompts = batchContext.batch?.map((x) => x.trim()).filter(Boolean) ?? null;
     const singlePrompt = (batchContext.composedSingle || effectivePrompt).trim();
+    const fromPromptList = batchContext.fromPromptList;
     if (!(batchPrompts?.length || singlePrompt)) {
       toast.error("Add a prompt", {
         description: linkedPrompts.length
@@ -936,9 +1117,10 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 contentKind: "text",
               });
             } else if (self) {
+              const listOffsetX = Math.max(560, cardWidthPx + 220);
               const listNode = buildPromptListNode(
-                { x: self.position.x + 420, y: self.position.y + 8 },
-                { label: "Assistant prompts", lines, mode: "prompts" },
+                { x: self.position.x + listOffsetX, y: self.position.y + 8 },
+                { label: "Assistant prompts", lines: [], mode: "prompts" },
               );
               setNodes((prev) => [...prev, listNode]);
               setEdges((prev) => [
@@ -952,6 +1134,16 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                   style: { stroke: "rgba(167, 139, 250, 0.5)", strokeWidth: 2 },
                 },
               ]);
+              // Smooth "build" effect: reveal generated prompts one by one in the new list.
+              lines.forEach((_, idx) => {
+                window.setTimeout(() => {
+                  patch(listNode.id, {
+                    lines: lines.slice(0, idx + 1),
+                    mode: "prompts",
+                    contentKind: "text",
+                  });
+                }, 90 + idx * 70);
+              });
             }
             toast.success(`Assistant ready — ${lines.length} prompt${lines.length > 1 ? "s" : ""} in list`);
           } else {
@@ -1088,7 +1280,6 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
 
     const shouldFanOutAsModules =
       (data.kind === "image" || data.kind === "video") &&
-      generatorExportMode === "modules" &&
       quantity > 1 &&
       !(batchPrompts?.length && batchPrompts.length > 1);
     const perNodeQuantity = shouldFanOutAsModules ? 1 : quantity;
@@ -1179,10 +1370,46 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       }
       setGenerating(true);
       let ok = false;
+      let promptsForRun: string[] = [];
+      let progressListId: string | null = null;
+      const progressiveImageUrls: string[] = [];
       try {
-        const promptsForRun = batchPrompts?.length ? batchPrompts : [singlePrompt];
+        promptsForRun = batchPrompts?.length ? batchPrompts : [singlePrompt];
+        const shouldBuildProgressList = fromPromptList && promptsForRun.length > 1;
+        const nodeRef = nodes.find((n) => n.id === id);
+        if (shouldBuildProgressList && nodeRef) {
+          const pendingSlots = promptsForRun.map((_, idx) => `${WORKFLOW_PENDING_MEDIA_PREFIX}${idx}`);
+          const existingListId = findLinkedWorkflowMediaResultsListId(nodes, edges, id, "image");
+          if (existingListId) {
+            progressListId = existingListId;
+            patch(progressListId, {
+              lines: pendingSlots,
+              mode: "results",
+              contentKind: "media",
+            });
+          } else {
+            const listNode = buildPromptListNode(
+              { x: nodeRef.position.x + Math.max(560, cardWidthPx + 220), y: nodeRef.position.y + 18 },
+              { label: "Image results", lines: pendingSlots, mode: "results" },
+            );
+            listNode.data = { ...listNode.data, contentKind: "media" };
+            progressListId = listNode.id;
+            setNodes((prev) => [...prev, listNode]);
+            setEdges((prev) => [
+              ...prev,
+              {
+                id: `e-${id}-${listNode.id}-${crypto.randomUUID().slice(0, 8)}`,
+                source: id,
+                sourceHandle: "generated",
+                target: listNode.id,
+                targetHandle: "inImage",
+                style: { stroke: "rgba(167, 139, 250, 0.5)", strokeWidth: 2 },
+              },
+            ]);
+          }
+        }
         const imageResults = await Promise.all(
-          promptsForRun.map(async (p) => {
+          promptsForRun.map(async (p, idx) => {
             const { imageUrl } = await runWorkflowImageJob({
               planId,
               personalApiKey: personalKey,
@@ -1193,6 +1420,17 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               quantity: perNodeQuantity,
               referenceImageUrls: refsForJob.length ? refsForJob : undefined,
             });
+            primeRemoteMediaForDisplay(imageUrl);
+            if (progressListId) {
+              progressiveImageUrls[idx] = imageUrl;
+              patch(progressListId, {
+                lines: promptsForRun.map((_, slotIdx) =>
+                  progressiveImageUrls[slotIdx]?.trim() || `${WORKFLOW_PENDING_MEDIA_PREFIX}${slotIdx}`,
+                ),
+                mode: "results",
+                contentKind: "media",
+              });
+            }
             return imageUrl;
           }),
         );
@@ -1201,33 +1439,58 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           outputPreviewUrl: imageUrl,
           outputMediaKind: "image",
         });
-        const nodeRef = nodes.find((n) => n.id === id);
-        if ((batchPrompts?.length ?? 0) > 1 && nodeRef) {
-          const listNode = buildPromptListNode(
-            { x: nodeRef.position.x + 380, y: nodeRef.position.y + 18 },
-            { label: "Image results", lines: imageResults, mode: "results" },
-          );
-          setNodes((prev) => [...prev, listNode]);
-          setEdges((prev) => [
-            ...prev,
-            {
-              id: `e-${id}-${listNode.id}-${crypto.randomUUID().slice(0, 8)}`,
-              source: id,
-              sourceHandle: "out",
-              target: listNode.id,
-              targetHandle: "in",
-              style: { stroke: "rgba(167, 139, 250, 0.5)", strokeWidth: 2 },
-            },
-          ]);
+        if (shouldBuildProgressList) {
+          if (progressListId) {
+            finalizeProgressMediaList(progressListId, imageResults);
+          }
           toast.success(`Batch done (${imageResults.length})`, {
-            description: "A new List node was created with all generated image URLs.",
+            description: "Image list updated progressively during generation.",
           });
+        } else if (fromPromptList && (batchPrompts?.length ?? 0) > 1 && nodeRef) {
+          const existingListId = findLinkedWorkflowMediaResultsListId(nodes, edges, id, "image");
+          if (existingListId) {
+            patch(existingListId, {
+              lines: imageResults,
+              mode: "results",
+              contentKind: "media",
+            });
+            toast.success(`Batch done (${imageResults.length})`, {
+              description: "Connected image list was updated.",
+            });
+          } else {
+            const listNode = buildPromptListNode(
+              { x: nodeRef.position.x + 380, y: nodeRef.position.y + 18 },
+              { label: "Image results", lines: imageResults, mode: "results" },
+            );
+            listNode.data = { ...listNode.data, contentKind: "media" };
+            setNodes((prev) => [...prev, listNode]);
+            setEdges((prev) => [
+              ...prev,
+              {
+                id: `e-${id}-${listNode.id}-${crypto.randomUUID().slice(0, 8)}`,
+                source: id,
+                sourceHandle: "generated",
+                target: listNode.id,
+                targetHandle: "inImage",
+                style: { stroke: "rgba(167, 139, 250, 0.5)", strokeWidth: 2 },
+              },
+            ]);
+            toast.success(`Batch done (${imageResults.length})`, {
+              description: "A new List node was created with all generated image URLs.",
+            });
+          }
         } else {
           toast.success("Image ready");
         }
         ok = true;
       } catch (e) {
         const msg = userMessageFromCaughtError(e, "Image generation failed. Try again.");
+        if (progressListId) {
+          const completed = promptsForRun
+            .map((_, slotIdx) => progressiveImageUrls[slotIdx]?.trim())
+            .filter(Boolean) as string[];
+          finalizeProgressMediaList(progressListId, completed);
+        }
         refundPlatformCredits(platformCharge, grantCredits, creditsRef);
         toast.error(msg);
       } finally {
@@ -1258,6 +1521,9 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     }
     setGenerating(true);
     let ok = false;
+    let promptsForRun: string[] = [];
+    let progressListId: string | null = null;
+    const progressiveVideoUrls: string[] = [];
     try {
       const linkedFromStartPort = collectLinkedImageUrlsForHandles(nodes, edges, id, ["startImage"]);
       const linkedFromEndPort = collectLinkedImageUrlsForHandles(nodes, edges, id, ["endImage"]);
@@ -1276,10 +1542,57 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       const referenceOnly = Array.from(new Set(referencePool.filter(Boolean))).filter(
         (u) => u !== startFrame && u !== endFrame,
       );
+      const indexedStartImages =
+        linkedFromStartPort.length > 0
+          ? linkedFromStartPort
+          : linkedFromReferencesPort.length > 0
+            ? linkedFromReferencesPort
+            : [];
+      const pickByIndex = (arr: string[], idx: number, fallback: string | undefined): string | undefined => {
+        if (!arr.length) return fallback;
+        const clamped = idx >= arr.length ? arr[arr.length - 1] : arr[idx];
+        const chosen = clamped?.trim();
+        return chosen || fallback;
+      };
 
-      const promptsForRun = batchPrompts?.length ? batchPrompts : [singlePrompt];
+      promptsForRun = batchPrompts?.length ? batchPrompts : [singlePrompt];
+      const shouldBuildProgressList = fromPromptList && promptsForRun.length > 1;
+      const nodeRef = nodes.find((n) => n.id === id);
+      if (shouldBuildProgressList && nodeRef) {
+        const pendingSlots = promptsForRun.map((_, idx) => `${WORKFLOW_PENDING_MEDIA_PREFIX}${idx}`);
+        const existingListId = findLinkedWorkflowMediaResultsListId(nodes, edges, id, "video");
+        if (existingListId) {
+          progressListId = existingListId;
+          patch(progressListId, {
+            lines: pendingSlots,
+            mode: "results",
+            contentKind: "media",
+          });
+        } else {
+          const listNode = buildPromptListNode(
+            { x: nodeRef.position.x + Math.max(560, cardWidthPx + 220), y: nodeRef.position.y + 18 },
+            { label: "Video results", lines: pendingSlots, mode: "results" },
+          );
+          listNode.data = { ...listNode.data, contentKind: "media" };
+          progressListId = listNode.id;
+          setNodes((prev) => [...prev, listNode]);
+          setEdges((prev) => [
+            ...prev,
+            {
+              id: `e-${id}-${listNode.id}-${crypto.randomUUID().slice(0, 8)}`,
+              source: id,
+              sourceHandle: "out",
+              target: listNode.id,
+              targetHandle: "inVideo",
+              style: { stroke: "rgba(167, 139, 250, 0.5)", strokeWidth: 2 },
+            },
+          ]);
+        }
+      }
       const videoResults = await Promise.all(
-        promptsForRun.map(async (p) => {
+        promptsForRun.map(async (p, idx) => {
+          const indexedStartFrame = pickByIndex(indexedStartImages, idx, startFrame);
+          const indexedReferenceOnly = referenceOnly.filter((u) => u !== indexedStartFrame && u !== endFrame);
           const { videoUrl } = await runWorkflowVideoJob({
             planId,
             personalApiKey: personalKey,
@@ -1290,11 +1603,22 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             resolution,
             durationSec: data.videoDurationSec,
             seedancePriority: data.videoPriority === "vip" ? "vip" : "normal",
-            linkedImageUrl: startFrame,
+            linkedImageUrl: indexedStartFrame,
             referenceImageUrl: undefined,
             endImageUrl: endFrame,
-            referenceImageUrls: referenceOnly.length ? referenceOnly : undefined,
+            referenceImageUrls: indexedReferenceOnly.length ? indexedReferenceOnly : undefined,
           });
+          primeRemoteMediaForDisplay(videoUrl);
+          if (progressListId) {
+            progressiveVideoUrls[idx] = videoUrl;
+            patch(progressListId, {
+              lines: promptsForRun.map((_, slotIdx) =>
+                progressiveVideoUrls[slotIdx]?.trim() || `${WORKFLOW_PENDING_MEDIA_PREFIX}${slotIdx}`,
+              ),
+              mode: "results",
+              contentKind: "media",
+            });
+          }
           return videoUrl;
         }),
       );
@@ -1305,26 +1629,12 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         videoExtractedFirstFrameUrl: undefined,
         videoExtractedLastFrameUrl: undefined,
       });
-      const nodeRef = nodes.find((n) => n.id === id);
-      if ((batchPrompts?.length ?? 0) > 1 && nodeRef) {
-        const listNode = buildPromptListNode(
-          { x: nodeRef.position.x + 380, y: nodeRef.position.y + 18 },
-          { label: "Video results", lines: videoResults, mode: "results" },
-        );
-        setNodes((prev) => [...prev, listNode]);
-        setEdges((prev) => [
-          ...prev,
-          {
-            id: `e-${id}-${listNode.id}-${crypto.randomUUID().slice(0, 8)}`,
-            source: id,
-            sourceHandle: "out",
-            target: listNode.id,
-            targetHandle: "in",
-            style: { stroke: "rgba(167, 139, 250, 0.5)", strokeWidth: 2 },
-          },
-        ]);
+      if (shouldBuildProgressList) {
+        if (progressListId) {
+          finalizeProgressMediaList(progressListId, videoResults);
+        }
         toast.success(`Batch done (${videoResults.length})`, {
-          description: "A new List node was created with all generated video URLs.",
+          description: "Video list updated progressively during generation.",
         });
       } else {
         toast.success("Video ready");
@@ -1332,6 +1642,12 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       ok = true;
     } catch (e) {
       const msg = userMessageFromCaughtError(e, "Video generation failed. Try again.");
+      if (progressListId) {
+        const completed = promptsForRun
+          .map((_, slotIdx) => progressiveVideoUrls[slotIdx]?.trim())
+          .filter(Boolean) as string[];
+        finalizeProgressMediaList(progressListId, completed);
+      }
       refundPlatformCredits(vPlatformCharge, grantCredits, creditsRef);
       toast.error(msg);
     } finally {
@@ -1355,7 +1671,6 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     aspectRatio,
     resolution,
     quantity,
-    generatorExportMode,
     cardWidthPx,
     patch,
     planId,
@@ -1372,11 +1687,21 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   ]);
 
   const runThisNodeOnly = useCallback(() => {
+    setRunChoiceOpen(false);
     void onGenerate();
   }, [onGenerate]);
   const runFromHere = useCallback(() => {
+    setRunChoiceOpen(false);
     window.dispatchEvent(new CustomEvent("workflow:run-from-here", { detail: { nodeId: id } }));
   }, [id]);
+  const onGenerateButtonClick = useCallback(() => {
+    if (generating) return;
+    if (!hasDownstreamModules) {
+      void onGenerate();
+      return;
+    }
+    setRunChoiceOpen((v) => !v);
+  }, [generating, hasDownstreamModules, onGenerate]);
 
   useEffect(() => {
     const onRunNode = (ev: Event) => {
@@ -1469,12 +1794,13 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           </div>
 
           <div className="mt-2 flex items-center gap-2">
+            <div className="relative ml-auto">
             <button
               type="button"
               title={generating ? "Running website module…" : "Run website module"}
               disabled={generating}
-              className="nodrag nopan ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-zinc-900 shadow-md transition hover:bg-white/95 disabled:cursor-not-allowed disabled:opacity-55"
-              onClick={() => void onGenerate()}
+              className="nodrag nopan flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-zinc-900 shadow-md transition hover:bg-white/95 disabled:cursor-not-allowed disabled:opacity-55"
+              onClick={onGenerateButtonClick}
             >
               {generating ? (
                 <Loader2 className="h-4 w-4 animate-spin text-zinc-900" aria-hidden />
@@ -1484,6 +1810,26 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 <ArrowRight className="h-4 w-4 text-zinc-900" strokeWidth={2.25} />
               )}
             </button>
+            {runChoiceOpen && hasDownstreamModules ? (
+              <div className="absolute bottom-[calc(100%+8px)] right-0 z-50 min-w-[170px] rounded-xl border border-white/12 bg-[#14141a]/95 p-1.5 shadow-[0_12px_36px_rgba(0,0,0,0.6)] backdrop-blur-md">
+                <button
+                  type="button"
+                  className="flex w-full items-center rounded-lg px-2.5 py-2 text-left text-[12px] font-medium text-white/90 transition hover:bg-white/[0.08]"
+                  onClick={runThisNodeOnly}
+                >
+                  This node only
+                </button>
+                <button
+                  type="button"
+                  className="flex w-full items-center rounded-lg px-2.5 py-2 text-left text-[12px] font-medium text-white/90 transition hover:bg-white/[0.08]"
+                  onClick={runFromHere}
+                >
+                  Run from here
+                  {runFromHereEstimatedCredits > 0 ? ` (${runFromHereEstimatedCredits} cr)` : ""}
+                </button>
+              </div>
+            ) : null}
+            </div>
           </div>
         </div>
       </>
@@ -1491,7 +1837,8 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   }
 
   if (data.kind === "assistant") {
-    const assistantCardWidth = Math.max(cardWidthPx, 520);
+    const assistantCardWidth = Math.max(cardWidthPx, 420);
+    const assistantBodyHeightPx = Math.max(230, assistantCardWidth - 130);
     return (
       <>
         <WorkflowNodeContextToolbar nodeId={id} onRun={runThisNodeOnly} onRunFromHere={runFromHere} />
@@ -1580,7 +1927,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           </div>
           <div
             className={cn(
-              "relative overflow-visible rounded-2xl border border-white/[0.08] bg-[#121212]/98 px-3 pb-3 pt-6 shadow-[0_12px_40px_rgba(0,0,0,0.5)] backdrop-blur-sm",
+              "relative overflow-visible rounded-2xl border border-white/[0.08] bg-[#121212]/98 px-3 pb-3 pt-10 shadow-[0_12px_40px_rgba(0,0,0,0.5)] backdrop-blur-sm",
               selected ? "ring-2 ring-violet-500/85 ring-offset-2 ring-offset-[#06070d]" : "",
             )}
             style={{ width: assistantCardWidth }}
@@ -1601,27 +1948,50 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               </span>
             </div>
           </div>
-          <div className="mb-2 flex items-center gap-1 rounded-xl border border-white/10 bg-[#0d0d10] p-1">
-            <button
-              type="button"
-              className={cn(
-                "flex-1 rounded-lg px-2 py-1.5 text-[12px] font-medium transition",
-                assistantMode === "input" ? "bg-white text-zinc-900" : "text-white/75 hover:bg-white/[0.08]",
-              )}
-              onClick={() => patch(id, { assistantMode: "input" })}
-            >
-              Input
-            </button>
-            <button
-              type="button"
-              className={cn(
-                "flex-1 rounded-lg px-2 py-1.5 text-[12px] font-medium transition",
-                assistantMode === "output" ? "bg-white text-zinc-900" : "text-white/75 hover:bg-white/[0.08]",
-              )}
-              onClick={() => patch(id, { assistantMode: "output" })}
-            >
-              Result
-            </button>
+          <div className="absolute left-2 top-2 z-[3] flex items-start gap-2">
+            <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-[#0d0d10]/95 p-0.5">
+              <button
+                type="button"
+                className={cn(
+                  "rounded-md px-2 py-0.5 text-[10px] font-medium transition",
+                  assistantMode === "input" ? "bg-white text-zinc-900" : "text-white/75 hover:bg-white/[0.08]",
+                )}
+                onClick={() => patch(id, { assistantMode: "input" })}
+              >
+                Input
+              </button>
+              <button
+                type="button"
+                className={cn(
+                  "rounded-md px-2 py-0.5 text-[10px] font-medium transition",
+                  assistantMode === "output" ? "bg-white text-zinc-900" : "text-white/75 hover:bg-white/[0.08]",
+                )}
+                onClick={() => patch(id, { assistantMode: "output" })}
+              >
+                Result
+              </button>
+            </div>
+            {assistantReferenceWireCount > 0 ? (
+              <div
+                className="flex items-center gap-1 rounded-lg border border-violet-400/35 bg-[#0f0f13]/90 px-1 py-0.5"
+                title="Linked upload/reference images used as assistant context."
+              >
+                {assistantLinkedReferencePreviewUrls.slice(0, 3).map((u, idx) => (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    key={`${u}-${idx}`}
+                    src={u}
+                    alt=""
+                    className="h-6 w-6 rounded object-cover ring-1 ring-white/25"
+                  />
+                ))}
+                {assistantLinkedReferencePreviewUrls.length > 3 ? (
+                  <span className="px-0.5 text-[9px] font-semibold text-white/70">
+                    +{assistantLinkedReferencePreviewUrls.length - 3}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
           </div>
 
           {assistantMode === "input" ? (
@@ -1629,29 +1999,30 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               value={prompt}
               onChange={(e) => patch(id, { prompt: e.target.value })}
               placeholder="Type your prompt for the assistant..."
-              rows={10}
+              rows={4}
               onFocus={() => setPromptFocused(true)}
               onBlur={() => setPromptFocused(false)}
-              className="nodrag nopan min-h-[240px] w-full resize-y rounded-xl border border-white/12 bg-black/35 px-3 py-2 text-[14px] leading-relaxed text-white/92 placeholder:text-white/30 outline-none focus:border-violet-500/40 focus:ring-1 focus:ring-violet-500/25"
+              style={{ minHeight: assistantBodyHeightPx }}
+              className="nodrag nopan w-full resize-y rounded-xl border border-white/12 bg-black/35 px-2.5 py-2 text-[12px] leading-relaxed text-white/92 placeholder:text-white/30 caret-white outline-none focus:border-violet-500/40 focus:ring-1 focus:ring-violet-500/25"
             />
           ) : (
-            <div className="nodrag nopan min-h-[240px] w-full overflow-auto rounded-xl border border-white/12 bg-black/35 px-3 py-2 text-[14px] leading-relaxed text-white/88">
-              {assistantOutput.trim() ? (
-                <pre className="whitespace-pre-wrap break-words font-sans text-[14px] leading-relaxed text-white/88">
-                  {assistantOutput}
-                </pre>
-              ) : (
-                <p className="text-white/35">No result yet. Switch to Input and run the assistant.</p>
-              )}
-            </div>
+            <textarea
+              value={assistantOutput}
+              onChange={(e) => patch(id, { assistantOutput: e.target.value })}
+              placeholder="No result yet. Switch to Input and run the assistant."
+              style={{ height: assistantBodyHeightPx }}
+              onFocus={() => setPromptFocused(true)}
+              onBlur={() => setPromptFocused(false)}
+              className="nodrag nopan w-full resize-y overflow-y-auto rounded-xl border border-white/12 bg-black/35 px-2.5 py-2 text-[12px] leading-relaxed text-white/88 placeholder:text-white/35 caret-white outline-none focus:border-violet-500/40 focus:ring-1 focus:ring-violet-500/25 studio-minimal-scrollbar"
+            />
           )}
 
-          <div className="mt-2 flex items-center gap-2">
+          <div className="mt-1.5 flex w-full flex-wrap items-center gap-1.5">
             <Select
               value={assistantExportMode}
               onValueChange={(v) => patch(id, { assistantExportMode: v as "text" | "list" })}
             >
-              <SelectTrigger size="sm" className={cn(selectTriggerClass, "min-w-[11rem]")}>
+              <SelectTrigger size="sm" className={cn(selectTriggerClass, "h-7 min-w-0 max-w-[5.5rem] px-2 text-[10px]")}>
                 <SelectValue placeholder="Export mode" />
               </SelectTrigger>
               <SelectContent className={selectContentClass} position="popper">
@@ -1666,7 +2037,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               value={assistantModel}
               onValueChange={(v) => patch(id, { assistantModel: v as AdAssetNodeData["assistantModel"] })}
             >
-              <SelectTrigger size="sm" className={cn(selectTriggerClass, "min-w-[12.5rem]")}>
+              <SelectTrigger size="sm" className={cn(selectTriggerClass, "h-7 min-w-0 max-w-[6.25rem] px-2 text-[10px]")}>
                 <SelectValue placeholder="Assistant model" />
               </SelectTrigger>
               <SelectContent className={selectContentClass} position="popper">
@@ -1678,40 +2049,55 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               </SelectContent>
             </Select>
             <span
-              className="inline-flex h-8 items-center gap-1.5 rounded-full border border-violet-400/35 bg-violet-500/12 px-2.5 text-[11px] font-semibold tabular-nums text-white shadow-[0_8px_24px_rgba(0,0,0,0.35)]"
+              className="inline-flex h-7 items-center gap-1 rounded-full border border-violet-400/35 bg-violet-500/12 px-2 text-[10px] font-semibold tabular-nums text-white shadow-[0_8px_24px_rgba(0,0,0,0.35)]"
               title="Estimated credits for this run"
             >
-              <Coins className="h-3.5 w-3.5 text-violet-200" strokeWidth={2.2} aria-hidden />
+              <Coins className="h-3 w-3 text-violet-200" strokeWidth={2.2} aria-hidden />
               {assistantEstimatedCredits}
             </span>
-            <button
-              type="button"
-              title={
-                generating
-                  ? "Running assistant…"
-                  : hasAssistantOutput
-                    ? "Regenerate assistant response"
-                    : "Run assistant"
-              }
-              disabled={generating}
-              className="nodrag nopan ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-zinc-900 shadow-md transition hover:bg-white/95 disabled:cursor-not-allowed disabled:opacity-55"
-              onClick={() => void onGenerate()}
-            >
-              {generating ? (
-                <Loader2 className="h-4 w-4 animate-spin text-zinc-900" aria-hidden />
-              ) : hasAssistantOutput ? (
-                <RotateCcw className="h-4 w-4 text-zinc-900" strokeWidth={2.25} />
-              ) : (
-                <ArrowRight className="h-4 w-4 text-zinc-900" strokeWidth={2.25} />
-              )}
-            </button>
+            <div className="relative ml-auto">
+              <button
+                type="button"
+                title={
+                  generating
+                    ? "Running assistant…"
+                    : hasAssistantOutput
+                      ? "Regenerate assistant response"
+                      : "Run assistant"
+                }
+                disabled={generating}
+                className="nodrag nopan flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white text-zinc-900 shadow-md transition hover:bg-white/95 disabled:cursor-not-allowed disabled:opacity-55"
+                onClick={onGenerateButtonClick}
+              >
+                {generating ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-zinc-900" aria-hidden />
+                ) : hasAssistantOutput ? (
+                  <RotateCcw className="h-3.5 w-3.5 text-zinc-900" strokeWidth={2.25} />
+                ) : (
+                  <ArrowRight className="h-3.5 w-3.5 text-zinc-900" strokeWidth={2.25} />
+                )}
+              </button>
+              {runChoiceOpen && hasDownstreamModules ? (
+                <div className="absolute bottom-[calc(100%+8px)] right-0 z-50 min-w-[170px] rounded-xl border border-white/12 bg-[#14141a]/95 p-1.5 shadow-[0_12px_36px_rgba(0,0,0,0.6)] backdrop-blur-md">
+                  <button
+                    type="button"
+                    className="flex w-full items-center rounded-lg px-2.5 py-2 text-left text-[12px] font-medium text-white/90 transition hover:bg-white/[0.08]"
+                    onClick={runThisNodeOnly}
+                  >
+                    This node only
+                  </button>
+                  <button
+                    type="button"
+                    className="flex w-full items-center rounded-lg px-2.5 py-2 text-left text-[12px] font-medium text-white/90 transition hover:bg-white/[0.08]"
+                    onClick={runFromHere}
+                  >
+                    Run from here
+                    {runFromHereEstimatedCredits > 0 ? ` (${runFromHereEstimatedCredits} cr)` : ""}
+                  </button>
+                </div>
+              ) : null}
+            </div>
           </div>
-          {assistantExportMode === "list" ? (
-            <p className="mt-1 px-0.5 text-[10px] leading-snug text-white/42">
-              Connect the assistant output (right) to a List node&apos;s text input: each run fills that list with one
-              item per script. If no List is wired yet, one is created once and linked automatically.
-            </p>
-          ) : null}
         </div>
         </div>
       </>
@@ -1997,11 +2383,26 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             ) : (
               // eslint-disable-next-line @next/next/no-img-element
               <img
+                ref={previewImageRef}
                 src={previewUrl}
                 alt=""
                 className="absolute inset-0 z-[1] h-full w-full object-cover"
               />
             )
+          ) : null}
+          {hasPreviewMedia && (data.kind === "image" || data.kind === "video") ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                openOutputPreviewLightbox();
+              }}
+              title="Open fullscreen"
+              className="nodrag nopan absolute left-2 top-2 z-[6] flex h-7 w-7 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white/85 opacity-0 backdrop-blur-sm transition hover:bg-black/70 group-hover/card:opacity-100"
+            >
+              <Maximize2 className="h-3.5 w-3.5" aria-hidden />
+            </button>
           ) : null}
 
           {generating && (data.kind === "image" || data.kind === "video") ? (
@@ -2032,22 +2433,22 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             {frame.width} × {frame.height}
           </div>
 
-          {hasPreviewMedia ? (
+          {hasPreviewMedia && data.kind !== "image" && data.kind !== "video" ? (
             <button
               type="button"
               className={cn(
                 "nodrag nopan absolute bottom-14 z-[4] border border-white/15 bg-black/35 px-2.5 py-2 text-left text-[12px] leading-snug text-white/92 backdrop-blur-sm transition hover:border-violet-400/45 hover:bg-black/50",
-                data.kind === "image" || data.kind === "video" ? "inset-x-0 rounded-none border-x-0" : "inset-x-2 rounded-lg",
+                "inset-x-2 rounded-lg",
               )}
               onClick={() => setPromptEditorOpen(true)}
               onPointerDown={(e) => e.stopPropagation()}
               title="Click to edit prompt"
             >
               <span className="line-clamp-2 whitespace-pre-wrap">
-                {prompt.trim() || "Click to write the prompt for this generation"}
+                {prompt.trim()}
               </span>
             </button>
-          ) : (
+          ) : data.kind === "image" || data.kind === "video" ? null : (
             <p
               className={cn(
                 "pointer-events-none absolute bottom-3 left-2 right-2 text-center text-[10px] leading-snug text-white/22 transition-opacity duration-200",
@@ -2084,181 +2485,161 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                   )}
                 />
               ) : null}
-              <button
-                type="button"
-                title="Prompt assistant, describe what you want"
-                className={cn(
-                  "rounded-md p-1 text-violet-300/85 transition hover:bg-violet-500/15 hover:text-violet-100",
-                  hasPreviewMedia ? "absolute right-0.5 top-0.5" : "absolute bottom-1 right-0.5",
-                )}
-                onClick={() => {
-                  setAssistantOpen(true);
-                  setAssistantResult("");
-                }}
-              >
-                <Wand2 className="h-3 w-3" strokeWidth={2} />
-              </button>
+              {data.kind !== "image" && data.kind !== "video" ? (
+                <button
+                  type="button"
+                  title="Prompt assistant, describe what you want"
+                  className={cn(
+                    "rounded-md p-1 text-violet-300/85 transition hover:bg-violet-500/15 hover:text-violet-100",
+                    hasPreviewMedia ? "absolute right-0.5 top-0.5" : "absolute bottom-1 right-0.5",
+                  )}
+                  onClick={() => {
+                    setAssistantOpen(true);
+                    setAssistantResult("");
+                  }}
+                >
+                  <Wand2 className="h-3 w-3" strokeWidth={2} />
+                </button>
+              ) : null}
             </div>
 
             <div
-              className="nodrag nopan mt-1 flex min-w-0 w-full flex-nowrap items-center gap-1"
+              className="nodrag nopan mt-1 flex min-w-0 w-full flex-wrap content-start items-end gap-x-1 gap-y-1"
               onPointerDown={(e) => e.stopPropagation()}
             >
-              <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-0.5 overflow-x-auto overflow-y-visible py-0.5 studio-params-scroll">
-                {showQuantity ? (
-                  <div className="flex h-6 shrink-0 items-center gap-px rounded-full border border-white/12 bg-[#1c1c1f] px-0.5 text-[9px] font-semibold text-white/88">
-                    <button
-                      type="button"
-                      className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-white/55 hover:bg-white/[0.08] hover:text-white"
-                      aria-label="Decrease count"
-                      onClick={() => patch(id, { quantity: Math.max(1, quantity - 1) })}
-                    >
-                      <Minus className="h-2.5 w-2.5" strokeWidth={2.5} />
-                    </button>
-                    <span className="min-w-[1.35rem] text-center tabular-nums">×{quantity}</span>
-                    <button
-                      type="button"
-                      className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-white/55 hover:bg-white/[0.08] hover:text-white"
-                      aria-label="Increase count"
-                      onClick={() => patch(id, { quantity: Math.min(4, quantity + 1) })}
-                    >
-                      <Plus className="h-2.5 w-2.5" strokeWidth={2.5} />
-                    </button>
-                  </div>
-                ) : null}
-                {showQuantity ? (
-                  <Select
-                    value={generatorExportMode}
-                    onValueChange={(v) => patch(id, { generatorExportMode: v as "list" | "modules" })}
+              {showQuantity ? (
+                <div className="flex h-6 shrink-0 items-center gap-px rounded-full border border-white/12 bg-[#1c1c1f] px-0.5 text-[9px] font-semibold text-white/88">
+                  <button
+                    type="button"
+                    className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-white/55 hover:bg-white/[0.08] hover:text-white"
+                    aria-label="Decrease count"
+                    onClick={() => patch(id, { quantity: Math.max(1, quantity - 1) })}
                   >
-                    <SelectTrigger
-                      size="sm"
-                      className={cn(selectTriggerClass, generatorSelectTriggerExtras, "min-w-0 max-w-[5.75rem] shrink-0")}
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className={selectContentClass} position="popper">
-                      {GENERATOR_EXPORT_MODES.map((m) => (
-                        <SelectItem key={m.value} value={m.value} className="text-[12px] focus:bg-violet-500/20">
-                          {m.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : null}
+                    <Minus className="h-2.5 w-2.5" strokeWidth={2.5} />
+                  </button>
+                  <span className="min-w-[1.35rem] text-center tabular-nums">×{quantity}</span>
+                  <button
+                    type="button"
+                    className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-white/55 hover:bg-white/[0.08] hover:text-white"
+                    aria-label="Increase count"
+                    onClick={() => patch(id, { quantity: Math.min(10, quantity + 1) })}
+                  >
+                    <Plus className="h-2.5 w-2.5" strokeWidth={2.5} />
+                  </button>
+                </div>
+              ) : null}
 
-                <Select value={model} onValueChange={(v) => patch(id, { model: v })} onOpenChange={setModelMenuOpen}>
+              <Select value={model} onValueChange={(v) => patch(id, { model: v })} onOpenChange={setModelMenuOpen}>
+                <SelectTrigger
+                  size="sm"
+                  className={cn(selectTriggerClass, generatorSelectTriggerExtras, "min-w-0 max-w-[5.25rem] shrink-0")}
+                >
+                  <SelectValue placeholder="Model" />
+                </SelectTrigger>
+                <SelectContent className={selectContentClass} position="popper">
+                  {models.map((m) => (
+                    <SelectItem key={m.value} value={m.value} className="text-[12px] focus:bg-violet-500/20">
+                      {m.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {aspectLocked ? (
+                <div
+                  className={cn(
+                    selectTriggerClass,
+                    "pointer-events-none min-w-0 max-w-[3.25rem] shrink-0 cursor-default opacity-95",
+                  )}
+                  title="Aspect follows uploaded or avatar media"
+                >
+                  <span className="mr-0.5 shrink-0 text-[9px] text-white/45" aria-hidden>
+                    {aspectIcon(aspectRatio)}
+                  </span>
+                  <span className="truncate text-[9px] text-white/75">{aspectRatio}</span>
+                </div>
+              ) : (
+                <Select value={aspectRatio} onValueChange={(v) => patch(id, { aspectRatio: v })} onOpenChange={setAspectMenuOpen}>
                   <SelectTrigger
                     size="sm"
-                    className={cn(selectTriggerClass, generatorSelectTriggerExtras, "min-w-0 max-w-[5.25rem] shrink-0")}
-                  >
-                    <SelectValue placeholder="Model" />
-                  </SelectTrigger>
-                  <SelectContent className={selectContentClass} position="popper">
-                    {models.map((m) => (
-                      <SelectItem key={m.value} value={m.value} className="text-[12px] focus:bg-violet-500/20">
-                        {m.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                {aspectLocked ? (
-                  <div
-                    className={cn(
-                      selectTriggerClass,
-                      "pointer-events-none min-w-0 max-w-[3.25rem] shrink-0 cursor-default opacity-95",
-                    )}
-                    title="Aspect follows uploaded or avatar media"
+                    className={cn(selectTriggerClass, generatorSelectTriggerExtras, "min-w-0 max-w-[3.35rem] shrink-0")}
                   >
                     <span className="mr-0.5 shrink-0 text-[9px] text-white/45" aria-hidden>
                       {aspectIcon(aspectRatio)}
                     </span>
-                    <span className="truncate text-[9px] text-white/75">{aspectRatio}</span>
-                  </div>
-                ) : (
-                  <Select value={aspectRatio} onValueChange={(v) => patch(id, { aspectRatio: v })} onOpenChange={setAspectMenuOpen}>
-                    <SelectTrigger
-                      size="sm"
-                      className={cn(selectTriggerClass, generatorSelectTriggerExtras, "min-w-0 max-w-[3.35rem] shrink-0")}
-                    >
-                      <span className="mr-0.5 shrink-0 text-[9px] text-white/45" aria-hidden>
-                        {aspectIcon(aspectRatio)}
-                      </span>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className={selectContentClass} position="popper">
-                      {aspects.map((r) => (
-                        <SelectItem key={r} value={r} className="text-[12px] focus:bg-violet-500/20">
-                          {aspectIcon(r)} {r}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-
-                <Select value={resolution} onValueChange={(v) => patch(id, { resolution: v })}>
-                  <SelectTrigger
-                    size="sm"
-                    className={cn(selectTriggerClass, generatorSelectTriggerExtras, "min-w-0 max-w-[4.25rem] shrink-0")}
-                  >
-                    <SelectValue placeholder="Res" />
+                    <SelectValue />
                   </SelectTrigger>
                   <SelectContent className={selectContentClass} position="popper">
-                    {resolutions.map((r) => (
+                    {aspects.map((r) => (
                       <SelectItem key={r} value={r} className="text-[12px] focus:bg-violet-500/20">
-                        {r}
+                        {aspectIcon(r)} {r}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                {data.kind === "video" && videoDurationOptions.length > 0 ? (
-                  <Select
-                    value={String(coerceWorkflowVideoDurationSec(model, data.videoDurationSec))}
-                    onValueChange={(v) => patch(id, { videoDurationSec: Number(v) })}
-                  >
-                    <SelectTrigger
-                      size="sm"
-                      className={cn(selectTriggerClass, generatorSelectTriggerExtras, "min-w-0 max-w-[3.75rem] shrink-0")}
-                    >
-                      <SelectValue placeholder="Dur" />
-                    </SelectTrigger>
-                    <SelectContent className={selectContentClass} position="popper">
-                      {videoDurationOptions.map((r) => (
-                        <SelectItem key={r} value={r} className="text-[12px] focus:bg-violet-500/20">
-                          {r}s
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : data.kind === "video" ? (
-                  <span className="inline-flex h-6 shrink-0 items-center rounded-full border border-white/10 bg-black/25 px-1.5 text-[8px] text-white/45">
-                    Fixed
-                  </span>
-                ) : null}
-                {showWorkflowSeedancePreviewPriority ? (
-                  <div className="flex h-6 shrink-0 items-center gap-px rounded-full border border-white/12 bg-[#1c1c1f] px-0.5">
-                    {(["normal", "vip"] as const).map((tier) => (
-                      <button
-                        key={tier}
-                        type="button"
-                        title={WORKFLOW_SEEDANCE_PREVIEW_PRIORITY_INFO}
-                        onClick={() => patch(id, { videoPriority: tier })}
-                        className={cn(
-                          "nodrag nopan rounded-full px-1 py-px text-[8px] font-semibold transition",
-                          (data.videoPriority ?? "normal") === tier
-                            ? "border border-violet-400/55 bg-violet-500/15 text-white"
-                            : "border border-white/8 bg-black/20 text-white/55 hover:text-white/75",
-                        )}
-                      >
-                        {tier === "vip" ? "VIP" : "Std"}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
+              )}
 
-              <div className="nodrag nopan group/run flex shrink-0 items-center gap-1">
+              <Select value={resolution} onValueChange={(v) => patch(id, { resolution: v })}>
+                <SelectTrigger
+                  size="sm"
+                  className={cn(selectTriggerClass, generatorSelectTriggerExtras, "min-w-0 max-w-[4.25rem] shrink-0")}
+                >
+                  <SelectValue placeholder="Res" />
+                </SelectTrigger>
+                <SelectContent className={selectContentClass} position="popper">
+                  {resolutions.map((r) => (
+                    <SelectItem key={r} value={r} className="text-[12px] focus:bg-violet-500/20">
+                      {r}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {data.kind === "video" && videoDurationOptions.length > 0 ? (
+                <Select
+                  value={String(coerceWorkflowVideoDurationSec(model, data.videoDurationSec))}
+                  onValueChange={(v) => patch(id, { videoDurationSec: Number(v) })}
+                >
+                  <SelectTrigger
+                    size="sm"
+                    className={cn(selectTriggerClass, generatorSelectTriggerExtras, "min-w-0 max-w-[3.75rem] shrink-0")}
+                  >
+                    <SelectValue placeholder="Dur" />
+                  </SelectTrigger>
+                  <SelectContent className={selectContentClass} position="popper">
+                    {videoDurationOptions.map((r) => (
+                      <SelectItem key={r} value={r} className="text-[12px] focus:bg-violet-500/20">
+                        {r}s
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : data.kind === "video" ? (
+                <span className="inline-flex h-6 shrink-0 items-center rounded-full border border-white/10 bg-black/25 px-1.5 text-[8px] text-white/45">
+                  Fixed
+                </span>
+              ) : null}
+              {showWorkflowSeedancePreviewPriority ? (
+                <div className="flex h-6 shrink-0 items-center gap-px rounded-full border border-white/12 bg-[#1c1c1f] px-0.5">
+                  {(["normal", "vip"] as const).map((tier) => (
+                    <button
+                      key={tier}
+                      type="button"
+                      title={WORKFLOW_SEEDANCE_PREVIEW_PRIORITY_INFO}
+                      onClick={() => patch(id, { videoPriority: tier })}
+                      className={cn(
+                        "nodrag nopan rounded-full px-1 py-px text-[8px] font-semibold transition",
+                        (data.videoPriority ?? "normal") === tier
+                          ? "border border-violet-400/55 bg-violet-500/15 text-white"
+                          : "border border-white/8 bg-black/20 text-white/55 hover:text-white/75",
+                      )}
+                    >
+                      {tier === "vip" ? "VIP" : "Std"}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+
+              <div className="nodrag nopan group/run ml-auto inline-flex shrink-0 items-center gap-1">
                 {estimatedCredits > 0 ? (
                   <span
                     className={cn(
@@ -2271,12 +2652,13 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                     {estimatedCredits}
                   </span>
                 ) : null}
+                <div className="relative">
                 <button
                   type="button"
                   title={generating ? "Generating…" : hasGeneratedOutput ? "Regenerate" : "Generate"}
                   disabled={generating}
                   className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white text-zinc-900 shadow-md transition hover:bg-white/95 disabled:cursor-not-allowed disabled:opacity-55"
-                  onClick={() => void onGenerate()}
+                  onClick={onGenerateButtonClick}
                 >
                   {generating ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin text-zinc-900" aria-hidden />
@@ -2286,6 +2668,26 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                     <ArrowRight className="h-3.5 w-3.5 text-zinc-900" strokeWidth={2.25} />
                   )}
                 </button>
+                {runChoiceOpen && hasDownstreamModules ? (
+                  <div className="absolute bottom-[calc(100%+8px)] right-0 z-50 min-w-[170px] rounded-xl border border-white/12 bg-[#14141a]/95 p-1.5 shadow-[0_12px_36px_rgba(0,0,0,0.6)] backdrop-blur-md">
+                    <button
+                      type="button"
+                      className="flex w-full items-center rounded-lg px-2.5 py-2 text-left text-[12px] font-medium text-white/90 transition hover:bg-white/[0.08]"
+                      onClick={runThisNodeOnly}
+                    >
+                      This node only
+                    </button>
+                    <button
+                      type="button"
+                      className="flex w-full items-center rounded-lg px-2.5 py-2 text-left text-[12px] font-medium text-white/90 transition hover:bg-white/[0.08]"
+                      onClick={runFromHere}
+                    >
+                      Run from here
+                      {runFromHereEstimatedCredits > 0 ? ` (${runFromHereEstimatedCredits} cr)` : ""}
+                    </button>
+                  </div>
+                ) : null}
+                </div>
               </div>
             </div>
           </div>
@@ -2426,7 +2828,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           </div>
         ) : null}
 
-        {data.kind !== "video" ? (
+        {data.kind !== "video" && data.kind !== "image" ? (
           <Handle
             id="out"
             type="source"
@@ -2438,8 +2840,49 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       </div>
       </div>
       </div>
+  {showImageGeneratorOutputBubble ? (
+        <div className="nodrag nopan relative z-[5] flex shrink-0 flex-col gap-1 self-start pt-5">
+          <div
+            className={cn(
+              workflowPortBubbleShellClass,
+              "nodrag nopan relative",
+              imageGeneratorOutputReady && "border-violet-400/35",
+              !imageGeneratorOutputReady && "opacity-70",
+            )}
+          >
+            <Handle
+              id="generated"
+              type="source"
+              position={Position.Right}
+              className={workflowPortSourceBubbleHandleClass}
+              aria-label="Generated image output"
+              title={
+                imageGeneratorOutputReady
+                  ? "Drag to wire this generated image into references, start frame, or another module."
+                  : "Run once to produce an image; then drag from here to chain into the next module."
+              }
+            />
+            <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/65">
+              <ImageIcon className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+            </span>
+          </div>
+        </div>
+      ) : null}
   {showVideoOutputBubbles ? (
         <div className="nodrag nopan relative z-[5] flex shrink-0 flex-col gap-1 self-start pt-5">
+          <div className={cn(workflowPortBubbleShellClass, "nodrag nopan relative border-violet-400/35")}>
+            <Handle
+              id="out"
+              type="source"
+              position={Position.Right}
+              className={workflowPortSourceBubbleHandleClass}
+              aria-label="Generated video output"
+              title="Drag to wire this generated video into a list or downstream video input."
+            />
+            <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-violet-200/90">
+              <Clapperboard className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+            </span>
+          </div>
           <div
             className={cn(
               workflowPortBubbleShellClass,
@@ -2497,6 +2940,52 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         </div>
       ) : null}
       </div>
+      {outputPreviewLightbox && previewUrl && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className="nodrag nopan fixed inset-0 z-[9999] flex items-center justify-center bg-black/88 p-3 backdrop-blur-[2px]"
+              onClick={() => setOutputPreviewLightbox(false)}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Full output preview"
+            >
+              <button
+                type="button"
+                className="nodrag nopan absolute right-3 top-3 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-black/65 text-white shadow-lg hover:bg-black/85"
+                title="Close preview"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setOutputPreviewLightbox(false);
+                }}
+              >
+                <X className="h-4 w-4" aria-hidden />
+              </button>
+              <div
+                className="nodrag nopan flex max-h-[92vh] max-w-[96vw] items-center justify-center"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {previewLightboxIsVideo ? (
+                  <video
+                    key={previewUrl}
+                    src={previewUrl}
+                    className="max-h-[92vh] max-w-[96vw] object-contain"
+                    controls
+                    autoPlay
+                    playsInline
+                  />
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={previewUrl}
+                    alt=""
+                    className="max-h-[92vh] max-w-[96vw] object-contain"
+                  />
+                )}
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </>
   );
 }

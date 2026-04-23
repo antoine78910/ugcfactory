@@ -8,6 +8,21 @@ const POLL_MAX_ROUNDS = 120;
 /** Avoid hung status requests leaving the Studio UI stuck on "generating" forever. */
 const STATUS_FETCH_TIMEOUT_MS = 45_000;
 
+function isTransientPollErrorMessage(msg: string): boolean {
+  const m = msg.toLowerCase();
+  return (
+    m.includes("abort") ||
+    m.includes("aborted") ||
+    m.includes("timeout") ||
+    m.includes("fetch failed") ||
+    m.includes("econnreset") ||
+    m.includes("und_err_socket") ||
+    m.includes("socketerror") ||
+    m.includes("other side closed") ||
+    m.includes("network")
+  );
+}
+
 async function fetchStatusWithTimeout(url: string): Promise<Response> {
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), STATUS_FETCH_TIMEOUT_MS);
@@ -70,12 +85,30 @@ export async function pollKlingVideo(
   const keyParam = `${p}${pi}`;
   const maxRounds = Math.max(1, Math.floor(opts?.maxRounds ?? POLL_MAX_ROUNDS));
   for (let i = 0; i < maxRounds; i++) {
-    const res = await fetchStatusWithTimeout(
-      `/api/kling/status?taskId=${encodeURIComponent(taskId)}${keyParam}`,
-    );
-    const json = await readKlingStatusResponse(res);
+    let res: Response;
+    let json: KlingStatusJson;
+    try {
+      res = await fetchStatusWithTimeout(`/api/kling/status?taskId=${encodeURIComponent(taskId)}${keyParam}`);
+      json = await readKlingStatusResponse(res);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err ?? "");
+      if (isTransientPollErrorMessage(msg)) {
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+        continue;
+      }
+      throw err instanceof Error ? err : new Error(msg || "Video status check failed.");
+    }
     if (!res.ok) {
-      throw new Error(json.error || `Video status check failed (HTTP ${res.status}).`);
+      const message = json.error || `Video status check failed (HTTP ${res.status}).`;
+      if (res.status === 429 || res.status === 502 || res.status === 503 || res.status === 504) {
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+        continue;
+      }
+      if (isTransientPollErrorMessage(message)) {
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+        continue;
+      }
+      throw new Error(message);
     }
     const st = String(json.data?.status ?? "").toUpperCase();
     if (st === "SUCCESS") {
@@ -125,12 +158,30 @@ async function readVeoStatusResponse(res: Response): Promise<VeoStatusJson> {
 export async function pollVeoVideo(taskId: string, personalApiKey?: string): Promise<string> {
   const keyParam = personalApiKey ? `&personalApiKey=${encodeURIComponent(personalApiKey)}` : "";
   for (let i = 0; i < POLL_MAX_ROUNDS; i++) {
-    const res = await fetchStatusWithTimeout(
-      `/api/kie/veo/status?taskId=${encodeURIComponent(taskId)}${keyParam}`,
-    );
-    const json = await readVeoStatusResponse(res);
+    let res: Response;
+    let json: VeoStatusJson;
+    try {
+      res = await fetchStatusWithTimeout(`/api/kie/veo/status?taskId=${encodeURIComponent(taskId)}${keyParam}`);
+      json = await readVeoStatusResponse(res);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err ?? "");
+      if (isTransientPollErrorMessage(msg)) {
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+        continue;
+      }
+      throw err instanceof Error ? err : new Error(msg || "Veo status check failed.");
+    }
     if (!res.ok) {
-      throw new Error(json.error || `Veo status check failed (HTTP ${res.status}).`);
+      const message = json.error || `Veo status check failed (HTTP ${res.status}).`;
+      if (res.status === 429 || res.status === 502 || res.status === 503 || res.status === 504) {
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+        continue;
+      }
+      if (isTransientPollErrorMessage(message)) {
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+        continue;
+      }
+      throw new Error(message);
     }
     const d = json.data;
     if (!d) throw new Error("Veo status returned no data.");

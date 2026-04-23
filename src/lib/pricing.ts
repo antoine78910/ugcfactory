@@ -5,6 +5,7 @@
 
 import {
   isStudioGoogleNanoBananaPickerId,
+  isStudioGptImage2PickerModelId,
   isStudioSeedreamImagePickerId,
   isStudioUnifiedSeedreamPickerId,
 } from "@/lib/studioImageModels";
@@ -161,14 +162,38 @@ function fixedImageModelCredits(p: {
   model: string;
   credits: number;
   fal_list_price_usd: number | null;
+  /** When set, overrides default `credits × $0.07` for retail / economics rows. */
+  price_usd_override?: number;
 }) {
+  const price_usd =
+    typeof p.price_usd_override === "number" && Number.isFinite(p.price_usd_override)
+      ? p.price_usd_override
+      : p.credits * 0.07;
   return {
     model: p.model,
     cost_usd: 0,
     cost_with_buffer: 0,
     target_margin: PRICING_BASE.target_margins.image,
-    price_usd: p.credits * 0.07,
+    price_usd,
     credits: p.credits,
+    fal_list_price_usd: p.fal_list_price_usd,
+  };
+}
+
+/** GPT Image 2 (KIE): derive billed credits from COGS using the standard image margin model. */
+function gptImage2Tier(p: {
+  model: string;
+  cost_usd: number;
+  fal_list_price_usd: number | null;
+}) {
+  const fromCost = computeImageModelFromCostUsd(p.cost_usd);
+  return {
+    model: p.model,
+    cost_usd: p.cost_usd,
+    cost_with_buffer: fromCost.cost_with_buffer,
+    target_margin: fromCost.target_margin,
+    price_usd: fromCost.price_usd,
+    credits: fromCost.credits,
     fal_list_price_usd: p.fal_list_price_usd,
   };
 }
@@ -260,6 +285,23 @@ export const IMAGE_MODEL = {
     model: "google_nano_banana",
     credits: 0.5,
     fal_list_price_usd: 0.039,
+  }),
+  /** GPT Image 2 (KIE), billed with standard image cost buffer + target margin model. */
+  gpt_image_2_text_to_image: gptImage2Tier({
+    model: "gpt_image_2_text_to_image",
+    cost_usd: 0.06,
+    fal_list_price_usd: null,
+  }),
+  gpt_image_2_image_to_image: gptImage2Tier({
+    model: "gpt_image_2_image_to_image",
+    cost_usd: 0.06,
+    fal_list_price_usd: null,
+  }),
+  /** Unified Studio / workflow picker id; billing matches T2I/I2I rows. */
+  gpt_image_2: gptImage2Tier({
+    model: "gpt_image_2",
+    cost_usd: 0.06,
+    fal_list_price_usd: null,
   }),
 };
 
@@ -468,6 +510,24 @@ export const STUDIO_IMAGE_SEEDREAM_45_ECONOMICS_ROWS = [
   };
 });
 
+/** GPT Image 2 (OpenAI via KIE Market), high quality T2I / I2I same credits. */
+export const STUDIO_IMAGE_GPT_IMAGE_2_ECONOMICS_ROWS: StudioImageEconomicsRow[] = [
+  mapImageModelToEconomicsRow(
+    "gpt_image_2_image_to_image",
+    "GPT Image 2, image-to-image, high",
+    "image",
+    "OpenAI",
+    "per image",
+  ),
+  mapImageModelToEconomicsRow(
+    "gpt_image_2_text_to_image",
+    "GPT Image 2, text-to-image, high",
+    "image",
+    "OpenAI",
+    "per image",
+  ),
+];
+
 /** Seedream 5.0 Lite rows (ByteDance). */
 export const STUDIO_IMAGE_SEEDREAM_50_LITE_ECONOMICS_ROWS = [
   {
@@ -611,6 +671,9 @@ export function studioImageCreditsPerOutput(opts: {
   studioModel: string;
   resolution: StudioImageOutputResolution;
 }): number {
+  if (isStudioGptImage2PickerModelId(opts.studioModel)) {
+    return IMAGE_MODEL.gpt_image_2_text_to_image.credits;
+  }
   if (isStudioSeedreamImagePickerId(opts.studioModel) || isStudioUnifiedSeedreamPickerId(opts.studioModel)) {
     return IMAGE_MODEL[opts.studioModel].credits;
   }
@@ -1060,6 +1123,16 @@ export function calculateVideoCreditsForModel(opts: VideoCreditOptions): number 
     case "sora-2-pro-text-to-video":
       return calculateSora2ProCredits(d, quality);
 
+    case "kling-2.5-turbo/video":
+    case "kling-2.5-turbo/image-to-video":
+    case "kling-2.5-turbo/text-to-video":
+    case "kling/v2-5-turbo-image-to-video-pro":
+    case "kling/v2-5-turbo-text-to-video-pro":
+      // Provider sheet (Turbo Pro): our $0.21 @5s, $0.42 @10s (same price for t2v / i2v).
+      // Keep the same billing convention as Kling 2.6 in this repo:
+      // retail = our × 2, credits = round(retail / 0.07).
+      // => 5s: round((0.21*2)/0.07)=6, 10s: round((0.42*2)/0.07)=12
+      return d > 5 ? 12 : 6;
     case "kling-3.0/video":
       return calculateKling30VideoCredits(d, quality, audio);
     case "kling-2.6/video":

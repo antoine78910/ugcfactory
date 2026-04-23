@@ -98,6 +98,45 @@ function promptListOutputKind(d: PromptListNodeData): "text" | "image" | "video"
   return "text";
 }
 
+const RE_LIST_NUMBERED_LINE = /^\s*\d{1,2}\s*[.)]\s+/;
+const RE_LIST_LABELLED_ANGLE =
+  /^\s*(?:Script|Prompt|Angle|Sujet|Scene)\s*\d+\s*[:\-.]\s*/i;
+/** e.g. "**Mirror selfie variation 1:**" or "Mirror selfie variation 2:" */
+const RE_LIST_VARIATION_HEADER =
+  /^\s*(?:\*\*)?[^\n]{0,200}?\bvariation\s*\d+\b[^\n:]{0,80}:\s*(?:\*\*)?\s*$/i;
+
+/**
+ * True when a line starts a new logical list row (title line often followed by a multi-line paragraph).
+ * Used for Prompt List text parsing and assistant → list export.
+ */
+export function isWorkflowTextListSectionStartLine(line: string): boolean {
+  if (RE_LIST_NUMBERED_LINE.test(line)) return true;
+  if (RE_LIST_LABELLED_ANGLE.test(line)) return true;
+  if (RE_LIST_VARIATION_HEADER.test(line)) return true;
+  return false;
+}
+
+function splitTextListBySectionHeaders(t: string): string[] | null {
+  const lines = t.split("\n");
+  if (!lines.some((l) => isWorkflowTextListSectionStartLine(l))) return null;
+
+  const blocks: string[] = [];
+  let cur: string[] = [];
+  for (const line of lines) {
+    if (isWorkflowTextListSectionStartLine(line) && cur.length > 0) {
+      const joined = cur.join("\n").trim();
+      if (joined) blocks.push(joined);
+      cur = [];
+    }
+    cur.push(line);
+  }
+  const last = cur.join("\n").trim();
+  if (last) blocks.push(last);
+
+  const out = dedupeBlocksPreserveOrder(blocks);
+  return out.length ? out : null;
+}
+
 /** Split pasted / assistant text into discrete prompts (max 50). */
 export function splitIntoPromptLines(raw: string): string[] {
   const t = raw.replace(/\r\n/g, "\n").trim();
@@ -106,7 +145,14 @@ export function splitIntoPromptLines(raw: string): string[] {
     .split(/\n{3,}/)
     .map((b) => b.trim())
     .filter(Boolean);
-  const chunks = blocks.length > 1 ? blocks : t.split("\n").map((l) => l.trim()).filter(Boolean);
+  const chunks =
+    blocks.length > 1
+      ? blocks
+      : (() => {
+          const sectioned = splitTextListBySectionHeaders(t);
+          if (sectioned?.length) return sectioned;
+          return t.split("\n").map((l) => l.trim()).filter(Boolean);
+        })();
   const out: string[] = [];
   const seen = new Set<string>();
   for (const c of chunks) {
@@ -116,9 +162,6 @@ export function splitIntoPromptLines(raw: string): string[] {
   }
   return out.slice(0, 50);
 }
-
-const ASSISTANT_LIST_ITEM_START =
-  /^\s*(?:\d{1,2}\s*[.)]\s+|(?:Script|Prompt|Angle|Sujet|Scene)\s*\d+\s*[:\-.]\s*)/i;
 
 function dedupeBlocksPreserveOrder(blocks: string[]): string[] {
   const seen = new Set<string>();
@@ -141,7 +184,7 @@ export function splitAssistantOutputToListLines(raw: string): string[] {
   const blocks: string[] = [];
   let cur: string[] = [];
   for (const line of lines) {
-    if (ASSISTANT_LIST_ITEM_START.test(line) && cur.length > 0) {
+    if (isWorkflowTextListSectionStartLine(line) && cur.length > 0) {
       const joined = cur.join("\n").trim();
       if (joined) blocks.push(joined);
       cur = [];
@@ -154,7 +197,7 @@ export function splitAssistantOutputToListLines(raw: string): string[] {
   let numbered = dedupeBlocksPreserveOrder(blocks);
   if (numbered.length >= 2) {
     const firstLine = numbered[0].split("\n")[0] ?? "";
-    if (!ASSISTANT_LIST_ITEM_START.test(firstLine) && numbered[1]) {
+    if (!isWorkflowTextListSectionStartLine(firstLine) && numbered[1]) {
       const intro = numbered.shift()!;
       numbered[0] = `${intro}\n\n${numbered[0]}`.trim();
     }
@@ -182,7 +225,7 @@ export function collectWorkflowBatchPrompts(
   targetNodeId: string,
   targetHandles: string[],
   localPrompt: string,
-): { batch: string[] | null; composedSingle: string } {
+): { batch: string[] | null; composedSingle: string; fromPromptList: boolean } {
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const wanted = new Set(targetHandles);
   const incoming = edges.filter((e) => {
@@ -221,7 +264,7 @@ export function collectWorkflowBatchPrompts(
   }
 
   if (hasList && flat.length) {
-    return { batch: flat, composedSingle: "" };
+    return { batch: flat, composedSingle: "", fromPromptList: true };
   }
 
   const linkedParts: string[] = [];
@@ -238,7 +281,7 @@ export function collectWorkflowBatchPrompts(
     if (t) linkedParts.push(t);
   }
   const composedSingle = composeWorkflowPrompt(localPrompt, linkedParts);
-  return { batch: null, composedSingle };
+  return { batch: null, composedSingle, fromPromptList: false };
 }
 
 /** Collect non-empty text from nodes connected to this node's target handle `in`. */
@@ -404,6 +447,18 @@ export function collectLinkedImageUrlsForHandles(
   for (const e of incoming) {
     const src = byId.get(e.source);
     if (!src) continue;
+    if (src.type === "promptList") {
+      const d = src.data as PromptListNodeData;
+      const srcHandle = e.sourceHandle ?? "out";
+      const kind = promptListOutputKind(d);
+      if (!(srcHandle === "outImage" || (srcHandle === "out" && kind === "image"))) continue;
+      for (const line of (d.lines ?? []).map((x) => x.trim()).filter(Boolean)) {
+        if (!isProbablyImageUrl(line) || seen.has(line)) continue;
+        seen.add(line);
+        urls.push(line);
+      }
+      continue;
+    }
     if (src.type === "imageRef") {
       const d = src.data as ImageRefNodeData;
       if (d.mediaKind === "video") continue;
@@ -520,26 +575,36 @@ export function resolveWorkflowImagePickerModel(raw: string): StudioImageKiePick
 
 export function mapWorkflowImageResolutionToStudio(res: string): "1K" | "2K" | "4K" {
   const r = res.trim();
+  if (r === "1K") return "1K";
   if (r === "2K" || r === "1536") return "2K";
   if (r === "4K") return "4K";
   return "1K";
 }
 
-const WORKFLOW_STATUS_FETCH_TIMEOUT_MS = 45_000;
+const WORKFLOW_STATUS_FETCH_TIMEOUT_MS = 90_000;
+const WORKFLOW_COMPLETE_TIMEOUT_MS = 8_000;
 
 async function pollNanoBananaTask(taskId: string, personalApiKey?: string): Promise<string> {
   const keyParam = personalApiKey ? `&personalApiKey=${encodeURIComponent(personalApiKey)}` : "";
   for (let i = 0; i < 120; i++) {
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), WORKFLOW_STATUS_FETCH_TIMEOUT_MS);
-    let res: Response;
+    let res: Response | null = null;
     try {
       res = await fetch(`/api/nanobanana/task?taskId=${encodeURIComponent(taskId)}${keyParam}`, {
         cache: "no-store",
         signal: ac.signal,
       });
+    } catch {
+      // Network hiccup or local timeout on one poll attempt shouldn't fail the whole generation.
+      await new Promise((r) => setTimeout(r, 1600));
+      continue;
     } finally {
       clearTimeout(timer);
+    }
+    if (!res) {
+      await new Promise((r) => setTimeout(r, 1600));
+      continue;
     }
     const text = await res.text();
     let json: {
@@ -589,22 +654,33 @@ async function registerStudioVideoTask(params: {
   });
 }
 
-async function completeStudioGenerationTask(taskId: string, resultUrl: string): Promise<void> {
+async function completeStudioGenerationTask(taskId: string, resultUrl: string): Promise<string> {
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), WORKFLOW_COMPLETE_TIMEOUT_MS);
   try {
-    await fetch("/api/studio/generations/complete", {
+    const res = await fetch("/api/studio/generations/complete", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ taskId, resultUrl }),
+      signal: ac.signal,
     });
+    const json = (await res.json().catch(() => ({}))) as { resultUrl?: string };
+    if (res.ok && typeof json.resultUrl === "string" && json.resultUrl.trim()) {
+      return json.resultUrl.trim();
+    }
   } catch {
     /* non-fatal */
+  } finally {
+    clearTimeout(timer);
   }
+  return resultUrl;
 }
 
 function workflowVideoDefaultDuration(modelId: string): number {
   switch (modelId) {
     case "kling-3.0/video":
       return 5;
+    case "kling-2.5-turbo/video":
     case "kling-2.6/video":
       return 5;
     case "openai/sora-2":
@@ -747,7 +823,7 @@ export async function runWorkflowImageJob(params: WorkflowRunImageParams): Promi
     Boolean(params.referenceImageUrls?.length),
   );
   const studioRes = mapWorkflowImageResolutionToStudio(params.resolution);
-  const n = Math.min(4, Math.max(1, params.quantity));
+  const n = Math.min(10, Math.max(1, params.quantity));
   const resolutionForApi = studioImageModelSupportsResolutionPicker(pickerModel) ? studioRes : "2K";
 
   const cappedRefs = (params.referenceImageUrls ?? []).slice(0, WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX);
@@ -780,7 +856,8 @@ export async function runWorkflowImageJob(params: WorkflowRunImageParams): Promi
     (startJson.data?.taskId ?? startJson.data?.rows?.[0]?.taskId)?.trim() ?? "";
   if (!taskId) throw new Error("No task id from server");
 
-  const imageUrl = await pollNanoBananaTask(taskId, params.personalApiKey);
+  const providerUrl = await pollNanoBananaTask(taskId, params.personalApiKey);
+  const imageUrl = await completeStudioGenerationTask(taskId, providerUrl);
   return { imageUrl };
 }
 
@@ -825,7 +902,8 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
   const baseCredits = calculateVideoCredits({
     modelId,
     duration,
-    audio: modelId === "kling-3.0/video" || modelId === "kling-2.6/video",
+    audio:
+      modelId === "kling-3.0/video" || modelId === "kling-2.5-turbo/video" || modelId === "kling-2.6/video",
     quality,
   });
   const credits =
@@ -871,8 +949,8 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
       inputUrls: startUrl ? [startUrl] : undefined,
     });
     const url = await pollVeoVideo(json.taskId, pKey);
-    void completeStudioGenerationTask(json.taskId, url);
-    return { videoUrl: url };
+    const finalUrl = await completeStudioGenerationTask(json.taskId, url);
+    return { videoUrl: finalUrl };
   }
 
   if (!pKey && !piKey && !canUseStudioVideoModel(params.planId, modelId)) {
@@ -880,6 +958,7 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
   }
 
   const isKling30 = modelId === "kling-3.0/video";
+  const isKling25Turbo = modelId === "kling-2.5-turbo/video";
   const isKling26 = modelId === "kling-2.6/video";
   const isSoraPicker = modelId === "openai/sora-2" || modelId === "openai/sora-2-pro";
   const isSeedanceI2V = isSeedancePicker(modelId);
@@ -894,7 +973,7 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
       imageUrl: startUrl ?? refUrls[0],
       duration,
       aspectRatio:
-        (isKling30 || isKling26) && !startUrl
+        (isKling30 || isKling25Turbo || isKling26) && !startUrl
           ? params.aspectRatio === "1:1"
             ? "1:1"
             : params.aspectRatio === "16:9"
@@ -911,8 +990,11 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
                 ? "16:9"
                 : "9:16"
               : undefined,
-      sound: modelId === "kling-3.0/video" || modelId === "kling-2.6/video" ? true : undefined,
-      mode: isKling30 || isKling26 || isSoraPicker ? quality : undefined,
+      sound:
+        modelId === "kling-3.0/video" || modelId === "kling-2.5-turbo/video" || modelId === "kling-2.6/video"
+          ? true
+          : undefined,
+      mode: isKling30 || isKling25Turbo || isKling26 || isSoraPicker ? quality : undefined,
       multiShots: isKling30 ? false : undefined,
       personalApiKey: pKey,
       piapiApiKey: piKey,
@@ -929,12 +1011,12 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
     creditsCharged: credits,
     personalApiKey: pKey,
     piapiApiKey: piKey,
-    inputUrls: startUrl ? [startUrl] : undefined,
+      inputUrls: (startUrl ? [startUrl] : refUrls[0] ? [refUrls[0]] : undefined),
   });
 
   const url = await pollKlingVideo(genJson.taskId, pKey, piKey);
-  void completeStudioGenerationTask(genJson.taskId, url);
-  return { videoUrl: url };
+  const finalUrl = await completeStudioGenerationTask(genJson.taskId, url);
+  return { videoUrl: finalUrl };
 }
 
 export function workflowImageChargeCredits(params: {
@@ -944,7 +1026,7 @@ export function workflowImageChargeCredits(params: {
 }): number {
   const pickerModel = resolveWorkflowImagePickerModel(params.model);
   const studioRes = mapWorkflowImageResolutionToStudio(params.resolution);
-  const n = Math.min(4, Math.max(1, params.quantity));
+  const n = Math.min(10, Math.max(1, params.quantity));
   const resolutionForPricing = studioImageModelSupportsResolutionPicker(pickerModel) ? studioRes : "2K";
   return studioImageCreditsChargedTotal({
     studioModel: pickerModel,
@@ -965,10 +1047,89 @@ export function workflowVideoChargeCredits(params: {
   const base = calculateVideoCredits({
     modelId,
     duration,
-    audio: modelId === "kling-3.0/video" || modelId === "kling-2.6/video",
+    audio:
+      modelId === "kling-3.0/video" || modelId === "kling-2.5-turbo/video" || modelId === "kling-2.6/video",
     quality,
   });
   const pri = params.seedancePriority === "vip" ? "vip" : "normal";
   if (pri === "vip" && isWorkflowSeedancePreviewModel(modelId)) return base * 2;
   return base;
+}
+
+/** Estimate credits for one runnable adAsset node from current graph wiring. */
+export function estimateWorkflowAdAssetRunCredits(
+  data: AdAssetNodeData,
+  nodeId: string,
+  nodes: Node[],
+  edges: Edge[],
+): number {
+  if (data.kind !== "image" && data.kind !== "video") return 0;
+
+  const prompt = (data.prompt ?? "").trim();
+  const { batch } = collectWorkflowBatchPrompts(nodes, edges, nodeId, ["text", "in"], prompt);
+  const batchPromptCount = batch?.length ?? 0;
+  const runCount = Math.max(1, batchPromptCount);
+  const multiBatchFromList = batchPromptCount > 1;
+  const quantity = Math.min(10, Math.max(1, data.quantity ?? 1));
+
+  if (data.kind === "image") {
+    const model = (data.model ?? "nano").trim() || "nano";
+    const rawRes = (data.resolution ?? "1024").trim();
+    const resolution = rawRes === "1024" ? "1K" : rawRes === "1536" ? "2K" : rawRes;
+    if (quantity > 1 && !multiBatchFromList) {
+      const oneNode = workflowImageChargeCredits({ model, resolution, quantity: 1 });
+      return oneNode * quantity * runCount;
+    }
+    return workflowImageChargeCredits({ model, resolution, quantity }) * runCount;
+  }
+
+  const model = (data.model ?? "kling-3.0/video").trim() || "kling-3.0/video";
+  const resolution = (data.resolution ?? "720p").trim() || "720p";
+  const seedancePriority: "normal" | "vip" = data.videoPriority === "vip" ? "vip" : "normal";
+  const oneVideo = workflowVideoChargeCredits({
+    model,
+    resolution,
+    durationSec: data.videoDurationSec,
+    seedancePriority,
+  });
+  if (quantity > 1 && !multiBatchFromList) {
+    return oneVideo * quantity * runCount;
+  }
+  return oneVideo * runCount;
+}
+
+/**
+ * Start fetching/decoding remote media before React commits new URLs into the workflow canvas,
+ * so list thumbnails tend to paint sooner after generation completes.
+ */
+export function primeRemoteMediaForDisplay(rawUrl: string): void {
+  if (typeof window === "undefined") return;
+  const trimmed = rawUrl.trim();
+  if (!trimmed) return;
+  if (trimmed.startsWith("__workflow_pending_media__:")) return;
+  const u = trimmed.replace(/#media=(image|video)$/i, "");
+  if (!u) return;
+  const lower = u.toLowerCase();
+  const looksVideo = /\.(mp4|webm|mov)(\?|$)/i.test(lower) || /#media=video/i.test(trimmed);
+  if (looksVideo) {
+    try {
+      const v = document.createElement("video");
+      v.preload = "auto";
+      v.muted = true;
+      v.playsInline = true;
+      v.src = u;
+      v.load();
+    } catch {
+      /* ignore */
+    }
+    return;
+  }
+  if (!/^https?:|^blob:|^data:/i.test(u)) return;
+  try {
+    const img = new Image();
+    img.decoding = "async";
+    img.src = u;
+  } catch {
+    /* ignore */
+  }
 }

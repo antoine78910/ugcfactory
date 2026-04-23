@@ -323,6 +323,20 @@ function isKling26(model: string): boolean {
   );
 }
 
+function isKling25Turbo(model: string): boolean {
+  return (
+    model === "kling-2.5-turbo/video" ||
+    model === "kling-2.5-turbo/image-to-video" ||
+    model === "kling-2.5-turbo/text-to-video" ||
+    model === "kling/v2-5-turbo-image-to-video-pro" ||
+    model === "kling/v2-5-turbo-text-to-video-pro"
+  );
+}
+
+function isKling25TurboImageToVideo(model: string): boolean {
+  return model === "kling/v2-5-turbo-image-to-video-pro" || model === "kling-2.5-turbo/image-to-video";
+}
+
 function isSora2(model: string): boolean {
   return (
     model === "openai/sora-2" ||
@@ -526,14 +540,18 @@ export async function POST(req: Request) {
       } else if (body.aspectRatio) {
         input.aspect_ratio = body.aspectRatio;
       }
-    } else if (isKling26(model)) {
+    } else if (isKling26(model) || isKling25Turbo(model)) {
       input = {
         prompt,
         sound: body.sound ?? false,
         duration: String(body.duration ?? 5),
       };
       if (hasKieReferenceImage) {
-        input.image_urls = [imageUrlRaw];
+        if (isKling25TurboImageToVideo(model)) {
+          input.image_url = imageUrlRaw;
+        } else {
+          input.image_urls = [imageUrlRaw];
+        }
       } else if (body.aspectRatio) {
         input.aspect_ratio = body.aspectRatio;
       }

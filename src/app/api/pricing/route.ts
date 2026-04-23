@@ -7,6 +7,7 @@ import {
   IMAGE_MODEL,
   KLING_3_0_12S_AUDIO_REFERENCE,
   calculateKling26VideoCredits,
+  calculateVideoCreditsForModel,
   kling30CreditsPerSecondFromSheet,
   PRICING_BASE,
   SORA_10S,
@@ -44,6 +45,13 @@ export async function GET() {
       topaz_image: TOPAZ_IMAGE_UPSCALER,
     },
     video: {
+      kling_25_turbo: {
+        formula: "per video: round((our_usd * 2) / 0.07); Turbo Pro 5s=$0.21, 10s=$0.42 (t2v/i2v same)",
+        credits_by_duration: {
+          "5s": calculateVideoCreditsForModel({ modelId: "kling-2.5-turbo/video", duration: 5 }),
+          "10s": calculateVideoCreditsForModel({ modelId: "kling-2.5-turbo/video", duration: 10 }),
+        },
+      },
       kling_26: {
         formula: "per video: round(Fal our_usd * 2 / 0.07); same $ for t2v and i2v",
         credits_by_duration_audio: {

@@ -1,6 +1,11 @@
 /** Studio Image tab picker ids sent to `/api/studio/generations/start` and KIE helpers. */
 
-export const STUDIO_UNIFIED_IMAGE_PICKER_IDS = ["seedream_45", "seedream_50_lite", "google_nano_banana"] as const;
+export const STUDIO_UNIFIED_IMAGE_PICKER_IDS = [
+  "seedream_45",
+  "seedream_50_lite",
+  "google_nano_banana",
+  "gpt_image_2",
+] as const;
 
 export const STUDIO_LEGACY_IMAGE_PICKER_IDS = [
   "seedream_45_text_to_image",
@@ -9,6 +14,8 @@ export const STUDIO_LEGACY_IMAGE_PICKER_IDS = [
   "seedream_50_lite_image_to_image",
   "nanobanana_standard",
   "google_nano_banana_edit",
+  "gpt_image_2_text_to_image",
+  "gpt_image_2_image_to_image",
 ] as const;
 
 export const STUDIO_SEEDREAM_IMAGE_PICKER_IDS = [
@@ -28,7 +35,9 @@ export type StudioImageKiePickerModelId = "nano" | "pro" | StudioUnifiedImagePic
 export type ResolvedStudioImageKiePickerModelId =
   | "nano"
   | "pro"
-  | Extract<StudioLegacyImagePickerId, StudioSeedreamImagePickerId | "nanobanana_standard" | "google_nano_banana_edit">;
+  | Extract<StudioLegacyImagePickerId, StudioSeedreamImagePickerId | "nanobanana_standard" | "google_nano_banana_edit">
+  | "gpt_image_2_text_to_image"
+  | "gpt_image_2_image_to_image";
 
 export function isStudioSeedreamImagePickerId(id: string): id is StudioSeedreamImagePickerId {
   return (STUDIO_SEEDREAM_IMAGE_PICKER_IDS as readonly string[]).includes(id);
@@ -46,6 +55,14 @@ export function isStudioGoogleNanoBananaPickerId(
   return id === "google_nano_banana" || id === "nanobanana_standard" || id === "google_nano_banana_edit";
 }
 
+export function isStudioGptImage2PickerModelId(id: string): boolean {
+  return id === "gpt_image_2" || id === "gpt_image_2_text_to_image" || id === "gpt_image_2_image_to_image";
+}
+
+export function isStudioGptImage2ResolvedPickerId(id: string): id is "gpt_image_2_text_to_image" | "gpt_image_2_image_to_image" {
+  return id === "gpt_image_2_text_to_image" || id === "gpt_image_2_image_to_image";
+}
+
 /** Quality/resolution row, only NanoBanana 2 and Pro expose 1K / 2K / 4K in Studio. */
 export function studioImageModelSupportsResolutionPicker(id: string): boolean {
   return id === "nano" || id === "pro";
@@ -60,6 +77,11 @@ export function studioSeedreamPickerRequiresReferenceImages(id: StudioSeedreamIm
   return id === "seedream_45_image_to_image" || id === "seedream_50_lite_image_to_image";
 }
 
+/** KIE GPT Image 2 image-to-image requires `input_urls`. */
+export function studioGptImage2PickerRequiresReferenceImages(id: string): boolean {
+  return id === "gpt_image_2_image_to_image";
+}
+
 export function resolveStudioImageModelForReferences(
   id: StudioImageKiePickerModelId,
   hasReferenceImages: boolean,
@@ -69,6 +91,11 @@ export function resolveStudioImageModelForReferences(
       return hasReferenceImages ? "seedream_45_image_to_image" : "seedream_45_text_to_image";
     case "seedream_50_lite":
       return hasReferenceImages ? "seedream_50_lite_image_to_image" : "seedream_50_lite_text_to_image";
+    case "gpt_image_2":
+      return hasReferenceImages ? "gpt_image_2_image_to_image" : "gpt_image_2_text_to_image";
+    case "gpt_image_2_text_to_image":
+    case "gpt_image_2_image_to_image":
+      return hasReferenceImages ? "gpt_image_2_image_to_image" : "gpt_image_2_text_to_image";
     case "google_nano_banana":
     case "nanobanana_standard":
     case "google_nano_banana_edit":

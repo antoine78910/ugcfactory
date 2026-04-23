@@ -8,6 +8,7 @@ import { isSubscriptionPlanId, type SubscriptionPlanId } from "@/lib/stripe/subs
 import {
   STUDIO_UNIFIED_IMAGE_PICKER_IDS,
   isStudioGoogleNanoBananaPickerId,
+  isStudioGptImage2PickerModelId,
   isStudioSeedreamImagePickerId,
 } from "@/lib/studioImageModels";
 import { STUDIO_VIDEO_EDIT_PICKER_IDS } from "@/lib/studioVideoEditModels";
@@ -42,6 +43,7 @@ const IMAGE_MIN_RANK: Record<"nano" | "pro", number> = {
 
 /** KIE / OpenAI ids used by Studio video panel + Veo API. */
 const VIDEO_MIN_RANK: Record<string, number> = {
+  "kling-2.5-turbo/video": 1, // Starter+
   "kling-2.6/video": 1, // Starter+
   // Starter should not include Seedance 2; unlock on Growth+
   "bytedance/seedance-2-preview": 2,
@@ -86,11 +88,22 @@ export function canUseStudioImagePickerModel(planId: AccountPlanId, pickerId: st
   if (isStudioGoogleNanoBananaPickerId(id)) {
     return planRank(planId) >= IMAGE_MIN_RANK.pro;
   }
+  if (isStudioGptImage2PickerModelId(id)) {
+    return planRank(planId) >= IMAGE_MIN_RANK.pro;
+  }
   return false;
 }
 
 /** KIE splits some models into text-to-video / image-to-video; normalize to the picker id for gates. */
 function normalizeVideoModelForGate(id: string): string {
+  if (
+    id === "kling-2.5-turbo/image-to-video" ||
+    id === "kling-2.5-turbo/text-to-video" ||
+    id === "kling/v2-5-turbo-image-to-video-pro" ||
+    id === "kling/v2-5-turbo-text-to-video-pro"
+  ) {
+    return "kling-2.5-turbo/video";
+  }
   if (id === "kling-2.6/image-to-video" || id === "kling-2.6/text-to-video") return "kling-2.6/video";
   if (id === "sora-2-image-to-video" || id === "sora-2-text-to-video") return "openai/sora-2";
   if (id === "sora-2-pro-image-to-video" || id === "sora-2-pro-text-to-video") return "openai/sora-2-pro";
@@ -140,6 +153,9 @@ export function minPlanForStudioImagePicker(pickerId: string): AccountPlanId {
   if (isStudioGoogleNanoBananaPickerId(id)) {
     return planIdAtMinRank(IMAGE_MIN_RANK.pro);
   }
+  if (isStudioGptImage2PickerModelId(id)) {
+    return planIdAtMinRank(IMAGE_MIN_RANK.pro);
+  }
   return "scale";
 }
 
@@ -182,6 +198,7 @@ export function upgradePlanMessage(requiredPlan: AccountPlanId, featureLabel: st
 
 const STUDIO_VIDEO_LABELS: Record<string, string> = {
   "kling-3.0/video": "Kling 3.0",
+  "kling-2.5-turbo/video": "Kling 2.5 Turbo",
   "kling-2.6/video": "Kling 2.6",
   "openai/sora-2": "Sora 2",
   "openai/sora-2-pro": "Sora 2 Pro",
@@ -204,6 +221,7 @@ const STUDIO_VIDEO_EDIT_PICKER_LABELS: Record<string, string> = {
 
 /** Order used in “included with your plan” lists (cheapest → premium). */
 export const STUDIO_VIDEO_IDS_ORDERED: readonly string[] = [
+  "kling-2.5-turbo/video",
   "kling-2.6/video",
   "bytedance/seedance-2-fast-preview",
   "bytedance/seedance-2-fast",
@@ -239,6 +257,9 @@ const STUDIO_IMAGE_PICKER_LABELS: Record<string, string> = {
   google_nano_banana: "NanoBanana 2",
   nanobanana_standard: "NanoBanana 2",
   google_nano_banana_edit: "NanoBanana 2",
+  gpt_image_2: "GPT Image 2",
+  gpt_image_2_text_to_image: "GPT Image 2",
+  gpt_image_2_image_to_image: "GPT Image 2",
 };
 
 export function studioImagePickerDisplayLabel(pickerId: string): string {
@@ -354,6 +375,7 @@ export const SUBSCRIPTION_MODEL_MATRIX_ROWS: SubscriptionModelMatrixRow[] = [
     label: "Seedream 5.0",
     tiers: tierBools(IMAGE_MIN_RANK.pro),
   },
+  { label: "Kling 2.5 Turbo", tiers: tierBools(VIDEO_MIN_RANK["kling-2.5-turbo/video"]) },
   { label: "Kling 2.6", tiers: tierBools(VIDEO_MIN_RANK["kling-2.6/video"]) },
   { label: "Seedance 2 Preview", tiers: tierBools(VIDEO_MIN_RANK["bytedance/seedance-2-preview"]) },
   { label: "Seedance 2 Fast Preview", tiers: tierBools(VIDEO_MIN_RANK["bytedance/seedance-2-fast-preview"]) },

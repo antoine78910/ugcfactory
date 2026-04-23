@@ -6,6 +6,7 @@ import {
   kieMarketModelForStudioImage,
   type KieGoogleImageResolution,
 } from "@/lib/kieGoogleImage";
+import { buildKieGptImage2Input, kieMarketModelForGptImage2Picker } from "@/lib/kieGptImage2";
 import {
   buildKieSeedreamInput,
   kieMarketModelForSeedreamPicker,
@@ -13,8 +14,10 @@ import {
 import type { NanoBananaImageSize, NanoBananaProAspectRatio, NanoBananaProResolution } from "@/lib/nanobanana";
 import { hasPersonalApiKey } from "@/lib/personalApiBypass";
 import {
+  isStudioGptImage2ResolvedPickerId,
   isStudioSeedreamImagePickerId,
   resolveStudioImageModelForReferences,
+  studioGptImage2PickerRequiresReferenceImages,
   studioSeedreamPickerRequiresReferenceImages,
   type StudioImageKiePickerModelId,
 } from "@/lib/studioImageModels";
@@ -97,6 +100,42 @@ export async function createStudioKieImageTasks(input: StudioKieImageTaskInput):
       return { taskId, model, kieModel };
     }
     const taskIds = await Promise.all(Array.from({ length: num }, () => runSeedream()));
+    return { taskIds, model, kieModel };
+  }
+
+  if (isStudioGptImage2ResolvedPickerId(model)) {
+    const normalizedRefs = await normalizeKieNanoBananaImageInputUrls(imageUrlsRaw);
+    if (studioGptImage2PickerRequiresReferenceImages(model)) {
+      if (!normalizedRefs?.length) {
+        throw new Error("Add at least one reference image for GPT Image 2 image-to-image.");
+      }
+    }
+    const kieModel = kieMarketModelForGptImage2Picker(model);
+    const aspectFor = input.aspectRatio ?? input.imageSize ?? "auto";
+    const cappedRefs =
+      model === "gpt_image_2_image_to_image" ? normalizedRefs?.slice(0, 16) : undefined;
+    const gptInput = buildKieGptImage2Input({
+      pickerId: model,
+      prompt,
+      aspectRatio: typeof aspectFor === "string" ? aspectFor : "auto",
+      imageUrls: cappedRefs,
+    });
+
+    const runGpt = () =>
+      kieMarketCreateTask(
+        {
+          model: kieModel,
+          callBackUrl,
+          input: gptInput,
+        },
+        personalKey,
+      );
+
+    if (num <= 1) {
+      const taskId = await runGpt();
+      return { taskId, model, kieModel };
+    }
+    const taskIds = await Promise.all(Array.from({ length: num }, () => runGpt()));
     return { taskIds, model, kieModel };
   }
 

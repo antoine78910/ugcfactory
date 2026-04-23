@@ -9,6 +9,7 @@ import {
   type Connection,
   type Edge,
   type FinalConnectionState,
+  type IsValidConnection,
   type OnConnectStartParams,
   Panel,
   ReactFlow,
@@ -89,6 +90,7 @@ import type { WorkflowCanvasNode } from "./workflowFlowTypes";
 import { WorkflowOnboarding, starterNodeForKind, type WorkflowStarterKind } from "./WorkflowOnboarding";
 import {
   defaultWorkflowProject,
+  migrateImageGeneratorOutEdgesToGenerated,
   newPage,
   shouldShowWorkflowOnboarding,
   type WorkflowProjectStateV1,
@@ -139,6 +141,7 @@ import {
   type WorkflowRunProjectLike,
 } from "./workflowProjectPipeline";
 import type { StickyNoteNodeData } from "./workflowStickyNoteTypes";
+import { estimateWorkflowAdAssetRunCredits } from "./workflowNodeRun";
 
 const nodeTypes = {
   adAsset: AdAssetNode,
@@ -276,7 +279,7 @@ function isWorkflowAdAssetDragKind(raw: string): raw is WorkflowDragNodeKind {
 }
 
 function isRunnableWorkflowAdAssetKind(kind: AdAssetNodeData["kind"]): boolean {
-  return kind === "image" || kind === "video" || kind === "assistant";
+  return kind === "image" || kind === "video" || kind === "assistant" || kind === "website";
 }
 
 type WorkflowConnectionDataKind = "text" | "image" | "video" | "media";
@@ -365,6 +368,42 @@ function canConnectByDataKind(
   if (sourceKind === "video") return targetKind === "video" || targetKind === "media";
   if (sourceKind === "media") return targetKind === "media" || targetKind === "image" || targetKind === "video";
   return true;
+}
+
+function targetHandleForNewNodeFromSourceKind(
+  newNode: WorkflowCanvasNode,
+  sourceKind: WorkflowConnectionDataKind | null,
+): string | null {
+  if (!sourceKind) return null;
+  if (newNode.type === "adAsset") {
+    const kind = (newNode.data as AdAssetNodeData).kind;
+    if (kind === "image") {
+      if (sourceKind === "text") return "text";
+      if (sourceKind === "image") return "references";
+      return null;
+    }
+    if (kind === "video") {
+      if (sourceKind === "text") return "text";
+      if (sourceKind === "image") return "startImage";
+      return null;
+    }
+    if (kind === "assistant") {
+      if (sourceKind === "text") return "text";
+      if (sourceKind === "image") return "references";
+      return null;
+    }
+    return sourceKind === "text" ? "in" : null;
+  }
+  if (newNode.type === "promptList") {
+    if (sourceKind === "text") return "inText";
+    if (sourceKind === "image") return "inImage";
+    if (sourceKind === "video") return "inVideo";
+    return null;
+  }
+  if (newNode.type === "textPrompt") {
+    return sourceKind === "text" ? "in" : null;
+  }
+  return null;
 }
 
 function WorkflowAddPaletteRow({
@@ -2001,7 +2040,7 @@ function WorkflowFlowWorkspace({
       redoStackRef.current = [];
       lastSnapshotRef.current = cloneWorkflowCanvasSnapshot(p.nodes, p.edges);
       setNodes(p.nodes.map((n) => ({ ...n, selected: false })));
-      setEdges(p.edges);
+      setEdges(migrateImageGeneratorOutEdgesToGenerated(p.nodes as WorkflowCanvasNode[], p.edges));
       setFrameOpen(false);
       setPlacementPicker(null);
       setTool("select");
@@ -2032,9 +2071,10 @@ function WorkflowFlowWorkspace({
 
   const applyCanvasSnapshot = useCallback((snap: WorkflowCanvasSnapshot) => {
     skipHistoryCommitRef.current = true;
-    lastSnapshotRef.current = cloneWorkflowCanvasSnapshot(snap.nodes, snap.edges);
+    const migrated = migrateImageGeneratorOutEdgesToGenerated(snap.nodes as WorkflowCanvasNode[], snap.edges);
+    lastSnapshotRef.current = cloneWorkflowCanvasSnapshot(snap.nodes, migrated);
     setNodes(snap.nodes);
-    setEdges(snap.edges);
+    setEdges(migrated);
     bumpHistoryUi();
   }, [setNodes, setEdges, bumpHistoryUi]);
 
@@ -2254,18 +2294,24 @@ function WorkflowFlowWorkspace({
       const from = placementPicker.connectFrom;
       const to = placementPicker.connectTo;
       setNodes((prev) => [...prev, newNode]);
-      const connectableFrom = newNode.type === "adAsset";
+      const connectableFrom =
+        newNode.type === "adAsset" ||
+        newNode.type === "textPrompt" ||
+        newNode.type === "promptList";
       const connectableTo =
         newNode.type === "adAsset" || newNode.type === "textPrompt" || newNode.type === "promptList";
       if (from && connectableFrom) {
-        const defaultTargetHandle =
-          newNode.type === "adAsset"
-            ? ((newNode.data as AdAssetNodeData).kind === "video"
-                ? "startImage"
-                : (newNode.data as AdAssetNodeData).kind === "image"
-                  ? "references"
-                  : "in")
-            : "in";
+        const allNodes = getNodes() as WorkflowCanvasNode[];
+        const fromNode = allNodes.find((n) => n.id === from.nodeId);
+        const fromKind = sourceKindFromNodeHandle(fromNode, from.handleId);
+        const defaultTargetHandle = targetHandleForNewNodeFromSourceKind(newNode as WorkflowCanvasNode, fromKind);
+        if (!defaultTargetHandle) {
+          toast.error("Incompatible connection", {
+            description: "This output type can only connect to matching input bubbles.",
+          });
+          setPlacementPicker(null);
+          return;
+        }
         setEdges((eds) =>
           addEdge(
             {
@@ -2281,12 +2327,14 @@ function WorkflowFlowWorkspace({
         );
       }
       if (to && connectableTo) {
+        const newAd = newNode.type === "adAsset" ? (newNode.data as AdAssetNodeData) : null;
+        const outHandle = newAd?.kind === "image" ? "generated" : "out";
         setEdges((eds) =>
           addEdge(
             {
               id: `e-${newNode.id}-${to.nodeId}-${crypto.randomUUID().slice(0, 8)}`,
               source: newNode.id,
-              sourceHandle: "out",
+              sourceHandle: outHandle,
               target: to.nodeId,
               targetHandle: to.handleId,
               style: { stroke: "rgba(167, 139, 250, 0.5)", strokeWidth: 2 },
@@ -2299,7 +2347,7 @@ function WorkflowFlowWorkspace({
       const linked = (from && connectableFrom) || (to && connectableTo);
       toast.success(linked ? "Node connected" : "Node added");
     },
-    [placementPicker, setNodes, setEdges],
+    [placementPicker, setNodes, setEdges, getNodes],
   );
 
   const pickUploadAtPlacement = useCallback(() => {
@@ -2325,6 +2373,13 @@ function WorkflowFlowWorkspace({
     setPlacementPicker(null);
     window.dispatchEvent(new CustomEvent("workflow:open-avatar-picker", { detail: { pendingConnect } }));
   }, [placementPicker]);
+
+  const placementSourceKind = useMemo<WorkflowConnectionDataKind | null>(() => {
+    const from = placementPicker?.connectFrom;
+    if (!from) return null;
+    const fromNode = (nodes as WorkflowCanvasNode[]).find((n) => n.id === from.nodeId);
+    return sourceKindFromNodeHandle(fromNode, from.handleId);
+  }, [placementPicker, nodes]);
 
   useEffect(() => {
     const id = project.activePageId;
@@ -2424,6 +2479,19 @@ function WorkflowFlowWorkspace({
     },
     [readOnly, setEdges, getNodes],
   );
+  const isValidConnection: IsValidConnection<Edge> = useCallback(
+    (params) => {
+      const { source, sourceHandle, target, targetHandle } = params;
+      if (!source || !target) return false;
+      const allNodes = getNodes() as WorkflowCanvasNode[];
+      const sourceNode = allNodes.find((n) => n.id === source);
+      const targetNode = allNodes.find((n) => n.id === target);
+      const srcKind = sourceKindFromNodeHandle(sourceNode, sourceHandle);
+      const dstKind = targetKindFromNodeHandle(targetNode, targetHandle);
+      return canConnectByDataKind(srcKind, dstKind);
+    },
+    [getNodes],
+  );
 
   const onNodeDragStop = useCallback(
     (_event: unknown, node: WorkflowCanvasNode) => {
@@ -2458,11 +2526,16 @@ function WorkflowFlowWorkspace({
         if (!pair) return;
         setEdges((eds) => {
           if (eds.some((e) => e.source === pair.source && e.target === pair.target)) return eds;
+          const srcNode = all.find((n) => n.id === pair.source);
+          const srcHandle =
+            srcNode?.type === "adAsset" && (srcNode.data as AdAssetNodeData).kind === "image"
+              ? "generated"
+              : "out";
           return addEdge(
             {
               id: `e-${pair.source}-${pair.target}-${crypto.randomUUID().slice(0, 8)}`,
               source: pair.source,
-              sourceHandle: "out",
+              sourceHandle: srcHandle,
               target: pair.target,
               targetHandle: "in",
               style: { stroke: "rgba(167, 139, 250, 0.5)", strokeWidth: 2 },
@@ -2692,15 +2765,62 @@ function WorkflowFlowWorkspace({
         return;
       }
 
+      // Run downstream modules in dependency order (topological),
+      // so each step gets inputs from earlier upstream runnable nodes.
+      const runSet = new Set(runIds);
+      const indegree = new Map<string, number>();
+      const children = new Map<string, string[]>();
+      const reachOrder = new Map<string, number>(reachable.map((nid, idx) => [nid, idx]));
+      for (const rid of runIds) {
+        indegree.set(rid, 0);
+        children.set(rid, []);
+      }
+      for (const e of edges) {
+        if (!runSet.has(e.source) || !runSet.has(e.target)) continue;
+        children.get(e.source)!.push(e.target);
+        indegree.set(e.target, (indegree.get(e.target) ?? 0) + 1);
+      }
+      const ready: string[] = runIds.filter((rid) => (indegree.get(rid) ?? 0) === 0);
+      ready.sort((a, b) => (reachOrder.get(a) ?? 0) - (reachOrder.get(b) ?? 0));
+      const orderedRunIds: string[] = [];
+      while (ready.length) {
+        const cur = ready.shift()!;
+        orderedRunIds.push(cur);
+        for (const nxt of children.get(cur) ?? []) {
+          const nextDeg = (indegree.get(nxt) ?? 0) - 1;
+          indegree.set(nxt, nextDeg);
+          if (nextDeg === 0) {
+            ready.push(nxt);
+            ready.sort((a, b) => (reachOrder.get(a) ?? 0) - (reachOrder.get(b) ?? 0));
+          }
+        }
+      }
+      // Fallback for any unexpected cycle: keep deterministic order and still run everything.
+      if (orderedRunIds.length !== runIds.length) {
+        for (const rid of runIds) {
+          if (!orderedRunIds.includes(rid)) orderedRunIds.push(rid);
+        }
+      }
+
       void (async () => {
-        toast.message("Run from here", { description: `${runIds.length} node(s) queued.` });
-        for (let i = 0; i < runIds.length; i++) {
-          const nodeId = runIds[i]!;
+        const estimatedCredits = orderedRunIds.reduce((sum, nid) => {
+          const n = byId.get(nid);
+          if (!n || n.type !== "adAsset") return sum;
+          const d = n.data as AdAssetNodeData;
+          return sum + estimateWorkflowAdAssetRunCredits(d, nid, nodes, edges);
+        }, 0);
+        const creditsLabel =
+          estimatedCredits > 0
+            ? `${orderedRunIds.length} node(s) queued • ~${Math.round(estimatedCredits)} credits (charged step-by-step).`
+            : `${orderedRunIds.length} node(s) queued.`;
+        toast.message("Run from here", { description: creditsLabel });
+        for (let i = 0; i < orderedRunIds.length; i++) {
+          const nodeId = orderedRunIds[i]!;
           window.dispatchEvent(new CustomEvent("workflow:run-node", { detail: { nodeId } }));
           const ok = await waitForNodeRun(nodeId);
           if (!ok) {
             toast.error("Run chain stopped", {
-              description: `Node ${i + 1}/${runIds.length} failed or timed out.`,
+              description: `Node ${i + 1}/${orderedRunIds.length} failed or timed out.`,
             });
             return;
           }
@@ -2745,11 +2865,13 @@ function WorkflowFlowWorkspace({
     }
     const { nodesToAdd, edgesToAdd, selectIds } = res;
     const selectSet = new Set(selectIds);
-    setNodes((prev) => [
-      ...prev.map((n) => ({ ...n, selected: false })),
+    const nextNodes = [
+      ...nodes.map((n) => ({ ...n, selected: false })),
       ...nodesToAdd.map((n) => ({ ...n, selected: selectSet.has(n.id) })),
-    ]);
-    setEdges((prev) => [...prev, ...edgesToAdd]);
+    ];
+    const nextEdges = migrateImageGeneratorOutEdgesToGenerated(nextNodes, [...edges, ...edgesToAdd]);
+    setNodes(nextNodes);
+    setEdges(nextEdges);
     toast.success("Duplicated");
   }, [nodes, edges, selectedNodes, setNodes, setEdges]);
 
@@ -2764,14 +2886,16 @@ function WorkflowFlowWorkspace({
       if (!res) return;
       const { nodesToAdd, edgesToAdd, selectIds } = res;
       const selectSet = new Set(selectIds);
-      setNodes((prev) => [
-        ...prev.map((n) => ({ ...n, selected: false })),
+      const nextNodes = [
+        ...nodes.map((n) => ({ ...n, selected: false })),
         ...nodesToAdd.map((n) => ({ ...n, selected: selectSet.has(n.id) })),
-      ]);
-      setEdges((prev) => [...prev, ...edgesToAdd]);
+      ];
+      const nextEdges = migrateImageGeneratorOutEdgesToGenerated(nextNodes, [...edges, ...edgesToAdd]);
+      setNodes(nextNodes);
+      setEdges(nextEdges);
       toast.success("Pasted");
     },
-    [setNodes, setEdges],
+    [nodes, edges, setNodes, setEdges],
   );
 
   const cutSelection = useCallback(() => {
@@ -3031,6 +3155,7 @@ function WorkflowFlowWorkspace({
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={readOnly ? undefined : onConnect}
+          isValidConnection={readOnly ? undefined : isValidConnection}
           onConnectStart={readOnly ? undefined : onConnectStart}
           onConnectEnd={readOnly ? undefined : onConnectEnd}
           connectionDragThreshold={0}
@@ -3338,7 +3463,86 @@ function WorkflowFlowWorkspace({
                   : "What should be created here?"}
           </p>
           <div className="flex max-h-[min(60vh,360px)] flex-col gap-1.5 overflow-y-auto pr-0.5">
-            {placementPicker.intent === "text-or-image" ? (
+            {placementPicker.connectFrom && placementSourceKind === "text" ? (
+              <>
+                <button
+                  type="button"
+                  className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
+                  onClick={() => placeNodeAtPicker("image")}
+                >
+                  Image generator
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
+                  onClick={() => placeNodeAtPicker("video")}
+                >
+                  Video generator
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
+                  onClick={() => placeNodeAtPicker("assistant")}
+                >
+                  Assistant
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
+                  onClick={() => placeNodeAtPicker("promptList")}
+                >
+                  List
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
+                  onClick={() => placeNodeAtPicker("textPrompt")}
+                >
+                  Prompt text
+                </button>
+              </>
+            ) : placementPicker.connectFrom && placementSourceKind === "image" ? (
+              <>
+                <button
+                  type="button"
+                  className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
+                  onClick={() => placeNodeAtPicker("video")}
+                >
+                  Video generator
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
+                  onClick={() => placeNodeAtPicker("image")}
+                >
+                  Image generator
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
+                  onClick={() => placeNodeAtPicker("assistant")}
+                >
+                  Assistant
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
+                  onClick={() => placeNodeAtPicker("promptList")}
+                >
+                  List
+                </button>
+              </>
+            ) : placementPicker.connectFrom && placementSourceKind === "video" ? (
+              <>
+                <button
+                  type="button"
+                  className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
+                  onClick={() => placeNodeAtPicker("promptList")}
+                >
+                  List
+                </button>
+              </>
+            ) : placementPicker.intent === "text-or-image" ? (
               <>
                 <button
                   type="button"

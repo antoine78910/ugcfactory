@@ -1,7 +1,7 @@
 "use client";
 
 import { Handle, Position, useReactFlow, type Node, type NodeProps } from "@xyflow/react";
-import { Clapperboard, CopyPlus, Download, ImageIcon, Maximize2, Trash2, Upload, X } from "lucide-react";
+import { Clapperboard, CopyPlus, ImageIcon, Maximize2, Trash2, Upload, X } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { toast } from "sonner";
@@ -24,7 +24,7 @@ export type ImageRefNodeData = {
 export type ImageRefNodeType = Node<ImageRefNodeData, "imageRef">;
 
 const FRAME_MAX_LONG = 260;
-const CARD_PAD_X = 24;
+const CARD_PAD_X = 0;
 
 function frameDimensions(intrinsicAspect?: number): { width: number; height: number } {
   const ar = intrinsicAspect && Number.isFinite(intrinsicAspect) && intrinsicAspect > 0 ? intrinsicAspect : 1;
@@ -41,9 +41,12 @@ export function ImageRefNode({ id, data }: NodeProps<ImageRefNodeType>) {
   const [hovered, setHovered] = useState(false);
   const [lightbox, setLightbox] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [titleEditing, setTitleEditing] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(data.label || "Upload");
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
   const [replacing, setReplacing] = useState(false);
   const replaceInputRef = useRef<HTMLInputElement>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
   const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const frame = useMemo(() => frameDimensions(data.intrinsicAspect), [data.intrinsicAspect]);
@@ -53,6 +56,32 @@ export function ImageRefNode({ id, data }: NodeProps<ImageRefNodeType>) {
     "nodrag nopan relative h-8 w-8 shrink-0 rounded-full border border-white/15 bg-[#15151a]/95 transition";
   const outputBubbleHandleClass =
     "nodrag nopan !absolute !inset-0 !z-[2] !box-border !h-8 !w-8 !min-h-8 !min-w-8 !max-h-8 !max-w-8 !rounded-full !border-0 !bg-transparent opacity-0 !transform-none";
+
+  useEffect(() => {
+    if (!titleEditing) setTitleDraft(data.label || "Upload");
+  }, [data.label, titleEditing]);
+
+  useEffect(() => {
+    if (titleEditing) titleInputRef.current?.focus();
+  }, [titleEditing]);
+
+  const commitTitle = useCallback(() => {
+    const next = titleDraft.trim() || "Upload";
+    setTitleEditing(false);
+    setNodes((prev) =>
+      prev.map((n) =>
+        n.id === id
+          ? ({
+              ...n,
+              data: {
+                ...n.data,
+                label: next,
+              },
+            } as WorkflowCanvasNode)
+          : n,
+      ),
+    );
+  }, [id, setNodes, titleDraft]);
 
   const clearLeave = () => {
     if (leaveTimer.current) {
@@ -70,15 +99,6 @@ export function ImageRefNode({ id, data }: NodeProps<ImageRefNodeType>) {
     clearLeave();
     leaveTimer.current = setTimeout(() => setHovered(false), 250);
   }, []);
-
-  const handleDownload = useCallback(() => {
-    const a = document.createElement("a");
-    a.href = data.imageUrl;
-    a.download = data.label || "image";
-    a.target = "_blank";
-    a.rel = "noopener noreferrer";
-    a.click();
-  }, [data.imageUrl, data.label]);
 
   const closeMenu = useCallback(() => {
     setMenuOpen(false);
@@ -174,10 +194,57 @@ export function ImageRefNode({ id, data }: NodeProps<ImageRefNodeType>) {
     <>
       <WorkflowNodeContextToolbar nodeId={id} onRun={noop} variant="sticky" />
 
-      <div className="relative flex items-start gap-1">
+      <div className="relative flex items-end gap-1">
+        <div
+          className="nodrag nopan absolute left-0 -top-6 z-[6] flex min-w-0 items-center gap-2.5 pr-2"
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <div className="flex h-6 w-6 items-center justify-center rounded-md border border-violet-500/45 bg-violet-950/65">
+            <ImageIcon className="h-3.5 w-3.5 text-violet-300" />
+          </div>
+          {titleEditing ? (
+            <input
+              ref={titleInputRef}
+              value={titleDraft}
+              onChange={(e) => setTitleDraft(e.target.value)}
+              onBlur={commitTitle}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  commitTitle();
+                }
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  setTitleDraft(data.label || "Upload");
+                  setTitleEditing(false);
+                }
+              }}
+              className="nodrag nopan min-w-0 rounded border border-white/20 bg-black/35 px-2 py-0.5 text-[12px] font-semibold tracking-tight text-white outline-none focus:border-violet-400/60"
+            />
+          ) : (
+            <button
+              type="button"
+              className="nodrag nopan min-w-0 truncate text-left text-[13px] font-semibold tracking-tight text-white"
+              onClick={(e) => {
+                e.stopPropagation();
+                setTitleEditing(true);
+              }}
+              onDoubleClick={(e) => {
+                e.stopPropagation();
+                setTitleEditing(true);
+              }}
+              title="Rename"
+            >
+              {data.label || "Upload"}
+            </button>
+          )}
+          <span className="text-[10px] font-medium uppercase tracking-wide text-white/35">
+            {data.source === "avatar" ? "Avatar" : "Upload"}
+          </span>
+        </div>
         <div
           className={cn(
-            "group relative rounded-2xl border bg-[#0e0c14] transition-shadow duration-200",
+            "group relative overflow-hidden rounded-2xl border bg-[#121212]/98 transition-shadow duration-200",
             "border-white/10 hover:border-white/20",
           )}
           style={{ width: cardWidth }}
@@ -199,19 +266,8 @@ export function ImageRefNode({ id, data }: NodeProps<ImageRefNodeType>) {
             className="hidden"
             onChange={onReplaceFileChange}
           />
-          {/* Header */}
-          <div className="flex items-center gap-2 px-3 pt-2.5 pb-2">
-            <div className="flex h-6 w-6 items-center justify-center rounded-md border border-sky-500/45 bg-sky-950/80">
-              <ImageIcon className="h-3.5 w-3.5 text-sky-300" />
-            </div>
-            <span className="truncate text-[12px] font-semibold text-white/85">{data.label || "Image"}</span>
-            <span className="ml-auto text-[10px] font-medium uppercase tracking-wide text-white/30">
-              {data.source === "avatar" ? "Avatar" : "Upload"}
-            </span>
-          </div>
-
           {/* Preview */}
-          <div className="relative mx-3 mb-3 overflow-hidden rounded-xl" style={{ width: frame.width, height: frame.height }}>
+          <div className="relative overflow-hidden rounded-none" style={{ width: frame.width, height: frame.height }}>
             {isVideo ? (
               <video
                 src={data.imageUrl}
@@ -252,14 +308,6 @@ export function ImageRefNode({ id, data }: NodeProps<ImageRefNodeType>) {
                   title="Enlarge"
                 >
                   <Maximize2 className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDownload}
-                  className="nodrag nopan rounded-lg bg-black/50 p-1.5 text-white/80 backdrop-blur-sm transition hover:bg-black/70 hover:text-white"
-                  title="Download"
-                >
-                  <Download className="h-3.5 w-3.5" />
                 </button>
               </div>
             )}

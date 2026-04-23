@@ -2,6 +2,21 @@ import type { Edge } from "@xyflow/react";
 
 import type { WorkflowCanvasNode } from "./workflowFlowTypes";
 
+/** Image generators used `out` before the dedicated `generated` bubble; rewrite on load. */
+export function migrateImageGeneratorOutEdgesToGenerated(nodes: WorkflowCanvasNode[], edges: Edge[]): Edge[] {
+  const imageGenIds = new Set(
+    nodes
+      .filter((n) => n.type === "adAsset" && (n.data as { kind?: string }).kind === "image")
+      .map((n) => n.id),
+  );
+  if (imageGenIds.size === 0) return edges;
+  return edges.map((e) => {
+    if (!imageGenIds.has(e.source)) return e;
+    if ((e.sourceHandle ?? "out") !== "out") return e;
+    return { ...e, sourceHandle: "generated" };
+  });
+}
+
 export type WorkflowFlowPage = {
   id: string;
   name: string;
@@ -43,12 +58,16 @@ function parseProject(raw: string | null): WorkflowProjectStateV1 | null {
   try {
     const p = JSON.parse(raw) as Partial<WorkflowProjectStateV1>;
     if (p?.v !== 1 || !Array.isArray(p.pages) || p.pages.length === 0) return null;
-    const pages: WorkflowFlowPage[] = p.pages.map((x, i) => ({
-      id: typeof x?.id === "string" ? x.id : `p-${i}`,
-      name: typeof x?.name === "string" && x.name.trim() ? x.name.trim() : `Page ${i + 1}`,
-      nodes: Array.isArray(x?.nodes) ? x.nodes : [],
-      edges: Array.isArray(x?.edges) ? x.edges : [],
-    }));
+    const pages: WorkflowFlowPage[] = p.pages.map((x, i) => {
+      const nodes = (Array.isArray(x?.nodes) ? x.nodes : []) as WorkflowCanvasNode[];
+      const rawEdges = Array.isArray(x?.edges) ? x.edges : [];
+      return {
+        id: typeof x?.id === "string" ? x.id : `p-${i}`,
+        name: typeof x?.name === "string" && x.name.trim() ? x.name.trim() : `Page ${i + 1}`,
+        nodes,
+        edges: migrateImageGeneratorOutEdgesToGenerated(nodes, rawEdges),
+      };
+    });
     const active =
       typeof p.activePageId === "string" && pages.some((x) => x.id === p.activePageId)
         ? p.activePageId

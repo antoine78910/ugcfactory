@@ -13,16 +13,27 @@ type Fail = { supabase: SupabaseClient; user: null; response: NextResponse };
  */
 export async function requireSupabaseUser(): Promise<Ok | Fail> {
   const supabase = await createSupabaseServerClient();
+  const readUser = async () => supabase.auth.getUser();
+  let authRes = await readUser();
+  const transientMsg = (authRes.error?.message ?? "").toLowerCase();
+  if (!authRes.data?.user && authRes.error && (transientMsg.includes("fetch failed") || transientMsg.includes("timeout"))) {
+    await new Promise((r) => setTimeout(r, 250));
+    authRes = await readUser();
+  }
   const {
     data: { user },
     error,
-  } = await supabase.auth.getUser();
+  } = authRes;
 
   if (error || !user) {
+    const message = (error?.message ?? "").toLowerCase();
+    const isTransientNetwork = message.includes("fetch failed") || message.includes("timeout");
     return {
       supabase,
       user: null,
-      response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
+      response: isTransientNetwork
+        ? NextResponse.json({ error: "Supabase temporarily unreachable" }, { status: 503 })
+        : NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
     };
   }
 

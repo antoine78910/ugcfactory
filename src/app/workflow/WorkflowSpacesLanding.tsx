@@ -11,6 +11,7 @@ import { useSupabaseBrowserClient } from "@/lib/supabase/BrowserSupabaseProvider
 import { WorkflowAmbientLayer } from "./WorkflowAmbientLayer";
 import {
   createSpace,
+  createSpaceFromTemplate,
   deleteSpace,
   getWorkflowStorageScope,
   loadSpacesIndex,
@@ -95,6 +96,14 @@ export function WorkflowSpacesLanding() {
 
   const openTemplate = (id: string) => {
     router.push(`/workflow/template/${encodeURIComponent(id)}`);
+  };
+  const duplicateTemplateToMyWorkflows = (e: MouseEvent, templateId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (storageScope === null) return;
+    const meta = createSpaceFromTemplate(storageScope, templateId);
+    if (!meta) return;
+    router.push(`/workflow/space/${encodeURIComponent(meta.id)}`);
   };
 
   const removeSpace = (e: MouseEvent, id: string) => {
@@ -234,9 +243,16 @@ export function WorkflowSpacesLanding() {
                     <div className="p-4">
                       <p className="font-semibold text-white">{t.name}</p>
                       <p className="mt-2 text-[13px] leading-relaxed text-white/45">{t.blurb}</p>
-                      <p className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-violet-300/70">
-                        View preview
-                      </p>
+                      <div className="mt-3 flex items-center justify-between gap-2">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-300/70">View preview</p>
+                        <button
+                          type="button"
+                          onClick={(e) => duplicateTemplateToMyWorkflows(e, t.id)}
+                          className="rounded-full border border-violet-400/35 bg-violet-500/12 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-violet-100 transition hover:border-violet-300/50 hover:bg-violet-500/20"
+                        >
+                          Duplicate
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </li>

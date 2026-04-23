@@ -3,13 +3,11 @@
 import { Handle, Position, useReactFlow, type NodeProps } from "@xyflow/react";
 import { Check, Clapperboard, Grid3X3, ImageIcon, List, ListOrdered, Maximize2, Pencil, Plus, Trash2, Type, X } from "lucide-react";
 import { createPortal } from "react-dom";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
 
-import {
-  splitIntoPromptLines,
-} from "../workflowNodeRun";
+import { primeRemoteMediaForDisplay, splitIntoPromptLines } from "../workflowNodeRun";
 import { useWorkflowNodePatch } from "../workflowNodePatchContext";
 import { WorkflowNodeContextToolbar } from "./WorkflowNodeContextToolbar";
 import {
@@ -40,6 +38,103 @@ function toRenderableMediaUrl(s: string): string {
   return s.replace(/#media=(image|video)$/i, "");
 }
 
+const WORKFLOW_PENDING_MEDIA_PREFIX = "__workflow_pending_media__:";
+
+function isPendingMediaToken(s: string): boolean {
+  return s.trim().startsWith(WORKFLOW_PENDING_MEDIA_PREFIX);
+}
+
+type PromptListMediaGalleryCellProps = {
+  url: string;
+  slotIndex: number;
+  onDeleteSlot: (idx: number) => void;
+  onPreviewUrl: (u: string) => void;
+};
+
+const PromptListMediaGalleryCell = memo(function PromptListMediaGalleryCell({
+  url,
+  slotIndex,
+  onDeleteSlot,
+  onPreviewUrl,
+}: PromptListMediaGalleryCellProps) {
+  const renderUrl = toRenderableMediaUrl(url);
+  const pending = isPendingMediaToken(url);
+  const fetchPriority = slotIndex < 9 ? ("high" as const) : ("low" as const);
+
+  useEffect(() => {
+    if (pending) return;
+    primeRemoteMediaForDisplay(url);
+  }, [pending, url]);
+
+  return (
+    <div
+      className="group relative aspect-square min-h-0 overflow-hidden rounded-md border border-white/10 bg-black/35"
+      onMouseEnter={(e) => {
+        const v = e.currentTarget.querySelector("video");
+        if (!v) return;
+        void v.play().catch(() => {});
+      }}
+      onMouseLeave={(e) => {
+        const v = e.currentTarget.querySelector("video");
+        if (!v) return;
+        v.pause();
+        v.currentTime = 0;
+      }}
+    >
+      {pending ? (
+        <div className="flex h-full w-full min-h-0 items-center justify-center bg-white/[0.04]">
+          <div className="h-7 w-7 animate-spin rounded-full border-2 border-white/20 border-t-violet-300/90" />
+        </div>
+      ) : isProbablyVideoUrl(url) ? (
+        <video
+          src={renderUrl}
+          className="h-full w-full min-h-0 object-cover transition group-hover:scale-[1.02]"
+          muted
+          loop
+          playsInline
+          preload="metadata"
+        />
+      ) : (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={renderUrl}
+          alt=""
+          loading="eager"
+          decoding="async"
+          fetchPriority={fetchPriority}
+          className="h-full w-full min-h-0 object-cover transition group-hover:scale-[1.02]"
+        />
+      )}
+      <div className="absolute inset-x-1.5 bottom-1.5 z-[2] flex items-center justify-end gap-1 opacity-0 transition group-hover:opacity-100">
+        <button
+          type="button"
+          className="nodrag nopan inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white/85 backdrop-blur-sm hover:bg-black/70"
+          title="View large"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onPreviewUrl(url);
+          }}
+        >
+          <Maximize2 className="h-3.5 w-3.5" aria-hidden />
+        </button>
+        <button
+          type="button"
+          className="nodrag nopan inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white/85 backdrop-blur-sm hover:bg-black/70"
+          title="Delete media"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onDeleteSlot(slotIndex);
+          }}
+        >
+          <Trash2 className="h-3.5 w-3.5" aria-hidden />
+        </button>
+      </div>
+    </div>
+  );
+});
+
 export function PromptListNode({ id, data: rawData, selected }: NodeProps<PromptListNodeType>) {
   const data = { ...PROMPT_LIST_DEFAULT_DATA, ...rawData };
   const mode = data.mode ?? "prompts";
@@ -51,6 +146,7 @@ export function PromptListNode({ id, data: rawData, selected }: NodeProps<Prompt
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [previewMediaUrl, setPreviewMediaUrl] = useState<string | null>(null);
+  const [previewTextItem, setPreviewTextItem] = useState<string | null>(null);
   const [titleEditing, setTitleEditing] = useState(false);
   const [titleDraft, setTitleDraft] = useState(data.label || "List");
   const mediaInputRef = useRef<HTMLInputElement | null>(null);
@@ -73,7 +169,14 @@ export function PromptListNode({ id, data: rawData, selected }: NodeProps<Prompt
     setEditorOpen(false);
     setEditingIndex(null);
   }, [patch]);
-  const displayTitle = (data.label || "List").trim() || "List";
+  const displayTitle = useMemo(() => {
+    const base = (data.label || "List").trim() || "List";
+    if (base.toLowerCase() === "list") {
+      const tail = id.replace(/[^a-zA-Z0-9]/g, "").slice(-2).toUpperCase() || "XX";
+      return `List #${tail}`;
+    }
+    return base;
+  }, [data.label, id]);
   const commitTitle = useCallback(() => {
     const next = titleDraft.trim();
     patch({ label: next || "List" });
@@ -117,13 +220,17 @@ export function PromptListNode({ id, data: rawData, selected }: NodeProps<Prompt
     [nonEmptyLines],
   );
   const listOutputKind = useMemo<"text" | "image" | "video">(() => {
+    if (contentKind === "media") {
+      // Media lists should keep media connectors even while items are still loading placeholders.
+      return videoLikeCount > 0 ? "video" : "image";
+    }
     if (!nonEmptyLines.length) return "text";
     const imageMajority = imageLikeCount >= Math.ceil(nonEmptyLines.length * 0.6);
     const videoMajority = videoLikeCount >= Math.ceil(nonEmptyLines.length * 0.6);
     if (videoMajority && videoLikeCount >= imageLikeCount) return "video";
     if (imageMajority) return "image";
     return "text";
-  }, [imageLikeCount, nonEmptyLines.length, videoLikeCount]);
+  }, [contentKind, imageLikeCount, nonEmptyLines.length, videoLikeCount]);
   const outputHandleId = listOutputKind === "image" ? "outImage" : listOutputKind === "video" ? "outVideo" : "outText";
   const activeWireKind: null | "text" | "image" | "video" = incomingInputKind;
   const outputBubbleShellClass =
@@ -177,6 +284,11 @@ export function PromptListNode({ id, data: rawData, selected }: NodeProps<Prompt
     },
     [isMediaList, mode, nonEmptyLines, patch, syncFromLines],
   );
+  const onDeleteItemRef = useRef(onDeleteItem);
+  onDeleteItemRef.current = onDeleteItem;
+  const deleteSlotStable = useCallback((idx: number) => {
+    onDeleteItemRef.current(idx);
+  }, []);
 
   return (
     <>
@@ -304,69 +416,17 @@ export function PromptListNode({ id, data: rawData, selected }: NodeProps<Prompt
             <div className="p-2.5">
               <div className="grid grid-cols-3 gap-2">
                 {nonEmptyLines.map((u, i) => (
-                  <div
-                    key={`${i}-${u.slice(-24)}`}
-                    className="group relative aspect-square overflow-hidden rounded-md border border-white/10 bg-black/35"
-                    onMouseEnter={(e) => {
-                      const v = e.currentTarget.querySelector("video");
-                      if (!v) return;
-                      void v.play().catch(() => {});
-                    }}
-                    onMouseLeave={(e) => {
-                      const v = e.currentTarget.querySelector("video");
-                      if (!v) return;
-                      v.pause();
-                      v.currentTime = 0;
-                    }}
-                  >
-                    {isProbablyVideoUrl(u) ? (
-                      <video
-                        src={toRenderableMediaUrl(u)}
-                        className="h-full w-full object-cover transition group-hover:scale-[1.02]"
-                        muted
-                        loop
-                        playsInline
-                        preload="metadata"
-                      />
-                    ) : (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={toRenderableMediaUrl(u)} alt="" className="h-full w-full object-cover transition group-hover:scale-[1.02]" />
-                    )}
-                    <div className="absolute inset-x-1.5 bottom-1.5 z-[2] flex items-center justify-end gap-1 opacity-0 transition group-hover:opacity-100">
-                      <button
-                        type="button"
-                        className="nodrag nopan inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white/85 backdrop-blur-sm hover:bg-black/70"
-                        title="View large"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          setPreviewMediaUrl(u);
-                        }}
-                      >
-                        <Maximize2 className="h-3.5 w-3.5" aria-hidden />
-                      </button>
-                      <button
-                        type="button"
-                        className="nodrag nopan inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white/85 backdrop-blur-sm hover:bg-black/70"
-                        title="Delete media"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          onDeleteItem(i);
-                        }}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" aria-hidden />
-                      </button>
-                    </div>
-                  </div>
+                  <PromptListMediaGalleryCell
+                    key={`media-slot-${i}`}
+                    url={u}
+                    slotIndex={i}
+                    onDeleteSlot={deleteSlotStable}
+                    onPreviewUrl={setPreviewMediaUrl}
+                  />
                 ))}
               </div>
             </div>
-            <div className="flex items-center justify-between border-t border-white/[0.08] px-2.5 py-2 text-[10px] text-white/55">
-              <span className="inline-flex items-center gap-1">
-                <Check className="h-3.5 w-3.5 text-white/65" aria-hidden />
-                Keep items
-              </span>
+            <div className="flex items-center justify-end border-t border-white/[0.08] px-2.5 py-2 text-[10px] text-white/55">
               <span>{nonEmptyLines.length} media</span>
               <button
                 type="button"
@@ -379,13 +439,26 @@ export function PromptListNode({ id, data: rawData, selected }: NodeProps<Prompt
             </div>
           </>
           ) : editorOpen ? (
-            <div className="p-2.5">
-              <div className="rounded-xl border border-white/12 bg-white/[0.06] p-3">
-                <input
+            <div className="relative p-2.5">
+              <div className="space-y-1.5 opacity-35 blur-[1.5px]">
+                {nonEmptyLines.map((line, i) => (
+                  <div
+                    key={`edit-bg-${i}-${line.slice(0, 24)}`}
+                    className={cn(
+                      "rounded-lg border border-white/10 bg-black/30 px-2.5 py-2 text-[11px] leading-relaxed text-white/82",
+                      editingIndex === i && "border-violet-400/45 bg-violet-500/[0.08]",
+                    )}
+                  >
+                    <span className="block max-h-[2.8em] overflow-hidden break-words leading-relaxed line-clamp-2">{line}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="absolute inset-x-2.5 top-2.5 rounded-xl border border-violet-400/45 bg-[#15151a]/96 p-3 shadow-[0_18px_40px_rgba(0,0,0,0.45)] backdrop-blur-sm">
+                <textarea
                   value={text}
                   onChange={(e) => setText(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") {
+                    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
                       e.preventDefault();
                       saveEditorText();
                     }
@@ -394,8 +467,9 @@ export function PromptListNode({ id, data: rawData, selected }: NodeProps<Prompt
                       cancelEditorText();
                     }
                   }}
-                  placeholder="Type text and press Enter..."
-                  className="nodrag nopan mb-3 w-full border-none bg-transparent px-0 text-[13px] text-white/90 placeholder:text-white/30 outline-none"
+                  placeholder="Type text here... (Ctrl/Cmd + Enter to save)"
+                  rows={6}
+                  className="nodrag nopan mb-3 min-h-[150px] w-full resize-y border-none bg-transparent px-0 text-[13px] leading-relaxed text-white/90 placeholder:text-white/30 outline-none studio-params-scroll"
                 />
                 <div className="flex items-center justify-between">
                   <span className="inline-flex h-7 items-center justify-center rounded-full border border-white/12 bg-white/[0.06] px-2 text-[12px] font-semibold text-white/70">
@@ -422,32 +496,37 @@ export function PromptListNode({ id, data: rawData, selected }: NodeProps<Prompt
                 </div>
               </div>
               <div className="mt-2 flex justify-end">
-              <button
-                type="button"
-                className="nodrag nopan inline-flex h-8 items-center rounded-full border border-white/12 bg-white/[0.06] px-3 text-[11px] font-semibold text-white/80 hover:bg-white/[0.1]"
-                onClick={() => {
-                  saveEditorText();
-                }}
-              >
-                Save
-              </button>
+                <button
+                  type="button"
+                  className="nodrag nopan inline-flex h-8 items-center rounded-full border border-white/12 bg-white/[0.06] px-3 text-[11px] font-semibold text-white/80 hover:bg-white/[0.1]"
+                  onClick={() => {
+                    saveEditorText();
+                  }}
+                >
+                  Save
+                </button>
               </div>
             </div>
           ) : (
             <>
-            <div className="max-h-[320px] space-y-1.5 overflow-y-auto p-2.5 studio-params-scroll">
+            <div className="space-y-1.5 p-2.5">
               {nonEmptyLines.map((line, i) => (
                 <div
                   key={`${i}-${line.slice(0, 24)}`}
-                  className="group relative rounded-lg border border-white/10 bg-black/30 px-2.5 py-2 text-[11px] leading-relaxed text-white/82"
+                  className="group relative cursor-pointer rounded-lg border border-white/10 bg-black/30 px-2.5 py-2 text-[11px] leading-relaxed text-white/82"
                   onMouseEnter={() => {}}
+                  onClick={() => setPreviewTextItem(line)}
+                  title={line}
                 >
-                  {line}
+                  <span className="block max-h-[2.8em] overflow-hidden pr-14 break-words leading-relaxed line-clamp-2">{line}</span>
                   <div className="pointer-events-none absolute right-2 top-2 flex items-center gap-1 opacity-0 transition group-hover:pointer-events-auto group-hover:opacity-100">
                     <button
                       type="button"
                       className="nodrag nopan inline-flex h-6 w-6 items-center justify-center rounded-md border border-white/12 bg-white/[0.06] text-white/80 hover:bg-white/[0.12]"
-                      onClick={() => onEditItem(i)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onEditItem(i);
+                      }}
                       title="Edit"
                     >
                       <Pencil className="h-3.5 w-3.5" aria-hidden />
@@ -455,7 +534,10 @@ export function PromptListNode({ id, data: rawData, selected }: NodeProps<Prompt
                     <button
                       type="button"
                       className="nodrag nopan inline-flex h-6 w-6 items-center justify-center rounded-md border border-white/12 bg-white/[0.06] text-white/80 hover:bg-white/[0.12]"
-                      onClick={() => onDeleteItem(i)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDeleteItem(i);
+                      }}
                       title="Delete"
                     >
                       <X className="h-3.5 w-3.5" aria-hidden />
@@ -562,6 +644,38 @@ export function PromptListNode({ id, data: rawData, selected }: NodeProps<Prompt
                   onClick={(e) => e.stopPropagation()}
                 />
               )}
+            </div>,
+            document.body,
+          )
+        : null}
+      {previewTextItem && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className="nodrag nopan fixed inset-0 z-[9999] flex items-center justify-center bg-black/88 p-3 backdrop-blur-[2px]"
+              onClick={() => setPreviewTextItem(null)}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Full text preview"
+            >
+              <button
+                type="button"
+                className="nodrag nopan absolute right-3 top-3 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-black/65 text-white shadow-lg hover:bg-black/85"
+                title="Close preview"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPreviewTextItem(null);
+                }}
+              >
+                <X className="h-4 w-4" aria-hidden />
+              </button>
+              <div
+                className="max-h-[86vh] w-[min(860px,96vw)] overflow-auto rounded-xl border border-white/12 bg-[#0f0f12] p-4 studio-params-scroll"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <pre className="whitespace-pre-wrap break-words font-sans text-[13px] leading-relaxed text-white/90">
+                  {previewTextItem}
+                </pre>
+              </div>
             </div>,
             document.body,
           )

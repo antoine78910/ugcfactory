@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
+import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import {
   studioGenerationRowToHistoryItem,
   type StudioGenerationRow,
@@ -112,9 +113,11 @@ export async function POST(req: Request) {
     if (procErr) throw procErr;
 
     const processingRows = (processing ?? []) as StudioGenerationRow[];
+    const admin = createSupabaseServiceClient();
+    const pollDbClient = admin ?? supabase;
     for (const row of processingRows) {
       try {
-        await pollStudioGenerationRow(row, personalApiKey, piapiApiKey, supabase);
+        await pollStudioGenerationRow(row, personalApiKey, piapiApiKey, pollDbClient);
       } catch {
         /* one bad poll should not block others */
       }

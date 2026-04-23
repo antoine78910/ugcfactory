@@ -7,6 +7,7 @@
 
 export const STUDIO_VIDEO_PICKER_IDS = [
   "kling-3.0/video",
+  "kling-2.5-turbo/video",
   "kling-2.6/video",
   "openai/sora-2",
   "openai/sora-2-pro",
@@ -36,6 +37,16 @@ function isKling26Resolved(model: string): boolean {
   );
 }
 
+function isKling25TurboResolved(model: string): boolean {
+  return (
+    model === "kling-2.5-turbo/video" ||
+    model === "kling-2.5-turbo/image-to-video" ||
+    model === "kling-2.5-turbo/text-to-video" ||
+    model === "kling/v2-5-turbo-image-to-video-pro" ||
+    model === "kling/v2-5-turbo-text-to-video-pro"
+  );
+}
+
 function isSora2Resolved(model: string): boolean {
   return (
     model === "openai/sora-2" ||
@@ -57,6 +68,7 @@ export function studioVideoDurationSecOptions(pickerId: string): string[] {
   switch (pickerId) {
     case "kling-3.0/video":
       return Array.from({ length: 13 }, (_, i) => String(i + 3));
+    case "kling-2.5-turbo/video":
     case "kling-2.6/video":
       return ["5", "10"];
     case "openai/sora-2":
@@ -90,6 +102,7 @@ export function studioVideoDurationRangeLabel(pickerId: string): string {
 export function studioVideoSupportsQualityPicker(pickerId: string): boolean {
   return (
     pickerId === "kling-3.0/video" ||
+    pickerId === "kling-2.5-turbo/video" ||
     pickerId === "kling-2.6/video" ||
     pickerId === "openai/sora-2" ||
     pickerId === "openai/sora-2-pro"
@@ -97,7 +110,11 @@ export function studioVideoSupportsQualityPicker(pickerId: string): boolean {
 }
 
 export function studioVideoSupportsNativeAudio(pickerId: string): boolean {
-  return pickerId === "kling-3.0/video" || pickerId === "kling-2.6/video";
+  return (
+    pickerId === "kling-3.0/video" ||
+    pickerId === "kling-2.5-turbo/video" ||
+    pickerId === "kling-2.6/video"
+  );
 }
 
 export function studioVideoSupportsMultiShot(pickerId: string): boolean {
@@ -125,7 +142,7 @@ export function studioVideoUsesSeedanceProOmniMediaUploads(pickerId: string): bo
 
 /** Create tab: show aspect ratio when the provider accepts it for the current frame setup. */
 export function studioVideoShowsAspectRatioCreate(pickerId: string, hasStartFrame: boolean): boolean {
-  if (pickerId === "kling-3.0/video" || pickerId === "kling-2.6/video") {
+  if (pickerId === "kling-3.0/video" || pickerId === "kling-2.5-turbo/video" || pickerId === "kling-2.6/video") {
     return !hasStartFrame;
   }
   if (pickerId.startsWith("bytedance/seedance")) return true;
@@ -164,6 +181,12 @@ export function validateStudioVideoJobDuration(
   if (isKling26Resolved(resolvedModel)) {
     if (duration !== 5 && duration !== 10) {
       throw new Error("Invalid duration for Kling 2.6. Must be 5 or 10.");
+    }
+    return;
+  }
+  if (isKling25TurboResolved(resolvedModel)) {
+    if (duration !== 5 && duration !== 10) {
+      throw new Error("Invalid duration for Kling 2.5 Turbo. Must be 5 or 10.");
     }
     return;
   }

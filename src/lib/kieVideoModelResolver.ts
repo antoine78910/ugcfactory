@@ -7,6 +7,10 @@
 export function resolveKieVideoPickerToMarketModel(pickerModel: string, hasReferenceImage: boolean): string {
   const id = pickerModel.trim();
   switch (id) {
+    case "kling-2.5-turbo/video":
+      return hasReferenceImage
+        ? "kling/v2-5-turbo-image-to-video-pro"
+        : "kling/v2-5-turbo-text-to-video-pro";
     case "kling-2.6/video":
       return hasReferenceImage ? "kling-2.6/image-to-video" : "kling-2.6/text-to-video";
     case "openai/sora-2":

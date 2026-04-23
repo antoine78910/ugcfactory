@@ -70,6 +70,8 @@ Several pickers use **one UI id**; the backend resolves to **two KIE `model` str
 | Seedream 4.5 text-to-image | [4-5-text-to-image](https://docs.kie.ai/market/seedream/4-5-text-to-image) |
 | Seedream 5 Lite **no** input image | [5-lite-text-to-image](https://docs.kie.ai/market/seedream/5-lite-text-to-image) |
 | Seedream 5 Lite **with** input image | [5-lite-image-to-image](https://docs.kie.ai/market/seedream-5-lite-image-to-image) |
+| GPT Image 2 text-to-image | [gpt-image-2-text-to-image](https://docs.kie.ai/market/gpt/gpt-image-2-text-to-image) |
+| GPT Image 2 image-to-image | [gpt-image-2-image-to-image](https://docs.kie.ai/market/gpt/gpt-image-2-image-to-image) |
 
 **Credits:** `IMAGE_MODEL` and related helpers in `src/lib/pricing.ts`; image picker routing in `src/lib/studioImageModels.ts` (and API routes under `src/app/api/studio/`).
 
