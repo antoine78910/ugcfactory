@@ -125,8 +125,44 @@ function maybeMigrateLegacyUnscopedIntoScope(scope: string) {
   }
 }
 
+/**
+ * First login quality-of-life migration:
+ * if the authenticated scope is empty but guest scope has workflows from local usage,
+ * copy guest index + space payloads into the user scope so modules remain visible after sign-in.
+ */
+function maybeMigrateGuestScopeIntoUserScope(scope: string) {
+  if (typeof window === "undefined") return;
+  if (!scope.startsWith("u:")) return;
+
+  const userKey = indexKeyV2(scope);
+  const userIdx = parseIndex(localStorage.getItem(userKey));
+  if (userIdx.spaces.length > 0) return;
+
+  const guestScope = "guest";
+  const guestKey = indexKeyV2(guestScope);
+  const guestIdx = parseIndex(localStorage.getItem(guestKey));
+  if (guestIdx.spaces.length === 0) return;
+
+  for (const s of guestIdx.spaces) {
+    const raw = localStorage.getItem(workflowSpaceStorageKey(guestScope, s.id));
+    if (!raw) continue;
+    try {
+      localStorage.setItem(workflowSpaceStorageKey(scope, s.id), raw);
+    } catch {
+      /* quota */
+    }
+  }
+
+  try {
+    localStorage.setItem(userKey, JSON.stringify(guestIdx));
+  } catch {
+    /* quota */
+  }
+}
+
 export function loadSpacesIndex(scope: string): IndexV1 {
   if (typeof window === "undefined") return defaultIndex();
+  maybeMigrateGuestScopeIntoUserScope(scope);
   maybeMigrateLegacyUnscopedIntoScope(scope);
   return parseIndex(localStorage.getItem(indexKeyV2(scope)));
 }
