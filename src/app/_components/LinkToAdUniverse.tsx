@@ -2238,7 +2238,6 @@ export default function LinkToAdUniverse({
     nanoBananaImageUrl,
     nanoBananaImageUrls,
     nanoBananaSelectedImageIndex,
-    persistUniverse,
   ]);
 
   const quality = useMemo(() => confidenceToQuality(confidence ?? undefined), [confidence]);
