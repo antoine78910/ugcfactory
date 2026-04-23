@@ -285,13 +285,13 @@ export function PromptListNode({ id, data: rawData, selected }: NodeProps<Prompt
   const outputHandleId = listOutputKind === "image" ? "outImage" : listOutputKind === "video" ? "outVideo" : "outText";
   const activeWireKind: null | "text" | "image" | "video" = incomingInputKind;
   const outputBubbleShellClass =
-    "nodrag nopan relative h-8 w-8 shrink-0 rounded-full border bg-[#15151a]/95 transition";
+    "workflow-port-create-cursor nodrag nopan relative h-8 w-8 shrink-0 rounded-full border bg-[#15151a]/95 transition";
   const inputBubbleShellClass =
-    "nodrag nopan relative h-8 w-8 shrink-0 rounded-full border bg-[#15151a]/95 transition";
+    "workflow-port-create-cursor nodrag nopan relative h-8 w-8 shrink-0 rounded-full border bg-[#15151a]/95 transition";
   const inputBubbleHandleClass =
-    "nodrag nopan !absolute !left-0 !top-0 !box-border !h-8 !w-8 !min-h-8 !min-w-8 !max-h-8 !max-w-8 !rounded-full !border-0 !bg-transparent opacity-0 !transform-none";
+    "workflow-port-create-cursor nodrag nopan !absolute !left-0 !top-0 !box-border !h-8 !w-8 !min-h-8 !min-w-8 !max-h-8 !max-w-8 !rounded-full !border-0 !bg-transparent opacity-0 !transform-none";
   const outputBubbleHandleClass =
-    "nodrag nopan !absolute !inset-0 !z-[2] !box-border !h-8 !w-8 !min-h-8 !min-w-8 !max-h-8 !max-w-8 !rounded-full !border-0 !bg-transparent opacity-0 !transform-none";
+    "workflow-port-create-cursor nodrag nopan !absolute !inset-0 !z-[2] !box-border !h-8 !w-8 !min-h-8 !min-w-8 !max-h-8 !max-w-8 !rounded-full !border-0 !bg-transparent opacity-0 !transform-none";
   const openOutputCreatePicker = useCallback(
     (sourceHandleId: string, targetEl: HTMLElement) => {
       const rect = targetEl.getBoundingClientRect();

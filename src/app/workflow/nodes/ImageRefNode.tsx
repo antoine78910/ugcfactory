@@ -53,9 +53,9 @@ export function ImageRefNode({ id, data }: NodeProps<ImageRefNodeType>) {
   const cardWidth = frame.width + CARD_PAD_X;
   const isVideo = data.mediaKind === "video";
   const outputBubbleShellClass =
-    "nodrag nopan relative h-8 w-8 shrink-0 rounded-full border border-white/15 bg-[#15151a]/95 transition";
+    "workflow-port-create-cursor nodrag nopan relative h-8 w-8 shrink-0 rounded-full border border-white/15 bg-[#15151a]/95 transition";
   const outputBubbleHandleClass =
-    "nodrag nopan !absolute !inset-0 !z-[2] !box-border !h-8 !w-8 !min-h-8 !min-w-8 !max-h-8 !max-w-8 !rounded-full !border-0 !bg-transparent opacity-0 !transform-none";
+    "workflow-port-create-cursor nodrag nopan !absolute !inset-0 !z-[2] !box-border !h-8 !w-8 !min-h-8 !min-w-8 !max-h-8 !max-w-8 !rounded-full !border-0 !bg-transparent opacity-0 !transform-none";
 
   useEffect(() => {
     if (!titleEditing) setTitleDraft(data.label || "Upload");

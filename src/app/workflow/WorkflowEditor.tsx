@@ -3685,6 +3685,34 @@ function workflowNodePreviewTint(type: WorkflowCanvasNode["type"]): string {
   }
 }
 
+function escapeSvgAttr(v: string): string {
+  return v
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&apos;");
+}
+
+function nodePreviewMediaUrl(node: WorkflowCanvasNode): string | null {
+  if (node.type === "imageRef") {
+    const data = node.data as ImageRefNodeData;
+    const url = (data.imageUrl ?? "").trim();
+    if (url && data.mediaKind === "image") return url;
+    // Video refs cannot be painted as thumbnail in lightweight SVG previews.
+    return null;
+  }
+  if (node.type !== "adAsset") return null;
+  const data = node.data as AdAssetNodeData;
+  const outputUrl = (data.outputPreviewUrl ?? "").trim();
+  const referenceUrl = (data.referencePreviewUrl ?? "").trim();
+  if (outputUrl && (data.outputMediaKind ?? "image") === "image") return outputUrl;
+  if (referenceUrl && (data.referenceMediaKind ?? "image") === "image") return referenceUrl;
+  const frameCandidate = (data.videoExtractedLastFrameUrl ?? data.videoExtractedFirstFrameUrl ?? "").trim();
+  if (frameCandidate && frameCandidate.length <= 180_000) return frameCandidate;
+  return null;
+}
+
 function buildWorkflowPreviewDataUrl(project: WorkflowProjectStateV1): string | undefined {
   const page = project.pages.find((p) => p.id === project.activePageId) ?? project.pages[0];
   if (!page || page.nodes.length === 0) return undefined;
@@ -3723,13 +3751,22 @@ function buildWorkflowPreviewDataUrl(project: WorkflowProjectStateV1): string | 
     .join("");
 
   const nodeSvg = nodes
-    .map((n) => {
+    .map((n, idx) => {
       const w = ((typeof n.width === "number" && n.width > 0) ? n.width : 180) * scale;
       const h = ((typeof n.height === "number" && n.height > 0) ? n.height : 110) * scale;
       const x = mapX(n.position.x);
       const y = mapY(n.position.y);
       const c = workflowNodePreviewTint(n.type);
-      return `<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${w.toFixed(2)}" height="${h.toFixed(2)}" rx="10" ry="10" fill="rgba(12,12,18,0.85)" stroke="${c}" stroke-opacity="0.55" stroke-width="1.4" />`;
+      const rx = Math.max(6, Math.min(10, 10 * scale));
+      const mediaUrl = nodePreviewMediaUrl(n);
+      const clipId = `clip-${idx}`;
+      const mediaBlock = mediaUrl
+        ? `<defs><clipPath id="${clipId}"><rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${w.toFixed(2)}" height="${h.toFixed(2)}" rx="${rx.toFixed(2)}" ry="${rx.toFixed(2)}"/></clipPath></defs>
+<image x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${w.toFixed(2)}" height="${h.toFixed(2)}" href="${escapeSvgAttr(mediaUrl)}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${clipId})" />
+<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${w.toFixed(2)}" height="${h.toFixed(2)}" rx="${rx.toFixed(2)}" ry="${rx.toFixed(2)}" fill="rgba(7,10,18,0.22)" />`
+        : `<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${w.toFixed(2)}" height="${h.toFixed(2)}" rx="${rx.toFixed(2)}" ry="${rx.toFixed(2)}" fill="rgba(12,12,18,0.85)" />`;
+      return `${mediaBlock}
+<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${w.toFixed(2)}" height="${h.toFixed(2)}" rx="${rx.toFixed(2)}" ry="${rx.toFixed(2)}" fill="none" stroke="${c}" stroke-opacity="0.55" stroke-width="1.4" />`;
     })
     .join("");
 

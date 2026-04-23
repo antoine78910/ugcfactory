@@ -374,6 +374,15 @@
   stroke-width: 3.25px !important;
 }
 
+/* Port bubbles (input/output): explicit "create/connect" cursor. */
+.workflow-flow .workflow-port-create-cursor {
+  cursor: copy !important;
+}
+
+.workflow-flow .workflow-port-create-cursor * {
+  cursor: copy !important;
+}
+
 /* One-shot snip overlay, pivot ≈ blade crossing in 24×24 icon space. */
 .workflow-cut-fx-root {
   position: fixed;

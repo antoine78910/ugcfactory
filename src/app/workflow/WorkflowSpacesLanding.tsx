@@ -19,6 +19,7 @@ import {
   updateSpaceMeta,
   type WorkflowSpaceMeta,
 } from "./workflowSpacesStorage";
+import type { WorkflowCanvasNode } from "./workflowFlowTypes";
 import {
   listWorkflowTemplates,
   saveTemporaryWorkflowTemplate,
@@ -39,6 +40,172 @@ function formatTimeAgo(ts: number): string {
   if (mo < 12) return `${mo} month${mo === 1 ? "" : "s"} ago`;
   const y = Math.floor(d / 365);
   return `${y} year${y === 1 ? "" : "s"} ago`;
+}
+
+function nodePreviewLabel(node: WorkflowCanvasNode): string {
+  if (node.type === "adAsset") {
+    const kind = String((node.data as { kind?: unknown })?.kind ?? "").trim();
+    if (kind) return kind;
+  }
+  if (node.type === "textPrompt") return "text";
+  if (node.type === "imageRef") return "image";
+  if (node.type === "promptList") return "list";
+  if (node.type === "stickyNote") return "note";
+  return node.type;
+}
+
+function nodePreviewMediaUrl(node: WorkflowCanvasNode): string | null {
+  if (node.type === "imageRef") {
+    const data = node.data as { imageUrl?: unknown; mediaKind?: unknown };
+    const url = typeof data.imageUrl === "string" ? data.imageUrl.trim() : "";
+    if (url && data.mediaKind === "image") return url;
+    return null;
+  }
+  if (node.type !== "adAsset") return null;
+  const data = node.data as {
+    outputPreviewUrl?: unknown;
+    outputMediaKind?: unknown;
+    referencePreviewUrl?: unknown;
+    referenceMediaKind?: unknown;
+    videoExtractedLastFrameUrl?: unknown;
+    videoExtractedFirstFrameUrl?: unknown;
+  };
+  const outputUrl = typeof data.outputPreviewUrl === "string" ? data.outputPreviewUrl.trim() : "";
+  if (outputUrl && (data.outputMediaKind ?? "image") === "image") return outputUrl;
+  const refUrl = typeof data.referencePreviewUrl === "string" ? data.referencePreviewUrl.trim() : "";
+  if (refUrl && (data.referenceMediaKind ?? "image") === "image") return refUrl;
+  const frameUrl =
+    typeof data.videoExtractedLastFrameUrl === "string" && data.videoExtractedLastFrameUrl.trim()
+      ? data.videoExtractedLastFrameUrl.trim()
+      : typeof data.videoExtractedFirstFrameUrl === "string" && data.videoExtractedFirstFrameUrl.trim()
+        ? data.videoExtractedFirstFrameUrl.trim()
+        : "";
+  if (frameUrl && frameUrl.length <= 180_000) return frameUrl;
+  return null;
+}
+
+function WorkflowSpaceCardPreviewFallback({
+  scope,
+  spaceId,
+}: {
+  scope: string;
+  spaceId: string;
+}) {
+  const preview = useMemo(() => {
+    const project = loadProjectForSpace(scope, spaceId);
+    const page = project.pages.find((p) => p.id === project.activePageId) ?? project.pages[0];
+    if (!page || !Array.isArray(page.nodes) || page.nodes.length === 0) return null;
+    const nodes = page.nodes.slice(0, 18) as WorkflowCanvasNode[];
+    const edges = (page.edges ?? []).slice(0, 28);
+    const minX = Math.min(...nodes.map((n) => n.position.x));
+    const minY = Math.min(...nodes.map((n) => n.position.y));
+    const maxX = Math.max(...nodes.map((n) => n.position.x + (n.width ?? 180)));
+    const maxY = Math.max(...nodes.map((n) => n.position.y + (n.height ?? 110)));
+    const width = Math.max(220, maxX - minX + 80);
+    const height = Math.max(140, maxY - minY + 80);
+    const nodeMap = new Map(nodes.map((n) => [n.id, n]));
+    return { nodes, edges, minX, minY, width, height, nodeMap };
+  }, [scope, spaceId]);
+
+  if (!preview) {
+    return (
+      <div className="absolute inset-0 bg-gradient-to-br from-violet-900/30 via-[#1a1a22] to-violet-950/35" />
+    );
+  }
+
+  return (
+    <svg
+      viewBox={`0 0 ${preview.width} ${preview.height}`}
+      className="absolute inset-0 h-full w-full"
+      role="img"
+      aria-label="Workflow preview"
+      preserveAspectRatio="xMidYMid meet"
+    >
+      <defs>
+        <linearGradient id={`wf-bg-${spaceId}`} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="rgba(46,16,101,0.72)" />
+          <stop offset="50%" stopColor="rgba(12,13,18,0.96)" />
+          <stop offset="100%" stopColor="rgba(30,27,75,0.78)" />
+        </linearGradient>
+      </defs>
+      <rect x={0} y={0} width={preview.width} height={preview.height} fill={`url(#wf-bg-${spaceId})`} />
+      {preview.edges.map((e, idx) => {
+        const src = preview.nodeMap.get(e.source);
+        const dst = preview.nodeMap.get(e.target);
+        if (!src || !dst) return null;
+        const x1 = src.position.x - preview.minX + 40 + (src.width ?? 180);
+        const y1 = src.position.y - preview.minY + 40 + (src.height ?? 110) * 0.5;
+        const x2 = dst.position.x - preview.minX + 40;
+        const y2 = dst.position.y - preview.minY + 40 + (dst.height ?? 110) * 0.5;
+        const mx = (x1 + x2) * 0.5;
+        return (
+          <path
+            key={`e-${e.id || idx}`}
+            d={`M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`}
+            stroke="rgba(167,139,250,0.55)"
+            strokeWidth={2}
+            fill="none"
+            strokeLinecap="round"
+          />
+        );
+      })}
+      {preview.nodes.map((n, idx) => {
+        const x = n.position.x - preview.minX + 40;
+        const y = n.position.y - preview.minY + 40;
+        const w = Math.max(94, Math.min(220, n.width ?? 170));
+        const h = Math.max(58, Math.min(140, n.height ?? 92));
+        const label = nodePreviewLabel(n);
+        const mediaUrl = nodePreviewMediaUrl(n);
+        const clipId = `wf-${spaceId}-clip-${idx}`;
+        const fill =
+          n.type === "adAsset"
+            ? "rgba(17,24,39,0.86)"
+            : n.type === "textPrompt"
+              ? "rgba(6,78,59,0.62)"
+              : n.type === "imageRef"
+                ? "rgba(67,56,202,0.6)"
+                : n.type === "promptList"
+                  ? "rgba(76,29,149,0.58)"
+                  : "rgba(146,64,14,0.58)";
+        return (
+          <g key={`n-${n.id}-${idx}`}>
+            {mediaUrl ? (
+              <>
+                <defs>
+                  <clipPath id={clipId}>
+                    <rect x={x} y={y} width={w} height={h} rx={12} />
+                  </clipPath>
+                </defs>
+                <image
+                  x={x}
+                  y={y}
+                  width={w}
+                  height={h}
+                  href={mediaUrl}
+                  preserveAspectRatio="xMidYMid slice"
+                  clipPath={`url(#${clipId})`}
+                />
+                <rect x={x} y={y} width={w} height={h} rx={12} fill="rgba(7,10,18,0.24)" />
+              </>
+            ) : (
+              <rect x={x} y={y} width={w} height={h} rx={12} fill={fill} />
+            )}
+            <rect x={x} y={y} width={w} height={h} rx={12} fill="none" stroke="rgba(255,255,255,0.22)" />
+            <text
+              x={x + 10}
+              y={y + 22}
+              fill="rgba(255,255,255,0.9)"
+              fontSize="11"
+              fontFamily="Inter, system-ui, sans-serif"
+              fontWeight="700"
+            >
+              {label.toUpperCase()}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
 }
 
 export function WorkflowSpacesLanding() {
@@ -299,16 +466,7 @@ export function WorkflowSpacesLanding() {
                   className="flex w-full cursor-pointer flex-col overflow-hidden rounded-2xl border border-white/[0.1] bg-[#0b0912]/90 text-left shadow-[0_12px_40px_rgba(0,0,0,0.35)] outline-none transition hover:border-violet-400/30 hover:bg-[#0b0912] hover:shadow-[0_12px_40px_rgba(139,92,246,0.08)] focus-visible:ring-2 focus-visible:ring-violet-500/50"
                 >
                   <div className="relative aspect-[16/10] w-full overflow-hidden bg-gradient-to-br from-violet-900/30 via-[#1a1a22] to-violet-950/35">
-                    {s.previewDataUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={s.previewDataUrl}
-                        alt={`${s.name} preview`}
-                        className="h-full w-full object-cover object-center"
-                        loading="lazy"
-                        decoding="async"
-                      />
-                    ) : null}
+                    <WorkflowSpaceCardPreviewFallback scope={storageScope} spaceId={s.id} />
                   </div>
                   <div className="flex items-start gap-2 p-4 pr-[4.5rem]">
                     <div className="min-w-0 flex-1">

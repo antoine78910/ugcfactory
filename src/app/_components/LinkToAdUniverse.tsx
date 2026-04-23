@@ -2598,6 +2598,31 @@ export default function LinkToAdUniverse({
     [neutralUploadUrl, resolveMaybeRelativeUrl],
   );
 
+  /** Add an AI/scraped candidate into Product photos without replacing current preview. */
+  const addProductPhotoFromCandidate = useCallback(
+    (url: string) => {
+      const picked = (url || "").trim();
+      if (!picked) return;
+      const resolvedPicked = resolveMaybeRelativeUrl(picked);
+      if (!resolvedPicked) return;
+
+      let added = false;
+      setProductOnlyImageUrls((prev) => {
+        const exists = prev.some((u) => resolveMaybeRelativeUrl(u) === resolvedPicked || u === picked);
+        if (exists) return prev;
+        added = true;
+        return [...prev, picked];
+      });
+      setUserPhotoUrls((prev) => {
+        const exists = prev.some((u) => resolveMaybeRelativeUrl(u) === resolvedPicked || u === picked);
+        return exists ? prev : [...prev, picked];
+      });
+      setNeutralUploadUrl((n) => n ?? picked);
+      if (added) toast.success("Added to product photos");
+    },
+    [resolveMaybeRelativeUrl],
+  );
+
   const isAlgorithmChosenPreview = useMemo(() => {
     if (!LINK_TO_AD_ENABLE_AI_PICK) return false;
     const cur = (resolvedPreviewUrl || "").trim();
@@ -6531,11 +6556,11 @@ export default function LinkToAdUniverse({
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  choosePreviewImage(u);
+                                  addProductPhotoFromCandidate(u);
                                 }}
                                 className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-md bg-black/70 text-white/75 opacity-0 transition hover:text-emerald-300 group-hover:opacity-100"
-                                aria-label="Add this image to generation references"
-                                title="Add to generation"
+                                aria-label="Add this image to product photos"
+                                title="Add to product photos"
                               >
                                 <Plus className="h-3 w-3" aria-hidden />
                               </button>
@@ -6799,11 +6824,11 @@ export default function LinkToAdUniverse({
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  choosePreviewImage(u);
+                                  addProductPhotoFromCandidate(u);
                                 }}
                                 className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-md bg-black/70 text-white/75 opacity-0 transition hover:text-emerald-300 group-hover:opacity-100"
-                                aria-label="Add this image to generation references"
-                                title="Add to generation"
+                                aria-label="Add this image to product photos"
+                                title="Add to product photos"
                               >
                                 <Plus className="h-3 w-3" aria-hidden />
                               </button>
@@ -7247,11 +7272,11 @@ export default function LinkToAdUniverse({
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                choosePreviewImage(u);
+                                addProductPhotoFromCandidate(u);
                               }}
                               className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-md bg-black/70 text-white/75 opacity-0 transition hover:text-emerald-300 group-hover:opacity-100"
-                              aria-label="Add this image to generation references"
-                              title="Add to generation"
+                              aria-label="Add this image to product photos"
+                              title="Add to product photos"
                             >
                               <Plus className="h-3 w-3" aria-hidden />
                             </button>
