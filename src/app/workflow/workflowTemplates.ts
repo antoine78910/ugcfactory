@@ -32,10 +32,21 @@ type WorkflowCustomTemplateRecord = {
   createdAt: number;
 };
 
+type WorkflowBuiltinTemplatePrefsRecord = {
+  id: string;
+  name?: string;
+  blurb?: string;
+  hidden?: boolean;
+};
+
 const WORKFLOW_CUSTOM_TEMPLATE_PREFIX = "tmp-template:";
 
 function customTemplatesStorageKey(scope: string): string {
   return `youry-workflow-custom-templates-v1:${scope}`;
+}
+
+function builtinTemplatesPrefsStorageKey(scope: string): string {
+  return `youry-workflow-builtin-template-prefs-v1:${scope}`;
 }
 
 function parseCustomTemplates(raw: string | null): WorkflowCustomTemplateRecord[] {
@@ -71,6 +82,40 @@ function writeCustomTemplates(scope: string, records: WorkflowCustomTemplateReco
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(customTemplatesStorageKey(scope), JSON.stringify(records));
+  } catch {
+    /* quota */
+  }
+}
+
+function parseBuiltinTemplatePrefs(raw: string | null): WorkflowBuiltinTemplatePrefsRecord[] {
+  if (!raw) return [];
+  try {
+    const arr = JSON.parse(raw) as WorkflowBuiltinTemplatePrefsRecord[];
+    if (!Array.isArray(arr)) return [];
+    return arr
+      .map((x) => ({
+        id: typeof x?.id === "string" ? x.id.trim() : "",
+        name: typeof x?.name === "string" ? x.name.trim() : undefined,
+        blurb: typeof x?.blurb === "string" ? x.blurb.trim() : undefined,
+        hidden: Boolean(x?.hidden),
+      }))
+      .filter((x) => x.id.length > 0);
+  } catch {
+    return [];
+  }
+}
+
+function readBuiltinTemplatePrefs(scope: string | null | undefined): WorkflowBuiltinTemplatePrefsRecord[] {
+  if (typeof window === "undefined") return [];
+  const s = typeof scope === "string" ? scope.trim() : "";
+  if (!s) return [];
+  return parseBuiltinTemplatePrefs(localStorage.getItem(builtinTemplatesPrefsStorageKey(s)));
+}
+
+function writeBuiltinTemplatePrefs(scope: string, records: WorkflowBuiltinTemplatePrefsRecord[]) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(builtinTemplatesPrefsStorageKey(scope), JSON.stringify(records));
   } catch {
     /* quota */
   }
@@ -169,7 +214,20 @@ const builders: Record<string, () => WorkflowProjectStateV1> = {
 };
 
 export function listWorkflowTemplates(scope?: string | null): WorkflowTemplateMeta[] {
-  const builtins = WORKFLOW_TEMPLATE_LIST.map((x) => ({ ...x, source: "builtin" as const }));
+  const builtinPrefs = readBuiltinTemplatePrefs(scope);
+  const prefsById = new Map(builtinPrefs.map((x) => [x.id, x]));
+  const builtins = WORKFLOW_TEMPLATE_LIST
+    .map((x) => {
+      const pref = prefsById.get(x.id);
+      if (pref?.hidden) return null;
+      return {
+        id: x.id,
+        name: pref?.name || x.name,
+        blurb: pref?.blurb || x.blurb,
+        source: "builtin" as const,
+      };
+    })
+    .filter((x) => x !== null);
   const custom = readCustomTemplates(scope).map((x) => ({
     id: x.id,
     name: x.name,
@@ -246,5 +304,53 @@ export function updateTemporaryWorkflowTemplateMeta(
   });
   if (!touched) return false;
   writeCustomTemplates(scope, next);
+  return true;
+}
+
+export function updateWorkflowTemplateMeta(
+  scope: string,
+  templateId: string,
+  patch: { name?: string; blurb?: string },
+): boolean {
+  if (templateId.startsWith(WORKFLOW_CUSTOM_TEMPLATE_PREFIX)) {
+    return updateTemporaryWorkflowTemplateMeta(scope, templateId, patch);
+  }
+  const records = readBuiltinTemplatePrefs(scope);
+  let touched = false;
+  const next = records.map((x) => {
+    if (x.id !== templateId) return x;
+    touched = true;
+    return {
+      ...x,
+      name: patch.name !== undefined ? patch.name.trim() || x.name : x.name,
+      blurb: patch.blurb !== undefined ? patch.blurb.trim() || x.blurb : x.blurb,
+      hidden: false,
+    };
+  });
+  if (!touched) {
+    next.unshift({
+      id: templateId,
+      name: patch.name?.trim() || undefined,
+      blurb: patch.blurb?.trim() || undefined,
+      hidden: false,
+    });
+  }
+  writeBuiltinTemplatePrefs(scope, next);
+  return true;
+}
+
+export function deleteWorkflowTemplate(scope: string, templateId: string): boolean {
+  if (templateId.startsWith(WORKFLOW_CUSTOM_TEMPLATE_PREFIX)) {
+    return deleteTemporaryWorkflowTemplate(scope, templateId);
+  }
+  const records = readBuiltinTemplatePrefs(scope);
+  const idx = records.findIndex((x) => x.id === templateId);
+  if (idx >= 0) {
+    const next = [...records];
+    next[idx] = { ...next[idx], hidden: true };
+    writeBuiltinTemplatePrefs(scope, next);
+    return true;
+  }
+  writeBuiltinTemplatePrefs(scope, [{ id: templateId, hidden: true }, ...records]);
   return true;
 }

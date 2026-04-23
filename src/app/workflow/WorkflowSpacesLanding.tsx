@@ -1,6 +1,6 @@
 "use client";
 
-import { Layers, LayoutTemplate, Plus, Search, Users } from "lucide-react";
+import { Layers, LayoutTemplate, Pencil, Plus, Search, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
 
@@ -20,10 +20,10 @@ import {
   type WorkflowSpaceMeta,
 } from "./workflowSpacesStorage";
 import {
-  deleteTemporaryWorkflowTemplate,
+  deleteWorkflowTemplate,
   listWorkflowTemplates,
   saveTemporaryWorkflowTemplate,
-  updateTemporaryWorkflowTemplateMeta,
+  updateWorkflowTemplateMeta,
 } from "./workflowTemplates";
 
 type TabId = "my" | "shared" | "templates";
@@ -152,7 +152,7 @@ export function WorkflowSpacesLanding() {
     e.preventDefault();
     e.stopPropagation();
     if (storageScope === null) return;
-    const removed = deleteTemporaryWorkflowTemplate(storageScope, templateId);
+    const removed = deleteWorkflowTemplate(storageScope, templateId);
     if (!removed) return;
     setTemplatesTick((n) => n + 1);
   };
@@ -166,7 +166,7 @@ export function WorkflowSpacesLanding() {
     const nextBlurbRaw = window.prompt("Template description", template.blurb);
     if (nextBlurbRaw === null) return;
     const nextBlurb = nextBlurbRaw.trim() || template.blurb;
-    const updated = updateTemporaryWorkflowTemplateMeta(storageScope, template.id, {
+    const updated = updateWorkflowTemplateMeta(storageScope, template.id, {
       name: nextName,
       blurb: nextBlurb,
     });
@@ -301,29 +301,38 @@ export function WorkflowSpacesLanding() {
                   >
                     <div className="aspect-[16/10] w-full bg-gradient-to-br from-violet-900/35 via-[#1a1a22] to-violet-950/40" />
                     <div className="p-4">
-                      <p className="font-semibold text-white">{t.name}</p>
-                      <p className="mt-2 text-[13px] leading-relaxed text-white/45">{t.blurb}</p>
+                      <div className="flex items-start gap-1.5">
+                        <p className="min-w-0 flex-1 font-semibold text-white">{t.name}</p>
+                        <button
+                          type="button"
+                          title="Edit template title and description"
+                          onClick={(e) => editTemplateMeta(e, t)}
+                          className="rounded-md p-1 text-white/50 transition hover:bg-white/10 hover:text-white"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                      <div className="mt-2 flex items-start gap-1.5">
+                        <p className="min-w-0 flex-1 text-[13px] leading-relaxed text-white/45">{t.blurb}</p>
+                        <button
+                          type="button"
+                          title="Edit template title and description"
+                          onClick={(e) => editTemplateMeta(e, t)}
+                          className="rounded-md p-1 text-white/45 transition hover:bg-white/10 hover:text-white"
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </button>
+                      </div>
                       <div className="mt-3 flex items-center justify-between gap-2">
                         <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-300/70">View preview</p>
                         <div className="flex items-center gap-1.5">
-                          {t.source === "custom" ? (
-                            <>
-                              <button
-                                type="button"
-                                onClick={(e) => editTemplateMeta(e, t)}
-                                className="rounded-full border border-white/20 bg-white/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white/85 transition hover:border-white/35 hover:bg-white/15"
-                              >
-                                Edit
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(e) => removeTemplate(e, t.id)}
-                                className="rounded-full border border-red-400/35 bg-red-500/12 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-red-100 transition hover:border-red-300/50 hover:bg-red-500/20"
-                              >
-                                Delete
-                              </button>
-                            </>
-                          ) : null}
+                          <button
+                            type="button"
+                            onClick={(e) => removeTemplate(e, t.id)}
+                            className="rounded-full border border-red-400/35 bg-red-500/12 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-red-100 transition hover:border-red-300/50 hover:bg-red-500/20"
+                          >
+                            Delete
+                          </button>
                           <button
                             type="button"
                             onClick={(e) => duplicateTemplateToMyWorkflows(e, t.id)}

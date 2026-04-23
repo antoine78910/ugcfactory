@@ -38,6 +38,13 @@ function toRenderableMediaUrl(s: string): string {
   return s.replace(/#media=(image|video)$/i, "");
 }
 
+function formatMediaDuration(totalSeconds: number): string {
+  const sec = Math.max(0, Math.floor(totalSeconds || 0));
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
 function keepWheelInsideTextarea(e: WheelEvent<HTMLTextAreaElement>) {
   const el = e.currentTarget;
   const canScroll = el.scrollHeight > el.clientHeight;
@@ -87,6 +94,7 @@ const PromptListMediaGalleryCell = memo(function PromptListMediaGalleryCell({
   const renderUrl = toRenderableMediaUrl(url);
   const pending = isPendingMediaToken(url);
   const fetchPriority = slotIndex < 9 ? ("high" as const) : ("low" as const);
+  const [videoDurationLabel, setVideoDurationLabel] = useState<string>("");
 
   useEffect(() => {
     if (pending) return;
@@ -94,20 +102,7 @@ const PromptListMediaGalleryCell = memo(function PromptListMediaGalleryCell({
   }, [pending, url]);
 
   return (
-    <div
-      className="group relative aspect-square min-h-0 overflow-hidden rounded-md border border-white/10 bg-black/35"
-      onMouseEnter={(e) => {
-        const v = e.currentTarget.querySelector("video");
-        if (!v) return;
-        void v.play().catch(() => {});
-      }}
-      onMouseLeave={(e) => {
-        const v = e.currentTarget.querySelector("video");
-        if (!v) return;
-        v.pause();
-        v.currentTime = 0;
-      }}
-    >
+    <div className="group relative aspect-square min-h-0 overflow-hidden rounded-md border border-white/10 bg-black/35">
       {pending ? (
         <div className="flex h-full w-full min-h-0 items-center justify-center bg-white/[0.04]">
           <div className="h-7 w-7 animate-spin rounded-full border-2 border-white/20 border-t-violet-300/90" />
@@ -118,8 +113,17 @@ const PromptListMediaGalleryCell = memo(function PromptListMediaGalleryCell({
           className="h-full w-full min-h-0 object-cover transition group-hover:scale-[1.02]"
           muted
           loop
+          autoPlay
           playsInline
           preload="metadata"
+          onLoadedMetadata={(e) => {
+            const d = e.currentTarget.duration;
+            if (!Number.isFinite(d) || d <= 0) {
+              setVideoDurationLabel("");
+              return;
+            }
+            setVideoDurationLabel(formatMediaDuration(d));
+          }}
         />
       ) : (
         // eslint-disable-next-line @next/next/no-img-element
@@ -132,6 +136,11 @@ const PromptListMediaGalleryCell = memo(function PromptListMediaGalleryCell({
           className="h-full w-full min-h-0 object-cover transition group-hover:scale-[1.02]"
         />
       )}
+      {isProbablyVideoUrl(url) && videoDurationLabel ? (
+        <div className="pointer-events-none absolute right-1.5 top-1.5 z-[2] rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-semibold text-white/90 transition-opacity group-hover:opacity-0">
+          {videoDurationLabel}
+        </div>
+      ) : null}
       <div className="absolute left-1.5 top-1.5 z-[2] opacity-0 transition group-hover:opacity-100">
         <button
           type="button"

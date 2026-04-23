@@ -2600,6 +2600,9 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 src={previewUrl}
                 className="nodrag nopan absolute inset-0 z-[1] h-full w-full object-cover"
                 controls
+                autoPlay
+                muted
+                loop
                 playsInline
                 preload="metadata"
                 title="Generated video preview"
