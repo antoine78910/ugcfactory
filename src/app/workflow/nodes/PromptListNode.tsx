@@ -132,7 +132,7 @@ const PromptListMediaGalleryCell = memo(function PromptListMediaGalleryCell({
           className="h-full w-full min-h-0 object-cover transition group-hover:scale-[1.02]"
         />
       )}
-      <div className="absolute right-1.5 top-1.5 z-[2] flex items-center justify-end gap-1 opacity-0 transition group-hover:opacity-100">
+      <div className="absolute left-1.5 top-1.5 z-[2] opacity-0 transition group-hover:opacity-100">
         <button
           type="button"
           className="nodrag nopan inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white/85 backdrop-blur-sm hover:bg-black/70"
@@ -146,6 +146,8 @@ const PromptListMediaGalleryCell = memo(function PromptListMediaGalleryCell({
         >
           <Download className="h-3.5 w-3.5" aria-hidden />
         </button>
+      </div>
+      <div className="absolute inset-x-1.5 bottom-1.5 z-[2] flex items-center justify-end gap-1 opacity-0 transition group-hover:opacity-100">
         <button
           type="button"
           className="nodrag nopan inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white/85 backdrop-blur-sm hover:bg-black/70"

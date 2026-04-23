@@ -2431,7 +2431,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             )
           ) : null}
           {hasPreviewMedia && (data.kind === "image" || data.kind === "video") ? (
-            <div className="nodrag nopan absolute right-2 top-2 z-[6] flex flex-col items-center gap-1 opacity-0 transition group-hover/card:opacity-100">
+            <div className="nodrag nopan absolute left-2 top-2 z-[6] flex flex-col items-center gap-1 opacity-0 transition group-hover/card:opacity-100">
               <button
                 type="button"
                 onClick={(e) => {

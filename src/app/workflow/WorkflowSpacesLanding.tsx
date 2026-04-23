@@ -16,6 +16,7 @@ import {
   getWorkflowStorageScope,
   loadProjectForSpace,
   loadSpacesIndex,
+  updateSpaceMeta,
   type WorkflowSpaceMeta,
 } from "./workflowSpacesStorage";
 import {
@@ -93,7 +94,10 @@ export function WorkflowSpacesLanding() {
 
   const onNewSpace = () => {
     if (storageScope === null) return;
-    const meta = createSpace(storageScope);
+    const proposed = window.prompt("Workflow name", "Untitled workflow");
+    if (proposed === null) return;
+    const nextName = proposed.trim() || "Untitled workflow";
+    const meta = createSpace(storageScope, nextName);
     router.push(`/workflow/space/${encodeURIComponent(meta.id)}`);
   };
 
@@ -118,6 +122,17 @@ export function WorkflowSpacesLanding() {
     e.stopPropagation();
     if (storageScope === null) return;
     deleteSpace(storageScope, id);
+    refresh(storageScope);
+  };
+  const renameSpace = (e: MouseEvent, space: WorkflowSpaceMeta) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (storageScope === null) return;
+    const proposed = window.prompt("Rename workflow", space.name);
+    if (proposed === null) return;
+    const nextName = proposed.trim();
+    if (!nextName || nextName === space.name) return;
+    updateSpaceMeta(storageScope, space.id, { name: nextName, updatedAt: Date.now() });
     refresh(storageScope);
   };
   const pushTemporaryTemplateFromSpace = (e: MouseEvent, space: WorkflowSpaceMeta) => {
@@ -327,6 +342,14 @@ export function WorkflowSpacesLanding() {
                     </div>
                   </div>
                 </div>
+                <button
+                  type="button"
+                  title="Edit name"
+                  onClick={(e) => renameSpace(e, s)}
+                  className="pointer-events-none absolute bottom-4 right-[9rem] z-10 rounded-lg px-2 py-1 text-[11px] font-semibold text-white/35 opacity-0 transition hover:bg-white/10 hover:text-white group-hover:pointer-events-auto group-hover:opacity-100"
+                >
+                  Edit
+                </button>
                 <button
                   type="button"
                   title="Push temporary template"
