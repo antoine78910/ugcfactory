@@ -8349,7 +8349,11 @@ export default function LinkToAdUniverse({
                                       <RefreshCw className="h-4 w-4 shrink-0" aria-hidden />
                                       Regenerate
                                       {hideCredits ? null : (
-                                        <CreditCostBadge amount={ltaVideoConfirmCreditsDisplay} />
+                                        <LinkToAdStudioStyleCreditPill
+                                          amount={ltaVideoConfirmCreditsDisplay}
+                                          hideCredits={hideCredits}
+                                          compact
+                                        />
                                       )}
                                     </span>
                                   )}

@@ -533,6 +533,7 @@ export async function POST(req: Request) {
     "Output only PROMPT 1, PROMPT 2, and PROMPT 3 with EDIT, Avatar / Scene / Shot sections.",
     "Never output TECHNICAL headers, preservation bullet lists, EXIF, or NEGATIVE PROMPT blocks.",
     "Do not add preamble, explanations, or reasoning.",
+    "If avatar reference images are attached, treat them as IDENTITY REFERENCES ONLY (face/body traits). Never treat avatar refs as product references.",
   ].join("\n");
 
   const userText = [
@@ -543,8 +544,11 @@ export async function POST(req: Request) {
     script,
     "",
     avatarRefs.length
-      ? `AVATAR REFERENCES ATTACHED: ${String(avatarRefs.length)} image(s). Match the person/persona appearance to these references whenever possible.`
+      ? `AVATAR REFERENCES ATTACHED: ${String(avatarRefs.length)} image(s). Match ONLY immutable identity traits (face, skin tone, hair, body traits) to these references.`
       : "No avatar reference image attached; infer persona from script and product context.",
+    avatarRefs.length
+      ? "PERSONA DISSOCIATION RULE: Do NOT copy clothing, accessories, pose, camera framing, or background from avatar refs. Outfit and styling must come from the script scene and can differ from avatar uploads."
+      : "",
     generationMode === "custom_ugc"
       ? `CUSTOM UGC INTENT: ${customUgcIntent || "No talk, just show the product naturally."}`
       : "MODE: automatic Link to Ad generation.",
