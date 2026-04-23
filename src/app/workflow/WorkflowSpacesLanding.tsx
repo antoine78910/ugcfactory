@@ -23,6 +23,7 @@ import {
   deleteTemporaryWorkflowTemplate,
   listWorkflowTemplates,
   saveTemporaryWorkflowTemplate,
+  updateTemporaryWorkflowTemplateMeta,
 } from "./workflowTemplates";
 
 type TabId = "my" | "shared" | "templates";
@@ -153,6 +154,23 @@ export function WorkflowSpacesLanding() {
     if (storageScope === null) return;
     const removed = deleteTemporaryWorkflowTemplate(storageScope, templateId);
     if (!removed) return;
+    setTemplatesTick((n) => n + 1);
+  };
+  const editTemplateMeta = (e: MouseEvent, template: { id: string; name: string; blurb: string }) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (storageScope === null) return;
+    const nextNameRaw = window.prompt("Template name", template.name);
+    if (nextNameRaw === null) return;
+    const nextName = nextNameRaw.trim() || template.name;
+    const nextBlurbRaw = window.prompt("Template description", template.blurb);
+    if (nextBlurbRaw === null) return;
+    const nextBlurb = nextBlurbRaw.trim() || template.blurb;
+    const updated = updateTemporaryWorkflowTemplateMeta(storageScope, template.id, {
+      name: nextName,
+      blurb: nextBlurb,
+    });
+    if (!updated) return;
     setTemplatesTick((n) => n + 1);
   };
 
@@ -289,13 +307,22 @@ export function WorkflowSpacesLanding() {
                         <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-300/70">View preview</p>
                         <div className="flex items-center gap-1.5">
                           {t.source === "custom" ? (
-                            <button
-                              type="button"
-                              onClick={(e) => removeTemplate(e, t.id)}
-                              className="rounded-full border border-red-400/35 bg-red-500/12 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-red-100 transition hover:border-red-300/50 hover:bg-red-500/20"
-                            >
-                              Delete
-                            </button>
+                            <>
+                              <button
+                                type="button"
+                                onClick={(e) => editTemplateMeta(e, t)}
+                                className="rounded-full border border-white/20 bg-white/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white/85 transition hover:border-white/35 hover:bg-white/15"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => removeTemplate(e, t.id)}
+                                className="rounded-full border border-red-400/35 bg-red-500/12 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-red-100 transition hover:border-red-300/50 hover:bg-red-500/20"
+                              >
+                                Delete
+                              </button>
+                            </>
                           ) : null}
                           <button
                             type="button"
@@ -336,20 +363,22 @@ export function WorkflowSpacesLanding() {
                 >
                   <div className="aspect-[16/10] w-full bg-gradient-to-br from-violet-900/30 via-[#1a1a22] to-violet-950/35" />
                   <div className="flex items-start gap-2 p-4 pr-[4.5rem]">
-                    <div className="min-w-0">
-                      <p className="truncate font-semibold text-white">{s.name}</p>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="min-w-0 flex-1 truncate font-semibold text-white">{s.name}</p>
+                        <button
+                          type="button"
+                          title="Edit name"
+                          onClick={(e) => renameSpace(e, s)}
+                          className="nodrag nopan pointer-events-none shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold text-white/40 opacity-0 transition hover:bg-white/10 hover:text-white group-hover:pointer-events-auto group-hover:opacity-100"
+                        >
+                          Edit
+                        </button>
+                      </div>
                       <p className="mt-1 text-[12px] text-white/40">Edited {formatTimeAgo(s.updatedAt)}</p>
                     </div>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  title="Edit name"
-                  onClick={(e) => renameSpace(e, s)}
-                  className="pointer-events-none absolute bottom-4 right-[9rem] z-10 rounded-lg px-2 py-1 text-[11px] font-semibold text-white/35 opacity-0 transition hover:bg-white/10 hover:text-white group-hover:pointer-events-auto group-hover:opacity-100"
-                >
-                  Edit
-                </button>
                 <button
                   type="button"
                   title="Push temporary template"

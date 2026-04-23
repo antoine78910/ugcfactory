@@ -84,10 +84,10 @@ export function LandingSeedanceTopButton() {
             />
           </span>
           <span className="ml-1.5 bg-gradient-to-r from-violet-100 via-white to-violet-200/95 bg-clip-text text-left text-[11px] font-semibold leading-snug text-transparent transition-transform group-hover:scale-[1.02] sm:text-xs">
-            Seedance Pro 2.0 now available !
+            GPT Image 2 &amp; Seedance Pro 2.0 now available !
           </span>
         </span>
-        <span className="sr-only">Seedance Pro 2.0 now available, sign up</span>
+        <span className="sr-only">GPT Image 2 and Seedance Pro 2.0 now available, sign up</span>
       </Link>
     </div>
   );

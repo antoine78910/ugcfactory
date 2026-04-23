@@ -225,3 +225,26 @@ export function deleteTemporaryWorkflowTemplate(scope: string, templateId: strin
   writeCustomTemplates(scope, next);
   return true;
 }
+
+export function updateTemporaryWorkflowTemplateMeta(
+  scope: string,
+  templateId: string,
+  patch: { name?: string; blurb?: string },
+): boolean {
+  const records = readCustomTemplates(scope);
+  let touched = false;
+  const next = records.map((x) => {
+    if (x.id !== templateId) return x;
+    touched = true;
+    const nextName = (patch.name ?? x.name).trim() || x.name;
+    const nextBlurb = (patch.blurb ?? x.blurb).trim() || x.blurb;
+    return {
+      ...x,
+      name: nextName,
+      blurb: nextBlurb,
+    };
+  });
+  if (!touched) return false;
+  writeCustomTemplates(scope, next);
+  return true;
+}
