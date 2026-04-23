@@ -661,6 +661,8 @@ export function CreditsPlanProvider({
       const amount = Number(n);
       if (!Number.isFinite(amount) || amount <= 0 || displayCreditsToLedgerTicks(amount) <= 0) return;
       const prev = readState(activeUserId);
+      // Product rule: image/video platform credits are consumed only on free/trial access.
+      if (prev.planId !== "free") return;
       const nextCurrent = Math.max(0, prev.current - amount);
       const nextTotal =
         prev.planId === "free"

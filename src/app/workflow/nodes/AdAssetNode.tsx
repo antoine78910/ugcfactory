@@ -1031,7 +1031,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     "workflow-port-create-cursor relative h-8 w-8 shrink-0 rounded-full border border-white/12 bg-[#1a1a1c]/95 transition hover:border-violet-500/35";
 
   const workflowPortBubbleHitClass =
-    "workflow-port-create-cursor nodrag nopan absolute inset-0 z-[1] flex cursor-copy items-center justify-center rounded-full border-0 bg-transparent p-0 shadow-none outline-none ring-0";
+    "workflow-port-create-cursor nodrag nopan absolute inset-0 z-[1] flex cursor-crosshair items-center justify-center rounded-full border-0 bg-transparent p-0 shadow-none outline-none ring-0";
 
   /** Invisible full-bubble overlay for source ports on the right column (ids: `generated`, `videoFirst`, `videoLast`). */
   const workflowPortSourceBubbleHandleClass =

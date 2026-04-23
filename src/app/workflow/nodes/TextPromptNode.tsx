@@ -25,22 +25,6 @@ export function TextPromptNode({ id, data: rawData, selected }: NodeProps<TextPr
     "workflow-port-create-cursor nodrag nopan relative h-8 w-8 shrink-0 rounded-full border border-white/15 bg-[#15151a]/95 transition";
   const outputBubbleHandleClass =
     "workflow-port-create-cursor nodrag nopan !absolute !inset-0 !z-[2] !box-border !h-8 !w-8 !min-h-8 !min-w-8 !max-h-8 !max-w-8 !rounded-full !border-0 !bg-transparent opacity-0 !transform-none";
-  const openOutputCreatePicker = useCallback(
-    (sourceHandleId: string, targetEl: HTMLElement) => {
-      const rect = targetEl.getBoundingClientRect();
-      window.dispatchEvent(
-        new CustomEvent("workflow:open-output-picker", {
-          detail: {
-            sourceNodeId: id,
-            sourceHandleId,
-            screenX: Math.round(rect.right + 10),
-            screenY: Math.round(rect.top + rect.height / 2),
-          },
-        }),
-      );
-    },
-    [id],
-  );
 
   return (
     <>
@@ -73,16 +57,6 @@ export function TextPromptNode({ id, data: rawData, selected }: NodeProps<TextPr
         <div className="nodrag nopan relative z-[7] mt-2 flex shrink-0 flex-col gap-1">
           <div className={outputBubbleShellClass}>
             <Handle id="out" type="source" position={Position.Right} className={outputBubbleHandleClass} />
-            <button
-              type="button"
-              onPointerDown={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                openOutputCreatePicker("out", e.currentTarget);
-              }}
-              title="Click to add a connected module"
-              className="workflow-port-create-cursor absolute inset-0 z-[3] cursor-copy rounded-full"
-            />
             <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/85">
               <Type className="h-3.5 w-3.5" aria-hidden />
             </span>

@@ -376,11 +376,11 @@
 
 /* Port bubbles (input/output): explicit "create/connect" cursor. */
 .workflow-flow .workflow-port-create-cursor {
-  cursor: copy !important;
+  cursor: crosshair !important;
 }
 
 .workflow-flow .workflow-port-create-cursor * {
-  cursor: copy !important;
+  cursor: crosshair !important;
 }
 
 /* One-shot snip overlay, pivot ≈ blade crossing in 24×24 icon space. */

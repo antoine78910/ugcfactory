@@ -3360,21 +3360,17 @@ export default function LinkToAdUniverse({
   }
 
   /**
-   * References sent to Nano Banana generation requests.
-   * Keep product references first, then persona photos for identity consistency.
+   * Link to Ad references sent to image generation requests.
+   * Intentionally keep a single input image to avoid stale/multi-reference drift.
    */
   function resolveNanoGenerationImageUrls(): string[] {
-    const out: string[] = [];
-    const seen = new Set<string>();
-    const push = (u: string) => {
-      const t = (u || "").trim();
-      if (!t || seen.has(t) || !/^https?:\/\//i.test(t)) return;
-      seen.add(t);
-      out.push(t);
-    };
-    for (const u of resolveNanoProductImageUrls()) push(u);
-    for (const u of personaPhotoUrls) push(u);
-    return out.slice(0, 8);
+    const preview = (resolvedPreviewUrl || "").trim();
+    if (/^https?:\/\//i.test(preview)) return [preview];
+    const product = resolveNanoProductImageUrl();
+    if (product) return [product];
+    const persona = (personaPhotoUrls[0] || "").trim();
+    if (/^https?:\/\//i.test(persona)) return [persona];
+    return [];
   }
 
   /** Same image logic as the preview when possible (avoids “button enabled but no HTTPS product” mismatches). */

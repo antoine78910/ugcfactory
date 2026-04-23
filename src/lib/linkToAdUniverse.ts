@@ -834,34 +834,18 @@ export function stripInlineTechnicalNoiseFromNanoSection(field: string): string 
   return t.slice(0, cut).trim();
 }
 
-/**
- * Shared lookahead that terminates an EDIT section body. Handles both plain and **markdown** formats,
- * as well as "---" separators and "# PROMPT N" headers used in multi-prompt raw text.
- */
-const NANO_SECTION_END_LA =
-  // Next EDIT, <any> header (plain or **bold**)
-  "(?=" +
-  "\\n\\s*\\*{0,2}EDIT\\s*[—:-]|" +
-  // TECHNICAL block
-  "\\n\\s*\\*{0,2}TECHNICAL\\*{0,2}\\s*[—:*\\s]|" +
-  // NEGATIVE PROMPT block
-  "\\n\\s*\\*{0,2}NEGATIVE\\s+PROMPT\\b|" +
-  // Horizontal rule separator (e.g. "---") used between prompts
-  "\\n\\s*---+\\s*\\n|" +
-  // Leaked codec / device line after creative (common model failure mode)
-  "\\n+\\s*(?:4K|8K|ProRes|Dolby|HDR|RAW|iPhone\\s*\\d+|Avoid\\s+jitter)\\b|" +
-  // Markdown PROMPT N header (e.g. "# PROMPT 2")
-  "\\n\\s*(?:[#*]+\\s*)?PROMPT\\s*[123]|" +
-  // End of string
-  "$)";
-
 /** True when prompts use EDIT, / TECHNICAL: blocks from the image prompt API. */
 export function parseNanoEditableSections(editable: string): NanoEditableSections & { isStructured: boolean } {
   const raw = editable.replace(/\r\n/g, "\n");
   if (!raw.trim()) {
     return { person: "", scene: "", product: "", isStructured: false };
   }
-  if (!/EDIT\s*[—:,-]\s*(?:Person|Avatar)\b/im.test(raw)) {
+  // Unstructured legacy blob: keep everything in Avatar field.
+  if (
+    !/(?:^|\n)\s*(?:\*{0,2}\s*)?(?:EDIT\s*[—:,-]\s*)?(?:Person|Avatar|Scene|Shot|Product(?:\s*(?:&|and)\s*action)?)\b/im.test(
+      raw,
+    )
+  ) {
     return {
       person: stripInlineTechnicalNoiseFromNanoSection(raw.trim()),
       scene: "",
@@ -869,25 +853,68 @@ export function parseNanoEditableSections(editable: string): NanoEditableSection
       isStructured: false,
     };
   }
-  // Pattern for any EDIT header (handles "EDIT, X:", "**EDIT, X:**", newlines after colon, etc.)
-  const editHdr = (label: string) =>
-    `\\*{0,2}EDIT\\s*[—:,-]\\s*${label}\\*{0,2}\\s*:?\\*{0,2}\\s*\\n?\\s*`;
 
-  const personM =
-    raw.match(new RegExp(editHdr("Avatar") + `([\\s\\S]*?)${NANO_SECTION_END_LA}`, "i")) ||
-    raw.match(new RegExp(editHdr("Person") + `([\\s\\S]*?)${NANO_SECTION_END_LA}`, "i"));
-  const sceneM = raw.match(
-    new RegExp(editHdr("Scene") + `([\\s\\S]*?)${NANO_SECTION_END_LA}`, "i"),
-  );
-  const productM =
-    raw.match(new RegExp(editHdr("Shot") + `([\\s\\S]*?)${NANO_SECTION_END_LA}`, "i")) ||
-    raw.match(
-      new RegExp(editHdr("Product(?:\\s*(?:&|and)\\s*action)?") + `([\\s\\S]*?)${NANO_SECTION_END_LA}`, "i"),
+  const buckets: Record<"person" | "scene" | "product", string[]> = {
+    person: [],
+    scene: [],
+    product: [],
+  };
+  let current: "person" | "scene" | "product" | null = null;
+  let sawStructuredHeader = false;
+
+  // Accept:
+  // - "EDIT, Avatar:"
+  // - "**EDIT, Scene:**"
+  // - "Shot:"
+  // - "Scene"
+  // - "EDIT, Shot: inline content..."
+  const sectionHeaderRe =
+    /^\s*(?:\*{0,2}\s*)?(?:EDIT\s*[—:,-]\s*)?(Avatar|Person|Scene|Shot|Product(?:\s*(?:&|and)\s*action)?)\s*(?::\s*(.*))?\s*(?:\*{0,2})?\s*$/i;
+  const technicalOrStopRe =
+    /^\s*(?:\*{0,2}\s*)?(?:TECHNICAL|NEGATIVE\s+PROMPT)\b|^\s*---+\s*$|^\s*(?:[#*]+\s*)?PROMPT\s*[123]\b/i;
+
+  for (const line of raw.split("\n")) {
+    if (technicalOrStopRe.test(line)) {
+      current = null;
+      continue;
+    }
+    const hm = line.match(sectionHeaderRe);
+    if (hm) {
+      sawStructuredHeader = true;
+      const label = String(hm[1] ?? "").toLowerCase();
+      if (label === "avatar" || label === "person") current = "person";
+      else if (label === "scene") current = "scene";
+      else current = "product";
+      const inline = String(hm[2] ?? "").trim();
+      if (inline) buckets[current].push(inline);
+      continue;
+    }
+    if (current) buckets[current].push(line);
+  }
+
+  if (!sawStructuredHeader) {
+    return {
+      person: stripInlineTechnicalNoiseFromNanoSection(raw.trim()),
+      scene: "",
+      product: "",
+      isStructured: false,
+    };
+  }
+
+  const cleanup = (text: string) =>
+    stripInlineTechnicalNoiseFromNanoSection(
+      text
+        .replace(
+          /^\s*(?:\*{0,2}\s*)?(?:EDIT\s*[—:,-]\s*)?(?:Avatar|Person|Scene|Shot|Product(?:\s*(?:&|and)\s*action)?)\s*:?\s*(?:\*{0,2})?\s*$/gim,
+          "",
+        )
+        .trim(),
     );
+
   return {
-    person: stripInlineTechnicalNoiseFromNanoSection(personM?.[1]?.trim() ?? ""),
-    scene: stripInlineTechnicalNoiseFromNanoSection(sceneM?.[1]?.trim() ?? ""),
-    product: stripInlineTechnicalNoiseFromNanoSection(productM?.[1]?.trim() ?? ""),
+    person: cleanup(buckets.person.join("\n")),
+    scene: cleanup(buckets.scene.join("\n")),
+    product: cleanup(buckets.product.join("\n")),
     isStructured: true,
   };
 }

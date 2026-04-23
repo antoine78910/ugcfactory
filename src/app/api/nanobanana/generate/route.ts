@@ -34,6 +34,14 @@ type Body = {
   personalApiKey?: string;
 };
 
+function firstHttpUrl(items: Array<string | null | undefined>): string | undefined {
+  for (const raw of items) {
+    const value = (raw ?? "").trim();
+    if (/^https?:\/\//i.test(value)) return value;
+  }
+  return undefined;
+}
+
 export async function POST(req: Request) {
   const { user, response } = await requireSupabaseUser();
   if (response) return response;
@@ -89,11 +97,23 @@ export async function POST(req: Request) {
   }
 
   try {
+    const singleLinkToAdRef =
+      body.linkToAd === true
+        ? firstHttpUrl([body.imageUrl, ...(Array.isArray(body.imageUrls) ? body.imageUrls : [])])
+        : undefined;
+    const imageUrl = body.linkToAd === true ? singleLinkToAdRef : body.imageUrl;
+    const imageUrls =
+      body.linkToAd === true
+        ? singleLinkToAdRef
+          ? [singleLinkToAdRef]
+          : undefined
+        : body.imageUrls;
+
     const { taskId, taskIds, kieModel } = await createStudioKieImageTasks({
       prompt,
       model,
-      imageUrl: body.imageUrl,
-      imageUrls: body.imageUrls,
+      imageUrl,
+      imageUrls,
       imageSize: body.imageSize,
       numImages: body.numImages,
       resolution: body.resolution,

@@ -66,10 +66,10 @@ export async function POST(req: Request) {
   if (!isStudioImageKiePickerModelId(model)) {
     return NextResponse.json({ error: "Invalid image model." }, { status: 400 });
   }
+  const dbPlan = await getUserPlan(user.id);
+  const accountPlan = dbPlan !== "free" ? dbPlan : parseAccountPlan(body.accountPlan);
   const personalKey = hasPersonalApiKey(body.personalApiKey) ? body.personalApiKey!.trim() : undefined;
   if (!personalKey) {
-    const dbPlan = await getUserPlan(user.id);
-    const accountPlan = dbPlan !== "free" ? dbPlan : parseAccountPlan(body.accountPlan);
     if (!canUseStudioImagePickerModel(accountPlan, model)) {
       return NextResponse.json(
         {
@@ -84,10 +84,11 @@ export async function POST(req: Request) {
   }
 
   const usesPersonalApi = Boolean(personalKey);
+  const shouldChargePlatformCredits = !usesPersonalApi && accountPlan === "free";
   // Calculate credits server-side, never trust the client-provided value
   const numImages = Math.max(1, Math.min(Number(body.numImages) || 1, 10));
   const resolution = (body.resolution as "1K" | "2K" | "4K" | undefined) ?? "1K";
-  const creditsDisplay = usesPersonalApi ? 0 : computeImageCredits(model, resolution, numImages);
+  const creditsDisplay = shouldChargePlatformCredits ? computeImageCredits(model, resolution, numImages) : 0;
   const totalTicks = displayCreditsToLedgerTicks(creditsDisplay);
 
   const refUrls = Array.isArray(body.imageUrls)

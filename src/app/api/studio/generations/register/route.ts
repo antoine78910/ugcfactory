@@ -11,6 +11,7 @@ import {
 } from "@/lib/studioGenerationsSchemaCompat";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import { getUserCreditBalance } from "@/lib/creditGrants";
+import { getUserPlan } from "@/lib/supabase/getUserPlan";
 
 async function snapshotCreditBalanceAfterInsert(userId: string, rowIds: string[]): Promise<void> {
   const uniq = [...new Set(rowIds.map((x) => x.trim()).filter(Boolean))];
@@ -66,14 +67,17 @@ export async function POST(req: Request) {
   const label = String(body.label ?? "").trim() || "Studio";
   const model = String(body.model ?? "").trim();
   const provider = String(body.provider ?? "kie-market").trim() || "kie-market";
-  const creditsDisplay = Math.max(0, Number(body.creditsCharged) || 0);
-  const totalTicks = displayCreditsToLedgerTicks(creditsDisplay);
   const hasKiePersonal = Boolean(String(body.personalApiKey ?? "").trim());
   const hasPiapiPersonal = Boolean(String(body.piapiApiKey ?? "").trim());
   const providerLc = provider.toLowerCase();
   /** Do not OR keys across providers, that breaks polling (e.g. KIE key set but PiAPI job never polled). */
   const usesPersonalApi =
     providerLc === "piapi" ? hasPiapiPersonal : hasKiePersonal;
+  // Product rule: platform credits are consumed only on free/trial access.
+  const planId = await getUserPlan(user.id);
+  const shouldChargePlatformCredits = planId === "free" && !usesPersonalApi;
+  const creditsDisplay = shouldChargePlatformCredits ? Math.max(0, Number(body.creditsCharged) || 0) : 0;
+  const totalTicks = displayCreditsToLedgerTicks(creditsDisplay);
   const taskIdsRaw = Array.isArray(body.taskIds) ? body.taskIds : body.taskId ? [body.taskId] : [];
   const taskIds = taskIdsRaw
     .map((x) => String(x ?? "").trim())
