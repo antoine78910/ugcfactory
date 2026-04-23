@@ -106,7 +106,6 @@ import { LINK_TO_AD_LOADING_MESSAGES } from "@/lib/linkToAd/loadingMessageLoops"
 import { assertStudioImageUpload, STUDIO_IMAGE_FILE_ACCEPT } from "@/lib/studioUploadValidation";
 import {
   creditsLinkToAdFullPipeline,
-  creditsLinkToAdVideoFromImage,
   CREDITS_LINK_TO_AD_THREE_REF_IMAGES,
   LINK_TO_AD_DEFAULT_VIDEO_MODEL,
   LINK_TO_AD_DEFAULT_VIDEO_DURATION_SEC,
@@ -1471,10 +1470,6 @@ export default function LinkToAdUniverse({
   const [nanoBananaTaskId, setNanoBananaTaskId] = useState<string | null>(null);
   const [nanoBananaImageUrl, setNanoBananaImageUrl] = useState<string | null>(null);
   const [nanoBananaImageUrls, setNanoBananaImageUrls] = useState<string[]>([]);
-  /** Temporary comparison set: GPT Image 2 outputs for the same 3 prompts. */
-  const [gptImage2CompareUrls, setGptImage2CompareUrls] = useState<string[]>([]);
-  const [gptImage2CompareLoading, setGptImage2CompareLoading] = useState(false);
-  const [gptImage2CompareElapsedMs, setGptImage2CompareElapsedMs] = useState<number | null>(null);
   const [nanoBananaSelectedImageIndex, setNanoBananaSelectedImageIndex] = useState<0 | 1 | 2 | null>(null);
   const [ugcVideoPromptGpt, setUgcVideoPromptGpt] = useState("");
   const [nanoPromptDrafts, setNanoPromptDrafts] = useState<[string, string, string]>(["", "", ""]);
@@ -1572,10 +1567,6 @@ export default function LinkToAdUniverse({
   const demoSimulateImageGen = useCallback(() => {
     setIsWorking(true);
     setIsNanoAllImagesSubmitting(true);
-    if (LINK_TO_AD_ENABLE_GPT_IMAGE2_COMPARE) {
-      setGptImage2CompareUrls([]);
-      setGptImage2CompareElapsedMs(null);
-    }
     setTimeout(() => {
       setIsNanoAllImagesSubmitting(false);
       setIsWorking(false);
@@ -2496,8 +2487,6 @@ export default function LinkToAdUniverse({
   const LINK_TO_AD_CHANGE_PICKER_MAX = 5;
   /** Temporary toggle: use manual-first image ordering instead of AI-picked highlight ordering. */
   const LINK_TO_AD_ENABLE_AI_PICK = false;
-  /** Temporary benchmark: alongside Nano Banana, also generate 3 GPT Image 2 references. */
-  const LINK_TO_AD_ENABLE_GPT_IMAGE2_COMPARE = true;
 
   const aiScrapedCandidateUrls = useMemo(() => {
     const out: string[] = [];
@@ -4108,69 +4097,6 @@ export default function LinkToAdUniverse({
     return { urlsByPrompt, lastTaskId, taskIds };
   }
 
-  async function runGptImage2CompareThree(
-    imageUrls: string[],
-    prompts: [string, string, string],
-    signal?: AbortSignal,
-  ): Promise<void> {
-    if (!LINK_TO_AD_ENABLE_GPT_IMAGE2_COMPARE) return;
-    setGptImage2CompareLoading(true);
-    setGptImage2CompareElapsedMs(null);
-    setGptImage2CompareUrls([]);
-    const startedAt = Date.now();
-    try {
-      const submitted = await Promise.all(
-        ([0, 1, 2] as const).map(async (slotIdx) => {
-          const prompt = prompts[slotIdx]?.trim();
-          if (!prompt) return null;
-          const res = await fetchWithRetry("/api/nanobanana/generate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            signal,
-            body: JSON.stringify({
-              linkToAd: true,
-              accountPlan: planId,
-              model: "gpt_image_2",
-              prompt,
-              imageUrls: imageUrls.length ? imageUrls : [],
-              aspectRatio: "9:16",
-              personalApiKey: getPersonalApiKey(),
-            }),
-          });
-          const json = (await res.json()) as { taskId?: string; error?: string };
-          if (!res.ok || !json.taskId) {
-            throw new Error(json.error || `GPT Image 2 generation failed (slot ${slotIdx + 1})`);
-          }
-          return { slotIdx, taskId: json.taskId };
-        }),
-      );
-      const valid = submitted.filter((x): x is { slotIdx: 0 | 1 | 2; taskId: string } => x !== null);
-      if (valid.length !== 3) throw new Error("Could not submit all GPT Image 2 jobs.");
-      const settled = await Promise.all(
-        valid.map(async ({ slotIdx, taskId }) => {
-          const urls = await pollNanoBananaTaskForUrls(taskId, signal);
-          return { slotIdx, firstUrl: urls[0] ?? "" };
-        }),
-      );
-      const out = ["", "", ""] as [string, string, string];
-      for (const row of settled) out[row.slotIdx] = row.firstUrl;
-      setGptImage2CompareUrls(out);
-      setGptImage2CompareElapsedMs(Date.now() - startedAt);
-      toast.message("GPT Image 2 comparison ready", {
-        description: "3 extra references generated for speed/quality comparison.",
-      });
-    } catch (e) {
-      if (e instanceof DOMException && e.name === "AbortError") return;
-      setGptImage2CompareUrls([]);
-      setGptImage2CompareElapsedMs(null);
-      toast.warning("GPT Image 2 comparison failed", {
-        description: e instanceof Error ? e.message : "Could not generate comparison images.",
-      });
-    } finally {
-      setGptImage2CompareLoading(false);
-    }
-  }
-
   /** Copy external image URLs to Supabase storage for fast loading. Silently falls back to originals. */
   async function reuploadToStorage(urls: string[]): Promise<string[]> {
     const result = [...urls];
@@ -4525,13 +4451,6 @@ export default function LinkToAdUniverse({
       nanoThreeAbortRef.current?.abort();
       const controller = new AbortController();
       nanoThreeAbortRef.current = controller;
-      if (LINK_TO_AD_ENABLE_GPT_IMAGE2_COMPARE) {
-        void runGptImage2CompareThree(
-          nanoRefs,
-          prompts as [string, string, string],
-          controller.signal,
-        );
-      }
       const { urlsByPrompt, lastTaskId: firstLastTaskId } = await runNanoBananaProThreeSequential(
         nanoRefs,
         prompts as [string, string, string],
@@ -5510,15 +5429,6 @@ export default function LinkToAdUniverse({
       (typeof a[2] === "string" ? a[2] : "").trim(),
     ];
   }, [nanoBananaImageUrls]);
-  const gptImage2CompareSlots = useMemo((): [string, string, string] => {
-    const a = gptImage2CompareUrls;
-    return [
-      (typeof a[0] === "string" ? a[0] : "").trim(),
-      (typeof a[1] === "string" ? a[1] : "").trim(),
-      (typeof a[2] === "string" ? a[2] : "").trim(),
-    ];
-  }, [gptImage2CompareUrls]);
-
   const nanoImageCaptionSlots = useMemo((): [string, string, string] => {
     const captionFromDraft = (raw: string) => {
       const sec = parseNanoEditableSections(raw);
@@ -5582,10 +5492,6 @@ export default function LinkToAdUniverse({
     () => creditsLinkToAdFullPipeline(LINK_TO_AD_DEFAULT_VIDEO_MODEL, videoDuration, ltaSeedanceSpeed),
     [videoDuration, ltaSeedanceSpeed],
   );
-  const ltaVideoOnlyCredits = useMemo(
-    () => creditsLinkToAdVideoFromImage(LINK_TO_AD_DEFAULT_VIDEO_MODEL, videoDuration, ltaSeedanceSpeed),
-    [videoDuration, ltaSeedanceSpeed],
-  );
   const ltaInitialGenerateCharge = useMemo(
     () => (linkToAdTrialEconomy ? LINK_TO_AD_TRIAL_INITIAL_GENERATE : ltaGenerateCredits),
     [linkToAdTrialEconomy, ltaGenerateCredits],
@@ -5599,8 +5505,8 @@ export default function LinkToAdUniverse({
     [linkToAdTrialEconomy],
   );
   const ltaVideoConfirmCreditsDisplay = useMemo(
-    () => (linkToAdTrialEconomy ? LINK_TO_AD_TRIAL_FINAL_VIDEO : ltaVideoOnlyCredits),
-    [linkToAdTrialEconomy, ltaVideoOnlyCredits],
+    () => (linkToAdTrialEconomy ? LINK_TO_AD_TRIAL_FINAL_VIDEO : 0),
+    [linkToAdTrialEconomy],
   );
   /** Video-prompt step has no direct credit charge (render charge happens on video generation). */
   const ltaVideoPromptFromImageCreditsDisplay = useMemo(
@@ -7933,65 +7839,6 @@ export default function LinkToAdUniverse({
                           );
                         })}
                       </div>
-                      {LINK_TO_AD_ENABLE_GPT_IMAGE2_COMPARE ? (
-                        <div className="rounded-xl border border-cyan-400/20 bg-cyan-500/[0.06] p-2.5">
-                          <div className="mb-2 flex items-center justify-between gap-2">
-                            <p className="text-[11px] font-semibold uppercase tracking-wide text-cyan-100/90">
-                              GPT Image 2 (temporary compare)
-                            </p>
-                            <span className="text-[10px] text-cyan-100/70">
-                              {gptImage2CompareLoading
-                                ? "Generating..."
-                                : gptImage2CompareElapsedMs != null
-                                  ? `${(gptImage2CompareElapsedMs / 1000).toFixed(1)}s`
-                                  : "Waiting"}
-                            </span>
-                          </div>
-                          <div className="grid w-full max-w-md grid-cols-3 gap-2 sm:max-w-lg sm:gap-3">
-                            {([0, 1, 2] as const).map((i) => {
-                              const imgUrl = gptImage2CompareSlots[i] ?? "";
-                              return (
-                                <div
-                                  key={`gpt2-${i}`}
-                                  className={cn(
-                                    "group/card2 relative aspect-square w-full min-w-0 overflow-hidden rounded-xl border bg-[#050507]",
-                                    imgUrl ? "border-cyan-300/30" : "border-white/10",
-                                  )}
-                                >
-                                  {imgUrl ? (
-                                    // eslint-disable-next-line @next/next/no-img-element
-                                    <img
-                                      src={imgUrl}
-                                      alt={`GPT Image 2 reference ${i + 1}`}
-                                      className="h-full w-full object-cover object-center"
-                                      loading="lazy"
-                                      decoding="async"
-                                    />
-                                  ) : (
-                                    <span className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-wide text-white/30">
-                                      {gptImage2CompareLoading ? "..." : "-"}
-                                    </span>
-                                  )}
-                                  {imgUrl ? (
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setNanoImageLightboxUrl(imgUrl);
-                                      }}
-                                      className="absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-lg bg-black/60 text-white opacity-0 shadow transition-opacity group-hover/card2:opacity-100"
-                                      aria-label="Open GPT Image 2 full size"
-                                      title="Open full size"
-                                    >
-                                      <Maximize2 className="h-4 w-4" aria-hidden />
-                                    </button>
-                                  ) : null}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ) : null}
                       <div className="flex max-w-md flex-col gap-2 sm:max-w-lg">
                         <Button
                           type="button"
