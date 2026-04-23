@@ -1,6 +1,6 @@
 "use client";
 
-import { Layers, LayoutTemplate, Pencil, Plus, Search, Users } from "lucide-react";
+import { Layers, LayoutTemplate, Plus, Search, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
 
@@ -20,10 +20,8 @@ import {
   type WorkflowSpaceMeta,
 } from "./workflowSpacesStorage";
 import {
-  deleteWorkflowTemplate,
   listWorkflowTemplates,
   saveTemporaryWorkflowTemplate,
-  updateWorkflowTemplateMeta,
 } from "./workflowTemplates";
 
 type TabId = "my" | "shared" | "templates";
@@ -109,15 +107,6 @@ export function WorkflowSpacesLanding() {
   const openTemplate = (id: string) => {
     router.push(`/workflow/template/${encodeURIComponent(id)}`);
   };
-  const duplicateTemplateToMyWorkflows = (e: MouseEvent, templateId: string) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (storageScope === null) return;
-    const meta = createSpaceFromTemplate(storageScope, templateId);
-    if (!meta) return;
-    router.push(`/workflow/space/${encodeURIComponent(meta.id)}`);
-  };
-
   const removeSpace = (e: MouseEvent, id: string) => {
     e.preventDefault();
     e.stopPropagation();
@@ -148,32 +137,6 @@ export function WorkflowSpacesLanding() {
     });
     setTemplatesTick((n) => n + 1);
   };
-  const removeTemplate = (e: MouseEvent, templateId: string) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (storageScope === null) return;
-    const removed = deleteWorkflowTemplate(storageScope, templateId);
-    if (!removed) return;
-    setTemplatesTick((n) => n + 1);
-  };
-  const editTemplateMeta = (e: MouseEvent, template: { id: string; name: string; blurb: string }) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (storageScope === null) return;
-    const nextNameRaw = window.prompt("Template name", template.name);
-    if (nextNameRaw === null) return;
-    const nextName = nextNameRaw.trim() || template.name;
-    const nextBlurbRaw = window.prompt("Template description", template.blurb);
-    if (nextBlurbRaw === null) return;
-    const nextBlurb = nextBlurbRaw.trim() || template.blurb;
-    const updated = updateWorkflowTemplateMeta(storageScope, template.id, {
-      name: nextName,
-      blurb: nextBlurb,
-    });
-    if (!updated) return;
-    setTemplatesTick((n) => n + 1);
-  };
-
   return (
     <div className="relative min-h-[100dvh] overflow-hidden bg-[#06070d] text-white">
       {/* Dots only on the canvas (`WorkflowEditor`); keep import so the symbol is always defined for bundlers/HMR */}
@@ -301,46 +264,11 @@ export function WorkflowSpacesLanding() {
                   >
                     <div className="aspect-[16/10] w-full bg-gradient-to-br from-violet-900/35 via-[#1a1a22] to-violet-950/40" />
                     <div className="p-4">
-                      <div className="flex items-start gap-1.5">
-                        <p className="min-w-0 flex-1 font-semibold text-white">{t.name}</p>
-                        <button
-                          type="button"
-                          title="Edit template title and description"
-                          onClick={(e) => editTemplateMeta(e, t)}
-                          className="rounded-md p-1 text-white/50 transition hover:bg-white/10 hover:text-white"
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                      <div className="mt-2 flex items-start gap-1.5">
-                        <p className="min-w-0 flex-1 text-[13px] leading-relaxed text-white/45">{t.blurb}</p>
-                        <button
-                          type="button"
-                          title="Edit template title and description"
-                          onClick={(e) => editTemplateMeta(e, t)}
-                          className="rounded-md p-1 text-white/45 transition hover:bg-white/10 hover:text-white"
-                        >
-                          <Pencil className="h-3 w-3" />
-                        </button>
-                      </div>
+                      <p className="min-w-0 font-semibold text-white">{t.name}</p>
+                      <p className="mt-2 min-w-0 text-[13px] leading-relaxed text-white/45">{t.blurb}</p>
                       <div className="mt-3 flex items-center justify-between gap-2">
                         <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-300/70">View preview</p>
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={(e) => removeTemplate(e, t.id)}
-                            className="rounded-full border border-red-400/35 bg-red-500/12 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-red-100 transition hover:border-red-300/50 hover:bg-red-500/20"
-                          >
-                            Delete
-                          </button>
-                          <button
-                            type="button"
-                            onClick={(e) => duplicateTemplateToMyWorkflows(e, t.id)}
-                            className="rounded-full border border-violet-400/35 bg-violet-500/12 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-violet-100 transition hover:border-violet-300/50 hover:bg-violet-500/20"
-                          >
-                            Duplicate
-                          </button>
-                        </div>
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-white/35">Shared template</span>
                       </div>
                     </div>
                   </div>
@@ -370,7 +298,18 @@ export function WorkflowSpacesLanding() {
                   }}
                   className="flex w-full cursor-pointer flex-col overflow-hidden rounded-2xl border border-white/[0.1] bg-[#0b0912]/90 text-left shadow-[0_12px_40px_rgba(0,0,0,0.35)] outline-none transition hover:border-violet-400/30 hover:bg-[#0b0912] hover:shadow-[0_12px_40px_rgba(139,92,246,0.08)] focus-visible:ring-2 focus-visible:ring-violet-500/50"
                 >
-                  <div className="aspect-[16/10] w-full bg-gradient-to-br from-violet-900/30 via-[#1a1a22] to-violet-950/35" />
+                  <div className="relative aspect-[16/10] w-full overflow-hidden bg-gradient-to-br from-violet-900/30 via-[#1a1a22] to-violet-950/35">
+                    {s.previewDataUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={s.previewDataUrl}
+                        alt={`${s.name} preview`}
+                        className="h-full w-full object-cover object-center"
+                        loading="lazy"
+                        decoding="async"
+                      />
+                    ) : null}
+                  </div>
                   <div className="flex items-start gap-2 p-4 pr-[4.5rem]">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">

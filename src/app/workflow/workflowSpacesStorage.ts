@@ -19,6 +19,8 @@ export type WorkflowSpaceMeta = {
   id: string;
   name: string;
   updatedAt: number;
+  /** Small rendered snapshot used on Workflow landing cards. */
+  previewDataUrl?: string;
 };
 
 type IndexV1 = { v: 1; spaces: WorkflowSpaceMeta[] };
@@ -39,6 +41,7 @@ function parseIndex(raw: string | null): IndexV1 {
         id: typeof s?.id === "string" ? s.id : `s-${i}`,
         name: typeof s?.name === "string" && s.name.trim() ? s.name.trim() : "Untitled workflow",
         updatedAt: typeof s?.updatedAt === "number" ? s.updatedAt : Date.now(),
+        previewDataUrl: typeof s?.previewDataUrl === "string" ? s.previewDataUrl : undefined,
       })),
     };
   } catch {
@@ -190,7 +193,7 @@ export function createSpace(scope: string, name = "Untitled workflow"): Workflow
 export function updateSpaceMeta(
   scope: string,
   id: string,
-  patch: Partial<Pick<WorkflowSpaceMeta, "name" | "updatedAt">>,
+  patch: Partial<Pick<WorkflowSpaceMeta, "name" | "updatedAt" | "previewDataUrl">>,
 ) {
   const index = loadSpacesIndex(scope);
   index.spaces = index.spaces.map((s) =>

@@ -2,6 +2,7 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import * as cheerio from "cheerio";
+import type { Element } from "domhandler";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { fetchStorePageHtmlForExtract } from "@/lib/storeExtractFetch";
 
@@ -194,7 +195,7 @@ function selectPrimaryJsonLdProducts(
 const RELATED_SECTION_RE =
   /(?:you\s+may\s+also\s+like|you\s+might\s+also\s+like|related\s+products?|recommended|similar\s+products?|frequently\s+bought\s+together|complete\s+the\s+look|shop\s+the\s+look|customers?\s+also\s+bought|pairs?\s+well\s+with|you'?ll\s+love|more\s+to\s+love|complementary)/i;
 
-function isRelatedProductsContext($: cheerio.CheerioAPI, el: cheerio.Element): boolean {
+function isRelatedProductsContext($: cheerio.CheerioAPI, el: Element): boolean {
   const chain = [el, ...$(el).parents().toArray().slice(0, 8)];
   for (const n of chain) {
     const cls = $(n).attr("class") ?? "";
