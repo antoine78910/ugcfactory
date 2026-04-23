@@ -75,7 +75,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 import { AdAssetNode, type AdAssetNodeData } from "./nodes/AdAssetNode";
-import { ImageRefNode, type ImageRefNodeType } from "./nodes/ImageRefNode";
+import { ImageRefNode, type ImageRefNodeData, type ImageRefNodeType } from "./nodes/ImageRefNode";
 import { StickyNoteNode } from "./nodes/StickyNoteNode";
 import { TextPromptNode, type TextPromptNodeData } from "./nodes/TextPromptNode";
 import { PromptListNode, type PromptListNodeData } from "./nodes/PromptListNode";
