@@ -122,6 +122,7 @@ import { proxiedMediaSrc } from "@/lib/mediaProxyUrl";
 import { loadAvatarUrls } from "@/lib/avatarLibrary";
 import { AvatarPickerDialog } from "@/app/_components/AvatarPickerDialog";
 import { clipboardImageFiles } from "@/lib/clipboardImage";
+import { uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
 import VideoCard from "@/app/_components/VideoCard";
 import {
   STUDIO_GENERATION_KIND_LINK_TO_AD_IMAGE,
@@ -924,14 +925,6 @@ function confidenceToQuality(c: string | undefined) {
     color: "text-destructive",
     help: "Low confidence. Upload a neutral product-only photo (no background, no people) for best results.",
   };
-}
-
-function safeParseJson<T>(raw: string): { ok: true; value: T } | { ok: false; error: string } {
-  try {
-    return { ok: true, value: JSON.parse(raw) as T };
-  } catch {
-    return { ok: false, error: "Invalid JSON from server." };
-  }
 }
 
 function withAudioHint(prompt: string) {
@@ -2700,17 +2693,8 @@ export default function LinkToAdUniverse({
       let lastError: string | null = null;
       for (const row of pendingRows) {
         try {
-          assertStudioImageUpload(row.file);
-          const fd = new FormData();
-          fd.set("file", row.file);
-          const res = await fetch("/api/uploads", { method: "POST", body: fd });
-          const raw = await res.text();
-          const parsed = safeParseJson<{ url?: string; error?: string }>(raw);
-          if (!res.ok || !parsed.ok) {
-            throw new Error(parsed.ok ? parsed.value.error || `Upload failed (${res.status})` : parsed.error);
-          }
-          if (!parsed.value.url) throw new Error(parsed.value.error || "Upload failed: missing url");
-          uploaded.push(parsed.value.url);
+          const url = await uploadFileToCdn(row.file, { kind: "image" });
+          uploaded.push(url);
         } catch (err) {
           lastError = err instanceof Error ? err.message : "Upload failed";
         } finally {
@@ -2757,17 +2741,7 @@ export default function LinkToAdUniverse({
     try {
       for (const row of pendingRows) {
         try {
-          assertStudioImageUpload(row.file);
-          const fd = new FormData();
-          fd.set("file", row.file);
-          const res = await fetch("/api/uploads", { method: "POST", body: fd });
-          const raw = await res.text();
-          const parsed = safeParseJson<{ url?: string; error?: string }>(raw);
-          if (!res.ok || !parsed.ok) {
-            throw new Error(parsed.ok ? parsed.value.error || `Upload failed (${res.status})` : parsed.error);
-          }
-          if (!parsed.value.url) throw new Error(parsed.value.error || "Upload failed: missing url");
-          const url = parsed.value.url;
+          const url = await uploadFileToCdn(row.file, { kind: "image" });
           setUserPhotoUrls((prev) => [...prev, url]);
           setProductOnlyImageUrls((prev) => [...prev, url]);
           setNeutralUploadUrl((n) => n ?? url);
@@ -2813,16 +2787,7 @@ export default function LinkToAdUniverse({
       for (const row of pendingRows) {
         try {
           assertStudioImageUpload(row.file);
-          const fd = new FormData();
-          fd.set("file", row.file);
-          const res = await fetch("/api/uploads", { method: "POST", body: fd });
-          const raw = await res.text();
-          const parsed = safeParseJson<{ url?: string; error?: string }>(raw);
-          if (!res.ok || !parsed.ok) {
-            throw new Error(parsed.ok ? parsed.value.error || `Upload failed (${res.status})` : parsed.error);
-          }
-          if (!parsed.value.url) throw new Error(parsed.value.error || "Upload failed: missing url");
-          const url = parsed.value.url;
+          const url = await uploadFileToCdn(row.file, { kind: "image" });
           setPersonaPhotoUrls((prev) => (prev.includes(url) ? prev : [...prev, url]));
           setUserPhotoUrls((prev) => (prev.includes(url) ? prev : [...prev, url]));
           added++;
@@ -3185,6 +3150,24 @@ export default function LinkToAdUniverse({
     const preview = (resolvedPreviewUrl || "").trim();
     if (preview && /^https?:\/\//i.test(preview)) return [preview];
     return [];
+  }
+
+  /**
+   * References sent to Nano Banana generation requests.
+   * Keep product references first, then persona photos for identity consistency.
+   */
+  function resolveNanoGenerationImageUrls(): string[] {
+    const out: string[] = [];
+    const seen = new Set<string>();
+    const push = (u: string) => {
+      const t = (u || "").trim();
+      if (!t || seen.has(t) || !/^https?:\/\//i.test(t)) return;
+      seen.add(t);
+      out.push(t);
+    };
+    for (const u of resolveNanoProductImageUrls()) push(u);
+    for (const u of personaPhotoUrls) push(u);
+    return out.slice(0, 8);
   }
 
   /** Same image logic as the preview when possible (avoids “button enabled but no HTTPS product” mismatches). */
@@ -3708,8 +3691,9 @@ export default function LinkToAdUniverse({
 
   async function onGenerateNanoBananaImage() {
     const url = storeUrl.trim();
-    const nanoRefs = resolveNanoProductImageUrls();
-    const img = nanoRefs[0];
+    const productRefs = resolveNanoProductImageUrls();
+    const nanoRefs = resolveNanoGenerationImageUrls();
+    const img = productRefs[0];
     const prompt = fullNanoPromptsTriple[nanoBananaSelectedPromptIndex]?.trim();
     if (!url || !lastExtractedJson || !prompt) {
       toast.error("Generate the 3 image prompts first, then choose a valid prompt.");
@@ -4012,8 +3996,9 @@ export default function LinkToAdUniverse({
         return;
       }
 
-      const nanoRefs = resolveNanoProductImageUrls();
-      const img = nanoRefs[0];
+      const productRefs = resolveNanoProductImageUrls();
+      const nanoRefs = resolveNanoGenerationImageUrls();
+      const img = productRefs[0];
       if (!img || !/^https?:\/\//i.test(img)) {
         throw new Error("Product image not available. Please regenerate.");
       }
@@ -4144,8 +4129,9 @@ export default function LinkToAdUniverse({
     const shouldCharge =
       (linkToAdTrialEconomy || force || hasExisting) && !ltaPrepaidThreeImagesRegen;
     const usingPrepaid = ltaPrepaidThreeImagesRegen && !shouldCharge;
-    const nanoRefs = resolveNanoProductImageUrls();
-    const img = nanoRefs[0];
+    const productRefs = resolveNanoProductImageUrls();
+    const nanoRefs = resolveNanoGenerationImageUrls();
+    const img = productRefs[0];
     if (!img || !/^https?:\/\//i.test(img)) {
       toast.error("HTTPS product image is required to generate images.");
       return;
