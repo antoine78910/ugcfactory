@@ -145,6 +145,71 @@ function tryParseJsonLdProducts($: cheerio.CheerioAPI) {
   return products;
 }
 
+function normalizeWords(input: string): string[] {
+  return input
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]+/g, " ")
+    .split(/\s+/)
+    .map((x) => x.trim())
+    .filter((x) => x.length >= 3);
+}
+
+function overlapScore(a: string, b: string): number {
+  const wa = new Set(normalizeWords(a));
+  const wb = new Set(normalizeWords(b));
+  if (!wa.size || !wb.size) return 0;
+  let hit = 0;
+  for (const w of wa) if (wb.has(w)) hit++;
+  return hit / Math.max(wa.size, wb.size);
+}
+
+/**
+ * Keep likely main product(s) from JSON-LD and avoid "related/recommended" products.
+ */
+function selectPrimaryJsonLdProducts(
+  products: Array<{ name?: string; image?: string | string[]; offers?: unknown }>,
+  pageTitle: string,
+): Array<{ name?: string; image?: string | string[]; offers?: unknown }> {
+  if (products.length <= 1) return products;
+  const scored = products.map((p, idx) => {
+    const name = typeof (p as any)?.name === "string" ? (p as any).name : "";
+    const sim = overlapScore(name, pageTitle);
+    const hasOffers = Boolean((p as any)?.offers);
+    return {
+      idx,
+      p,
+      score: sim + (hasOffers ? 0.08 : 0),
+    };
+  });
+  scored.sort((a, b) => b.score - a.score);
+  const best = scored[0];
+  if (!best) return products.slice(0, 1);
+  const nearBest = scored
+    .filter((x) => x.score >= Math.max(0.05, best.score - 0.08))
+    .slice(0, 3)
+    .map((x) => x.p);
+  return nearBest.length ? nearBest : [best.p];
+}
+
+const RELATED_SECTION_RE =
+  /(?:you\s+may\s+also\s+like|you\s+might\s+also\s+like|related\s+products?|recommended|similar\s+products?|frequently\s+bought\s+together|complete\s+the\s+look|shop\s+the\s+look|customers?\s+also\s+bought|pairs?\s+well\s+with|you'?ll\s+love|more\s+to\s+love|complementary)/i;
+
+function isRelatedProductsContext($: cheerio.CheerioAPI, el: cheerio.Element): boolean {
+  const chain = [el, ...$(el).parents().toArray().slice(0, 8)];
+  for (const n of chain) {
+    const cls = $(n).attr("class") ?? "";
+    const id = $(n).attr("id") ?? "";
+    const aria = $(n).attr("aria-label") ?? "";
+    const testid = $(n).attr("data-testid") ?? "";
+    const sectionId = $(n).attr("data-section-id") ?? "";
+    const attrs = `${cls} ${id} ${aria} ${testid} ${sectionId}`;
+    if (RELATED_SECTION_RE.test(attrs)) return true;
+  }
+  const parentSection = $(el).closest("section, aside, div, ul");
+  const headingText = cleanText(parentSection.find("h1,h2,h3,h4,h5,[role='heading']").first().text() || "");
+  return RELATED_SECTION_RE.test(headingText);
+}
+
 function pickAround(text: string, keyword: string, windowChars = 900) {
   const idx = text.toLowerCase().indexOf(keyword.toLowerCase());
   if (idx === -1) return null;
@@ -209,7 +274,10 @@ export async function POST(req: Request) {
   }
 
   // JSON-LD Product images (best packshots)
-  const ldProducts = tryParseJsonLdProducts($);
+  const ldProducts = selectPrimaryJsonLdProducts(
+    tryParseJsonLdProducts($),
+    ogTitle || title || "",
+  );
   for (const p of ldProducts) {
     const img = (p as any)?.image;
     const imgs = typeof img === "string" ? [img] : Array.isArray(img) ? img : [];
@@ -237,6 +305,7 @@ export async function POST(req: Request) {
 
   // picture/source srcset
   $("source").each((_, el) => {
+    if (isRelatedProductsContext($, el)) return;
     const ss = $(el).attr("srcset") || $(el).attr("data-srcset");
     const inProductContext = (() => {
       const parentChain = $(el).parents().toArray().slice(0, 6);
@@ -262,6 +331,7 @@ export async function POST(req: Request) {
     /product|gallery|carousel|slider|main-image|hero-image|featured|swiper|pdp|detail/i;
 
   $("img").each((_, el) => {
+    if (isRelatedProductsContext($, el)) return;
     const $el = $(el);
     const src =
       $el.attr("src") || $el.attr("data-src") || $el.attr("data-original") || $el.attr("data-lazy-src");
@@ -305,6 +375,7 @@ export async function POST(req: Request) {
 
   // Inline styles background-image
   $("[style]").each((_, el) => {
+    if (isRelatedProductsContext($, el)) return;
     const style = $(el).attr("style");
     for (const u of extractStyleUrls(style, url)) {
       if (!looksLikeJunkImage(u)) generalBucket.push({ url: u, source: "bg" });

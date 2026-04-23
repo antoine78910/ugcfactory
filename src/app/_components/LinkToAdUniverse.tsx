@@ -2486,6 +2486,8 @@ export default function LinkToAdUniverse({
   }, [resolveMaybeRelativeUrl, userPhotoUrls]);
   /** Change picker: only top-ranked scraped URLs (classify order is preserved in productOnlyImageUrls). */
   const LINK_TO_AD_CHANGE_PICKER_MAX = 5;
+  /** Temporary toggle: use manual-first image ordering instead of AI-picked highlight ordering. */
+  const LINK_TO_AD_ENABLE_AI_PICK = false;
 
   const aiScrapedCandidateUrls = useMemo(() => {
     const out: string[] = [];
@@ -2509,6 +2511,7 @@ export default function LinkToAdUniverse({
 
   /** Top product refs currently selected by the scoring for image generation (compact UI list). */
   const aiPickedProductUrls = useMemo(() => {
+    if (!LINK_TO_AD_ENABLE_AI_PICK) return [];
     const out: string[] = [];
     const seenKeys = new Set<string>();
     const previewKey = imageDedupeKey(resolvedPreviewUrl);
@@ -2523,7 +2526,17 @@ export default function LinkToAdUniverse({
     // Fallback: keep at least one picked slot when only the preview candidate exists.
     if (out.length === 0 && resolvedPreviewUrl) out.push(resolvedPreviewUrl);
     return out;
-  }, [cleanCandidate?.url, fallbackImageUrl, neutralUploadUrl, productOnlyImageUrls, resolvedPreviewUrl, resolveMaybeRelativeUrl, imageDedupeKey, storeUrl]);
+  }, [
+    LINK_TO_AD_ENABLE_AI_PICK,
+    cleanCandidate?.url,
+    fallbackImageUrl,
+    neutralUploadUrl,
+    productOnlyImageUrls,
+    resolvedPreviewUrl,
+    resolveMaybeRelativeUrl,
+    imageDedupeKey,
+    storeUrl,
+  ]);
   const aiPickedProductUrlSet = useMemo(() => new Set(aiPickedProductUrls), [aiPickedProductUrls]);
   /** Thumbnail strip: preview + top AI-picked product refs + user-uploaded product photos (deduped). */
   const productPhotosStripUrls = useMemo(() => {
@@ -2576,11 +2589,12 @@ export default function LinkToAdUniverse({
   );
 
   const isAlgorithmChosenPreview = useMemo(() => {
+    if (!LINK_TO_AD_ENABLE_AI_PICK) return false;
     const cur = (resolvedPreviewUrl || "").trim();
     if (!cur) return false;
     if (resolvedNeutralUploadUrl && cur === resolvedNeutralUploadUrl) return false;
     return (resolvedCleanCandidateUrl && cur === resolvedCleanCandidateUrl) || (resolvedFallbackImageUrl && cur === resolvedFallbackImageUrl);
-  }, [resolvedCleanCandidateUrl, resolvedFallbackImageUrl, resolvedNeutralUploadUrl, resolvedPreviewUrl]);
+  }, [LINK_TO_AD_ENABLE_AI_PICK, resolvedCleanCandidateUrl, resolvedFallbackImageUrl, resolvedNeutralUploadUrl, resolvedPreviewUrl]);
 
   const removeAlgorithmChosenPreview = useCallback(() => {
     const cur = (resolvedPreviewUrl || "").trim();
@@ -6380,11 +6394,6 @@ export default function LinkToAdUniverse({
                         Product photos ({productPhotosStripUrls.length})
                       </span>
                       <div className="flex flex-wrap items-center gap-1.5">
-                        {isAlgorithmChosenPreview ? (
-                          <span className="rounded-md border border-violet-400/35 bg-violet-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-violet-100">
-                            Picked by AI
-                          </span>
-                        ) : null}
                         {aiAlternativeUrls.length > 0 ? (
                           <button
                             type="button"
@@ -6412,16 +6421,37 @@ export default function LinkToAdUniverse({
                         </p>
                         <div className="mt-2 flex flex-wrap gap-2">
                           {aiAlternativeUrls.map((u, i) => (
-                            <button
+                            <div
                               key={`${u}-${i}-ai-switch`}
-                              type="button"
-                              onClick={() => choosePreviewImage(u)}
                               className="group relative h-14 w-14 overflow-hidden rounded-md border border-white/15 bg-[#050507] transition hover:border-violet-400/50"
-                              title="Use this image"
                             >
                               {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img src={u} alt={`AI candidate ${i + 1}`} className="h-full w-full object-cover" loading="lazy" />
-                            </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setProductImageLightboxUrl(resolveMaybeRelativeUrl(u) || u);
+                                }}
+                                className="absolute left-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-md bg-black/70 text-white/70 opacity-0 transition hover:text-white group-hover:opacity-100"
+                                aria-label="Open product image full size"
+                                title="Open full size"
+                              >
+                                <Maximize2 className="h-3 w-3" aria-hidden />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  choosePreviewImage(u);
+                                }}
+                                className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-md bg-black/70 text-white/75 opacity-0 transition hover:text-emerald-300 group-hover:opacity-100"
+                                aria-label="Add this image to generation references"
+                                title="Add to generation"
+                              >
+                                <Plus className="h-3 w-3" aria-hidden />
+                              </button>
+                            </div>
                           ))}
                         </div>
                       </div>
@@ -6632,11 +6662,6 @@ export default function LinkToAdUniverse({
                         Product photos ({productPhotosStripUrls.length})
                       </span>
                       <div className="flex flex-wrap items-center gap-1.5">
-                        {isAlgorithmChosenPreview ? (
-                          <span className="rounded-md border border-violet-400/35 bg-violet-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-violet-100">
-                            Picked by AI
-                          </span>
-                        ) : null}
                         {aiAlternativeUrls.length > 0 ? (
                           <button
                             type="button"
@@ -6664,16 +6689,37 @@ export default function LinkToAdUniverse({
                         </p>
                         <div className="mt-2 flex flex-wrap gap-2">
                           {aiAlternativeUrls.map((u, i) => (
-                            <button
+                            <div
                               key={`${u}-${i}-ai-switch-2`}
-                              type="button"
-                              onClick={() => choosePreviewImage(u)}
                               className="group relative h-14 w-14 overflow-hidden rounded-md border border-white/15 bg-[#050507] transition hover:border-violet-400/50"
-                              title="Use this image"
                             >
                               {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img src={u} alt={`AI candidate ${i + 1}`} className="h-full w-full object-cover" loading="lazy" />
-                            </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setProductImageLightboxUrl(resolveMaybeRelativeUrl(u) || u);
+                                }}
+                                className="absolute left-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-md bg-black/70 text-white/70 opacity-0 transition hover:text-white group-hover:opacity-100"
+                                aria-label="Open product image full size"
+                                title="Open full size"
+                              >
+                                <Maximize2 className="h-3 w-3" aria-hidden />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  choosePreviewImage(u);
+                                }}
+                                className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-md bg-black/70 text-white/75 opacity-0 transition hover:text-emerald-300 group-hover:opacity-100"
+                                aria-label="Add this image to generation references"
+                                title="Add to generation"
+                              >
+                                <Plus className="h-3 w-3" aria-hidden />
+                              </button>
+                            </div>
                           ))}
                         </div>
                       </div>
@@ -7064,11 +7110,6 @@ export default function LinkToAdUniverse({
                       Product photos ({productPhotosStripUrls.length})
                     </span>
                     <div className="flex flex-wrap items-center gap-1.5">
-                      {isAlgorithmChosenPreview ? (
-                        <span className="rounded-md border border-violet-400/35 bg-violet-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-violet-100">
-                          Picked by AI
-                        </span>
-                      ) : null}
                       {aiAlternativeUrls.length > 0 ? (
                         <button
                           type="button"
@@ -7096,16 +7137,37 @@ export default function LinkToAdUniverse({
                       </p>
                       <div className="mt-2 flex flex-wrap gap-2">
                         {aiAlternativeUrls.map((u, i) => (
-                          <button
+                          <div
                             key={`${u}-${i}-ai-switch-3`}
-                            type="button"
-                            onClick={() => choosePreviewImage(u)}
                             className="group relative h-14 w-14 overflow-hidden rounded-md border border-white/15 bg-[#050507] transition hover:border-violet-400/50"
-                            title="Use this image"
                           >
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img src={u} alt={`AI candidate ${i + 1}`} className="h-full w-full object-cover" loading="lazy" />
-                          </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setProductImageLightboxUrl(resolveMaybeRelativeUrl(u) || u);
+                              }}
+                              className="absolute left-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-md bg-black/70 text-white/70 opacity-0 transition hover:text-white group-hover:opacity-100"
+                              aria-label="Open product image full size"
+                              title="Open full size"
+                            >
+                              <Maximize2 className="h-3 w-3" aria-hidden />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                choosePreviewImage(u);
+                              }}
+                              className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-md bg-black/70 text-white/75 opacity-0 transition hover:text-emerald-300 group-hover:opacity-100"
+                              aria-label="Add this image to generation references"
+                              title="Add to generation"
+                            >
+                              <Plus className="h-3 w-3" aria-hidden />
+                            </button>
+                          </div>
                         ))}
                       </div>
                     </div>

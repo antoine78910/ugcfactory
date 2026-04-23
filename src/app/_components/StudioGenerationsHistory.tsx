@@ -753,9 +753,12 @@ export function StudioGenerationsHistory({
             >
               <div className="rounded-xl border border-white/[0.07] bg-white/[0.03] p-3.5">
                 <div className="mb-2 text-[13px] font-semibold text-white/85">Prompt</div>
-                <p className="whitespace-pre-wrap break-words text-[12px] leading-relaxed text-white/55">
-                  {lightboxItem.prompt?.trim() ? lightboxItem.prompt.trim() : "-"}
-                </p>
+                <Textarea
+                  value={lightboxItem.prompt?.trim() ? lightboxItem.prompt.trim() : "-"}
+                  readOnly
+                  rows={8}
+                  className="min-h-[7rem] max-h-[20rem] w-full resize-y whitespace-pre-wrap border-white/[0.07] bg-black/25 text-[12px] leading-relaxed text-white/70"
+                />
                 {lightboxItem.modelLabel ? (
                   <p className="mt-2.5 text-[10px] font-semibold uppercase tracking-wide text-violet-300/90">
                     Model · {lightboxItem.modelLabel}

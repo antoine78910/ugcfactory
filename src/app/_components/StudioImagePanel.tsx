@@ -27,10 +27,7 @@ import type { StudioHistoryItem, StudioImageLightboxEditModelOption } from "@/ap
 import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
 import { formatDisplayCredits } from "@/lib/creditLedgerTicks";
 import {
-  KIE_TOPAZ_IMAGE_UPSCALE_MODEL,
   studioImageCreditsChargedTotal,
-  topazImageUpscaleCredits,
-  topazImageUpscaleKieFactorToTierLabel,
 } from "@/lib/pricing";
 import { NANO_BANANA_2_ASPECT_RATIOS } from "@/lib/nanobanana";
 import { dedupeStudioImageHistoryByMediaUrl } from "@/lib/studioHistoryDedupe";
@@ -116,6 +113,7 @@ const IMAGE_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
     id: "gpt_image_2",
     label: "GPT Image 2",
     icon: "google",
+    newBadge: true,
     ...studioImagePickerCardHints("gpt_image_2"),
     searchText: "gpt image 2 openai text to image image to image",
   },
@@ -273,96 +271,6 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
       }
     })();
   }, []);
-
-  const runImageUpscale = useCallback(
-    (opts: { sourceUrl: string; upscaleFactor: string }) => {
-      const url = opts.sourceUrl.trim();
-      const f = opts.upscaleFactor.trim();
-      if (!url) return;
-      if (!["2", "4", "8"].includes(f)) {
-        toast.error("Invalid upscale tier.");
-        return;
-      }
-      if (serverHistory !== true) {
-        toast.error("Sync backend indisponible. Recharge la page puis reessaie.");
-        return;
-      }
-
-      const creditBypass = isPlatformCreditBypassActive();
-      const charge = topazImageUpscaleCredits(f);
-      if (!creditBypass && creditsRef.current < charge) {
-        setBilling({ open: true, reason: "credits", required: charge });
-        return;
-      }
-
-      const platformCharge = creditBypass ? 0 : charge;
-      if (!creditBypass) {
-        spendCredits(charge);
-        creditsRef.current = Math.max(0, creditsRef.current - charge);
-      }
-
-      const label = `Topaz Image ${topazImageUpscaleKieFactorToTierLabel(f)}`;
-
-      void (async () => {
-        const pKey = getPersonalApiKey() ?? undefined;
-
-        try {
-          const res = await fetch("/api/kie/upscale/image", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ imageUrl: url, upscaleFactor: f, personalApiKey: pKey }),
-          });
-          const json = (await res.json()) as { taskId?: string; model?: string; error?: string };
-          if (!res.ok || !json.taskId) throw new Error(json.error || "Upscale request failed");
-
-          const regRes = await fetch("/api/studio/generations/register", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              kind: "studio_upscale",
-              label,
-              taskId: json.taskId,
-              model: json.model?.trim() || KIE_TOPAZ_IMAGE_UPSCALE_MODEL,
-              creditsCharged: platformCharge,
-              personalApiKey: pKey,
-              aspectRatio: aspect,
-            }),
-          });
-          const regJson = (await regRes.json()) as {
-            data?: { rows?: { id: string }[] };
-            error?: string;
-          };
-          if (!regRes.ok || !regJson.data?.rows?.length) {
-            throw new Error(regJson.error || "Failed to register job");
-          }
-          const rowId = String(regJson.data.rows[0]!.id);
-          const startedAt = Date.now();
-          setHistoryItems((prev) => {
-            const row: StudioHistoryItem = {
-              id: rowId,
-              kind: "image",
-              status: "generating",
-              label,
-              createdAt: startedAt,
-              studioGenerationKind: "studio_upscale",
-              model: json.model?.trim() || KIE_TOPAZ_IMAGE_UPSCALE_MODEL,
-              modelLabel: "Topaz image upscale",
-              aspectRatio: aspect,
-            };
-            return [row, ...prev.filter((i) => i.id !== rowId)];
-          });
-          toast.message("Image upscale running", {
-            description: "You can leave this page, it will appear in history when ready.",
-          });
-        } catch (e) {
-          const msg = userMessageFromCaughtError(e, "Something went wrong while upscaling.");
-          refundPlatformCredits(platformCharge, grantCredits, creditsRef);
-          toast.error(msg);
-        }
-      })();
-    },
-    [serverHistory, spendCredits, grantCredits, aspect],
-  );
 
   useEffect(() => {
     if (serverHistory !== true) return;
@@ -798,11 +706,6 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
               onDismissFailed={dismissFailedHistoryItem}
               onItemDeleted={(id) => setHistoryItems((prev) => prev.filter((i) => i.id !== id))}
               onChangeVoice={onChangeVoice}
-              imageLightboxUpscale={{
-                seedFactor: "2",
-                creditsFor: (factor) => topazImageUpscaleCredits(factor),
-                onSubmitUpscale: runImageUpscale,
-              }}
               imageLightboxEdit={{
                 nanoAspectOptions: NANO_BANANA_2_ASPECT_RATIOS,
                 proAspectOptions: proAspectOptionsFull,
