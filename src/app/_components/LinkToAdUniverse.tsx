@@ -6334,7 +6334,7 @@ export default function LinkToAdUniverse({
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
                         key={resolvedPreviewUrl}
-                        src={resolvedPreviewUrl}
+                        src={proxiedMediaSrc(resolvedPreviewUrl)}
                         alt="Product"
                         className="h-full w-full object-cover object-center"
                         loading="eager"
@@ -6441,7 +6441,7 @@ export default function LinkToAdUniverse({
                               className="group relative h-14 w-14 overflow-hidden rounded-md border border-white/15 bg-[#050507] transition hover:border-violet-400/50"
                             >
                               {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={u} alt={`AI candidate ${i + 1}`} className="h-full w-full object-cover" loading="lazy" />
+                              <img src={proxiedMediaSrc(u)} alt={`AI candidate ${i + 1}`} className="h-full w-full object-cover" loading="lazy" />
                               <button
                                 type="button"
                                 onClick={(e) => {
@@ -6483,7 +6483,7 @@ export default function LinkToAdUniverse({
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
-                            src={url}
+                            src={proxiedMediaSrc(url)}
                             alt={`Product ${i + 1}`}
                             className="h-full w-full cursor-pointer object-cover"
                             loading="lazy"
@@ -6620,7 +6620,7 @@ export default function LinkToAdUniverse({
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
                           key={resolvedPreviewUrl}
-                          src={resolvedPreviewUrl}
+                          src={proxiedMediaSrc(resolvedPreviewUrl)}
                           alt="Product"
                           className="h-full w-full object-cover object-center"
                           loading="eager"
@@ -6709,7 +6709,7 @@ export default function LinkToAdUniverse({
                               className="group relative h-14 w-14 overflow-hidden rounded-md border border-white/15 bg-[#050507] transition hover:border-violet-400/50"
                             >
                               {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={u} alt={`AI candidate ${i + 1}`} className="h-full w-full object-cover" loading="lazy" />
+                              <img src={proxiedMediaSrc(u)} alt={`AI candidate ${i + 1}`} className="h-full w-full object-cover" loading="lazy" />
                               <button
                                 type="button"
                                 onClick={(e) => {
@@ -6751,7 +6751,7 @@ export default function LinkToAdUniverse({
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
-                            src={url}
+                            src={proxiedMediaSrc(url)}
                             alt={`Product ${i + 1}`}
                             className="h-full w-full cursor-pointer object-cover"
                             loading="lazy"
@@ -7067,7 +7067,7 @@ export default function LinkToAdUniverse({
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
                         key={resolvedPreviewUrl}
-                        src={resolvedPreviewUrl}
+                        src={proxiedMediaSrc(resolvedPreviewUrl)}
                         alt="Product"
                         className="h-full w-full object-cover object-center"
                         loading="eager"
@@ -7157,7 +7157,7 @@ export default function LinkToAdUniverse({
                             className="group relative h-14 w-14 overflow-hidden rounded-md border border-white/15 bg-[#050507] transition hover:border-violet-400/50"
                           >
                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={u} alt={`AI candidate ${i + 1}`} className="h-full w-full object-cover" loading="lazy" />
+                            <img src={proxiedMediaSrc(u)} alt={`AI candidate ${i + 1}`} className="h-full w-full object-cover" loading="lazy" />
                             <button
                               type="button"
                               onClick={(e) => {
@@ -7199,7 +7199,7 @@ export default function LinkToAdUniverse({
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
-                          src={url}
+                          src={proxiedMediaSrc(url)}
                           alt={`Product ${i + 1}`}
                           className="h-full w-full cursor-pointer object-cover"
                           loading="lazy"
@@ -7317,7 +7317,7 @@ export default function LinkToAdUniverse({
                               {url ? (
                                 /* eslint-disable-next-line @next/next/no-img-element */
                                 <img
-                                  src={url}
+                                  src={proxiedMediaSrc(url)}
                                   alt={`Reference ${i + 1}`}
                                   className="h-full w-full object-cover object-center"
                                   loading="eager"
@@ -7426,7 +7426,7 @@ export default function LinkToAdUniverse({
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
-                            src={url}
+                            src={proxiedMediaSrc(url)}
                             alt=""
                             className="h-full w-full object-cover object-center"
                             loading="lazy"
