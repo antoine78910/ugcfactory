@@ -25,6 +25,7 @@ import {
   Sparkles,
   Globe2,
   Maximize2,
+  Download,
   Trash2,
   Type,
   Wand2,
@@ -302,6 +303,23 @@ function parseAspectParts(ratio: string): { w: number; h: number } {
   const [a, b] = ratio.split(":").map(Number);
   if (!a || !b || !Number.isFinite(a) || !Number.isFinite(b)) return { w: 1, h: 1 };
   return { w: a, h: b };
+}
+
+function triggerMediaDownload(url: string, fallbackName: string) {
+  const trimmed = url.trim();
+  if (!trimmed) return;
+  const a = document.createElement("a");
+  if (/^blob:|^data:/i.test(trimmed)) {
+    a.href = trimmed;
+    a.download = fallbackName;
+  } else {
+    a.href = `/api/download?url=${encodeURIComponent(trimmed)}`;
+  }
+  a.rel = "noopener noreferrer";
+  a.style.display = "none";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 }
 
 /** Longest side of the output preview (px); module shape follows aspect ratio. */
@@ -615,6 +633,12 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     if (!outputUrl) return;
     setOutputPreviewLightbox(true);
   }, [data.outputPreviewUrl, data.referencePreviewUrl]);
+  const downloadPreviewMedia = useCallback(() => {
+    const outputUrl = (data.outputPreviewUrl ?? data.referencePreviewUrl ?? "").trim();
+    if (!outputUrl) return;
+    const fallbackName = data.kind === "video" ? "workflow-video.mp4" : "workflow-image.jpg";
+    triggerMediaDownload(outputUrl, fallbackName);
+  }, [data.kind, data.outputPreviewUrl, data.referencePreviewUrl]);
   const normalizeCompletedMediaLines = useCallback((lines: string[]): string[] => {
     return lines
       .map((x) => x.trim())
@@ -2407,18 +2431,32 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             )
           ) : null}
           {hasPreviewMedia && (data.kind === "image" || data.kind === "video") ? (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                openOutputPreviewLightbox();
-              }}
-              title="Open fullscreen"
-              className="nodrag nopan absolute left-2 top-2 z-[6] flex h-7 w-7 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white/85 opacity-0 backdrop-blur-sm transition hover:bg-black/70 group-hover/card:opacity-100"
-            >
-              <Maximize2 className="h-3.5 w-3.5" aria-hidden />
-            </button>
+            <div className="nodrag nopan absolute right-2 top-2 z-[6] flex flex-col items-center gap-1 opacity-0 transition group-hover/card:opacity-100">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  openOutputPreviewLightbox();
+                }}
+                title="Open fullscreen"
+                className="nodrag nopan flex h-7 w-7 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white/85 backdrop-blur-sm transition hover:bg-black/70"
+              >
+                <Maximize2 className="h-3.5 w-3.5" aria-hidden />
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  downloadPreviewMedia();
+                }}
+                title="Download"
+                className="nodrag nopan flex h-7 w-7 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white/85 backdrop-blur-sm transition hover:bg-black/70"
+              >
+                <Download className="h-3.5 w-3.5" aria-hidden />
+              </button>
+            </div>
           ) : null}
 
           {generating && (data.kind === "image" || data.kind === "video") ? (

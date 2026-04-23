@@ -1,9 +1,9 @@
 "use client";
 
 import { Handle, Position, useReactFlow, type NodeProps } from "@xyflow/react";
-import { Check, Clapperboard, Grid3X3, ImageIcon, List, ListOrdered, Maximize2, Pencil, Plus, Trash2, Type, X } from "lucide-react";
+import { Check, Clapperboard, Download, Grid3X3, ImageIcon, List, ListOrdered, Maximize2, Pencil, Plus, Trash2, Type, X } from "lucide-react";
 import { createPortal } from "react-dom";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type WheelEvent } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -36,6 +36,33 @@ function isProbablyVideoUrl(s: string): boolean {
 
 function toRenderableMediaUrl(s: string): string {
   return s.replace(/#media=(image|video)$/i, "");
+}
+
+function keepWheelInsideTextarea(e: WheelEvent<HTMLTextAreaElement>) {
+  const el = e.currentTarget;
+  const canScroll = el.scrollHeight > el.clientHeight;
+  if (!canScroll) return;
+  // Prevent React Flow / page from stealing wheel while editing list items.
+  e.preventDefault();
+  el.scrollTop += e.deltaY;
+  e.stopPropagation();
+}
+
+function triggerMediaDownload(url: string, fallbackName: string) {
+  const trimmed = url.trim();
+  if (!trimmed) return;
+  const a = document.createElement("a");
+  if (/^blob:|^data:/i.test(trimmed)) {
+    a.href = trimmed;
+    a.download = fallbackName;
+  } else {
+    a.href = `/api/download?url=${encodeURIComponent(trimmed)}`;
+  }
+  a.rel = "noopener noreferrer";
+  a.style.display = "none";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 }
 
 const WORKFLOW_PENDING_MEDIA_PREFIX = "__workflow_pending_media__:";
@@ -105,7 +132,20 @@ const PromptListMediaGalleryCell = memo(function PromptListMediaGalleryCell({
           className="h-full w-full min-h-0 object-cover transition group-hover:scale-[1.02]"
         />
       )}
-      <div className="absolute inset-x-1.5 bottom-1.5 z-[2] flex items-center justify-end gap-1 opacity-0 transition group-hover:opacity-100">
+      <div className="absolute right-1.5 top-1.5 z-[2] flex items-center justify-end gap-1 opacity-0 transition group-hover:opacity-100">
+        <button
+          type="button"
+          className="nodrag nopan inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white/85 backdrop-blur-sm hover:bg-black/70"
+          title="Download"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const fallback = isProbablyVideoUrl(url) ? `workflow-media-${slotIndex + 1}.mp4` : `workflow-media-${slotIndex + 1}.jpg`;
+            triggerMediaDownload(renderUrl, fallback);
+          }}
+        >
+          <Download className="h-3.5 w-3.5" aria-hidden />
+        </button>
         <button
           type="button"
           className="nodrag nopan inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white/85 backdrop-blur-sm hover:bg-black/70"
@@ -457,6 +497,7 @@ export function PromptListNode({ id, data: rawData, selected }: NodeProps<Prompt
                 <textarea
                   value={text}
                   onChange={(e) => setText(e.target.value)}
+                  onWheelCapture={keepWheelInsideTextarea}
                   onKeyDown={(e) => {
                     if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
                       e.preventDefault();
