@@ -2462,7 +2462,21 @@ export default function LinkToAdUniverse({
     return aiScrapedCandidateUrls.filter((u) => u !== preview).slice(0, LINK_TO_AD_CHANGE_PICKER_MAX);
   }, [aiScrapedCandidateUrls, resolvedPreviewUrl]);
 
-  /** Thumbnail strip: active preview (AI pick / neutral / chosen) plus user-uploaded product photos only, not every scraped packshot. */
+  /** Top product refs currently selected by the scoring for image generation (compact UI list). */
+  const aiPickedProductUrls = useMemo(() => {
+    const out: string[] = [];
+    const seen = new Set<string>();
+    for (const u of resolveNanoProductImageUrls()) {
+      const r = resolveMaybeRelativeUrl(u);
+      if (!r || seen.has(r)) continue;
+      seen.add(r);
+      out.push(r);
+      if (out.length >= 2) break;
+    }
+    return out;
+  }, [cleanCandidate?.url, fallbackImageUrl, neutralUploadUrl, productOnlyImageUrls, resolvedPreviewUrl, resolveMaybeRelativeUrl, storeUrl]);
+  const aiPickedProductUrlSet = useMemo(() => new Set(aiPickedProductUrls), [aiPickedProductUrls]);
+  /** Thumbnail strip: preview + top AI-picked product refs + user-uploaded product photos (deduped). */
   const productPhotosStripUrls = useMemo(() => {
     const out: string[] = [];
     const seen = new Set<string>();
@@ -2473,6 +2487,7 @@ export default function LinkToAdUniverse({
       out.push((raw || "").trim());
     };
     if (resolvedPreviewUrl) add(resolvedPreviewUrl);
+    for (const u of aiPickedProductUrls) add(u);
     for (const u of productOnlyImageUrls) {
       const r = resolveMaybeRelativeUrl(u);
       if (!r || seen.has(r)) continue;
@@ -2480,12 +2495,7 @@ export default function LinkToAdUniverse({
       if (isUserProduct) add(u);
     }
     return out;
-  }, [productOnlyImageUrls, userPhotoUrls, resolvedPreviewUrl, resolveMaybeRelativeUrl]);
-  /** Exact product refs (ordered) currently sent to Nano Banana image generation. */
-  const nanoGenerationProductRefs = useMemo(
-    () => resolveNanoProductImageUrls(),
-    [cleanCandidate?.url, fallbackImageUrl, neutralUploadUrl, productOnlyImageUrls, resolvedPreviewUrl, storeUrl, userPhotoUrls],
-  );
+  }, [aiPickedProductUrls, productOnlyImageUrls, userPhotoUrls, resolvedPreviewUrl, resolveMaybeRelativeUrl]);
 
   const choosePreviewImage = useCallback(
     (url: string) => {
@@ -3200,8 +3210,7 @@ export default function LinkToAdUniverse({
   }
 
   /**
-   * Prefer the most recently uploaded user photos (avatar or manual uploads),
-   * then fall back to discovered product packshots.
+   * Prefer product-only photos selected in Link to Ad, then fallback packshots.
    */
   function buildProductCandidatesForGeneration(): string[] {
     const out: string[] = [];
@@ -3213,15 +3222,14 @@ export default function LinkToAdUniverse({
       out.push(t);
     };
 
-    for (let i = userPhotoUrls.length - 1; i >= 0; i--) push(userPhotoUrls[i]);
     for (let i = productOnlyImageUrls.length - 1; i >= 0; i--) push(productOnlyImageUrls[i]);
     if (cleanCandidate?.url) push(cleanCandidate.url);
     return out;
   }
 
   /**
-   * Product reference URLs for Nano Banana (same priority as {@link buildProductCandidatesForGeneration}):
-   * latest user uploads, then classified packshots. Avatars stay in `avatarImageUrls`, not here.
+   * Product reference URLs for Nano Banana:
+   * product-only picks first, then classified packshots (never persona/avatar URLs).
    */
   function buildProductPackshotCandidatesForNano(): string[] {
     const out: string[] = [];
@@ -3232,7 +3240,6 @@ export default function LinkToAdUniverse({
       seen.add(t);
       out.push(t);
     };
-    for (let i = userPhotoUrls.length - 1; i >= 0; i--) push(userPhotoUrls[i]);
     for (let i = productOnlyImageUrls.length - 1; i >= 0; i--) push(productOnlyImageUrls[i]);
     if (cleanCandidate?.url) push(cleanCandidate.url);
     return out;
@@ -5423,10 +5430,10 @@ export default function LinkToAdUniverse({
     () => (linkToAdTrialEconomy ? LINK_TO_AD_TRIAL_FINAL_VIDEO : ltaVideoOnlyCredits),
     [linkToAdTrialEconomy, ltaVideoOnlyCredits],
   );
-  /** Trial: render credits are debited on Kling only; the “video prompt” step does not spend. */
+  /** Video-prompt step has no direct credit charge (render charge happens on video generation). */
   const ltaVideoPromptFromImageCreditsDisplay = useMemo(
-    () => (linkToAdTrialEconomy ? 0 : ltaVideoOnlyCredits),
-    [linkToAdTrialEconomy, ltaVideoOnlyCredits],
+    () => 0,
+    [],
   );
 
   /** Match product image resolution used for Nano prompts (preview or packshots), not only main preview URL. */
@@ -6326,7 +6333,7 @@ export default function LinkToAdUniverse({
                       <div className="flex flex-wrap items-center gap-1.5">
                         {isAlgorithmChosenPreview ? (
                           <span className="rounded-md border border-violet-400/35 bg-violet-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-violet-100">
-                            Picked by AI
+                            AI pick
                           </span>
                         ) : null}
                         {aiAlternativeUrls.length > 0 ? (
@@ -6349,28 +6356,6 @@ export default function LinkToAdUniverse({
                         </button>
                       </div>
                     </div>
-                    {nanoGenerationProductRefs.length > 0 ? (
-                      <div className="rounded-lg border border-emerald-400/20 bg-emerald-500/[0.06] p-2">
-                        <p className="text-[10px] font-medium text-emerald-100/90">
-                          Used for image generation ({nanoGenerationProductRefs.length})
-                        </p>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {nanoGenerationProductRefs.slice(0, 6).map((u, i) => (
-                            <div
-                              key={`${u}-${i}-nano-refs-a`}
-                              className={cn(
-                                "relative h-12 w-12 overflow-hidden rounded-md border bg-[#050507]",
-                                i === 0 ? "border-emerald-300/70 ring-1 ring-emerald-300/40" : "border-emerald-200/30",
-                              )}
-                              title={i === 0 ? "Primary reference sent to generation" : "Reference sent to generation"}
-                            >
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={u} alt={`Generation ref ${i + 1}`} className="h-full w-full object-cover" loading="lazy" />
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
                     {showAiImagePicker && aiAlternativeUrls.length > 0 ? (
                       <div className="rounded-lg border border-violet-400/20 bg-violet-500/[0.06] p-2">
                         <p className="text-[10px] font-medium text-violet-100/90">
@@ -6411,6 +6396,14 @@ export default function LinkToAdUniverse({
                             referrerPolicy="no-referrer"
                             onClick={() => choosePreviewImage(url)}
                           />
+                          {(() => {
+                            const resolved = resolveMaybeRelativeUrl(url);
+                            return resolved && aiPickedProductUrlSet.has(resolved) ? (
+                              <span className="pointer-events-none absolute bottom-0.5 left-0.5 rounded border border-violet-300/35 bg-violet-500/70 px-1 py-[1px] text-[8px] font-bold uppercase tracking-wide text-white">
+                                AI
+                              </span>
+                            ) : null;
+                          })()}
                           <button
                             type="button"
                             onClick={() => removeProductPhoto(url)}
@@ -6580,7 +6573,7 @@ export default function LinkToAdUniverse({
                       <div className="flex flex-wrap items-center gap-1.5">
                         {isAlgorithmChosenPreview ? (
                           <span className="rounded-md border border-violet-400/35 bg-violet-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-violet-100">
-                            Picked by AI
+                            AI pick
                           </span>
                         ) : null}
                         {aiAlternativeUrls.length > 0 ? (
@@ -6603,28 +6596,6 @@ export default function LinkToAdUniverse({
                         </button>
                       </div>
                     </div>
-                    {nanoGenerationProductRefs.length > 0 ? (
-                      <div className="rounded-lg border border-emerald-400/20 bg-emerald-500/[0.06] p-2">
-                        <p className="text-[10px] font-medium text-emerald-100/90">
-                          Used for image generation ({nanoGenerationProductRefs.length})
-                        </p>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {nanoGenerationProductRefs.slice(0, 6).map((u, i) => (
-                            <div
-                              key={`${u}-${i}-nano-refs-b`}
-                              className={cn(
-                                "relative h-12 w-12 overflow-hidden rounded-md border bg-[#050507]",
-                                i === 0 ? "border-emerald-300/70 ring-1 ring-emerald-300/40" : "border-emerald-200/30",
-                              )}
-                              title={i === 0 ? "Primary reference sent to generation" : "Reference sent to generation"}
-                            >
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={u} alt={`Generation ref ${i + 1}`} className="h-full w-full object-cover" loading="lazy" />
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
                     {showAiImagePicker && aiAlternativeUrls.length > 0 ? (
                       <div className="rounded-lg border border-violet-400/20 bg-violet-500/[0.06] p-2">
                         <p className="text-[10px] font-medium text-violet-100/90">
@@ -6665,6 +6636,14 @@ export default function LinkToAdUniverse({
                             referrerPolicy="no-referrer"
                             onClick={() => choosePreviewImage(url)}
                           />
+                          {(() => {
+                            const resolved = resolveMaybeRelativeUrl(url);
+                            return resolved && aiPickedProductUrlSet.has(resolved) ? (
+                              <span className="pointer-events-none absolute bottom-0.5 left-0.5 rounded border border-violet-300/35 bg-violet-500/70 px-1 py-[1px] text-[8px] font-bold uppercase tracking-wide text-white">
+                                AI
+                              </span>
+                            ) : null;
+                          })()}
                           <button
                             type="button"
                             onClick={() => removeProductPhoto(url)}
@@ -7014,7 +6993,7 @@ export default function LinkToAdUniverse({
                     <div className="flex flex-wrap items-center gap-1.5">
                       {isAlgorithmChosenPreview ? (
                         <span className="rounded-md border border-violet-400/35 bg-violet-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-violet-100">
-                          Picked by AI
+                          AI pick
                         </span>
                       ) : null}
                       {aiAlternativeUrls.length > 0 ? (
@@ -7037,28 +7016,6 @@ export default function LinkToAdUniverse({
                       </button>
                     </div>
                   </div>
-                  {nanoGenerationProductRefs.length > 0 ? (
-                    <div className="mt-2 rounded-lg border border-emerald-400/20 bg-emerald-500/[0.06] p-2">
-                      <p className="text-[10px] font-medium text-emerald-100/90">
-                        Used for image generation ({nanoGenerationProductRefs.length})
-                      </p>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {nanoGenerationProductRefs.slice(0, 6).map((u, i) => (
-                          <div
-                            key={`${u}-${i}-nano-refs-c`}
-                            className={cn(
-                              "relative h-12 w-12 overflow-hidden rounded-md border bg-[#050507]",
-                              i === 0 ? "border-emerald-300/70 ring-1 ring-emerald-300/40" : "border-emerald-200/30",
-                            )}
-                            title={i === 0 ? "Primary reference sent to generation" : "Reference sent to generation"}
-                          >
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={u} alt={`Generation ref ${i + 1}`} className="h-full w-full object-cover" loading="lazy" />
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
                   {showAiImagePicker && aiAlternativeUrls.length > 0 ? (
                     <div className="mt-2 rounded-lg border border-violet-400/20 bg-violet-500/[0.06] p-2">
                       <p className="text-[10px] font-medium text-violet-100/90">
@@ -7099,6 +7056,14 @@ export default function LinkToAdUniverse({
                           referrerPolicy="no-referrer"
                           onClick={() => choosePreviewImage(url)}
                         />
+                        {(() => {
+                          const resolved = resolveMaybeRelativeUrl(url);
+                          return resolved && aiPickedProductUrlSet.has(resolved) ? (
+                            <span className="pointer-events-none absolute bottom-0.5 left-0.5 rounded border border-violet-300/35 bg-violet-500/70 px-1 py-[1px] text-[8px] font-bold uppercase tracking-wide text-white">
+                              AI
+                            </span>
+                          ) : null;
+                        })()}
                         <button
                           type="button"
                           onClick={() => removeProductPhoto(url)}

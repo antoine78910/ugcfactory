@@ -861,7 +861,7 @@ export function parseNanoEditableSections(editable: string): NanoEditableSection
   if (!raw.trim()) {
     return { person: "", scene: "", product: "", isStructured: false };
   }
-  if (!/EDIT\s*[—:-]\s*(?:Person|Avatar)\b/im.test(raw)) {
+  if (!/EDIT\s*[—:,-]\s*(?:Person|Avatar)\b/im.test(raw)) {
     return {
       person: stripInlineTechnicalNoiseFromNanoSection(raw.trim()),
       scene: "",
@@ -871,7 +871,7 @@ export function parseNanoEditableSections(editable: string): NanoEditableSection
   }
   // Pattern for any EDIT header (handles "EDIT, X:", "**EDIT, X:**", newlines after colon, etc.)
   const editHdr = (label: string) =>
-    `\\*{0,2}EDIT\\s*[—:-]\\s*${label}\\*{0,2}\\s*:?\\*{0,2}\\s*\\n?\\s*`;
+    `\\*{0,2}EDIT\\s*[—:,-]\\s*${label}\\*{0,2}\\s*:?\\*{0,2}\\s*\\n?\\s*`;
 
   const personM =
     raw.match(new RegExp(editHdr("Avatar") + `([\\s\\S]*?)${NANO_SECTION_END_LA}`, "i")) ||
