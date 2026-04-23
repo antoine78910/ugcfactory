@@ -336,15 +336,12 @@ function StudioShellInner({
 
       <main
         className={cn(
-          "relative z-10 grid min-h-screen items-start transition-[grid-template-columns] duration-200 ease-out",
-          // Mobile: single column (sidebar is off-canvas). md+: two columns with collapsible sidebar.
-          "grid-cols-[minmax(0,1fr)]",
-          navCollapsed ? "md:grid-cols-[4rem_minmax(0,1fr)]" : "md:grid-cols-[248px_minmax(0,1fr)]",
+          "relative z-10 min-h-screen",
         )}
       >
         <aside
           className={cn(
-            // Desktop: permanently fixed sidebar (never scrolls away).
+            // Desktop: permanently fixed sidebar (never moves while scrolling content).
             "md:fixed md:left-0 md:top-0 md:z-30 md:flex md:h-dvh md:max-w-none md:translate-x-0 md:shadow-none",
             // Mobile: off-canvas drawer, slides in from the left.
             "fixed inset-y-0 left-0 z-50 flex h-dvh w-[17rem] max-w-[85vw] flex-col overflow-visible border-r border-white/10 bg-[#06070d] py-4 shadow-2xl transition-transform duration-200 ease-out md:transition-none",
@@ -607,7 +604,12 @@ function StudioShellInner({
           </div>
         </aside>
 
-        <div className="relative z-0 min-h-0 min-w-0">
+        <div
+          className={cn(
+            "relative z-0 min-h-0 min-w-0 transition-[padding] duration-200 ease-out",
+            navCollapsed ? "md:pl-16" : "md:pl-[248px]",
+          )}
+        >
           {children}
           {isTrial && isStudioShell && activeSection !== "link_to_ad" && activeSection !== null ? (
             <TrialSectionLock

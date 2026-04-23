@@ -20,7 +20,7 @@ import {
 import { cn } from "@/lib/utils";
 import { ledgerTicksToDisplayCredits } from "@/lib/creditLedgerTicks";
 
-type Tab = "generations" | "runs" | "credits" | "onboarding";
+type Tab = "generations" | "runs" | "credits" | "onboarding" | "feedback";
 
 type OnboardingAdminRow = {
   user_id: string;
@@ -149,6 +149,17 @@ type Stats = {
   totalCreditsSpent: number;
   statusBreakdown: { ready: number; failed: number; processing: number };
   kindBreakdown: Record<string, number>;
+};
+
+type FeedbackRow = {
+  id: string;
+  user_id: string;
+  email: string | null;
+  category: "feedback" | "feature" | "bug" | string;
+  message: string;
+  page_path: string | null;
+  status: string | null;
+  created_at: string;
 };
 
 function relativeTime(iso: string): string {
@@ -300,6 +311,14 @@ export default function AdminPage() {
   const [onboardLoading, setOnboardLoading] = useState(false);
   const [onboardError, setOnboardError] = useState<string | null>(null);
   const [onboardWarning, setOnboardWarning] = useState<string | null>(null);
+  const [feedbackRows, setFeedbackRows] = useState<FeedbackRow[]>([]);
+  const [feedbackTotal, setFeedbackTotal] = useState(0);
+  const [feedbackPage, setFeedbackPage] = useState(1);
+  const [feedbackSearch, setFeedbackSearch] = useState("");
+  const [feedbackSearchInput, setFeedbackSearchInput] = useState("");
+  const [feedbackCategory, setFeedbackCategory] = useState("");
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
 
   // Expanded row (for prompt/details)
   const [expandedGenId, setExpandedGenId] = useState<string | null>(null);
@@ -412,6 +431,25 @@ export default function AdminPage() {
     }
   }, [onboardPage, onboardSearch]);
 
+  const fetchFeedback = useCallback(async () => {
+    setFeedbackLoading(true);
+    setFeedbackError(null);
+    try {
+      const params = new URLSearchParams({ page: String(feedbackPage), per_page: String(perPage) });
+      if (feedbackCategory) params.set("category", feedbackCategory);
+      if (feedbackSearch) params.set("q", feedbackSearch);
+      const r = await fetch(`/api/admin/feedback?${params}`);
+      const d = (await r.json()) as { rows?: FeedbackRow[]; total?: number; error?: string };
+      if (!r.ok) throw new Error(d.error ?? `HTTP ${r.status}`);
+      setFeedbackRows(d.rows ?? []);
+      setFeedbackTotal(d.total ?? 0);
+    } catch (e) {
+      setFeedbackError(e instanceof Error ? e.message : "Failed to load feedback");
+    } finally {
+      setFeedbackLoading(false);
+    }
+  }, [feedbackCategory, feedbackPage, feedbackSearch, perPage]);
+
   const fetchCreditRedeems = useCallback(async () => {
     setCreditLoading(true);
     setCreditError(null);
@@ -482,7 +520,8 @@ export default function AdminPage() {
     else if (tab === "runs") void fetchRuns();
     else if (tab === "credits") void fetchCreditRedeems();
     else if (tab === "onboarding") void fetchOnboarding();
-  }, [tab, fetchGenerations, fetchRuns, fetchCreditRedeems, fetchOnboarding]);
+    else if (tab === "feedback") void fetchFeedback();
+  }, [tab, fetchGenerations, fetchRuns, fetchCreditRedeems, fetchOnboarding, fetchFeedback]);
 
   useEffect(() => {
     if (tab === "generations" && activeCompPlans.length === 0 && !partnerPlansLoading) {
@@ -493,6 +532,7 @@ export default function AdminPage() {
   const genTotalPages = Math.max(1, Math.ceil(genTotal / perPage));
   const runTotalPages = Math.max(1, Math.ceil(runTotal / perPage));
   const onboardTotalPages = Math.max(1, Math.ceil(onboardTotal / perPage));
+  const feedbackTotalPages = Math.max(1, Math.ceil(feedbackTotal / perPage));
   const creditLogTotalPages = Math.max(1, Math.ceil(creditLogTotal / creditLogPerPage));
 
   const copyRedeemLink = useCallback(async (secret: string, rowId: string) => {
@@ -623,6 +663,8 @@ export default function AdminPage() {
                   ? "Credit gift links & redemption audit"
                   : tab === "onboarding"
                     ? "Onboarding answers, emails, and subscription status after checkout"
+                    : tab === "feedback"
+                      ? "User feedback and feature requests from the app"
                     : "All user generations & projects"}
               </p>
             </div>
@@ -668,6 +710,16 @@ export default function AdminPage() {
             >
               Credit links
             </button>
+            <button
+              type="button"
+              onClick={() => { setTab("feedback"); setFeedbackPage(1); }}
+              className={cn(
+                "rounded-lg px-3 py-1.5 text-xs font-semibold transition",
+                tab === "feedback" ? "bg-violet-500 text-white" : "bg-white/5 text-white/60 hover:bg-white/10",
+              )}
+            >
+              Feedback
+            </button>
           </div>
         </div>
 
@@ -685,7 +737,7 @@ export default function AdminPage() {
             />
           </div>
         )}
-        {tab !== "credits" && tab !== "onboarding" && stats && (
+        {tab !== "credits" && tab !== "onboarding" && tab !== "feedback" && stats && (
           <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard label="Total Generations" value={stats.totalGenerations} icon={Activity} accent="bg-violet-500/20 text-violet-300" />
             <StatCard label="Total Users" value={stats.totalUsers} icon={Users} accent="bg-blue-500/20 text-blue-300" />
@@ -724,7 +776,7 @@ export default function AdminPage() {
         )}
 
         {/* Filters bar */}
-        <div className={cn("mt-4 flex flex-wrap items-center gap-3", tab === "credits" && "hidden")}>
+        <div className={cn("mt-4 flex flex-wrap items-center gap-3", (tab === "credits" || tab === "feedback") && "hidden")}>
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
             <input
@@ -1389,6 +1441,104 @@ export default function AdminPage() {
                   type="button"
                   disabled={onboardPage >= onboardTotalPages}
                   onClick={() => setOnboardPage((p) => p + 1)}
+                  className="flex h-7 w-7 items-center justify-center rounded-md border border-white/10 bg-white/5 text-white/50 transition hover:bg-white/10 disabled:opacity-30"
+                >
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : tab === "feedback" && feedbackLoading && feedbackRows.length === 0 ? (
+          <div className="mt-12 flex items-center justify-center gap-2 text-white/40">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            Loading feedback…
+          </div>
+        ) : tab === "feedback" ? (
+          <div className="mt-4 space-y-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="relative flex-1">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
+                <input
+                  type="text"
+                  placeholder="Search by email, page, or message…"
+                  value={feedbackSearchInput}
+                  onChange={(e) => setFeedbackSearchInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      setFeedbackSearch(feedbackSearchInput);
+                      setFeedbackPage(1);
+                    }
+                  }}
+                  className="w-full rounded-lg border border-white/10 bg-white/[0.03] py-2 pl-10 pr-3 text-sm text-white placeholder-white/30 outline-none transition focus:border-violet-400/40"
+                />
+              </div>
+              <select
+                value={feedbackCategory}
+                onChange={(e) => { setFeedbackCategory(e.target.value); setFeedbackPage(1); }}
+                className="rounded-lg border border-white/10 bg-[#0b0912] px-3 py-2 text-xs text-white/70 outline-none"
+              >
+                <option value="">All types</option>
+                <option value="feedback">Feedback</option>
+                <option value="feature">Feature request</option>
+                <option value="bug">Bug report</option>
+              </select>
+            </div>
+            {feedbackError ? (
+              <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">{feedbackError}</div>
+            ) : null}
+            <div className="overflow-x-auto rounded-xl border border-white/[0.08]">
+              <table className="w-full min-w-[980px] text-left text-xs">
+                <thead>
+                  <tr className="border-b border-white/10 text-[10px] uppercase tracking-wide text-white/40">
+                    <th className="px-3 py-2.5 font-semibold">When</th>
+                    <th className="px-3 py-2.5 font-semibold">Type</th>
+                    <th className="px-3 py-2.5 font-semibold">User</th>
+                    <th className="px-3 py-2.5 font-semibold">Page</th>
+                    <th className="px-3 py-2.5 font-semibold">Message</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {feedbackRows.map((row) => (
+                    <tr key={row.id} className="border-b border-white/5 align-top transition hover:bg-white/[0.02]">
+                      <td className="whitespace-nowrap px-3 py-2.5 text-white/45">{new Date(row.created_at).toLocaleString()}</td>
+                      <td className="px-3 py-2.5">
+                        <span className="rounded-full border border-violet-500/30 bg-violet-500/15 px-2 py-0.5 text-[10px] font-semibold text-violet-200">
+                          {row.category || "feedback"}
+                        </span>
+                      </td>
+                      <td className="max-w-[220px] truncate px-3 py-2.5 text-violet-200/90" title={row.email ?? row.user_id}>
+                        {row.email?.trim() ? row.email : row.user_id.slice(0, 8)}
+                      </td>
+                      <td className="max-w-[200px] truncate px-3 py-2.5 text-white/60" title={row.page_path ?? "-"}>
+                        {row.page_path ?? "-"}
+                      </td>
+                      <td className="max-w-[560px] whitespace-pre-wrap px-3 py-2.5 text-white/70">{row.message}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {feedbackRows.length === 0 && !feedbackLoading ? (
+                <p className="py-8 text-center text-sm text-white/30">No feedback yet</p>
+              ) : null}
+            </div>
+            <div className="flex items-center justify-between px-1">
+              <p className="text-[11px] text-white/40">{feedbackTotal} total</p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={feedbackPage <= 1}
+                  onClick={() => setFeedbackPage((p) => p - 1)}
+                  className="flex h-7 w-7 items-center justify-center rounded-md border border-white/10 bg-white/5 text-white/50 transition hover:bg-white/10 disabled:opacity-30"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </button>
+                <span className="text-xs tabular-nums text-white/50">
+                  {feedbackPage} / {feedbackTotalPages}
+                </span>
+                <button
+                  type="button"
+                  disabled={feedbackPage >= feedbackTotalPages}
+                  onClick={() => setFeedbackPage((p) => p + 1)}
                   className="flex h-7 w-7 items-center justify-center rounded-md border border-white/10 bg-white/5 text-white/50 transition hover:bg-white/10 disabled:opacity-30"
                 >
                   <ChevronRight className="h-3.5 w-3.5" />

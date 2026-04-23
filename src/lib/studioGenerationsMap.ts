@@ -7,6 +7,20 @@ import {
   studioVideoEditPickerDisplayLabel,
 } from "@/lib/subscriptionModelAccess";
 
+const WORKFLOW_HISTORY_LABEL_PREFIX = "[Workflow]";
+
+function parseWorkflowTaggedLabel(raw: string): { label: string; workflowGenerated: boolean } {
+  const t = raw.trim();
+  if (!t) return { label: "", workflowGenerated: false };
+  if (t.startsWith(WORKFLOW_HISTORY_LABEL_PREFIX)) {
+    return {
+      label: t.slice(WORKFLOW_HISTORY_LABEL_PREFIX.length).trim() || "Workflow generation",
+      workflowGenerated: true,
+    };
+  }
+  return { label: t, workflowGenerated: false };
+}
+
 function resultUrlLooksLikeVideo(url: string): boolean {
   const t = url.trim().toLowerCase();
   if (!t) return false;
@@ -170,16 +184,20 @@ export function studioGenerationRowToHistoryItem(row: StudioGenerationRow): Stud
   const baseIds = { studioGenerationId: row.id };
   const extId = String(row.external_task_id ?? "").trim();
   const taskExtra = extId ? { externalTaskId: extId } : {};
+  const parsedLabel = parseWorkflowTaggedLabel(row.label ?? "");
+  const label = parsedLabel.label || "Avatar";
+  const workflowExtra = parsedLabel.workflowGenerated ? { workflowGenerated: true } : {};
   if (hasUrls || isReady) {
     return {
       id: row.id,
       kind: mediaKind,
       status: "ready",
-      label: row.label || "Avatar",
+      label,
       mediaUrl: resultUrls[0],
       createdAt,
       studioGenerationKind: row.kind,
       inputUrls: inputUrlsOrUndef,
+      ...workflowExtra,
       ...baseIds,
       ...taskExtra,
       ...modelExtra,
@@ -191,12 +209,13 @@ export function studioGenerationRowToHistoryItem(row: StudioGenerationRow): Stud
       id: row.id,
       kind: mediaKind,
       status: "failed",
-      label: row.label || "Failed",
+      label: label || "Failed",
       errorMessage: userFacingProviderErrorOrDefault(row.error_message, "Generation failed"),
       creditsRefunded: Boolean(row.credits_refund_hint_sent),
       createdAt,
       studioGenerationKind: row.kind,
       inputUrls: inputUrlsOrUndef,
+      ...workflowExtra,
       ...baseIds,
       ...taskExtra,
       ...modelExtra,
@@ -207,10 +226,11 @@ export function studioGenerationRowToHistoryItem(row: StudioGenerationRow): Stud
     id: row.id,
     kind: mediaKind,
     status: "generating",
-    label: row.label || "Generating…",
+    label: label || "Generating…",
     createdAt,
     studioGenerationKind: row.kind,
     inputUrls: inputUrlsOrUndef,
+    ...workflowExtra,
     ...baseIds,
     ...taskExtra,
     ...modelExtra,

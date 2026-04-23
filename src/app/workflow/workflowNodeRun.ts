@@ -29,6 +29,15 @@ import { uploadBlobUrlToCdn } from "@/lib/uploadBlobUrlToCdn";
 
 /** Max reference image wires / URLs merged into one workflow Image generator job (Kie / NanoBanana). */
 export const WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX = 14;
+const WORKFLOW_HISTORY_LABEL_PREFIX = "[Workflow] ";
+
+function workflowHistoryLabel(label: string): string {
+  const t = label.trim();
+  if (!t) return WORKFLOW_HISTORY_LABEL_PREFIX.trim();
+  return t.startsWith(WORKFLOW_HISTORY_LABEL_PREFIX)
+    ? t
+    : `${WORKFLOW_HISTORY_LABEL_PREFIX}${t}`;
+}
 
 export function stripStickyHtmlToText(html: string): string {
   const h = html.trim();
@@ -836,7 +845,7 @@ export async function runWorkflowImageJob(params: WorkflowRunImageParams): Promi
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       kind: "studio_image",
-      label: params.prompt.slice(0, 120),
+      label: workflowHistoryLabel(params.prompt.slice(0, 120)),
       accountPlan: params.planId,
       prompt: params.prompt,
       model: resolvedModel,
@@ -940,7 +949,7 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
     const json = (await res.json()) as { taskId?: string; provider?: string; error?: string };
     if (!res.ok || !json.taskId) throw new Error(json.error || "Veo failed");
     await registerStudioVideoTask({
-      label: params.prompt.slice(0, 120),
+      label: workflowHistoryLabel(params.prompt.slice(0, 120)),
       taskId: json.taskId,
       provider: json.provider,
       model: modelId,
@@ -1004,7 +1013,7 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
   if (!genRes.ok || !genJson.taskId) throw new Error(genJson.error || "Video task failed");
 
   await registerStudioVideoTask({
-    label: params.prompt.slice(0, 120),
+    label: workflowHistoryLabel(params.prompt.slice(0, 120)),
     taskId: genJson.taskId,
     provider: genJson.provider,
     model: modelId,

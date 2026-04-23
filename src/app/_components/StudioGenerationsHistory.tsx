@@ -50,6 +50,8 @@ export type StudioHistoryItem = {
   studioGenerationId?: string;
   /** Provider task id (KIE / PiAPI), used to restore in-flight rows after reload. */
   externalTaskId?: string;
+  /** Item originated from workflow generation flow. */
+  workflowGenerated?: boolean;
 };
 
 function formatHistoryDate(ts: number): string {
@@ -644,6 +646,11 @@ export function StudioGenerationsHistory({
                         view === "list" && "flex flex-1 flex-col justify-center py-1",
                       )}
                     >
+                      {item.workflowGenerated ? (
+                        <span className="inline-flex w-fit items-center gap-1 rounded-full border border-violet-400/35 bg-violet-500/12 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-violet-100">
+                          Workflow generation
+                        </span>
+                      ) : null}
                       <p className="line-clamp-2 text-xs leading-snug text-white/50">{item.label}</p>
                       {item.modelLabel ? (
                         <p className="line-clamp-1 text-[10px] font-medium uppercase tracking-wide text-violet-300/85">

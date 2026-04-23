@@ -53,7 +53,7 @@ import {
   UserRound,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
 import {
   useCallback,
@@ -643,6 +643,7 @@ function WorkflowReactFlowChrome({
   canRedo,
   readOnly,
 }: ChromeProps) {
+  const pathname = usePathname();
   const barIcon = "h-[18px] w-[18px] shrink-0";
   const { screenToFlowPosition, flowToScreenPosition, getNodesBounds, getInternalNode, getNodes } = useReactFlow();
   const viewport = useStore((s) => s.transform);
@@ -864,7 +865,42 @@ function WorkflowReactFlowChrome({
   const [addPlusTab, setAddPlusTab] = useState<"basics" | "upload">("basics");
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   const [avatarUrls, setAvatarUrls] = useState<string[]>([]);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [feedbackCategory, setFeedbackCategory] = useState<"feedback" | "feature" | "bug">("feedback");
+  const [feedbackMessage, setFeedbackMessage] = useState("");
+  const [feedbackSending, setFeedbackSending] = useState(false);
   const uploadInputRef = useRef<HTMLInputElement>(null);
+
+  const submitFeedback = useCallback(async () => {
+    const message = feedbackMessage.trim();
+    if (!message) {
+      toast.error("Please add your message.");
+      return;
+    }
+    setFeedbackSending(true);
+    try {
+      const r = await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          category: feedbackCategory,
+          message,
+          pagePath: pathname || "/workflow",
+        }),
+      });
+      const data = (await r.json().catch(() => ({}))) as { error?: string };
+      if (!r.ok) throw new Error(data.error ?? `HTTP ${r.status}`);
+      setFeedbackMessage("");
+      setFeedbackCategory("feedback");
+      setFeedbackOpen(false);
+      toast.success("Feedback sent. Thank you!");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not send feedback.");
+    } finally {
+      setFeedbackSending(false);
+    }
+  }, [feedbackCategory, feedbackMessage, pathname]);
   useEffect(() => {
     const onOpen = (
       ev: Event,
@@ -1494,7 +1530,11 @@ function WorkflowReactFlowChrome({
           {activeName}
         </button>
         <div className="flex items-center gap-3 rounded-full border border-violet-500/25 bg-[#06070d]/95 px-4 py-2 text-[12px] text-white/50 shadow-lg backdrop-blur-md">
-          <button type="button" className="text-white/40 hover:text-white/65">
+          <button
+            type="button"
+            className="text-white/40 hover:text-white/65"
+            onClick={() => setFeedbackOpen(true)}
+          >
             Give feedback
           </button>
           <span className="text-white/25">|</span>
@@ -1504,6 +1544,69 @@ function WorkflowReactFlowChrome({
           </button>
         </div>
       </Panel>
+
+      {feedbackOpen ? (
+        <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-xl rounded-2xl border border-white/10 bg-[#0b0912] p-4 shadow-2xl">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-white">Send feedback</p>
+                <p className="mt-1 text-xs text-white/45">
+                  Share a bug, feature request, or any idea. It will be visible in Admin &gt; Feedback.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFeedbackOpen(false)}
+                className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-xs text-white/70 hover:bg-white/[0.08]"
+              >
+                Close
+              </button>
+            </div>
+            <div className="mt-4 grid gap-3">
+              <label className="grid gap-1">
+                <span className="text-[11px] text-white/45">Type</span>
+                <select
+                  value={feedbackCategory}
+                  onChange={(e) => setFeedbackCategory((e.target.value as "feedback" | "feature" | "bug") ?? "feedback")}
+                  className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-violet-500/40"
+                >
+                  <option value="feedback">Feedback</option>
+                  <option value="feature">Feature request</option>
+                  <option value="bug">Bug report</option>
+                </select>
+              </label>
+              <label className="grid gap-1">
+                <span className="text-[11px] text-white/45">Message</span>
+                <textarea
+                  value={feedbackMessage}
+                  onChange={(e) => setFeedbackMessage(e.target.value)}
+                  placeholder="Describe your idea or issue…"
+                  rows={7}
+                  className="w-full resize-y rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none placeholder:text-white/25 focus:border-violet-500/40"
+                />
+              </label>
+            </div>
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setFeedbackOpen(false)}
+                className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs font-semibold text-white/65 hover:bg-white/[0.08]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void submitFeedback()}
+                disabled={feedbackSending}
+                className="inline-flex items-center rounded-lg border border-violet-400/40 bg-violet-500/20 px-3 py-1.5 text-xs font-semibold text-violet-100 transition hover:bg-violet-500/30 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {feedbackSending ? "Sending..." : "Send feedback"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {!readOnly && canGroup && !frameOpen && groupSelectionAnchor ? (
         <div
