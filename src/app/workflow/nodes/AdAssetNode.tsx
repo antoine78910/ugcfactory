@@ -524,6 +524,22 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     },
     [id],
   );
+  const openOutputCreatePicker = useCallback(
+    (sourceHandleId: string, targetEl: HTMLElement) => {
+      const rect = targetEl.getBoundingClientRect();
+      window.dispatchEvent(
+        new CustomEvent("workflow:open-output-picker", {
+          detail: {
+            sourceNodeId: id,
+            sourceHandleId,
+            screenX: Math.round(rect.right + 10),
+            screenY: Math.round(rect.top + rect.height / 2),
+          },
+        }),
+      );
+    },
+    [id],
+  );
 
   const handleInputBubblePointerDown = useCallback(
     (
@@ -3075,6 +3091,12 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             type="source"
             position={Position.Right}
             className="!h-3 !w-3 !border-2 !border-violet-500/45 !bg-[#06070d]"
+            onPointerDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              openOutputCreatePicker("out", e.currentTarget as HTMLElement);
+            }}
+            title="Click to add a connected module"
           />
         ) : null}
       </div>
@@ -3103,6 +3125,16 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                   : "Run once to produce an image; then drag from here to chain into the next module."
               }
             />
+            <button
+              type="button"
+              onPointerDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                openOutputCreatePicker("generated", e.currentTarget);
+              }}
+              title="Click to add a connected module"
+              className="absolute inset-0 z-[3] rounded-full"
+            />
             <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/65">
               <ImageIcon className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
             </span>
@@ -3119,6 +3151,16 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               className={workflowPortSourceBubbleHandleClass}
               aria-label="Generated video output"
               title="Drag to wire this generated video into a list or downstream video input."
+            />
+            <button
+              type="button"
+              onPointerDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                openOutputCreatePicker("out", e.currentTarget);
+              }}
+              title="Click to add a connected module"
+              className="absolute inset-0 z-[3] rounded-full"
             />
             <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-violet-200/90">
               <Clapperboard className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
@@ -3142,6 +3184,16 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 e.stopPropagation();
                 void onExtractVideoFrame("first");
               }}
+            />
+            <button
+              type="button"
+              onPointerDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                openOutputCreatePicker("videoFirst", e.currentTarget);
+              }}
+              title="Click to add a connected module"
+              className="absolute inset-0 z-[3] rounded-full"
             />
             <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/65">
               {frameExtractBusy === "first" ? (
@@ -3169,6 +3221,16 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 e.stopPropagation();
                 void onExtractVideoFrame("last");
               }}
+            />
+            <button
+              type="button"
+              onPointerDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                openOutputCreatePicker("videoLast", e.currentTarget);
+              }}
+              title="Click to add a connected module"
+              className="absolute inset-0 z-[3] rounded-full"
             />
             <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/65">
               {frameExtractBusy === "last" ? (

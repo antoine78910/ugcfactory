@@ -188,6 +188,13 @@ type WorkflowOpenInputPickerDetail = {
   usePointerFlow?: boolean;
 };
 
+type WorkflowOpenOutputPickerDetail = {
+  sourceNodeId: string;
+  sourceHandleId: string;
+  screenX: number;
+  screenY: number;
+};
+
 /** Scissors snip FX, Lucide scissors geometry; two halves close with a snap at the pivot. */
 function WorkflowCutSnipFx({ x, y }: { x: number; y: number }) {
   const cap = { strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
@@ -1145,6 +1152,13 @@ function WorkflowReactFlowChrome({
         color="rgba(228, 222, 255, 0.42)"
         className="workflow-flow-dot-glow"
       />
+      <input
+        ref={uploadInputRef}
+        type="file"
+        accept="image/*,video/*"
+        className="hidden"
+        onChange={onUploadFileChange}
+      />
 
       <Panel
         position="top-left"
@@ -1331,13 +1345,6 @@ function WorkflowReactFlowChrome({
                     <p className="text-[12px] leading-snug text-white/55">
                       Upload an image or video as a reference node. Connect it to a generator to use as input.
                     </p>
-                    <input
-                      ref={uploadInputRef}
-                      type="file"
-                      accept="image/*,video/*"
-                      className="hidden"
-                      onChange={onUploadFileChange}
-                    />
                     <button
                       type="button"
                       onClick={() => uploadInputRef.current?.click()}
@@ -2115,6 +2122,30 @@ function WorkflowFlowWorkspace({
     window.addEventListener("workflow:open-input-picker", onOpenInputPicker as EventListener);
     return () =>
       window.removeEventListener("workflow:open-input-picker", onOpenInputPicker as EventListener);
+  }, [nodes, screenToFlowPosition, armPlacementPickerAgainstPaneClick]);
+
+  useEffect(() => {
+    const onOpenOutputPicker = (ev: Event) => {
+      const detail = (ev as CustomEvent<WorkflowOpenOutputPickerDetail>).detail;
+      if (!detail) return;
+      const sourceNode = nodes.find((n) => n.id === detail.sourceNodeId);
+      const sourceKind = sourceKindFromNodeHandle(sourceNode, detail.sourceHandleId);
+      if (!sourceKind) return;
+      const fallbackFlow = screenToFlowPosition({ x: detail.screenX, y: detail.screenY });
+      const rightFlow = sourceNode
+        ? { x: sourceNode.position.x + 300, y: sourceNode.position.y + 8 }
+        : fallbackFlow;
+      armPlacementPickerAgainstPaneClick();
+      setPlacementPicker({
+        flow: rightFlow,
+        screenX: detail.screenX,
+        screenY: detail.screenY,
+        connectFrom: { nodeId: detail.sourceNodeId, handleId: detail.sourceHandleId },
+      });
+    };
+    window.addEventListener("workflow:open-output-picker", onOpenOutputPicker as EventListener);
+    return () =>
+      window.removeEventListener("workflow:open-output-picker", onOpenOutputPicker as EventListener);
   }, [nodes, screenToFlowPosition, armPlacementPickerAgainstPaneClick]);
 
   useEffect(() => {
@@ -3519,13 +3550,6 @@ function WorkflowFlowWorkspace({
                   onClick={() => placeNodeAtPicker("promptList")}
                 >
                   List
-                </button>
-                <button
-                  type="button"
-                  className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
-                  onClick={() => placeNodeAtPicker("sticky")}
-                >
-                  Canvas note
                 </button>
                 <button
                   type="button"

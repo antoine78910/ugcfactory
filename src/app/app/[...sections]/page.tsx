@@ -2293,7 +2293,7 @@ export default function AppBrandWizard() {
       searchParams.get("project") ?? new URLSearchParams(window.location.search).get("project");
     const sectionRunId =
       appSection === "link_to_ad"
-        ? linkToAdActiveRunId || linkToAdResumeRunId || runId
+        ? linkToAdActiveRunId || linkToAdResumeRunId
         : runId;
     const projectId = appSection === "projects" ? null : sectionRunId || urlProject || null;
     const wantPath = sectionToPath(appSection, projectId);
@@ -4727,6 +4727,7 @@ export default function AppBrandWizard() {
                   onActiveRunIdChange={setLinkToAdActiveRunId}
                   onStartFreshLinkToAdSession={() => {
                     setLinkToAdResumeRunId(null);
+                    setLinkToAdActiveRunId(null);
                     setLinkToAdMountKey((k) => k + 1);
                     void refreshMeAndRuns();
                   }}

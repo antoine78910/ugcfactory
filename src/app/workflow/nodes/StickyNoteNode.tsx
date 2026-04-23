@@ -67,6 +67,22 @@ export function StickyNoteNode({ id, data: rawData, selected }: NodeProps<Sticky
     setEdges(getEdges().filter((e) => e.source !== id && e.target !== id));
     toast.success("Note deleted");
   }, [getEdges, getNodes, id, setEdges, setNodes]);
+  const openOutputCreatePicker = useCallback(
+    (targetEl: HTMLElement) => {
+      const rect = targetEl.getBoundingClientRect();
+      window.dispatchEvent(
+        new CustomEvent("workflow:open-output-picker", {
+          detail: {
+            sourceNodeId: id,
+            sourceHandleId: "out",
+            screenX: Math.round(rect.right + 10),
+            screenY: Math.round(rect.top + rect.height / 2),
+          },
+        }),
+      );
+    },
+    [id],
+  );
 
   const shapeClass =
     data.shape === "square" ? "rounded-sm" : data.shape === "pill" ? "rounded-[2rem]" : "rounded-xl";
@@ -153,6 +169,16 @@ export function StickyNoteNode({ id, data: rawData, selected }: NodeProps<Sticky
           type="source"
           position={Position.Right}
           className="!h-3 !w-3 !border-2 !border-amber-600/45 !bg-amber-100"
+        />
+        <button
+          type="button"
+          className="absolute -right-4 top-1/2 z-[6] h-6 w-6 -translate-y-1/2 rounded-full"
+          title="Click to add a connected module"
+          onPointerDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openOutputCreatePicker(e.currentTarget);
+          }}
         />
       </div>
     </>

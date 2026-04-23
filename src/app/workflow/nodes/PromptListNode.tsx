@@ -292,6 +292,22 @@ export function PromptListNode({ id, data: rawData, selected }: NodeProps<Prompt
     "nodrag nopan !absolute !left-0 !top-0 !box-border !h-8 !w-8 !min-h-8 !min-w-8 !max-h-8 !max-w-8 !rounded-full !border-0 !bg-transparent opacity-0 !transform-none";
   const outputBubbleHandleClass =
     "nodrag nopan !absolute !inset-0 !z-[2] !box-border !h-8 !w-8 !min-h-8 !min-w-8 !max-h-8 !max-w-8 !rounded-full !border-0 !bg-transparent opacity-0 !transform-none";
+  const openOutputCreatePicker = useCallback(
+    (sourceHandleId: string, targetEl: HTMLElement) => {
+      const rect = targetEl.getBoundingClientRect();
+      window.dispatchEvent(
+        new CustomEvent("workflow:open-output-picker", {
+          detail: {
+            sourceNodeId: id,
+            sourceHandleId,
+            screenX: Math.round(rect.right + 10),
+            screenY: Math.round(rect.top + rect.height / 2),
+          },
+        }),
+      );
+    },
+    [id],
+  );
   const isMediaList = contentKind === "media";
   const showMediaGallery = isMediaList && nonEmptyLines.length > 0;
   const listIndexLabel = useMemo(() => {
@@ -635,6 +651,16 @@ export function PromptListNode({ id, data: rawData, selected }: NodeProps<Prompt
           {(!activeWireKind || activeWireKind === "text") ? (
             <div className={cn(outputBubbleShellClass, "border-white/15")}>
               <Handle id="outText" type="source" position={Position.Right} className={outputBubbleHandleClass} />
+              <button
+                type="button"
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  openOutputCreatePicker("outText", e.currentTarget);
+                }}
+                title="Click to add a connected module"
+                className="absolute inset-0 z-[3] rounded-full"
+              />
               <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/85">
                 <Type className="h-3.5 w-3.5" aria-hidden />
               </span>
@@ -643,6 +669,16 @@ export function PromptListNode({ id, data: rawData, selected }: NodeProps<Prompt
           {(!activeWireKind || activeWireKind === "image") ? (
             <div className={cn(outputBubbleShellClass, "border-white/15")}>
               <Handle id="outImage" type="source" position={Position.Right} className={outputBubbleHandleClass} />
+              <button
+                type="button"
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  openOutputCreatePicker("outImage", e.currentTarget);
+                }}
+                title="Click to add a connected module"
+                className="absolute inset-0 z-[3] rounded-full"
+              />
               <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/85">
                 <ImageIcon className="h-3.5 w-3.5" aria-hidden />
               </span>
@@ -651,6 +687,16 @@ export function PromptListNode({ id, data: rawData, selected }: NodeProps<Prompt
           {(!activeWireKind || activeWireKind === "video") ? (
             <div className={cn(outputBubbleShellClass, "border-white/15")}>
               <Handle id="outVideo" type="source" position={Position.Right} className={outputBubbleHandleClass} />
+              <button
+                type="button"
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  openOutputCreatePicker("outVideo", e.currentTarget);
+                }}
+                title="Click to add a connected module"
+                className="absolute inset-0 z-[3] rounded-full"
+              />
               <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/85">
                 <Clapperboard className="h-3.5 w-3.5" aria-hidden />
               </span>

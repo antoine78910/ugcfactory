@@ -183,15 +183,48 @@ function patchNanoEditableSection(
 function coerceNanoEditableSections(draft: string): { person: string; scene: string; product: string } {
   const parsed = parseNanoEditableSections(draft);
   if (parsed.isStructured) return { person: parsed.person, scene: parsed.scene, product: parsed.product };
-  const flat = String(draft ?? "")
+  const raw = String(draft ?? "")
     .replace(/\r\n/g, "\n")
     .replace(/^\s*(?:[#*]+\s*)?PROMPT\s*[123](?:\s*[*#]+)?\s*$/gim, "")
     .trim();
-  return {
-    person: parsed.person || flat,
-    scene: parsed.scene,
-    product: parsed.product,
+  if (!raw) return { person: "", scene: "", product: "" };
+
+  const cleanBody = (v: string) =>
+    v
+      .replace(/^\s*(?:\*{0,2}\s*)?EDIT\s*[—:,-]\s*(?:Avatar|Person|Scene|Shot|Product(?:\s*(?:&|and)\s*action)?)\s*:?\s*\*{0,2}\s*$/gim, "")
+      .trim();
+
+  // Fallback parser for plain headers like:
+  // Avatar / Scene / Shot (with or without "EDIT,")
+  const lines = raw.split("\n");
+  let current: "person" | "scene" | "product" | null = null;
+  const buckets: Record<"person" | "scene" | "product", string[]> = {
+    person: [],
+    scene: [],
+    product: [],
   };
+  const headerRe =
+    /^(?:\*{0,2}\s*)?(?:EDIT\s*[—:,-]\s*)?(Avatar|Person|Scene|Shot|Product(?:\s*(?:&|and)\s*action)?)\s*:?\s*\*{0,2}\s*$/i;
+
+  for (const line of lines) {
+    const m = line.match(headerRe);
+    if (m) {
+      const k = m[1].toLowerCase();
+      if (k === "avatar" || k === "person") current = "person";
+      else if (k === "scene") current = "scene";
+      else current = "product";
+      continue;
+    }
+    if (current) buckets[current].push(line);
+  }
+
+  const person = cleanBody(buckets.person.join("\n"));
+  const scene = cleanBody(buckets.scene.join("\n"));
+  const product = cleanBody(buckets.product.join("\n"));
+  if (person || scene || product) return { person, scene, product };
+
+  // Last fallback: keep full text only in Avatar (never duplicate into Scene/Shot).
+  return { person: cleanBody(raw), scene: "", product: "" };
 }
 
 function fnv1aHash(input: string): string {
@@ -1817,9 +1850,11 @@ export default function LinkToAdUniverse({
     latestSnapRef.current = null;
     prevAngleRef.current = null;
     nanoBananaPromptsSignatureRef.current = null;
+    onResumeConsumed?.();
+    onActiveRunIdChange?.(null);
     onRunsChanged?.();
     toast.message("Link to Ad reset", { description: "You can start a new ad from scratch." });
-  }, [cancelCurrentGeneration, onRunsChanged]);
+  }, [cancelCurrentGeneration, onResumeConsumed, onActiveRunIdChange, onRunsChanged]);
 
   const handleReturnToFreshLinkToAd = useCallback(() => {
     cancelCurrentGeneration({ silent: true });
@@ -2431,6 +2466,16 @@ export default function LinkToAdUniverse({
   const resolvedCleanCandidateUrl = useMemo(() => resolveMaybeRelativeUrl(cleanCandidate?.url), [cleanCandidate?.url, resolveMaybeRelativeUrl]);
   const resolvedFallbackImageUrl = useMemo(() => resolveMaybeRelativeUrl(fallbackImageUrl), [fallbackImageUrl, resolveMaybeRelativeUrl]);
   const resolvedNeutralUploadUrl = useMemo(() => resolveMaybeRelativeUrl(neutralUploadUrl), [neutralUploadUrl, resolveMaybeRelativeUrl]);
+  const imageDedupeKey = useCallback((raw: string | null | undefined): string => {
+    const r = (resolveMaybeRelativeUrl(raw) || "").trim();
+    if (!r) return "";
+    try {
+      const u = new URL(r);
+      return `${u.origin}${u.pathname}`.toLowerCase();
+    } catch {
+      return r.toLowerCase().split("?")[0].split("#")[0];
+    }
+  }, [resolveMaybeRelativeUrl]);
   const resolvedUserPhotoUrlSet = useMemo(() => {
     const set = new Set<string>();
     for (const u of userPhotoUrls) {
@@ -2465,16 +2510,20 @@ export default function LinkToAdUniverse({
   /** Top product refs currently selected by the scoring for image generation (compact UI list). */
   const aiPickedProductUrls = useMemo(() => {
     const out: string[] = [];
-    const seen = new Set<string>();
+    const seenKeys = new Set<string>();
+    const previewKey = imageDedupeKey(resolvedPreviewUrl);
     for (const u of resolveNanoProductImageUrls()) {
       const r = resolveMaybeRelativeUrl(u);
-      if (!r || seen.has(r)) continue;
-      seen.add(r);
+      const key = imageDedupeKey(r);
+      if (!r || !key || seenKeys.has(key) || (previewKey && key === previewKey)) continue;
+      seenKeys.add(key);
       out.push(r);
       if (out.length >= 2) break;
     }
+    // Fallback: keep at least one picked slot when only the preview candidate exists.
+    if (out.length === 0 && resolvedPreviewUrl) out.push(resolvedPreviewUrl);
     return out;
-  }, [cleanCandidate?.url, fallbackImageUrl, neutralUploadUrl, productOnlyImageUrls, resolvedPreviewUrl, resolveMaybeRelativeUrl, storeUrl]);
+  }, [cleanCandidate?.url, fallbackImageUrl, neutralUploadUrl, productOnlyImageUrls, resolvedPreviewUrl, resolveMaybeRelativeUrl, imageDedupeKey, storeUrl]);
   const aiPickedProductUrlSet = useMemo(() => new Set(aiPickedProductUrls), [aiPickedProductUrls]);
   /** Thumbnail strip: preview + top AI-picked product refs + user-uploaded product photos (deduped). */
   const productPhotosStripUrls = useMemo(() => {
@@ -6333,7 +6382,7 @@ export default function LinkToAdUniverse({
                       <div className="flex flex-wrap items-center gap-1.5">
                         {isAlgorithmChosenPreview ? (
                           <span className="rounded-md border border-violet-400/35 bg-violet-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-violet-100">
-                            AI pick
+                            Picked by AI
                           </span>
                         ) : null}
                         {aiAlternativeUrls.length > 0 ? (
@@ -6396,6 +6445,18 @@ export default function LinkToAdUniverse({
                             referrerPolicy="no-referrer"
                             onClick={() => choosePreviewImage(url)}
                           />
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setProductImageLightboxUrl(resolveMaybeRelativeUrl(url) || url);
+                            }}
+                            className="absolute left-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-md bg-black/70 text-white/70 opacity-0 transition hover:text-white group-hover/photo:opacity-100"
+                            aria-label="Open product image full size"
+                            title="Open full size"
+                          >
+                            <Maximize2 className="h-3 w-3" aria-hidden />
+                          </button>
                           {(() => {
                             const resolved = resolveMaybeRelativeUrl(url);
                             return resolved && aiPickedProductUrlSet.has(resolved) ? (
@@ -6573,7 +6634,7 @@ export default function LinkToAdUniverse({
                       <div className="flex flex-wrap items-center gap-1.5">
                         {isAlgorithmChosenPreview ? (
                           <span className="rounded-md border border-violet-400/35 bg-violet-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-violet-100">
-                            AI pick
+                            Picked by AI
                           </span>
                         ) : null}
                         {aiAlternativeUrls.length > 0 ? (
@@ -6636,6 +6697,18 @@ export default function LinkToAdUniverse({
                             referrerPolicy="no-referrer"
                             onClick={() => choosePreviewImage(url)}
                           />
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setProductImageLightboxUrl(resolveMaybeRelativeUrl(url) || url);
+                            }}
+                            className="absolute left-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-md bg-black/70 text-white/70 opacity-0 transition hover:text-white group-hover/photo:opacity-100"
+                            aria-label="Open product image full size"
+                            title="Open full size"
+                          >
+                            <Maximize2 className="h-3 w-3" aria-hidden />
+                          </button>
                           {(() => {
                             const resolved = resolveMaybeRelativeUrl(url);
                             return resolved && aiPickedProductUrlSet.has(resolved) ? (
@@ -6993,7 +7066,7 @@ export default function LinkToAdUniverse({
                     <div className="flex flex-wrap items-center gap-1.5">
                       {isAlgorithmChosenPreview ? (
                         <span className="rounded-md border border-violet-400/35 bg-violet-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-violet-100">
-                          AI pick
+                          Picked by AI
                         </span>
                       ) : null}
                       {aiAlternativeUrls.length > 0 ? (
@@ -7056,6 +7129,18 @@ export default function LinkToAdUniverse({
                           referrerPolicy="no-referrer"
                           onClick={() => choosePreviewImage(url)}
                         />
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setProductImageLightboxUrl(resolveMaybeRelativeUrl(url) || url);
+                          }}
+                          className="absolute left-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-md bg-black/70 text-white/70 opacity-0 transition hover:text-white group-hover/photo2:opacity-100"
+                          aria-label="Open product image full size"
+                          title="Open full size"
+                        >
+                          <Maximize2 className="h-3 w-3" aria-hidden />
+                        </button>
                         {(() => {
                           const resolved = resolveMaybeRelativeUrl(url);
                           return resolved && aiPickedProductUrlSet.has(resolved) ? (
