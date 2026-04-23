@@ -621,13 +621,14 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       .filter((x) => x.length > 0 && !x.startsWith(WORKFLOW_PENDING_MEDIA_PREFIX));
   }, []);
   const finalizeProgressMediaList = useCallback(
-    (listId: string, preferredLines?: string[]) => {
+    (listId: string, preferredLines?: string[], label?: string) => {
       const fromNode = getNodes().find((n) => n.id === listId);
       const currentLines = Array.isArray(fromNode?.data?.lines)
         ? (fromNode?.data?.lines as string[])
         : [];
       const cleaned = normalizeCompletedMediaLines(preferredLines ?? currentLines);
       patch(listId, {
+        ...(label?.trim() ? { label: label.trim() } : {}),
         lines: cleaned,
         mode: "results",
         contentKind: "media",
@@ -1073,6 +1074,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     }
 
     if (data.kind === "assistant") {
+      const assistantListLabel = `${(data.label || cfg.title || "Assistant").trim() || "Assistant"} prompts`;
       setGenerating(true);
       let ok = false;
       try {
@@ -1112,6 +1114,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
 
             if (linkedListId) {
               patch(linkedListId, {
+                label: assistantListLabel,
                 lines,
                 mode: "prompts",
                 contentKind: "text",
@@ -1120,7 +1123,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               const listOffsetX = Math.max(560, cardWidthPx + 220);
               const listNode = buildPromptListNode(
                 { x: self.position.x + listOffsetX, y: self.position.y + 8 },
-                { label: "Assistant prompts", lines: [], mode: "prompts" },
+                { label: assistantListLabel, lines: [], mode: "prompts" },
               );
               setNodes((prev) => [...prev, listNode]);
               setEdges((prev) => [
@@ -1340,6 +1343,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       data.referenceMediaKind !== "video" && refUrl ? refUrl : undefined;
 
     if (data.kind === "image") {
+      const imageResultsListLabel = `${(data.label || cfg.title || "Image").trim() || "Image"} results`;
       const linkedImageReferences = collectLinkedImageUrlsForHandles(nodes, edges, id, ["references", "in"]);
       const mergedImageReferences = Array.from(
         new Set([...(refImageForImageGen ? [refImageForImageGen] : []), ...linkedImageReferences]),
@@ -1383,6 +1387,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           if (existingListId) {
             progressListId = existingListId;
             patch(progressListId, {
+              label: imageResultsListLabel,
               lines: pendingSlots,
               mode: "results",
               contentKind: "media",
@@ -1434,14 +1439,18 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             return imageUrl;
           }),
         );
-        const imageUrl = imageResults[0] ?? "";
+        const imageUrl =
+          imageResults
+            .map((u) => u.trim())
+            .filter(Boolean)
+            .at(-1) ?? "";
         patch(id, {
           outputPreviewUrl: imageUrl,
           outputMediaKind: "image",
         });
         if (shouldBuildProgressList) {
           if (progressListId) {
-            finalizeProgressMediaList(progressListId, imageResults);
+            finalizeProgressMediaList(progressListId, imageResults, imageResultsListLabel);
           }
           toast.success(`Batch done (${imageResults.length})`, {
             description: "Image list updated progressively during generation.",
@@ -1450,6 +1459,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           const existingListId = findLinkedWorkflowMediaResultsListId(nodes, edges, id, "image");
           if (existingListId) {
             patch(existingListId, {
+              label: imageResultsListLabel,
               lines: imageResults,
               mode: "results",
               contentKind: "media",
@@ -1489,7 +1499,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           const completed = promptsForRun
             .map((_, slotIdx) => progressiveImageUrls[slotIdx]?.trim())
             .filter(Boolean) as string[];
-          finalizeProgressMediaList(progressListId, completed);
+          finalizeProgressMediaList(progressListId, completed, imageResultsListLabel);
         }
         refundPlatformCredits(platformCharge, grantCredits, creditsRef);
         toast.error(msg);
@@ -1501,6 +1511,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     }
 
     /* video */
+    const videoResultsListLabel = `${(data.label || cfg.title || "Video").trim() || "Video"} results`;
     const perVideoCharge = workflowVideoChargeCredits({
       model,
       resolution,
@@ -1564,6 +1575,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         if (existingListId) {
           progressListId = existingListId;
           patch(progressListId, {
+            label: videoResultsListLabel,
             lines: pendingSlots,
             mode: "results",
             contentKind: "media",
@@ -1622,7 +1634,11 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           return videoUrl;
         }),
       );
-      const videoUrl = videoResults[0] ?? "";
+      const videoUrl =
+        videoResults
+          .map((u) => u.trim())
+          .filter(Boolean)
+          .at(-1) ?? "";
       patch(id, {
         outputPreviewUrl: videoUrl,
         outputMediaKind: "video",
@@ -1631,7 +1647,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       });
       if (shouldBuildProgressList) {
         if (progressListId) {
-          finalizeProgressMediaList(progressListId, videoResults);
+          finalizeProgressMediaList(progressListId, videoResults, videoResultsListLabel);
         }
         toast.success(`Batch done (${videoResults.length})`, {
           description: "Video list updated progressively during generation.",
@@ -1646,7 +1662,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         const completed = promptsForRun
           .map((_, slotIdx) => progressiveVideoUrls[slotIdx]?.trim())
           .filter(Boolean) as string[];
-        finalizeProgressMediaList(progressListId, completed);
+        finalizeProgressMediaList(progressListId, completed, videoResultsListLabel);
       }
       refundPlatformCredits(vPlatformCharge, grantCredits, creditsRef);
       toast.error(msg);
@@ -1838,7 +1854,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
 
   if (data.kind === "assistant") {
     const assistantCardWidth = Math.max(cardWidthPx, 420);
-    const assistantBodyHeightPx = Math.max(230, assistantCardWidth - 130);
+    const assistantBodyHeightPx = Math.max(248, assistantCardWidth - 114);
     return (
       <>
         <WorkflowNodeContextToolbar nodeId={id} onRun={runThisNodeOnly} onRunFromHere={runFromHere} />
@@ -1847,7 +1863,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           onMouseEnter={() => window.dispatchEvent(new CustomEvent("workflow:hover-node", { detail: { nodeId: id } }))}
           onMouseLeave={() => window.dispatchEvent(new CustomEvent("workflow:unhover-node"))}
         >
-          <div className="nodrag nopan absolute -top-7 left-2 z-[8] flex min-w-0 items-center gap-2.5 pr-2" onPointerDown={(e) => e.stopPropagation()}>
+          <div className="nodrag nopan absolute -top-7 left-3 z-[8] flex min-w-0 items-center gap-2.5 pr-2" onPointerDown={(e) => e.stopPropagation()}>
             <Icon className="h-4 w-4 shrink-0 text-white/75" strokeWidth={2} aria-hidden />
             {titleEditing ? (
               <input
@@ -1927,7 +1943,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           </div>
           <div
             className={cn(
-              "relative overflow-visible rounded-2xl border border-white/[0.08] bg-[#121212]/98 px-3 pb-3 pt-10 shadow-[0_12px_40px_rgba(0,0,0,0.5)] backdrop-blur-sm",
+              "relative overflow-visible rounded-2xl border border-white/[0.08] bg-[#121212]/98 px-3 pb-3 pt-12 shadow-[0_12px_40px_rgba(0,0,0,0.5)] backdrop-blur-sm",
               selected ? "ring-2 ring-violet-500/85 ring-offset-2 ring-offset-[#06070d]" : "",
             )}
             style={{ width: assistantCardWidth }}
@@ -1973,7 +1989,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             </div>
             {assistantReferenceWireCount > 0 ? (
               <div
-                className="flex items-center gap-1 rounded-lg border border-violet-400/35 bg-[#0f0f13]/90 px-1 py-0.5"
+                className="flex max-w-[170px] items-center gap-1.5 overflow-hidden rounded-lg bg-[#0f0f13]/90 px-1.5 py-1"
                 title="Linked upload/reference images used as assistant context."
               >
                 {assistantLinkedReferencePreviewUrls.slice(0, 3).map((u, idx) => (
@@ -1982,7 +1998,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                     key={`${u}-${idx}`}
                     src={u}
                     alt=""
-                    className="h-6 w-6 rounded object-cover ring-1 ring-white/25"
+                    className="h-8 w-8 shrink-0 rounded-md object-cover"
                   />
                 ))}
                 {assistantLinkedReferencePreviewUrls.length > 3 ? (

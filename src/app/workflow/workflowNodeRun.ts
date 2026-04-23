@@ -221,6 +221,17 @@ export function splitAssistantOutputToListLines(raw: string): string[] {
   );
   if (dashed.length >= 2) return dashed.slice(0, 50);
 
+  // Assistant -> List UX rule:
+  // one blank line starts a new item, while single line breaks stay in the same item
+  // (so "Variation X" + its paragraph remain a single row).
+  const paragraphBlocks = dedupeBlocksPreserveOrder(
+    t
+      .split(/\n{2,}/)
+      .map((s) => s.trim())
+      .filter(Boolean),
+  );
+  if (paragraphBlocks.length >= 2) return paragraphBlocks.slice(0, 50);
+
   return splitIntoPromptLines(t);
 }
 

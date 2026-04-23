@@ -2859,6 +2859,14 @@ function WorkflowFlowWorkspace({
     if (removed) toast.success("Connection cut");
     return removed;
   }, [setEdges]);
+  const playCutSnipFxAt = useCallback((x: number, y: number) => {
+    setCutSnipFx({ x, y });
+    if (cutSnipClearTimerRef.current) clearTimeout(cutSnipClearTimerRef.current);
+    cutSnipClearTimerRef.current = setTimeout(() => {
+      cutSnipClearTimerRef.current = null;
+      setCutSnipFx(null);
+    }, 650);
+  }, []);
 
   const edgeEndpointFlowPoint = useCallback(
     (nodeId: string, edgeHandleId: string | null | undefined, side: "source" | "target"): { x: number; y: number } | null => {
@@ -3029,11 +3037,27 @@ function WorkflowFlowWorkspace({
         const target = ev.target as HTMLElement | null;
         if (!target?.closest(".react-flow")) return;
         if (target.closest(".react-flow__panel")) return;
+        if (target.closest(".react-flow__edge")) {
+          const edgeId = hoveredEdgeId;
+          if (edgeId) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            const ok = cutEdgeAtPointer(edgeId);
+            if (ok) {
+              playCutSnipFxAt(ev.clientX, ev.clientY);
+              setHoveredEdgeScissors(null);
+              setHoveredEdgeId(null);
+              cutSuppressNextPaneClickRef.current = true;
+            }
+          }
+          return;
+        }
         if (target.closest("button, input, textarea, select, [role=\"button\"]")) return;
         cutTrailActiveRef.current = true;
         cutTrailJustFinishedRef.current = false;
         const first = { x: ev.clientX, y: ev.clientY };
-        setCutTrailPoints([first]);
+        // Seed with 2 points so the cut line is immediately visible while holding.
+        setCutTrailPoints([first, first]);
         setHoveredEdgeId(null);
         setHoveredEdgeScissors(null);
       }}
@@ -3041,12 +3065,20 @@ function WorkflowFlowWorkspace({
         if (readOnly || tool !== "cutTarget") return;
         if (!cutTrailActiveRef.current) return;
         setCutTrailPoints((prev) => {
-          if (!prev.length) return [{ x: ev.clientX, y: ev.clientY }];
-          const last = prev[prev.length - 1]!;
-          const dx = ev.clientX - last.x;
-          const dy = ev.clientY - last.y;
-          if (dx * dx + dy * dy < 16) return prev;
-          return [...prev, { x: ev.clientX, y: ev.clientY }];
+          const cur = { x: ev.clientX, y: ev.clientY };
+          if (!prev.length) return [cur, cur];
+          if (prev.length === 1) return [prev[0]!, cur];
+          const next = [...prev];
+          const penultimate = next[next.length - 2]!;
+          const dxAnchor = cur.x - penultimate.x;
+          const dyAnchor = cur.y - penultimate.y;
+          // Keep a live endpoint for precision, and add anchors every few px for segment cutting.
+          if (dxAnchor * dxAnchor + dyAnchor * dyAnchor >= 36) {
+            next.push(cur);
+          } else {
+            next[next.length - 1] = cur;
+          }
+          return next;
         });
       }}
       onMouseUp={() => {
@@ -3107,14 +3139,7 @@ function WorkflowFlowWorkspace({
             event.stopPropagation();
             const ok = cutEdgeAtPointer(edge.id);
             if (!ok) return;
-            const x = event.clientX;
-            const y = event.clientY;
-            setCutSnipFx({ x, y });
-            if (cutSnipClearTimerRef.current) clearTimeout(cutSnipClearTimerRef.current);
-            cutSnipClearTimerRef.current = setTimeout(() => {
-              cutSnipClearTimerRef.current = null;
-              setCutSnipFx(null);
-            }, 650);
+            playCutSnipFxAt(event.clientX, event.clientY);
             setHoveredEdgeScissors(null);
             setHoveredEdgeId(null);
           }}
@@ -3252,12 +3277,7 @@ function WorkflowFlowWorkspace({
                 const y = e.clientY;
                 const ok = cutEdgeAtPointer(hoveredEdgeId);
                 if (!ok) return;
-                setCutSnipFx({ x, y });
-                if (cutSnipClearTimerRef.current) clearTimeout(cutSnipClearTimerRef.current);
-                cutSnipClearTimerRef.current = setTimeout(() => {
-                  cutSnipClearTimerRef.current = null;
-                  setCutSnipFx(null);
-                }, 650);
+                playCutSnipFxAt(x, y);
                 setHoveredEdgeScissors(null);
                 setHoveredEdgeId(null);
               }}
