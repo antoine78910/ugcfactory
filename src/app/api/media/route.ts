@@ -18,6 +18,11 @@ const PASS_THROUGH_HEADERS = [
   "last-modified",
 ] as const;
 
+function isRenderableMediaContentType(ct: string): boolean {
+  const t = (ct || "").toLowerCase();
+  return t.startsWith("image/") || t.startsWith("video/") || t.startsWith("audio/");
+}
+
 /**
  * Inline playback / image load through the app origin (auth required).
  * Forwards Range so video elements can seek and show frames immediately.
@@ -67,6 +72,18 @@ export async function GET(req: Request) {
     if (!upstream.ok || !upstream.body) {
       return Response.json(
         { error: `Upstream failed: HTTP ${upstream.status}` },
+        { status: 502 },
+      );
+    }
+    const upstreamCt = (upstream.headers.get("content-type") ?? "").split(";")[0].trim();
+    if (!isRenderableMediaContentType(upstreamCt)) {
+      return Response.json(
+        {
+          error:
+            "Upstream did not return a media file. The source may be protected by Cloudflare/Kasada hotlink rules.",
+          code: "NON_MEDIA_UPSTREAM",
+          contentType: upstreamCt || null,
+        },
         { status: 502 },
       );
     }
