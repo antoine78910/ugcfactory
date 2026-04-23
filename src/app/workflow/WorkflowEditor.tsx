@@ -27,7 +27,6 @@ import {
   Copy,
   CopyPlus,
   Eye,
-  FolderKanban,
   Globe2,
   GripVertical,
   Hand,
@@ -76,7 +75,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 import { AdAssetNode, type AdAssetNodeData } from "./nodes/AdAssetNode";
-import { ImageRefNode } from "./nodes/ImageRefNode";
+import { ImageRefNode, type ImageRefNodeType } from "./nodes/ImageRefNode";
 import { StickyNoteNode } from "./nodes/StickyNoteNode";
 import { TextPromptNode, type TextPromptNodeData } from "./nodes/TextPromptNode";
 import { PromptListNode, type PromptListNodeData } from "./nodes/PromptListNode";
@@ -134,12 +133,6 @@ import {
   measureImageAspectFromUrlSafe,
   measureVideoAspectFromObjectUrl,
 } from "./workflowMediaAspect";
-import {
-  buildWorkflowProjectPipeline,
-  buildWorkflowProjectPipelineFromRun,
-  WORKFLOW_PROJECT_PIPELINE_DND,
-  type WorkflowRunProjectLike,
-} from "./workflowProjectPipeline";
 import type { StickyNoteNodeData } from "./workflowStickyNoteTypes";
 import { estimateWorkflowAdAssetRunCredits } from "./workflowNodeRun";
 
@@ -193,10 +186,6 @@ type WorkflowOpenInputPickerDetail = {
   screenY: number;
   forceIntent?: "text-or-image";
   usePointerFlow?: boolean;
-};
-
-type WorkflowProjectRunListItem = WorkflowRunProjectLike & {
-  created_at?: string;
 };
 
 /** Scissors snip FX, Lucide scissors geometry; two halves close with a snap at the pivot. */
@@ -872,11 +861,7 @@ function WorkflowReactFlowChrome({
     toast.success("List added");
   }, [screenToFlowPosition, setNodes, setAddOpen, setFrameOpen]);
 
-  const [addPlusTab, setAddPlusTab] = useState<"basics" | "upload" | "projects">("basics");
-  const [projectRuns, setProjectRuns] = useState<WorkflowProjectRunListItem[]>([]);
-  const [projectRunsLoading, setProjectRunsLoading] = useState(false);
-  const [projectRunsLoaded, setProjectRunsLoaded] = useState(false);
-  const [projectPickerOpen, setProjectPickerOpen] = useState(false);
+  const [addPlusTab, setAddPlusTab] = useState<"basics" | "upload">("basics");
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   const [avatarUrls, setAvatarUrls] = useState<string[]>([]);
   const uploadInputRef = useRef<HTMLInputElement>(null);
@@ -987,21 +972,21 @@ function WorkflowReactFlowChrome({
 
           const hostedUrl = await uploadFileToCdn(file, { kind: isVideo ? "video" : "image" });
           setNodes((prev) =>
-            prev.map((n) =>
-              n.id === tempNode.id
-                ? {
-                    ...n,
-                    data: {
-                      ...n.data,
-                      imageUrl: hostedUrl,
-                      label: baseName,
-                      source: "upload",
-                      mediaKind: isVideo ? "video" : "image",
-                      intrinsicAspect: ar,
-                    },
-                  }
-                : n,
-            ),
+            prev.map((n) => {
+              if (n.id !== tempNode.id || n.type !== "imageRef") return n;
+              const updatedNode: ImageRefNodeType = {
+                ...n,
+                data: {
+                  ...n.data,
+                  imageUrl: hostedUrl,
+                  label: baseName,
+                  source: "upload",
+                  mediaKind: isVideo ? "video" : "image",
+                  intrinsicAspect: ar,
+                },
+              };
+              return updatedNode;
+            }),
           );
           toast.success("Node added");
           URL.revokeObjectURL(objectUrl);
@@ -1064,59 +1049,6 @@ function WorkflowReactFlowChrome({
     e.dataTransfer.setData(WORKFLOW_NODE_DND, payload);
     e.dataTransfer.effectAllowed = "copy";
   }, []);
-
-  const addProjectPipeline = useCallback(() => {
-    const position = screenToFlowPosition({
-      x: window.innerWidth / 2,
-      y: window.innerHeight / 2,
-    });
-    const { nodes: projectNodes, edges: projectEdges } = buildWorkflowProjectPipeline(position);
-    setNodes((prev) => [...prev, ...projectNodes]);
-    setEdges((prev) => [...prev, ...projectEdges]);
-    setAddOpen(false);
-    setFrameOpen(false);
-    setAddPlusTab("basics");
-    toast.success("Project pipeline added", {
-      description: "Brief → angles → image prompts → images → video prompt → video.",
-    });
-  }, [screenToFlowPosition, setAddOpen, setEdges, setFrameOpen, setNodes]);
-
-  const addProjectPipelineFromRun = useCallback(
-    (run: WorkflowProjectRunListItem) => {
-      const position = screenToFlowPosition({
-        x: window.innerWidth / 2,
-        y: window.innerHeight / 2,
-      });
-      const { nodes: projectNodes, edges: projectEdges } = buildWorkflowProjectPipelineFromRun(position, run);
-      setNodes((prev) => [...prev, ...projectNodes]);
-      setEdges((prev) => [...prev, ...projectEdges]);
-      setAddOpen(false);
-      setFrameOpen(false);
-      setAddPlusTab("basics");
-      toast.success("Project imported", {
-        description: "Loaded product, brief, selected angle, Nano images, video prompt, and video.",
-      });
-    },
-    [screenToFlowPosition, setAddOpen, setEdges, setFrameOpen, setNodes],
-  );
-
-  const loadProjectRuns = useCallback(async () => {
-    if (projectRunsLoading) return;
-    setProjectRunsLoading(true);
-    try {
-      const res = await fetch("/api/runs/list", { cache: "no-store" });
-      const json = (await res.json()) as { data?: WorkflowProjectRunListItem[]; error?: string };
-      if (!res.ok) throw new Error(json.error || "Could not load projects.");
-      setProjectRuns(Array.isArray(json.data) ? json.data : []);
-      setProjectRunsLoaded(true);
-    } catch (e) {
-      toast.error("Could not load projects", {
-        description: e instanceof Error ? e.message : "Unknown error",
-      });
-    } finally {
-      setProjectRunsLoading(false);
-    }
-  }, [projectRunsLoading]);
 
   if (readOnly) {
     return (
@@ -1230,18 +1162,6 @@ function WorkflowReactFlowChrome({
                     )}
                   >
                     Upload
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAddPlusTab("projects")}
-                    className={cn(
-                      "min-w-0 flex-1 py-2.5 text-[11px] font-semibold transition sm:text-[12px]",
-                      addPlusTab === "projects"
-                        ? "border-b-2 border-violet-400 text-white"
-                        : "text-white/45 hover:text-white/70",
-                    )}
-                  >
-                    Projects
                   </button>
                 </div>
                 <div className="max-h-[min(70vh,440px)] overflow-y-auto">
@@ -1391,44 +1311,7 @@ function WorkflowReactFlowChrome({
                       Browse files
                     </button>
                   </div>
-                ) : (
-                  <div className="space-y-3 p-3">
-                    <p className="text-[12px] leading-snug text-white/55">
-                      Import a saved Link to Ad project into this workflow with one click.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setProjectPickerOpen(true);
-                        if (!projectRunsLoaded) void loadProjectRuns();
-                      }}
-                      className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/12 bg-white/[0.06] py-2.5 text-[13px] font-semibold text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/10"
-                    >
-                      <FolderKanban className="h-4 w-4 text-white/70" strokeWidth={2} aria-hidden />
-                      Choose my projects
-                    </button>
-                    <div
-                      draggable
-                      onDragStart={(e) => {
-                        setDragPayload(e, WORKFLOW_PROJECT_PIPELINE_DND);
-                        setAddOpen(false);
-                        setFrameOpen(false);
-                      }}
-                      className="flex cursor-grab items-center gap-2 rounded-xl border border-dashed border-white/15 px-3 py-2.5 text-[12px] text-white/55 active:cursor-grabbing"
-                    >
-                      <GripVertical className="h-4 w-4 shrink-0 text-white/35" aria-hidden />
-                      Drag to canvas to place an empty pipeline
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => addProjectPipeline()}
-                      className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/12 bg-white/[0.06] py-2 text-[12px] font-semibold text-white/80 transition hover:border-violet-400/35 hover:bg-violet-500/10"
-                    >
-                      <FolderKanban className="h-4 w-4 text-white/65" strokeWidth={2} aria-hidden />
-                      Add empty pipeline
-                    </button>
-                  </div>
-                )}
+                ) : null}
                 </div>
               </div>
             ) : null}
@@ -1601,82 +1484,6 @@ function WorkflowReactFlowChrome({
         onPick={onAvatarPicked}
         title="Choose avatar"
       />
-
-      {projectPickerOpen ? (
-        <div
-          className="fixed inset-0 z-[220] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm"
-          onClick={() => setProjectPickerOpen(false)}
-          role="dialog"
-          aria-label="Choose my projects"
-        >
-          <div
-            className="w-[min(720px,100%)] overflow-hidden rounded-2xl border border-white/12 bg-[#0b0912] shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between border-b border-white/[0.08] px-4 py-3">
-              <div>
-                <p className="text-[14px] font-semibold text-white">Choose my projects</p>
-                <p className="text-[12px] text-white/50">Import one Link to Ad project into the workflow.</p>
-              </div>
-              <button
-                type="button"
-                className="rounded-lg px-2.5 py-1.5 text-[12px] font-medium text-white/65 transition hover:bg-white/[0.08] hover:text-white"
-                onClick={() => setProjectPickerOpen(false)}
-              >
-                Close
-              </button>
-            </div>
-            <div className="max-h-[min(62vh,520px)] space-y-1.5 overflow-y-auto p-3">
-              {projectRunsLoading ? (
-                <p className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-[12px] text-white/55">
-                  Loading projects...
-                </p>
-              ) : projectRuns.length === 0 ? (
-                <div className="space-y-2 rounded-xl border border-white/10 bg-white/[0.03] p-3">
-                  <p className="text-[12px] text-white/60">No Link to Ad project found yet.</p>
-                  <button
-                    type="button"
-                    onClick={() => void loadProjectRuns()}
-                    className="rounded-lg border border-white/15 px-2.5 py-1.5 text-[12px] font-medium text-white/85 transition hover:bg-white/[0.08]"
-                  >
-                    Refresh
-                  </button>
-                </div>
-              ) : (
-                projectRuns.map((run) => {
-                  const title = (run.title ?? "").trim() || "Untitled project";
-                  const host = (() => {
-                    const raw = (run.store_url ?? "").trim();
-                    if (!raw) return "No store URL";
-                    try {
-                      return new URL(raw).hostname.replace(/^www\./i, "");
-                    } catch {
-                      return raw;
-                    }
-                  })();
-                  return (
-                    <button
-                      key={run.id}
-                      type="button"
-                      onClick={() => {
-                        addProjectPipelineFromRun(run);
-                        setProjectPickerOpen(false);
-                      }}
-                      className="flex w-full items-start justify-between gap-3 rounded-xl border border-white/12 bg-white/[0.04] px-3 py-2 text-left transition hover:border-violet-400/35 hover:bg-violet-500/10"
-                    >
-                      <div className="min-w-0">
-                        <p className="truncate text-[12px] font-semibold text-white/90">{title}</p>
-                        <p className="truncate text-[11px] text-white/45">{host}</p>
-                      </div>
-                      <FolderKanban className="mt-0.5 h-4 w-4 shrink-0 text-white/45" aria-hidden />
-                    </button>
-                  );
-                })
-              )}
-            </div>
-          </div>
-        </div>
-      ) : null}
 
       <Panel position="bottom-center" className="!m-0 !mb-4 flex !flex-col !items-center gap-2 !w-auto">
         <button
@@ -2162,15 +1969,6 @@ function WorkflowFlowWorkspace({
       if (isWorkflowAdAssetDragKind(raw)) {
         setNodes((prev) => [...prev, buildAdAssetNode(raw, flowPos)]);
         toast.success("Node added");
-        return;
-      }
-      if (raw === WORKFLOW_PROJECT_PIPELINE_DND) {
-        const { nodes: projectNodes, edges: projectEdges } = buildWorkflowProjectPipeline(flowPos);
-        setNodes((prev) => [...prev, ...projectNodes]);
-        setEdges((prev) => [...prev, ...projectEdges]);
-        toast.success("Project pipeline added", {
-          description: "Brief → angles → image prompts → images → video prompt → video.",
-        });
         return;
       }
     },
