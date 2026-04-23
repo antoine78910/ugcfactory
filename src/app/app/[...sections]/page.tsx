@@ -2283,7 +2283,7 @@ export default function AppBrandWizard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only when opening Projects
   }, [appSection]);
 
-  /** Keep the browser URL in sync with appSection + runId (path-based). */
+  /** Keep the browser URL in sync with appSection + active project id (path-based). */
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!isBrowserStudioWizardPath(pathname)) return;
@@ -2291,8 +2291,11 @@ export default function AppBrandWizard() {
     const cur = window.location.pathname + window.location.search;
     const urlProject =
       searchParams.get("project") ?? new URLSearchParams(window.location.search).get("project");
-    const projectId =
-      appSection === "projects" ? null : runId || urlProject || null;
+    const sectionRunId =
+      appSection === "link_to_ad"
+        ? linkToAdActiveRunId || linkToAdResumeRunId || runId
+        : runId;
+    const projectId = appSection === "projects" ? null : sectionRunId || urlProject || null;
     const wantPath = sectionToPath(appSection, projectId);
     // Avoid stripping `?project=` before loadRun() sets `runId` (refresh / deep link would lose the run).
     if (
@@ -2306,7 +2309,7 @@ export default function AppBrandWizard() {
     if (cur !== wantPath) {
       window.history.replaceState(null, "", wantPath);
     }
-  }, [runId, appSection, pathname, searchParams]);
+  }, [runId, linkToAdActiveRunId, linkToAdResumeRunId, appSection, pathname, searchParams]);
 
   async function onExtract() {
     const url = storeUrl.trim();

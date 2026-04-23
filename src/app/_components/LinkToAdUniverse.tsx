@@ -172,13 +172,26 @@ function patchNanoEditableSection(
   section: "person" | "scene" | "product",
   value: string,
 ): string {
-  const parsed = parseNanoEditableSections(draft);
-  if (!parsed.isStructured) return value;
+  const parsed = coerceNanoEditableSections(draft);
   return composeNanoEditableSections({
     person: section === "person" ? value : parsed.person,
     scene: section === "scene" ? value : parsed.scene,
     product: section === "product" ? value : parsed.product,
   });
+}
+
+function coerceNanoEditableSections(draft: string): { person: string; scene: string; product: string } {
+  const parsed = parseNanoEditableSections(draft);
+  if (parsed.isStructured) return { person: parsed.person, scene: parsed.scene, product: parsed.product };
+  const flat = String(draft ?? "")
+    .replace(/\r\n/g, "\n")
+    .replace(/^\s*(?:[#*]+\s*)?PROMPT\s*[123](?:\s*[*#]+)?\s*$/gim, "")
+    .trim();
+  return {
+    person: parsed.person || flat,
+    scene: parsed.scene,
+    product: parsed.product,
+  };
 }
 
 function fnv1aHash(input: string): string {
@@ -1173,8 +1186,13 @@ export default function LinkToAdUniverse({
 }: LinkToAdUniverseProps) {
   const reduceMotion = useReducedMotion();
   const { planId, current: creditsBalance, spendCredits, grantCredits, isTrial, isUnlimited } = useCreditsPlan();
-  /** $1 trial window: discounted Link to Ad steps; final video billed separately (see trial constants). */
-  const linkToAdTrialEconomy = Boolean(isTrial && !isUnlimited && !isPlatformCreditBypassActive());
+  /**
+   * $1 trial window only: discounted Link to Ad steps.
+   * Never apply trial pricing to normal Free/Paid plans.
+   */
+  const linkToAdTrialEconomy = Boolean(
+    isTrial && planId === "free" && !isUnlimited && !isPlatformCreditBypassActive(),
+  );
   const supabaseClient = useSupabaseBrowserClient();
 
   const [_userEmail, _setUserEmail] = useState<string | null>(null);
@@ -2143,6 +2161,86 @@ export default function LinkToAdUniverse({
     );
   }, [productOnlyImageUrls, neutralUploadUrl, universeRunId, storeUrl, extractedTitle, lastExtractedJson]);
 
+  const draftAutosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const draftAutosaveSignatureRef = useRef<string>("");
+  useEffect(() => {
+    const pageUrl = storeUrl.trim();
+    const base = latestSnapRef.current;
+    if (!pageUrl || !universeRunId || !lastExtractedJson || !base) return;
+    const signature = JSON.stringify({
+      pageUrl,
+      extractedTitle: extractedTitle ?? "",
+      neutralUploadUrl: neutralUploadUrl ?? "",
+      productOnlyImageUrls,
+      userPhotoUrls,
+      personaPhotoUrls,
+      generationMode,
+      customUgcTopic,
+      customUgcOffer,
+      customUgcCta,
+      summaryText,
+      scriptsText,
+      angleLabels,
+      selectedAngleIndex,
+      videoDuration,
+      ltaSeedanceSpeed,
+      videoStageMode,
+      nanoBananaPromptsRaw,
+      nanoBananaSelectedPromptIndex,
+      nanoBananaImageUrl: nanoBananaImageUrl ?? "",
+      nanoBananaImageUrls,
+      nanoBananaSelectedImageIndex,
+    });
+    if (signature === draftAutosaveSignatureRef.current) return;
+    draftAutosaveSignatureRef.current = signature;
+    if (draftAutosaveTimerRef.current) clearTimeout(draftAutosaveTimerRef.current);
+    draftAutosaveTimerRef.current = setTimeout(() => {
+      const latest = latestSnapRef.current;
+      if (!latest) return;
+      const triple = buildPersistTriplePatchingActive();
+      void persistUniverse(
+        universeRunId,
+        pageUrl,
+        extractedTitle,
+        lastExtractedJson,
+        snapshotWithPersistTriple(latest, triple),
+        packshotsForSave(),
+      );
+    }, 900);
+    return () => {
+      if (draftAutosaveTimerRef.current) {
+        clearTimeout(draftAutosaveTimerRef.current);
+        draftAutosaveTimerRef.current = null;
+      }
+    };
+  }, [
+    universeRunId,
+    storeUrl,
+    extractedTitle,
+    lastExtractedJson,
+    neutralUploadUrl,
+    productOnlyImageUrls,
+    userPhotoUrls,
+    personaPhotoUrls,
+    generationMode,
+    customUgcTopic,
+    customUgcOffer,
+    customUgcCta,
+    summaryText,
+    scriptsText,
+    angleLabels,
+    selectedAngleIndex,
+    videoDuration,
+    ltaSeedanceSpeed,
+    videoStageMode,
+    nanoBananaPromptsRaw,
+    nanoBananaSelectedPromptIndex,
+    nanoBananaImageUrl,
+    nanoBananaImageUrls,
+    nanoBananaSelectedImageIndex,
+    persistUniverse,
+  ]);
+
   const quality = useMemo(() => confidenceToQuality(confidence ?? undefined), [confidence]);
   const fullNanoPromptsTriple = useMemo((): [string, string, string] => {
     return [
@@ -2384,6 +2482,11 @@ export default function LinkToAdUniverse({
     }
     return out;
   }, [productOnlyImageUrls, userPhotoUrls, resolvedPreviewUrl, resolveMaybeRelativeUrl]);
+  /** Exact product refs (ordered) currently sent to Nano Banana image generation. */
+  const nanoGenerationProductRefs = useMemo(
+    () => resolveNanoProductImageUrls(),
+    [cleanCandidate?.url, fallbackImageUrl, neutralUploadUrl, productOnlyImageUrls, resolvedPreviewUrl, storeUrl, userPhotoUrls],
+  );
 
   const choosePreviewImage = useCallback(
     (url: string) => {
@@ -3880,6 +3983,10 @@ export default function LinkToAdUniverse({
       submitted.map(async ({ i, taskId }) => {
         const urls = await pollNanoBananaTaskForUrls(taskId, signal);
         const firstUrl = urls[0] ?? "";
+        // Render each slot as soon as its polling resolves (do not wait for all 3).
+        urlsByPrompt[i] = firstUrl;
+        setNanoBananaImageUrls([...urlsByPrompt]);
+        setNanoBananaTaskId(taskId);
         return { i, taskId, firstUrl };
       }),
     );
@@ -4067,19 +4174,17 @@ export default function LinkToAdUniverse({
           }
         }
 
-        const settled = await Promise.allSettled(
+        await Promise.allSettled(
           submitted.map(async ({ slotIdx, taskId }) => {
             const generatedUrls = await pollNanoBananaTaskForUrls(taskId);
-            return { slotIdx, taskId, firstUrl: generatedUrls[0] ?? "" };
+            const firstUrl = generatedUrls[0] ?? "";
+            // Resume path: progressively reveal each slot as soon as it is ready.
+            partialUrls[slotIdx] = firstUrl;
+            setNanoBananaTaskId(taskId);
+            setNanoBananaImageUrls([...partialUrls]);
+            return { slotIdx, taskId, firstUrl };
           }),
         );
-        for (const item of settled) {
-          if (item.status !== "fulfilled") continue;
-          const { slotIdx, taskId, firstUrl } = item.value;
-          partialUrls[slotIdx] = firstUrl;
-          setNanoBananaTaskId(taskId);
-          setNanoBananaImageUrls([...partialUrls]);
-        }
       }
 
       if (!partialUrls[0] || !partialUrls[1] || !partialUrls[2]) {
@@ -4308,15 +4413,18 @@ export default function LinkToAdUniverse({
         const settled = await Promise.allSettled(
           validSubmissions.map(async ({ slotIdx, taskId }) => {
             const polled = await pollNanoBananaTaskForUrls(taskId, controller.signal);
-            return { slotIdx, taskId, firstUrl: polled[0] ?? "" };
+            const firstUrl = polled[0] ?? "";
+            // Render each recovered slot immediately.
+            urlsByPrompt[slotIdx] = firstUrl;
+            setNanoBananaImageUrls([...urlsByPrompt]);
+            setNanoBananaTaskId(taskId);
+            lastTaskId = taskId;
+            return { slotIdx, taskId, firstUrl };
           }),
         );
         for (const item of settled) {
           if (item.status !== "fulfilled") continue;
-          const { slotIdx, taskId, firstUrl } = item.value;
-          urlsByPrompt[slotIdx] = firstUrl;
-          setNanoBananaImageUrls([...urlsByPrompt]);
-          setNanoBananaTaskId(taskId);
+          const { taskId } = item.value;
           lastTaskId = taskId;
         }
       }
@@ -5581,8 +5689,8 @@ export default function LinkToAdUniverse({
                 </div>
               </div>
             </div>
-            {/* Compact settings row: duration + speed + mode, collapsed */}
-            <details className="w-full max-w-xl rounded-xl border border-white/8 bg-white/[0.02] text-white/60 [&[open]>summary]:mb-3">
+            {/* Compact settings row: duration + speed + mode, open by default */}
+            <details open className="w-full max-w-xl rounded-xl border border-white/8 bg-white/[0.02] text-white/60 [&[open]>summary]:mb-3">
               <summary className="flex cursor-pointer select-none items-center gap-2 px-4 py-2.5 text-xs font-semibold tracking-wide">
                 <ChevronRight className="h-3.5 w-3.5 transition-transform [[open]>&]:rotate-90" aria-hidden />
                 Settings
@@ -6242,6 +6350,28 @@ export default function LinkToAdUniverse({
                         </button>
                       </div>
                     </div>
+                    {nanoGenerationProductRefs.length > 0 ? (
+                      <div className="rounded-lg border border-emerald-400/20 bg-emerald-500/[0.06] p-2">
+                        <p className="text-[10px] font-medium text-emerald-100/90">
+                          Used for image generation ({nanoGenerationProductRefs.length})
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {nanoGenerationProductRefs.slice(0, 6).map((u, i) => (
+                            <div
+                              key={`${u}-${i}-nano-refs-a`}
+                              className={cn(
+                                "relative h-12 w-12 overflow-hidden rounded-md border bg-[#050507]",
+                                i === 0 ? "border-emerald-300/70 ring-1 ring-emerald-300/40" : "border-emerald-200/30",
+                              )}
+                              title={i === 0 ? "Primary reference sent to generation" : "Reference sent to generation"}
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={u} alt={`Generation ref ${i + 1}`} className="h-full w-full object-cover" loading="lazy" />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
                     {showAiImagePicker && aiAlternativeUrls.length > 0 ? (
                       <div className="rounded-lg border border-violet-400/20 bg-violet-500/[0.06] p-2">
                         <p className="text-[10px] font-medium text-violet-100/90">
@@ -6474,6 +6604,28 @@ export default function LinkToAdUniverse({
                         </button>
                       </div>
                     </div>
+                    {nanoGenerationProductRefs.length > 0 ? (
+                      <div className="rounded-lg border border-emerald-400/20 bg-emerald-500/[0.06] p-2">
+                        <p className="text-[10px] font-medium text-emerald-100/90">
+                          Used for image generation ({nanoGenerationProductRefs.length})
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {nanoGenerationProductRefs.slice(0, 6).map((u, i) => (
+                            <div
+                              key={`${u}-${i}-nano-refs-b`}
+                              className={cn(
+                                "relative h-12 w-12 overflow-hidden rounded-md border bg-[#050507]",
+                                i === 0 ? "border-emerald-300/70 ring-1 ring-emerald-300/40" : "border-emerald-200/30",
+                              )}
+                              title={i === 0 ? "Primary reference sent to generation" : "Reference sent to generation"}
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={u} alt={`Generation ref ${i + 1}`} className="h-full w-full object-cover" loading="lazy" />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
                     {showAiImagePicker && aiAlternativeUrls.length > 0 ? (
                       <div className="rounded-lg border border-violet-400/20 bg-violet-500/[0.06] p-2">
                         <p className="text-[10px] font-medium text-violet-100/90">
@@ -6886,6 +7038,28 @@ export default function LinkToAdUniverse({
                       </button>
                     </div>
                   </div>
+                  {nanoGenerationProductRefs.length > 0 ? (
+                    <div className="mt-2 rounded-lg border border-emerald-400/20 bg-emerald-500/[0.06] p-2">
+                      <p className="text-[10px] font-medium text-emerald-100/90">
+                        Used for image generation ({nanoGenerationProductRefs.length})
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {nanoGenerationProductRefs.slice(0, 6).map((u, i) => (
+                          <div
+                            key={`${u}-${i}-nano-refs-c`}
+                            className={cn(
+                              "relative h-12 w-12 overflow-hidden rounded-md border bg-[#050507]",
+                              i === 0 ? "border-emerald-300/70 ring-1 ring-emerald-300/40" : "border-emerald-200/30",
+                            )}
+                            title={i === 0 ? "Primary reference sent to generation" : "Reference sent to generation"}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={u} alt={`Generation ref ${i + 1}`} className="h-full w-full object-cover" loading="lazy" />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                   {showAiImagePicker && aiAlternativeUrls.length > 0 ? (
                     <div className="mt-2 rounded-lg border border-violet-400/20 bg-violet-500/[0.06] p-2">
                       <p className="text-[10px] font-medium text-violet-100/90">
@@ -7274,14 +7448,12 @@ export default function LinkToAdUniverse({
                     <div className="rounded-xl border border-white/10 bg-black/20 px-2.5 pb-2 pt-1">
                       {([0, 1, 2] as const).map((i) => {
                         const draft = nanoPromptDrafts[i];
-                        const parsed = parseNanoEditableSections(draft);
+                        const parsed = coerceNanoEditableSections(draft);
                         const panelOpen = nanoImagePromptOpen[i];
-                        const summaryPreview = parsed.isStructured
-                          ? nanoPromptPreviewOneLine(
-                              [parsed.person, parsed.scene, parsed.product].filter((x) => x.trim()).join(" · "),
-                              68,
-                            )
-                          : nanoPromptPreviewOneLine(draft, 68);
+                        const summaryPreview = nanoPromptPreviewOneLine(
+                          [parsed.person, parsed.scene, parsed.product].filter((x) => x.trim()).join(" · "),
+                          68,
+                        );
                         return (
                           <div
                             key={i}
@@ -7326,7 +7498,7 @@ export default function LinkToAdUniverse({
                                     <Loader2 className="h-4 w-4 shrink-0 animate-spin text-violet-300" aria-hidden />
                                     <span>Generating image prompts…</span>
                                   </div>
-                                ) : parsed.isStructured ? (
+                                ) : (
                                   <LtaTrialPromptPeek
                                     className="mt-1.5"
                                     sections={[
@@ -7335,13 +7507,8 @@ export default function LinkToAdUniverse({
                                       { label: "Shot", body: parsed.product },
                                     ]}
                                   />
-                                ) : (
-                                  <LtaTrialPromptPeek
-                                    className="mt-1.5"
-                                    sections={[{ label: "Image prompt", body: draft }]}
-                                  />
                                 )
-                              ) : parsed.isStructured ? (
+                              ) : (
                                 <div className="mt-1.5 space-y-3 pb-0.5">
                                   {(
                                     [
@@ -7399,30 +7566,6 @@ export default function LinkToAdUniverse({
                                       </div>
                                     );
                                   })}
-                                </div>
-                              ) : (
-                                <div className="mt-1.5">
-                                  <Textarea
-                                    value={draft}
-                                    onChange={(e) => {
-                                      const v = e.target.value;
-                                      setNanoPromptDrafts((prev) => {
-                                        const next: [string, string, string] = [prev[0], prev[1], prev[2]];
-                                        next[i] = v;
-                                        setNanoBananaPromptsRaw(
-                                          composeThreeLabeledPrompts([
-                                            mergeNanoPromptForApi(next[0], nanoPromptTechnicalTails[0]),
-                                            mergeNanoPromptForApi(next[1], nanoPromptTechnicalTails[1]),
-                                            mergeNanoPromptForApi(next[2], nanoPromptTechnicalTails[2]),
-                                          ]),
-                                        );
-                                        return next;
-                                      });
-                                    }}
-                                    rows={5}
-                                    spellCheck
-                                    className="min-h-[5rem] w-full resize-y border-0 border-b border-white/[0.07] bg-transparent px-1 py-0.5 text-[11px] leading-snug text-white/80 shadow-none outline-none ring-0 focus-visible:border-violet-400/30 focus-visible:ring-0"
-                                  />
                                 </div>
                               )
                             ) : null}
