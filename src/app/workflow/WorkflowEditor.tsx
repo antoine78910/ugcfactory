@@ -102,7 +102,11 @@ import {
   saveProjectForSpace,
   updateSpaceMeta,
 } from "./workflowSpacesStorage";
-import { buildTemplateProject, getWorkflowTemplateMeta } from "./workflowTemplates";
+import {
+  buildTemplateProject,
+  getWorkflowTemplateMeta,
+  parseWorkflowCommunityTemplateUuid,
+} from "./workflowTemplates";
 import { WorkflowNodePatchProvider } from "./workflowNodePatchContext";
 import { ShareWorkflowDialog } from "./ShareWorkflowDialog";
 import { WorkflowInviteWelcome } from "./WorkflowInviteWelcome";
@@ -3931,9 +3935,8 @@ export function WorkflowTemplatePreview({ templateId }: { templateId: string }) 
   const sb = useSupabaseBrowserClient();
   const resolvedId = useMemo(() => normalizeWorkflowSpaceId(templateId), [templateId]);
   const [storageScope, setStorageScope] = useState<string | null>(null);
-  const [project, setProject] = useState<WorkflowProjectStateV1>(
-    () => buildTemplateProject(resolvedId) ?? defaultWorkflowProject(),
-  );
+  const [project, setProject] = useState<WorkflowProjectStateV1>(() => defaultWorkflowProject());
+  const [communityLabel, setCommunityLabel] = useState<string | null>(null);
   const [useBusy, setUseBusy] = useState(false);
 
   useEffect(() => {
@@ -3952,16 +3955,48 @@ export function WorkflowTemplatePreview({ templateId }: { templateId: string }) 
 
   useEffect(() => {
     if (storageScope === null) return;
-    const p = buildTemplateProject(resolvedId, storageScope);
-    if (!p) {
-      router.replace("/workflow");
+    const communityUuid = parseWorkflowCommunityTemplateUuid(resolvedId);
+    if (!communityUuid) {
+      setCommunityLabel(null);
+      const p = buildTemplateProject(resolvedId, storageScope);
+      if (!p) {
+        router.replace("/workflow");
+        return;
+      }
+      setProject(p);
       return;
     }
-    setProject(p);
+
+    let cancelled = false;
+    setCommunityLabel(null);
+    (async () => {
+      const res = await fetch(`/api/workflow/community-templates/${communityUuid}`);
+      if (cancelled) return;
+      if (!res.ok) {
+        router.replace("/workflow");
+        return;
+      }
+      const body = (await res.json().catch(() => null)) as {
+        template?: { name?: unknown; project?: WorkflowProjectStateV1 };
+      } | null;
+      const t = body?.template;
+      if (!t?.project || t.project.v !== 1 || !Array.isArray(t.project.pages)) {
+        router.replace("/workflow");
+        return;
+      }
+      const nm = typeof t.name === "string" && t.name.trim() ? t.name.trim() : "Template";
+      if (!cancelled) {
+        setCommunityLabel(nm);
+        setProject(t.project);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [resolvedId, router, storageScope]);
 
   const templateMeta = getWorkflowTemplateMeta(resolvedId, storageScope);
-  const title = templateMeta?.name ?? "Template";
+  const title = communityLabel ?? templateMeta?.name ?? "Template";
 
   const onUseTemplate = useCallback(() => {
     if (storageScope === null) {
@@ -3969,14 +4004,21 @@ export function WorkflowTemplatePreview({ templateId }: { templateId: string }) 
       return;
     }
     setUseBusy(true);
-    const meta = createSpaceFromTemplate(storageScope, resolvedId);
+    const communityUuid = parseWorkflowCommunityTemplateUuid(resolvedId);
+    const meta =
+      communityUuid != null
+        ? createSpaceFromTemplate(storageScope, resolvedId, {
+            preloadedProject: project,
+            templateLabel: communityLabel ?? title,
+          })
+        : createSpaceFromTemplate(storageScope, resolvedId);
     if (!meta) {
       toast.error("Could not create a workflow from this template.");
       setUseBusy(false);
       return;
     }
     router.push(`/workflow/space/${encodeURIComponent(meta.id)}`);
-  }, [resolvedId, router, storageScope]);
+  }, [communityLabel, project, resolvedId, router, storageScope, title]);
 
   return (
     <div className="relative flex min-h-[100dvh] min-w-0 flex-col overflow-hidden bg-[#06070d] text-white">

@@ -5,7 +5,11 @@ import {
   saveWorkflowProjectRaw,
   workflowSpaceStorageKey,
 } from "./workflowProjectStorage";
-import { cloneTemplateProjectForNewSpace, getWorkflowTemplateMeta } from "./workflowTemplates";
+import {
+  cloneTemplateProjectForNewSpace,
+  getWorkflowTemplateMeta,
+  type WorkflowTemplateMeta,
+} from "./workflowTemplates";
 
 /** Legacy keys (pre per-user isolation). */
 const INDEX_KEY_V1 = "youry-workflow-spaces-index-v1";
@@ -231,11 +235,26 @@ export function saveProjectForSpace(scope: string, spaceId: string, state: Workf
 }
 
 /** Creates a new space and copies the template project into it. */
-export function createSpaceFromTemplate(scope: string, templateId: string): WorkflowSpaceMeta | null {
-  const project = cloneTemplateProjectForNewSpace(templateId, scope);
+export function createSpaceFromTemplate(
+  scope: string,
+  templateId: string,
+  opts?: {
+    preloadedProject?: WorkflowProjectStateV1 | null;
+    templateLabel?: string | null;
+    communitySummaries?: readonly WorkflowTemplateMeta[] | null;
+  },
+): WorkflowSpaceMeta | null {
+  const project =
+    opts?.preloadedProject != null
+      ? structuredClone(opts.preloadedProject)
+      : cloneTemplateProjectForNewSpace(templateId, scope);
   if (!project) return null;
-  const metaTpl = getWorkflowTemplateMeta(templateId, scope);
-  const meta = createSpace(scope, metaTpl?.name ? `${metaTpl.name} (copy)` : "From template");
+  const metaTpl = getWorkflowTemplateMeta(templateId, scope, opts?.communitySummaries ?? null);
+  const base =
+    (opts?.templateLabel?.trim() ?? "") ||
+    metaTpl?.name ||
+    "From template";
+  const meta = createSpace(scope, `${base} (copy)`);
   saveWorkflowProjectRaw(scope, meta.id, project);
   touchSpaceUpdated(scope, meta.id);
   return meta;

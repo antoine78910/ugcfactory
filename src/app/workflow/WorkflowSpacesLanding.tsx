@@ -3,6 +3,7 @@
 import { Layers, LayoutTemplate, Plus, Search, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
+import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
 
@@ -22,7 +23,8 @@ import {
 import type { WorkflowCanvasNode } from "./workflowFlowTypes";
 import {
   listWorkflowTemplates,
-  saveTemporaryWorkflowTemplate,
+  workflowCommunityTemplateId,
+  type WorkflowTemplateMeta,
 } from "./workflowTemplates";
 
 type TabId = "my" | "shared" | "templates";
@@ -214,9 +216,27 @@ export function WorkflowSpacesLanding() {
   const [storageScope, setStorageScope] = useState<string | null>(null);
   const [spaces, setSpaces] = useState<WorkflowSpaceMeta[]>([]);
   const [templatesTick, setTemplatesTick] = useState(0);
+  const [communityTemplates, setCommunityTemplates] = useState<WorkflowTemplateMeta[]>([]);
   const [hydrated, setHydrated] = useState(false);
   const [tab, setTab] = useState<TabId>("my");
   const [query, setQuery] = useState("");
+
+  const refreshCommunityTemplates = useCallback(async () => {
+    const res = await fetch("/api/workflow/community-templates", { method: "GET" });
+    if (!res.ok) return;
+    const j = (await res.json().catch(() => null)) as { templates?: unknown } | null;
+    const rows = Array.isArray(j?.templates) ? j.templates : [];
+    setCommunityTemplates(
+      rows
+        .filter((r: { id?: unknown }) => typeof r.id === "string" && /^[0-9a-f-]{36}$/i.test(String(r.id).trim()))
+        .map((r: { id: string; name?: unknown; blurb?: unknown }) => ({
+          id: workflowCommunityTemplateId(r.id.trim()),
+          name: typeof r.name === "string" && r.name.trim() ? r.name.trim() : "Template",
+          blurb: typeof r.blurb === "string" && r.blurb.trim() ? r.blurb.trim() : "",
+          source: "community" as const,
+        })),
+    );
+  }, []);
 
   useEffect(() => {
     if (!sb) {
@@ -225,12 +245,16 @@ export function WorkflowSpacesLanding() {
     }
     void sb.auth.getSession().then(({ data }) => {
       setStorageScope(getWorkflowStorageScope(data.session?.user?.id ?? null));
+      if (data.session?.user) void refreshCommunityTemplates();
+      else setCommunityTemplates([]);
     });
     const { data: sub } = sb.auth.onAuthStateChange((_event, session) => {
       setStorageScope(getWorkflowStorageScope(session?.user?.id ?? null));
+      if (session?.user) void refreshCommunityTemplates();
+      else setCommunityTemplates([]);
     });
     return () => sub.subscription.unsubscribe();
-  }, [sb]);
+  }, [sb, refreshCommunityTemplates]);
 
   const refresh = useCallback((scope: string) => {
     setSpaces(loadSpacesIndex(scope).spaces);
@@ -251,12 +275,12 @@ export function WorkflowSpacesLanding() {
 
   const filteredTemplates = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const all = listWorkflowTemplates(storageScope);
+    const all = listWorkflowTemplates(storageScope, communityTemplates);
     if (!q) return all;
     return all.filter(
       (t) => t.name.toLowerCase().includes(q) || t.blurb.toLowerCase().includes(q),
     );
-  }, [query, storageScope, templatesTick]);
+  }, [query, storageScope, templatesTick, communityTemplates]);
 
   const onNewSpace = () => {
     if (storageScope === null) return;
@@ -292,17 +316,45 @@ export function WorkflowSpacesLanding() {
     updateSpaceMeta(storageScope, space.id, { name: nextName, updatedAt: Date.now() });
     refresh(storageScope);
   };
-  const pushTemporaryTemplateFromSpace = (e: MouseEvent, space: WorkflowSpaceMeta) => {
+  const publishCommunityTemplateFromSpace = async (e: MouseEvent, space: WorkflowSpaceMeta) => {
     e.preventDefault();
     e.stopPropagation();
     if (storageScope === null) return;
+    if (!sb) {
+      toast.error("Sign in required", {
+        description: "Publish a template so every signed-in user can copy it.",
+      });
+      return;
+    }
+    const { data: sess } = await sb.auth.getSession();
+    if (!sess.session?.user) {
+      toast.error("Sign in required", {
+        description: "Publish a template so every signed-in user can copy it.",
+      });
+      return;
+    }
+    const proposed = window.prompt("Template name (visible to all users)", space.name);
+    if (proposed === null) return;
+    const name = proposed.trim() || space.name;
     const project = loadProjectForSpace(storageScope, space.id);
-    saveTemporaryWorkflowTemplate(storageScope, {
-      project,
-      name: `${space.name} (temp)`,
-      blurb: "Temporary template pushed from workflow.",
+    const res = await fetch("/api/workflow/community-templates", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        name,
+        blurb: `Published from workflow “${space.name}”.`,
+        project,
+      }),
     });
+    const j = (await res.json().catch(() => null)) as { error?: string } | null;
+    if (!res.ok) {
+      toast.error(j?.error ?? "Could not publish template");
+      return;
+    }
+    toast.success("Template published", { description: "It appears under Templates for every user." });
+    await refreshCommunityTemplates();
     setTemplatesTick((n) => n + 1);
+    setTab("templates");
   };
   return (
     <div className="relative min-h-[100dvh] overflow-hidden bg-[#06070d] text-white">
@@ -435,7 +487,13 @@ export function WorkflowSpacesLanding() {
                       <p className="mt-2 min-w-0 text-[13px] leading-relaxed text-white/45">{t.blurb}</p>
                       <div className="mt-3 flex items-center justify-between gap-2">
                         <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-300/70">View preview</p>
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-white/35">Shared template</span>
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-white/35">
+                          {t.source === "community"
+                            ? "Everyone"
+                            : t.source === "custom"
+                              ? "This device"
+                              : "Built-in"}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -476,7 +534,7 @@ export function WorkflowSpacesLanding() {
                           type="button"
                           title="Edit name"
                           onClick={(e) => renameSpace(e, s)}
-                          className="nodrag nopan pointer-events-none shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold text-white/40 opacity-0 transition hover:bg-white/10 hover:text-white group-hover:pointer-events-auto group-hover:opacity-100"
+                          className="nodrag nopan shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold text-white/55 transition hover:bg-white/10 hover:text-white sm:text-white/40"
                         >
                           Edit
                         </button>
@@ -485,22 +543,24 @@ export function WorkflowSpacesLanding() {
                     </div>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  title="Push temporary template"
-                  onClick={(e) => pushTemporaryTemplateFromSpace(e, s)}
-                  className="pointer-events-none absolute bottom-4 right-[4.75rem] z-10 rounded-lg px-2 py-1 text-[11px] font-semibold text-white/35 opacity-0 transition hover:bg-violet-500/15 hover:text-violet-200 group-hover:pointer-events-auto group-hover:opacity-100"
-                >
-                  Push template
-                </button>
-                <button
-                  type="button"
-                  title="Delete workflow"
-                  onClick={(e) => removeSpace(e, s.id)}
-                  className="pointer-events-none absolute bottom-4 right-4 z-10 rounded-lg px-2 py-1 text-[11px] font-semibold text-white/35 opacity-0 transition hover:bg-red-500/15 hover:text-red-300 group-hover:pointer-events-auto group-hover:opacity-100"
-                >
-                  Delete
-                </button>
+                <div className="absolute bottom-3 right-3 z-10 flex flex-wrap justify-end gap-1 sm:bottom-4 sm:right-4 sm:gap-1.5">
+                  <button
+                    type="button"
+                    title="Publish for all signed-in users"
+                    onClick={(e) => void publishCommunityTemplateFromSpace(e, s)}
+                    className="rounded-lg border border-white/[0.08] bg-black/50 px-2 py-1 text-[11px] font-semibold text-violet-200/90 shadow-sm backdrop-blur-sm transition hover:bg-violet-500/20 hover:text-violet-100"
+                  >
+                    Publish template
+                  </button>
+                  <button
+                    type="button"
+                    title="Delete workflow"
+                    onClick={(e) => removeSpace(e, s.id)}
+                    className="rounded-lg border border-white/[0.08] bg-black/50 px-2 py-1 text-[11px] font-semibold text-white/55 shadow-sm backdrop-blur-sm transition hover:bg-red-500/15 hover:text-red-200"
+                  >
+                    Delete
+                  </button>
+                </div>
               </li>
             ))}
           </ul>

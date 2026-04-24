@@ -8,19 +8,30 @@ export type WorkflowTemplateMeta = {
   name: string;
   /** Short line for cards on the landing page */
   blurb: string;
-  source?: "builtin" | "custom";
+  source?: "builtin" | "custom" | "community";
 };
+
+/** URL / storage id: `community:` + Supabase row uuid (same for every account). */
+export const WORKFLOW_COMMUNITY_TEMPLATE_PREFIX = "community:";
+
+export function workflowCommunityTemplateId(uuid: string): string {
+  const u = uuid.trim();
+  return `${WORKFLOW_COMMUNITY_TEMPLATE_PREFIX}${u}`;
+}
+
+export function parseWorkflowCommunityTemplateUuid(templateId: string): string | null {
+  const t = templateId.trim();
+  if (!t.startsWith(WORKFLOW_COMMUNITY_TEMPLATE_PREFIX)) return null;
+  const uuid = t.slice(WORKFLOW_COMMUNITY_TEMPLATE_PREFIX.length).trim();
+  if (!/^[0-9a-f-]{36}$/i.test(uuid)) return null;
+  return uuid;
+}
 
 export const WORKFLOW_TEMPLATE_LIST: WorkflowTemplateMeta[] = [
   {
     id: "ugc-pipeline",
     name: "UGC content pipeline",
     blurb: "Image → video → variation, wired and ready to customize.",
-  },
-  {
-    id: "dual-hook-video",
-    name: "Dual hook to video",
-    blurb: "Two image directions feeding one UGC-style clip.",
   },
 ];
 
@@ -173,47 +184,14 @@ function buildUgcPipeline(): WorkflowProjectStateV1 {
   };
 }
 
-function buildDualHook(): WorkflowProjectStateV1 {
-  const pageId = "tpl-page-dual";
-  const a = buildAdAssetNode("image", { x: 40, y: 80 });
-  a.data = {
-    ...a.data,
-    label: "Hook A, problem",
-    prompt: "Close-up frustration moment, cool tones, thumb-stopping.",
-  };
-  const b = buildAdAssetNode("image", { x: 40, y: 320 });
-  b.data = {
-    ...b.data,
-    label: "Hook B, desire",
-    prompt: "Aspirational lifestyle shot, warm light, product visible.",
-  };
-  const v = buildAdAssetNode("video", { x: 420, y: 200 });
-  v.data = {
-    ...v.data,
-    label: "UGC mashup",
-    prompt: "Merge both angles into one punchy 9:16 story.",
-  };
-  return {
-    v: 1,
-    onboardingDismissed: true,
-    activePageId: pageId,
-    pages: [
-      {
-        id: pageId,
-        name: "Launch",
-        nodes: [a, b, v],
-        edges: [makeEdge(a.id, v.id, { sourceHandle: "generated" }), makeEdge(b.id, v.id, { sourceHandle: "generated" })],
-      },
-    ],
-  };
-}
-
 const builders: Record<string, () => WorkflowProjectStateV1> = {
   "ugc-pipeline": buildUgcPipeline,
-  "dual-hook-video": buildDualHook,
 };
 
-export function listWorkflowTemplates(scope?: string | null): WorkflowTemplateMeta[] {
+export function listWorkflowTemplates(
+  scope?: string | null,
+  communitySummaries?: readonly WorkflowTemplateMeta[] | null,
+): WorkflowTemplateMeta[] {
   const builtinPrefs = readBuiltinTemplatePrefs(scope);
   const prefsById = new Map(builtinPrefs.map((x) => [x.id, x]));
   const builtins = WORKFLOW_TEMPLATE_LIST
@@ -234,11 +212,21 @@ export function listWorkflowTemplates(scope?: string | null): WorkflowTemplateMe
     blurb: x.blurb,
     source: "custom" as const,
   }));
-  return [...custom, ...builtins];
+  const community = (communitySummaries ?? []).map((t) => ({
+    id: t.id,
+    name: t.name,
+    blurb: t.blurb,
+    source: "community" as const,
+  }));
+  return [...community, ...custom, ...builtins];
 }
 
-export function getWorkflowTemplateMeta(id: string, scope?: string | null): WorkflowTemplateMeta | undefined {
-  return listWorkflowTemplates(scope).find((t) => t.id === id);
+export function getWorkflowTemplateMeta(
+  id: string,
+  scope?: string | null,
+  communitySummaries?: readonly WorkflowTemplateMeta[] | null,
+): WorkflowTemplateMeta | undefined {
+  return listWorkflowTemplates(scope, communitySummaries).find((t) => t.id === id);
 }
 
 /** Fresh project graph (new node ids each call). */
