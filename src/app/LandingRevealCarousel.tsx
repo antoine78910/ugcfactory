@@ -116,7 +116,7 @@ function RevealSlide({
   return (
     <div
       ref={cardRef}
-      className="pointer-events-none relative z-10 isolate w-[70vw] max-w-[25rem] shrink-0 overflow-hidden rounded-3xl bg-[#0a0a0c] sm:w-[90vw]"
+      className="pointer-events-none relative z-10 isolate w-[46vw] max-w-[25rem] min-w-[9.5rem] shrink-0 overflow-hidden rounded-3xl bg-[#0a0a0c] sm:w-[90vw]"
       style={{ aspectRatio: "0.64" }}
     >
       <Image
