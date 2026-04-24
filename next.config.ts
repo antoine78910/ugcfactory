@@ -22,6 +22,17 @@ const nextConfig: NextConfig = {
       "@dub/analytics",
     ],
   },
+  /**
+   * Tighter image defaults so any asset still going through `/_next/image`
+   * (e.g. dynamic content, remote URLs) is served as AVIF/WebP when possible
+   * and cached aggressively on the edge. Landing carousel PNGs now opt-in to
+   * `unoptimized` because they are already compressed and served from
+   * `/public/carousel/*` with an immutable `Cache-Control` header.
+   */
+  images: {
+    formats: ["image/avif", "image/webp"],
+    minimumCacheTTL: 31536000,
+  },
   async headers() {
     return [
       {

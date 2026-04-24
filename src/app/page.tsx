@@ -113,7 +113,7 @@ export default function LandingPage() {
         </div>
       </header>
 
-      <div className="relative">
+      <div className="relative overflow-hidden">
         <div className="pointer-events-none absolute inset-x-0 top-0 z-0 h-[min(100svh,1040px)] overflow-x-hidden">
           <Image
             src="/hero-bg-texture.png"
@@ -130,9 +130,16 @@ export default function LandingPage() {
           <div className="absolute left-1/2 top-0 z-[3] h-[700px] w-[1000px] -translate-x-1/2 rounded-full bg-violet-600/[0.12] blur-[140px]" />
         </div>
 
-        {/* ── Hero: headline + 3D strip (texture is the absolute layer above) ── */}
-        <section className="relative z-10 min-h-[min(92svh,1040px)] sm:min-h-[min(100svh,1040px)]">
-        <div className="relative z-10 mx-auto w-full max-w-5xl px-4 pb-16 pt-4 text-center sm:px-6 sm:pb-24 sm:pt-7 md:pb-28 md:pt-8">
+        {/*
+          Hero layout:
+          - Mobile: flow layout with a fixed gap between the URL input and the 3D ring.
+            Avoids the inconsistent spacing produced by `absolute bottom-0 + min-h-92svh`
+            on very tall/short phones.
+          - sm+: unchanged — section is min-h of the viewport, ring absolutely anchored
+            to the bottom.
+        */}
+        <section className="relative z-10 sm:min-h-[min(100svh,1040px)]">
+        <div className="relative z-10 mx-auto w-full max-w-5xl px-4 pb-4 pt-4 text-center sm:px-6 sm:pb-24 sm:pt-7 md:pb-28 md:pt-8">
           <LandingSeedanceTopButton />
           <h1 className="mx-auto max-w-4xl px-3 text-[2.35rem] font-extrabold tracking-tight leading-[1.12] sm:px-6 sm:text-5xl md:text-6xl lg:text-[3.5rem] lg:leading-[1.08]">
             <span className="block">Realistic AI UGC for</span>
@@ -171,9 +178,15 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* 3D video cylinder, less translate-y = sits higher vs bottom anchor */}
+        {/*
+          3D video cylinder:
+          - Mobile: in flow (relative) with a fixed `mt-8` gap below the input card
+            and a constrained height so spacing is identical on every phone.
+          - sm+: absolute-anchored to the bottom like before; `translate-y-*` nudges
+            the ring downward vs the section anchor.
+        */}
         <div
-          className="pointer-events-none absolute inset-x-0 bottom-0 z-[2] h-[min(460px,56svh)] translate-y-8 overflow-hidden sm:h-[min(530px,60svh)] sm:translate-y-6 lg:h-[min(640px,66svh)] lg:translate-y-5"
+          className="pointer-events-none relative z-[2] mt-8 h-[min(360px,44svh)] overflow-hidden sm:absolute sm:inset-x-0 sm:bottom-0 sm:mt-0 sm:h-[min(530px,60svh)] sm:translate-y-6 lg:h-[min(640px,66svh)] lg:translate-y-5"
           aria-hidden
         >
           <HeroVideoCarousel3D srcs={HERO_STUDIO_VIDEOS} />

@@ -55,6 +55,14 @@ function RevealSlide({
   const cardRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  /**
+   * Per-card lazy gate for the MP4 overlay. Without this, all 14 slides (2 copies × 7)
+   * would kick off network requests at once, which is what makes the image→video
+   * carousel feel slow on mobile. We only mount the `<video src>` when the card is
+   * actually close to the viewport.
+   */
+  const [videoMounted, setVideoMounted] = useState(false);
+
   useEffect(() => {
     const card = cardRef.current;
     const overlay = overlayRef.current;
@@ -67,6 +75,31 @@ function RevealSlide({
   }, [registryRef, slideIndex]);
 
   useEffect(() => {
+    if (!videoSrc) return;
+    const card = cardRef.current;
+    if (!card) return;
+    if (typeof IntersectionObserver === "undefined") {
+      setVideoMounted(true);
+      return;
+    }
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            setVideoMounted(true);
+            io.disconnect();
+            break;
+          }
+        }
+      },
+      { root: null, rootMargin: "250px 250px", threshold: 0 },
+    );
+    io.observe(card);
+    return () => io.disconnect();
+  }, [videoSrc]);
+
+  useEffect(() => {
+    if (!videoMounted) return;
     const video = videoRef.current;
     if (!video || !videoSrc) return;
     video.muted = true;
@@ -78,7 +111,7 @@ function RevealSlide({
     video.controls = false;
     video.disablePictureInPicture = true;
     void video.play().catch(() => {});
-  }, [videoSrc]);
+  }, [videoMounted, videoSrc]);
 
   return (
     <div
@@ -93,6 +126,8 @@ function RevealSlide({
         className="object-cover"
         sizes="(max-width:768px) 90vw, 400px"
         loading={slideIndex === 0 ? "eager" : "lazy"}
+        unoptimized
+        draggable={false}
       />
       <div
         ref={overlayRef}
@@ -103,7 +138,7 @@ function RevealSlide({
           WebkitBackfaceVisibility: "hidden",
         }}
       >
-        {videoSrc ? (
+        {videoSrc && videoMounted ? (
           <video
             ref={videoRef}
             key={`${slideIndex}-${videoSrc}`}
@@ -114,7 +149,7 @@ function RevealSlide({
             muted
             playsInline
             controls={false}
-            preload="auto"
+            preload="metadata"
             disablePictureInPicture
             disableRemotePlayback
             controlsList="nodownload noplaybackrate nofullscreen noremoteplayback"
@@ -140,7 +175,6 @@ function RevealSlide({
 }
 
 export function LandingRevealCarousel() {
-  const [revealVideosReady, setRevealVideosReady] = useState(false);
   const [isActive, setIsActive] = useState(false);
   const carouselTrackRef = useRef<HTMLDivElement>(null);
   const carouselSetRef = useRef<HTMLDivElement>(null);
@@ -156,12 +190,7 @@ export function LandingRevealCarousel() {
     if (!el) return;
     const io = new IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting) {
-          setRevealVideosReady(true);
-          setIsActive(true);
-        } else {
-          setIsActive(false);
-        }
+        setIsActive(entry.isIntersecting);
       },
       { root: null, rootMargin: "480px 0px", threshold: 0 },
     );
@@ -292,7 +321,7 @@ export function LandingRevealCarousel() {
                 slideIndex={i}
                 registryRef={revealRegistryRef}
                 imageSrc={item.product.src}
-                videoSrc={revealVideosReady ? item.slide.src : null}
+                videoSrc={item.slide.src}
                 imageAlt={item.product.alt}
               />
             ))}
@@ -304,7 +333,7 @@ export function LandingRevealCarousel() {
                 slideIndex={i + PAIRED_CAROUSEL_ITEMS.length}
                 registryRef={revealRegistryRef}
                 imageSrc={item.product.src}
-                videoSrc={revealVideosReady ? item.slide.src : null}
+                videoSrc={item.slide.src}
                 imageAlt={item.product.alt}
               />
             ))}
