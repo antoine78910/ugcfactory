@@ -27,13 +27,7 @@ export function parseWorkflowCommunityTemplateUuid(templateId: string): string |
   return uuid;
 }
 
-export const WORKFLOW_TEMPLATE_LIST: WorkflowTemplateMeta[] = [
-  {
-    id: "ugc-pipeline",
-    name: "UGC content pipeline",
-    blurb: "Image → video → variation, wired and ready to customize.",
-  },
-];
+export const WORKFLOW_TEMPLATE_LIST: WorkflowTemplateMeta[] = [];
 
 type WorkflowCustomTemplateRecord = {
   id: string;

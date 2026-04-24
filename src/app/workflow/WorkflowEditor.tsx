@@ -176,11 +176,21 @@ type WorkflowInputBubblePreviewState =
   | {
       targetNodeId: string;
       targetHandleId: "text" | "references" | "startImage" | "endImage";
-      kind: "text" | "image";
+      anchorX: number;
+      anchorY: number;
       screenX: number;
       screenY: number;
-      flowX: number;
-      flowY: number;
+    }
+  | null;
+
+type WorkflowOutputBubblePreviewState =
+  | {
+      sourceNodeId: string;
+      sourceHandleId: string;
+      anchorX: number;
+      anchorY: number;
+      screenX: number;
+      screenY: number;
     }
   | null;
 
@@ -414,6 +424,7 @@ function WorkflowAddPaletteRow({
   onClick,
   draggable,
   onDragStart,
+  soon,
 }: {
   icon: LucideIcon;
   label: string;
@@ -421,14 +432,19 @@ function WorkflowAddPaletteRow({
   onClick: () => void;
   draggable?: boolean;
   onDragStart?: (e: DragEvent) => void;
+  soon?: boolean;
 }) {
   return (
     <button
       type="button"
-      draggable={Boolean(draggable)}
-      onDragStart={onDragStart}
+      draggable={!soon && Boolean(draggable)}
+      onDragStart={soon ? undefined : onDragStart}
       onClick={onClick}
-      className="flex w-full items-center gap-3 px-3 py-2 text-left transition hover:bg-white/[0.06]"
+      disabled={soon}
+      className={cn(
+        "flex w-full items-center gap-3 px-3 py-2 text-left transition",
+        soon ? "cursor-not-allowed opacity-45" : "hover:bg-white/[0.06]",
+      )}
     >
       <span
         className={cn(
@@ -439,6 +455,11 @@ function WorkflowAddPaletteRow({
         <Icon className="h-4 w-4 text-white" strokeWidth={2} />
       </span>
       <span className="text-[13px] font-medium text-white/90">{label}</span>
+      {soon ? (
+        <span className="ml-auto rounded-full border border-white/20 bg-white/[0.06] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white/70">
+          Soon
+        </span>
+      ) : null}
     </button>
   );
 }
@@ -1302,12 +1323,7 @@ function WorkflowReactFlowChrome({
                       icon={Globe2}
                       label="Website"
                       iconShellClass="border-cyan-500/45 bg-cyan-950/80"
-                      draggable
-                      onDragStart={(e) => {
-                        setDragPayload(e, "website");
-                        setAddOpen(false);
-                        setFrameOpen(false);
-                      }}
+                      soon
                       onClick={() => addNode("website")}
                     />
                     <WorkflowAddPaletteRow
@@ -1925,6 +1941,7 @@ function WorkflowFlowWorkspace({
   const [placementPicker, setPlacementPicker] = useState<WorkflowPlacementPickerState | null>(null);
   const placementRef = useRef<HTMLDivElement>(null);
   const [inputBubblePreview, setInputBubblePreview] = useState<WorkflowInputBubblePreviewState>(null);
+  const [outputBubblePreview, setOutputBubblePreview] = useState<WorkflowOutputBubblePreviewState>(null);
   const cutTargetBusyRef = useRef(false);
   const cutSuppressNextPaneClickRef = useRef(false);
   /** After a wire drop that opens the placement menu, ignore the synthetic pane click that would clear it. */
@@ -2162,6 +2179,8 @@ function WorkflowFlowWorkspace({
         | {
             targetNodeId: string;
             targetHandleId: "text" | "references" | "startImage" | "endImage";
+            anchorX: number;
+            anchorY: number;
             screenX: number;
             screenY: number;
           }
@@ -2176,25 +2195,26 @@ function WorkflowFlowWorkspace({
       if (
         !("targetNodeId" in detail) ||
         !("targetHandleId" in detail) ||
+        !("anchorX" in detail) ||
+        !("anchorY" in detail) ||
         !("screenX" in detail) ||
         !("screenY" in detail) ||
         typeof detail.targetNodeId !== "string" ||
         typeof detail.targetHandleId !== "string" ||
+        typeof detail.anchorX !== "number" ||
+        typeof detail.anchorY !== "number" ||
         typeof detail.screenX !== "number" ||
         typeof detail.screenY !== "number"
       ) {
         return;
       }
-
-      const flow = screenToFlowPosition({ x: detail.screenX, y: detail.screenY });
       setInputBubblePreview({
         targetNodeId: detail.targetNodeId,
         targetHandleId: detail.targetHandleId,
-        kind: detail.targetHandleId === "text" ? "text" : "image",
+        anchorX: detail.anchorX,
+        anchorY: detail.anchorY,
         screenX: detail.screenX,
         screenY: detail.screenY,
-        flowX: flow.x,
-        flowY: flow.y,
       });
     };
 
@@ -2227,6 +2247,81 @@ function WorkflowFlowWorkspace({
     return () => {
       window.removeEventListener("workflow:input-bubble-preview", onPreview as EventListener);
       window.removeEventListener("workflow:input-bubble-drop", onDrop as EventListener);
+    };
+  }, [readOnly, screenToFlowPosition, armPlacementPickerAgainstPaneClick]);
+
+  useEffect(() => {
+    if (readOnly) return;
+
+    const onPreview = (ev: Event) => {
+      const detail = (ev as CustomEvent<
+        | { active?: boolean }
+        | {
+            sourceNodeId: string;
+            sourceHandleId: string;
+            anchorX: number;
+            anchorY: number;
+            screenX: number;
+            screenY: number;
+          }
+      >).detail;
+      if (!detail) return;
+
+      if ("active" in detail && detail.active === false) {
+        setOutputBubblePreview(null);
+        return;
+      }
+
+      if (
+        !("sourceNodeId" in detail) ||
+        !("sourceHandleId" in detail) ||
+        !("anchorX" in detail) ||
+        !("anchorY" in detail) ||
+        !("screenX" in detail) ||
+        !("screenY" in detail) ||
+        typeof detail.sourceNodeId !== "string" ||
+        typeof detail.sourceHandleId !== "string" ||
+        typeof detail.anchorX !== "number" ||
+        typeof detail.anchorY !== "number" ||
+        typeof detail.screenX !== "number" ||
+        typeof detail.screenY !== "number"
+      ) {
+        return;
+      }
+
+      setOutputBubblePreview({
+        sourceNodeId: detail.sourceNodeId,
+        sourceHandleId: detail.sourceHandleId,
+        anchorX: detail.anchorX,
+        anchorY: detail.anchorY,
+        screenX: detail.screenX,
+        screenY: detail.screenY,
+      });
+    };
+
+    const onDrop = (ev: Event) => {
+      const detail = (ev as CustomEvent<{
+        sourceNodeId: string;
+        sourceHandleId: string;
+        screenX: number;
+        screenY: number;
+      }>).detail;
+      if (!detail) return;
+      setOutputBubblePreview(null);
+      armPlacementPickerAgainstPaneClick();
+      setPlacementPicker({
+        flow: screenToFlowPosition({ x: detail.screenX, y: detail.screenY }),
+        screenX: detail.screenX,
+        screenY: detail.screenY,
+        connectFrom: { nodeId: detail.sourceNodeId, handleId: detail.sourceHandleId },
+      });
+    };
+
+    window.addEventListener("workflow:output-bubble-preview", onPreview as EventListener);
+    window.addEventListener("workflow:output-bubble-drop", onDrop as EventListener);
+    return () => {
+      window.removeEventListener("workflow:output-bubble-preview", onPreview as EventListener);
+      window.removeEventListener("workflow:output-bubble-drop", onDrop as EventListener);
     };
   }, [readOnly, screenToFlowPosition, armPlacementPickerAgainstPaneClick]);
 
@@ -3398,23 +3493,40 @@ function WorkflowFlowWorkspace({
       ) : null}
 
       {inputBubblePreview ? (
-        <div
-          className="pointer-events-none fixed z-[210] -translate-x-1/2 -translate-y-1/2"
-          style={{
-            left: Math.max(12, Math.min(inputBubblePreview.screenX, (typeof window !== "undefined" ? window.innerWidth : 1200) - 12)),
-            top: Math.max(12, Math.min(inputBubblePreview.screenY, (typeof window !== "undefined" ? window.innerHeight : 800) - 12)),
-          }}
-          aria-hidden
-        >
-          {inputBubblePreview.kind === "text" ? (
-            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-black/30 text-[12px] font-bold text-white/70 shadow-[0_10px_30px_rgba(0,0,0,0.5)] backdrop-blur">
-              T
-            </div>
-          ) : (
-            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-black/30 text-[12px] font-bold text-white/70 shadow-[0_10px_30px_rgba(0,0,0,0.5)] backdrop-blur">
-              <ImageIconLucide className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-            </div>
-          )}
+        <div className="pointer-events-none fixed inset-0 z-[210]" aria-hidden>
+          <svg
+            className="pointer-events-none fixed inset-0 z-[210]"
+            width="100%"
+            height="100%"
+            viewBox={`0 0 ${typeof window !== "undefined" ? window.innerWidth : 1} ${typeof window !== "undefined" ? window.innerHeight : 1}`}
+            fill="none"
+          >
+            <path
+              d={`M ${inputBubblePreview.anchorX} ${inputBubblePreview.anchorY} C ${inputBubblePreview.anchorX - 90} ${inputBubblePreview.anchorY}, ${inputBubblePreview.screenX + 90} ${inputBubblePreview.screenY}, ${inputBubblePreview.screenX} ${inputBubblePreview.screenY}`}
+              stroke="rgba(167, 139, 250, 0.5)"
+              strokeWidth="2"
+            />
+            <circle cx={inputBubblePreview.screenX} cy={inputBubblePreview.screenY} r="3" fill="rgba(167,139,250,0.72)" />
+          </svg>
+        </div>
+      ) : null}
+
+      {outputBubblePreview ? (
+        <div className="pointer-events-none fixed inset-0 z-[210]" aria-hidden>
+          <svg
+            className="pointer-events-none fixed inset-0 z-[210]"
+            width="100%"
+            height="100%"
+            viewBox={`0 0 ${typeof window !== "undefined" ? window.innerWidth : 1} ${typeof window !== "undefined" ? window.innerHeight : 1}`}
+            fill="none"
+          >
+            <path
+              d={`M ${outputBubblePreview.anchorX} ${outputBubblePreview.anchorY} C ${outputBubblePreview.anchorX + 90} ${outputBubblePreview.anchorY}, ${outputBubblePreview.screenX - 90} ${outputBubblePreview.screenY}, ${outputBubblePreview.screenX} ${outputBubblePreview.screenY}`}
+              stroke="rgba(167, 139, 250, 0.5)"
+              strokeWidth="2"
+            />
+            <circle cx={outputBubblePreview.screenX} cy={outputBubblePreview.screenY} r="3" fill="rgba(167,139,250,0.72)" />
+          </svg>
         </div>
       ) : null}
 
@@ -3558,10 +3670,10 @@ function WorkflowFlowWorkspace({
                 </button>
                 <button
                   type="button"
-                  className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
-                  onClick={() => placeNodeAtPicker("website")}
+                  className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/50 opacity-50"
+                  disabled
                 >
-                  Website
+                  Website (Soon)
                 </button>
                 <button
                   type="button"

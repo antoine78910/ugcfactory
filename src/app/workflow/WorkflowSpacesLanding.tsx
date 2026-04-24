@@ -1,6 +1,6 @@
 "use client";
 
-import { Layers, LayoutTemplate, Plus, Search, Users } from "lucide-react";
+import { Layers, LayoutTemplate, Pencil, Plus, Search, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
 import { toast } from "sonner";
@@ -13,7 +13,6 @@ import { WorkflowAmbientLayer } from "./WorkflowAmbientLayer";
 import { WorkflowLandingHeroDiagram } from "./WorkflowLandingHeroDiagram";
 import {
   createSpace,
-  createSpaceFromTemplate,
   deleteSpace,
   getWorkflowStorageScope,
   loadProjectForSpace,
@@ -216,12 +215,15 @@ export function WorkflowSpacesLanding() {
   const sb = useSupabaseBrowserClient();
   const [storageScope, setStorageScope] = useState<string | null>(null);
   const [spaces, setSpaces] = useState<WorkflowSpaceMeta[]>([]);
-  const [templatesTick, setTemplatesTick] = useState(0);
   const [communityTemplates, setCommunityTemplates] = useState<WorkflowTemplateMeta[]>([]);
   const [communityLoadFailed, setCommunityLoadFailed] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [tab, setTab] = useState<TabId>("my");
   const [query, setQuery] = useState("");
+  const [newWorkflowDialogOpen, setNewWorkflowDialogOpen] = useState(false);
+  const [newWorkflowName, setNewWorkflowName] = useState("Untitled workflow");
+  const [editingSpaceId, setEditingSpaceId] = useState<string | null>(null);
+  const [editingSpaceName, setEditingSpaceName] = useState("");
 
   const refreshCommunityTemplates = useCallback(async () => {
     const res = await fetch(`/api/workflow/community-templates?t=${Date.now()}`, {
@@ -287,7 +289,7 @@ export function WorkflowSpacesLanding() {
 
   const filteredSpaces = useMemo(() => {
     const q = query.trim().toLowerCase();
-    let list = spaces;
+    const list = spaces;
     if (!q) return list;
     return list.filter((s) => s.name.toLowerCase().includes(q));
   }, [spaces, query]);
@@ -299,14 +301,19 @@ export function WorkflowSpacesLanding() {
     return all.filter(
       (t) => t.name.toLowerCase().includes(q) || t.blurb.toLowerCase().includes(q),
     );
-  }, [query, storageScope, templatesTick, communityTemplates]);
+  }, [query, storageScope, communityTemplates]);
 
   const onNewSpace = () => {
     if (storageScope === null) return;
-    const proposed = window.prompt("Workflow name", "Untitled workflow");
-    if (proposed === null) return;
-    const nextName = proposed.trim() || "Untitled workflow";
+    setNewWorkflowName("Untitled workflow");
+    setNewWorkflowDialogOpen(true);
+  };
+
+  const confirmNewSpace = () => {
+    if (storageScope === null) return;
+    const nextName = newWorkflowName.trim() || "Untitled workflow";
     const meta = createSpace(storageScope, nextName);
+    setNewWorkflowDialogOpen(false);
     router.push(`/workflow/space/${encodeURIComponent(meta.id)}`);
   };
 
@@ -324,78 +331,25 @@ export function WorkflowSpacesLanding() {
     deleteSpace(storageScope, id);
     refresh(storageScope);
   };
-  const renameSpace = (e: MouseEvent, space: WorkflowSpaceMeta) => {
+  const startRenameSpace = (e: MouseEvent, space: WorkflowSpaceMeta) => {
     e.preventDefault();
     e.stopPropagation();
+    setEditingSpaceId(space.id);
+    setEditingSpaceName(space.name);
+  };
+
+  const commitRenameSpace = (spaceId: string) => {
     if (storageScope === null) return;
-    const proposed = window.prompt("Rename workflow", space.name);
-    if (proposed === null) return;
-    const nextName = proposed.trim();
-    if (!nextName || nextName === space.name) return;
-    updateSpaceMeta(storageScope, space.id, { name: nextName, updatedAt: Date.now() });
+    const nextName = editingSpaceName.trim();
+    const current = spaces.find((x) => x.id === spaceId);
+    if (!current) {
+      setEditingSpaceId(null);
+      return;
+    }
+    if (!nextName || nextName === current.name) return;
+    updateSpaceMeta(storageScope, spaceId, { name: nextName });
     refresh(storageScope);
-  };
-  const publishCommunityTemplateFromSpace = async (e: MouseEvent, space: WorkflowSpaceMeta) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (storageScope === null) return;
-    if (!sb) {
-      toast.error("Sign in required", {
-        description: "Publish a template so every signed-in user can copy it.",
-      });
-      return;
-    }
-    const { data: sess } = await sb.auth.getSession();
-    if (!sess.session?.user) {
-      toast.error("Sign in required", {
-        description: "Publish a template so every signed-in user can copy it.",
-      });
-      return;
-    }
-    const proposed = window.prompt("Template name (visible to all users)", space.name);
-    if (proposed === null) return;
-    const name = proposed.trim() || space.name;
-    const project = loadProjectForSpace(storageScope, space.id);
-    const res = await fetch("/api/workflow/community-templates", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        name,
-        blurb: `Published from workflow “${space.name}”.`,
-        project,
-      }),
-    });
-    const j = (await res.json().catch(() => null)) as { error?: string } | null;
-    if (!res.ok) {
-      toast.error(j?.error ?? "Could not publish template");
-      return;
-    }
-    toast.success("Template published", { description: "It appears under Templates for every user." });
-    await refreshCommunityTemplates();
-    setTemplatesTick((n) => n + 1);
-    setTab("templates");
-  };
-  const clearMyPublishedTemplates = async () => {
-    if (!sb) {
-      toast.error("Sign in required");
-      return;
-    }
-    const { data: sess } = await sb.auth.getSession();
-    if (!sess.session?.user) {
-      toast.error("Sign in required");
-      return;
-    }
-    const ok = window.confirm("Delete all templates you published? This cannot be undone.");
-    if (!ok) return;
-    const res = await fetch("/api/workflow/community-templates", { method: "DELETE" });
-    const j = (await res.json().catch(() => null)) as { error?: string } | null;
-    if (!res.ok) {
-      toast.error(j?.error ?? "Could not delete templates");
-      return;
-    }
-    await refreshCommunityTemplates();
-    setTemplatesTick((n) => n + 1);
-    toast.success("Published templates deleted");
+    setEditingSpaceId(null);
   };
   return (
     <div className="relative min-h-[100dvh] overflow-hidden bg-[#06070d] text-white">
@@ -466,15 +420,6 @@ export function WorkflowSpacesLanding() {
                 className="w-full rounded-full border border-white/[0.1] bg-[#0b0912]/90 py-2.5 pl-10 pr-4 text-[13px] text-white placeholder:text-white/35 outline-none ring-violet-500/0 transition focus:border-violet-500/35 focus:ring-2 focus:ring-violet-500/25"
               />
             </div>
-            {tab === "templates" ? (
-              <button
-                type="button"
-                onClick={() => void clearMyPublishedTemplates()}
-                className="shrink-0 rounded-full border border-red-400/25 bg-red-500/10 px-3 py-2 text-[12px] font-semibold text-red-100/90 transition hover:border-red-400/45 hover:bg-red-500/20"
-              >
-                Clear my published
-              </button>
-            ) : null}
           </div>
         </div>
         {tab === "templates" && communityLoadFailed ? (
@@ -553,30 +498,43 @@ export function WorkflowSpacesLanding() {
                   </div>
                   <div className="flex items-start gap-2 p-4 pr-[4.5rem]">
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="min-w-0 flex-1 truncate font-semibold text-white">{s.name}</p>
-                        <button
-                          type="button"
-                          title="Edit name"
-                          onClick={(e) => renameSpace(e, s)}
-                          className="nodrag nopan shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold text-white/55 transition hover:bg-white/10 hover:text-white sm:text-white/40"
-                        >
-                          Edit
-                        </button>
+                      <div className="flex items-center">
+                        {editingSpaceId === s.id ? (
+                          <input
+                            value={editingSpaceName}
+                            autoFocus
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                            }}
+                            onChange={(e) => setEditingSpaceName(e.target.value)}
+                            onBlur={() => commitRenameSpace(s.id)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") commitRenameSpace(s.id);
+                              if (e.key === "Escape") setEditingSpaceId(null);
+                              e.stopPropagation();
+                            }}
+                            className="h-7 w-[min(220px,100%)] rounded-md border border-white/15 bg-black/35 px-2 text-[14px] font-semibold text-white outline-none focus:border-violet-400/40"
+                          />
+                        ) : (
+                          <div className="inline-flex max-w-full items-center gap-1.5">
+                            <p className="truncate font-semibold text-white">{s.name}</p>
+                            <button
+                              type="button"
+                              title="Edit name"
+                              onClick={(e) => startRenameSpace(e, s)}
+                              className="nodrag nopan inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-white/55 transition hover:bg-white/10 hover:text-white sm:text-white/40"
+                            >
+                              <Pencil className="h-3.5 w-3.5" strokeWidth={2.2} />
+                            </button>
+                          </div>
+                        )}
                       </div>
                       <p className="mt-1 text-[12px] text-white/40">Edited {formatTimeAgo(s.updatedAt)}</p>
                     </div>
                   </div>
                 </div>
                 <div className="absolute bottom-3 right-3 z-10 flex flex-wrap justify-end gap-1 sm:bottom-4 sm:right-4 sm:gap-1.5">
-                  <button
-                    type="button"
-                    title="Publish for all signed-in users"
-                    onClick={(e) => void publishCommunityTemplateFromSpace(e, s)}
-                    className="rounded-lg border border-white/[0.08] bg-black/50 px-2 py-1 text-[11px] font-semibold text-violet-200/90 shadow-sm backdrop-blur-sm transition hover:bg-violet-500/20 hover:text-violet-100"
-                  >
-                    Publish template
-                  </button>
                   <button
                     type="button"
                     title="Delete workflow"
@@ -591,6 +549,40 @@ export function WorkflowSpacesLanding() {
           </ul>
         )}
       </div>
+      {newWorkflowDialogOpen ? (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 px-4">
+          <div className="w-full max-w-md rounded-2xl border border-white/12 bg-[#0b0912] p-4 shadow-2xl">
+            <p className="text-sm font-semibold text-white">New workflow</p>
+            <input
+              autoFocus
+              value={newWorkflowName}
+              onChange={(e) => setNewWorkflowName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") confirmNewSpace();
+                if (e.key === "Escape") setNewWorkflowDialogOpen(false);
+              }}
+              className="mt-3 h-10 w-full rounded-lg border border-white/12 bg-white/[0.04] px-3 text-sm text-white outline-none focus:border-violet-400/45"
+              placeholder="Untitled workflow"
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setNewWorkflowDialogOpen(false)}
+                className="rounded-lg border border-white/12 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/70 transition hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmNewSpace}
+                className="rounded-lg border border-violet-400/30 bg-violet-500/20 px-3 py-2 text-xs font-semibold text-violet-100 transition hover:bg-violet-500/30"
+              >
+                Create
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

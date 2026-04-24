@@ -5,6 +5,13 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/admin";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 
+function isFeedbackTableMissingError(err: { code?: string; message?: string } | null | undefined): boolean {
+  if (!err) return false;
+  const msg = String(err.message ?? "").toLowerCase();
+  const code = String(err.code ?? "").toUpperCase();
+  return code === "PGRST205" || msg.includes("feedback_submissions") && msg.includes("schema cache");
+}
+
 export async function GET(req: Request) {
   const { response } = await requireAdmin();
   if (response) return response;
@@ -32,7 +39,12 @@ export async function GET(req: Request) {
   if (q) query = query.or(`email.ilike.%${q}%,message.ilike.%${q}%,page_path.ilike.%${q}%`);
 
   const { data, error, count } = await query;
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    if (isFeedbackTableMissingError(error)) {
+      return NextResponse.json({ rows: [], total: 0, page, perPage });
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 
   return NextResponse.json({
     rows: data ?? [],

@@ -1208,6 +1208,45 @@ function LinkToAdFullSequencePlayer({
   );
 }
 
+function LinkToAdAssetTypeSwitch({
+  value,
+  onChange,
+}: {
+  value: "product" | "app";
+  onChange: (next: "product" | "app") => void;
+}) {
+  return (
+    <div className="relative h-[2.7rem] w-[10.25rem] shrink-0 overflow-hidden rounded-2xl border border-violet-400/30 bg-[#0f1016] p-1 shadow-[inset_0_2px_4px_rgba(0,0,0,0.85),0_16px_30px_-14px_rgba(0,0,0,0.65)]">
+      <div
+        className={cn(
+          "pointer-events-none absolute inset-y-1 left-1 w-[calc(50%-0.25rem)] rounded-[0.8rem] border border-violet-200/35 bg-[linear-gradient(145deg,rgba(196,181,253,0.28),rgba(139,92,246,0.06))] shadow-[0_0_18px_rgba(139,92,246,0.4),inset_0_0_12px_rgba(167,139,250,0.25)] transition-transform duration-300 ease-out",
+          value === "app" ? "translate-x-[calc(100%+0.25rem)]" : "translate-x-0",
+        )}
+      >
+        <span className="pointer-events-none absolute left-[10%] top-0 h-px w-[80%] bg-gradient-to-r from-transparent via-white/85 to-transparent" />
+      </div>
+      <div className="relative z-10 flex h-full items-center">
+        <button
+          type="button"
+          onClick={() => onChange("product")}
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl px-2 text-xs font-semibold"
+        >
+          <Box className={cn("h-3.5 w-3.5 transition", value === "product" ? "text-violet-50" : "text-white/45")} />
+          <span className={cn("transition", value === "product" ? "text-white" : "text-white/45")}>Product</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange("app")}
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl px-2 text-xs font-semibold"
+        >
+          <AppWindow className={cn("h-3.5 w-3.5 transition", value === "app" ? "text-violet-50" : "text-white/45")} />
+          <span className={cn("transition", value === "app" ? "text-white" : "text-white/45")}>App</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function LinkToAdUniverse({
   resumeRunId,
   onResumeConsumed,
@@ -5774,29 +5813,10 @@ export default function LinkToAdUniverse({
               <p className="mt-1.5 text-sm text-white/50">We scan the page and create a UGC video ad for you.</p>
             </div>
             <div className="w-full max-w-xl space-y-3">
-              <div className="flex items-stretch gap-3">
-                <div className="shrink-0 rounded-[1.15rem] border border-violet-400/25 bg-violet-500/10 p-1 shadow-[0_14px_32px_rgba(76,29,149,0.28)]">
-                  {([
-                    ["product", "Product", Box],
-                    ["app", "App", AppWindow],
-                  ] as const).map(([value, label, Icon]) => (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => setLinkToAdAssetType(value)}
-                      className={cn(
-                        "flex h-[1.68rem] w-full items-center gap-2 rounded-xl px-3 text-left text-xs font-semibold transition",
-                        linkToAdAssetType === value
-                          ? "border border-violet-300/45 bg-violet-300/90 text-[#12061f] shadow-[0_0_0_1px_rgba(196,181,253,0.35)]"
-                          : "border border-transparent text-violet-100/70 hover:bg-violet-400/15 hover:text-violet-50",
-                      )}
-                    >
-                      <Icon className="h-3.5 w-3.5 shrink-0" />
-                      <span>{label}</span>
-                    </button>
-                  ))}
-                </div>
-                <div className="relative flex-1">
+              <div className="flex justify-center">
+                <LinkToAdAssetTypeSwitch value={linkToAdAssetType} onChange={setLinkToAdAssetType} />
+              </div>
+              <div className="relative">
                   {/* Landing-page input style, with reduced glow for filming. */}
                   <div className="pointer-events-none absolute -inset-6 rounded-[1.25rem] bg-violet-600/10 blur-2xl opacity-30" />
                   <div className="relative overflow-hidden rounded-[1.25rem] bg-transparent p-2 ring-1 ring-violet-500/40 shadow-[0_0_45px_rgba(139,92,246,0.10)] transition-all duration-300 ease-out focus-within:ring-2 focus-within:ring-violet-400 focus-within:shadow-[0_0_60px_rgba(139,92,246,0.18)] sm:py-1.5">
@@ -5831,7 +5851,6 @@ export default function LinkToAdUniverse({
                     </Button>
                   </div>
                 </div>
-              </div>
             </div>
             {/* Compact settings row: duration + speed + mode, open by default */}
             <details open className="w-full max-w-xl rounded-xl border border-white/8 bg-white/[0.02] text-white/60 [&[open]>summary]:mb-3">

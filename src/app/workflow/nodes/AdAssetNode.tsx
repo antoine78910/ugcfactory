@@ -541,6 +541,89 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     [id],
   );
 
+  const handleOutputBubblePointerDown = useCallback(
+    (event: React.PointerEvent<HTMLElement>, sourceHandleId: string) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const el = event.currentTarget;
+      const bubbleRect = el.getBoundingClientRect();
+      const anchorX = Math.round(bubbleRect.left + bubbleRect.width / 2);
+      const anchorY = Math.round(bubbleRect.top + bubbleRect.height / 2);
+      const startX = event.clientX;
+      const startY = event.clientY;
+      let moved = false;
+      let longPress = false;
+      const timer = window.setTimeout(() => {
+        longPress = true;
+      }, 280);
+
+      window.dispatchEvent(
+        new CustomEvent("workflow:output-bubble-preview", {
+          detail: {
+            sourceNodeId: id,
+            sourceHandleId,
+            anchorX,
+            anchorY,
+            screenX: Math.round(startX),
+            screenY: Math.round(startY),
+          },
+        }),
+      );
+
+      const cleanup = () => {
+        window.clearTimeout(timer);
+        window.removeEventListener("pointermove", onMove, true);
+        window.removeEventListener("pointerup", onUp, true);
+        window.removeEventListener("pointercancel", onCancel, true);
+        window.dispatchEvent(
+          new CustomEvent("workflow:output-bubble-preview", {
+            detail: { active: false },
+          }),
+        );
+      };
+
+      const onMove = (ev: PointerEvent) => {
+        if (Math.abs(ev.clientX - startX) > 2 || Math.abs(ev.clientY - startY) > 2) moved = true;
+        window.dispatchEvent(
+          new CustomEvent("workflow:output-bubble-preview", {
+            detail: {
+              sourceNodeId: id,
+              sourceHandleId,
+              anchorX,
+              anchorY,
+              screenX: Math.round(ev.clientX),
+              screenY: Math.round(ev.clientY),
+            },
+          }),
+        );
+      };
+
+      const onCancel = () => cleanup();
+      const onUp = (ev: PointerEvent) => {
+        cleanup();
+        if (longPress || moved) {
+          window.dispatchEvent(
+            new CustomEvent("workflow:output-bubble-drop", {
+              detail: {
+                sourceNodeId: id,
+                sourceHandleId,
+                screenX: Math.round(ev.clientX),
+                screenY: Math.round(ev.clientY),
+              },
+            }),
+          );
+          return;
+        }
+        openOutputCreatePicker(sourceHandleId, el);
+      };
+
+      window.addEventListener("pointermove", onMove, true);
+      window.addEventListener("pointerup", onUp, true);
+      window.addEventListener("pointercancel", onCancel, true);
+    },
+    [id, openOutputCreatePicker],
+  );
+
   const handleInputBubblePointerDown = useCallback(
     (
       event: React.PointerEvent<HTMLButtonElement>,
@@ -549,6 +632,9 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       event.preventDefault();
       event.stopPropagation();
       const el = event.currentTarget;
+      const bubbleRect = el.getBoundingClientRect();
+      const anchorX = Math.round(bubbleRect.left + bubbleRect.width / 2);
+      const anchorY = Math.round(bubbleRect.top + bubbleRect.height / 2);
       const startX = event.clientX;
       const startY = event.clientY;
       let moved = false;
@@ -563,6 +649,8 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           detail: {
             targetNodeId: id,
             targetHandleId: targetHandle,
+            anchorX,
+            anchorY,
             screenX: Math.round(startX),
             screenY: Math.round(startY),
           },
@@ -588,6 +676,8 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             detail: {
               targetNodeId: id,
               targetHandleId: targetHandle,
+              anchorX,
+              anchorY,
               screenX: Math.round(ev.clientX),
               screenY: Math.round(ev.clientY),
             },
@@ -3094,9 +3184,9 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             onPointerDown={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              openOutputCreatePicker("out", e.currentTarget as HTMLElement);
+              handleOutputBubblePointerDown(e, "out");
             }}
-            title="Click to add a connected module"
+            title="Drag or hold to create a linked module"
           />
         ) : null}
       </div>
@@ -3130,9 +3220,9 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               onPointerDown={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                openOutputCreatePicker("generated", e.currentTarget);
+                handleOutputBubblePointerDown(e, "generated");
               }}
-              title="Click to add a connected module"
+              title="Create linked module (Image output -> References / Start image / End image)"
               className="absolute inset-0 z-[3] rounded-full"
             />
             <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/65">
@@ -3157,9 +3247,9 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               onPointerDown={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                openOutputCreatePicker("out", e.currentTarget);
+                handleOutputBubblePointerDown(e, "out");
               }}
-              title="Click to add a connected module"
+              title="Create linked module (Video output -> prompt/list or next module)"
               className="absolute inset-0 z-[3] rounded-full"
             />
             <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-violet-200/90">
@@ -3190,9 +3280,9 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               onPointerDown={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                openOutputCreatePicker("videoFirst", e.currentTarget);
+                handleOutputBubblePointerDown(e, "videoFirst");
               }}
-              title="Click to add a connected module"
+              title="Create linked module (First frame -> Start image)"
               className="absolute inset-0 z-[3] rounded-full"
             />
             <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/65">
@@ -3227,9 +3317,9 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               onPointerDown={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                openOutputCreatePicker("videoLast", e.currentTarget);
+                handleOutputBubblePointerDown(e, "videoLast");
               }}
-              title="Click to add a connected module"
+              title="Create linked module (Last frame -> End image)"
               className="absolute inset-0 z-[3] rounded-full"
             />
             <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/65">

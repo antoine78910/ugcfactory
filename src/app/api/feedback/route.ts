@@ -12,6 +12,13 @@ type Body = {
   pagePath?: string;
 };
 
+function isFeedbackTableMissingError(err: { code?: string; message?: string } | null | undefined): boolean {
+  if (!err) return false;
+  const msg = String(err.message ?? "").toLowerCase();
+  const code = String(err.code ?? "").toUpperCase();
+  return code === "PGRST205" || msg.includes("feedback_submissions") && msg.includes("schema cache");
+}
+
 async function sendFeedbackEmail(opts: {
   fromEmail: string;
   category: string;
@@ -77,7 +84,7 @@ export async function POST(req: Request) {
     page_path: pagePath,
     status: "new",
   });
-  if (error) {
+  if (error && !isFeedbackTableMissingError(error)) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
