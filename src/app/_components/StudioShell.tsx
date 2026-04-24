@@ -97,6 +97,8 @@ type CreateNavEntry =
       icon: LucideIcon;
       /** Grayed, no navigation, “Soon” pill */
       soon?: boolean;
+      /** Clickable entry with a small BETA pill. */
+      beta?: boolean;
     };
 
 const CREATE_NAV: CreateNavEntry[] = [
@@ -115,7 +117,7 @@ const CREATE_NAV: CreateNavEntry[] = [
     href: "/workflow",
     label: "Workflow",
     icon: GitBranch,
-    soon: true,
+    beta: true,
   },
   { kind: "route", id: "avatar", label: "Avatar", icon: UserRound },
   { kind: "route", id: "ad_clone", label: "Translate", icon: Languages },
@@ -459,7 +461,7 @@ function StudioShellInner({
                 {CREATE_NAV.map((entry) => {
                   const NavIcon = entry.icon;
                   if (entry.kind === "custom-link") {
-                    const { href, label, id: linkId, soon } = entry;
+                    const { href, label, id: linkId, soon, beta } = entry;
                     if (soon) {
                       return (
                         <div
@@ -499,6 +501,11 @@ function StudioShellInner({
                           aria-hidden
                         />
                         <span className={cn("min-w-0 truncate", navCollapsed && "sr-only")}>{label}</span>
+                        {!navCollapsed && beta ? (
+                          <span className="shrink-0 rounded-md border border-violet-300/35 bg-violet-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-violet-100">
+                            Beta
+                          </span>
+                        ) : null}
                       </span>
                     );
                     return (

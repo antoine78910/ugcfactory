@@ -505,6 +505,22 @@ function universeThumbFromExtracted(extracted: unknown): string | null {
   return null;
 }
 
+function linkToAdRunStatusFromExtracted(extracted: unknown): { label: string; done: boolean } {
+  const snap = readUniverseFromExtracted(extracted);
+  if (!snap) return { label: "Unknown", done: false };
+  const hasScripts = typeof snap.scriptsText === "string" && snap.scriptsText.trim().length > 0;
+  if (universeHasPendingKlingTask(snap)) return { label: "Generating video", done: false };
+  if (Array.isArray(snap.linkToAdPipelineByAngle) && snap.linkToAdPipelineByAngle.some((p) => p?.nanoThreeGenerating)) {
+    return { label: "Generating images", done: false };
+  }
+  if (typeof snap.nanoBananaTaskId === "string" && snap.nanoBananaTaskId.trim()) {
+    return { label: "Generating images", done: false };
+  }
+  if (snap.phase === "after_summary" && !hasScripts) return { label: "Writing scripts", done: false };
+  if (snap.phase === "after_scripts" && hasScripts) return { label: "Finished", done: true };
+  return { label: "Ready", done: true };
+}
+
 type RunGenerationPreview =
   | { kind: "image"; url: string }
   | { kind: "video" }
@@ -1833,13 +1849,18 @@ export default function AppBrandWizard() {
     return savedRuns
       .filter((r) => runHasLinkToAdUniverse(r.extracted))
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-      .map((r) => ({
-        id: r.id,
-        title: r.title,
-        storeUrl: r.store_url,
-        createdAt: r.created_at,
-        thumbUrl: universeThumbFromExtracted(r.extracted) || r.selected_image_url || null,
-      }));
+      .map((r) => {
+        const status = linkToAdRunStatusFromExtracted(r.extracted);
+        return {
+          id: r.id,
+          title: r.title,
+          storeUrl: r.store_url,
+          createdAt: r.created_at,
+          thumbUrl: universeThumbFromExtracted(r.extracted) || r.selected_image_url || null,
+          statusLabel: status.label,
+          statusDone: status.done,
+        };
+      });
   }, [savedRuns]);
 
   const selectedProject = useMemo(

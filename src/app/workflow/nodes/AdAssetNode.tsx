@@ -1313,6 +1313,23 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     },
     [id],
   );
+  const emitRunLog = useCallback(
+    (level: "info" | "error" | "success", message: string) => {
+      const nodeLabel = ((data.label || cfg.title || data.kind || "Node").trim() || "Node");
+      window.dispatchEvent(
+        new CustomEvent("workflow:run-log", {
+          detail: {
+            ts: Date.now(),
+            nodeId: id,
+            nodeLabel,
+            level,
+            message,
+          },
+        }),
+      );
+    },
+    [cfg.title, data.kind, data.label, id],
+  );
   const onGenerate = useCallback(async () => {
     if (generating) return;
 
@@ -1341,10 +1358,12 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           : "Type the prompt inside the module, or connect the text prompt port to a canvas note whose text should be included.",
       });
       emitRunFinished(false);
+      emitRunLog("error", "Run blocked: prompt is empty.");
       return;
     }
 
     if (data.kind === "assistant") {
+      emitRunLog("info", "Assistant run started.");
       const assistantListLabel = `${(data.label || cfg.title || "Assistant").trim() || "Assistant"} prompts`;
       setGenerating(true);
       let ok = false;
@@ -1428,10 +1447,12 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         }
         patch(id, { websiteLastRunAt: new Date().toISOString() });
         ok = true;
+        emitRunLog("success", "Assistant run finished.");
       } catch (e) {
         toast.error("Assistant failed", {
           description: e instanceof Error ? e.message : "Try again.",
         });
+        emitRunLog("error", `Assistant failed: ${e instanceof Error ? e.message : "Unknown error"}`);
       } finally {
         setGenerating(false);
         emitRunFinished(ok);
@@ -1445,8 +1466,10 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           description: "Use a full URL starting with http:// or https://",
         });
         emitRunFinished(false);
+        emitRunLog("error", "Website module blocked: invalid URL.");
         return;
       }
+      emitRunLog("info", "Website module started.");
       setGenerating(true);
       let ok = false;
       try {
@@ -1535,10 +1558,12 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           }
         }
         ok = true;
+        emitRunLog("success", "Website module finished.");
       } catch (e) {
         toast.error("Website module failed", {
           description: userMessageFromCaughtError(e, "Try another product URL."),
         });
+        emitRunLog("error", `Website module failed: ${userMessageFromCaughtError(e, "Try another product URL.")}`);
       } finally {
         setGenerating(false);
         emitRunFinished(ok);
@@ -1549,6 +1574,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     if (data.kind !== "image" && data.kind !== "video") {
       toast.message("Coming soon", { description: "Run is available for Image and Video generators." });
       emitRunFinished(false);
+      emitRunLog("error", "Run not supported for this module type.");
       return;
     }
 
@@ -1614,6 +1640,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       data.referenceMediaKind !== "video" && refUrl ? refUrl : undefined;
 
     if (data.kind === "image") {
+      emitRunLog("info", "Image generation started.");
       const imageResultsListLabel = `${(data.label || cfg.title || "Image").trim() || "Image"} results`;
       const linkedImageReferences = collectLinkedImageUrlsForHandles(nodes, edges, id, ["references", "in"]);
       const mergedImageReferences = Array.from(
@@ -1636,6 +1663,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       if (!creditBypass && creditsRef.current < charge) {
         toast.error("Not enough credits", { description: `You need ${charge} credits for this run.` });
         emitRunFinished(false);
+        emitRunLog("error", `Image generation blocked: not enough credits (${charge}).`);
         return;
       }
       const platformCharge = creditBypass ? 0 : charge;
@@ -1781,6 +1809,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           toast.success("Image ready");
         }
         ok = true;
+        emitRunLog("success", "Image generation finished.");
         setPendingWorkflowRun(null);
       } catch (e) {
         const msg = userMessageFromCaughtError(e, "Image generation failed. Try again.");
@@ -1792,6 +1821,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         }
         refundPlatformCredits(platformCharge, grantCredits, creditsRef);
         toast.error(msg);
+        emitRunLog("error", `Image generation failed: ${msg}`);
       } finally {
         if (!ok && !pendingImageTaskIds.some((t) => t.trim())) {
           setPendingWorkflowRun(null);
@@ -1815,8 +1845,10 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     if (!creditBypass && creditsRef.current < vCharge) {
       toast.error("Not enough credits", { description: `You need ${vCharge} credits for this run.` });
       emitRunFinished(false);
+      emitRunLog("error", `Video generation blocked: not enough credits (${vCharge}).`);
       return;
     }
+    emitRunLog("info", "Video generation started.");
     const vPlatformCharge = creditBypass ? 0 : vCharge;
     if (!creditBypass && vPlatformCharge > 0) {
       spendCredits(vPlatformCharge);
@@ -1965,6 +1997,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         toast.success("Video ready");
       }
       ok = true;
+      emitRunLog("success", "Video generation finished.");
       setPendingWorkflowRun(null);
     } catch (e) {
       const msg = userMessageFromCaughtError(e, "Video generation failed. Try again.");
@@ -1976,6 +2009,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       }
       refundPlatformCredits(vPlatformCharge, grantCredits, creditsRef);
       toast.error(msg);
+      emitRunLog("error", `Video generation failed: ${msg}`);
     } finally {
       if (!ok && !pendingVideoTaskIds.some((t) => t.trim())) {
         setPendingWorkflowRun(null);
@@ -2013,6 +2047,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     websiteOutputMode,
     websiteProductImageCount,
     emitRunFinished,
+    emitRunLog,
     setPendingWorkflowRun,
   ]);
 

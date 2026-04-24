@@ -210,6 +210,16 @@ type WorkflowOpenOutputPickerDetail = {
   screenY: number;
 };
 
+type WorkflowRunLogLevel = "info" | "error" | "success";
+
+type WorkflowRunLogEntry = {
+  ts: number;
+  nodeId?: string;
+  nodeLabel?: string;
+  level: WorkflowRunLogLevel;
+  message: string;
+};
+
 /** Scissors snip FX, Lucide scissors geometry; two halves close with a snap at the pivot. */
 function WorkflowCutSnipFx({ x, y }: { x: number; y: number }) {
   const cap = { strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
@@ -486,6 +496,7 @@ type FlowWorkspaceProps = {
   project: WorkflowProjectStateV1;
   setProject: React.Dispatch<React.SetStateAction<WorkflowProjectStateV1>>;
   readOnly?: boolean;
+  onRunLog?: (entry: WorkflowRunLogEntry) => void;
   /** When read-only template preview: bottom bar to duplicate into a workflow */
   showTemplateUseCta?: boolean;
   onUseTemplate?: () => void;
@@ -1913,6 +1924,7 @@ function WorkflowFlowWorkspace({
   project,
   setProject,
   readOnly = false,
+  onRunLog,
   showTemplateUseCta = false,
   onUseTemplate,
   useTemplateBusy = false,
@@ -2249,6 +2261,25 @@ function WorkflowFlowWorkspace({
       window.removeEventListener("workflow:input-bubble-drop", onDrop as EventListener);
     };
   }, [readOnly, screenToFlowPosition, armPlacementPickerAgainstPaneClick]);
+
+  useEffect(() => {
+    if (!onRunLog) return;
+    const onWorkflowRunLog = (ev: Event) => {
+      const detail = (ev as CustomEvent<WorkflowRunLogEntry>).detail;
+      if (!detail || typeof detail.message !== "string" || !detail.message.trim()) return;
+      const level: WorkflowRunLogLevel =
+        detail.level === "error" ? "error" : detail.level === "success" ? "success" : "info";
+      onRunLog({
+        ts: typeof detail.ts === "number" ? detail.ts : Date.now(),
+        nodeId: typeof detail.nodeId === "string" ? detail.nodeId : undefined,
+        nodeLabel: typeof detail.nodeLabel === "string" ? detail.nodeLabel : undefined,
+        level,
+        message: detail.message.trim(),
+      });
+    };
+    window.addEventListener("workflow:run-log", onWorkflowRunLog as EventListener);
+    return () => window.removeEventListener("workflow:run-log", onWorkflowRunLog as EventListener);
+  }, [onRunLog]);
 
   useEffect(() => {
     if (readOnly) return;
@@ -3911,7 +3942,24 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
   const [workflowHydrated, setWorkflowHydrated] = useState(false);
   const [spaceName, setSpaceName] = useState("Untitled workflow");
   const [shareOpen, setShareOpen] = useState(false);
+  const [runHistory, setRunHistory] = useState<WorkflowRunLogEntry[]>([]);
   const lastSavedPreviewRef = useRef<string | undefined>(undefined);
+  const runHistoryStorageKey = useMemo(
+    () => `youry-workflow-run-history-v1:${resolvedSpaceId}`,
+    [resolvedSpaceId],
+  );
+
+  const appendRunHistory = useCallback((entry: WorkflowRunLogEntry) => {
+    setRunHistory((prev) => {
+      const next = [entry, ...prev].slice(0, 28);
+      try {
+        localStorage.setItem(runHistoryStorageKey, JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }, [runHistoryStorageKey]);
 
   useEffect(() => {
     if (!sb) {
@@ -3938,8 +3986,23 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
     const meta = idx.find((s) => s.id === resolvedSpaceId);
     if (meta) setSpaceName(meta.name);
     setWorkflowProject(loadProjectForSpace(storageScope, resolvedSpaceId));
+    try {
+      const raw = localStorage.getItem(runHistoryStorageKey);
+      const arr = raw ? (JSON.parse(raw) as WorkflowRunLogEntry[]) : [];
+      if (Array.isArray(arr)) {
+        setRunHistory(
+          arr
+            .filter((x) => x && typeof x.message === "string" && typeof x.ts === "number")
+            .slice(0, 28),
+        );
+      } else {
+        setRunHistory([]);
+      }
+    } catch {
+      setRunHistory([]);
+    }
     setWorkflowHydrated(true);
-  }, [resolvedSpaceId, router, storageScope]);
+  }, [resolvedSpaceId, router, storageScope, runHistoryStorageKey]);
 
   useEffect(() => {
     if (!workflowHydrated || storageScope === null) return;
@@ -4019,11 +4082,57 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
 
       <div className="relative z-10 flex min-h-0 min-w-0 flex-1">
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-[#06070d]">
+          {runHistory.length > 0 ? (
+            <div className="pointer-events-auto absolute right-3 top-3 z-30 w-[min(360px,calc(100%-1.5rem))] rounded-xl border border-white/12 bg-[#0b0912]/90 p-2.5 shadow-2xl backdrop-blur-md">
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-white/55">Run history</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRunHistory([]);
+                    try {
+                      localStorage.removeItem(runHistoryStorageKey);
+                    } catch {
+                      /* ignore */
+                    }
+                  }}
+                  className="rounded-md border border-white/10 px-1.5 py-0.5 text-[10px] font-semibold text-white/55 transition hover:bg-white/10 hover:text-white/80"
+                >
+                  Clear
+                </button>
+              </div>
+              <div className="max-h-44 space-y-1 overflow-y-auto pr-1">
+                {runHistory.map((e, idx) => (
+                  <div key={`${e.ts}-${idx}`} className="rounded-md border border-white/8 bg-black/20 px-2 py-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={cn(
+                          "inline-block h-1.5 w-1.5 rounded-full",
+                          e.level === "error" ? "bg-red-400/90" : e.level === "success" ? "bg-emerald-400/90" : "bg-amber-300/90",
+                        )}
+                      />
+                      <span className="text-[10px] font-medium text-white/70">
+                        {e.nodeLabel?.trim() || "Workflow"}
+                      </span>
+                      <span className="text-[9px] text-white/35">
+                        {new Date(e.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-[11px] leading-snug text-white/80">{e.message}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
           <div className="relative flex h-full min-h-[480px] min-w-0 flex-1 flex-col">
             <div className="min-h-0 flex-1">
               {workflowHydrated && !showOnboarding ? (
                 <ReactFlowProvider>
-                  <WorkflowFlowWorkspace project={workflowProject} setProject={setWorkflowProject} />
+                  <WorkflowFlowWorkspace
+                    project={workflowProject}
+                    setProject={setWorkflowProject}
+                    onRunLog={appendRunHistory}
+                  />
                 </ReactFlowProvider>
               ) : (
                 <div className="h-full min-h-[400px] w-full" aria-hidden />
