@@ -4083,7 +4083,7 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
       <div className="relative z-10 flex min-h-0 min-w-0 flex-1">
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-[#06070d]">
           {runHistory.length > 0 ? (
-            <div className="pointer-events-auto absolute right-3 top-3 z-30 w-[min(360px,calc(100%-1.5rem))] rounded-xl border border-white/12 bg-[#0b0912]/90 p-2.5 shadow-2xl backdrop-blur-md">
+            <div className="group pointer-events-auto absolute right-3 top-3 z-30 w-[min(250px,calc(100%-1.5rem))] rounded-xl border border-white/12 bg-[#0b0912]/90 p-2 shadow-2xl backdrop-blur-md">
               <div className="mb-2 flex items-center justify-between">
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-white/55">Run history</p>
                 <button
@@ -4101,26 +4101,52 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
                   Clear
                 </button>
               </div>
-              <div className="max-h-44 space-y-1 overflow-y-auto pr-1">
-                {runHistory.map((e, idx) => (
-                  <div key={`${e.ts}-${idx}`} className="rounded-md border border-white/8 bg-black/20 px-2 py-1.5">
-                    <div className="flex items-center gap-1.5">
-                      <span
-                        className={cn(
-                          "inline-block h-1.5 w-1.5 rounded-full",
-                          e.level === "error" ? "bg-red-400/90" : e.level === "success" ? "bg-emerald-400/90" : "bg-amber-300/90",
-                        )}
-                      />
-                      <span className="text-[10px] font-medium text-white/70">
-                        {e.nodeLabel?.trim() || "Workflow"}
-                      </span>
-                      <span className="text-[9px] text-white/35">
-                        {new Date(e.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                      </span>
-                    </div>
-                    <p className="mt-0.5 text-[11px] leading-snug text-white/80">{e.message}</p>
+              <div className="relative">
+                <div className="rounded-md border border-white/8 bg-black/20 px-2 py-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      className={cn(
+                        "inline-block h-1.5 w-1.5 rounded-full",
+                        runHistory[0]?.level === "error"
+                          ? "bg-red-400/90"
+                          : runHistory[0]?.level === "success"
+                            ? "bg-emerald-400/90"
+                            : "bg-amber-300/90",
+                      )}
+                    />
+                    <span className="text-[10px] font-medium text-white/70">
+                      {runHistory[0]?.nodeLabel?.trim() || "Workflow"}
+                    </span>
+                    <span className="text-[9px] text-white/35">
+                      {new Date(runHistory[0]?.ts ?? Date.now()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    </span>
                   </div>
-                ))}
+                  <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-white/82">{runHistory[0]?.message}</p>
+                </div>
+
+                <div className="pointer-events-none absolute inset-x-0 top-[3.2rem] h-6 bg-gradient-to-b from-[#0b0912]/95 to-transparent group-hover:opacity-0" />
+
+                <div className="mt-1.5 max-h-0 space-y-1 overflow-y-auto pr-1 opacity-0 transition-all duration-200 group-hover:max-h-44 group-hover:opacity-100">
+                  {runHistory.slice(1).map((e, idx) => (
+                    <div key={`${e.ts}-${idx + 1}`} className="rounded-md border border-white/8 bg-black/20 px-2 py-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={cn(
+                            "inline-block h-1.5 w-1.5 rounded-full",
+                            e.level === "error" ? "bg-red-400/90" : e.level === "success" ? "bg-emerald-400/90" : "bg-amber-300/90",
+                          )}
+                        />
+                        <span className="text-[10px] font-medium text-white/70">
+                          {e.nodeLabel?.trim() || "Workflow"}
+                        </span>
+                        <span className="text-[9px] text-white/35">
+                          {new Date(e.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                      </div>
+                      <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-white/80">{e.message}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           ) : null}
