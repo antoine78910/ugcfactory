@@ -537,6 +537,9 @@ export async function POST(req: Request) {
     "Never output TECHNICAL headers, preservation bullet lists, EXIF, or NEGATIVE PROMPT blocks.",
     "Do not add preamble, explanations, or reasoning.",
     "If avatar reference images are attached, treat them as IDENTITY REFERENCES ONLY (face/body traits). Never treat avatar refs as product references.",
+    avatarRefs.length > 0
+      ? "Avatar refs present: keep the SAME person identity across PROMPT 1/2/3 (same face, skin tone, hair, body traits)."
+      : "No avatar refs: DO NOT keep the same person across PROMPT 1/2/3. Generate 3 DISTINCT avatars (different face identity each prompt).",
   ].join("\n");
 
   const userText = [
@@ -552,6 +555,9 @@ export async function POST(req: Request) {
     avatarRefs.length
       ? "PERSONA DISSOCIATION RULE: Do NOT copy clothing, accessories, pose, camera framing, or background from avatar refs. Outfit and styling must come from the script scene and can differ from avatar uploads."
       : "",
+    avatarRefs.length
+      ? "IDENTITY LOCK: Same person in PROMPT 1, PROMPT 2, PROMPT 3."
+      : "NO IDENTITY LOCK: Use a different avatar identity in each prompt (PROMPT 1/2/3 must not be the same person).",
     generationMode === "custom_ugc"
       ? `CUSTOM UGC INTENT: ${customUgcIntent || "No talk, just show the product naturally."}`
       : "MODE: automatic Link to Ad generation.",
