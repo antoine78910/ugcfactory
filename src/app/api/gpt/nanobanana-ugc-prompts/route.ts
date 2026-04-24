@@ -10,6 +10,7 @@ import {
   parseThreeLabeledPrompts,
   splitNanoPromptBodyForEditing,
 } from "@/lib/linkToAdUniverse";
+import { LINK_TO_AD_APP_IMAGE_PROMPT_INSTRUCTIONS } from "@/lib/linkToAdAppPrompts";
 
 type Body = {
   marketingScript: string;
@@ -19,6 +20,7 @@ type Body = {
   /** Optional human/avatar refs to guide persona appearance. */
   avatarImageUrls?: string[] | null;
   generationMode?: "automatic" | "custom_ugc";
+  linkToAdAssetType?: "product" | "app";
   customUgcIntent?: string | null;
   provider?: "gpt" | "claude";
 };
@@ -525,6 +527,7 @@ export async function POST(req: Request) {
         .slice(0, 3)
     : [];
   const generationMode = body?.generationMode === "custom_ugc" ? "custom_ugc" : "automatic";
+  const linkToAdAssetType = body?.linkToAdAssetType === "app" ? "app" : "product";
   const customUgcIntent = body?.customUgcIntent?.trim() || "";
   const provider: "gpt" | "claude" = body?.provider === "gpt" ? "gpt" : "claude";
 
@@ -537,7 +540,7 @@ export async function POST(req: Request) {
   ].join("\n");
 
   const userText = [
-    INSTRUCTIONS,
+    linkToAdAssetType === "app" ? LINK_TO_AD_APP_IMAGE_PROMPT_INSTRUCTIONS : INSTRUCTIONS,
     "",
     "---",
     "MARKETING SCRIPT (use as the creative brief):",
@@ -552,6 +555,9 @@ export async function POST(req: Request) {
     generationMode === "custom_ugc"
       ? `CUSTOM UGC INTENT: ${customUgcIntent || "No talk, just show the product naturally."}`
       : "MODE: automatic Link to Ad generation.",
+    linkToAdAssetType === "app"
+      ? "ASSET TYPE: APP. Treat references as app context and produce app-focused UGC visuals (realistic phone/computer usage, UI interactions, app outcomes)."
+      : "ASSET TYPE: PRODUCT. Treat references as physical product context.",
   ].join("\n");
 
   try {

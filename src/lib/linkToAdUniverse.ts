@@ -6,6 +6,7 @@ export type LinkToAdUniverseSnapshotV1 = {
   v: 1;
   phase: "after_summary" | "after_scripts";
   generationMode?: "automatic" | "custom_ugc";
+  linkToAdAssetType?: "product" | "app";
   /** AI provider used for scripts/prompts generation. */
   aiProvider?: "gpt" | "claude";
   customUgcIntent?: string;
@@ -1289,6 +1290,7 @@ export function readUniverseFromExtracted(extracted: unknown): LinkToAdUniverseS
       o.generationMode === "custom_ugc" || o.generationMode === "automatic"
         ? (o.generationMode as "automatic" | "custom_ugc")
         : "automatic",
+    linkToAdAssetType: o.linkToAdAssetType === "app" ? "app" : "product",
     aiProvider: o.aiProvider === "claude" ? "claude" : "gpt",
     customUgcIntent: typeof o.customUgcIntent === "string" ? o.customUgcIntent : "",
     customUgcTopic: typeof o.customUgcTopic === "string" ? o.customUgcTopic : "",

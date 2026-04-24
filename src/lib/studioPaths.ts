@@ -1,5 +1,6 @@
 export type AppSection =
   | "link_to_ad"
+  | "ads_studio"
   | "avatar"
   | "ad_clone"
   | "voice"
@@ -14,6 +15,7 @@ export type VoiceToolMode = "voice_change";
 
 export const SECTION_TO_SLUG: Record<AppSection, string> = {
   link_to_ad: "link-to-ad",
+  ads_studio: "ads-studio",
   avatar: "avatar",
   ad_clone: "translate",
   voice: "voice",

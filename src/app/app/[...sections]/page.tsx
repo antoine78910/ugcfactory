@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import LinkToAdUniverse from "@/app/_components/LinkToAdUniverse";
+import AdsStudioPanel from "@/app/_components/AdsStudioPanel";
 import { ProjectRunBrandBriefEditor } from "@/app/_components/ProjectRunBrandBriefEditor";
 import { ProjectRunScriptsEditor } from "@/app/_components/ProjectRunScriptsEditor";
 import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
@@ -130,6 +131,7 @@ function mergeVoiceHistoryWithServer(
 type WizardStep = "url" | "analysis" | "quiz" | "image" | "video";
 type AppSection =
   | "link_to_ad"
+  | "ads_studio"
   | "avatar"
   | "ad_clone"
   | "voice"
@@ -359,6 +361,7 @@ const UGC_CURRENT_RUN_KEY = "ugc_current_run_id";
 
 const APP_VALID_SECTIONS: AppSection[] = [
   "link_to_ad",
+  "ads_studio",
   "avatar",
   "ad_clone",
   "voice",
@@ -372,6 +375,7 @@ const APP_VALID_SECTIONS: AppSection[] = [
 /** URL slug ↔ internal section id. Exported so StudioShell can share the mapping. */
 const SECTION_TO_SLUG: Record<AppSection, string> = {
   link_to_ad: "link-to-ad",
+  ads_studio: "ads-studio",
   avatar: "avatar",
   ad_clone: "translate",
   voice: "voice",
@@ -4737,6 +4741,13 @@ export default function AppBrandWizard() {
                 />
               </div>
             ) : null}
+            <div className={appSection === "ads_studio" ? "contents" : "hidden"} aria-hidden={appSection !== "ads_studio"}>
+              <Card className="gap-2 border-white/10 bg-[#0b0912]/85 py-3 shadow-[0_0_30px_rgba(139,92,246,0.08)]">
+                <CardContent className="px-3 pb-3 pt-2 sm:px-6">
+                  <AdsStudioPanel />
+                </CardContent>
+              </Card>
+            </div>
 
             {appSection === "link_to_ad" && false && step === "url" && (
               <Card className="border-white/10 bg-[#0b0912]/85 shadow-[0_0_30px_rgba(139,92,246,0.08)]">

@@ -7,6 +7,7 @@ import { claudeMessagesText } from "@/lib/claudeResponses";
 import { UGC_I2V_PROMPT_INSTRUCTIONS } from "@/lib/ugcI2vPromptInstructions";
 import { normalizeUgcScriptVideoDurationSec } from "@/lib/ugcAiScriptBrief";
 import { parseUgcI2v30sParts } from "@/lib/ugcI2vParse";
+import { LINK_TO_AD_APP_VIDEO_PROMPT_INSTRUCTIONS } from "@/lib/linkToAdAppPrompts";
 
 type Body = {
   /** Full UGC script for the chosen angle (includes VOICE PROFILE etc.) */
@@ -14,6 +15,7 @@ type Body = {
   provider?: "gpt" | "claude";
   /** Drives 30s → two prompts (PART 1 / PART 2) vs single prompt. */
   videoDurationSeconds?: number;
+  linkToAdAssetType?: "product" | "app";
 };
 
 export async function POST(req: Request) {
@@ -24,6 +26,7 @@ export async function POST(req: Request) {
   const angleScript = body?.angleScript?.trim();
   const provider: "gpt" | "claude" = body?.provider === "gpt" ? "gpt" : "claude";
   const videoDurationSeconds = normalizeUgcScriptVideoDurationSec(body?.videoDurationSeconds);
+  const linkToAdAssetType = body?.linkToAdAssetType === "app" ? "app" : "product";
   if (!angleScript) {
     return NextResponse.json({ error: "Missing `angleScript`." }, { status: 400 });
   }
@@ -39,7 +42,7 @@ export async function POST(req: Request) {
   ].join("\n");
 
   const user = [
-    UGC_I2V_PROMPT_INSTRUCTIONS,
+    linkToAdAssetType === "app" ? LINK_TO_AD_APP_VIDEO_PROMPT_INSTRUCTIONS : UGC_I2V_PROMPT_INSTRUCTIONS,
     "",
     "---",
     `Target video duration for this run: ${String(videoDurationSeconds)} seconds.`,

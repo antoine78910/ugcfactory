@@ -5,10 +5,12 @@ import { openaiResponsesText } from "@/lib/openaiResponses";
 import { claudeMessagesText } from "@/lib/claudeResponses";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { makeCacheKey } from "@/lib/gptCache";
+import { LINK_TO_AD_APP_BRAND_BRIEF_EXTRA_INSTRUCTIONS } from "@/lib/linkToAdAppPrompts";
 
 type Body = {
   url: string;
   provider?: "gpt" | "claude";
+  linkToAdAssetType?: "product" | "app";
 };
 
 async function fetchPageText(url: string, maxChars = 12_000): Promise<string> {
@@ -42,6 +44,7 @@ export async function POST(req: Request) {
   if (!url) return NextResponse.json({ error: "Missing `url`." }, { status: 400 });
 
   const provider: "gpt" | "claude" = body?.provider === "gpt" ? "gpt" : "claude";
+  const linkToAdAssetType = body?.linkToAdAssetType === "app" ? "app" : "product";
 
   const EXAMPLE_SKULT =
     "Skult Men is a men's skincare brand offering products designed to improve facial appearance and deliver a more defined jawline and a more sculpted face. The hero product, the Collagen Face Sculpt Wrap, is a facial mask meant to help firm skin, improve elasticity, and create the look of a more toned, structured face. The core problem it addresses is dissatisfaction with facial definition among men, especially a weak jawline, a face that feels too round or slack, or loss of skin firmness. That tension can affect perceived masculinity, attractiveness, and self-confidence. The central product promise is to help visibly firm and sculpt the face using collagen and a tightening effect, for a sharper jawline and clearer facial structure. The transformation sold is moving from a softer or less defined face to one that looks more sculpted, masculine, and structured. The primary audience is men roughly 20–40 who care about appearance, are into grooming and optimizing how they look, and respond to modern aesthetic cues (strong jawline, structured face). Their main pains are lack of facial definition, a face that looks too round or tired, and wanting to improve looks without invasive procedures. Their desires include a clearer jawline, a more masculine-looking face, compliments, and more confidence in how they look. Key objections may be whether it really works, how long until results show, whether the effect lasts, and whether it suits all skin types. The strongest marketing angles are transformation (before/after jawline), masculinity (more structured, virile look), simple solution (an easy at-home mask), confidence (better presence and appearance), and social proof (testimonials and visible results). Overall, Skult Men positions as a men's grooming brand promising visible improvement in facial definition and selling the idea of a more sculpted, masculine, confident face through a simple, accessible solution.";
@@ -51,6 +54,9 @@ export async function POST(req: Request) {
     "",
     `Product URL: ${url}`,
     "",
+    ...(linkToAdAssetType === "app"
+      ? [LINK_TO_AD_APP_BRAND_BRIEF_EXTRA_INSTRUCTIONS, ""]
+      : []),
     "Output a detailed brand brief. Include enough on how to use it so UGC can show the benefit clearly, without dwelling on it too long.",
     "",
     "Match the form and structure of the example below (concise, clear, do not diverge). The example shows structure and tone only, not content to copy for another brand.",
@@ -69,7 +75,7 @@ export async function POST(req: Request) {
   ].join("\n");
 
   try {
-    const cacheKey = makeCacheKey({ v: 4, url, provider });
+    const cacheKey = makeCacheKey({ v: 5, url, provider, linkToAdAssetType });
     try {
       const { data: hit } = await supabase
         .from("gpt_cache")

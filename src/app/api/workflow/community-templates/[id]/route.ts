@@ -4,6 +4,17 @@ import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 
 type Ctx = { params: Promise<{ id: string }> };
 
+function isMissingCommunityTemplatesTable(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  const msg = (error.message ?? "").toLowerCase();
+  return (
+    error.code === "42P01" ||
+    error.code === "PGRST205" ||
+    (msg.includes("workflow_community_templates") && msg.includes("schema cache")) ||
+    (msg.includes("workflow_community_templates") && msg.includes("does not exist"))
+  );
+}
+
 export async function GET(_req: Request, ctx: Ctx) {
   const auth = await requireSupabaseUser();
   if (auth.response) return auth.response;
@@ -21,6 +32,15 @@ export async function GET(_req: Request, ctx: Ctx) {
     .maybeSingle();
 
   if (error) {
+    if (isMissingCommunityTemplatesTable(error)) {
+      return NextResponse.json(
+        {
+          error:
+            "Community templates are not enabled yet on this database. Run the latest Supabase migration, then retry.",
+        },
+        { status: 503 },
+      );
+    }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
   if (!data) {

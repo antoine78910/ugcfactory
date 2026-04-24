@@ -5,7 +5,9 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { toast } from "sonner";
 import Link from "next/link";
 import {
+  AppWindow,
   ArrowLeft,
+  Box,
   Check,
   ChevronDown,
   ChevronRight,
@@ -1389,6 +1391,7 @@ export default function LinkToAdUniverse({
   const [summaryText, setSummaryText] = useState<string>("");
   const [scriptsText, setScriptsText] = useState<string>("");
   const [generationMode, setGenerationMode] = useState<"automatic" | "custom_ugc">("automatic");
+  const [linkToAdAssetType, setLinkToAdAssetType] = useState<"product" | "app">("product");
   const scriptProvider = "claude" as const;
 
   const [videoDuration, setVideoDuration] = useState<number>(10);
@@ -1839,6 +1842,7 @@ export default function LinkToAdUniverse({
     setNanoPromptDrafts(["", "", ""]);
     setNanoPromptTechnicalTails(["", "", ""]);
     setGenerationMode("automatic");
+    setLinkToAdAssetType("product");
     setCustomUgcTopic("");
     setCustomUgcOffer("");
     setCustomUgcCta("");
@@ -2117,6 +2121,7 @@ export default function LinkToAdUniverse({
       v: 1,
       phase: scriptsText ? "after_scripts" : "after_summary",
       generationMode,
+      linkToAdAssetType,
       customUgcIntent: composeCustomUgcIntent(customUgcTopic, customUgcOffer, customUgcCta),
       customUgcTopic: customUgcTopic.trim(),
       customUgcOffer: customUgcOffer.trim(),
@@ -2156,6 +2161,7 @@ export default function LinkToAdUniverse({
     userPhotoUrls,
     personaPhotoUrls,
     generationMode,
+    linkToAdAssetType,
     customUgcTopic,
     customUgcOffer,
     customUgcCta,
@@ -2746,6 +2752,7 @@ export default function LinkToAdUniverse({
       setSummaryText(snap.summaryText);
       setScriptsText(snap.scriptsText);
       setGenerationMode(snap.generationMode === "custom_ugc" ? "custom_ugc" : "automatic");
+      setLinkToAdAssetType(snap.linkToAdAssetType === "app" ? "app" : "product");
       setCustomUgcTopic(((snap.customUgcTopic ?? "").trim() || (snap.customUgcIntent ?? "").trim()));
       setCustomUgcOffer((snap.customUgcOffer ?? "").trim());
       setCustomUgcCta((snap.customUgcCta ?? "").trim());
@@ -3478,6 +3485,7 @@ export default function LinkToAdUniverse({
             avatarImageUrls: personaRefs.length > 0 ? personaRefs : undefined,
             videoDurationSeconds: videoDuration,
             generationMode,
+            linkToAdAssetType,
             customUgcIntent: composeCustomUgcIntent(customUgcTopic, customUgcOffer, customUgcCta),
             provider: scriptProvider,
           }),
@@ -3686,6 +3694,7 @@ export default function LinkToAdUniverse({
           userProductImageUrls: pipelineProductUrls,
           personaImageUrls: pipelinePersonaUrls,
           generationMode,
+          linkToAdAssetType,
           customUgcIntent: composeCustomUgcIntent(customUgcTopic, customUgcOffer, customUgcCta),
           aiProvider: scriptProvider,
           videoDurationSeconds: videoDuration,
@@ -3815,6 +3824,7 @@ export default function LinkToAdUniverse({
           productImageUrls: nanoRefs,
           avatarImageUrls: avatarRefs,
           generationMode,
+          linkToAdAssetType,
           customUgcIntent: composeCustomUgcIntent(customUgcTopic, customUgcOffer, customUgcCta),
           provider: scriptProvider,
         }),
@@ -3883,11 +3893,24 @@ export default function LinkToAdUniverse({
 
   async function onGenerateNanoBananaImage() {
     const url = storeUrl.trim();
+    const idx = selectedAngleIndex === 0 || selectedAngleIndex === 1 || selectedAngleIndex === 2 ? selectedAngleIndex : 0;
     const productRefs = resolveNanoProductImageUrls();
     const nanoRefs = resolveNanoGenerationImageUrls();
     const img = productRefs[0];
-    const prompt = fullNanoPromptsTriple[nanoBananaSelectedPromptIndex]?.trim();
-    if (!url || !lastExtractedJson || !prompt) {
+    const promptIdx =
+      nanoBananaSelectedPromptIndex === 0 || nanoBananaSelectedPromptIndex === 1 || nanoBananaSelectedPromptIndex === 2
+        ? nanoBananaSelectedPromptIndex
+        : 0;
+    const selectedScript = selectedScriptOptionByIndex(scriptsText, idx);
+    const script = (idx === selectedAngleIndex ? editableScript : selectedScript).trim() || selectedScript;
+    const avatarRefs = personaPhotoUrls
+      .map((u) => u.trim())
+      .filter((u, i, arr) => /^https?:\/\//i.test(u) && arr.indexOf(u) === i)
+      .slice(-3)
+      .reverse();
+    const signature = `script:${fnv1aHash(script)}|imgs:${nanoRefs.join(",")}|avatars:${avatarRefs.join(",")}|provider:${scriptProvider}`;
+    let prompt = fullNanoPromptsTriple[promptIdx]?.trim();
+    if (!url || !lastExtractedJson) {
       toast.error("Generate the 3 image prompts first, then choose a valid prompt.");
       return;
     }
@@ -3896,9 +3919,24 @@ export default function LinkToAdUniverse({
       return;
     }
     setIsNanoImageSubmitting(true);
-    lastNanoImagePromptRef.current = prompt;
-    lastNanoImagePromptIndexRef.current = nanoBananaSelectedPromptIndex;
     try {
+      // If refs changed after prompt generation (for example persona uploads), refresh prompts first.
+      if (!prompt || nanoBananaPromptsSignatureRef.current !== signature) {
+        const nextPrompts = await onGenerateNanoBananaPrompts(idx, { keepThreeImagesSubmitting: true });
+        if (!nextPrompts) return;
+        const parsed = parseThreeLabeledPrompts(nextPrompts);
+        const normalized = parsed.map((p) => {
+          const { editable, technicalTail } = splitNanoPromptBodyForEditing(p);
+          return mergeNanoPromptForApi(editable, technicalTail).trim();
+        }) as [string, string, string];
+        prompt = normalized[promptIdx]?.trim() ?? "";
+      }
+      if (!prompt) {
+        toast.error("Generate the 3 image prompts first, then choose a valid prompt.");
+        return;
+      }
+      lastNanoImagePromptRef.current = prompt;
+      lastNanoImagePromptIndexRef.current = promptIdx;
       nanoImageAbortRef.current?.abort();
       const controller = new AbortController();
       nanoImageAbortRef.current = controller;
@@ -3921,9 +3959,8 @@ export default function LinkToAdUniverse({
       if (!res.ok || !json.taskId) throw new Error(json.error || "Image generation failed");
       setNanoBananaTaskId(json.taskId);
       setNanoPollTaskId(json.taskId);
-      setNanoPollingSlotIndex(nanoBananaSelectedPromptIndex);
-      const angleIdx =
-        selectedAngleIndex === 0 || selectedAngleIndex === 1 || selectedAngleIndex === 2 ? selectedAngleIndex : 0;
+      setNanoPollingSlotIndex(promptIdx);
+      const angleIdx = idx;
       void registerLinkToAdStudioImage(json.taskId, `Link to Ad · Angle ${angleIdx + 1} · image`);
       const base = latestSnapRef.current;
       if (base && lastExtractedJson) {
@@ -3944,8 +3981,7 @@ export default function LinkToAdUniverse({
       if (e instanceof DOMException && e.name === "AbortError") return;
       const errMsg = e instanceof Error ? e.message : "Unknown error";
       toast.error("Image generation", { description: errMsg });
-      const angleIdx =
-        selectedAngleIndex === 0 || selectedAngleIndex === 1 || selectedAngleIndex === 2 ? selectedAngleIndex : 0;
+      const angleIdx = idx;
       void registerLinkToAdStudioImageFailed(`Link to Ad · Angle ${angleIdx + 1} · image`, errMsg);
     } finally {
       setIsNanoImageSubmitting(false);
@@ -4798,6 +4834,7 @@ export default function LinkToAdUniverse({
           angleScript: script,
           provider: scriptProvider,
           videoDurationSeconds: videoDuration,
+          linkToAdAssetType,
         }),
       });
       const json = (await res.json()) as {
@@ -5737,39 +5774,62 @@ export default function LinkToAdUniverse({
               <p className="mt-1.5 text-sm text-white/50">We scan the page and create a UGC video ad for you.</p>
             </div>
             <div className="w-full max-w-xl space-y-3">
-              <div className="relative">
-                {/* Landing-page input style, with reduced glow for filming. */}
-                <div className="pointer-events-none absolute -inset-6 rounded-[1.25rem] bg-violet-600/10 blur-2xl opacity-30" />
-                <div className="relative overflow-hidden rounded-[1.25rem] bg-transparent p-2 ring-1 ring-violet-500/40 shadow-[0_0_45px_rgba(139,92,246,0.10)] transition-all duration-300 ease-out focus-within:ring-2 focus-within:ring-violet-400 focus-within:shadow-[0_0_60px_rgba(139,92,246,0.18)] sm:py-1.5">
-                  <Input
-                    value={storeUrl}
-                    onChange={(e) => setStoreUrl(e.target.value)}
-                    placeholder="https://your-product-page.com"
-                    autoFocus
-                    className="h-11 w-full border-0 !bg-transparent pl-4 pr-[10.5rem] text-sm text-white placeholder:text-white/25 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 sm:pr-44"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        handleGenerateFromUrl();
-                      }
-                    }}
-                  />
-                  <Button
-                    type="button"
-                    disabled={!storeUrl.trim()}
-                    onClick={handleGenerateFromUrl}
-                    className="absolute right-2 top-1/2 inline-flex h-[2.75rem] max-w-[min(100%,11.5rem)] -translate-y-1/2 items-center justify-center gap-0 rounded-[1rem] border border-violet-200/40 bg-violet-400 px-2 text-sm font-semibold text-black shadow-[0_6px_0_0_rgba(76,29,149,0.9)] ring-offset-0 transition-all hover:-translate-y-[calc(50%+1px)] hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9),0_0_18px_rgba(167,139,250,0.30)] focus-visible:border-violet-400/45 focus-visible:ring-violet-400/55 focus-visible:ring-[3px] active:translate-y-[calc(-50%+6px)] active:shadow-[0_0_0_0_rgba(76,29,149,0.9)] disabled:opacity-40 sm:max-w-none sm:min-w-[10rem] sm:px-2.5"
-                  >
-                    <span className="inline-flex min-w-0 items-center gap-1 sm:gap-1.5">
-                      <span className="truncate">Generate</span>
-                      <Sparkles className="h-4 w-4 shrink-0" aria-hidden />
-                      <LinkToAdStudioStyleCreditPill
-                        amount={ltaInitialGenerateCharge}
-                        hideCredits={hideCredits}
-                        compact
-                      />
-                    </span>
-                  </Button>
+              <div className="flex items-stretch gap-3">
+                <div className="shrink-0 rounded-[1.15rem] border border-violet-400/25 bg-violet-500/10 p-1 shadow-[0_14px_32px_rgba(76,29,149,0.28)]">
+                  {([
+                    ["product", "Product", Box],
+                    ["app", "App", AppWindow],
+                  ] as const).map(([value, label, Icon]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setLinkToAdAssetType(value)}
+                      className={cn(
+                        "flex h-[1.68rem] w-full items-center gap-2 rounded-xl px-3 text-left text-xs font-semibold transition",
+                        linkToAdAssetType === value
+                          ? "border border-violet-300/45 bg-violet-300/90 text-[#12061f] shadow-[0_0_0_1px_rgba(196,181,253,0.35)]"
+                          : "border border-transparent text-violet-100/70 hover:bg-violet-400/15 hover:text-violet-50",
+                      )}
+                    >
+                      <Icon className="h-3.5 w-3.5 shrink-0" />
+                      <span>{label}</span>
+                    </button>
+                  ))}
+                </div>
+                <div className="relative flex-1">
+                  {/* Landing-page input style, with reduced glow for filming. */}
+                  <div className="pointer-events-none absolute -inset-6 rounded-[1.25rem] bg-violet-600/10 blur-2xl opacity-30" />
+                  <div className="relative overflow-hidden rounded-[1.25rem] bg-transparent p-2 ring-1 ring-violet-500/40 shadow-[0_0_45px_rgba(139,92,246,0.10)] transition-all duration-300 ease-out focus-within:ring-2 focus-within:ring-violet-400 focus-within:shadow-[0_0_60px_rgba(139,92,246,0.18)] sm:py-1.5">
+                    <Input
+                      value={storeUrl}
+                      onChange={(e) => setStoreUrl(e.target.value)}
+                      placeholder="https://your-product-page.com"
+                      autoFocus
+                      className="h-11 w-full border-0 !bg-transparent pl-4 pr-[10.5rem] text-sm text-white placeholder:text-white/25 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 sm:pr-44"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleGenerateFromUrl();
+                        }
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      disabled={!storeUrl.trim()}
+                      onClick={handleGenerateFromUrl}
+                      className="absolute right-2 top-1/2 inline-flex h-[2.75rem] max-w-[min(100%,11.5rem)] -translate-y-1/2 items-center justify-center gap-0 rounded-[1rem] border border-violet-200/40 bg-violet-400 px-2 text-sm font-semibold text-black shadow-[0_6px_0_0_rgba(76,29,149,0.9)] ring-offset-0 transition-all hover:-translate-y-[calc(50%+1px)] hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9),0_0_18px_rgba(167,139,250,0.30)] focus-visible:border-violet-400/45 focus-visible:ring-violet-400/55 focus-visible:ring-[3px] active:translate-y-[calc(-50%+6px)] active:shadow-[0_0_0_0_rgba(76,29,149,0.9)] disabled:opacity-40 sm:max-w-none sm:min-w-[10rem] sm:px-2.5"
+                    >
+                      <span className="inline-flex min-w-0 items-center gap-1 sm:gap-1.5">
+                        <span className="truncate">Generate</span>
+                        <Sparkles className="h-4 w-4 shrink-0" aria-hidden />
+                        <LinkToAdStudioStyleCreditPill
+                          amount={ltaInitialGenerateCharge}
+                          hideCredits={hideCredits}
+                          compact
+                        />
+                      </span>
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>

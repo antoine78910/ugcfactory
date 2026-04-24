@@ -66,6 +66,7 @@ export async function runInitialPipeline(
     /** Persona / avatar reference URLs for script generation vision. */
     personaImageUrls?: string[];
     generationMode?: "automatic" | "custom_ugc";
+    linkToAdAssetType?: "product" | "app";
     customUgcIntent?: string;
     aiProvider?: "gpt" | "claude";
     /** 5 / 10 / 15 / 30, spoken-word budget for UGC scripts (Link to Ad duration control). */
@@ -85,6 +86,7 @@ export async function runInitialPipeline(
     .map((u) => (typeof u === "string" ? u.trim() : ""))
     .filter((u) => /^https?:\/\//i.test(u));
   const generationMode = opts.generationMode === "custom_ugc" ? "custom_ugc" : "automatic";
+  const linkToAdAssetType = opts.linkToAdAssetType === "app" ? "app" : "product";
   const customUgcIntent = (opts.customUgcIntent ?? "").trim();
   const aiProvider = opts.aiProvider === "claude" ? "claude" : "gpt";
   const scriptTargetDurationSec = normalizeUgcScriptVideoDurationSec(
@@ -194,7 +196,7 @@ export async function runInitialPipeline(
     report(2);
     const summaryRes = await f("/api/gpt/brand-url-summary", {
       method: "POST",
-      body: JSON.stringify({ url, provider: aiProvider }),
+      body: JSON.stringify({ url, provider: aiProvider, linkToAdAssetType }),
     });
     if (!summaryRes.ok) {
       const raw = await summaryRes.text().catch(() => "");
@@ -223,6 +225,7 @@ export async function runInitialPipeline(
       v: 1,
       phase: "after_summary",
       generationMode,
+      linkToAdAssetType,
       customUgcIntent,
       aiProvider,
       ltaVideoDurationSec: scriptTargetDurationSec,
@@ -265,6 +268,7 @@ export async function runInitialPipeline(
           avatarImageUrls: personaForScripts,
           videoDurationSeconds: scriptTargetDurationSec,
           generationMode,
+          linkToAdAssetType,
           customUgcIntent,
           provider: aiProvider,
         }),
@@ -288,6 +292,7 @@ export async function runInitialPipeline(
         v: 1,
         phase: "after_scripts",
         generationMode,
+        linkToAdAssetType,
         customUgcIntent,
         aiProvider,
         ltaVideoDurationSec: scriptTargetDurationSec,
@@ -362,6 +367,7 @@ export async function runContinueScriptsPipeline(
 
   const base = cloneExtractedBase(run.extracted);
   const generationMode = snap.generationMode === "custom_ugc" ? "custom_ugc" : "automatic";
+  const linkToAdAssetType = snap.linkToAdAssetType === "app" ? "app" : "product";
   const customUgcIntent = (snap.customUgcIntent ?? "").trim();
   const titleForScripts = typeof run.title === "string" ? run.title : null;
   const candidates =
@@ -397,6 +403,7 @@ export async function runContinueScriptsPipeline(
         avatarImageUrls: personaForScripts,
         videoDurationSeconds: scriptTargetDurationSec,
         generationMode,
+        linkToAdAssetType,
         customUgcIntent,
         provider: aiProvider,
       }),
@@ -415,6 +422,7 @@ export async function runContinueScriptsPipeline(
       v: 1,
       phase: "after_scripts",
       generationMode,
+      linkToAdAssetType,
       customUgcIntent,
       aiProvider,
       ltaVideoDurationSec: scriptTargetDurationSec,

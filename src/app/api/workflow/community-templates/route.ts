@@ -4,11 +4,24 @@ import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import type { WorkflowProjectStateV1 } from "@/app/workflow/workflowProjectStorage";
 
 const MAX_PROJECT_BYTES = 1_800_000;
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 function isValidProject(p: unknown): p is WorkflowProjectStateV1 {
   if (!p || typeof p !== "object") return false;
   const o = p as { v?: unknown; pages?: unknown; activePageId?: unknown };
   return o.v === 1 && typeof o.activePageId === "string" && Array.isArray(o.pages);
+}
+
+function isMissingCommunityTemplatesTable(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  const msg = (error.message ?? "").toLowerCase();
+  return (
+    error.code === "42P01" ||
+    error.code === "PGRST205" ||
+    (msg.includes("workflow_community_templates") && msg.includes("schema cache")) ||
+    (msg.includes("workflow_community_templates") && msg.includes("does not exist"))
+  );
 }
 
 export async function GET() {
@@ -22,6 +35,15 @@ export async function GET() {
     .limit(200);
 
   if (error) {
+    if (isMissingCommunityTemplatesTable(error)) {
+      return NextResponse.json(
+        {
+          error:
+            "Community templates are not enabled yet on this database. Run the latest Supabase migration, then retry.",
+        },
+        { status: 503 },
+      );
+    }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
@@ -75,8 +97,42 @@ export async function POST(req: Request) {
     .single();
 
   if (error) {
+    if (isMissingCommunityTemplatesTable(error)) {
+      return NextResponse.json(
+        {
+          error:
+            "Community templates are not enabled yet on this database. Run the latest Supabase migration, then retry.",
+        },
+        { status: 503 },
+      );
+    }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
   return NextResponse.json({ template: data });
+}
+
+export async function DELETE() {
+  const auth = await requireSupabaseUser();
+  if (auth.response) return auth.response;
+
+  const { error } = await auth.supabase
+    .from("workflow_community_templates")
+    .delete()
+    .eq("created_by", auth.user.id);
+
+  if (error) {
+    if (isMissingCommunityTemplatesTable(error)) {
+      return NextResponse.json(
+        {
+          error:
+            "Community templates are not enabled yet on this database. Run the latest Supabase migration, then retry.",
+        },
+        { status: 503 },
+      );
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ ok: true });
 }

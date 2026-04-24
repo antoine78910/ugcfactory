@@ -12,6 +12,7 @@ import {
 } from "@/lib/ugcAiScriptBrief";
 import { MAX_GPT_PRODUCT_REFERENCE_IMAGES } from "@/lib/productReferenceImages";
 import { sanitizeUgcAngleScriptText } from "@/lib/sanitizeUgcAngleScript";
+import { LINK_TO_AD_APP_SCRIPT_INSTRUCTIONS } from "@/lib/linkToAdAppPrompts";
 
 type Body = {
   storeUrl?: string;
@@ -28,6 +29,7 @@ type Body = {
   /** 5 | 10 | 15 | 30 (legacy: 8 → 10s tier). Drives max spoken-word count per script. */
   videoDurationSeconds?: number;
   generationMode?: "automatic" | "custom_ugc";
+  linkToAdAssetType?: "product" | "app";
   customUgcIntent?: string | null;
   provider?: "gpt" | "claude";
 };
@@ -75,6 +77,7 @@ export async function POST(req: Request) {
 
   const videoDurationSeconds = normalizeUgcScriptVideoDurationSec(body?.videoDurationSeconds);
   const generationMode = body?.generationMode === "custom_ugc" ? "custom_ugc" : "automatic";
+  const linkToAdAssetType = body?.linkToAdAssetType === "app" ? "app" : "product";
   const customUgcIntent = body?.customUgcIntent?.trim() || "";
   const previousScriptsText = body?.previousScriptsText?.trim() || "";
   const provider: "gpt" | "claude" = body?.provider === "gpt" ? "gpt" : "claude";
@@ -88,11 +91,14 @@ export async function POST(req: Request) {
     generationMode === "custom_ugc"
       ? `Generation mode: CUSTOM UGC INTENT. Respect this user intent while still following all structural rules: ${customUgcIntent || "No talk, product-focused visual UGC."}`
       : "Generation mode: AUTOMATIC (standard Link to Ad).",
+    linkToAdAssetType === "app"
+      ? "Asset type: APP. Write the scripts for an app ad (mobile/desktop UI, onboarding, feature benefits, retention angle) rather than a physical product."
+      : "Asset type: PRODUCT (physical/ecommerce product).",
     previousScriptsText
       ? "Important: generate 3 NEW angles that are meaningfully different from the previous set. Do NOT reuse the same headline/hook/problem/benefits/CTA, and avoid similar phrasing."
       : "",
     "",
-    UGC_SCRIPT_INSTRUCTIONS,
+    linkToAdAssetType === "app" ? LINK_TO_AD_APP_SCRIPT_INSTRUCTIONS : UGC_SCRIPT_INSTRUCTIONS,
   ].join("\n");
 
   const imageNote =
@@ -123,6 +129,9 @@ export async function POST(req: Request) {
     generationMode === "custom_ugc"
       ? `Custom UGC intent from user: ${customUgcIntent || "No talk, just show the product naturally."}`
       : "Mode: automatic generation from URL context.",
+    linkToAdAssetType === "app"
+      ? "Important: this Link to Ad run targets an app, so hooks, pains, benefits and CTA should center on app usage and outcomes."
+      : "Important: this Link to Ad run targets a physical product.",
     "",
     imageNote,
     "",
@@ -140,6 +149,7 @@ export async function POST(req: Request) {
       avatarUrlsJoined: avatarRefs.join("|"),
       videoDurationSeconds,
       generationMode,
+      linkToAdAssetType,
       customUgcIntent,
       storeUrl,
       productTitle,

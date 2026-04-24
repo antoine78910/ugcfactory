@@ -42,6 +42,7 @@ const LAST_STUDIO_NAV_SECTION_LS = "youry-last-studio-nav-section";
 
 export type StudioNavSection =
   | "link_to_ad"
+  | "ads_studio"
   | "avatar"
   | "ad_clone"
   | "voice"
@@ -53,6 +54,7 @@ export type StudioNavSection =
 
 const SECTION_TO_SLUG: Record<StudioNavSection, string> = {
   link_to_ad: "link-to-ad",
+  ads_studio: "ads-studio",
   avatar: "avatar",
   ad_clone: "translate",
   voice: "voice",
@@ -99,6 +101,14 @@ type CreateNavEntry =
 
 const CREATE_NAV: CreateNavEntry[] = [
   { kind: "route", id: "link_to_ad", label: "Link to Ad", icon: Link2 },
+  {
+    kind: "custom-link",
+    id: "ads_studio",
+    href: "/ads-studio",
+    label: "Ads Studio",
+    icon: Sparkles,
+    soon: true,
+  },
   {
     kind: "custom-link",
     id: "workflow",

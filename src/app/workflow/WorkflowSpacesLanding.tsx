@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { useSupabaseBrowserClient } from "@/lib/supabase/BrowserSupabaseProvider";
 
 import { WorkflowAmbientLayer } from "./WorkflowAmbientLayer";
+import { WorkflowLandingHeroDiagram } from "./WorkflowLandingHeroDiagram";
 import {
   createSpace,
   createSpaceFromTemplate,
@@ -217,13 +218,23 @@ export function WorkflowSpacesLanding() {
   const [spaces, setSpaces] = useState<WorkflowSpaceMeta[]>([]);
   const [templatesTick, setTemplatesTick] = useState(0);
   const [communityTemplates, setCommunityTemplates] = useState<WorkflowTemplateMeta[]>([]);
+  const [communityLoadFailed, setCommunityLoadFailed] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [tab, setTab] = useState<TabId>("my");
   const [query, setQuery] = useState("");
 
   const refreshCommunityTemplates = useCallback(async () => {
-    const res = await fetch("/api/workflow/community-templates", { method: "GET" });
-    if (!res.ok) return;
+    const res = await fetch(`/api/workflow/community-templates?t=${Date.now()}`, {
+      method: "GET",
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      setCommunityLoadFailed(true);
+      const j = (await res.json().catch(() => null)) as { error?: string } | null;
+      if (j?.error) toast.error(j.error);
+      return;
+    }
+    setCommunityLoadFailed(false);
     const j = (await res.json().catch(() => null)) as { templates?: unknown } | null;
     const rows = Array.isArray(j?.templates) ? j.templates : [];
     setCommunityTemplates(
@@ -251,7 +262,10 @@ export function WorkflowSpacesLanding() {
     const { data: sub } = sb.auth.onAuthStateChange((_event, session) => {
       setStorageScope(getWorkflowStorageScope(session?.user?.id ?? null));
       if (session?.user) void refreshCommunityTemplates();
-      else setCommunityTemplates([]);
+      else {
+        setCommunityTemplates([]);
+        setCommunityLoadFailed(false);
+      }
     });
     return () => sub.subscription.unsubscribe();
   }, [sb, refreshCommunityTemplates]);
@@ -265,6 +279,11 @@ export function WorkflowSpacesLanding() {
     refresh(storageScope);
     setHydrated(true);
   }, [storageScope, refresh]);
+
+  useEffect(() => {
+    if (tab !== "templates") return;
+    void refreshCommunityTemplates();
+  }, [tab, refreshCommunityTemplates]);
 
   const filteredSpaces = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -356,6 +375,28 @@ export function WorkflowSpacesLanding() {
     setTemplatesTick((n) => n + 1);
     setTab("templates");
   };
+  const clearMyPublishedTemplates = async () => {
+    if (!sb) {
+      toast.error("Sign in required");
+      return;
+    }
+    const { data: sess } = await sb.auth.getSession();
+    if (!sess.session?.user) {
+      toast.error("Sign in required");
+      return;
+    }
+    const ok = window.confirm("Delete all templates you published? This cannot be undone.");
+    if (!ok) return;
+    const res = await fetch("/api/workflow/community-templates", { method: "DELETE" });
+    const j = (await res.json().catch(() => null)) as { error?: string } | null;
+    if (!res.ok) {
+      toast.error(j?.error ?? "Could not delete templates");
+      return;
+    }
+    await refreshCommunityTemplates();
+    setTemplatesTick((n) => n + 1);
+    toast.success("Published templates deleted");
+  };
   return (
     <div className="relative min-h-[100dvh] overflow-hidden bg-[#06070d] text-white">
       {/* Dots only on the canvas (`WorkflowEditor`); keep import so the symbol is always defined for bundlers/HMR */}
@@ -365,8 +406,8 @@ export function WorkflowSpacesLanding() {
 
       <div className="relative z-10 mx-auto max-w-6xl px-4 pb-16 pt-8 sm:px-6 sm:pt-10">
         <div className="overflow-hidden rounded-[22px] border border-white/[0.08] bg-gradient-to-br from-violet-950/80 via-[#0c0d12] to-violet-950/45 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.45)] sm:p-10">
-          <div className="flex flex-col gap-8 lg:flex-row lg:items-center lg:justify-between">
-            <div className="max-w-xl">
+          <div className="flex flex-col gap-8 lg:flex-row lg:items-center lg:gap-6">
+            <div className="w-full shrink-0 lg:max-w-sm lg:basis-[24%]">
               <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Workflow</h1>
               <p className="mt-2 text-lg font-semibold text-white/80">Start from scratch</p>
               <p className="mt-2 text-sm leading-relaxed text-white/45">
@@ -382,40 +423,8 @@ export function WorkflowSpacesLanding() {
               </button>
             </div>
 
-            <div className="relative hidden h-[200px] w-[min(100%,380px)] shrink-0 lg:block" aria-hidden>
-              <div className="absolute inset-0 rounded-2xl border border-white/10 bg-[#06070d]/90 p-4">
-                <div className="relative h-full">
-                  <div className="absolute left-2 top-6 h-14 w-24 rounded-xl border border-violet-500/35 bg-black/60" />
-                  <div className="absolute right-4 top-10 h-12 w-32 rounded-xl border border-violet-500/35 bg-black/50 px-2 py-1.5 text-[9px] leading-snug text-white/55">
-                    Slowly and cinematically zoom out of the scene…
-                  </div>
-                  <div className="absolute bottom-8 left-1/4 h-12 w-20 rounded-xl border border-white/15 bg-black/70" />
-                  <svg className="absolute inset-0 h-full w-full" viewBox="0 0 380 200" fill="none">
-                    <path
-                      d="M 60 70 Q 120 40 180 90 T 300 100"
-                      stroke="url(#g1)"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                    />
-                    <path
-                      d="M 180 90 Q 240 130 320 95"
-                      stroke="url(#g2)"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                    />
-                    <defs>
-                      <linearGradient id="g1" x1="0" y1="0" x2="1" y2="0">
-                        <stop stopColor="#c4b5fd" stopOpacity="0.55" />
-                        <stop offset="1" stopColor="#a78bfa" stopOpacity="0.65" />
-                      </linearGradient>
-                      <linearGradient id="g2" x1="0" y1="0" x2="1" y2="0">
-                        <stop stopColor="#a78bfa" stopOpacity="0.65" />
-                        <stop offset="1" stopColor="#7c3aed" stopOpacity="0.45" />
-                      </linearGradient>
-                    </defs>
-                  </svg>
-                </div>
-              </div>
+            <div className="relative min-h-[240px] w-full lg:min-h-0 lg:basis-[76%] lg:min-w-0" aria-hidden>
+              <WorkflowLandingHeroDiagram className="h-[min(280px,52vw)] lg:h-[min(300px,36vw)] xl:h-[min(320px,32vw)]" />
             </div>
           </div>
         </div>
@@ -446,17 +455,33 @@ export function WorkflowSpacesLanding() {
             ))}
           </div>
 
-          <div className="relative w-full sm:max-w-md">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/35" />
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={tab === "templates" ? "Search templates…" : "Search workflows…"}
-              className="w-full rounded-full border border-white/[0.1] bg-[#0b0912]/90 py-2.5 pl-10 pr-4 text-[13px] text-white placeholder:text-white/35 outline-none ring-violet-500/0 transition focus:border-violet-500/35 focus:ring-2 focus:ring-violet-500/25"
-            />
+          <div className="flex w-full items-center gap-2 sm:w-auto">
+            <div className="relative w-full sm:w-[26rem]">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/35" />
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={tab === "templates" ? "Search templates…" : "Search workflows…"}
+                className="w-full rounded-full border border-white/[0.1] bg-[#0b0912]/90 py-2.5 pl-10 pr-4 text-[13px] text-white placeholder:text-white/35 outline-none ring-violet-500/0 transition focus:border-violet-500/35 focus:ring-2 focus:ring-violet-500/25"
+              />
+            </div>
+            {tab === "templates" ? (
+              <button
+                type="button"
+                onClick={() => void clearMyPublishedTemplates()}
+                className="shrink-0 rounded-full border border-red-400/25 bg-red-500/10 px-3 py-2 text-[12px] font-semibold text-red-100/90 transition hover:border-red-400/45 hover:bg-red-500/20"
+              >
+                Clear my published
+              </button>
+            ) : null}
           </div>
         </div>
+        {tab === "templates" && communityLoadFailed ? (
+          <p className="mt-2 text-xs text-red-200/80">
+            Community templates failed to load. Check Supabase migration/auth, then refresh.
+          </p>
+        ) : null}
 
         {!hydrated || storageScope === null ? (
           <p className="mt-10 text-center text-sm text-white/40">Loading workflows…</p>
