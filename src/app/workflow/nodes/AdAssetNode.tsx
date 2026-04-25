@@ -1297,6 +1297,25 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   const hasGeneratedOutput = Boolean(data.outputPreviewUrl?.trim());
   const hasAssistantOutput = Boolean(assistantOutput.trim());
   const hasWebsiteRun = Boolean(data.websiteLastRunAt?.trim());
+  const isGeneratorNode = data.kind === "image" || data.kind === "video";
+  const generatorTextInputWireCount = useStore(
+    useCallback(
+      (s) => {
+        if (!isGeneratorNode) return 0;
+        return s.edges.filter((e) => {
+          if (e.target !== id) return false;
+          const h = e.targetHandle ?? "";
+          return WORKFLOW_TEXT_INPUT_HANDLES.includes(h as (typeof WORKFLOW_TEXT_INPUT_HANDLES)[number]);
+        }).length;
+      },
+      [id, isGeneratorNode],
+    ),
+  );
+  const hasLinkedGeneratorTextInput = isGeneratorNode && generatorTextInputWireCount > 0;
+  const showPromptPreviewChip =
+    hasPreviewMedia &&
+    prompt.trim().length > 0 &&
+    (!isGeneratorNode || !hasLinkedGeneratorTextInput);
 
   useEffect(() => {
     if (data.kind !== "video") return;
@@ -2815,12 +2834,13 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             {frame.width} × {frame.height}
           </div>
 
-          {hasPreviewMedia ? (
+          {showPromptPreviewChip ? (
             <button
               type="button"
               className={cn(
                 "nodrag nopan absolute bottom-14 z-[4] border border-white/15 bg-black/35 px-2.5 py-2 text-left text-[12px] leading-snug text-white/92 backdrop-blur-sm transition hover:border-violet-400/45 hover:bg-black/50",
                 "inset-x-2 rounded-lg",
+                showEditLayer ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0",
               )}
               onClick={() => setPromptEditorOpen(true)}
               onPointerDown={(e) => e.stopPropagation()}
@@ -2850,7 +2870,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             )}
           >
             <div className="nodrag nopan relative" onPointerDown={(e) => e.stopPropagation()}>
-              {!hasPreviewMedia || data.kind === "image" || data.kind === "video" ? (
+              {!hasPreviewMedia || !isGeneratorNode || !hasLinkedGeneratorTextInput ? (
                 <textarea
                   value={prompt}
                   onChange={(e) => patch(id, { prompt: e.target.value })}
