@@ -248,9 +248,10 @@ export function WorkflowLandingHeroDiagram({ className }: { className?: string }
             <span className="text-[8px] font-semibold uppercase tracking-wide text-white/45">Prompt text</span>
           </div>
           <div className="p-2">
-            <p className="line-clamp-2 rounded-lg border border-white/12 bg-black/50 px-2 py-1.5 text-[9px] text-white/78">
-              "Clean UGC portrait style, soft light, natural skin, ecommerce vibe"
-            </p>
+            <div className="max-h-[34px] min-h-[30px] overflow-y-auto rounded-lg border border-white/12 bg-black/50 px-2 py-1.5 text-[9px] text-white/78">
+              <span>Clean UGC portrait style, soft light, natural skin, ecommerce vibe, premium product framing, subtle shadows</span>
+              <span className="ml-0.5 inline-block h-[10px] w-[1px] animate-pulse bg-violet-200/90 align-[-1px]" />
+            </div>
           </div>
           <div className="absolute -right-2 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full border border-white/15 bg-[#15151a]/95" />
         </div>
@@ -314,9 +315,10 @@ export function WorkflowLandingHeroDiagram({ className }: { className?: string }
             <span className="text-[8px] font-semibold uppercase tracking-wide text-white/45">Prompt text</span>
           </div>
           <div className="p-2">
-            <p className="line-clamp-2 rounded-lg border border-white/12 bg-black/50 px-2 py-1.5 text-[9px] text-white/78">
-              "Slow cinematic push-in + subtle smile + product in hand"
-            </p>
+            <div className="max-h-[34px] min-h-[30px] overflow-y-auto rounded-lg border border-white/12 bg-black/50 px-2 py-1.5 text-[9px] text-white/78">
+              <span>Slow cinematic push-in + subtle smile + product in hand, realistic motion blur, smooth camera path</span>
+              <span className="ml-0.5 inline-block h-[10px] w-[1px] animate-pulse bg-violet-200/90 align-[-1px]" />
+            </div>
           </div>
           <div className="absolute -right-2 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full border border-white/15 bg-[#15151a]/95" />
         </div>
