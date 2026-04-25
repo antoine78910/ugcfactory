@@ -889,6 +889,19 @@ function LinkToAdRecentRunsToggle({
   );
 }
 
+function normalizeRecentRunStatus(statusLabel: string | undefined, statusDone: boolean | undefined): { label: string; done: boolean } {
+  const raw = (statusLabel || "").trim().toLowerCase();
+  if (raw.includes("generat") || raw.includes("writing") || raw.includes("script") || raw.includes("angle")) {
+    return { label: "generating", done: false };
+  }
+  if (raw.includes("running")) return { label: "running", done: false };
+  if (raw.includes("finish") || raw.includes("ready") || raw.includes("done")) {
+    return { label: "finished", done: true };
+  }
+  if (statusDone === true) return { label: "finished", done: true };
+  return { label: "running", done: false };
+}
+
 function LinkToAdRecentRunsChips({
   recentLinkToAdRuns,
   hidePreviousLtaGenerations,
@@ -945,8 +958,9 @@ function LinkToAdRecentRunsChips({
                     return "";
                   }
                 })();
-                const statusText = (r.statusLabel || "").trim();
-                const statusDone = r.statusDone === true;
+                const statusMeta = normalizeRecentRunStatus(r.statusLabel, r.statusDone);
+                const statusText = statusMeta.label;
+                const statusDone = statusMeta.done;
                 return (
                   <motion.button
                     key={r.id}
@@ -1537,6 +1551,29 @@ export default function LinkToAdUniverse({
     if (!activeToken) return runningLinkToAdProjects;
     return runningLinkToAdProjects.filter((p) => p.token !== activeToken);
   }, [runningLinkToAdProjects, isWorking]);
+  const recentLinkToAdRunsForDisplay = useMemo(() => {
+    if (!runningLinkToAdProjectsForDisplay.length) return recentLinkToAdRuns;
+    const byId = new Map(recentLinkToAdRuns.map((r) => [r.id, r] as const));
+    for (const p of runningLinkToAdProjectsForDisplay) {
+      const runId = p.runId?.trim();
+      if (!runId) continue;
+      const existing = byId.get(runId);
+      if (existing) {
+        byId.set(runId, { ...existing, statusLabel: "running", statusDone: false });
+        continue;
+      }
+      byId.set(runId, {
+        id: runId,
+        title: null,
+        storeUrl: p.storeUrl,
+        createdAt: new Date(p.startedAt).toISOString(),
+        thumbUrl: null,
+        statusLabel: "running",
+        statusDone: false,
+      });
+    }
+    return [...byId.values()].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+  }, [recentLinkToAdRuns, runningLinkToAdProjectsForDisplay]);
   const [lastExtractedJson, setLastExtractedJson] = useState<Record<string, unknown> | null>(null);
   const [angleLabels, setAngleLabels] = useState<string[]>(["", "", ""]);
   const [selectedAngleIndex, setSelectedAngleIndex] = useState<number | null>(null);
@@ -6148,40 +6185,10 @@ export default function LinkToAdUniverse({
                 ) : null}
               </div>
             </details>
-            {runningLinkToAdProjectsForDisplay.length > 0 ? (
-              <div className="w-full max-w-xl rounded-xl border border-amber-400/20 bg-amber-500/[0.06] px-3 py-2">
-                <p className="text-[9px] font-semibold uppercase tracking-wide text-amber-200/85">Project running</p>
-                <div className="mt-1 flex flex-wrap gap-1.5">
-                  {runningLinkToAdProjectsForDisplay.slice(0, 4).map((p) => {
-                    const label = (() => {
-                      try {
-                        return new URL(p.storeUrl).hostname.replace(/^www\./, "");
-                      } catch {
-                        return p.storeUrl.slice(0, 24);
-                      }
-                    })();
-                    return (
-                      <button
-                        key={p.token}
-                        type="button"
-                        disabled={!p.runId}
-                        onClick={() => {
-                          if (p.runId) handleSwitchRecentRun(p.runId);
-                        }}
-                        className="rounded-md border border-white/10 bg-black/30 px-2 py-1 text-[10px] font-medium text-white/80 disabled:cursor-default disabled:opacity-70"
-                        title={p.runId ? "Open this running project" : "Run is starting..."}
-                      >
-                        {label || "Project"} · running
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ) : null}
-            {recentLinkToAdRuns.length > 0 ? (
+            {recentLinkToAdRunsForDisplay.length > 0 ? (
               <div className="w-full max-w-xl rounded-xl border border-white/8 bg-white/[0.02] px-3 py-2">
                 <div className="flex items-center gap-2">
-                  <p className="shrink-0 text-[9px] font-semibold uppercase tracking-wide text-violet-200/85">Recent</p>
+                  <p className="shrink-0 text-[9px] font-semibold uppercase tracking-wide text-violet-200/85">Recent projects</p>
                   <LinkToAdRecentRunsToggle
                     compact
                     hidePreviousLtaGenerations={hidePreviousLtaGenerations}
@@ -6191,7 +6198,7 @@ export default function LinkToAdUniverse({
                 </div>
                 <LinkToAdRecentRunsChips
                   compact
-                  recentLinkToAdRuns={recentLinkToAdRuns}
+                  recentLinkToAdRuns={recentLinkToAdRunsForDisplay}
                   hidePreviousLtaGenerations={hidePreviousLtaGenerations}
                   activeRunIdProp={activeRunIdProp}
                   universeRunId={universeRunId}
@@ -6203,37 +6210,7 @@ export default function LinkToAdUniverse({
           </div>
         ) : (
         <>
-        {runningLinkToAdProjectsForDisplay.length > 0 ? (
-          <div className="mb-3 rounded-lg border border-amber-400/20 bg-amber-500/[0.06] px-2.5 py-2">
-            <p className="text-[9px] font-semibold uppercase tracking-wide text-amber-200/85">Project running</p>
-            <div className="mt-1 flex flex-wrap gap-1.5">
-              {runningLinkToAdProjectsForDisplay.slice(0, 4).map((p) => {
-                const label = (() => {
-                  try {
-                    return new URL(p.storeUrl).hostname.replace(/^www\./, "");
-                  } catch {
-                    return p.storeUrl.slice(0, 24);
-                  }
-                })();
-                return (
-                  <button
-                    key={p.token}
-                    type="button"
-                    disabled={!p.runId}
-                    onClick={() => {
-                      if (p.runId) handleSwitchRecentRun(p.runId);
-                    }}
-                    className="rounded-md border border-white/10 bg-black/30 px-2 py-1 text-[10px] font-medium text-white/80 disabled:cursor-default disabled:opacity-70"
-                    title={p.runId ? "Open this running project" : "Run is starting..."}
-                  >
-                    {label || "Project"} · running
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        ) : null}
-        {!showBrandHeaderInsteadOfUrl && recentLinkToAdRuns.length > 0 ? (
+        {!showBrandHeaderInsteadOfUrl && recentLinkToAdRunsForDisplay.length > 0 ? (
           <div className="mb-4">
             <div className="rounded-lg border border-violet-500/15 bg-violet-500/[0.05] px-2.5 py-2">
               <p className="text-[9px] font-semibold uppercase tracking-wide text-violet-200/85">Recent projects</p>
@@ -6247,7 +6224,7 @@ export default function LinkToAdUniverse({
                 <div className="min-w-0 flex-1">
                   <LinkToAdRecentRunsChips
                     compact
-                    recentLinkToAdRuns={recentLinkToAdRuns}
+                    recentLinkToAdRuns={recentLinkToAdRunsForDisplay}
                     hidePreviousLtaGenerations={hidePreviousLtaGenerations}
                     activeRunIdProp={activeRunIdProp}
                     universeRunId={universeRunId}
