@@ -195,10 +195,7 @@ export function ImageRefNode({ id, data }: NodeProps<ImageRefNodeType>) {
       <WorkflowNodeContextToolbar nodeId={id} onRun={noop} variant="sticky" />
 
       <div className="relative flex items-end gap-1">
-        <div
-          className="nodrag nopan absolute left-0 -top-6 z-[6] flex min-w-0 items-center gap-2.5 pr-2"
-          onPointerDown={(e) => e.stopPropagation()}
-        >
+        <div className="absolute left-0 -top-6 z-[6] flex min-w-0 items-center gap-2.5 pr-2">
           <div className="flex h-6 w-6 items-center justify-center rounded-md border border-violet-500/45 bg-violet-950/65">
             <ImageIcon className="h-3.5 w-3.5 text-violet-300" />
           </div>

@@ -381,7 +381,7 @@ export function PromptListNode({ id, data: rawData, selected }: NodeProps<Prompt
             selected && "ring-2 ring-violet-500/85 ring-offset-2 ring-offset-[#06070d]",
           )}
         >
-          <div className="nodrag nopan absolute -top-7 left-0 z-[8] flex min-w-0 items-center gap-2.5 pr-2" onPointerDown={(e) => e.stopPropagation()}>
+          <div className="absolute -top-7 left-0 z-[8] flex min-w-0 items-center gap-2.5 pr-2">
             <ListOrdered className="h-4 w-4 shrink-0 text-violet-300/90" strokeWidth={2} aria-hidden />
             {titleEditing ? (
               <input

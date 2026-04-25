@@ -2702,7 +2702,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         }
       >
       <div className="relative pt-5" style={{ width: cardWidthPx }}>
-        <div className="nodrag nopan absolute left-0 top-0 z-[6] flex min-w-0 items-center gap-2.5 pr-2" onPointerDown={(e) => e.stopPropagation()}>
+        <div className="absolute left-0 top-0 z-[6] flex min-w-0 items-center gap-2.5 pr-2">
           <Icon className="h-4 w-4 shrink-0 text-white/75" strokeWidth={2} aria-hidden />
           {titleEditing ? (
             <input
