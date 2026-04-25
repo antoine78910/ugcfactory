@@ -91,14 +91,14 @@ const IMAGE_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
   {
     id: "seedream_45",
     label: "Seedream 4.5",
-    icon: "google",
+    icon: "seedream",
     ...studioImagePickerCardHints("seedream_45"),
     searchText: "seedream 4.5 text to image image to image",
   },
   {
     id: "seedream_50_lite",
     label: "Seedream 5.0 Lite",
-    icon: "google",
+    icon: "seedream",
     ...studioImagePickerCardHints("seedream_50_lite"),
     searchText: "seedream 5.0 lite text to image image to image",
   },
@@ -112,7 +112,7 @@ const IMAGE_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
   {
     id: "gpt_image_2",
     label: "GPT Image 2",
-    icon: "google",
+    icon: "gpt_image_2",
     newBadge: true,
     ...studioImagePickerCardHints("gpt_image_2"),
     searchText: "gpt image 2 openai text to image image to image",

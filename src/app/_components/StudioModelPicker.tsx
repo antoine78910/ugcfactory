@@ -17,10 +17,12 @@ import { cn } from "@/lib/utils";
 export type StudioModelPickerIcon =
   | "kling"
   | "seedance"
+  | "seedream"
   | "sora"
   | "veo"
   /** Google NanoBanana / Gemini image models (not ByteDance Seedance video). */
   | "google"
+  | "gpt_image_2"
   | "image_pro"
   | "image_std"
   | "grok";
@@ -44,9 +46,11 @@ export type StudioModelPickerItem = {
 const STUDIO_MODEL_LOGO_SRC: Partial<Record<StudioModelPickerIcon, string>> = {
   kling: "/studio/model-logos/kling.png",
   seedance: "/studio/model-logos/seedance.png",
+  seedream: "/studio/model-logos/seedream.png",
   sora: "/studio/model-logos/sora.png",
   veo: "/studio/model-logos/google.png",
   google: "/studio/model-logos/google.png",
+  gpt_image_2: "/studio/model-logos/gpt-image-2.png",
   grok: "/studio/model-logos/grok.png",
   image_pro: "/studio/model-logos/google.png",
   image_std: "/studio/model-logos/google.png",
