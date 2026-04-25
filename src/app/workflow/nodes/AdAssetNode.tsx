@@ -2815,7 +2815,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             {frame.width} × {frame.height}
           </div>
 
-          {hasPreviewMedia && data.kind !== "image" && data.kind !== "video" ? (
+          {hasPreviewMedia ? (
             <button
               type="button"
               className={cn(
@@ -2850,7 +2850,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             )}
           >
             <div className="nodrag nopan relative" onPointerDown={(e) => e.stopPropagation()}>
-              {!hasPreviewMedia ? (
+              {!hasPreviewMedia || data.kind === "image" || data.kind === "video" ? (
                 <textarea
                   value={prompt}
                   onChange={(e) => patch(id, { prompt: e.target.value })}

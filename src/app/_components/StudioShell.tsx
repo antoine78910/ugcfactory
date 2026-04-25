@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
 import {
   ChevronLeft,
@@ -202,6 +202,7 @@ function StudioShellInner({
   studioProjectId,
 }: Props) {
   const pathname = usePathname();
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const { planDisplayName, isTrial } = useCreditsPlan();
   /** User preference for collapsed rail; applied only on md+ (see `navCollapsed` below). */
@@ -316,6 +317,22 @@ function StudioShellInner({
   }
 
   const ProjectsNavIcon = PROJECTS_NAV.icon;
+  const navigateCustomLink = (href: string) => {
+    if (typeof window === "undefined") return;
+    const current = window.location.pathname + window.location.search;
+    if (current === href) {
+      setMobileNavOpen(false);
+      return;
+    }
+    setMobileNavOpen(false);
+    router.push(href);
+    window.setTimeout(() => {
+      const next = window.location.pathname + window.location.search;
+      if (next !== href) {
+        window.location.assign(href);
+      }
+    }, 700);
+  };
 
   return (
     <div className="dark min-h-screen bg-[#050507] text-white">
@@ -514,6 +531,20 @@ function StudioShellInner({
                         href={href}
                         className={cn(navButtonClass(active), navCollapsed && "px-2.5 py-3.5")}
                         title={label}
+                        onClick={(event) => {
+                          if (
+                            event.defaultPrevented ||
+                            event.button !== 0 ||
+                            event.metaKey ||
+                            event.ctrlKey ||
+                            event.shiftKey ||
+                            event.altKey
+                          ) {
+                            return;
+                          }
+                          event.preventDefault();
+                          navigateCustomLink(href);
+                        }}
                       >
                         {content}
                       </Link>

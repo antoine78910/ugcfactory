@@ -17,6 +17,7 @@ import {
   veoUpgradeMessage,
 } from "@/lib/subscriptionModelAccess";
 import {
+  isStudioGptImage2PickerModelId,
   isStudioImageKiePickerModelId,
   resolveStudioImageModelForReferences,
   studioImageModelSupportsResolutionPicker,
@@ -845,7 +846,11 @@ export async function runWorkflowImageJob(params: WorkflowRunImageParams): Promi
   );
   const studioRes = mapWorkflowImageResolutionToStudio(params.resolution);
   const n = Math.min(10, Math.max(1, params.quantity));
-  const resolutionForApi = studioImageModelSupportsResolutionPicker(pickerModel) ? studioRes : "2K";
+  const resolutionForApi = isStudioGptImage2PickerModelId(pickerModel)
+    ? undefined
+    : studioImageModelSupportsResolutionPicker(pickerModel)
+      ? studioRes
+      : "2K";
 
   const cappedRefs = (params.referenceImageUrls ?? []).slice(0, WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX);
   const resolvedReferenceUrls = await resolveLocalWorkflowMediaUrlsForServer(
@@ -862,7 +867,7 @@ export async function runWorkflowImageJob(params: WorkflowRunImageParams): Promi
       prompt: params.prompt,
       model: resolvedModel,
       aspectRatio: params.aspectRatio,
-      resolution: resolutionForApi,
+      ...(resolutionForApi ? { resolution: resolutionForApi } : {}),
       numImages: n,
       personalApiKey: params.personalApiKey,
       imageUrls: resolvedReferenceUrls.length ? resolvedReferenceUrls : undefined,

@@ -14,7 +14,7 @@ import type { NanoBananaProAspectRatio } from "@/lib/nanobanana";
 import { logGenerationFailure, userFacingProviderErrorOrDefault } from "@/lib/generationUserMessage";
 import { displayCreditsToLedgerTicks } from "@/lib/creditLedgerTicks";
 import { studioImageCreditsChargedTotal } from "@/lib/pricing";
-import { isStudioImageKiePickerModelId } from "@/lib/studioImageModels";
+import { isStudioGptImage2PickerModelId, isStudioImageKiePickerModelId } from "@/lib/studioImageModels";
 import { getUserPlan } from "@/lib/supabase/getUserPlan";
 import { isMissingAspectRatioColumnError } from "@/lib/studioGenerationsSchemaCompat";
 
@@ -87,8 +87,11 @@ export async function POST(req: Request) {
   const shouldChargePlatformCredits = !usesPersonalApi && accountPlan === "free";
   // Calculate credits server-side, never trust the client-provided value
   const numImages = Math.max(1, Math.min(Number(body.numImages) || 1, 10));
-  const resolution = (body.resolution as "1K" | "2K" | "4K" | undefined) ?? "1K";
-  const creditsDisplay = shouldChargePlatformCredits ? computeImageCredits(model, resolution, numImages) : 0;
+  const requestedResolution = (body.resolution as "1K" | "2K" | "4K" | undefined) ?? "1K";
+  const supportsResolution = !isStudioGptImage2PickerModelId(model);
+  const resolutionForTask = supportsResolution ? requestedResolution : undefined;
+  const resolutionForCredits = supportsResolution ? requestedResolution : "1K";
+  const creditsDisplay = shouldChargePlatformCredits ? computeImageCredits(model, resolutionForCredits, numImages) : 0;
   const totalTicks = displayCreditsToLedgerTicks(creditsDisplay);
 
   const refUrls = Array.isArray(body.imageUrls)
@@ -101,7 +104,7 @@ export async function POST(req: Request) {
       prompt,
       model,
       numImages: body.numImages ?? 1,
-      resolution: (body.resolution as "1K" | "2K" | "4K" | undefined) ?? "1K",
+      resolution: resolutionForTask,
       aspectRatio: (body.aspectRatio as NanoBananaProAspectRatio | undefined) ?? "3:4",
       personalApiKey: body.personalApiKey,
       imageUrls: refUrls.length > 0 ? refUrls : undefined,
