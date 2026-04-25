@@ -1530,6 +1530,11 @@ export default function LinkToAdUniverse({
   const [universeRunId, setUniverseRunId] = useState<string | null>(null);
   const [runningLinkToAdProjects, setRunningLinkToAdProjects] = useState<LinkToAdRunningProject[]>([]);
   const activeRunTokenRef = useRef<string | null>(null);
+  const runningLinkToAdProjectsForDisplay = useMemo(() => {
+    const activeToken = activeRunTokenRef.current;
+    if (!activeToken) return runningLinkToAdProjects;
+    return runningLinkToAdProjects.filter((p) => p.token !== activeToken);
+  }, [runningLinkToAdProjects, isWorking]);
   const [lastExtractedJson, setLastExtractedJson] = useState<Record<string, unknown> | null>(null);
   const [angleLabels, setAngleLabels] = useState<string[]>(["", "", ""]);
   const [selectedAngleIndex, setSelectedAngleIndex] = useState<number | null>(null);
@@ -6141,11 +6146,11 @@ export default function LinkToAdUniverse({
                 ) : null}
               </div>
             </details>
-            {runningLinkToAdProjects.length > 0 ? (
+            {runningLinkToAdProjectsForDisplay.length > 0 ? (
               <div className="w-full max-w-xl rounded-xl border border-amber-400/20 bg-amber-500/[0.06] px-3 py-2">
                 <p className="text-[9px] font-semibold uppercase tracking-wide text-amber-200/85">Project running</p>
                 <div className="mt-1 flex flex-wrap gap-1.5">
-                  {runningLinkToAdProjects.slice(0, 4).map((p) => {
+                  {runningLinkToAdProjectsForDisplay.slice(0, 4).map((p) => {
                     const label = (() => {
                       try {
                         return new URL(p.storeUrl).hostname.replace(/^www\./, "");
@@ -6196,11 +6201,11 @@ export default function LinkToAdUniverse({
           </div>
         ) : (
         <>
-        {runningLinkToAdProjects.length > 0 ? (
+        {runningLinkToAdProjectsForDisplay.length > 0 ? (
           <div className="mb-3 rounded-lg border border-amber-400/20 bg-amber-500/[0.06] px-2.5 py-2">
             <p className="text-[9px] font-semibold uppercase tracking-wide text-amber-200/85">Project running</p>
             <div className="mt-1 flex flex-wrap gap-1.5">
-              {runningLinkToAdProjects.slice(0, 4).map((p) => {
+              {runningLinkToAdProjectsForDisplay.slice(0, 4).map((p) => {
                 const label = (() => {
                   try {
                     return new URL(p.storeUrl).hostname.replace(/^www\./, "");

@@ -46,7 +46,7 @@ export type StudioModelPickerItem = {
 const STUDIO_MODEL_LOGO_SRC: Partial<Record<StudioModelPickerIcon, string>> = {
   kling: "/studio/model-logos/kling.png",
   seedance: "/studio/model-logos/seedance.png",
-  seedream: "/studio/model-logos/seedream.png",
+  seedream: "/studio/model-logos/seedance.png",
   sora: "/studio/model-logos/sora.png",
   veo: "/studio/model-logos/google.png",
   google: "/studio/model-logos/google.png",
