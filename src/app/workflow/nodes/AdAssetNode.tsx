@@ -2808,7 +2808,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
 
           {generating && (data.kind === "image" || data.kind === "video") ? (
             <div
-              className="nodrag nopan absolute inset-0 z-[9] flex flex-col items-center justify-center gap-3 bg-black/42 backdrop-blur-[2.5px] transition-[opacity,backdrop-filter] duration-300 ease-out motion-reduce:transition-none"
+              className="pointer-events-none nodrag nopan absolute inset-0 z-[9] flex flex-col items-center justify-center gap-3 bg-black/42 backdrop-blur-[2.5px] transition-[opacity,backdrop-filter] duration-300 ease-out motion-reduce:transition-none"
               aria-live="polite"
               aria-busy="true"
               aria-label={data.kind === "video" ? "Rendering video" : "Generating image"}
