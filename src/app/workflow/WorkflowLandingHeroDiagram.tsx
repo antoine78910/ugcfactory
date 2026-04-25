@@ -52,6 +52,7 @@ function bezierCurve(a: { x: number; y: number }, b: { x: number; y: number }, b
 
 export function WorkflowLandingHeroDiagram({ className }: { className?: string }) {
   const wrapRef = useRef<HTMLDivElement>(null);
+  const pointerRef = useRef({ x: 0, y: 0 });
   const tiltRef = useRef({ x: 0, y: 0 });
   const targetRef = useRef({ x: 0, y: 0 });
   const rafRef = useRef(0);
@@ -60,15 +61,21 @@ export function WorkflowLandingHeroDiagram({ className }: { className?: string }
   const [hoverActive, setHoverActive] = useState(false);
 
   const tick = useCallback(() => {
-    const cur = tiltRef.current;
+    const pointer = pointerRef.current;
     const tgt = targetRef.current;
-    const nx = cur.x + (tgt.x - cur.x) * 0.14;
-    const ny = cur.y + (tgt.y - cur.y) * 0.14;
+    const smoothTarget = {
+      x: tgt.x + (pointer.x - tgt.x) * 0.09,
+      y: tgt.y + (pointer.y - tgt.y) * 0.09,
+    };
+    targetRef.current = smoothTarget;
+    const cur = tiltRef.current;
+    const nx = cur.x + (smoothTarget.x - cur.x) * 0.1;
+    const ny = cur.y + (smoothTarget.y - cur.y) * 0.1;
     tiltRef.current = { x: nx, y: ny };
     const moving =
       Math.hypot(nx - cur.x, ny - cur.y) > 0.001 ||
-      Math.hypot(nx - tgt.x, ny - tgt.y) > 0.006 ||
-      Math.hypot(tgt.x, tgt.y) > 0.015;
+      Math.hypot(nx - smoothTarget.x, ny - smoothTarget.y) > 0.004 ||
+      Math.hypot(smoothTarget.x, smoothTarget.y) > 0.01;
     if (moving) setFrame((k) => (k + 1) % 1_000_000);
     rafRef.current = requestAnimationFrame(tick);
   }, []);
@@ -106,10 +113,11 @@ export function WorkflowLandingHeroDiagram({ className }: { className?: string }
     const nx = ((e.clientX - r.left) / r.width - 0.5) * 2;
     const ny = ((e.clientY - r.top) / r.height - 0.5) * 2;
     if (!hoverActive) setHoverActive(true);
-    targetRef.current = { x: Math.max(-1, Math.min(1, nx)), y: Math.max(-1, Math.min(1, ny)) };
+    pointerRef.current = { x: Math.max(-1, Math.min(1, nx)), y: Math.max(-1, Math.min(1, ny)) };
   };
   const onLeave = () => {
     setHoverActive(false);
+    pointerRef.current = { x: 0, y: 0 };
     targetRef.current = { x: 0, y: 0 };
   };
 
@@ -131,8 +139,8 @@ export function WorkflowLandingHeroDiagram({ className }: { className?: string }
       x: (mx * 0.5 + 0.5) * VB.w,
       y: (my * 0.5 + 0.5) * VB.h,
     };
-    const pullRadius = 180;
-    const pullMax = 24;
+    const pullRadius = 168;
+    const pullMax = 14;
     const pull = (id: keyof typeof BASE) => {
       const b = BASE[id];
       const cx = b.x + b.w * 0.5;
@@ -141,7 +149,7 @@ export function WorkflowLandingHeroDiagram({ className }: { className?: string }
       const dy = cursor.y - cy;
       const dist = Math.hypot(dx, dy);
       if (!Number.isFinite(dist) || dist < 0.001 || dist >= pullRadius) return { x: 0, y: 0 };
-      const strength = Math.pow(1 - dist / pullRadius, 2);
+      const strength = (1 - dist / pullRadius) * 0.85;
       const unitX = dx / dist;
       const unitY = dy / dist;
       return {
@@ -165,10 +173,8 @@ export function WorkflowLandingHeroDiagram({ className }: { className?: string }
     return {
       a: bezierCurve(portRight(placed.prompt), portLeft(placed.imgGen), 0.44),
       b: bezierCurve(portRight(placed.upload), portLeft(placed.imgGen), 0.34),
-      c: bezierCurve(portRight(placed.imgGen), portLeft(placed.imgOut), 0.4),
-      d: bezierCurve(portRight(placed.imgOut), portLeft(placed.videoGen), 0.5),
+      d: bezierCurve(portRight(placed.imgGen), portLeft(placed.videoGen), 0.5),
       e: bezierCurve(portRight(placed.videoPrompt), portLeft(placed.videoGen), 0.42),
-      f: bezierCurve(portRight(placed.videoGen), portLeft(placed.videoOut), 0.42),
     };
   }, [placed]);
 
@@ -188,8 +194,8 @@ export function WorkflowLandingHeroDiagram({ className }: { className?: string }
     <div
       ref={wrapRef}
       className={cn(
-        "relative isolate cursor-default select-none overflow-hidden rounded-2xl border border-white/[0.1]",
-        "bg-[#07080f]/95 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
+        "relative isolate cursor-default select-none overflow-hidden",
+        "bg-transparent",
         "min-h-[220px] w-full sm:min-h-[240px] lg:min-h-[260px]",
         className,
       )}
@@ -227,10 +233,8 @@ export function WorkflowLandingHeroDiagram({ className }: { className?: string }
         <g filter="url(#hero-glow)">
           <path d={paths.a} fill="none" stroke="url(#hero-edge-green)" strokeWidth={2.1} strokeLinecap="round" />
           <path d={paths.b} fill="none" stroke="url(#hero-edge-green)" strokeWidth={2.1} strokeLinecap="round" />
-          <path d={paths.c} fill="none" stroke="url(#hero-edge-green)" strokeWidth={2.1} strokeLinecap="round" />
           <path d={paths.d} fill="none" stroke="url(#hero-edge-purple)" strokeWidth={2.1} strokeLinecap="round" />
           <path d={paths.e} fill="none" stroke="url(#hero-edge-purple)" strokeWidth={2.1} strokeLinecap="round" />
-          <path d={paths.f} fill="none" stroke="url(#hero-edge-purple)" strokeWidth={2.1} strokeLinecap="round" />
         </g>
       </svg>
 
@@ -252,7 +256,7 @@ export function WorkflowLandingHeroDiagram({ className }: { className?: string }
         </div>
 
         <div
-          className="absolute overflow-hidden rounded-2xl border border-white/10 bg-[#121212]/98 shadow-[0_12px_40px_rgba(0,0,0,0.45)]"
+          className="absolute overflow-hidden rounded-2xl border border-violet-300/25 bg-[#121212]/98 shadow-[0_12px_40px_rgba(0,0,0,0.45)]"
           style={pct(placed.upload)}
         >
           <div className="flex items-center gap-2 border-b border-white/[0.08] px-2 py-1.5">
@@ -262,9 +266,9 @@ export function WorkflowLandingHeroDiagram({ className }: { className?: string }
             <span className="text-[8px] font-semibold tracking-tight text-white">Upload</span>
             <span className="ml-auto text-[8px] uppercase tracking-wide text-white/35">input</span>
           </div>
-          <div className="p-1.5">
+          <div className="p-1">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={DEMO.uploaded} alt="" className="h-full w-full rounded-xl object-cover" draggable={false} />
+            <img src={DEMO.uploaded} alt="" className="h-full w-full rounded-xl object-cover saturate-110" draggable={false} />
           </div>
           <div className="absolute -right-2 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full border border-white/15 bg-[#15151a]/95" />
         </div>
@@ -285,9 +289,11 @@ export function WorkflowLandingHeroDiagram({ className }: { className?: string }
             {imgGenerating ? <Loader2 className="h-3 w-3 animate-spin text-violet-200" /> : <Type className="h-3 w-3 text-white/45" />}
             {imgGenerating ? "Generating image..." : imgReady ? "Image generated" : "Waiting input"}
             </div>
+            <div className="mt-1.5 rounded-md border border-white/10 bg-black/35 px-1.5 py-1 text-[8px] text-white/60">
+              Output included in module
+            </div>
           </div>
           <div className="absolute -left-2 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full border border-white/15 bg-[#15151a]/95" />
-          <div className="absolute -right-2 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full border border-white/15 bg-[#15151a]/95" />
         </div>
 
         <div className="absolute overflow-hidden rounded-2xl border border-white/10 bg-[#121212]/98 shadow-[0_12px_40px_rgba(0,0,0,0.45)]" style={pct(placed.imgOut)}>
@@ -296,7 +302,6 @@ export function WorkflowLandingHeroDiagram({ className }: { className?: string }
           <div className="absolute bottom-1 left-1 rounded bg-black/60 px-1 py-0.5 text-[8px] font-semibold uppercase tracking-wide text-violet-200/95">
             {imgReady ? "Generated image" : "Uploaded image"}
           </div>
-          <div className="absolute -left-2 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full border border-white/15 bg-[#15151a]/95" />
           <div className="absolute -right-2 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full border border-white/15 bg-[#15151a]/95" />
         </div>
 
@@ -332,9 +337,11 @@ export function WorkflowLandingHeroDiagram({ className }: { className?: string }
             {videoGenerating ? <Loader2 className="h-3 w-3 animate-spin text-violet-200" /> : <Type className="h-3 w-3 text-white/45" />}
             {videoGenerating ? "Generating video..." : videoReady ? "Video generated" : "Waiting image"}
             </div>
+            <div className="mt-1.5 rounded-md border border-white/10 bg-black/35 px-1.5 py-1 text-[8px] text-white/60">
+              Output included in module
+            </div>
           </div>
           <div className="absolute -left-2 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full border border-white/15 bg-[#15151a]/95" />
-          <div className="absolute -right-2 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full border border-white/15 bg-[#15151a]/95" />
         </div>
 
         <div className="absolute overflow-hidden rounded-2xl border border-white/10 bg-[#121212]/98 shadow-[0_12px_40px_rgba(0,0,0,0.45)]" style={pct(placed.videoOut)}>
@@ -343,7 +350,6 @@ export function WorkflowLandingHeroDiagram({ className }: { className?: string }
           <div className="absolute bottom-1 right-1 rounded bg-black/65 px-1 py-0.5 text-[8px] font-semibold uppercase tracking-wide text-violet-200/95">
             {videoReady ? "Generated video" : "Video preview"}
           </div>
-          <div className="absolute -left-2 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full border border-white/15 bg-[#15151a]/95" />
         </div>
       </div>
 
