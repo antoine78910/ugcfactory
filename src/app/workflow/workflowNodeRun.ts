@@ -670,7 +670,7 @@ async function registerStudioVideoTask(params: {
   await fetch("/api/studio/generations/register", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ kind: "studio_video", ...params }),
+    body: JSON.stringify({ kind: "workflow_video", ...params }),
   });
 }
 
@@ -856,7 +856,7 @@ export async function runWorkflowImageJob(params: WorkflowRunImageParams): Promi
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      kind: "studio_image",
+      kind: "workflow_image",
       label: workflowHistoryLabel(params.prompt.slice(0, 120)),
       accountPlan: params.planId,
       prompt: params.prompt,

@@ -10,11 +10,16 @@ function deriveAppEndpoint(row: Record<string, unknown>): string {
   if (kind === "studio_audio") return "/api/elevenlabs/speech-to-speech";
   if (kind === "studio_translate_video") return "/api/wavespeed/video-translate";
   if (kind === "motion_control") return "/api/kling/motion-control";
-  if (kind === "studio_video" || kind === "studio_watermark" || kind === "link_to_ad_video") {
+  if (
+    kind === "studio_video" ||
+    kind === "workflow_video" ||
+    kind === "studio_watermark" ||
+    kind === "link_to_ad_video"
+  ) {
     return "/api/kling/generate";
   }
   if (kind === "link_to_ad_image") return "/api/nanobanana/generate";
-  if (kind === "studio_image" || kind === "avatar") {
+  if (kind === "studio_image" || kind === "workflow_image" || kind === "avatar") {
     return "/api/studio/generations/start";
   }
   if (kind === "studio_upscale") return "/api/kie/upscale";

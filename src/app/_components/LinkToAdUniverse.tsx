@@ -1184,22 +1184,24 @@ function PersonaPhotoSection({
             </div>
           ))}
           {personaPhotoUrls.map((url, i) => (
-            <div key={`persona-${url}-${i}`} className="group/persona relative h-14 w-14 shrink-0 overflow-hidden rounded-full border-2 border-violet-400/30 bg-[#050507]">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={url}
-                alt={`Persona ${i + 1}`}
-                className="h-full w-full object-cover"
-                loading="lazy"
-                referrerPolicy="no-referrer"
-              />
+            <div key={`persona-${url}-${i}`} className="group/persona relative h-14 w-14 shrink-0">
+              <div className="h-full w-full overflow-hidden rounded-full border-2 border-violet-400/30 bg-[#050507]">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={url}
+                  alt={`Persona ${i + 1}`}
+                  className="h-full w-full object-cover"
+                  loading="lazy"
+                  referrerPolicy="no-referrer"
+                />
+              </div>
               <button
                 type="button"
                 onClick={() => onRemove(url)}
-                className="absolute right-0 top-0 flex h-4 w-4 items-center justify-center rounded-full bg-black/80 text-white/60 opacity-0 transition hover:text-red-400 group-hover/persona:opacity-100"
+                className="absolute -right-1 -top-1 z-10 flex h-5 w-5 items-center justify-center rounded-full border border-white/20 bg-black/85 text-white/70 opacity-0 shadow-[0_2px_8px_rgba(0,0,0,0.45)] transition hover:text-red-400 group-hover/persona:opacity-100"
                 aria-label="Remove"
               >
-                <X className="h-2.5 w-2.5" />
+                <X className="h-3 w-3" />
               </button>
             </div>
           ))}
