@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2, Sparkles, UserRound } from "lucide-react";
+import { Loader2, Plus, Sparkles, UserRound, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -19,6 +19,8 @@ import { StudioOutputPane } from "@/app/_components/StudioEmptyExamples";
 import { StudioGenerationsHistory } from "@/app/_components/StudioGenerationsHistory";
 import type { StudioHistoryItem } from "@/app/_components/StudioGenerationsHistory";
 import { studioImageCreditsPerOutput, type StudioImageOutputResolution } from "@/lib/pricing";
+import { uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
+import { STUDIO_IMAGE_FILE_ACCEPT } from "@/lib/studioUploadValidation";
 
 const LS_AVATAR_HISTORY = "ugc_studio_avatar_history_v1";
 
@@ -78,6 +80,13 @@ function buildAvatarPrompt(p: AvatarParams, resolution: StudioImageOutputResolut
   ]
     .filter(Boolean)
     .join(" ");
+}
+
+const AVATAR_360_PROMPT =
+  "A professional character reference sheet of the exact same character from the reference image, plain white background. his name tag 'D. kieft' is clearly visible. Two rows: top row contains four equally sized close-up head shots side by side - front facing, left profile, right profile, and back of head. Bottom row contains three equally sized full body shots side by side - full body front, full body three-quarter side profile, and full body back. Replicate every detail exactly across all panels: facial structure, skin tone, natural blemishes, pore texture, hair color, hair texture and styling, eye color with realistic iris detail, natural moisture and catchlights. Exact same outfit and costume consistent across every single view. Soft neutral studio lighting, flat and even across all panels, no shadows, no color cast, no background elements. Every panel perfectly consistent in character, scale, and lighting. Shot on Hasselblad X2D 100C, photorealistic, ultra sharp micro detail, RAW photograph quality, character design sheet, turnaround sheet, model sheet, orthographic reference.";
+
+async function uploadAvatarReference(file: File): Promise<string> {
+  return uploadFileToCdn(file, { kind: "image" });
 }
 
 function readLocalAvatarHistory(): StudioHistoryItem[] {
@@ -195,6 +204,9 @@ export default function StudioAvatarPanel({
   const [params, setParams] = useState<AvatarParams>(DEFAULTS);
   const [outputResolution, setOutputResolution] = useState<StudioImageOutputResolution>("1K");
   const [busy, setBusy] = useState(false);
+  const [avatar360RefUrls, setAvatar360RefUrls] = useState<string[]>([]);
+  const [avatar360Uploading, setAvatar360Uploading] = useState(false);
+  const [avatar360UploadPreviews, setAvatar360UploadPreviews] = useState<{ id: string; blob: string }[]>([]);
   const [historyItems, setHistoryItems] = useState<StudioHistoryItem[]>([]);
   /** null = unknown; true = Supabase + server poll; false = guest / local only */
   const [serverHistory, setServerHistory] = useState<boolean | null>(null);
@@ -203,6 +215,7 @@ export default function StudioAvatarPanel({
   const [billing, setBilling] = useState<Bill>({ open: false });
 
   const credits = studioImageCreditsPerOutput({ studioModel: "nano", resolution: outputResolution });
+  const avatar360Credits = studioImageCreditsPerOutput({ studioModel: "pro", resolution: outputResolution });
 
   const set = useCallback((key: keyof AvatarParams, value: string) => {
     setParams((prev) => ({ ...prev, [key]: value }));
@@ -343,6 +356,116 @@ export default function StudioAvatarPanel({
     })();
   }, [params, outputResolution, planId, credits, spendCredits, grantCredits, serverHistory]);
 
+  const onAddAvatar360Refs = useCallback(() => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = STUDIO_IMAGE_FILE_ACCEPT;
+    input.multiple = true;
+    input.onchange = async () => {
+      const files = Array.from(input.files ?? []);
+      if (!files.length) return;
+      const slice = files.slice(0, 8);
+      const pending = slice.map((f) => ({ id: crypto.randomUUID(), blob: URL.createObjectURL(f), file: f }));
+      setAvatar360UploadPreviews((prev) => [...prev, ...pending.map(({ id, blob }) => ({ id, blob }))]);
+      setAvatar360Uploading(true);
+      try {
+        const urls: string[] = [];
+        for (const row of pending) {
+          try {
+            urls.push(await uploadAvatarReference(row.file));
+          } catch (e) {
+            toast.error("Upload failed", {
+              description: userMessageFromCaughtError(e, "Use JPEG, PNG, WebP, or GIF."),
+            });
+          } finally {
+            URL.revokeObjectURL(row.blob);
+            setAvatar360UploadPreviews((p) => p.filter((x) => x.id !== row.id));
+          }
+        }
+        if (urls.length) {
+          setAvatar360RefUrls((prev) => [...prev, ...urls].slice(0, 12));
+          toast.success(`${urls.length} reference image(s) added`);
+        }
+      } finally {
+        setAvatar360Uploading(false);
+      }
+    };
+    input.click();
+  }, []);
+
+  const generateAvatar360Profile = useCallback(() => {
+    if (serverHistory !== true) {
+      toast.error("Backend sync unavailable. Reload and try again.");
+      return;
+    }
+    if (!avatar360RefUrls.length) {
+      toast.error("Add at least one avatar reference image.");
+      return;
+    }
+    const creditBypass = isPlatformCreditBypassActive();
+    if (!creditBypass && creditsRef.current < avatar360Credits) {
+      setBilling({ open: true, reason: "credits", required: avatar360Credits });
+      return;
+    }
+    const platformCharge = creditBypass ? 0 : avatar360Credits;
+    if (!creditBypass) {
+      spendCredits(avatar360Credits);
+      creditsRef.current = Math.max(0, creditsRef.current - avatar360Credits);
+    }
+    const label = "Avatar 360 Profile";
+    setBusy(true);
+
+    void (async () => {
+      try {
+        const res = await fetch("/api/studio/generations/start", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            kind: "avatar",
+            label,
+            accountPlan: planId,
+            prompt: AVATAR_360_PROMPT,
+            model: "pro",
+            imageUrls: avatar360RefUrls,
+            aspectRatio: "16:9",
+            resolution: outputResolution,
+            numImages: 1,
+            creditsCharged: platformCharge,
+            personalApiKey: getPersonalApiKey(),
+          }),
+        });
+        const json = (await res.json()) as { data?: { id: string }; error?: string };
+        if (!res.ok) throw new Error(json.error || "Start failed");
+        const id = json.data?.id;
+        if (!id) throw new Error("No job id");
+        const startedAt = Date.now();
+        setHistoryItems((prev) => [
+          {
+            id,
+            kind: "image",
+            status: "generating",
+            label,
+            createdAt: startedAt,
+            aspectRatio: "16:9",
+          },
+          ...prev.filter((i) => i.id !== id),
+        ]);
+        toast.message("360 profile generation running", {
+          description: "You can leave this page, it will finish on the server.",
+        });
+      } catch (e) {
+        const msg = userMessageFromCaughtError(
+          e,
+          "Something went wrong while generating 360 profile. Please try again.",
+        );
+        refundPlatformCredits(platformCharge, grantCredits, creditsRef);
+        toast.error(msg);
+      } finally {
+        setBusy(false);
+      }
+    })();
+  }, [avatar360RefUrls, avatar360Credits, planId, outputResolution, serverHistory, spendCredits, grantCredits]);
+
   return (
     <>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-4 lg:h-[calc(100dvh-4rem)] lg:min-h-0">
@@ -411,6 +534,63 @@ export default function StudioAvatarPanel({
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
               Generate avatar
               <span className="rounded-md bg-white/15 px-1.5 py-0.5 text-xs tabular-nums">{credits}</span>
+            </Button>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+            <p className="text-xs font-semibold text-white">360° Profile</p>
+            <p className="mt-1 text-[11px] text-white/50">
+              Upload one or more photos of the avatar. We generate a 16:9 turnaround sheet with NanoBanana Pro.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                size="icon"
+                className="h-12 w-12 shrink-0 rounded-xl border border-white/10 bg-white/5 text-white hover:bg-white/10"
+                title="Add avatar references"
+                disabled={avatar360Uploading || busy}
+                onClick={onAddAvatar360Refs}
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+              {avatar360UploadPreviews.map((row) => (
+                <div
+                  key={row.id}
+                  className="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-violet-500/35"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={row.blob} alt="" className="h-full w-full object-cover opacity-75" />
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/35">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-white/80" />
+                  </div>
+                </div>
+              ))}
+              {avatar360RefUrls.map((u, i) => (
+                <button
+                  key={`${u}-${i}`}
+                  type="button"
+                  className="group relative h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-white/15"
+                  title="Remove"
+                  onClick={() => setAvatar360RefUrls((prev) => prev.filter((_, j) => j !== i))}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={u} alt="" className="h-full w-full object-cover" />
+                  <span className="absolute inset-0 flex items-center justify-center bg-black/65 opacity-0 transition group-hover:opacity-100">
+                    <X className="h-3.5 w-3.5 text-white" />
+                  </span>
+                </button>
+              ))}
+            </div>
+            <Button
+              type="button"
+              disabled={busy || avatar360Uploading || serverHistory !== true}
+              onClick={generateAvatar360Profile}
+              className="mt-3 h-10 gap-2 rounded-xl border border-violet-400/30 bg-violet-500 px-4 text-sm font-bold text-white shadow-[0_4px_0_0_rgba(76,29,149,0.7)] hover:bg-violet-400"
+            >
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              Generate 360 profile
+              <span className="rounded-md bg-white/15 px-1.5 py-0.5 text-xs tabular-nums">{avatar360Credits}</span>
             </Button>
           </div>
         </div>

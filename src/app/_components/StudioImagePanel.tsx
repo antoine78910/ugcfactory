@@ -9,7 +9,7 @@ import {
   isPlatformCreditBypassActive,
 } from "@/app/_components/CreditsPlanContext";
 import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
-import { Plus, Sparkles, UserRound } from "lucide-react";
+import { Loader2, Plus, Sparkles, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -230,6 +230,7 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
   const [resolution, setResolution] = useState<(typeof PRO_RESOLUTIONS)[number]>("2K");
   const [numImages, setNumImages] = useState(1);
   const [refUrls, setRefUrls] = useState<string[]>([]);
+  const [isStartingGeneration, setIsStartingGeneration] = useState(false);
   /** Reference image uploads only; does not block Generate. */
   const [refUploadBusy, setRefUploadBusy] = useState(false);
   const [refUploadPreviews, setRefUploadPreviews] = useState<{ id: string; blob: string }[]>([]);
@@ -360,6 +361,7 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
   };
 
   function runImageGeneration(opts: RunGenOpts) {
+    if (isStartingGeneration) return;
     if (serverHistory !== true) {
       toast.error("Sync backend indisponible. Recharge la page puis reessaie.");
       return;
@@ -399,6 +401,7 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
       spendCredits(chargeTotal);
       creditsRef.current = Math.max(0, creditsRef.current - chargeTotal);
     }
+    setIsStartingGeneration(true);
 
     void (async () => {
       try {
@@ -448,6 +451,8 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
         );
         refundPlatformCredits(platformCharge, grantCredits, creditsRef);
         toast.error(msg);
+      } finally {
+        setIsStartingGeneration(false);
       }
     })();
   }
@@ -679,10 +684,15 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
           </div>
         </div>
 
-        <Button type="button" onClick={() => generate()} className={generateBtnClass}>
+        <Button
+          type="button"
+          onClick={() => generate()}
+          disabled={isStartingGeneration}
+          className={generateBtnClass}
+        >
           <span className="inline-flex items-center gap-2">
             Generate
-            <Sparkles className="h-5 w-5" />
+            {isStartingGeneration ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}
             <span className="rounded-md bg-white/15 px-2 py-0.5 text-base tabular-nums">
               {formatDisplayCredits(totalCredits)}
             </span>

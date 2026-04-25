@@ -944,6 +944,8 @@ export default function StudioVideoPanel({
   creditsRef.current = creditsBalance;
 
   const [tab, setTab] = useState<VideoTab>("create");
+  const [isCreateStartingGeneration, setIsCreateStartingGeneration] = useState(false);
+  const [isEditStartingGeneration, setIsEditStartingGeneration] = useState(false);
   const [startUrl, setStartUrl] = useState<string | null>(null);
   const [endUrl, setEndUrl] = useState<string | null>(null);
   /** Seedance Preview / Fast Preview: 1–4 uploaded refs (replaces start/end frames). */
@@ -3051,6 +3053,7 @@ export default function StudioVideoPanel({
   }, [editElementUrls.length]);
 
   const generateEdit = () => {
+    if (isEditStartingGeneration) return;
     const p = editPrompt.trim();
     if (!p) {
       toast.error("Describe the change you want.");
@@ -3107,6 +3110,7 @@ export default function StudioVideoPanel({
       spendCredits(editCredits);
       creditsRef.current = Math.max(0, creditsRef.current - editCredits);
     }
+    setIsEditStartingGeneration(true);
     const startedAt = Date.now();
     const poster =
       motionEdit && editMotionImageUrl
@@ -3302,11 +3306,14 @@ export default function StudioVideoPanel({
               : i,
           ),
         );
+      } finally {
+        setIsEditStartingGeneration(false);
       }
     })();
   };
 
   const generate = () => {
+    if (isCreateStartingGeneration) return;
     const klingCustom = modelId === "kling-3.0/video" && multiShot;
 
     let label: string;
@@ -3482,6 +3489,7 @@ export default function StudioVideoPanel({
       spendCredits(credits);
       creditsRef.current = Math.max(0, creditsRef.current - credits);
     }
+    setIsCreateStartingGeneration(true);
     const startedAt = Date.now();
     const historyAspect = videoHistoryAspectLabel(meta.family, aspect, veoAspect);
     const seedanceCreatePosterUrl =
@@ -3849,6 +3857,8 @@ export default function StudioVideoPanel({
               : i,
           ),
         );
+      } finally {
+        setIsCreateStartingGeneration(false);
       }
     })();
   };
@@ -4130,10 +4140,19 @@ export default function StudioVideoPanel({
               ) : null}
             </div>
 
-            <Button type="button" onClick={() => generateEdit()} className={generateBtnClass}>
+            <Button
+              type="button"
+              onClick={() => generateEdit()}
+              disabled={isEditStartingGeneration}
+              className={generateBtnClass}
+            >
               <span className="inline-flex items-center gap-2">
                 Generate
-                <Sparkles className="h-5 w-5" />
+                {isEditStartingGeneration ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <Sparkles className="h-5 w-5" />
+                )}
                 <span className="rounded-md bg-white/15 px-2 py-0.5 text-base tabular-nums">{editCredits}</span>
               </span>
             </Button>
@@ -4810,10 +4829,19 @@ export default function StudioVideoPanel({
               ) : null}
             </div>
 
-            <Button type="button" onClick={() => generate()} className={generateBtnClass}>
+            <Button
+              type="button"
+              onClick={() => generate()}
+              disabled={isCreateStartingGeneration}
+              className={generateBtnClass}
+            >
               <span className="inline-flex items-center gap-2">
                 Generate
-                <Sparkles className="h-5 w-5" />
+                {isCreateStartingGeneration ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <Sparkles className="h-5 w-5" />
+                )}
                 <span className="rounded-md bg-white/15 px-2 py-0.5 text-base tabular-nums">{credits}</span>
               </span>
             </Button>
