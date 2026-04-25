@@ -4881,12 +4881,14 @@ export default function LinkToAdUniverse({
       void persistUniverse(universeRunId, url, extractedTitle, lastExtractedJson, snapshotWithPersistTriple(base, triple), packshotsForSave());
     };
 
+    const generationRefs = nanoRefs.length ? nanoRefs : [img];
+
     try {
       nanoThreeAbortRef.current?.abort();
       const controller = new AbortController();
       nanoThreeAbortRef.current = controller;
       const { urlsByPrompt, lastTaskId: firstLastTaskId } = await runNanoBananaProThreeSequential(
-        nanoRefs,
+        generationRefs,
         prompts as [string, string, string],
         { labelPrefix: `Link to Ad · Angle ${idx + 1}`, onSlotSubmitted },
         controller.signal,
@@ -4911,7 +4913,7 @@ export default function LinkToAdUniverse({
                 accountPlan: planId,
                 model: "gpt_image_2",
                 prompt,
-                imageUrls: nanoRefs.length ? nanoRefs : [],
+                imageUrls: generationRefs,
                 aspectRatio: "9:16",
                 personalApiKey: getPersonalApiKey(),
               }),
