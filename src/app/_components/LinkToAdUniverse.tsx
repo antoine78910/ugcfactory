@@ -635,6 +635,14 @@ type LinkToAdRunningProject = {
 
 const LINK_TO_AD_RUNNING_PROJECTS_LS = "youry-link-to-ad-running-projects-v1";
 const LINK_TO_AD_RUNNING_TTL_MS = 6 * 60 * 60 * 1000;
+const LINK_TO_AD_HIDE_RUN_LOG_LS = "link-to-ad-hide-run-log";
+
+type LinkToAdRunLogEntry = {
+  id: string;
+  at: number;
+  stage: string;
+  message: string;
+};
 
 function readLinkToAdRunningProjects(): LinkToAdRunningProject[] {
   if (typeof window === "undefined") return [];
@@ -1432,7 +1440,7 @@ export default function LinkToAdUniverse({
           label,
           taskId,
           provider: "kie-market",
-          model: "nanobanana_pro · 2K · 9:16",
+          model: "gpt_image_2 · 9:16",
           aspectRatio: "9:16",
           creditsCharged: 0,
           personalApiKey: getPersonalApiKey(),
@@ -1451,7 +1459,7 @@ export default function LinkToAdUniverse({
       kind: STUDIO_GENERATION_KIND_LINK_TO_AD_IMAGE,
       label,
       provider: "kie-market",
-      model: "nanobanana_pro · 2K · 9:16",
+      model: "gpt_image_2 · 9:16",
       errorMessage,
       ...(productUrl ? { inputUrls: [productUrl] } : {}),
     });
@@ -1615,6 +1623,8 @@ export default function LinkToAdUniverse({
   const [nanoBananaPromptsRaw, setNanoBananaPromptsRaw] = useState("");
   const [nanoBananaSelectedPromptIndex, setNanoBananaSelectedPromptIndex] = useState<0 | 1 | 2>(0);
   const [nanoBananaTaskId, setNanoBananaTaskId] = useState<string | null>(null);
+  /** Per-slot NanoBanana task IDs (length 3). Persisted so each of the 3 images can be recovered after the user closes the tab. */
+  const [nanoBananaTaskIds, setNanoBananaTaskIds] = useState<(string | null)[]>([null, null, null]);
   const [nanoBananaImageUrl, setNanoBananaImageUrl] = useState<string | null>(null);
   const [nanoBananaImageUrls, setNanoBananaImageUrls] = useState<string[]>([]);
   const [nanoBananaSelectedImageIndex, setNanoBananaSelectedImageIndex] = useState<0 | 1 | 2 | null>(null);
@@ -1652,6 +1662,26 @@ export default function LinkToAdUniverse({
   const [angleSummaryDrafts, setAngleSummaryDrafts] = useState<Record<number, string>>({});
   /** Screen-recording: hide recent-generation chips (stored in localStorage). */
   const [hidePreviousLtaGenerations, setHidePreviousLtaGenerations] = useState(false);
+  const [hideRunLog, setHideRunLog] = useState(false);
+  const [runLogEntries, setRunLogEntries] = useState<LinkToAdRunLogEntry[]>([]);
+  const lastRunLogSigRef = useRef<string>("");
+  const appendRunLog = useCallback((nextStage: string, nextMessage: string) => {
+    const stageLabel = (nextStage || "working").trim();
+    const message = (nextMessage || "").trim();
+    if (!message) return;
+    const sig = `${stageLabel}|${message}`;
+    if (lastRunLogSigRef.current === sig) return;
+    lastRunLogSigRef.current = sig;
+    setRunLogEntries((prev) => [
+      {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        at: Date.now(),
+        stage: stageLabel,
+        message,
+      },
+      ...prev,
+    ].slice(0, 30));
+  }, []);
 
   const nanoBananaPromptsSignatureRef = useRef<string | null>(null);
   /** Incremented when user abandons the flow so late pipeline responses do not re-hydrate the UI. */
@@ -1852,16 +1882,41 @@ export default function LinkToAdUniverse({
       /* ignore */
     }
   }, []);
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(LINK_TO_AD_HIDE_RUN_LOG_LS) === "1") setHideRunLog(true);
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   useEffect(() => {
     onActiveRunIdChange?.(universeRunId);
   }, [universeRunId, onActiveRunIdChange]);
+  useEffect(() => {
+    setRunLogEntries([]);
+    lastRunLogSigRef.current = "";
+    if (universeRunId) {
+      appendRunLog("ready", `Loaded project ${universeRunId.slice(0, 8)}.`);
+    }
+  }, [appendRunLog, universeRunId]);
 
   const toggleHidePreviousLtaGenerations = useCallback(() => {
     setHidePreviousLtaGenerations((h) => {
       const next = !h;
       try {
         localStorage.setItem("link-to-ad-hide-previous-generations", next ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }, []);
+  const toggleHideRunLog = useCallback(() => {
+    setHideRunLog((h) => {
+      const next = !h;
+      try {
+        localStorage.setItem(LINK_TO_AD_HIDE_RUN_LOG_LS, next ? "1" : "0");
       } catch {
         /* ignore */
       }
@@ -1960,6 +2015,7 @@ export default function LinkToAdUniverse({
     setNanoBananaPromptsRaw("");
     setNanoBananaSelectedPromptIndex(0);
     setNanoBananaTaskId(null);
+    setNanoBananaTaskIds([null, null, null]);
     setNanoBananaImageUrl(null);
     setNanoBananaImageUrls([]);
     setNanoBananaSelectedImageIndex(null);
@@ -2106,6 +2162,7 @@ export default function LinkToAdUniverse({
       nanoBananaPromptsRaw,
       nanoBananaSelectedPromptIndex,
       nanoBananaTaskId,
+      nanoBananaTaskIds: [...nanoBananaTaskIds].slice(0, 3),
       nanoBananaImageUrl,
       nanoBananaImageUrls: [...nanoBananaImageUrls],
       nanoBananaSelectedImageIndex,
@@ -2123,6 +2180,11 @@ export default function LinkToAdUniverse({
         : 0,
     );
     setNanoBananaTaskId(p.nanoBananaTaskId ?? null);
+    {
+      const ids = Array.isArray(p.nanoBananaTaskIds) ? [...p.nanoBananaTaskIds] : [null, null, null];
+      while (ids.length < 3) ids.push(null);
+      setNanoBananaTaskIds(ids.slice(0, 3));
+    }
     setNanoBananaImageUrl(p.nanoBananaImageUrl ?? null);
     setNanoBananaImageUrls(Array.isArray(p.nanoBananaImageUrls) ? [...p.nanoBananaImageUrls] : []);
     setNanoBananaSelectedImageIndex(
@@ -2162,7 +2224,28 @@ export default function LinkToAdUniverse({
       ),
     );
     // Restore the three-image generation loading state so the spinner shows on return.
-    if (p.nanoThreeGenerating) {
+    // Trigger when either:
+    //  (a) the explicit `nanoThreeGenerating` flag is set, or
+    //  (b) any slot has a saved task id but no URL (flag may have been lost on tab close).
+    const ids = Array.isArray(p.nanoBananaTaskIds) ? p.nanoBananaTaskIds : [];
+    const urls = Array.isArray(p.nanoBananaImageUrls) ? p.nanoBananaImageUrls : [];
+    const anyOrphanTask = (() => {
+      for (let i = 0; i < 3; i++) {
+        const t = typeof ids[i] === "string" ? (ids[i] as string).trim() : "";
+        const u = typeof urls[i] === "string" ? (urls[i] as string).trim() : "";
+        if (t && !u) return true;
+      }
+      const tail = typeof p.nanoBananaTaskId === "string" ? p.nanoBananaTaskId.trim() : "";
+      if (tail) {
+        const anyEmpty = [0, 1, 2].some((i) => {
+          const u = typeof urls[i] === "string" ? (urls[i] as string).trim() : "";
+          return !u;
+        });
+        if (anyEmpty) return true;
+      }
+      return false;
+    })();
+    if (p.nanoThreeGenerating || anyOrphanTask) {
       setIsNanoAllImagesSubmitting(true);
       nanoThreeGeneratingFromDb.current = true;
       nanoThreeResumeAttemptedRef.current = false;
@@ -2316,6 +2399,7 @@ export default function LinkToAdUniverse({
     nanoBananaPromptsRaw,
     nanoBananaSelectedPromptIndex,
     nanoBananaTaskId,
+    nanoBananaTaskIds,
     nanoBananaImageUrl,
     nanoBananaImageUrls,
     nanoBananaSelectedImageIndex,
@@ -3866,6 +3950,7 @@ export default function LinkToAdUniverse({
     setNanoBananaPromptsRaw("");
     setNanoBananaSelectedPromptIndex(0);
     setNanoBananaTaskId(null);
+    setNanoBananaTaskIds([null, null, null]);
     setNanoBananaImageUrl(null);
     setNanoBananaImageUrls([]);
     setNanoBananaSelectedImageIndex(null);
@@ -4151,10 +4236,9 @@ export default function LinkToAdUniverse({
         body: JSON.stringify({
           linkToAd: true,
           accountPlan: planId,
-          model: "pro",
+          model: "gpt_image_2",
           prompt,
           imageUrls: nanoRefs.length ? nanoRefs : [img],
-          resolution: "2K",
           aspectRatio: "9:16",
           personalApiKey: getPersonalApiKey(),
         }),
@@ -4286,10 +4370,9 @@ export default function LinkToAdUniverse({
           body: JSON.stringify({
             linkToAd: true,
             accountPlan: planId,
-            model: "pro",
+            model: "gpt_image_2",
             prompt,
             imageUrls: imageUrls.length ? imageUrls : [],
-            resolution: "2K",
             aspectRatio: "9:16",
             personalApiKey: getPersonalApiKey(),
           }),
@@ -4416,6 +4499,15 @@ export default function LinkToAdUniverse({
     const partialUrls: string[] = [...nanoBananaImageUrls];
     while (partialUrls.length < 3) partialUrls.push("");
 
+    // Stable per-slot task IDs (fall back to the legacy single `nanoBananaTaskId` for the last slot).
+    const savedTaskIds: (string | null)[] = (() => {
+      const ids = [...nanoBananaTaskIds];
+      while (ids.length < 3) ids.push(null);
+      const tail = (nanoBananaTaskId ?? "").trim();
+      if (tail && !ids[2]) ids[2] = tail;
+      return ids.slice(0, 3);
+    })();
+
     const clearGeneratingFlag = async () => {
       const base = latestSnapRef.current;
       if (!base || !lastExtractedJson) return;
@@ -4432,34 +4524,90 @@ export default function LinkToAdUniverse({
         return;
       }
 
-      const productRefs = resolveNanoProductImageUrls();
-      const nanoRefs = resolveNanoGenerationImageUrls();
-      const img = productRefs[0];
-      if (!img || !/^https?:\/\//i.test(img)) {
-        throw new Error("Product image not available. Please regenerate.");
-      }
-
-      // Find first empty slot; try to poll the saved taskId for it.
-      const firstEmptySlot = partialUrls.findIndex((u) => !u?.trim());
-      const savedTaskId = nanoBananaTaskId?.trim();
-
-      if (savedTaskId && firstEmptySlot !== -1) {
+      // 1) First, ask the server if any of the saved tasks have already been completed by the
+      //    studio_generations cron (no extra credits, no re-poll, instant rehydrate).
+      const taskIdsToLookup = savedTaskIds
+        .map((t, i) => ({ t: (t ?? "").trim(), i }))
+        .filter(({ t, i }) => t.length > 0 && !partialUrls[i]?.trim())
+        .map(({ t }) => t);
+      let serverFailedSlots: number[] = [];
+      if (taskIdsToLookup.length > 0) {
         try {
-          toast.message("Reprise de la génération…", { duration: 4000 });
-          const urls = await pollNanoBananaTaskForUrls(savedTaskId);
-          partialUrls[firstEmptySlot] = urls[0] ?? "";
-          setNanoBananaImageUrls([...partialUrls]);
+          const lookupRes = await fetch(
+            `/api/studio/generations/by-task?taskIds=${encodeURIComponent(taskIdsToLookup.join(","))}`,
+            { cache: "no-store" },
+          );
+          if (lookupRes.ok) {
+            const lookupJson = (await lookupRes.json()) as {
+              data?: Record<string, { status?: string; urls?: string[]; errorMessage?: string | null } | undefined>;
+            };
+            const map = lookupJson.data ?? {};
+            for (let i = 0; i < 3; i++) {
+              const tid = (savedTaskIds[i] ?? "").trim();
+              if (!tid) continue;
+              const row = map[tid];
+              if (!row) continue;
+              const status = String(row.status ?? "").toLowerCase();
+              const isReady = ["ready", "success", "succeeded", "completed", "done"].includes(status);
+              const isFailed = ["failed", "error", "errored", "cancelled", "canceled"].includes(status);
+              const url0 = (row.urls ?? []).find((u) => typeof u === "string" && u.trim().length > 0);
+              if (isReady && url0) {
+                partialUrls[i] = url0;
+                setNanoBananaImageUrls([...partialUrls]);
+              } else if (isFailed) {
+                serverFailedSlots.push(i);
+              }
+            }
+          }
         } catch {
-          // Task expired or failed, will re-generate this slot below.
-          partialUrls[firstEmptySlot] = "";
+          // Lookup failure is non-fatal: fall through to provider polling.
         }
       }
 
-      // Re-generate any still-missing slots in parallel (no extra credit charge, original payment already done).
-      const missingSlots = ([0, 1, 2] as const).filter((slotIdx) => !partialUrls[slotIdx]?.trim());
-      if (missingSlots.length > 0) {
+      const productRefs = resolveNanoProductImageUrls();
+      const nanoRefs = resolveNanoGenerationImageUrls();
+      const img = productRefs[0];
+
+      // 2) For slots still missing, poll the provider directly using the saved per-slot task IDs.
+      const stillMissing = ([0, 1, 2] as const).filter(
+        (slotIdx) => !partialUrls[slotIdx]?.trim() && !serverFailedSlots.includes(slotIdx),
+      );
+      if (stillMissing.length > 0) {
+        toast.message("Picking up where you left off…", { duration: 4000 });
+        await Promise.allSettled(
+          stillMissing.map(async (slotIdx) => {
+            const tid = (savedTaskIds[slotIdx] ?? "").trim();
+            if (!tid) {
+              serverFailedSlots.push(slotIdx);
+              return;
+            }
+            try {
+              const urls = await pollNanoBananaTaskForUrls(tid);
+              const u = urls[0] ?? "";
+              if (u) {
+                partialUrls[slotIdx] = u;
+                setNanoBananaImageUrls([...partialUrls]);
+              } else {
+                serverFailedSlots.push(slotIdx);
+              }
+            } catch {
+              serverFailedSlots.push(slotIdx);
+            }
+          }),
+        );
+      }
+
+      // 3) Last resort: any slot that has no task ID, or whose task expired/failed, re-submits one
+      //    new job (no extra credits — the original 3-image charge already covered it).
+      const reSubmitSlots = ([0, 1, 2] as const).filter(
+        (slotIdx) => !partialUrls[slotIdx]?.trim(),
+      );
+      if (reSubmitSlots.length > 0) {
+        if (!img || !/^https?:\/\//i.test(img)) {
+          throw new Error("Product image not available. Please regenerate.");
+        }
         const submitted = await Promise.all(
-          missingSlots.map(async (slotIdx) => {
+          reSubmitSlots.map(async (slotIdx) => {
             const prompt = fullNanoPromptsTriple[slotIdx] ?? "";
             if (!prompt.trim()) throw new Error(`Image prompt missing for slot ${slotIdx + 1}`);
             const res = await fetchWithRetry("/api/nanobanana/generate", {
@@ -4468,10 +4616,9 @@ export default function LinkToAdUniverse({
               body: JSON.stringify({
                 linkToAd: true,
                 accountPlan: planId,
-                model: "pro",
+                model: "gpt_image_2",
                 prompt,
                 imageUrls: nanoRefs.length ? nanoRefs : [img],
-                resolution: "2K",
                 aspectRatio: "9:16",
                 personalApiKey: getPersonalApiKey(),
               }),
@@ -4482,6 +4629,12 @@ export default function LinkToAdUniverse({
           }),
         );
 
+        // Persist the new per-slot task IDs immediately so a subsequent navigation can recover them too.
+        const nextIds: (string | null)[] = [...savedTaskIds];
+        for (const { slotIdx, taskId } of submitted) {
+          if (slotIdx === 0 || slotIdx === 1 || slotIdx === 2) nextIds[slotIdx] = taskId;
+        }
+        setNanoBananaTaskIds(nextIds.slice(0, 3));
         const latestTask = submitted[submitted.length - 1]?.taskId ?? null;
         if (latestTask) {
           setNanoBananaTaskId(latestTask);
@@ -4489,6 +4642,7 @@ export default function LinkToAdUniverse({
           if (base && lastExtractedJson) {
             const triple = buildPersistTriplePatchingActive({
               nanoBananaTaskId: latestTask,
+              nanoBananaTaskIds: nextIds.slice(0, 3),
               nanoBananaImageUrls: [...partialUrls],
               nanoThreeGenerating: true,
             });
@@ -4507,7 +4661,6 @@ export default function LinkToAdUniverse({
           submitted.map(async ({ slotIdx, taskId }) => {
             const generatedUrls = await pollNanoBananaTaskForUrls(taskId);
             const firstUrl = generatedUrls[0] ?? "";
-            // Resume path: progressively reveal each slot as soon as it is ready.
             partialUrls[slotIdx] = firstUrl;
             setNanoBananaTaskId(taskId);
             setNanoBananaImageUrls([...partialUrls]);
@@ -4581,6 +4734,36 @@ export default function LinkToAdUniverse({
 
     setIsNanoAllImagesSubmitting(true);
 
+    // Mark `nanoThreeGenerating: true` in the DB IMMEDIATELY (before the prompts regeneration phase)
+    // so a user closing the tab during prompt regen still sees the loading + auto-resume on return.
+    {
+      const baseEarly = latestSnapRef.current;
+      if (baseEarly && lastExtractedJson) {
+        const earlyTriple = pipelineByAngle.map((p, i) =>
+          i === idx
+            ? {
+                ...cloneAnglePipeline(p),
+                nanoThreeGenerating: true,
+              }
+            : cloneAnglePipeline(p),
+        ) as [LinkToAdAnglePipelineV1, LinkToAdAnglePipelineV1, LinkToAdAnglePipelineV1];
+        setPipelineByAngle(earlyTriple);
+        const snapEarly = snapshotWithPersistTriple(baseEarly, earlyTriple);
+        try {
+          await persistUniverse(
+            universeRunId,
+            url,
+            extractedTitle,
+            lastExtractedJson,
+            snapEarly,
+            packshotsForSave(),
+          );
+        } catch {
+          // Non-fatal: fall through; we still try the in-flight persist below.
+        }
+      }
+    }
+
     // If the user changed product/persona reference images since we last generated prompts,
     // regenerate the 3 NanoBanana prompts so the “New 3 images” takes the latest refs into account.
     const selectedScript = selectedScriptOptionByIndex(scriptsText, idx);
@@ -4637,6 +4820,7 @@ export default function LinkToAdUniverse({
     setNanoBananaSelectedImageIndex(null);
     setNanoBananaSelectedPromptIndex(0);
     setNanoBananaTaskId(null);
+    setNanoBananaTaskIds([null, null, null]);
     setNanoPollTaskId(null);
     setNanoPollingSlotIndex(null);
 
@@ -4656,6 +4840,7 @@ export default function LinkToAdUniverse({
             ? {
                 ...cloneAnglePipeline(p),
                 nanoBananaTaskId: null,
+                nanoBananaTaskIds: [null, null, null] as (string | null)[],
                 nanoBananaImageUrl: null,
                 nanoBananaImageUrls: [],
                 nanoBananaSelectedImageIndex: null as 0 | 1 | 2 | null,
@@ -4673,14 +4858,23 @@ export default function LinkToAdUniverse({
     }
 
     // Callback that fires right after each task is submitted (before polling).
-    // Persists the in-flight taskId to DB so navigation doesn't lose it.
-    const onSlotSubmitted = (taskId: string, _slotIdx: number, partialUrls: string[]) => {
+    // Persists the in-flight taskId (per-slot + last) to DB so navigation doesn't lose any of the 3.
+    const onSlotSubmitted = (taskId: string, slotIdx: number, partialUrls: string[]) => {
       setNanoBananaTaskId(taskId);
       setNanoBananaImageUrls([...partialUrls]);
+      let nextIdsSnapshot: (string | null)[] = [null, null, null];
+      setNanoBananaTaskIds((prev) => {
+        const next = [...prev];
+        while (next.length < 3) next.push(null);
+        if (slotIdx === 0 || slotIdx === 1 || slotIdx === 2) next[slotIdx] = taskId;
+        nextIdsSnapshot = next.slice(0, 3);
+        return nextIdsSnapshot;
+      });
       const base = latestSnapRef.current;
       if (!base || !lastExtractedJson) return;
       const triple = buildPersistTriplePatchingActive({
         nanoBananaTaskId: taskId,
+        nanoBananaTaskIds: nextIdsSnapshot,
         nanoBananaImageUrls: [...partialUrls],
         nanoThreeGenerating: true,
       });
@@ -4715,10 +4909,9 @@ export default function LinkToAdUniverse({
               body: JSON.stringify({
                 linkToAd: true,
                 accountPlan: planId,
-                model: "pro",
+                model: "gpt_image_2",
                 prompt,
                 imageUrls: nanoRefs.length ? nanoRefs : [],
-                resolution: "2K",
                 aspectRatio: "9:16",
                 personalApiKey: getPersonalApiKey(),
               }),
@@ -5394,20 +5587,37 @@ export default function LinkToAdUniverse({
   /**
    * Auto-resume 3-image NanoBanana generation when the user returns to the page mid-generation.
    * `nanoThreeGeneratingFromDb` is set by `applyPipelineFromSnapshot` when it reads `nanoThreeGenerating: true`
-   * from the persisted pipeline. We wait until prompts are available before kicking off the resume.
+   * (or detects orphan task IDs) from the persisted pipeline.
+   *
+   * We can fire as soon as we have:
+   *   - any saved per-slot task id → recover from studio_generations / provider polling, OR
+   *   - the 3 prompts ready → fall back to re-submitting missing slots.
+   * Prompts are no longer required when task IDs are available, since recovery does not need them.
    */
   useEffect(() => {
     if (!nanoThreeGeneratingFromDb.current) return;
     if (nanoThreeResumeAttemptedRef.current) return;
     if (!isNanoAllImagesSubmitting) return;
-    // Wait until the prompts derived state is ready (set via a downstream effect from nanoBananaPromptsRaw).
-    if (!fullNanoPromptsTriple.every((p) => p.trim())) return;
     if (selectedAngleIndex === null) return;
+
+    const hasAnySavedTaskId =
+      nanoBananaTaskIds.some((t) => typeof t === "string" && t.trim().length > 0) ||
+      Boolean((nanoBananaTaskId ?? "").trim());
+    const promptsReady = fullNanoPromptsTriple.every((p) => p.trim());
+
+    // Need at least one of: saved task IDs to poll, or prompts ready to re-submit.
+    if (!hasAnySavedTaskId && !promptsReady) return;
 
     nanoThreeResumeAttemptedRef.current = true;
     nanoThreeGeneratingFromDb.current = false;
     void resumeNanoThreeGeneration();
-  }, [isNanoAllImagesSubmitting, fullNanoPromptsTriple, selectedAngleIndex]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [
+    isNanoAllImagesSubmitting,
+    fullNanoPromptsTriple,
+    selectedAngleIndex,
+    nanoBananaTaskIds,
+    nanoBananaTaskId,
+  ]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reset the three-image resume guard when the angle or run changes.
   useEffect(() => {
@@ -5824,6 +6034,20 @@ export default function LinkToAdUniverse({
   // Image prompt generation already shows status inside the output panel; avoid duplicating it at the top.
   const showTopUniverseLoading = showUniverseLoading && universeLoadingState.phase !== "nano_prompts";
 
+  useEffect(() => {
+    if (universeLoadingState.message) {
+      appendRunLog(stage, universeLoadingState.message);
+      return;
+    }
+    if (stage === "ready") {
+      appendRunLog("ready", "Run finished.");
+      return;
+    }
+    if (stage === "error") {
+      appendRunLog("error", "Run ended with an error.");
+    }
+  }, [appendRunLog, stage, universeLoadingState.message]);
+
   async function handleGenerateVideoFromSelectedImage() {
     if (nanoBananaSelectedImageIndex === null || !nanoBananaImageUrl?.trim()) {
       toast.error("Select a reference image first.");
@@ -6239,6 +6463,39 @@ export default function LinkToAdUniverse({
         <div className="space-y-2">
           <LinkToAdUniverseStepper currentStep={universeCurrentStep} />
         </div>
+        {runLogEntries.length > 0 ? (
+          <div className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-white/60">Run history</p>
+              <button
+                type="button"
+                onClick={toggleHideRunLog}
+                className="inline-flex items-center gap-1 rounded-md border border-white/12 bg-black/20 px-2 py-1 text-[10px] font-medium text-white/65 transition hover:border-white/20 hover:text-white/85"
+              >
+                {hideRunLog ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                {hideRunLog ? "Show" : "Hide"}
+              </button>
+            </div>
+            {!hideRunLog ? (
+              <div className="mt-2 space-y-1.5">
+                {runLogEntries.slice(0, 10).map((entry) => (
+                  <div key={entry.id} className="flex items-start gap-2 text-[11px]">
+                    <span className="mt-[3px] inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-violet-300/80" />
+                    <span className="shrink-0 tabular-nums text-white/35">
+                      {new Date(entry.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                    </span>
+                    <span className="min-w-0 text-white/70">
+                      <span className="mr-1 rounded bg-white/8 px-1 py-0.5 text-[10px] uppercase tracking-wide text-white/55">
+                        {entry.stage}
+                      </span>
+                      {entry.message}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
         {showTopUniverseLoading ? (
           <div className="-mt-2 mb-2 flex min-h-[4.25rem] items-center gap-3 rounded-xl border border-violet-500/15 bg-violet-500/[0.06] px-3 py-3 sm:gap-4 sm:px-4 shadow-[0_0_24px_rgba(139,92,246,0.12)]">
             {isWorking &&

@@ -80,6 +80,12 @@ export type LinkToAdAnglePipelineV1 = {
    * Persisted to DB so the loading state can be restored after navigation.
    */
   nanoThreeGenerating?: boolean;
+  /**
+   * Per-slot NanoBanana task IDs (length 3, index-aligned with `nanoBananaImageUrls`).
+   * Persisted so a returning user can recover URLs from any slot, not just the last one.
+   * `null` means the slot was never submitted for this batch.
+   */
+  nanoBananaTaskIds?: (string | null)[];
 };
 
 /** One NanoBanana reference frame’s video state (index-aligned with nanoBananaImageUrls). */
@@ -148,6 +154,7 @@ export function emptyAnglePipeline(): LinkToAdAnglePipelineV1 {
     nanoBananaPromptsRaw: "",
     nanoBananaSelectedPromptIndex: 0,
     nanoBananaTaskId: null,
+    nanoBananaTaskIds: [null, null, null],
     nanoBananaImageUrl: null,
     nanoBananaImageUrls: [],
     nanoBananaSelectedImageIndex: null,
@@ -159,9 +166,12 @@ export function emptyAnglePipeline(): LinkToAdAnglePipelineV1 {
 
 export function cloneAnglePipeline(p: LinkToAdAnglePipelineV1): LinkToAdAnglePipelineV1 {
   const k = p.klingByReferenceIndex;
+  const ids = Array.isArray(p.nanoBananaTaskIds) ? [...p.nanoBananaTaskIds] : [null, null, null];
+  while (ids.length < 3) ids.push(null);
   return {
     ...p,
     nanoBananaImageUrls: Array.isArray(p.nanoBananaImageUrls) ? [...p.nanoBananaImageUrls] : [],
+    nanoBananaTaskIds: ids.slice(0, 3),
     klingByReferenceIndex:
       k && k.length === 3 ? k.map((s) => cloneSlot(s)) : createEmptyKlingByReference(),
   };
@@ -183,10 +193,21 @@ function parseAnglePipelineNode(x: unknown): LinkToAdAnglePipelineV1 | null {
       ? [...(o.nanoBananaImageUrls as string[])]
       : [];
   const kParsed = parseKlingSlotsFromUnknown(o.klingByReferenceIndex);
+  const taskIdsRaw = o.nanoBananaTaskIds;
+  const parsedTaskIds: (string | null)[] = (() => {
+    if (!Array.isArray(taskIdsRaw)) return [null, null, null];
+    const out: (string | null)[] = [];
+    for (let i = 0; i < 3; i++) {
+      const v = taskIdsRaw[i];
+      out.push(typeof v === "string" && v.trim().length > 0 ? v.trim() : null);
+    }
+    return out;
+  })();
   return {
     nanoBananaPromptsRaw: typeof o.nanoBananaPromptsRaw === "string" ? o.nanoBananaPromptsRaw : "",
     nanoBananaSelectedPromptIndex: spi,
     nanoBananaTaskId: typeof o.nanoBananaTaskId === "string" ? o.nanoBananaTaskId : o.nanoBananaTaskId === null ? null : null,
+    nanoBananaTaskIds: parsedTaskIds,
     nanoBananaImageUrl: typeof o.nanoBananaImageUrl === "string" ? o.nanoBananaImageUrl : o.nanoBananaImageUrl === null ? null : null,
     nanoBananaImageUrls: urls,
     nanoBananaSelectedImageIndex: o.nanoBananaSelectedImageIndex === null ? null : sii,
