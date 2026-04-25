@@ -94,6 +94,7 @@ import {
   shouldShowWorkflowOnboarding,
   type WorkflowProjectStateV1,
 } from "./workflowProjectStorage";
+import { buildWorkflowPreviewDataUrl } from "./workflowPreviewRenderer";
 import {
   createSpaceFromTemplate,
   getWorkflowStorageScope,
@@ -3813,125 +3814,6 @@ function normalizeWorkflowSpaceId(raw: string): string {
   }
 }
 
-function workflowNodePreviewTint(type: WorkflowCanvasNode["type"]): string {
-  switch (type) {
-    case "adAsset":
-      return "#8b5cf6";
-    case "imageRef":
-      return "#22d3ee";
-    case "textPrompt":
-      return "#a78bfa";
-    case "promptList":
-      return "#38bdf8";
-    case "stickyNote":
-      return "#f59e0b";
-    case "workflowGroup":
-      return "#a3a3a3";
-    default:
-      return "#71717a";
-  }
-}
-
-function escapeSvgAttr(v: string): string {
-  return v
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&apos;");
-}
-
-function nodePreviewMediaUrl(node: WorkflowCanvasNode): string | null {
-  if (node.type === "imageRef") {
-    const data = node.data as ImageRefNodeData;
-    const url = (data.imageUrl ?? "").trim();
-    if (url && data.mediaKind === "image") return url;
-    // Video refs cannot be painted as thumbnail in lightweight SVG previews.
-    return null;
-  }
-  if (node.type !== "adAsset") return null;
-  const data = node.data as AdAssetNodeData;
-  const outputUrl = (data.outputPreviewUrl ?? "").trim();
-  const referenceUrl = (data.referencePreviewUrl ?? "").trim();
-  if (outputUrl && (data.outputMediaKind ?? "image") === "image") return outputUrl;
-  if (referenceUrl && (data.referenceMediaKind ?? "image") === "image") return referenceUrl;
-  const frameCandidate = (data.videoExtractedLastFrameUrl ?? data.videoExtractedFirstFrameUrl ?? "").trim();
-  if (frameCandidate && frameCandidate.length <= 180_000) return frameCandidate;
-  return null;
-}
-
-function buildWorkflowPreviewDataUrl(project: WorkflowProjectStateV1): string | undefined {
-  const page = project.pages.find((p) => p.id === project.activePageId) ?? project.pages[0];
-  if (!page || page.nodes.length === 0) return undefined;
-
-  const nodes = page.nodes.slice(0, 60);
-  const minX = Math.min(...nodes.map((n) => n.position.x));
-  const minY = Math.min(...nodes.map((n) => n.position.y));
-  const maxX = Math.max(...nodes.map((n) => n.position.x + ((typeof n.width === "number" && n.width > 0) ? n.width : 180)));
-  const maxY = Math.max(...nodes.map((n) => n.position.y + ((typeof n.height === "number" && n.height > 0) ? n.height : 110)));
-
-  const srcW = Math.max(1, maxX - minX);
-  const srcH = Math.max(1, maxY - minY);
-  const vbW = 640;
-  const vbH = 400;
-  const pad = 28;
-  const scale = Math.min((vbW - pad * 2) / srcW, (vbH - pad * 2) / srcH);
-  const tx = (vbW - srcW * scale) / 2 - minX * scale;
-  const ty = (vbH - srcH * scale) / 2 - minY * scale;
-  const mapX = (x: number) => x * scale + tx;
-  const mapY = (y: number) => y * scale + ty;
-
-  const centers = new Map<string, { x: number; y: number }>();
-  for (const n of nodes) {
-    const w = (typeof n.width === "number" && n.width > 0) ? n.width : 180;
-    const h = (typeof n.height === "number" && n.height > 0) ? n.height : 110;
-    centers.set(n.id, { x: mapX(n.position.x + w / 2), y: mapY(n.position.y + h / 2) });
-  }
-
-  const edgeSvg = page.edges
-    .map((e) => {
-      const a = centers.get(e.source);
-      const b = centers.get(e.target);
-      if (!a || !b) return "";
-      return `<line x1="${a.x.toFixed(2)}" y1="${a.y.toFixed(2)}" x2="${b.x.toFixed(2)}" y2="${b.y.toFixed(2)}" stroke="rgba(196,181,253,0.45)" stroke-width="1.6" stroke-linecap="round" />`;
-    })
-    .join("");
-
-  const nodeSvg = nodes
-    .map((n, idx) => {
-      const w = ((typeof n.width === "number" && n.width > 0) ? n.width : 180) * scale;
-      const h = ((typeof n.height === "number" && n.height > 0) ? n.height : 110) * scale;
-      const x = mapX(n.position.x);
-      const y = mapY(n.position.y);
-      const c = workflowNodePreviewTint(n.type);
-      const rx = Math.max(6, Math.min(10, 10 * scale));
-      const mediaUrl = nodePreviewMediaUrl(n);
-      const clipId = `clip-${idx}`;
-      const mediaBlock = mediaUrl
-        ? `<defs><clipPath id="${clipId}"><rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${w.toFixed(2)}" height="${h.toFixed(2)}" rx="${rx.toFixed(2)}" ry="${rx.toFixed(2)}"/></clipPath></defs>
-<image x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${w.toFixed(2)}" height="${h.toFixed(2)}" href="${escapeSvgAttr(mediaUrl)}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${clipId})" />
-<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${w.toFixed(2)}" height="${h.toFixed(2)}" rx="${rx.toFixed(2)}" ry="${rx.toFixed(2)}" fill="rgba(7,10,18,0.22)" />`
-        : `<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${w.toFixed(2)}" height="${h.toFixed(2)}" rx="${rx.toFixed(2)}" ry="${rx.toFixed(2)}" fill="rgba(12,12,18,0.85)" />`;
-      return `${mediaBlock}
-<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${w.toFixed(2)}" height="${h.toFixed(2)}" rx="${rx.toFixed(2)}" ry="${rx.toFixed(2)}" fill="none" stroke="${c}" stroke-opacity="0.55" stroke-width="1.4" />`;
-    })
-    .join("");
-
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${vbW}" height="${vbH}" viewBox="0 0 ${vbW} ${vbH}">
-<defs>
-<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-<stop offset="0%" stop-color="#17102a"/>
-<stop offset="100%" stop-color="#090b12"/>
-</linearGradient>
-</defs>
-<rect width="${vbW}" height="${vbH}" fill="url(#bg)"/>
-${edgeSvg}
-${nodeSvg}
-</svg>`;
-
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
-}
-
 export function WorkflowEditor({ spaceId }: { spaceId: string }) {
   const router = useRouter();
   const sb = useSupabaseBrowserClient();
@@ -4009,21 +3891,21 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
     saveProjectForSpace(storageScope, resolvedSpaceId, workflowProject);
   }, [workflowHydrated, storageScope, resolvedSpaceId, workflowProject]);
 
-  const workflowPreviewDataUrl = useMemo(
+  const workflowPreviewSavedDataUrl = useMemo(
     () => buildWorkflowPreviewDataUrl(workflowProject),
     [workflowProject],
   );
 
   useEffect(() => {
     if (!workflowHydrated || storageScope === null) return;
-    const next = workflowPreviewDataUrl;
+    const next = workflowPreviewSavedDataUrl;
     if (lastSavedPreviewRef.current === next) return;
     const t = window.setTimeout(() => {
       updateSpaceMeta(storageScope, resolvedSpaceId, { previewDataUrl: next });
       lastSavedPreviewRef.current = next;
-    }, 300);
+    }, 400);
     return () => window.clearTimeout(t);
-  }, [workflowHydrated, storageScope, resolvedSpaceId, workflowPreviewDataUrl]);
+  }, [workflowHydrated, storageScope, resolvedSpaceId, workflowPreviewSavedDataUrl]);
 
   const showOnboarding = workflowHydrated && shouldShowWorkflowOnboarding(workflowProject);
 
