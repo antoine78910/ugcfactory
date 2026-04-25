@@ -731,6 +731,44 @@ function veoAspectFromWorkflowAspect(aspect: string): KieVeoAspectRatio {
   return "Auto";
 }
 
+/** Coerce a workflow aspect string to one Kling/Seedance accepts (16:9, 9:16, 1:1). */
+function clampVideoAspect3Way(aspect: string): "16:9" | "9:16" | "1:1" {
+  const a = aspect.trim();
+  if (a === "16:9") return "16:9";
+  if (a === "1:1") return "1:1";
+  return "9:16";
+}
+
+/** Sora 2 only accepts portrait (9:16) or landscape (16:9). */
+function clampSoraAspect(aspect: string): "16:9" | "9:16" {
+  return aspect.trim() === "16:9" ? "16:9" : "9:16";
+}
+
+/**
+ * Picker → which video models accept `aspect_ratio` from the user (when an image is provided too).
+ *
+ * Kling 3.0 + Seedance accept aspect_ratio in **both** text-to-video and image-to-video.
+ * Kling 2.5 Turbo / Kling 2.6 accept aspect_ratio in text-to-video only — when a reference
+ * image is attached the KIE API derives the aspect from the image and rejects an explicit value.
+ * Sora 2 accepts portrait/landscape in either mode.
+ */
+function resolveWorkflowKlingAspectForApi(
+  modelId: string,
+  rawAspect: string,
+  hasStartUrl: boolean,
+): "16:9" | "9:16" | "1:1" | undefined {
+  const isKling30 = modelId === "kling-3.0/video";
+  const isKling25Turbo = modelId === "kling-2.5-turbo/video";
+  const isKling26 = modelId === "kling-2.6/video";
+  const isSora = modelId === "openai/sora-2" || modelId === "openai/sora-2-pro";
+  const isSeedance = modelId.startsWith("bytedance/seedance");
+
+  if (isSora) return clampSoraAspect(rawAspect);
+  if (isKling30 || isSeedance) return clampVideoAspect3Way(rawAspect);
+  if ((isKling25Turbo || isKling26) && !hasStartUrl) return clampVideoAspect3Way(rawAspect);
+  return undefined;
+}
+
 export function resolveWorkflowVideoModelId(raw: string): string {
   const t = raw.trim();
   if (t === "auto" || !t) return "kling-3.0/video";
@@ -990,7 +1028,12 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
   const isKling25Turbo = modelId === "kling-2.5-turbo/video";
   const isKling26 = modelId === "kling-2.6/video";
   const isSoraPicker = modelId === "openai/sora-2" || modelId === "openai/sora-2-pro";
-  const isSeedanceI2V = isSeedancePicker(modelId);
+
+  const aspectForApi = resolveWorkflowKlingAspectForApi(
+    modelId,
+    params.aspectRatio,
+    Boolean(startUrl ?? refUrls[0]),
+  );
 
   const genRes = await fetch("/api/kling/generate", {
     method: "POST",
@@ -1001,24 +1044,7 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
       prompt: params.prompt,
       imageUrl: startUrl ?? refUrls[0],
       duration,
-      aspectRatio:
-        (isKling30 || isKling25Turbo || isKling26) && !startUrl
-          ? params.aspectRatio === "1:1"
-            ? "1:1"
-            : params.aspectRatio === "16:9"
-              ? "16:9"
-              : "9:16"
-          : isSeedanceI2V && startUrl
-            ? params.aspectRatio === "1:1"
-              ? "1:1"
-              : params.aspectRatio === "16:9"
-                ? "16:9"
-                : "9:16"
-            : isSoraPicker
-              ? params.aspectRatio === "16:9"
-                ? "16:9"
-                : "9:16"
-              : undefined,
+      aspectRatio: aspectForApi,
       sound:
         modelId === "kling-3.0/video" || modelId === "kling-2.5-turbo/video" || modelId === "kling-2.6/video"
           ? true

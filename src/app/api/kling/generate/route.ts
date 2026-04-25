@@ -537,7 +537,10 @@ export async function POST(req: Request) {
         const frameUrls = [imageUrlRaw];
         if (hasKieEndImage) frameUrls.push(endImageUrlRaw);
         input.image_urls = frameUrls;
-      } else if (body.aspectRatio) {
+      }
+      // Kling 3.0 accepts aspect_ratio alongside image_urls (system auto-adapts when omitted).
+      // @see https://docs.kie.ai/market/kling/kling-3-0
+      if (body.aspectRatio) {
         input.aspect_ratio = body.aspectRatio;
       }
     } else if (isKling26(model) || isKling25Turbo(model)) {
