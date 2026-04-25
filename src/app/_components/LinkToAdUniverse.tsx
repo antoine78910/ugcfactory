@@ -3636,16 +3636,30 @@ export default function LinkToAdUniverse({
 
   /**
    * Link to Ad references sent to image generation requests.
-   * Intentionally keep a single input image to avoid stale/multi-reference drift.
+   * Returns the product reference first, followed by every uploaded persona/avatar URL so the
+   * image-gen model receives the user's persona as a real visual input (not just prose).
+   * Persona refs are read from current state so the user can toggle them on/off freely until they click Generate.
    */
   function resolveNanoGenerationImageUrls(): string[] {
+    const refs: string[] = [];
+    const seen = new Set<string>();
+    const add = (raw: string | null | undefined) => {
+      const t = (raw ?? "").trim();
+      if (!t || !/^https?:\/\//i.test(t) || seen.has(t)) return;
+      seen.add(t);
+      refs.push(t);
+    };
+
     const preview = (resolvedPreviewUrl || "").trim();
-    if (/^https?:\/\//i.test(preview)) return [preview];
-    const product = resolveNanoProductImageUrl();
-    if (product) return [product];
-    const persona = (personaPhotoUrls[0] || "").trim();
-    if (/^https?:\/\//i.test(persona)) return [persona];
-    return [];
+    if (preview) add(preview);
+    if (refs.length === 0) {
+      const product = resolveNanoProductImageUrl();
+      if (product) add(product);
+    }
+
+    for (const url of personaPhotoUrls) add(url);
+
+    return refs;
   }
 
   /** Same image logic as the preview when possible (avoids “button enabled but no HTTPS product” mismatches). */

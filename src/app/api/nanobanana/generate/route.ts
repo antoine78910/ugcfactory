@@ -42,6 +42,24 @@ function firstHttpUrl(items: Array<string | null | undefined>): string | undefin
   return undefined;
 }
 
+/**
+ * Collect every distinct HTTPS reference URL provided by the caller.
+ * Used by Link to Ad mode so persona/avatar images uploaded by the user reach the
+ * image-gen model alongside the product reference (cap mirrors GPT Image 2's 16-input limit).
+ */
+function collectHttpUrls(items: Array<string | null | undefined>, max: number): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of items) {
+    const value = (raw ?? "").trim();
+    if (!value || !/^https?:\/\//i.test(value) || seen.has(value)) continue;
+    seen.add(value);
+    out.push(value);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
 export async function POST(req: Request) {
   serverLog("nanobanana_generate_in", { url: req.url });
   const { user, response } = await requireSupabaseUser();
@@ -109,15 +127,18 @@ export async function POST(req: Request) {
   }
 
   try {
-    const singleLinkToAdRef =
+    const linkToAdRefs =
       body.linkToAd === true
-        ? firstHttpUrl([body.imageUrl, ...(Array.isArray(body.imageUrls) ? body.imageUrls : [])])
+        ? collectHttpUrls(
+            [body.imageUrl, ...(Array.isArray(body.imageUrls) ? body.imageUrls : [])],
+            16,
+          )
         : undefined;
-    const imageUrl = body.linkToAd === true ? singleLinkToAdRef : body.imageUrl;
+    const imageUrl = body.linkToAd === true ? linkToAdRefs?.[0] : body.imageUrl;
     const imageUrls =
       body.linkToAd === true
-        ? singleLinkToAdRef
-          ? [singleLinkToAdRef]
+        ? linkToAdRefs && linkToAdRefs.length > 0
+          ? linkToAdRefs
           : undefined
         : body.imageUrls;
 

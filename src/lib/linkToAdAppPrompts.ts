@@ -122,6 +122,13 @@ DIGITAL IMAGE RULES:
 - Digital scenes: home office, bedroom, car, cafe, living room
 - No physical product in frame
 
+PERSONA REFERENCE IMAGE RULE (CRITICAL):
+- If an avatar/persona reference image is attached as model input, do NOT describe facial identity traits in prose.
+- In that case, start each prompt with exactly:
+  Reproduce the persona shown in the attached avatar reference image exactly as is — same face, skin tone, hair, body traits.
+- Then continue with scene, outfit, mood, framing and action based on VIDEO_METADATA and script context.
+- If no avatar/persona reference image is attached, infer persona normally from VIDEO_METADATA and script text.
+
 PROMPT FORMAT:
 Generate THREE prompts labeled:
 PROMPT 1

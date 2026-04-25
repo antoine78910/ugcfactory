@@ -538,7 +538,15 @@ export async function POST(req: Request) {
     "Do not add preamble, explanations, or reasoning.",
     "If avatar reference images are attached, treat them as IDENTITY REFERENCES ONLY (face/body traits). Never treat avatar refs as product references.",
     avatarRefs.length > 0
-      ? "Avatar refs present: keep the SAME person identity across PROMPT 1/2/3 (same face, skin tone, hair, body traits)."
+      ? [
+          "AVATAR REFERENCE IMAGE PROVIDED (CRITICAL — overrides any other persona rule below):",
+          "The image-generation model will receive the attached avatar reference image directly as one of its inputs alongside the product image.",
+          "Do NOT describe the persona's face shape, skin tone, hair details, eye color, ethnicity, age range, or unique physical traits anywhere in the prompt.",
+          "Instead, include this exact phrase verbatim at the start of the avatar/persona section (or at the start of the paragraph when the format is a single block): \"Reproduce the persona shown in the attached avatar reference image exactly as is — same face, skin tone, hair, body traits, no identity changes across PROMPT 1, PROMPT 2, and PROMPT 3.\"",
+          "You may still briefly describe clothing, accessories, expression, posture and micro-movements coming from the script — those are stylistic, not identity.",
+          "Do NOT use the 9-character-parameter rules or any text-generated persona description; identity comes from the reference image, never from prose.",
+          "Treat any conflicting rule in the system message (e.g. \"Describe the face with maximum precision\") as overridden by this directive whenever an avatar reference image is attached.",
+        ].join("\n")
       : "No avatar refs: DO NOT keep the same person across PROMPT 1/2/3. Generate 3 DISTINCT avatars (different face identity each prompt).",
   ].join("\n");
 
@@ -550,13 +558,13 @@ export async function POST(req: Request) {
     script,
     "",
     avatarRefs.length
-      ? `AVATAR REFERENCES ATTACHED: ${String(avatarRefs.length)} image(s). Match ONLY immutable identity traits (face, skin tone, hair, body traits) to these references.`
+      ? `AVATAR REFERENCES ATTACHED: ${String(avatarRefs.length)} image(s). The image-generation model will receive these directly as inputs together with the product reference. EDIT, Avatar must reference the attached avatar image instead of describing identity in prose (see "AVATAR REFERENCE IMAGE PROVIDED" rule in the system message).`
       : "No avatar reference image attached; infer persona from script and product context.",
     avatarRefs.length
       ? "PERSONA DISSOCIATION RULE: Do NOT copy clothing, accessories, pose, camera framing, or background from avatar refs. Outfit and styling must come from the script scene and can differ from avatar uploads."
       : "",
     avatarRefs.length
-      ? "IDENTITY LOCK: Same person in PROMPT 1, PROMPT 2, PROMPT 3."
+      ? "IDENTITY LOCK: Same person in PROMPT 1, PROMPT 2, PROMPT 3 (identity comes from the attached avatar reference, not from prose)."
       : "NO IDENTITY LOCK: Use a different avatar identity in each prompt (PROMPT 1/2/3 must not be the same person).",
     generationMode === "custom_ugc"
       ? `CUSTOM UGC INTENT: ${customUgcIntent || "No talk, just show the product naturally."}`
