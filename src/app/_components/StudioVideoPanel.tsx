@@ -3191,6 +3191,7 @@ export default function StudioVideoPanel({
                 : i,
             ),
           );
+          setIsEditStartingGeneration(false);
           toast.message("Motion control started", { description: "Polling…" });
           const url = await pollKlingVideo(json.taskId, editPKey, getPersonalPiapiApiKey() ?? undefined);
           void completeStudioTask(json.taskId, url);
@@ -3259,6 +3260,7 @@ export default function StudioVideoPanel({
               : i,
           ),
         );
+        setIsEditStartingGeneration(false);
         toast.message("Edit started", { description: "Polling provider…" });
         const url = await pollKlingVideo(json.taskId, editPKey, getPersonalPiapiApiKey() ?? undefined);
         void completeStudioTask(json.taskId, url);
@@ -3306,7 +3308,6 @@ export default function StudioVideoPanel({
               : i,
           ),
         );
-      } finally {
         setIsEditStartingGeneration(false);
       }
     })();
@@ -3591,6 +3592,7 @@ export default function StudioVideoPanel({
                 : i,
             ),
           );
+          setIsCreateStartingGeneration(false);
           toast.message(
             snap.modelId === "openai/sora-2-pro" ? "Sora 2 Pro started" : "Sora 2 started",
             { description: "Rendering…" },
@@ -3676,6 +3678,7 @@ export default function StudioVideoPanel({
                 : i,
             ),
           );
+          setIsCreateStartingGeneration(false);
           toast.message("Veo started", { description: "Rendering…" });
           const url = await pollVeoVideo(json.taskId, pKey);
           void completeStudioTask(json.taskId, url);
@@ -3795,6 +3798,7 @@ export default function StudioVideoPanel({
               : i,
           ),
         );
+        setIsCreateStartingGeneration(false);
         toast.message("Generation started", { description: "Polling provider…" });
         const url = await pollKlingVideo(
           json.taskId,
@@ -3857,7 +3861,6 @@ export default function StudioVideoPanel({
               : i,
           ),
         );
-      } finally {
         setIsCreateStartingGeneration(false);
       }
     })();
