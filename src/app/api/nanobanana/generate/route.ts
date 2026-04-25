@@ -43,15 +43,27 @@ function firstHttpUrl(items: Array<string | null | undefined>): string | undefin
 }
 
 export async function POST(req: Request) {
+  serverLog("nanobanana_generate_in", { url: req.url });
   const { user, response } = await requireSupabaseUser();
-  if (response) return response;
+  if (response) {
+    serverLog("nanobanana_generate_unauth", {});
+    return response;
+  }
 
   let body: Body;
   try {
     body = (await req.json()) as Body;
   } catch {
+    serverLog("nanobanana_generate_bad_json", {});
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
+  serverLog("nanobanana_generate_body", {
+    model: body.model,
+    linkToAd: body.linkToAd === true,
+    imagesCount: Array.isArray(body.imageUrls) ? body.imageUrls.length : 0,
+    aspectRatio: body.aspectRatio,
+    promptLen: typeof body.prompt === "string" ? body.prompt.length : 0,
+  });
 
   let prompt = (body.prompt ?? "").trim();
   if (!prompt) {

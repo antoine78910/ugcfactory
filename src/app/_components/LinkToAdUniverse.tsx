@@ -2224,9 +2224,10 @@ export default function LinkToAdUniverse({
       ),
     );
     // Restore the three-image generation loading state so the spinner shows on return.
-    // Trigger when either:
-    //  (a) the explicit `nanoThreeGenerating` flag is set, or
-    //  (b) any slot has a saved task id but no URL (flag may have been lost on tab close).
+    // ONLY when there's something concrete to resume — i.e. at least one saved per-slot task id
+    // (or the legacy single tail task id) without a corresponding URL. A bare `nanoThreeGenerating: true`
+    // flag without any task id means a previous attempt aborted before submitting; we must NOT block
+    // the UI in that case (otherwise the user is stuck with a disabled "Generate 3 images" button).
     const ids = Array.isArray(p.nanoBananaTaskIds) ? p.nanoBananaTaskIds : [];
     const urls = Array.isArray(p.nanoBananaImageUrls) ? p.nanoBananaImageUrls : [];
     const anyOrphanTask = (() => {
@@ -2245,10 +2246,14 @@ export default function LinkToAdUniverse({
       }
       return false;
     })();
-    if (p.nanoThreeGenerating || anyOrphanTask) {
+    if (anyOrphanTask) {
       setIsNanoAllImagesSubmitting(true);
       nanoThreeGeneratingFromDb.current = true;
       nanoThreeResumeAttemptedRef.current = false;
+    } else {
+      // Stale flag with no recoverable task id → make sure the UI is not stuck loading.
+      setIsNanoAllImagesSubmitting(false);
+      nanoThreeGeneratingFromDb.current = false;
     }
   }
 
@@ -4164,8 +4169,11 @@ export default function LinkToAdUniverse({
       const base = latestSnapRef.current;
       if (base && lastExtractedJson) {
         const snap = snapshotWithPersistTriple(base, triple, sel);
-        await persistUniverse(universeRunId, url, extractedTitle, lastExtractedJson, snap, packshotsForSave(), {
+        // Fire-and-forget: a slow/failed persist must NEVER block the image generation pipeline.
+        void persistUniverse(universeRunId, url, extractedTitle, lastExtractedJson, snap, packshotsForSave(), {
           imagePrompt: finalPromptsRaw,
+        }).catch(() => {
+          /* non-fatal: prompts are already in local state, persistence will retry on next save */
         });
       }
       toast.success("3 image prompts saved.");
@@ -4705,7 +4713,23 @@ export default function LinkToAdUniverse({
   async function onGenerateNanoBananaImagesFromAllPrompts(opts?: { forceRegenerateCharge?: boolean }) {
     const url = storeUrl.trim();
     const idx = selectedAngleIndex;
+    // Beacon to server logs: lets us trace whether the click reached the handler and which exit path it took.
+    const traceId = `lta-3img-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const beacon = (event: string, extra?: Record<string, unknown>) => {
+      try {
+        void fetch("/api/log/lta-trace", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ traceId, event, ...extra }),
+          keepalive: true,
+        }).catch(() => undefined);
+      } catch {
+        /* ignore */
+      }
+    };
+    beacon("click", { hasUrl: Boolean(url), idx, force: Boolean(opts?.forceRegenerateCharge) });
     if (!url || !lastExtractedJson || idx === null) {
+      beacon("exit_not_ready", { hasUrl: Boolean(url), hasJson: Boolean(lastExtractedJson), idx });
       toast.error("Project not ready to generate images.");
       return;
     }
@@ -4720,6 +4744,7 @@ export default function LinkToAdUniverse({
     const nanoRefs = resolveNanoGenerationImageUrls();
     const img = productRefs[0];
     if (!img || !/^https?:\/\//i.test(img)) {
+      beacon("exit_no_product_image", { productCount: productRefs.length });
       toast.error("HTTPS product image is required to generate images.");
       return;
     }
@@ -4727,15 +4752,18 @@ export default function LinkToAdUniverse({
       const walletNow = creditsBalanceRef.current;
       setLtaFrozenCredits(walletNow);
       if (!spendLtaCreditsIfEnough(ltaThreeImagesCharge)) {
+        beacon("exit_insufficient_credits", {});
         setLtaFrozenCredits(null);
         return;
       }
     }
 
     setIsNanoAllImagesSubmitting(true);
+    beacon("loading_started", { nanoRefsCount: nanoRefs.length });
 
     // Mark `nanoThreeGenerating: true` in the DB IMMEDIATELY (before the prompts regeneration phase)
     // so a user closing the tab during prompt regen still sees the loading + auto-resume on return.
+    // Fire-and-forget: a slow/failed persist must never block the actual /api/nanobanana/generate call.
     {
       const baseEarly = latestSnapRef.current;
       if (baseEarly && lastExtractedJson) {
@@ -4749,18 +4777,16 @@ export default function LinkToAdUniverse({
         ) as [LinkToAdAnglePipelineV1, LinkToAdAnglePipelineV1, LinkToAdAnglePipelineV1];
         setPipelineByAngle(earlyTriple);
         const snapEarly = snapshotWithPersistTriple(baseEarly, earlyTriple);
-        try {
-          await persistUniverse(
-            universeRunId,
-            url,
-            extractedTitle,
-            lastExtractedJson,
-            snapEarly,
-            packshotsForSave(),
-          );
-        } catch {
-          // Non-fatal: fall through; we still try the in-flight persist below.
-        }
+        void persistUniverse(
+          universeRunId,
+          url,
+          extractedTitle,
+          lastExtractedJson,
+          snapEarly,
+          packshotsForSave(),
+        ).catch(() => {
+          /* non-fatal */
+        });
       }
     }
 
@@ -4784,8 +4810,10 @@ export default function LinkToAdUniverse({
 
     let prompts: [string, string, string];
     if (!signatureMatches) {
+      beacon("regen_prompts_start", {});
       const nextPrompts = await onGenerateNanoBananaPrompts(idx, { keepThreeImagesSubmitting: true });
       if (!nextPrompts) {
+        beacon("exit_prompts_failed", {});
         if (shouldCharge && !isPlatformCreditBypassActive()) {
           grantCredits(ltaThreeImagesCharge);
           creditsBalanceRef.current += ltaThreeImagesCharge;
@@ -4794,16 +4822,23 @@ export default function LinkToAdUniverse({
         setIsNanoAllImagesSubmitting(false);
         return;
       }
+      beacon("regen_prompts_ok", { length: nextPrompts.length });
       promptsText = nextPrompts;
       prompts = parseThreeLabeledPrompts(promptsText).map((p) => {
         const { editable, technicalTail } = splitNanoPromptBodyForEditing(p);
         return mergeNanoPromptForApi(editable, technicalTail).trim();
       }) as [string, string, string];
     } else {
+      beacon("prompts_signature_matches", {});
       prompts = fullNanoPromptsTriple;
     }
 
     if (!prompts[0] || !prompts[1] || !prompts[2]) {
+      beacon("exit_prompts_missing", {
+        p0: Boolean(prompts[0]),
+        p1: Boolean(prompts[1]),
+        p2: Boolean(prompts[2]),
+      });
       if (shouldCharge && !isPlatformCreditBypassActive()) {
         grantCredits(ltaThreeImagesCharge);
         creditsBalanceRef.current += ltaThreeImagesCharge;
@@ -4882,6 +4917,10 @@ export default function LinkToAdUniverse({
     };
 
     const generationRefs = nanoRefs.length ? nanoRefs : [img];
+    beacon("submit_3_tasks", {
+      refsCount: generationRefs.length,
+      promptLengths: prompts.map((p) => p.length),
+    });
 
     try {
       nanoThreeAbortRef.current?.abort();
@@ -4893,6 +4932,9 @@ export default function LinkToAdUniverse({
         { labelPrefix: `Link to Ad · Angle ${idx + 1}`, onSlotSubmitted },
         controller.signal,
       );
+      beacon("3_tasks_settled", {
+        ready: urlsByPrompt.filter((u) => typeof u === "string" && u.trim().length > 0).length,
+      });
 
       let lastTaskId = firstLastTaskId;
       // Provider can complete only part of the batch; retry missing slots twice without re-charging.
@@ -5009,7 +5051,10 @@ export default function LinkToAdUniverse({
         }
       })();
     } catch (e) {
-      if (e instanceof DOMException && e.name === "AbortError") return;
+      if (e instanceof DOMException && e.name === "AbortError") {
+        beacon("aborted", {});
+        return;
+      }
       if ((shouldCharge || usingPrepaid) && !isPlatformCreditBypassActive()) {
         grantCredits(ltaThreeImagesCharge);
         creditsBalanceRef.current += ltaThreeImagesCharge;
@@ -5017,6 +5062,7 @@ export default function LinkToAdUniverse({
         setLtaFrozenCredits(null);
       }
       const errMsg = e instanceof Error ? e.message : "Unknown error";
+      beacon("caught_error", { errMsg: errMsg.slice(0, 300) });
       toast.error("Image generation", { description: errMsg });
       void registerLinkToAdStudioImageFailed(`Link to Ad · Angle ${idx + 1} · 3 images`, errMsg);
       const base = latestSnapRef.current;
