@@ -19,6 +19,7 @@ import {
   STUDIO_IMAGE_TAB_KINDS,
   STUDIO_LIBRARY_KINDS,
   STUDIO_VIDEO_TAB_KINDS,
+  STUDIO_WORKFLOW_KINDS,
 } from "@/lib/studioGenerationKinds";
 import {
   filterLegacyLinkToAdFromTabRows,
@@ -50,10 +51,12 @@ const MAX_ROWS_TO_POLL_PER_REQUEST = 28;
 
 const ALLOWED_POLL_KINDS = new Set<string>(LIBRARY_KINDS);
 const POLL_KIND_DEFAULT = "avatar";
+const WORKFLOW_KIND_ALIAS = "workflow";
 
 function resolvePollKinds(kind: string): string[] | "all" {
   const t = kind.trim();
   if (t === "all") return "all";
+  if (t === WORKFLOW_KIND_ALIAS) return [...STUDIO_WORKFLOW_KINDS];
   const parts = t.split(",").map((s) => s.trim()).filter(Boolean);
   const kinds = parts.filter((k) => ALLOWED_POLL_KINDS.has(k));
   if (kinds.length === 0) {
@@ -61,6 +64,7 @@ function resolvePollKinds(kind: string): string[] | "all" {
   }
   return kinds;
 }
+
 
 export async function POST(req: Request) {
   const { supabase, user, response } = await requireSupabaseUser();

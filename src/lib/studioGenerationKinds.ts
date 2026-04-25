@@ -17,6 +17,20 @@ export const STUDIO_GENERATION_KIND_STUDIO_TRANSLATE_VIDEO = "studio_translate_v
 /** Voice change outputs (ElevenLabs), separate from Translate history. */
 export const STUDIO_GENERATION_KIND_VOICE_CHANGE = "studio_voice_change" as const;
 
+/** Workflow Image Generator nodes (kept out of Studio history / Projects library). */
+export const STUDIO_GENERATION_KIND_WORKFLOW_IMAGE = "workflow_image" as const;
+/** Workflow Video Generator nodes (kept out of Studio history / Projects library). */
+export const STUDIO_GENERATION_KIND_WORKFLOW_VIDEO = "workflow_video" as const;
+
+/**
+ * Kinds owned by the Workflow editor: rows survive page reload / navigation so the in-flight
+ * "generating" overlay can be rehydrated by polling these specifically (`kind=workflow`).
+ */
+export const STUDIO_WORKFLOW_KINDS = [
+  STUDIO_GENERATION_KIND_WORKFLOW_IMAGE,
+  STUDIO_GENERATION_KIND_WORKFLOW_VIDEO,
+] as const;
+
 /**
  * Max rows for Create tab list queries (`kind=avatar`, `studio_image,studio_upscale`, video kinds, etc.).
  * Single global ORDER+LIMIT was too small for heavy users.

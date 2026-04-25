@@ -256,7 +256,12 @@ type WorkflowPollHistoryItem = {
   status?: "ready" | "failed" | "generating";
   mediaUrl?: string;
   errorMessage?: string;
+  studioGenerationKind?: string;
+  createdAt?: number;
 };
+
+/** Race window (ms) within which a freshly-started run is allowed to adopt a server-side workflow row that was created without a synced task id. */
+const WORKFLOW_RACE_RECOVERY_WINDOW_MS = 90_000;
 
 /**
  * List node already wired from this generator's media output (Assistant reuses text lists the same way).
@@ -998,12 +1003,18 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   useEffect(() => {
     if (data.kind !== "image" && data.kind !== "video") return;
     const pending = data.pendingWorkflowRun;
-    const taskIds = pending?.taskIds?.map((t) => t.trim()).filter(Boolean) ?? [];
-    if (!taskIds.length) return;
-    const pendingMediaKind = pending?.mediaKind ?? (data.kind === "video" ? "video" : "image");
+    if (!pending) return;
+    const initialTaskIds = pending.taskIds?.map((t) => t.trim()).filter(Boolean) ?? [];
+    const pendingMediaKind = pending.mediaKind ?? (data.kind === "video" ? "video" : "image");
+    const updatedAt = pending.updatedAt ?? 0;
+    const fresh = updatedAt > 0 && Date.now() - updatedAt < WORKFLOW_RACE_RECOVERY_WINDOW_MS;
+    if (initialTaskIds.length === 0 && !fresh) return;
 
     let alive = true;
     let timer: ReturnType<typeof setTimeout> | null = null;
+    let trackedTaskIds = initialTaskIds.slice();
+    let raceRecoveryAttempts = 0;
+    const expectedKindForMedia = pendingMediaKind === "video" ? "workflow_video" : "workflow_image";
     setGenerating(true);
 
     const poll = async () => {
@@ -1012,7 +1023,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            kind: "all",
+            kind: "workflow",
             personalApiKey: getPersonalApiKey()?.trim() || undefined,
             piapiApiKey: getPersonalPiapiApiKey()?.trim() || undefined,
           }),
@@ -1024,22 +1035,57 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
         if (!alive) return;
 
+        const items = json.data ?? [];
         const byTask = new Map<string, WorkflowPollHistoryItem>();
-        for (const item of json.data ?? []) {
+        for (const item of items) {
           const tid = (item.externalTaskId ?? "").trim();
           if (!tid) continue;
           byTask.set(tid, item);
         }
 
-        const orderedUrls = taskIds.map((tid) => byTask.get(tid)?.mediaUrl?.trim() || "");
+        if (trackedTaskIds.length === 0) {
+          // Race recovery: pendingWorkflowRun was persisted before /start returned a task id.
+          // Adopt the closest in-progress workflow row of matching media kind, created near `updatedAt`.
+          const candidates = items.filter((it) => {
+            if (it.studioGenerationKind !== expectedKindForMedia) return false;
+            if (it.status !== "generating") return false;
+            const created = typeof it.createdAt === "number" ? it.createdAt : NaN;
+            if (!Number.isFinite(created)) return false;
+            return created >= updatedAt - 5_000 && created <= updatedAt + WORKFLOW_RACE_RECOVERY_WINDOW_MS;
+          });
+          if (candidates.length === 0) {
+            raceRecoveryAttempts += 1;
+            if (Date.now() - updatedAt > WORKFLOW_RACE_RECOVERY_WINDOW_MS || raceRecoveryAttempts > 8) {
+              setPendingWorkflowRun(null);
+              setGenerating(false);
+              return;
+            }
+            return;
+          }
+          const adopted = candidates
+            .sort((a, b) => Math.abs((a.createdAt ?? 0) - updatedAt) - Math.abs((b.createdAt ?? 0) - updatedAt))
+            .map((c) => (c.externalTaskId ?? "").trim())
+            .filter(Boolean) as string[];
+          if (!adopted.length) return;
+          trackedTaskIds = adopted;
+          setPendingWorkflowRun({
+            mediaKind: pendingMediaKind,
+            taskIds: trackedTaskIds,
+            progressListId: pending.progressListId ?? null,
+            listLabel: pending.listLabel,
+          });
+        }
+
+        const taskIdsForPoll = trackedTaskIds;
+        const orderedUrls = taskIdsForPoll.map((tid) => byTask.get(tid)?.mediaUrl?.trim() || "");
         const completedUrls = orderedUrls.filter(Boolean);
-        const statuses = taskIds.map((tid) => byTask.get(tid)?.status ?? "generating");
+        const statuses = taskIdsForPoll.map((tid) => byTask.get(tid)?.status ?? "generating");
         const allTerminal = statuses.every((s) => s === "ready" || s === "failed");
 
-        if (pending?.progressListId) {
+        if (pending.progressListId) {
           patch(pending.progressListId, {
             ...(pending.listLabel?.trim() ? { label: pending.listLabel.trim() } : {}),
-            lines: taskIds.map((_, idx) => orderedUrls[idx] || `${WORKFLOW_PENDING_MEDIA_PREFIX}${idx}`),
+            lines: taskIdsForPoll.map((_, idx) => orderedUrls[idx] || `${WORKFLOW_PENDING_MEDIA_PREFIX}${idx}`),
             mode: "results",
             contentKind: "media",
           });

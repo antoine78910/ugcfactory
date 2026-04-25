@@ -109,10 +109,12 @@ export function studioGenerationModelDisplayLabel(
   switch (kind) {
     case "studio_image":
     case "link_to_ad_image":
+    case "workflow_image":
       return studioImagePickerDisplayLabel(m);
     case "studio_video":
     case "studio_watermark":
     case "link_to_ad_video":
+    case "workflow_video":
       if (m.startsWith("studio-edit/")) return studioVideoEditPickerDisplayLabel(m);
       if (m === "motion_control") return "Motion control";
       return studioVideoDisplayLabel(m);
@@ -154,12 +156,14 @@ function rowKindToMediaKind(kind: string, resultUrls: string[], label: string): 
     kind === "studio_video" ||
     kind === "studio_watermark" ||
     kind === "link_to_ad_video" ||
-    kind === "studio_translate_video"
+    kind === "studio_translate_video" ||
+    kind === "workflow_video"
   ) {
     return "video";
   }
   if (kind === "studio_audio") return "audio";
   if (kind === "link_to_ad_image") return "image";
+  if (kind === "workflow_image") return "image";
   if (kind === "studio_upscale") {
     const u = resultUrls[0] ?? "";
     if (u) return resultUrlLooksLikeAudio(u) ? "audio" : resultUrlLooksLikeVideo(u) ? "video" : "image";
