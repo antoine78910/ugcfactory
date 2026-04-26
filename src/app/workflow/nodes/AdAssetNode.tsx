@@ -60,6 +60,7 @@ import { cn } from "@/lib/utils";
 
 import { useWorkflowNodePatch } from "../workflowNodePatchContext";
 import { buildWorkflowProjectPipelineFromRun } from "../workflowProjectPipeline";
+import type { WorkflowCanvasNode } from "../workflowFlowTypes";
 import {
   collectWorkflowBatchPrompts,
   collectLinkedImageUrlsForHandles,
@@ -439,6 +440,23 @@ async function extractVideoFrameJpegDataUrl(video: HTMLVideoElement, end: boolea
 
   ctx.drawImage(video, 0, 0, tw, th);
   return canvas.toDataURL("image/jpeg", 0.88);
+}
+
+/** Load a video URL in a detached element and capture a JPEG frame. */
+async function extractVideoFrameJpegDataUrlFromUrl(videoUrl: string, end: boolean): Promise<string> {
+  const v = document.createElement("video");
+  v.preload = "metadata";
+  v.crossOrigin = "anonymous";
+  v.muted = true;
+  v.playsInline = true;
+  v.src = videoUrl;
+  try {
+    return await extractVideoFrameJpegDataUrl(v, end);
+  } finally {
+    v.pause();
+    v.removeAttribute("src");
+    v.load();
+  }
 }
 /** Horizontal padding from `px-3` on the card (left + right). */
 const CARD_PAD_X_PX = 0;
@@ -1987,9 +2005,80 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     const progressiveVideoUrls: string[] = [];
     let pendingVideoTaskIds: string[] = [];
     try {
-      const linkedFromStartPort = collectLinkedImageUrlsForHandles(nodes, edges, id, ["startImage"]);
-      const linkedFromEndPort = collectLinkedImageUrlsForHandles(nodes, edges, id, ["endImage"]);
-      const linkedFromReferencesPort = collectLinkedImageUrlsForHandles(nodes, edges, id, ["references"]);
+      let nodesForVideoInputs = nodes;
+      const incomingVideoFrameEdges = edges.filter(
+        (e) => e.target === id && ((e.targetHandle ?? "") === "startImage" || (e.targetHandle ?? "") === "endImage"),
+      );
+      if (incomingVideoFrameEdges.length > 0) {
+        const byId = new Map(nodesForVideoInputs.map((n) => [n.id, n]));
+        const frameCacheWrites = new Map<string, Partial<AdAssetNodeData>>();
+        const frameTaskSeen = new Set<string>();
+        for (const edge of incomingVideoFrameEdges) {
+          const src = byId.get(edge.source);
+          if (!src || src.type !== "adAsset") continue;
+          const srcData = src.data as AdAssetNodeData;
+          if (srcData.kind !== "video") continue;
+          const outUrl = srcData.outputPreviewUrl?.trim();
+          if (!outUrl) continue;
+          const srcHandle = edge.sourceHandle ?? "out";
+          const wantEndFrame = srcHandle !== "videoFirst";
+          const firstCached =
+            frameCacheWrites.get(src.id)?.videoExtractedFirstFrameUrl?.trim() ??
+            srcData.videoExtractedFirstFrameUrl?.trim() ??
+            "";
+          const lastCached =
+            frameCacheWrites.get(src.id)?.videoExtractedLastFrameUrl?.trim() ??
+            srcData.videoExtractedLastFrameUrl?.trim() ??
+            "";
+          const alreadyHaveWanted = wantEndFrame ? Boolean(lastCached) : Boolean(firstCached);
+          if (alreadyHaveWanted) continue;
+          const taskKey = `${src.id}:${wantEndFrame ? "last" : "first"}`;
+          if (frameTaskSeen.has(taskKey)) continue;
+          frameTaskSeen.add(taskKey);
+          try {
+            const extracted = await extractVideoFrameJpegDataUrlFromUrl(outUrl, wantEndFrame);
+            const prev = frameCacheWrites.get(src.id) ?? {};
+            frameCacheWrites.set(src.id, {
+              ...prev,
+              ...(wantEndFrame
+                ? { videoExtractedLastFrameUrl: extracted }
+                : { videoExtractedFirstFrameUrl: extracted }),
+            });
+          } catch {
+            // Keep generation resilient: if extraction fails, existing logic still falls back to
+            // any already-cached frame / other references instead of hard-failing the whole run.
+          }
+        }
+        if (frameCacheWrites.size > 0) {
+          nodesForVideoInputs = nodesForVideoInputs.map((n) => {
+            const patchData = frameCacheWrites.get(n.id);
+            if (!patchData) return n;
+            return {
+              ...n,
+              data: {
+                ...(n.data as AdAssetNodeData),
+                ...patchData,
+              },
+            } as WorkflowCanvasNode;
+          });
+          setNodes((prev) =>
+            prev.map((n) => {
+              const patchData = frameCacheWrites.get(n.id);
+              if (!patchData) return n;
+              return {
+                ...n,
+                data: {
+                  ...(n.data as AdAssetNodeData),
+                  ...patchData,
+                },
+              } as WorkflowCanvasNode;
+            }),
+          );
+        }
+      }
+      const linkedFromStartPort = collectLinkedImageUrlsForHandles(nodesForVideoInputs, edges, id, ["startImage"]);
+      const linkedFromEndPort = collectLinkedImageUrlsForHandles(nodesForVideoInputs, edges, id, ["endImage"]);
+      const linkedFromReferencesPort = collectLinkedImageUrlsForHandles(nodesForVideoInputs, edges, id, ["references"]);
       const nodeRefUrl =
         data.referenceMediaKind === "image" && data.referencePreviewUrl?.trim()
           ? data.referencePreviewUrl.trim()
