@@ -863,8 +863,11 @@ export function parseNanoEditableSections(editable: string): NanoEditableSection
     return { person: "", scene: "", product: "", isStructured: false };
   }
   // Unstructured legacy blob: keep everything in Avatar field.
+  // Tolerant prefixes: optional markdown heading (`#`..`######`) and/or bold (`**`)
+  // wrapping around the EDIT label, since some model outputs render headers as
+  // markdown (e.g. "## EDIT, Avatar:" or "**EDIT, Scene:**").
   if (
-    !/(?:^|\n)\s*(?:\*{0,2}\s*)?(?:EDIT\s*[—:,-]\s*)?(?:Person|Avatar|Scene|Shot|Product(?:\s*(?:&|and)\s*action)?)\b/im.test(
+    !/(?:^|\n)\s*(?:#{1,6}\s*)?(?:\*{0,2}\s*)?(?:EDIT\s*[—:,-]\s*)?(?:Person|Avatar|Scene|Shot|Product(?:\s*(?:&|and)\s*action)?)\b/im.test(
       raw,
     )
   ) {
@@ -887,11 +890,13 @@ export function parseNanoEditableSections(editable: string): NanoEditableSection
   // Accept:
   // - "EDIT, Avatar:"
   // - "**EDIT, Scene:**"
+  // - "## EDIT, Shot:"            (markdown heading)
+  // - "### EDIT, Scene (continued):" (parenthetical sub-label, still routed to Scene)
   // - "Shot:"
   // - "Scene"
   // - "EDIT, Shot: inline content..."
   const sectionHeaderRe =
-    /^\s*(?:\*{0,2}\s*)?(?:EDIT\s*[—:,-]\s*)?(Avatar|Person|Scene|Shot|Product(?:\s*(?:&|and)\s*action)?)\s*(?::\s*(.*))?\s*(?:\*{0,2})?\s*$/i;
+    /^\s*(?:#{1,6}\s*)?(?:\*{0,2}\s*)?(?:EDIT\s*[—:,-]\s*)?(Avatar|Person|Scene|Shot|Product(?:\s*(?:&|and)\s*action)?)(?:\s*\([^)]*\))?\s*(?::\s*(.*))?\s*(?:\*{0,2})?\s*$/i;
   const technicalOrStopRe =
     /^\s*(?:\*{0,2}\s*)?(?:TECHNICAL|NEGATIVE\s+PROMPT)\b|^\s*---+\s*$|^\s*(?:[#*]+\s*)?PROMPT\s*[123]\b/i;
 
@@ -927,7 +932,7 @@ export function parseNanoEditableSections(editable: string): NanoEditableSection
     stripInlineTechnicalNoiseFromNanoSection(
       text
         .replace(
-          /^\s*(?:\*{0,2}\s*)?(?:EDIT\s*[—:,-]\s*)?(?:Avatar|Person|Scene|Shot|Product(?:\s*(?:&|and)\s*action)?)\s*:?\s*(?:\*{0,2})?\s*$/gim,
+          /^\s*(?:#{1,6}\s*)?(?:\*{0,2}\s*)?(?:EDIT\s*[—:,-]\s*)?(?:Avatar|Person|Scene|Shot|Product(?:\s*(?:&|and)\s*action)?)(?:\s*\([^)]*\))?\s*:?\s*(?:\*{0,2})?\s*$/gim,
           "",
         )
         .trim(),

@@ -485,6 +485,8 @@ EDIT, Shot:
 
 Rules:
 * Use the exact headers "EDIT, Avatar:", "EDIT, Scene:", and "EDIT, Shot:" (comma after EDIT).
+* Do NOT prefix the EDIT headers with markdown (no "#", "##", "###", "**", or bullet markers). The header must be a plain line that starts with the letter E of EDIT.
+* Use exactly ONE "EDIT, Scene:" block per PROMPT. Do NOT emit a second "EDIT, Scene (continued):" or any parenthetical sub-section — fold continuation prose directly into the single Scene block as additional sentences/paragraphs.
 * Do not add TECHNICAL, PRESERVATION INSTRUCTIONS, NEGATIVE PROMPT, horizontal-rule separators before those blocks, or standalone camera-spec paragraphs.
 * Do not explain your reasoning. Output only PROMPT 1, PROMPT 2, and PROMPT 3.
 `.trim();

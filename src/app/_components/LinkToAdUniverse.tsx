@@ -192,11 +192,16 @@ function coerceNanoEditableSections(draft: string): { person: string; scene: str
 
   const cleanBody = (v: string) =>
     v
-      .replace(/^\s*(?:\*{0,2}\s*)?EDIT\s*[—:,-]\s*(?:Avatar|Person|Scene|Shot|Product(?:\s*(?:&|and)\s*action)?)\s*:?\s*\*{0,2}\s*$/gim, "")
+      .replace(
+        /^\s*(?:#{1,6}\s*)?(?:\*{0,2}\s*)?EDIT\s*[—:,-]\s*(?:Avatar|Person|Scene|Shot|Product(?:\s*(?:&|and)\s*action)?)(?:\s*\([^)]*\))?\s*:?\s*\*{0,2}\s*$/gim,
+        "",
+      )
       .trim();
 
   // Fallback parser for plain headers like:
-  // Avatar / Scene / Shot (with or without "EDIT,")
+  // Avatar / Scene / Shot (with or without "EDIT,").
+  // Tolerates markdown heading prefixes ("## EDIT, Scene:") and parenthetical
+  // sub-labels ("Scene (continued)") so a single section gets split correctly.
   const lines = raw.split("\n");
   let current: "person" | "scene" | "product" | null = null;
   const buckets: Record<"person" | "scene" | "product", string[]> = {
@@ -205,7 +210,7 @@ function coerceNanoEditableSections(draft: string): { person: string; scene: str
     product: [],
   };
   const headerRe =
-    /^(?:\*{0,2}\s*)?(?:EDIT\s*[—:,-]\s*)?(Avatar|Person|Scene|Shot|Product(?:\s*(?:&|and)\s*action)?)\s*:?\s*\*{0,2}\s*$/i;
+    /^(?:#{1,6}\s*)?(?:\*{0,2}\s*)?(?:EDIT\s*[—:,-]\s*)?(Avatar|Person|Scene|Shot|Product(?:\s*(?:&|and)\s*action)?)(?:\s*\([^)]*\))?\s*:?\s*\*{0,2}\s*$/i;
 
   for (const line of lines) {
     const m = line.match(headerRe);
