@@ -456,7 +456,7 @@ export function WorkflowSpacesLanding() {
                               }}
                               className="rounded-md border border-white/[0.08] bg-black/50 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white/60 transition hover:bg-red-500/15 hover:text-red-200"
                             >
-                              Delete
+                              Remove from templates
                             </button>
                           ) : null}
                         </div>

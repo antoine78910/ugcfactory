@@ -3916,6 +3916,7 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
   const [spaceName, setSpaceName] = useState("Untitled workflow");
   const [shareOpen, setShareOpen] = useState(false);
   const [publishBusy, setPublishBusy] = useState(false);
+  const [publishedTemplateId, setPublishedTemplateId] = useState<string | null>(null);
   const [publishTemplateOpen, setPublishTemplateOpen] = useState(false);
   const [publishTemplateName, setPublishTemplateName] = useState("");
   const [publishTemplateBlurb, setPublishTemplateBlurb] = useState("");
@@ -3961,7 +3962,12 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
       return;
     }
     const meta = idx.find((s) => s.id === resolvedSpaceId);
-    if (meta) setSpaceName(meta.name);
+    if (meta) {
+      setSpaceName(meta.name);
+      setPublishedTemplateId(meta.publishedCommunityTemplateId ?? null);
+    } else {
+      setPublishedTemplateId(null);
+    }
     setWorkflowProject(loadProjectForSpace(storageScope, resolvedSpaceId));
     try {
       const raw = localStorage.getItem(runHistoryStorageKey);
@@ -4049,6 +4055,7 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
           name,
           blurb: blurb || suggestedBlurb,
           project: workflowProject,
+          templateId: publishedTemplateId,
         }),
       });
       const body = (await res.json().catch(() => null)) as { error?: string; template?: { id?: string } } | null;
@@ -4062,6 +4069,10 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
       setPublishTemplateOpen(false);
       const publishedId = body?.template?.id?.trim();
       if (publishedId && /^[0-9a-f-]{36}$/i.test(publishedId)) {
+        setPublishedTemplateId(publishedId);
+        if (storageScope) {
+          updateSpaceMeta(storageScope, resolvedSpaceId, { publishedCommunityTemplateId: publishedId });
+        }
         router.push(`/workflow/template/${encodeURIComponent(`community:${publishedId}`)}`);
       }
     } catch {
@@ -4069,7 +4080,7 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
     } finally {
       setPublishBusy(false);
     }
-  }, [publishBusy, publishTemplateName, publishTemplateBlurb, router, workflowProject]);
+  }, [publishBusy, publishTemplateName, publishTemplateBlurb, publishedTemplateId, router, workflowProject, storageScope, resolvedSpaceId]);
 
   return (
     <div className="relative flex min-h-[100dvh] min-w-0 flex-col overflow-hidden bg-[#06070d] text-white">
@@ -4099,7 +4110,7 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
             )}
           >
             {publishBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Globe2 className="h-3.5 w-3.5" />}
-            {publishBusy ? "Publishing…" : "Publish template"}
+            {publishBusy ? "Publishing…" : publishedTemplateId ? "Push modification" : "Publish template"}
           </button>
           <button
             type="button"
@@ -4121,9 +4132,13 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
       {publishTemplateOpen ? (
         <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/70 px-4">
           <div className="w-full max-w-lg rounded-2xl border border-white/12 bg-[#0b0912] p-5 shadow-2xl">
-            <h2 className="text-[17px] font-semibold text-white">Publish template</h2>
+            <h2 className="text-[17px] font-semibold text-white">
+              {publishedTemplateId ? "Push template modification" : "Publish template"}
+            </h2>
             <p className="mt-1 text-[13px] text-white/60">
-              Share this workflow in the community Templates tab.
+              {publishedTemplateId
+                ? "Update your already published community template with current workflow changes."
+                : "Share this workflow in the community Templates tab."}
             </p>
             <div className="mt-4 space-y-3">
               <label className="block">
@@ -4166,7 +4181,7 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
                 )}
               >
                 {publishBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-                {publishBusy ? "Publishing…" : "Publish"}
+                {publishBusy ? "Publishing…" : publishedTemplateId ? "Push modification" : "Publish"}
               </button>
             </div>
           </div>

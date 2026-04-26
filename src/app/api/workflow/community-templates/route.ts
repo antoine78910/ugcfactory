@@ -35,6 +35,19 @@ function creatorDisplayNameFromAuthUser(user: { email?: string | null; user_meta
   return "User";
 }
 
+function templateOwnedByUser(
+  row: { created_by?: string | null; created_by_name?: string | null },
+  user: { id: string; email?: string | null; user_metadata?: unknown },
+): boolean {
+  if (row.created_by && row.created_by === user.id) return true;
+  // Backward compatibility for older rows missing `created_by`: fall back to display-name match.
+  const ownerName = (row.created_by_name ?? "").trim().toLowerCase();
+  if (!row.created_by && ownerName) {
+    return ownerName === creatorDisplayNameFromAuthUser(user).trim().toLowerCase();
+  }
+  return false;
+}
+
 export async function GET() {
   const auth = await requireSupabaseUser();
   if (auth.response) return auth.response;
@@ -64,7 +77,7 @@ export async function GET() {
     blurb: row.blurb,
     created_at: row.created_at,
     created_by_name: row.created_by_name,
-    created_by_me: row.created_by === auth.user.id,
+    created_by_me: templateOwnedByUser(row, auth.user),
   }));
   return NextResponse.json({ templates });
 }
@@ -89,9 +102,11 @@ export async function POST(req: Request) {
     name?: unknown;
     blurb?: unknown;
     project?: unknown;
+    templateId?: unknown;
   };
   const name = typeof b.name === "string" ? b.name.trim() : "";
   const blurb = typeof b.blurb === "string" ? b.blurb.trim() : "";
+  const templateId = typeof b.templateId === "string" ? b.templateId.trim() : "";
   if (!name) {
     return NextResponse.json({ error: "Name is required." }, { status: 400 });
   }
@@ -104,17 +119,28 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Workflow project is too large to publish." }, { status: 413 });
   }
 
-  const { data, error } = await auth.supabase
-    .from("workflow_community_templates")
-    .insert({
-      created_by: auth.user.id,
-      created_by_name: creatorDisplayNameFromAuthUser(auth.user),
-      name: name.slice(0, 200),
-      blurb: (blurb || "Shared workflow template.").slice(0, 500),
-      project: b.project,
-    })
-    .select("id, name, blurb, created_by_name")
-    .single();
+  const isUpdate = /^[0-9a-f-]{36}$/i.test(templateId);
+  const payload = {
+    name: name.slice(0, 200),
+    blurb: (blurb || "Shared workflow template.").slice(0, 500),
+    project: b.project,
+  };
+  const q = auth.supabase.from("workflow_community_templates");
+  const { data, error } = isUpdate
+    ? await q
+        .update(payload)
+        .eq("id", templateId)
+        .eq("created_by", auth.user.id)
+        .select("id, name, blurb, created_by_name")
+        .maybeSingle()
+    : await q
+        .insert({
+          created_by: auth.user.id,
+          created_by_name: creatorDisplayNameFromAuthUser(auth.user),
+          ...payload,
+        })
+        .select("id, name, blurb, created_by_name")
+        .single();
 
   if (error) {
     if (isMissingCommunityTemplatesTable(error)) {
@@ -127,6 +153,9 @@ export async function POST(req: Request) {
       );
     }
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+  if (isUpdate && !data) {
+    return NextResponse.json({ error: "Template not found or not owned by your account." }, { status: 404 });
   }
 
   return NextResponse.json({ template: data });
