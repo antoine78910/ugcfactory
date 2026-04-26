@@ -1477,6 +1477,14 @@ export default function LinkToAdUniverse({
     });
   }, [storeUrl]);
   const [isWorking, setIsWorking] = useState(false);
+  /**
+   * `true` while the parent passed a `resumeRunId` and we haven't finished hydrating from
+   * `/api/runs/get` yet. Lazy-initialized to `Boolean(resumeRunId)` so a hard reload of
+   * `/link-to-ad?project=<id>` shows the project skeleton on the very first paint instead
+   * of flashing the empty "Paste your product link" hero for several seconds while chunks,
+   * auth and Supabase queries warm up.
+   */
+  const [isResumeHydrating, setIsResumeHydrating] = useState<boolean>(() => Boolean(resumeRunId));
   /** Extra product photo uploads should not trigger global "Working..." pipeline state. */
   const [isUploadingAdditionalPhotos, setIsUploadingAdditionalPhotos] = useState(false);
   const [pendingProductUploads, setPendingProductUploads] = useState<{ id: string; blob: string }[]>([]);
@@ -3095,21 +3103,28 @@ export default function LinkToAdUniverse({
   );
 
   useEffect(() => {
-    if (!resumeRunId) return;
+    if (!resumeRunId) {
+      setIsResumeHydrating(false);
+      return;
+    }
     let cancelled = false;
+    setIsResumeHydrating(true);
     (async () => {
       try {
         const res = await fetch(`/api/runs/get?runId=${encodeURIComponent(resumeRunId)}`, { cache: "no-store" });
         const json = (await res.json()) as { data?: { id: string; store_url?: string; title?: string | null; extracted?: unknown }; error?: string };
         if (res.status === 404) return;
         if (!res.ok || !json.data) throw new Error(json.error || "Load failed");
-        if (!cancelled) hydrateFromRun(json.data);
+        if (!cancelled) hydrateFromRun(json.data, { silent: true });
       } catch (e) {
         toast.error("Unable to load the project", {
           description: e instanceof Error ? e.message : "Unknown error",
         });
       } finally {
-        if (!cancelled) onResumeConsumed?.();
+        if (!cancelled) {
+          setIsResumeHydrating(false);
+          onResumeConsumed?.();
+        }
       }
     })();
     return () => {
@@ -5987,6 +6002,8 @@ export default function LinkToAdUniverse({
   const nanoHasAnyReferenceImage = nanoImageSlots.some(Boolean);
   const nanoHasThreeImages = nanoImageSlots.every(Boolean);
   const isNanoThreeActivelyGenerating = Boolean((nanoPollTaskId || isNanoAllImagesSubmitting) && !nanoHasThreeImages);
+  const isThreeImagesBusy = Boolean(isNanoAllImagesSubmitting || nanoPollTaskId || isNanoPromptsLoading);
+  const isAnglesRegenerating = Boolean(isWorking && stage === "writing_scripts");
   const nanoShowReferenceStrip =
     Boolean(nanoBananaPromptsRaw.trim()) &&
     (nanoHasAnyReferenceImage || isNanoThreeActivelyGenerating);
@@ -6274,8 +6291,35 @@ export default function LinkToAdUniverse({
       </CardHeader>
 
       <CardContent className="flex flex-1 flex-col gap-6">
+        {/*
+          ---------- RESUME LOADING ----------
+          Hard reload of `/link-to-ad?project=<id>` (or a recent-run chip click) hits this branch
+          first. We show a skeleton while `/api/runs/get` resolves so the user never sees the
+          empty hero on a project they already started. Lazy-init of `isResumeHydrating` makes
+          this paint on the very first render — no flash of the URL form.
+        */}
+        {isResumeHydrating && !showBrandHeaderInsteadOfUrl ? (
+          <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 py-10">
+            <div
+              className="relative h-12 w-12 rounded-full border-2 border-violet-500/20 border-t-violet-400 motion-safe:animate-spin"
+              aria-hidden
+            />
+            <div className="flex flex-col items-center gap-1 text-center">
+              <p className="text-base font-semibold text-white/90">Loading project…</p>
+              <p className="text-xs text-white/50">
+                Restoring your brief, scripts and references.
+              </p>
+            </div>
+            <div className="grid w-full max-w-2xl grid-cols-1 gap-3 sm:grid-cols-3" aria-hidden>
+              <div className="h-24 animate-pulse rounded-xl border border-white/10 bg-white/[0.03]" />
+              <div className="h-24 animate-pulse rounded-xl border border-white/10 bg-white/[0.03]" />
+              <div className="h-24 animate-pulse rounded-xl border border-white/10 bg-white/[0.03]" />
+            </div>
+          </div>
+        ) : null}
+
         {/* ---------- HERO URL INPUT (idle state: centered, prominent) ---------- */}
-        {!showBrandHeaderInsteadOfUrl && !isWorking && stage === "idle" ? (
+        {!isResumeHydrating && !showBrandHeaderInsteadOfUrl && !isWorking && stage === "idle" ? (
           <div className="flex min-h-[60vh] flex-col items-center gap-6 py-4">
             <div className="text-center">
               <h2 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">Paste your product link</h2>
@@ -7423,9 +7467,14 @@ export default function LinkToAdUniverse({
                     disabled={isWorking || stage === "writing_scripts"}
                     onClick={() => requestRegenerateMarketingAngles()}
                     className="group/regen inline-flex shrink-0 items-center gap-1.5 rounded-full border border-violet-400/25 bg-violet-500/10 px-3 py-1.5 text-[11px] font-semibold text-violet-300 transition-all hover:border-violet-400/50 hover:bg-violet-500/20 hover:text-violet-200 disabled:pointer-events-none disabled:opacity-40"
+                    aria-busy={isAnglesRegenerating}
                   >
-                    <RefreshCw className="h-3 w-3 transition-transform group-hover/regen:rotate-90" aria-hidden />
-                    Regenerate
+                    {isAnglesRegenerating ? (
+                      <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+                    ) : (
+                      <RefreshCw className="h-3 w-3 transition-transform group-hover/regen:rotate-90" aria-hidden />
+                    )}
+                    {isAnglesRegenerating ? "Regenerating..." : "Regenerate"}
                     {hideCredits ? null : <CreditCostBadge amount={2} />}
                   </button>
                 </div>
@@ -7972,9 +8021,14 @@ export default function LinkToAdUniverse({
                           }
                           onClick={() => void onGenerateNanoBananaImagesFromAllPrompts({ forceRegenerateCharge: true })}
                           className="group/ri mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-full border border-violet-400/20 bg-violet-500/10 px-3 py-1.5 text-[10px] font-semibold text-violet-300 transition-all hover:border-violet-400/40 hover:bg-violet-500/20 hover:text-violet-200 disabled:pointer-events-none disabled:opacity-40"
+                          aria-busy={isThreeImagesBusy}
                         >
-                          <RefreshCw className="h-2.5 w-2.5 transition-transform group-hover/ri:rotate-90" aria-hidden />
-                          Regen 3 images
+                          {isThreeImagesBusy ? (
+                            <Loader2 className="h-2.5 w-2.5 animate-spin" aria-hidden />
+                          ) : (
+                            <RefreshCw className="h-2.5 w-2.5 transition-transform group-hover/ri:rotate-90" aria-hidden />
+                          )}
+                          {isThreeImagesBusy ? "Regenerating..." : "Regen 3 images"}
                           {hideCredits ? null : <CreditCostBadge amount={ltaThreeImagesCharge} className="text-[9px]" />}
                         </button>
                       ) : null}
@@ -8031,9 +8085,14 @@ export default function LinkToAdUniverse({
                         disabled={isWorking || stage === "writing_scripts"}
                         onClick={() => requestRegenerateMarketingAngles()}
                         className="group/regen-sa inline-flex shrink-0 items-center gap-1 rounded-full border border-violet-400/25 bg-violet-500/10 px-2.5 py-1 text-[10px] font-semibold text-violet-300 transition-all hover:border-violet-400/50 hover:bg-violet-500/20 hover:text-violet-200 disabled:pointer-events-none disabled:opacity-40"
+                        aria-busy={isAnglesRegenerating}
                       >
-                        <RefreshCw className="h-2.5 w-2.5 transition-transform group-hover/regen-sa:rotate-90" aria-hidden />
-                        Regenerate
+                        {isAnglesRegenerating ? (
+                          <Loader2 className="h-2.5 w-2.5 animate-spin" aria-hidden />
+                        ) : (
+                          <RefreshCw className="h-2.5 w-2.5 transition-transform group-hover/regen-sa:rotate-90" aria-hidden />
+                        )}
+                        {isAnglesRegenerating ? "Regenerating..." : "Regenerate"}
                         {hideCredits ? null : <CreditCostBadge amount={2} className="px-1 py-px text-[9px]" />}
                       </button>
                     </div>
@@ -8327,9 +8386,14 @@ export default function LinkToAdUniverse({
                             }
                             onClick={() => void onGenerateNanoBananaImagesFromAllPrompts({ forceRegenerateCharge: true })}
                             className="group/ri mt-3 inline-flex items-center gap-1.5 rounded-full border border-violet-400/20 bg-violet-500/10 px-3.5 py-1.5 text-[11px] font-semibold text-violet-300 transition-all hover:border-violet-400/40 hover:bg-violet-500/20 hover:text-violet-200 disabled:pointer-events-none disabled:opacity-40"
+                            aria-busy={isThreeImagesBusy}
                           >
-                            <RefreshCw className="h-3 w-3 transition-transform group-hover/ri:rotate-90" aria-hidden />
-                            Regenerate 3 images
+                            {isThreeImagesBusy ? (
+                              <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+                            ) : (
+                              <RefreshCw className="h-3 w-3 transition-transform group-hover/ri:rotate-90" aria-hidden />
+                            )}
+                            {isThreeImagesBusy ? "Regenerating 3 images..." : "Regenerate 3 images"}
                             {hideCredits ? null : <CreditCostBadge amount={ltaThreeImagesCharge} />}
                           </button>
                         ) : null}
