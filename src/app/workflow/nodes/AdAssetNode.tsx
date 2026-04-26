@@ -3365,11 +3365,6 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             type="source"
             position={Position.Right}
             className="!h-3 !w-3 !border-2 !border-violet-500/45 !bg-[#06070d]"
-            onPointerDown={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              handleOutputBubblePointerDown(e, "out");
-            }}
             title="Drag or hold to create a linked module"
           />
         ) : null}
@@ -3399,16 +3394,6 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                   : "Run once to produce an image; then drag from here to chain into the next module."
               }
             />
-            <button
-              type="button"
-              onPointerDown={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                handleOutputBubblePointerDown(e, "generated");
-              }}
-              title="Create linked module (Image output -> References / Start image / End image)"
-              className="absolute inset-0 z-[3] rounded-full"
-            />
             <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/85">
               <ImageIcon className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
             </span>
@@ -3425,16 +3410,6 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               className={workflowPortSourceBubbleHandleClass}
               aria-label="Generated video output"
               title="Drag to wire this generated video into a list or downstream video input."
-            />
-            <button
-              type="button"
-              onPointerDown={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                handleOutputBubblePointerDown(e, "out");
-              }}
-              title="Create linked module (Video output -> prompt/list or next module)"
-              className="absolute inset-0 z-[3] rounded-full"
             />
             <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-violet-200/90">
               <Clapperboard className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
@@ -3458,16 +3433,6 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 e.stopPropagation();
                 void onExtractVideoFrame("first");
               }}
-            />
-            <button
-              type="button"
-              onPointerDown={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                handleOutputBubblePointerDown(e, "videoFirst");
-              }}
-              title="Create linked module (First frame -> Start image)"
-              className="absolute inset-0 z-[3] rounded-full"
             />
             <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/85">
               {frameExtractBusy === "first" ? (
@@ -3495,16 +3460,6 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 e.stopPropagation();
                 void onExtractVideoFrame("last");
               }}
-            />
-            <button
-              type="button"
-              onPointerDown={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                handleOutputBubblePointerDown(e, "videoLast");
-              }}
-              title="Create linked module (Last frame -> End image)"
-              className="absolute inset-0 z-[3] rounded-full"
             />
             <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/85">
               {frameExtractBusy === "last" ? (
