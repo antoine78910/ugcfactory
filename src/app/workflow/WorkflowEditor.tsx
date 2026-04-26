@@ -70,6 +70,7 @@ import {
 
 import { AvatarPickerDialog } from "@/app/_components/AvatarPickerDialog";
 import { loadAvatarUrls } from "@/lib/avatarLibrary";
+import { clipboardImageFiles } from "@/lib/clipboardImage";
 import { useSupabaseBrowserClient } from "@/lib/supabase/BrowserSupabaseProvider";
 import { uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
 import { cn } from "@/lib/utils";
@@ -1002,15 +1003,9 @@ function WorkflowReactFlowChrome({
     void loadAvatarUrls().then((urls) => setAvatarUrls(urls));
   }, [avatarPickerOpen]);
 
-  const onUploadFileChange = useCallback(
-    (e: ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      e.target.value = "";
+  const addImageNodeFromFile = useCallback(
+    (file: File) => {
       const pendingConnect = pendingImageRefConnectRef.current;
-      if (!file) {
-        updatePendingImageRefConnect(null);
-        return;
-      }
       const isVideo = file.type.startsWith("video/");
       const objectUrl = URL.createObjectURL(file);
       let tempNodeId: string | null = null;
@@ -1084,6 +1079,19 @@ function WorkflowReactFlowChrome({
       })();
     },
     [screenToFlowPosition, setEdges, setNodes, setAddOpen, setFrameOpen, updatePendingImageRefConnect],
+  );
+
+  const onUploadFileChange = useCallback(
+    (e: ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      e.target.value = "";
+      if (!file) {
+        updatePendingImageRefConnect(null);
+        return;
+      }
+      addImageNodeFromFile(file);
+    },
+    [addImageNodeFromFile, updatePendingImageRefConnect],
   );
 
   const onAvatarPicked = useCallback(
@@ -3128,6 +3136,66 @@ function WorkflowFlowWorkspace({
     const onPaste = (e: ClipboardEvent) => {
       if (readOnly) return;
       if (isEditableElementFocused()) return;
+      const imageFiles = clipboardImageFiles(e);
+      if (imageFiles.length > 0) {
+        e.preventDefault();
+        const file = imageFiles[0]!;
+        const isVideo = file.type.startsWith("video/");
+        const objectUrl = URL.createObjectURL(file);
+        let tempNodeId: string | null = null;
+        void (async () => {
+          try {
+            const ar = isVideo
+              ? await measureVideoAspectFromObjectUrl(objectUrl)
+              : await measureImageAspectFromObjectUrl(objectUrl);
+            const position = screenToFlowPosition({
+              x: window.innerWidth / 2,
+              y: window.innerHeight / 2,
+            });
+            const baseName = file.name.replace(/\.[^.]+$/, "") || (isVideo ? "Video" : "Image");
+            const tempNode = buildImageRefNode(position, {
+              imageUrl: objectUrl,
+              source: "upload",
+              mediaKind: isVideo ? "video" : "image",
+              intrinsicAspect: ar,
+              label: `${baseName} (uploading...)`,
+            });
+            tempNodeId = tempNode.id;
+            setNodes((prev) => [...prev, tempNode]);
+            setAddOpen(false);
+            setFrameOpen(false);
+
+            const hostedUrl = await uploadFileToCdn(file, { kind: isVideo ? "video" : "image" });
+            setNodes((prev) =>
+              prev.map((n) => {
+                if (n.id !== tempNode.id || n.type !== "imageRef") return n;
+                const updatedNode: ImageRefNodeType = {
+                  ...n,
+                  data: {
+                    ...n.data,
+                    imageUrl: hostedUrl,
+                    label: baseName,
+                    source: "upload",
+                    mediaKind: isVideo ? "video" : "image",
+                    intrinsicAspect: ar,
+                  },
+                };
+                return updatedNode;
+              }),
+            );
+            toast.success("Image pasted to canvas");
+            URL.revokeObjectURL(objectUrl);
+          } catch {
+            if (tempNodeId) {
+              setNodes((prev) => prev.filter((n) => n.id !== tempNodeId));
+              setEdges((eds) => eds.filter((e2) => e2.source !== tempNodeId && e2.target !== tempNodeId));
+            }
+            URL.revokeObjectURL(objectUrl);
+            toast.error("Could not paste image", { description: "Try copying another image." });
+          }
+        })();
+        return;
+      }
       const text = e.clipboardData?.getData("text/plain") ?? "";
       const payload = parseWorkflowClipboardText(text);
       if (!payload) return;
@@ -3136,7 +3204,7 @@ function WorkflowFlowWorkspace({
     };
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
-  }, [readOnly, applyWorkflowPaste]);
+  }, [readOnly, applyWorkflowPaste, screenToFlowPosition, setNodes, setEdges, setAddOpen, setFrameOpen]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -3162,6 +3230,12 @@ function WorkflowFlowWorkspace({
         onRedo();
         return;
       }
+      if (k === "d") {
+        if (!canCloneWorkflowSelection(selectedNodes)) return;
+        e.preventDefault();
+        cloneSelection();
+        return;
+      }
       if (k === "x") {
         if (!buildWorkflowClipboardPayload(nodes, edges, selectedNodes)) return;
         e.preventDefault();
@@ -3178,7 +3252,7 @@ function WorkflowFlowWorkspace({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [readOnly, nodes, edges, selectedNodes, cutSelection, onUndo, onRedo]);
+  }, [readOnly, nodes, edges, selectedNodes, cutSelection, cloneSelection, onUndo, onRedo]);
 
   useEffect(() => {
     if (readOnly || (tool !== "stickyPlace" && tool !== "cutTarget")) return;
@@ -3369,6 +3443,22 @@ function WorkflowFlowWorkspace({
               setNodes((prev) => [...prev, buildStickyNoteNode({ x: p.x - dx, y: p.y - dy })]);
               toast.success("Note added");
             }
+          }}
+          onPaneContextMenu={readOnly ? undefined : (ev) => {
+            // Standard workflow-builder pattern: right-click on empty canvas opens quick add picker.
+            ev.preventDefault();
+            if (tool === "cutTarget") return;
+            const flow = screenToFlowPosition({ x: ev.clientX, y: ev.clientY });
+            armPlacementPickerAgainstPaneClick();
+            setAddOpen(false);
+            setFrameOpen(false);
+            setSelectionBarExpanded(false);
+            setPlacementPicker({
+              flow,
+              screenX: ev.clientX,
+              screenY: ev.clientY,
+              intent: "generic",
+            });
           }}
           className={cn(
             "workflow-flow relative z-[1] !bg-transparent",
