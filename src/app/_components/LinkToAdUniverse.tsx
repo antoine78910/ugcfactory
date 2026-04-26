@@ -5284,6 +5284,19 @@ export default function LinkToAdUniverse({
       const fallbackSelected = (nanoBananaImageUrls[idx] ?? "").trim();
       if (fallbackSelected) setNanoBananaImageUrl(fallbackSelected);
     }
+    const referenceImageUrls = Array.from(
+      new Set(
+        [
+          (idx === 0 || idx === 1 || idx === 2 ? nanoBananaImageUrls[idx] : "") ?? "",
+          nanoBananaImageUrl ?? "",
+          ...nanoBananaImageUrls,
+          ...productPhotosStripUrls,
+          ...resolvedProductUrlsForGpt(),
+        ]
+          .map((u) => String(u ?? "").trim())
+          .filter((u) => /^https?:\/\//i.test(u)),
+      ),
+    ).slice(0, 8);
     setIsVideoPromptLoading(true);
     try {
       videoPromptAbortRef.current?.abort();
@@ -5298,6 +5311,7 @@ export default function LinkToAdUniverse({
           provider: scriptProvider,
           videoDurationSeconds: videoDuration,
           linkToAdAssetType,
+          referenceImageUrls,
         }),
       });
       const json = (await res.json()) as {

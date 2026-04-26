@@ -136,10 +136,17 @@ const PROJECTS_NAV: { id: StudioNavSection; label: string; icon: LucideIcon } = 
 
 function sectionHref(section: StudioNavSection, projectId: string | null | undefined): string {
   const slug = SECTION_TO_SLUG[section] ?? "link-to-ad";
-  let href = `/${slug}`;
+  const href = `/${slug}`;
   /** My Projects always opens the brands dashboard, not a deep-linked run. */
   if (section === "projects") return href;
-  if (projectId) href += `?project=${encodeURIComponent(projectId)}`;
+  /**
+   * Only the Link-to-Ad route carries `?project=<id>`. Other tools (avatar, image, video,
+   * upscale, translate, voice, motion-control) must stay on a clean `/<slug>` URL so a
+   * stale project id from a previous Link-to-Ad session does not leak across features.
+   */
+  if (section === "link_to_ad" && projectId) {
+    return `${href}?project=${encodeURIComponent(projectId)}`;
+  }
   return href;
 }
 

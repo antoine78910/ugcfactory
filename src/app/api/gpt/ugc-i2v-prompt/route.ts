@@ -1,9 +1,9 @@
 export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
-import { openaiResponsesText } from "@/lib/openaiResponses";
+import { openaiResponsesText, openaiResponsesTextWithImages } from "@/lib/openaiResponses";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
-import { claudeMessagesText } from "@/lib/claudeResponses";
+import { claudeMessagesText, claudeMessagesTextWithImages } from "@/lib/claudeResponses";
 import { UGC_I2V_PROMPT_INSTRUCTIONS } from "@/lib/ugcI2vPromptInstructions";
 import { normalizeUgcScriptVideoDurationSec } from "@/lib/ugcAiScriptBrief";
 import { parseUgcI2v30sParts } from "@/lib/ugcI2vParse";
@@ -16,6 +16,8 @@ type Body = {
   /** Drives 30s → two prompts (PART 1 / PART 2) vs single prompt. */
   videoDurationSeconds?: number;
   linkToAdAssetType?: "product" | "app";
+  /** Selected reference images from Link to Ad (chosen image + product photos fallbacks). */
+  referenceImageUrls?: string[];
 };
 
 export async function POST(req: Request) {
@@ -27,6 +29,13 @@ export async function POST(req: Request) {
   const provider: "gpt" | "claude" = body?.provider === "gpt" ? "gpt" : "claude";
   const videoDurationSeconds = normalizeUgcScriptVideoDurationSec(body?.videoDurationSeconds);
   const linkToAdAssetType = body?.linkToAdAssetType === "app" ? "app" : "product";
+  const referenceImageUrls = Array.from(
+    new Set(
+      (Array.isArray(body?.referenceImageUrls) ? body?.referenceImageUrls : [])
+        .map((u) => String(u ?? "").trim())
+        .filter((u) => /^https?:\/\//i.test(u)),
+    ),
+  ).slice(0, 8);
   if (!angleScript) {
     return NextResponse.json({ error: "Missing `angleScript`." }, { status: 400 });
   }
@@ -51,6 +60,9 @@ export async function POST(req: Request) {
       : "Output a single continuous video prompt (not PART 1 / PART 2).",
     "The reference image is already selected and available in this pipeline. Do not ask for it.",
     "Do not ask questions. Do not ask for additional inputs. Produce final prompts now.",
+    referenceImageUrls.length
+      ? `Reference images are attached to this request (${referenceImageUrls.length}). Analyze them now.`
+      : "No image attachment could be forwarded; still produce a final prompt directly from the script metadata without asking for inputs.",
     "",
     "UGC SCRIPT FOR THIS ANGLE (includes voice profile, use it):",
     angleScript,
@@ -59,8 +71,22 @@ export async function POST(req: Request) {
   try {
     const text =
       provider === "claude"
-        ? await claudeMessagesText({ system: developer, user })
-        : (await openaiResponsesText({ developer, user })).text;
+        ? referenceImageUrls.length
+          ? await claudeMessagesTextWithImages({
+              system: developer,
+              user,
+              imageUrls: referenceImageUrls,
+            })
+          : await claudeMessagesText({ system: developer, user })
+        : referenceImageUrls.length
+          ? (
+              await openaiResponsesTextWithImages({
+                developer,
+                userText: user,
+                imageUrls: referenceImageUrls,
+              })
+            ).text
+          : (await openaiResponsesText({ developer, user })).text;
     const data = String(text ?? "").trim();
     const parts30 = videoDurationSeconds === 30 ? parseUgcI2v30sParts(data) : null;
     return NextResponse.json({

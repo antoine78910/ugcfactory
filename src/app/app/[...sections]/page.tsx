@@ -358,6 +358,48 @@ type VideoGenState =
   | { kind: "error"; message: string };
 
 const UGC_CURRENT_RUN_KEY = "ugc_current_run_id";
+/**
+ * Last project id the user had loaded on `/link-to-ad`.
+ * Restored on the sidebar Link-to-Ad nav so coming back from another section keeps the user on
+ * the project they were viewing (without surviving an explicit Cancel / Return-to-Link-to-Ad).
+ */
+const LAST_LINK_TO_AD_PROJECT_KEY = "youry-last-link-to-ad-project-id-v1";
+
+function readLastLinkToAdProjectId(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(LAST_LINK_TO_AD_PROJECT_KEY);
+    const trimmed = raw?.trim() ?? "";
+    return trimmed || null;
+  } catch {
+    return null;
+  }
+}
+
+function writeLastLinkToAdProjectId(id: string | null) {
+  if (typeof window === "undefined") return;
+  try {
+    if (id && id.trim()) {
+      localStorage.setItem(LAST_LINK_TO_AD_PROJECT_KEY, id.trim());
+    } else {
+      localStorage.removeItem(LAST_LINK_TO_AD_PROJECT_KEY);
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Read `?project=<id>` from `window.location.search` without depending on a hook. */
+function readProjectIdFromInitialUrl(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const v = new URLSearchParams(window.location.search).get("project");
+    const trimmed = v?.trim() ?? "";
+    return trimmed || null;
+  } catch {
+    return null;
+  }
+}
 
 const APP_VALID_SECTIONS: AppSection[] = [
   "link_to_ad",
@@ -445,12 +487,19 @@ function translateModeFromPathname(pathname: string): TranslateToolMode | null {
   return "video_translate";
 }
 
-/** Build a public (no `/app`) path for a section; middleware rewrites on the app host. */
+/**
+ * Build a public (no `/app`) path for a section; middleware rewrites on the app host.
+ * Only `link_to_ad` carries `?project=<id>` in its URL; every other studio section uses a
+ * clean `/<slug>` path so a stale project id from a previous Link-to-Ad session can never
+ * leak across features (avatar / image / video / translate / voice / motion / upscale).
+ */
 function sectionToPath(section: AppSection, projectId?: string | null, extra?: string): string {
   const slug = SECTION_TO_SLUG[section] ?? "link-to-ad";
   let path = `/${slug}`;
   if (extra) path += `/${extra}`;
-  if (projectId) path += `?project=${encodeURIComponent(projectId)}`;
+  if (section === "link_to_ad" && projectId) {
+    path += `?project=${encodeURIComponent(projectId)}`;
+  }
   return path;
 }
 
@@ -831,8 +880,22 @@ export default function AppBrandWizard() {
       extracted?: unknown;
     }>
   >([]);
-  /** Open Link to Ad and hydrate from this run (Projects). */
-  const [linkToAdResumeRunId, setLinkToAdResumeRunId] = useState<string | null>(null);
+  /**
+   * Open Link to Ad and hydrate from this run (Projects).
+   * Lazy-init from `?project=<id>` so a hard reload of `/link-to-ad?project=<id>` hydrates
+   * the wizard on the very first paint instead of flashing the empty state for a few seconds.
+   * If there is no `?project=` in the URL, fall back to the last project the user was on
+   * (saved on every Link-to-Ad change, cleared on Cancel / Return-to-Link-to-Ad). The URL
+   * sync effect will then push `?project=<id>` into the address bar.
+   * Only do this when the user is actually on `/link-to-ad` (any other section starting with
+   * a stale `?project=` must not auto-resume Link to Ad).
+   */
+  const [linkToAdResumeRunId, setLinkToAdResumeRunId] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    const sec = sectionFromPathname(window.location.pathname);
+    if (sec !== "link_to_ad") return null;
+    return readProjectIdFromInitialUrl() ?? readLastLinkToAdProjectId();
+  });
   /** Remount Link to Ad for a clean session (Return to Link to Ad). */
   const [linkToAdMountKey, setLinkToAdMountKey] = useState(0);
   /**
@@ -2178,7 +2241,16 @@ export default function AppBrandWizard() {
     const savedRunId = typeof localStorage !== "undefined" ? localStorage.getItem(UGC_CURRENT_RUN_KEY) : null;
     const initialRunId = (runIdFromUrl && runIdFromUrl.trim()) || (savedRunId && savedRunId.trim()) || null;
     if (initialRunId) {
-      void loadRun(initialRunId);
+      // On Link-to-Ad, the LinkToAdUniverse component hydrates from the same id via its
+      // own `resumeRunId` prop (lazy-initialized from the URL). Skip the legacy loadRun()
+      // there to avoid a duplicate /api/runs/get fetch + the noisy "Run loaded" toast.
+      const initialSection =
+        typeof window !== "undefined"
+          ? sectionFromPathname(window.location.pathname)
+          : "link_to_ad";
+      if (initialSection !== "link_to_ad") {
+        void loadRun(initialRunId);
+      }
     }
     void refreshMeAndRuns();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2189,23 +2261,46 @@ export default function AppBrandWizard() {
     else if (typeof localStorage !== "undefined") localStorage.removeItem(UGC_CURRENT_RUN_KEY);
   }, [runId]);
 
-  const setAppSectionNav = useCallback((s: AppSection, extra?: string) => {
-    pendingSectionNavRef.current = s;
-    setAppSection(s);
-    if (s === "projects") {
-      setSelectedProjectNormalizedUrl(null);
-    }
-    const projectId =
-      s === "projects"
-        ? null
-        : typeof window !== "undefined"
-          ? new URLSearchParams(window.location.search).get("project")
-          : null;
-    const newPath = sectionToPath(s, projectId, extra);
-    if (typeof window !== "undefined" && window.location.pathname + window.location.search !== newPath) {
-      window.history.pushState(null, "", newPath);
-    }
-  }, []);
+  const setAppSectionNav = useCallback(
+    (s: AppSection, extra?: string) => {
+      pendingSectionNavRef.current = s;
+      setAppSection(s);
+      if (s === "projects") {
+        setSelectedProjectNormalizedUrl(null);
+      }
+      // Only the Link-to-Ad route carries `?project=<id>` in the URL. Every other studio
+      // section (avatar / image / video / translate / voice / motion / upscale / projects)
+      // navigates to a clean `/<slug>` path so a stale project id from a previous Link-to-Ad
+      // session does not leak across features.
+      let projectId: string | null = null;
+      if (s === "link_to_ad") {
+        const fromUrl =
+          typeof window !== "undefined"
+            ? new URLSearchParams(window.location.search).get("project")
+            : null;
+        // Coming from another section: the search params no longer have `project`, so fall
+        // back to the in-memory active/resume run, then to the last project the user was on.
+        projectId =
+          (fromUrl && fromUrl.trim()) ||
+          linkToAdActiveRunId ||
+          linkToAdResumeRunId ||
+          readLastLinkToAdProjectId() ||
+          null;
+        if (projectId && !linkToAdResumeRunId && !linkToAdActiveRunId) {
+          // Re-arm Link to Ad to hydrate from the restored project id.
+          setLinkToAdResumeRunId(projectId);
+        }
+      }
+      const newPath = sectionToPath(s, projectId, extra);
+      if (
+        typeof window !== "undefined" &&
+        window.location.pathname + window.location.search !== newPath
+      ) {
+        window.history.pushState(null, "", newPath);
+      }
+    },
+    [linkToAdActiveRunId, linkToAdResumeRunId],
+  );
 
   /**
    * Called when the user clicks "Change Voice" on a video in ANY history panel.
@@ -2308,33 +2403,69 @@ export default function AppBrandWizard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only when opening Projects
   }, [appSection]);
 
-  /** Keep the browser URL in sync with appSection + active project id (path-based). */
+  /**
+   * Keep the browser URL in sync with appSection + active project id (path-based).
+   *
+   * Only Link-to-Ad keeps `?project=<id>`. Every other studio section ends up on a clean
+   * `/<slug>` URL. We also bail when the current pathname does not belong to this catch-all
+   * (e.g. user just clicked Workflow which has its own `/workflow` route) so we don't fight
+   * Next.js during the route transition.
+   */
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!isBrowserStudioWizardPath(pathname)) return;
 
+    const stripped = pathname.replace(/^\/app\/?/, "");
+    const firstSeg = stripped.split("/").filter(Boolean)[0] ?? "";
+    const expectedSlug = SECTION_TO_SLUG[appSection] ?? "link-to-ad";
+    // Allow the `/watermark` alias for the video tool, and the empty path on first hit.
+    const ownsRoute =
+      !firstSeg || firstSeg === expectedSlug || firstSeg === "watermark";
+    if (!ownsRoute) return;
+
     const cur = window.location.pathname + window.location.search;
-    const urlProject =
-      searchParams.get("project") ?? new URLSearchParams(window.location.search).get("project");
-    const sectionRunId =
-      appSection === "link_to_ad"
-        ? linkToAdActiveRunId || linkToAdResumeRunId
-        : runId;
-    const projectId = appSection === "projects" ? null : sectionRunId || urlProject || null;
-    const wantPath = sectionToPath(appSection, projectId);
-    // Avoid stripping `?project=` before loadRun() sets `runId` (refresh / deep link would lose the run).
-    if (
-      appSection === "link_to_ad" &&
-      Boolean(urlProject?.trim()) &&
-      !runId &&
-      (cur.includes("project=") || cur.includes("project%3D"))
-    ) {
+
+    if (appSection !== "link_to_ad") {
+      // Strip any leftover `?project=` from non Link-to-Ad sections.
+      const wantPath = sectionToPath(appSection, null);
+      if (cur !== wantPath) {
+        window.history.replaceState(null, "", wantPath);
+      }
       return;
     }
+
+    // Single source of truth for `/link-to-ad?project=<id>`: the in-memory active or resume
+    // run id. Lazy-init seeds `linkToAdResumeRunId` from the URL on first paint so a hard
+    // refresh keeps the param without flicker, and an explicit Cancel / Return-to-Link-to-Ad
+    // (both ids null) drops the param immediately.
+    const projectId = linkToAdActiveRunId || linkToAdResumeRunId || null;
+    const wantPath = sectionToPath("link_to_ad", projectId);
     if (cur !== wantPath) {
       window.history.replaceState(null, "", wantPath);
     }
-  }, [runId, linkToAdActiveRunId, linkToAdResumeRunId, appSection, pathname, searchParams]);
+  }, [linkToAdActiveRunId, linkToAdResumeRunId, appSection, pathname, searchParams]);
+
+  /**
+   * Persist the last Link-to-Ad project id so coming back to the section from another tool
+   * restores the user's place. Cleared on Cancel / Return-to-Link-to-Ad (which set both
+   * active and resume run ids to null).
+   */
+  useEffect(() => {
+    if (appSection !== "link_to_ad") return;
+    const id = linkToAdActiveRunId || linkToAdResumeRunId || null;
+    writeLastLinkToAdProjectId(id);
+    // When the user explicitly cancels the current Link-to-Ad (both ids cleared), also drop
+    // the legacy `runId` / `UGC_CURRENT_RUN_KEY` so a hard refresh doesn't silently
+    // re-hydrate into the project they just dismissed.
+    if (!id && runId) {
+      setRunId(null);
+      try {
+        localStorage.removeItem(UGC_CURRENT_RUN_KEY);
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [appSection, linkToAdActiveRunId, linkToAdResumeRunId, runId]);
 
   async function onExtract() {
     const url = storeUrl.trim();
@@ -4754,10 +4885,31 @@ export default function AppBrandWizard() {
                     setLinkToAdResumeRunId(null);
                     setLinkToAdActiveRunId(null);
                     setLinkToAdMountKey((k) => k + 1);
+                    // Drop the legacy `runId` so the URL-sync effect treats this as a clean
+                    // session and strips `?project=<id>` from `/link-to-ad` immediately.
+                    setRunId(null);
+                    if (typeof window !== "undefined") {
+                      try {
+                        localStorage.removeItem(UGC_CURRENT_RUN_KEY);
+                      } catch {
+                        /* ignore */
+                      }
+                    }
+                    writeLastLinkToAdProjectId(null);
+                    if (
+                      typeof window !== "undefined" &&
+                      (window.location.search.includes("project=") ||
+                        window.location.search.includes("project%3D"))
+                    ) {
+                      window.history.replaceState(null, "", "/link-to-ad");
+                    }
                     void refreshMeAndRuns();
                   }}
-                  onSwitchLinkToAdRun={(runId) => {
-                    setLinkToAdResumeRunId(runId);
+                  onSwitchLinkToAdRun={(nextRunId) => {
+                    // Switching to another saved Link-to-Ad run from the recent chips: clear the
+                    // currently active run id so the URL syncs to the new project on the next paint.
+                    setLinkToAdActiveRunId(null);
+                    setLinkToAdResumeRunId(nextRunId);
                   }}
                 />
               </div>

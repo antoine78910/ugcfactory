@@ -11,6 +11,7 @@ import {
   type NodeProps,
 } from "@xyflow/react";
 import {
+  AlertTriangle,
   Coins,
   ArrowRight,
   Clapperboard,
@@ -41,7 +42,10 @@ import {
   isPlatformCreditBypassActive,
   useCreditsPlan,
 } from "@/app/_components/CreditsPlanContext";
-import { userMessageFromCaughtError } from "@/lib/generationUserMessage";
+import {
+  userFacingProviderErrorOrDefault,
+  userMessageFromCaughtError,
+} from "@/lib/generationUserMessage";
 import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
 import { studioVideoDurationSecOptions } from "@/lib/studioVideoModelCapabilities";
 
@@ -484,6 +488,13 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   const [runChoiceOpen, setRunChoiceOpen] = useState(false);
   const [cardHovered, setCardHovered] = useState(false);
   const [generating, setGenerating] = useState(false);
+  /**
+   * Last user-facing error from an image/video run on this node. Sticks in the UI
+   * (overlay + toast already shown) so the user actually sees what went wrong with
+   * piapi / provider failures instead of just a silently dropped “processing” state.
+   * Cleared at the start of every new run and when a successful media URL arrives.
+   */
+  const [lastGenerationError, setLastGenerationError] = useState<string | null>(null);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [aspectMenuOpen, setAspectMenuOpen] = useState(false);
   const [promptFocused, setPromptFocused] = useState(false);
@@ -1000,6 +1011,30 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     return () => window.removeEventListener("keydown", onKey);
   }, [outputPreviewLightbox]);
 
+  const emitRunFinished = useCallback(
+    (ok: boolean) => {
+      window.dispatchEvent(new CustomEvent("workflow:node-run-finished", { detail: { nodeId: id, success: ok } }));
+    },
+    [id],
+  );
+  const emitRunLog = useCallback(
+    (level: "info" | "error" | "success", message: string) => {
+      const nodeLabel = ((data.label || cfg.title || data.kind || "Node").trim() || "Node");
+      window.dispatchEvent(
+        new CustomEvent("workflow:run-log", {
+          detail: {
+            ts: Date.now(),
+            nodeId: id,
+            nodeLabel,
+            level,
+            message,
+          },
+        }),
+      );
+    },
+    [cfg.title, data.kind, data.label, id],
+  );
+
   useEffect(() => {
     if (data.kind !== "image" && data.kind !== "video") return;
     const pending = data.pendingWorkflowRun;
@@ -1058,6 +1093,18 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             if (Date.now() - updatedAt > WORKFLOW_RACE_RECOVERY_WINDOW_MS || raceRecoveryAttempts > 8) {
               setPendingWorkflowRun(null);
               setGenerating(false);
+              const lostMsg =
+                pendingMediaKind === "video"
+                  ? "Video generation request was lost (no provider task id). Try regenerating."
+                  : "Image generation request was lost (no provider task id). Try regenerating.";
+              setLastGenerationError(lostMsg);
+              toast.error(lostMsg);
+              emitRunLog("error", lostMsg);
+              window.dispatchEvent(
+                new CustomEvent("workflow:node-run-finished", {
+                  detail: { nodeId: id, success: false },
+                }),
+              );
               return;
             }
             return;
@@ -1108,6 +1155,35 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 ? { videoExtractedFirstFrameUrl: undefined, videoExtractedLastFrameUrl: undefined }
                 : {}),
             });
+            setLastGenerationError(null);
+          }
+          /**
+           * Surface provider failures (Kling, PiAPI / Seedance, Veo, NanoBanana…) that came
+           * back during background polling so the workflow node stops looking like it’s still
+           * processing and the user actually sees what went wrong.
+           */
+          const failedItems = taskIdsForPoll
+            .map((tid) => byTask.get(tid))
+            .filter((it): it is WorkflowPollHistoryItem => Boolean(it && it.status === "failed"));
+          if (failedItems.length > 0) {
+            const rawMessages = failedItems
+              .map((it) => (it.errorMessage ?? "").trim())
+              .filter((m) => m.length > 0);
+            const baseMsg = rawMessages[0] ?? "";
+            const fallback =
+              pendingMediaKind === "video"
+                ? "Video generation failed. Try again or change model / inputs."
+                : "Image generation failed. Try again or change model / inputs.";
+            const friendly = userFacingProviderErrorOrDefault(baseMsg, fallback);
+            const summary =
+              failedItems.length === taskIdsForPoll.length
+                ? friendly
+                : `${failedItems.length}/${taskIdsForPoll.length} ${
+                    pendingMediaKind === "video" ? "videos" : "images"
+                  } failed: ${friendly}`;
+            setLastGenerationError(summary);
+            toast.error(summary);
+            emitRunLog("error", `Generation failed: ${summary}`);
           }
           setPendingWorkflowRun(null);
           setGenerating(false);
@@ -1133,6 +1209,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   }, [
     data.kind,
     data.pendingWorkflowRun,
+    emitRunLog,
     finalizeProgressMediaList,
     id,
     patch,
@@ -1372,31 +1449,9 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     }
   }, [data.kind, data.videoDurationSec, id, model, patch]);
 
-  const emitRunFinished = useCallback(
-    (ok: boolean) => {
-      window.dispatchEvent(new CustomEvent("workflow:node-run-finished", { detail: { nodeId: id, success: ok } }));
-    },
-    [id],
-  );
-  const emitRunLog = useCallback(
-    (level: "info" | "error" | "success", message: string) => {
-      const nodeLabel = ((data.label || cfg.title || data.kind || "Node").trim() || "Node");
-      window.dispatchEvent(
-        new CustomEvent("workflow:run-log", {
-          detail: {
-            ts: Date.now(),
-            nodeId: id,
-            nodeLabel,
-            level,
-            message,
-          },
-        }),
-      );
-    },
-    [cfg.title, data.kind, data.label, id],
-  );
   const onGenerate = useCallback(async () => {
     if (generating) return;
+    setLastGenerationError(null);
 
     const nodes = getNodes();
     const edges = getEdges();
@@ -1885,6 +1940,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           finalizeProgressMediaList(progressListId, completed, imageResultsListLabel);
         }
         refundPlatformCredits(platformCharge, grantCredits, creditsRef);
+        setLastGenerationError(msg);
         toast.error(msg);
         emitRunLog("error", `Image generation failed: ${msg}`);
       } finally {
@@ -2073,6 +2129,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         finalizeProgressMediaList(progressListId, completed, videoResultsListLabel);
       }
       refundPlatformCredits(vPlatformCharge, grantCredits, creditsRef);
+      setLastGenerationError(msg);
       toast.error(msg);
       emitRunLog("error", `Video generation failed: ${msg}`);
     } finally {
@@ -2868,6 +2925,36 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                   {data.kind === "video" ? "Rendering" : "Generating"}
                 </p>
               </div>
+            </div>
+          ) : null}
+
+          {!generating && lastGenerationError && (data.kind === "image" || data.kind === "video") ? (
+            <div
+              className="nodrag nopan absolute inset-0 z-[9] flex flex-col items-center justify-center gap-2.5 bg-[#14141c]/92 backdrop-blur-[2px] px-3 py-3"
+              role="alert"
+              aria-live="assertive"
+              aria-label={data.kind === "video" ? "Video generation failed" : "Image generation failed"}
+            >
+              <div className="flex h-9 w-9 items-center justify-center rounded-full border border-red-400/35 bg-red-500/12">
+                <AlertTriangle className="h-4 w-4 text-red-300" strokeWidth={2.2} aria-hidden />
+              </div>
+              <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-red-200/90">
+                {data.kind === "video" ? "Video failed" : "Image failed"}
+              </p>
+              <p className="line-clamp-4 max-w-full text-center text-[10.5px] leading-snug text-white/75">
+                {lastGenerationError}
+              </p>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setLastGenerationError(null);
+                }}
+                className="mt-0.5 rounded-full border border-white/15 bg-black/55 px-2.5 py-1 text-[10px] font-medium text-white/80 transition hover:bg-black/75 hover:text-white"
+              >
+                Dismiss
+              </button>
             </div>
           ) : null}
 
