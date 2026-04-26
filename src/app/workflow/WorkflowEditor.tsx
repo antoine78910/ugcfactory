@@ -3916,6 +3916,9 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
   const [spaceName, setSpaceName] = useState("Untitled workflow");
   const [shareOpen, setShareOpen] = useState(false);
   const [publishBusy, setPublishBusy] = useState(false);
+  const [publishTemplateOpen, setPublishTemplateOpen] = useState(false);
+  const [publishTemplateName, setPublishTemplateName] = useState("");
+  const [publishTemplateBlurb, setPublishTemplateBlurb] = useState("");
   const [runHistory, setRunHistory] = useState<WorkflowRunLogEntry[]>([]);
   const lastSavedPreviewRef = useRef<string | undefined>(undefined);
   const runHistoryStorageKey = useMemo(
@@ -4019,14 +4022,24 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
     });
   }, []);
 
-  const onPublishTemplate = useCallback(async () => {
+  const onPublishTemplate = useCallback(() => {
     if (publishBusy) return;
     const suggestedName = spaceName.trim() || "My workflow template";
     const suggestedBlurb = "Shared workflow template.";
-    const name = (window.prompt("Template name", suggestedName) ?? "").trim();
-    if (!name) return;
-    const blurb = (window.prompt("Short description (optional)", suggestedBlurb) ?? "").trim();
+    setPublishTemplateName(suggestedName);
+    setPublishTemplateBlurb(suggestedBlurb);
+    setPublishTemplateOpen(true);
+  }, [publishBusy, spaceName]);
 
+  const submitPublishTemplate = useCallback(async () => {
+    if (publishBusy) return;
+    const suggestedBlurb = "Shared workflow template.";
+    const name = publishTemplateName.trim();
+    const blurb = publishTemplateBlurb.trim();
+    if (!name) {
+      toast.error("Please enter a template name.");
+      return;
+    }
     setPublishBusy(true);
     try {
       const res = await fetch("/api/workflow/community-templates", {
@@ -4046,6 +4059,7 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
       toast.success("Template published", {
         description: "It is now visible to everyone in the Templates tab.",
       });
+      setPublishTemplateOpen(false);
       const publishedId = body?.template?.id?.trim();
       if (publishedId && /^[0-9a-f-]{36}$/i.test(publishedId)) {
         router.push(`/workflow/template/${encodeURIComponent(`community:${publishedId}`)}`);
@@ -4055,7 +4069,7 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
     } finally {
       setPublishBusy(false);
     }
-  }, [publishBusy, router, spaceName, workflowProject]);
+  }, [publishBusy, publishTemplateName, publishTemplateBlurb, router, workflowProject]);
 
   return (
     <div className="relative flex min-h-[100dvh] min-w-0 flex-col overflow-hidden bg-[#06070d] text-white">
@@ -4104,6 +4118,60 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
         spaceId={resolvedSpaceId}
         spaceName={spaceName}
       />
+      {publishTemplateOpen ? (
+        <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/70 px-4">
+          <div className="w-full max-w-lg rounded-2xl border border-white/12 bg-[#0b0912] p-5 shadow-2xl">
+            <h2 className="text-[17px] font-semibold text-white">Publish template</h2>
+            <p className="mt-1 text-[13px] text-white/60">
+              Share this workflow in the community Templates tab.
+            </p>
+            <div className="mt-4 space-y-3">
+              <label className="block">
+                <span className="mb-1 block text-[12px] font-semibold text-white/70">Template name</span>
+                <input
+                  value={publishTemplateName}
+                  onChange={(e) => setPublishTemplateName(e.target.value)}
+                  className="h-10 w-full rounded-lg border border-white/12 bg-white/[0.04] px-3 text-[13px] text-white outline-none placeholder:text-white/35 focus:border-violet-400/45"
+                  placeholder="My workflow template"
+                  maxLength={90}
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-[12px] font-semibold text-white/70">Short description</span>
+                <textarea
+                  value={publishTemplateBlurb}
+                  onChange={(e) => setPublishTemplateBlurb(e.target.value)}
+                  className="min-h-[84px] w-full resize-y rounded-lg border border-white/12 bg-white/[0.04] px-3 py-2 text-[13px] text-white outline-none placeholder:text-white/35 focus:border-violet-400/45"
+                  placeholder="Shared workflow template."
+                  maxLength={260}
+                />
+              </label>
+            </div>
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPublishTemplateOpen(false)}
+                className="inline-flex h-9 items-center rounded-full border border-white/15 px-3 text-[12px] font-semibold text-white/80 transition hover:bg-white/10"
+                disabled={publishBusy}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void submitPublishTemplate()}
+                disabled={publishBusy}
+                className={cn(
+                  "inline-flex h-9 items-center gap-2 rounded-full border border-violet-400/35 bg-white px-3.5 text-[12px] font-semibold text-zinc-900 transition hover:bg-white/95",
+                  publishBusy && "cursor-not-allowed opacity-70",
+                )}
+              >
+                {publishBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                {publishBusy ? "Publishing…" : "Publish"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <WorkflowInviteWelcome spaceId={resolvedSpaceId} />
 
       <div className="relative z-10 flex min-h-0 min-w-0 flex-1">

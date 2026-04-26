@@ -41,7 +41,7 @@ export async function GET() {
 
   const { data, error } = await auth.supabase
     .from("workflow_community_templates")
-    .select("id, name, blurb, created_at, created_by_name")
+    .select("id, name, blurb, created_at, created_by_name, created_by")
     .order("created_at", { ascending: false })
     .limit(200);
 
@@ -58,7 +58,15 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ templates: data ?? [] });
+  const templates = (data ?? []).map((row) => ({
+    id: row.id,
+    name: row.name,
+    blurb: row.blurb,
+    created_at: row.created_at,
+    created_by_name: row.created_by_name,
+    created_by_me: row.created_by === auth.user.id,
+  }));
+  return NextResponse.json({ templates });
 }
 
 export async function POST(req: Request) {

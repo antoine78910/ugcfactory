@@ -2031,17 +2031,9 @@ export default function LinkToAdUniverse({
     [universeRunId, stage, isWorking, summaryText, scriptsText],
   );
 
-  const confirmAndResetLinkToAdToStart = useCallback(() => {
-    const msg = [
-      "Cancel this Link to Ad?",
-      "",
-      "The draft on this screen will be lost (URL, brief, scripts, uploads, in-progress media).",
-      "Credits already spent will NOT be refunded.",
-      "",
-      "Runs already saved to your Projects are not deleted.",
-    ].join("\n");
-    if (typeof window !== "undefined" && !window.confirm(msg)) return;
+  const [resetLinkToAdConfirmOpen, setResetLinkToAdConfirmOpen] = useState(false);
 
+  const resetLinkToAdToStart = useCallback(() => {
     linkToAdFlowEpochRef.current += 1;
     cancelCurrentGeneration({ silent: true });
     setIsWorking(false);
@@ -2119,6 +2111,10 @@ export default function LinkToAdUniverse({
     onRunsChanged?.();
     toast.message("Link to Ad reset", { description: "You can start a new ad from scratch." });
   }, [cancelCurrentGeneration, onResumeConsumed, onActiveRunIdChange, onRunsChanged]);
+
+  const confirmAndResetLinkToAdToStart = useCallback(() => {
+    setResetLinkToAdConfirmOpen(true);
+  }, []);
 
   const handleReturnToFreshLinkToAd = useCallback(() => {
     cancelCurrentGeneration({ silent: true });
@@ -9504,6 +9500,36 @@ export default function LinkToAdUniverse({
           }}
         />
       )
+    ) : null}
+    {resetLinkToAdConfirmOpen ? (
+      <div className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/75 p-4">
+        <div className="w-full max-w-md rounded-2xl border border-white/12 bg-[#0b0912] p-5 shadow-2xl">
+          <h3 className="text-[16px] font-semibold text-white">Cancel this Link to Ad?</h3>
+          <p className="mt-2 text-[13px] leading-relaxed text-white/65">
+            The draft on this screen will be lost (URL, brief, scripts, uploads, in-progress media). Credits already
+            spent will not be refunded. Runs already saved to your Projects are not deleted.
+          </p>
+          <div className="mt-5 flex items-center justify-end gap-2">
+            <button
+              type="button"
+              className="inline-flex h-9 items-center rounded-full border border-white/15 px-3 text-[12px] font-semibold text-white/80 transition hover:bg-white/10"
+              onClick={() => setResetLinkToAdConfirmOpen(false)}
+            >
+              Keep editing
+            </button>
+            <button
+              type="button"
+              className="inline-flex h-9 items-center rounded-full border border-red-400/35 bg-red-500/20 px-3 text-[12px] font-semibold text-red-100 transition hover:bg-red-500/30"
+              onClick={() => {
+                setResetLinkToAdConfirmOpen(false);
+                resetLinkToAdToStart();
+              }}
+            >
+              Cancel and reset
+            </button>
+          </div>
+        </div>
+      </div>
     ) : null}
     <AvatarPickerDialog
       open={avatarPickerOpen}

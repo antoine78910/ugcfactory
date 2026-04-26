@@ -180,6 +180,10 @@ export function StudioGenerationsHistory({
     studioGenerationKind?: string;
   } | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleteItem, setConfirmDeleteItem] = useState<{
+    id: string;
+    studioGenerationKind?: string;
+  } | null>(null);
   const [editPrompt, setEditPrompt] = useState("");
   const [editModel, setEditModel] = useState<string>("pro");
   const [editAspect, setEditAspect] = useState("3:4");
@@ -311,7 +315,6 @@ export function StudioGenerationsHistory({
   const deleteHistoryEntry = useCallback(
     async (id: string, studioGenerationKind?: string) => {
       if (!onItemDeleted) return;
-      if (!window.confirm("Remove this generation from your library?")) return;
       setDeletingId(id);
       try {
         const needsServer =
@@ -341,9 +344,9 @@ export function StudioGenerationsHistory({
 
   const handleDeleteItem = useCallback(
     (item: StudioHistoryItem) => {
-      void deleteHistoryEntry(item.id, item.studioGenerationKind);
+      setConfirmDeleteItem({ id: item.id, studioGenerationKind: item.studioGenerationKind });
     },
-    [deleteHistoryEntry],
+    [],
   );
 
   const grouped = useMemo(() => groupByDate(items), [items]);
@@ -1025,6 +1028,41 @@ export function StudioGenerationsHistory({
             </aside>
           </div>
         </div>,
+            document.body,
+          )
+        : null}
+      {confirmDeleteItem
+        ? createPortal(
+            <div className="fixed inset-0 z-[230] flex items-center justify-center bg-black/72 p-4">
+              <div className="w-full max-w-md rounded-2xl border border-white/12 bg-[#0b0912] p-5 shadow-2xl">
+                <h3 className="text-[16px] font-semibold text-white">Remove generation?</h3>
+                <p className="mt-1 text-[13px] text-white/60">
+                  This removes the item from your library.
+                </p>
+                <div className="mt-5 flex items-center justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-white/15 bg-white/[0.03] text-white/80 hover:bg-white/10"
+                    onClick={() => setConfirmDeleteItem(null)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    className="bg-red-500 text-white hover:bg-red-400"
+                    onClick={() => {
+                      const pending = confirmDeleteItem;
+                      setConfirmDeleteItem(null);
+                      if (!pending) return;
+                      void deleteHistoryEntry(pending.id, pending.studioGenerationKind);
+                    }}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              </div>
+            </div>,
             document.body,
           )
         : null}

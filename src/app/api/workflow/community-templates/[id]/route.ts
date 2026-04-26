@@ -49,3 +49,35 @@ export async function GET(_req: Request, ctx: Ctx) {
 
   return NextResponse.json({ template: data });
 }
+
+export async function DELETE(_req: Request, ctx: Ctx) {
+  const auth = await requireSupabaseUser();
+  if (auth.response) return auth.response;
+
+  const { id } = await ctx.params;
+  const uuid = typeof id === "string" ? id.trim() : "";
+  if (!uuid || !/^[0-9a-f-]{36}$/i.test(uuid)) {
+    return NextResponse.json({ error: "Invalid template id." }, { status: 400 });
+  }
+
+  const { error } = await auth.supabase
+    .from("workflow_community_templates")
+    .delete()
+    .eq("id", uuid)
+    .eq("created_by", auth.user.id);
+
+  if (error) {
+    if (isMissingCommunityTemplatesTable(error)) {
+      return NextResponse.json(
+        {
+          error:
+            "Community templates are not enabled yet on this database. Run the latest Supabase migration, then retry.",
+        },
+        { status: 503 },
+      );
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ ok: true });
+}

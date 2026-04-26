@@ -23,7 +23,9 @@ import {
 } from "./workflowSpacesStorage";
 import {
   buildTemplateProject,
+  deleteWorkflowTemplate,
   listWorkflowTemplates,
+  parseWorkflowCommunityTemplateUuid,
   workflowCommunityTemplateId,
   type WorkflowTemplateMeta,
 } from "./workflowTemplates";
@@ -88,6 +90,7 @@ export function WorkflowSpacesLanding() {
   const [newWorkflowName, setNewWorkflowName] = useState("Untitled workflow");
   const [editingSpaceId, setEditingSpaceId] = useState<string | null>(null);
   const [editingSpaceName, setEditingSpaceName] = useState("");
+  const [templateDeleteDialog, setTemplateDeleteDialog] = useState<WorkflowTemplateMeta | null>(null);
 
   const refreshCommunityTemplates = useCallback(async () => {
     const res = await fetch(`/api/workflow/community-templates?t=${Date.now()}`, {
@@ -106,7 +109,7 @@ export function WorkflowSpacesLanding() {
     setCommunityTemplates(
       rows
         .filter((r: { id?: unknown }) => typeof r.id === "string" && /^[0-9a-f-]{36}$/i.test(String(r.id).trim()))
-        .map((r: { id: string; name?: unknown; blurb?: unknown; created_by_name?: unknown }) => ({
+        .map((r: { id: string; name?: unknown; blurb?: unknown; created_by_name?: unknown; created_by_me?: unknown }) => ({
           id: workflowCommunityTemplateId(r.id.trim()),
           name: typeof r.name === "string" && r.name.trim() ? r.name.trim() : "Template",
           blurb: typeof r.blurb === "string" && r.blurb.trim() ? r.blurb.trim() : "",
@@ -115,6 +118,7 @@ export function WorkflowSpacesLanding() {
               ? r.created_by_name.trim()
               : undefined,
           source: "community" as const,
+          canDelete: Boolean(r.created_by_me),
         })),
     );
   }, []);
@@ -258,6 +262,39 @@ export function WorkflowSpacesLanding() {
     deleteSpace(storageScope, id);
     refresh(storageScope);
   };
+
+  const removeTemplate = useCallback(
+    async (template: WorkflowTemplateMeta) => {
+      if (storageScope === null) return;
+      if (template.source === "community") {
+        const uuid = parseWorkflowCommunityTemplateUuid(template.id);
+        if (!uuid) return;
+        const res = await fetch(`/api/workflow/community-templates/${encodeURIComponent(uuid)}`, {
+          method: "DELETE",
+          cache: "no-store",
+        });
+        if (!res.ok) {
+          const j = (await res.json().catch(() => null)) as { error?: string } | null;
+          toast.error(j?.error || "Could not delete template.");
+          return;
+        }
+        setTemplateDeleteDialog(null);
+        toast.success("Template removed");
+        void refreshCommunityTemplates();
+        return;
+      }
+      if (template.source === "custom") {
+        const ok = deleteWorkflowTemplate(storageScope, template.id);
+        if (!ok) {
+          toast.error("Could not delete template.");
+          return;
+        }
+        setTemplateDeleteDialog(null);
+        toast.success("Template removed");
+      }
+    },
+    [storageScope, refreshCommunityTemplates],
+  );
   const startRenameSpace = (e: MouseEvent, space: WorkflowSpaceMeta) => {
     e.preventDefault();
     e.stopPropagation();
@@ -401,13 +438,28 @@ export function WorkflowSpacesLanding() {
                       <p className="mt-2 min-w-0 text-[13px] leading-relaxed text-white/45">{t.blurb}</p>
                       <div className="mt-3 flex items-center justify-between gap-2">
                         <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-300/70">View preview</p>
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-white/35">
-                          {t.source === "community"
-                            ? "Everyone"
-                            : t.source === "custom"
-                              ? "This device"
-                              : "Built-in"}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-white/35">
+                            {t.source === "community"
+                              ? "Everyone"
+                              : t.source === "custom"
+                                ? "This device"
+                                : "Built-in"}
+                          </span>
+                          {t.canDelete ? (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setTemplateDeleteDialog(t);
+                              }}
+                              className="rounded-md border border-white/[0.08] bg-black/50 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white/60 transition hover:bg-red-500/15 hover:text-red-200"
+                            >
+                              Delete
+                            </button>
+                          ) : null}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -532,6 +584,32 @@ export function WorkflowSpacesLanding() {
                 className="rounded-lg border border-violet-400/30 bg-violet-500/20 px-3 py-2 text-xs font-semibold text-violet-100 transition hover:bg-violet-500/30"
               >
                 Create
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {templateDeleteDialog ? (
+        <div className="fixed inset-0 z-[130] flex items-center justify-center bg-black/70 px-4">
+          <div className="w-full max-w-md rounded-2xl border border-white/12 bg-[#0b0912] p-4 shadow-2xl">
+            <p className="text-sm font-semibold text-white">Delete template?</p>
+            <p className="mt-2 text-[13px] leading-relaxed text-white/60">
+              <span className="font-semibold text-white/85">{templateDeleteDialog.name}</span> will be removed from templates.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setTemplateDeleteDialog(null)}
+                className="rounded-lg border border-white/12 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/70 transition hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void removeTemplate(templateDeleteDialog)}
+                className="rounded-lg border border-red-400/30 bg-red-500/20 px-3 py-2 text-xs font-semibold text-red-100 transition hover:bg-red-500/30"
+              >
+                Delete
               </button>
             </div>
           </div>

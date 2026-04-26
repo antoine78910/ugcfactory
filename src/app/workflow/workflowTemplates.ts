@@ -10,6 +10,8 @@ export type WorkflowTemplateMeta = {
   blurb: string;
   authorName?: string;
   source?: "builtin" | "custom" | "community";
+  /** True when current user can remove this template. */
+  canDelete?: boolean;
 };
 
 /** URL / storage id: `community:` + Supabase row uuid (same for every account). */
