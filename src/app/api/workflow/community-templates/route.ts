@@ -24,13 +24,24 @@ function isMissingCommunityTemplatesTable(error: { code?: string; message?: stri
   );
 }
 
+function creatorDisplayNameFromAuthUser(user: { email?: string | null; user_metadata?: unknown }): string {
+  const md = (user.user_metadata ?? {}) as { first_name?: unknown; name?: unknown };
+  const firstName = typeof md.first_name === "string" ? md.first_name.trim() : "";
+  if (firstName) return firstName.slice(0, 80);
+  const fullName = typeof md.name === "string" ? md.name.trim() : "";
+  if (fullName) return fullName.slice(0, 80);
+  const email = typeof user.email === "string" ? user.email.trim() : "";
+  if (email.includes("@")) return email.split("@")[0].slice(0, 80);
+  return "User";
+}
+
 export async function GET() {
   const auth = await requireSupabaseUser();
   if (auth.response) return auth.response;
 
   const { data, error } = await auth.supabase
     .from("workflow_community_templates")
-    .select("id, name, blurb, created_at")
+    .select("id, name, blurb, created_at, created_by_name")
     .order("created_at", { ascending: false })
     .limit(200);
 
@@ -89,11 +100,12 @@ export async function POST(req: Request) {
     .from("workflow_community_templates")
     .insert({
       created_by: auth.user.id,
+      created_by_name: creatorDisplayNameFromAuthUser(auth.user),
       name: name.slice(0, 200),
       blurb: (blurb || "Shared workflow template.").slice(0, 500),
       project: b.project,
     })
-    .select("id, name, blurb")
+    .select("id, name, blurb, created_by_name")
     .single();
 
   if (error) {

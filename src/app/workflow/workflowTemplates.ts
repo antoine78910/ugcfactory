@@ -8,6 +8,7 @@ export type WorkflowTemplateMeta = {
   name: string;
   /** Short line for cards on the landing page */
   blurb: string;
+  authorName?: string;
   source?: "builtin" | "custom" | "community";
 };
 
@@ -210,6 +211,7 @@ export function listWorkflowTemplates(
     id: t.id,
     name: t.name,
     blurb: t.blurb,
+    authorName: t.authorName,
     source: "community" as const,
   }));
   return [...community, ...custom, ...builtins];

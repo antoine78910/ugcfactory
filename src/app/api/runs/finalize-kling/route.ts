@@ -4,6 +4,7 @@ export const maxDuration = 300;
 
 import { NextResponse } from "next/server";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
+import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import {
   extractKieMediaUrls,
   kieMarketRecordInfo,
@@ -19,6 +20,8 @@ import {
   snapshotAfterKlingVideoSuccessForAngle,
   universeHasPendingKlingTask,
 } from "@/lib/linkToAdUniverse";
+import { mirrorRunMediaUrls } from "@/lib/runMediaPersistence";
+import { serverLog } from "@/lib/serverLog";
 
 type Body = { runId?: string };
 
@@ -132,13 +135,49 @@ export async function POST(req: Request) {
         clipPart,
       );
       const base = cloneExtractedBase(run.extracted);
-      const extracted = { ...base, __universe: nextSnap };
+      let extracted: Record<string, unknown> = { ...base, __universe: nextSnap };
+      let finalVideoUrl = vUrl;
+
+      /**
+       * PiAPI / KIE return ephemeral URLs (e.g. `img.theapi.app/ephemeral/...`) that expire.
+       * Archive into `studio-media` before persisting so the user keeps access forever.
+       * Best-effort: if mirroring fails, the original URL is kept and the cron backfill picks it up.
+       */
+      const admin = createSupabaseServiceClient();
+      if (admin) {
+        try {
+          const mirrored = await mirrorRunMediaUrls({
+            admin,
+            userId: user.id,
+            rowId: runId,
+            payload: { video_url: finalVideoUrl, extracted },
+          });
+          if (mirrored.changed) {
+            if (typeof mirrored.payload.video_url === "string" && mirrored.payload.video_url) {
+              finalVideoUrl = mirrored.payload.video_url;
+            }
+            if (mirrored.payload.extracted && typeof mirrored.payload.extracted === "object") {
+              extracted = mirrored.payload.extracted as Record<string, unknown>;
+            }
+            serverLog("link_to_ad_finalize_mirror", {
+              runId,
+              mirrored: mirrored.mirroredCount,
+              candidates: mirrored.candidateCount,
+            });
+          }
+        } catch (e) {
+          serverLog("link_to_ad_finalize_mirror_error", {
+            runId,
+            message: e instanceof Error ? e.message : String(e),
+          });
+        }
+      }
 
       const { error: upErr } = await supabase
         .from("ugc_runs")
         .update({
           extracted,
-          video_url: vUrl,
+          video_url: finalVideoUrl,
         })
         .eq("id", runId)
         .eq("user_id", user.id);
@@ -147,7 +186,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: upErr.message }, { status: 502 });
       }
 
-      return NextResponse.json({ ok: true, videoUrl: vUrl });
+      return NextResponse.json({ ok: true, videoUrl: finalVideoUrl });
     }
 
     if (failedMessage) {

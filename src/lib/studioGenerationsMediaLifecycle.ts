@@ -8,6 +8,7 @@ import {
 } from "@/lib/studioGenerationsMedia";
 import { normalizeResultUrls } from "@/lib/studioGenerationsMap";
 import type { StudioGenerationRow } from "@/lib/studioGenerationsMap";
+import { mirrorRunMediaUrls, rowHasUnpersistedMedia } from "@/lib/runMediaPersistence";
 
 /**
  * Migrate ALL result_urls not yet on our Supabase Storage bucket to `studio-media`.
@@ -105,4 +106,87 @@ export async function applyStudioMediaRetention(
     serverLog("studio_media_retention", { purged, cutoff });
   }
   return { purged };
+}
+
+type UgcRunMediaRow = {
+  id: string;
+  user_id: string;
+  selected_image_url: string | null;
+  video_url: string | null;
+  generated_image_urls: string[] | null;
+  packshot_urls: string[] | null;
+  extracted: unknown;
+};
+
+/**
+ * Migrate ANY provider-hosted (ephemeral) media URLs found in `ugc_runs` rows
+ * (Link to Ad / Workflow projects) into `studio-media`. Covers `selected_image_url`,
+ * `video_url`, `generated_image_urls`, `packshot_urls`, and the `extracted` JSONB
+ * (Link to Ad universe with embedded Kling / Nano Banana / Seedance URLs).
+ * Returns counts; a single row with N migrated URLs counts as `updated += 1`.
+ */
+export async function backfillEphemeralUgcRunMedia(
+  admin: SupabaseClient,
+  limit: number,
+): Promise<{ scanned: number; updated: number; mirroredUrls: number }> {
+  const { data: rows, error } = await admin
+    .from("ugc_runs")
+    .select("id, user_id, selected_image_url, video_url, generated_image_urls, packshot_urls, extracted")
+    .order("created_at", { ascending: false })
+    .limit(Math.min(2000, limit * 20));
+
+  if (error) throw error;
+
+  let scanned = 0;
+  let updated = 0;
+  let mirroredUrls = 0;
+  for (const row of (rows ?? []) as UgcRunMediaRow[]) {
+    if (!rowHasUnpersistedMedia(row)) continue;
+    scanned++;
+    try {
+      const mirrored = await mirrorRunMediaUrls({
+        admin,
+        userId: row.user_id,
+        rowId: row.id,
+        payload: {
+          selected_image_url: row.selected_image_url,
+          video_url: row.video_url,
+          generated_image_urls: row.generated_image_urls,
+          packshot_urls: row.packshot_urls,
+          extracted: row.extracted,
+        },
+      });
+      if (!mirrored.changed) continue;
+
+      const { error: upErr } = await admin
+        .from("ugc_runs")
+        .update({
+          selected_image_url: mirrored.payload.selected_image_url ?? null,
+          video_url: mirrored.payload.video_url ?? null,
+          generated_image_urls: mirrored.payload.generated_image_urls ?? null,
+          packshot_urls: mirrored.payload.packshot_urls ?? null,
+          extracted: mirrored.payload.extracted ?? null,
+        })
+        .eq("id", row.id);
+      if (upErr) {
+        serverLog("ugc_run_media_backfill_update_error", { id: row.id, message: upErr.message });
+        continue;
+      }
+      updated++;
+      mirroredUrls += mirrored.mirroredCount;
+      if (updated >= limit) break;
+    } catch (e) {
+      serverLog("ugc_run_media_backfill_error", {
+        id: row.id,
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+
+  if (updated > 0) {
+    serverLog("ugc_run_media_backfill", { scanned, updated, mirroredUrls });
+  }
+  // Reference helper to keep import live for non-Storage migrations later.
+  void isStudioMediaPublicUrl;
+  return { scanned, updated, mirroredUrls };
 }

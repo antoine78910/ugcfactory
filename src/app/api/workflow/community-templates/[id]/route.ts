@@ -27,7 +27,7 @@ export async function GET(_req: Request, ctx: Ctx) {
 
   const { data, error } = await auth.supabase
     .from("workflow_community_templates")
-    .select("id, name, blurb, project, created_at")
+    .select("id, name, blurb, project, created_at, created_by_name")
     .eq("id", uuid)
     .maybeSingle();
 

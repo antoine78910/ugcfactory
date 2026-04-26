@@ -22,6 +22,7 @@ import {
   type WorkflowSpaceMeta,
 } from "./workflowSpacesStorage";
 import {
+  buildTemplateProject,
   listWorkflowTemplates,
   workflowCommunityTemplateId,
   type WorkflowTemplateMeta,
@@ -100,15 +101,19 @@ export function WorkflowSpacesLanding() {
       return;
     }
     setCommunityLoadFailed(false);
-    const j = (await res.json().catch(() => null)) as { templates?: unknown } | null;
+      const j = (await res.json().catch(() => null)) as { templates?: unknown } | null;
     const rows = Array.isArray(j?.templates) ? j.templates : [];
     setCommunityTemplates(
       rows
         .filter((r: { id?: unknown }) => typeof r.id === "string" && /^[0-9a-f-]{36}$/i.test(String(r.id).trim()))
-        .map((r: { id: string; name?: unknown; blurb?: unknown }) => ({
+        .map((r: { id: string; name?: unknown; blurb?: unknown; created_by_name?: unknown }) => ({
           id: workflowCommunityTemplateId(r.id.trim()),
           name: typeof r.name === "string" && r.name.trim() ? r.name.trim() : "Template",
           blurb: typeof r.blurb === "string" && r.blurb.trim() ? r.blurb.trim() : "",
+          authorName:
+            typeof r.created_by_name === "string" && r.created_by_name.trim()
+              ? r.created_by_name.trim()
+              : undefined,
           source: "community" as const,
         })),
     );
@@ -209,6 +214,22 @@ export function WorkflowSpacesLanding() {
     );
   }, [query, storageScope, communityTemplates]);
 
+  const templatePreviewDataUrlById = useMemo(() => {
+    const out = new Map<string, string>();
+    for (const t of filteredTemplates) {
+      try {
+        const project = buildTemplateProject(t.id, storageScope);
+        if (!project) continue;
+        const svg = buildWorkflowPreviewSvg(project);
+        if (!svg?.svg) continue;
+        out.set(t.id, `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg.svg)}`);
+      } catch {
+        // keep card fallback for invalid template payloads
+      }
+    }
+    return out;
+  }, [filteredTemplates, storageScope]);
+
   const onNewSpace = () => {
     if (storageScope === null) return;
     setNewWorkflowName("Untitled workflow");
@@ -265,8 +286,12 @@ export function WorkflowSpacesLanding() {
       <div className="pointer-events-none absolute right-0 top-[120px] z-[1] h-[320px] w-[480px] rounded-full bg-violet-600/12 blur-[90px]" />
 
       <div className="relative z-10 mx-auto max-w-6xl px-4 pb-16 pt-8 sm:px-6 sm:pt-10">
-        <div className="overflow-hidden rounded-[22px] border border-white/[0.08] bg-gradient-to-br from-violet-950/80 via-[#0c0d12] to-violet-950/45 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.45)] sm:p-10">
-          <div className="flex flex-col gap-8 lg:flex-row lg:items-center lg:gap-6">
+        <div className="relative overflow-hidden rounded-[22px] border border-white/[0.08] bg-gradient-to-br from-violet-950/80 via-[#0c0d12] to-violet-950/45 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.45)] sm:p-10">
+          <div className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(120%_85%_at_58%_38%,rgba(167,139,250,0.18),transparent_68%)]" />
+          <div className="pointer-events-none absolute inset-x-0 top-0 z-0 h-[45%] bg-gradient-to-b from-[#0d0e1a]/80 via-[#0d0e1a]/35 to-transparent" />
+          <div className="pointer-events-none absolute inset-y-0 right-0 z-0 w-[58%] bg-gradient-to-l from-violet-500/[0.08] via-violet-400/[0.03] to-transparent" />
+
+          <div className="relative z-[1] flex flex-col gap-8 lg:flex-row lg:items-center lg:gap-6">
             <div className="w-full shrink-0 lg:max-w-sm lg:basis-[24%]">
               <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Workflow</h1>
               <p className="mt-2 text-lg font-semibold text-white/80">Start from scratch</p>
@@ -284,7 +309,7 @@ export function WorkflowSpacesLanding() {
             </div>
 
             <div className="relative min-h-[240px] w-full lg:min-h-0 lg:basis-[76%] lg:min-w-0" aria-hidden>
-              <WorkflowLandingHeroDiagram className="h-[min(280px,52vw)] lg:h-[min(300px,36vw)] xl:h-[min(320px,32vw)]" />
+              <WorkflowLandingHeroDiagram className="relative z-[1] h-[min(270px,48vw)] lg:h-[min(300px,33vw)] xl:h-[min(330px,30vw)]" />
             </div>
           </div>
         </div>
@@ -357,9 +382,22 @@ export function WorkflowSpacesLanding() {
                     }}
                     className="flex w-full cursor-pointer flex-col overflow-hidden rounded-2xl border border-white/[0.1] bg-[#0b0912]/90 text-left shadow-[0_12px_40px_rgba(0,0,0,0.35)] outline-none transition hover:border-violet-400/30 hover:bg-[#0b0912] hover:shadow-[0_12px_40px_rgba(139,92,246,0.08)] focus-visible:ring-2 focus-visible:ring-violet-500/50"
                   >
-                    <div className="aspect-[16/10] w-full bg-gradient-to-br from-violet-900/35 via-[#1a1a22] to-violet-950/40" />
+                    <div className="relative aspect-[16/10] w-full overflow-hidden bg-gradient-to-br from-violet-900/35 via-[#1a1a22] to-violet-950/40">
+                      {templatePreviewDataUrlById.get(t.id) ? (
+                        <img
+                          src={templatePreviewDataUrlById.get(t.id)}
+                          alt={`${t.name} template preview`}
+                          className="absolute inset-0 h-full w-full object-cover"
+                          loading="lazy"
+                          decoding="async"
+                        />
+                      ) : null}
+                    </div>
                     <div className="p-4">
                       <p className="min-w-0 font-semibold text-white">{t.name}</p>
+                      {t.source === "community" && t.authorName ? (
+                        <p className="mt-1 text-[11px] text-white/50">by {t.authorName}</p>
+                      ) : null}
                       <p className="mt-2 min-w-0 text-[13px] leading-relaxed text-white/45">{t.blurb}</p>
                       <div className="mt-3 flex items-center justify-between gap-2">
                         <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-300/70">View preview</p>

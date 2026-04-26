@@ -5,35 +5,40 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
 
-const VB = { w: 680, h: 290 };
+const VB = { w: 860, h: 430 };
 
 type Rect = { x: number; y: number; w: number; h: number };
 
-const BASE: Record<"prompt" | "upload" | "imgGen" | "imgOut" | "videoPrompt" | "videoGen" | "videoOut", Rect> = {
-  prompt: { x: 18, y: 18, w: 220, h: 76 },
-  upload: { x: 18, y: 116, w: 220, h: 76 },
-  imgGen: { x: 266, y: 66, w: 140, h: 74 },
-  imgOut: { x: 430, y: 48, w: 108, h: 108 },
-  videoPrompt: { x: 266, y: 172, w: 140, h: 74 },
-  videoGen: { x: 430, y: 172, w: 108, h: 74 },
-  videoOut: { x: 560, y: 144, w: 104, h: 104 },
+const BASE: Record<"prompt" | "upload" | "imgGen" | "videoPrompt" | "videoGen", Rect> = {
+  prompt: { x: 28, y: 28, w: 280, h: 86 },
+  upload: { x: 28, y: 116, w: 170, h: 252 },
+  imgGen: { x: 360, y: 22, w: 186, h: 360 },
+  videoPrompt: { x: 330, y: 332, w: 220, h: 82 },
+  videoGen: { x: 624, y: 72, w: 186, h: 360 },
 };
 
 const DEPTH: Record<keyof typeof BASE, number> = {
   prompt: 1,
   upload: 1.1,
   imgGen: 1.2,
-  imgOut: 1.32,
   videoPrompt: 1.18,
   videoGen: 1.25,
-  videoOut: 1.35,
 };
 
 const DEMO = {
-  uploaded: "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=420&h=420&fit=crop&q=70",
-  generatedImage: "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=420&h=420&fit=crop&q=70",
-  generatedVideoPreview: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=420&h=420&fit=crop&q=70",
+  uploaded: "/workflow-hero/upload-3x4.png",
+  generatedImage: "/workflow-hero/generated-image-9x16.png",
+  generatedVideoPreview: "/workflow-hero/generated-video-preview-9x16.png",
+  generatedVideo: "/workflow-hero/generated-video-preview-9x16.mp4",
 } as const;
+const DEMO_UPLOAD_FORMAT = "3:4";
+const DEMO_IMAGE_FORMAT = "9:16";
+const DEMO_VIDEO_FORMAT = "9:16";
+const STEP_IMAGE_START_MS = 1000;
+const STEP_IMAGE_READY_MS = 6000; // 5s image generation
+const STEP_VIDEO_START_MS = 7000; // 1s pause after image reveal
+const STEP_VIDEO_READY_MS = 12000; // 5s video generation
+const STEP_CYCLE_MS = 17000; // 5s hold on final video preview
 
 function shiftRect(r: Rect, dx: number, dy: number): Rect {
   return { x: r.x + dx, y: r.y + dy, w: r.w, h: r.h };
@@ -57,8 +62,10 @@ export function WorkflowLandingHeroDiagram({ className }: { className?: string }
   const targetRef = useRef({ x: 0, y: 0 });
   const rafRef = useRef(0);
   const [, setFrame] = useState(0);
-  const [step, setStep] = useState<0 | 1 | 2 | 3>(0);
+  const [step, setStep] = useState<0 | 1 | 2 | 3 | 4>(0);
   const [hoverActive, setHoverActive] = useState(false);
+  const [imageRevealFx, setImageRevealFx] = useState(false);
+  const [videoRevealFx, setVideoRevealFx] = useState(false);
 
   const tick = useCallback(() => {
     const pointer = pointerRef.current;
@@ -86,24 +93,40 @@ export function WorkflowLandingHeroDiagram({ className }: { className?: string }
   }, [tick]);
 
   useEffect(() => {
-    const t1 = window.setTimeout(() => setStep(1), 1200);
-    const t2 = window.setTimeout(() => setStep(2), 3600);
-    const t3 = window.setTimeout(() => setStep(3), 5900);
-    const t4 = window.setTimeout(() => setStep(0), 9000);
+    const t1 = window.setTimeout(() => setStep(1), STEP_IMAGE_START_MS);
+    const t2 = window.setTimeout(() => setStep(2), STEP_IMAGE_READY_MS);
+    const t3 = window.setTimeout(() => setStep(3), STEP_VIDEO_START_MS);
+    const t4 = window.setTimeout(() => setStep(4), STEP_VIDEO_READY_MS);
+    const t5 = window.setTimeout(() => setStep(0), STEP_CYCLE_MS);
     const cycle = window.setInterval(() => {
       setStep(0);
-      window.setTimeout(() => setStep(1), 1200);
-      window.setTimeout(() => setStep(2), 3600);
-      window.setTimeout(() => setStep(3), 5900);
-    }, 9000);
+      window.setTimeout(() => setStep(1), STEP_IMAGE_START_MS);
+      window.setTimeout(() => setStep(2), STEP_IMAGE_READY_MS);
+      window.setTimeout(() => setStep(3), STEP_VIDEO_START_MS);
+      window.setTimeout(() => setStep(4), STEP_VIDEO_READY_MS);
+    }, STEP_CYCLE_MS);
     return () => {
       window.clearTimeout(t1);
       window.clearTimeout(t2);
       window.clearTimeout(t3);
       window.clearTimeout(t4);
+      window.clearTimeout(t5);
       window.clearInterval(cycle);
     };
   }, []);
+
+  useEffect(() => {
+    if (step === 2) {
+      setImageRevealFx(true);
+      const raf = window.requestAnimationFrame(() => setImageRevealFx(false));
+      return () => window.cancelAnimationFrame(raf);
+    }
+    if (step === 4) {
+      setVideoRevealFx(true);
+      const t = window.setTimeout(() => setVideoRevealFx(false), 700);
+      return () => window.clearTimeout(t);
+    }
+  }, [step]);
 
   const onMove = (e: React.MouseEvent<HTMLDivElement>) => {
     const el = wrapRef.current;
@@ -129,10 +152,8 @@ export function WorkflowLandingHeroDiagram({ className }: { className?: string }
         prompt: BASE.prompt,
         upload: BASE.upload,
         imgGen: BASE.imgGen,
-        imgOut: BASE.imgOut,
         videoPrompt: BASE.videoPrompt,
         videoGen: BASE.videoGen,
-        videoOut: BASE.videoOut,
       };
     }
     const cursor = {
@@ -162,10 +183,8 @@ export function WorkflowLandingHeroDiagram({ className }: { className?: string }
       prompt: shiftRect(BASE.prompt, o("prompt").x, o("prompt").y),
       upload: shiftRect(BASE.upload, o("upload").x, o("upload").y),
       imgGen: shiftRect(BASE.imgGen, o("imgGen").x, o("imgGen").y),
-      imgOut: shiftRect(BASE.imgOut, o("imgOut").x, o("imgOut").y),
       videoPrompt: shiftRect(BASE.videoPrompt, o("videoPrompt").x, o("videoPrompt").y),
       videoGen: shiftRect(BASE.videoGen, o("videoGen").x, o("videoGen").y),
-      videoOut: shiftRect(BASE.videoOut, o("videoOut").x, o("videoOut").y),
     };
   }, [mx, my, hoverActive]);
 
@@ -187,8 +206,8 @@ export function WorkflowLandingHeroDiagram({ className }: { className?: string }
 
   const imgGenerating = step === 1;
   const imgReady = step >= 2;
-  const videoGenerating = step === 2;
-  const videoReady = step >= 3;
+  const videoGenerating = step === 3;
+  const videoReady = step >= 4;
 
   return (
     <div
@@ -202,16 +221,6 @@ export function WorkflowLandingHeroDiagram({ className }: { className?: string }
       onMouseMove={onMove}
       onMouseLeave={onLeave}
     >
-      <div
-        className="pointer-events-none absolute inset-0 opacity-[0.2]"
-        style={{
-          backgroundImage:
-            "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E\")",
-        }}
-      />
-      <div className="pointer-events-none absolute -left-10 bottom-0 h-[70%] w-[55%] rounded-full bg-cyan-500/10 blur-[70px]" />
-      <div className="pointer-events-none absolute -right-6 top-0 h-[55%] w-[45%] rounded-full bg-violet-600/14 blur-[64px]" />
-
       <svg className="relative z-[1] block h-full w-full" viewBox={`0 0 ${VB.w} ${VB.h}`} preserveAspectRatio="xMidYMid meet" aria-hidden>
         <defs>
           <linearGradient id="hero-edge-green" x1="0" y1="0" x2="1" y2="0">
@@ -267,9 +276,15 @@ export function WorkflowLandingHeroDiagram({ className }: { className?: string }
             <span className="text-[8px] font-semibold tracking-tight text-white">Upload</span>
             <span className="ml-auto text-[8px] uppercase tracking-wide text-white/35">input</span>
           </div>
-          <div className="p-1">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={DEMO.uploaded} alt="" className="h-full w-full rounded-xl object-cover saturate-110" draggable={false} />
+          <div className="relative p-0">
+            <div className="relative w-full overflow-hidden bg-black/35 aspect-[3/4]">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={DEMO.uploaded} alt="" className="h-full w-full object-contain object-center saturate-110" draggable={false} />
+              <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/[0.07] via-transparent to-black/25" />
+              <div className="absolute right-1 top-1 rounded bg-black/65 px-1 py-[1px] text-[7px] font-semibold tracking-wide text-white/85">
+                {DEMO_UPLOAD_FORMAT}
+              </div>
+            </div>
           </div>
           <div className="absolute -right-2 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full border border-white/15 bg-[#15151a]/95" />
         </div>
@@ -285,25 +300,41 @@ export function WorkflowLandingHeroDiagram({ className }: { className?: string }
             <ImageIcon className="h-3.5 w-3.5 text-white/50" />
             <span className="text-[8px] font-semibold uppercase tracking-wide text-white/45">Image Generator</span>
           </div>
-          <div className="px-2 py-2">
-            <div className="flex items-center gap-1.5 text-[9px] text-white/78">
-            {imgGenerating ? <Loader2 className="h-3 w-3 animate-spin text-violet-200" /> : <Type className="h-3 w-3 text-white/45" />}
-            {imgGenerating ? "Generating image..." : imgReady ? "Image generated" : "Waiting input"}
+          <div className="relative p-0">
+            <div className="relative w-full overflow-hidden bg-black/40 aspect-[9/16]">
+              {!imgGenerating ? (
+                <>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={DEMO.generatedImage}
+                    alt=""
+                    className={cn(
+                      "h-full w-full object-contain object-center transition-[filter,transform,opacity] duration-[2000ms] ease-out",
+                      imageRevealFx ? "scale-[1.02] opacity-100 blur-[10px]" : "scale-100 opacity-100 blur-0",
+                    )}
+                    draggable={false}
+                  />
+                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/[0.05] via-transparent to-black/18" />
+                  <div className="absolute right-1 top-1 rounded bg-black/65 px-1 py-[1px] text-[7px] font-semibold tracking-wide text-white/85">
+                    {DEMO_IMAGE_FORMAT}
+                  </div>
+                </>
+              ) : null}
+              {imgGenerating ? (
+                <div className="absolute inset-0 z-[2] flex flex-col items-center justify-center gap-2 bg-black/42 backdrop-blur-[2px]">
+                  <div className="relative h-9 w-9">
+                    <span className="absolute inset-0 rounded-full border border-white/[0.09]" />
+                    <span className="absolute inset-0 animate-spin rounded-full border-2 border-transparent border-t-violet-400/88 border-r-violet-400/22 [animation-duration:1.15s]" />
+                  </div>
+                  <p className="text-[8px] font-semibold uppercase tracking-[0.16em] text-white/55">Generating</p>
+                </div>
+              ) : null}
             </div>
-            <div className="mt-1.5 rounded-md border border-white/10 bg-black/35 px-1.5 py-1 text-[8px] text-white/60">
-              Output included in module
+            <div className="absolute bottom-1.5 left-1.5 z-[3] rounded bg-black/60 px-1.5 py-0.5 text-[8px] text-white/85">
+              {imgGenerating ? "Generating image..." : imgReady ? "Image generated" : "Waiting input"}
             </div>
           </div>
           <div className="absolute -left-2 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full border border-white/15 bg-[#15151a]/95" />
-        </div>
-
-        <div className="absolute overflow-hidden rounded-2xl border border-white/10 bg-[#121212]/98 shadow-[0_12px_40px_rgba(0,0,0,0.45)]" style={pct(placed.imgOut)}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={imgReady ? DEMO.generatedImage : DEMO.uploaded} alt="" className="h-full w-full object-cover" draggable={false} />
-          <div className="absolute bottom-1 left-1 rounded bg-black/60 px-1 py-0.5 text-[8px] font-semibold uppercase tracking-wide text-violet-200/95">
-            {imgReady ? "Generated image" : "Uploaded image"}
-          </div>
-          <div className="absolute -right-2 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full border border-white/15 bg-[#15151a]/95" />
         </div>
 
         <div
@@ -316,7 +347,7 @@ export function WorkflowLandingHeroDiagram({ className }: { className?: string }
           </div>
           <div className="p-2">
             <div className="max-h-[34px] min-h-[30px] overflow-y-auto rounded-lg border border-white/12 bg-black/50 px-2 py-1.5 text-[9px] text-white/78">
-              <span>Slow cinematic push-in + subtle smile + product in hand, realistic motion blur, smooth camera path</span>
+              <span>Creator holds the product close to camera, smiles naturally, then points at on-screen benefit text: “Launch UGC ads in minutes”. End with clean CTA card: “Try now on youry.io”. Keep realistic face, hands, and product details.</span>
               <span className="ml-0.5 inline-block h-[10px] w-[1px] animate-pulse bg-violet-200/90 align-[-1px]" />
             </div>
           </div>
@@ -334,24 +365,57 @@ export function WorkflowLandingHeroDiagram({ className }: { className?: string }
             <Clapperboard className="h-3.5 w-3.5 text-white/50" />
             <span className="text-[8px] font-semibold uppercase tracking-wide text-white/45">Video Generator</span>
           </div>
-          <div className="px-2 py-2">
-            <div className="flex items-center gap-1.5 text-[9px] text-white/78">
-            {videoGenerating ? <Loader2 className="h-3 w-3 animate-spin text-violet-200" /> : <Type className="h-3 w-3 text-white/45" />}
-            {videoGenerating ? "Generating video..." : videoReady ? "Video generated" : "Waiting image"}
+          <div className="relative p-0">
+            <div className="relative w-full overflow-hidden bg-black/40 aspect-[9/16]">
+              {!videoGenerating ? (
+                <>
+                  {videoReady ? (
+                    <video
+                      key={DEMO.generatedVideo}
+                      src={DEMO.generatedVideo}
+                      className={cn(
+                        "h-full w-full object-contain object-center transition-all duration-700 ease-out",
+                        videoRevealFx ? "scale-[1.03] opacity-100" : "scale-100 opacity-100",
+                      )}
+                      autoPlay
+                      muted
+                      loop
+                      playsInline
+                      preload="metadata"
+                    />
+                  ) : imgReady ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={DEMO.generatedImage}
+                      alt=""
+                      className="h-full w-full object-contain object-center transition-all duration-700 ease-out"
+                      draggable={false}
+                    />
+                  ) : null}
+                  {videoRevealFx ? (
+                    <div className="pointer-events-none absolute inset-0 z-[3] animate-pulse bg-white/10" />
+                  ) : null}
+                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/[0.05] via-transparent to-black/18" />
+                  <div className="absolute right-1 top-1 rounded bg-black/65 px-1 py-[1px] text-[7px] font-semibold tracking-wide text-white/85">
+                    {DEMO_VIDEO_FORMAT}
+                  </div>
+                </>
+              ) : null}
+              {videoGenerating ? (
+                <div className="absolute inset-0 z-[2] flex flex-col items-center justify-center gap-2 bg-black/42 backdrop-blur-[2px]">
+                  <div className="relative h-9 w-9">
+                    <span className="absolute inset-0 rounded-full border border-white/[0.09]" />
+                    <span className="absolute inset-0 animate-spin rounded-full border-2 border-transparent border-t-violet-400/88 border-r-violet-400/22 [animation-duration:1.15s]" />
+                  </div>
+                  <p className="text-[8px] font-semibold uppercase tracking-[0.16em] text-white/55">Rendering</p>
+                </div>
+              ) : null}
             </div>
-            <div className="mt-1.5 rounded-md border border-white/10 bg-black/35 px-1.5 py-1 text-[8px] text-white/60">
-              Output included in module
+            <div className="absolute bottom-1.5 left-1.5 z-[3] rounded bg-black/60 px-1.5 py-0.5 text-[8px] text-white/85">
+              {videoGenerating ? "Generating video..." : videoReady ? "Video generated" : "Waiting image"}
             </div>
           </div>
           <div className="absolute -left-2 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full border border-white/15 bg-[#15151a]/95" />
-        </div>
-
-        <div className="absolute overflow-hidden rounded-2xl border border-white/10 bg-[#121212]/98 shadow-[0_12px_40px_rgba(0,0,0,0.45)]" style={pct(placed.videoOut)}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={videoReady ? DEMO.generatedVideoPreview : DEMO.generatedImage} alt="" className="h-full w-full object-cover" draggable={false} />
-          <div className="absolute bottom-1 right-1 rounded bg-black/65 px-1 py-0.5 text-[8px] font-semibold uppercase tracking-wide text-violet-200/95">
-            {videoReady ? "Generated video" : "Video preview"}
-          </div>
         </div>
       </div>
 

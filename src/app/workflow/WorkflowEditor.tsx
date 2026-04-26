@@ -51,6 +51,7 @@ import {
   Undo2,
   Upload,
   UserRound,
+  Loader2,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -3824,6 +3825,7 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
   const [workflowHydrated, setWorkflowHydrated] = useState(false);
   const [spaceName, setSpaceName] = useState("Untitled workflow");
   const [shareOpen, setShareOpen] = useState(false);
+  const [publishBusy, setPublishBusy] = useState(false);
   const [runHistory, setRunHistory] = useState<WorkflowRunLogEntry[]>([]);
   const lastSavedPreviewRef = useRef<string | undefined>(undefined);
   const runHistoryStorageKey = useMemo(
@@ -3900,10 +3902,12 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
     if (!workflowHydrated || storageScope === null) return;
     const next = workflowPreviewSavedDataUrl;
     if (lastSavedPreviewRef.current === next) return;
+    // Delay snapshot persistence so freshly generated media has time to settle
+    // before we freeze the card preview shown on the workflow landing.
     const t = window.setTimeout(() => {
       updateSpaceMeta(storageScope, resolvedSpaceId, { previewDataUrl: next });
       lastSavedPreviewRef.current = next;
-    }, 400);
+    }, 10_000);
     return () => window.clearTimeout(t);
   }, [workflowHydrated, storageScope, resolvedSpaceId, workflowPreviewSavedDataUrl]);
 
@@ -3925,6 +3929,44 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
     });
   }, []);
 
+  const onPublishTemplate = useCallback(async () => {
+    if (publishBusy) return;
+    const suggestedName = spaceName.trim() || "My workflow template";
+    const suggestedBlurb = "Shared workflow template.";
+    const name = (window.prompt("Template name", suggestedName) ?? "").trim();
+    if (!name) return;
+    const blurb = (window.prompt("Short description (optional)", suggestedBlurb) ?? "").trim();
+
+    setPublishBusy(true);
+    try {
+      const res = await fetch("/api/workflow/community-templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          blurb: blurb || suggestedBlurb,
+          project: workflowProject,
+        }),
+      });
+      const body = (await res.json().catch(() => null)) as { error?: string; template?: { id?: string } } | null;
+      if (!res.ok) {
+        toast.error(body?.error || "Could not publish template.");
+        return;
+      }
+      toast.success("Template published", {
+        description: "It is now visible to everyone in the Templates tab.",
+      });
+      const publishedId = body?.template?.id?.trim();
+      if (publishedId && /^[0-9a-f-]{36}$/i.test(publishedId)) {
+        router.push(`/workflow/template/${encodeURIComponent(`community:${publishedId}`)}`);
+      }
+    } catch {
+      toast.error("Network error while publishing template.");
+    } finally {
+      setPublishBusy(false);
+    }
+  }, [publishBusy, router, spaceName, workflowProject]);
+
   return (
     <div className="relative flex min-h-[100dvh] min-w-0 flex-col overflow-hidden bg-[#06070d] text-white">
       <div className="pointer-events-none absolute left-1/2 top-0 h-[420px] w-[900px] -translate-x-1/2 rounded-full bg-violet-600/12 blur-[120px]" />
@@ -3943,6 +3985,18 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={onPublishTemplate}
+            disabled={publishBusy}
+            className={cn(
+              "inline-flex h-9 items-center gap-2 rounded-full border border-white/16 bg-white/5 px-3.5 text-[13px] font-semibold text-white/85 transition hover:bg-white/10",
+              publishBusy && "cursor-not-allowed opacity-70",
+            )}
+          >
+            {publishBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Globe2 className="h-3.5 w-3.5" />}
+            {publishBusy ? "Publishing…" : "Publish template"}
+          </button>
           <button
             type="button"
             onClick={() => setShareOpen(true)}
@@ -4066,6 +4120,7 @@ export function WorkflowTemplatePreview({ templateId }: { templateId: string }) 
   const [storageScope, setStorageScope] = useState<string | null>(null);
   const [project, setProject] = useState<WorkflowProjectStateV1>(() => defaultWorkflowProject());
   const [communityLabel, setCommunityLabel] = useState<string | null>(null);
+  const [communityAuthor, setCommunityAuthor] = useState<string | null>(null);
   const [useBusy, setUseBusy] = useState(false);
 
   useEffect(() => {
@@ -4087,6 +4142,7 @@ export function WorkflowTemplatePreview({ templateId }: { templateId: string }) 
     const communityUuid = parseWorkflowCommunityTemplateUuid(resolvedId);
     if (!communityUuid) {
       setCommunityLabel(null);
+      setCommunityAuthor(null);
       const p = buildTemplateProject(resolvedId, storageScope);
       if (!p) {
         router.replace("/workflow");
@@ -4098,6 +4154,7 @@ export function WorkflowTemplatePreview({ templateId }: { templateId: string }) 
 
     let cancelled = false;
     setCommunityLabel(null);
+    setCommunityAuthor(null);
     (async () => {
       const res = await fetch(`/api/workflow/community-templates/${communityUuid}`);
       if (cancelled) return;
@@ -4106,7 +4163,7 @@ export function WorkflowTemplatePreview({ templateId }: { templateId: string }) 
         return;
       }
       const body = (await res.json().catch(() => null)) as {
-        template?: { name?: unknown; project?: WorkflowProjectStateV1 };
+        template?: { name?: unknown; project?: WorkflowProjectStateV1; created_by_name?: unknown };
       } | null;
       const t = body?.template;
       if (!t?.project || t.project.v !== 1 || !Array.isArray(t.project.pages)) {
@@ -4116,6 +4173,9 @@ export function WorkflowTemplatePreview({ templateId }: { templateId: string }) 
       const nm = typeof t.name === "string" && t.name.trim() ? t.name.trim() : "Template";
       if (!cancelled) {
         setCommunityLabel(nm);
+        setCommunityAuthor(
+          typeof t.created_by_name === "string" && t.created_by_name.trim() ? t.created_by_name.trim() : null,
+        );
         setProject(t.project);
       }
     })();
@@ -4166,6 +4226,7 @@ export function WorkflowTemplatePreview({ templateId }: { templateId: string }) 
               <Eye className="h-3.5 w-3.5 shrink-0 text-white/45" strokeWidth={2} aria-hidden />
               <span className="truncate">{title}</span>
             </span>
+            {communityAuthor ? <span className="truncate text-white/35">by {communityAuthor}</span> : null}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">

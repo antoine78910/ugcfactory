@@ -1,7 +1,11 @@
 export const runtime = "nodejs";
+export const maxDuration = 120;
 
 import { NextResponse } from "next/server";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
+import { createSupabaseServiceClient } from "@/lib/supabase/admin";
+import { mirrorRunMediaUrls } from "@/lib/runMediaPersistence";
+import { serverLog } from "@/lib/serverLog";
 
 type Body = {
   runId?: string;
@@ -29,7 +33,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
-  const payload: any = {
+  const payload: Record<string, unknown> = {
     user_id: user.id,
   };
   if (typeof body.storeUrl === "string" && body.storeUrl.trim()) payload.store_url = body.storeUrl.trim();
@@ -40,13 +44,57 @@ export async function POST(req: Request) {
   if (Array.isArray(body.packshotUrls)) payload.packshot_urls = body.packshotUrls.filter(Boolean).slice(0, 12);
   if (typeof body.imagePrompt === "string") payload.image_prompt = body.imagePrompt;
   if (typeof body.negativePrompt === "string") payload.negative_prompt = body.negativePrompt;
-  if (Array.isArray(body.generatedImageUrls)) payload.generated_image_urls = body.generatedImageUrls.filter(Boolean).slice(0, 12);
+  if (Array.isArray(body.generatedImageUrls))
+    payload.generated_image_urls = body.generatedImageUrls.filter(Boolean).slice(0, 12);
   if (body.selectedImageUrl === null || typeof body.selectedImageUrl === "string")
     payload.selected_image_url = body.selectedImageUrl;
   if (body.videoTemplateId === null || typeof body.videoTemplateId === "string")
     payload.video_template_id = body.videoTemplateId;
   if (typeof body.videoPrompt === "string") payload.video_prompt = body.videoPrompt;
   if (body.videoUrl === null || typeof body.videoUrl === "string") payload.video_url = body.videoUrl;
+
+  /**
+   * Archive any provider-hosted (e.g. PiAPI ephemeral, fal, kie) media URLs found in
+   * the inbound payload to our `studio-media` bucket BEFORE persisting. Otherwise the
+   * URLs expire and the user loses access to their generations.
+   */
+  const admin = createSupabaseServiceClient();
+  if (admin) {
+    try {
+      const targetRowId = typeof body.runId === "string" && body.runId.trim() ? body.runId.trim() : "pending";
+      const mirrored = await mirrorRunMediaUrls({
+        admin,
+        userId: user.id,
+        rowId: targetRowId,
+        payload: {
+          selected_image_url: payload.selected_image_url as string | null | undefined,
+          video_url: payload.video_url as string | null | undefined,
+          generated_image_urls: payload.generated_image_urls as string[] | null | undefined,
+          packshot_urls: payload.packshot_urls as string[] | null | undefined,
+          extracted: payload.extracted,
+        },
+      });
+      if (mirrored.changed) {
+        if (mirrored.payload.selected_image_url !== undefined)
+          payload.selected_image_url = mirrored.payload.selected_image_url;
+        if (mirrored.payload.video_url !== undefined) payload.video_url = mirrored.payload.video_url;
+        if (mirrored.payload.generated_image_urls !== undefined)
+          payload.generated_image_urls = mirrored.payload.generated_image_urls;
+        if (mirrored.payload.packshot_urls !== undefined) payload.packshot_urls = mirrored.payload.packshot_urls;
+        if (mirrored.payload.extracted !== undefined) payload.extracted = mirrored.payload.extracted;
+        serverLog("ugc_run_media_mirror", {
+          runId: targetRowId,
+          mirrored: mirrored.mirroredCount,
+          candidates: mirrored.candidateCount,
+        });
+      }
+    } catch (e) {
+      // Mirroring is best-effort; never block the save itself.
+      serverLog("ugc_run_media_mirror_error", {
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
 
   try {
     if (typeof body.runId === "string" && body.runId.trim()) {
@@ -73,4 +121,3 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: message }, { status: 502 });
   }
 }
-

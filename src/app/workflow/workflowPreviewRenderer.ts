@@ -28,6 +28,8 @@ const HEADER_H = 22;
 const PORT_R = 3.5;
 const MIN_CARD_W = 132;
 const MIN_CARD_H = 74;
+const PREVIEW_MAX_NODES = 14;
+const PREVIEW_FOCUS_WIDTH = 1400;
 
 const CHAR_W_LABEL = 5.6;
 const CHAR_W_BODY = 5.4;
@@ -477,10 +479,23 @@ function layoutNodes(
   project: WorkflowProjectStateV1,
   width: number,
   height: number,
-): { items: LaidOutNode[]; bounds: { minX: number; minY: number; maxX: number; maxY: number } } | null {
+): {
+  items: LaidOutNode[];
+  bounds: { minX: number; minY: number; maxX: number; maxY: number; nodeIds: Set<string> };
+} | null {
   const page = project.pages.find((p) => p.id === project.activePageId) ?? project.pages[0];
   if (!page || !Array.isArray(page.nodes) || page.nodes.length === 0) return null;
-  const nodes = page.nodes.slice(0, 36);
+
+  // Keep previews readable on large canvases:
+  // focus the "start" of the workflow (left-most area) instead of cramming the full graph.
+  const sortedByStart = [...page.nodes].sort(
+    (a, b) => a.position.x - b.position.x || a.position.y - b.position.y,
+  );
+  const leftMostX = Math.min(...sortedByStart.map((n) => n.position.x));
+  const nodesInStartWindow = sortedByStart.filter((n) => n.position.x <= leftMostX + PREVIEW_FOCUS_WIDTH);
+  const nodes = (nodesInStartWindow.length > 0 ? nodesInStartWindow : sortedByStart).slice(0, PREVIEW_MAX_NODES);
+
+  const nodeIds = new Set(nodes.map((n) => n.id));
   const minX = Math.min(...nodes.map((n) => n.position.x));
   const minY = Math.min(...nodes.map((n) => n.position.y));
   const maxX = Math.max(
@@ -507,7 +522,7 @@ function layoutNodes(
     const y = n.position.y * scale + ty;
     return { node: n, kind: classifyNode(n), x, y, w, h };
   });
-  return { items, bounds: { minX, minY, maxX, maxY } };
+  return { items, bounds: { minX, minY, maxX, maxY, nodeIds } };
 }
 
 function renderNodeCard(item: LaidOutNode, idx: number, idPrefix: string): string {
@@ -575,10 +590,12 @@ function renderNodeCard(item: LaidOutNode, idx: number, idPrefix: string): strin
 function buildEdges(
   page: NonNullable<WorkflowProjectStateV1["pages"]>[number],
   itemMap: Map<string, LaidOutNode>,
+  visibleNodeIds: Set<string>,
 ): string {
   const out: string[] = [];
   const edges = (page.edges ?? []).slice(0, 80);
   for (const e of edges) {
+    if (!visibleNodeIds.has(e.source) || !visibleNodeIds.has(e.target)) continue;
     const a = itemMap.get(e.source);
     const b = itemMap.get(e.target);
     if (!a || !b) continue;
@@ -607,7 +624,7 @@ export function buildWorkflowPreviewSvg(
 
   const idPrefix = `wf-${Math.abs(hashString(project.activePageId + ":" + layout.items.length)).toString(36)}`;
 
-  const edgesSvg = buildEdges(page, itemMap);
+  const edgesSvg = buildEdges(page, itemMap, layout.bounds.nodeIds);
   const nodesSvg = layout.items.map((it, idx) => renderNodeCard(it, idx, idPrefix)).join("");
 
   const dotSize = 1.1;
