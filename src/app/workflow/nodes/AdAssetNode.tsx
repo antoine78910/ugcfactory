@@ -442,20 +442,52 @@ async function extractVideoFrameJpegDataUrl(video: HTMLVideoElement, end: boolea
   return canvas.toDataURL("image/jpeg", 0.88);
 }
 
-/** Load a video URL in a detached element and capture a JPEG frame. */
+/**
+ * Load a video URL in a detached element and capture a JPEG frame.
+ *
+ * Remote video CDNs (Kling / PiAPI / Veo) typically don't return
+ * `Access-Control-Allow-Origin: *`, so loading them directly in a `<video>`
+ * with `crossOrigin="anonymous"` taints the canvas and `canvas.toDataURL()`
+ * throws. Going through the authenticated `/api/download` proxy turns the
+ * fetch into a same-origin Blob, so the resulting object URL is never
+ * tainted and the extraction works for any supported video provider.
+ */
 async function extractVideoFrameJpegDataUrlFromUrl(videoUrl: string, end: boolean): Promise<string> {
+  const trimmed = videoUrl.trim();
+  if (!trimmed) throw new Error("Missing video URL");
+
+  let blob: Blob | null = null;
+  if (/^blob:|^data:/i.test(trimmed)) {
+    const r = await fetch(trimmed, { cache: "no-store" });
+    if (!r.ok) throw new Error(`Could not read video (${r.status})`);
+    blob = await r.blob();
+  } else {
+    try {
+      const r = await fetch(`/api/download?url=${encodeURIComponent(trimmed)}`, { cache: "no-store" });
+      if (r.ok) blob = await r.blob();
+    } catch {
+      // proxy unreachable — fall through to direct CORS attempt
+    }
+    if (!blob) {
+      const r = await fetch(trimmed, { mode: "cors", cache: "no-store" });
+      if (!r.ok) throw new Error(`Could not download video (${r.status})`);
+      blob = await r.blob();
+    }
+  }
+
+  const objectUrl = URL.createObjectURL(blob);
   const v = document.createElement("video");
-  v.preload = "metadata";
-  v.crossOrigin = "anonymous";
+  v.preload = "auto";
   v.muted = true;
   v.playsInline = true;
-  v.src = videoUrl;
+  v.src = objectUrl;
   try {
     return await extractVideoFrameJpegDataUrl(v, end);
   } finally {
     v.pause();
     v.removeAttribute("src");
     v.load();
+    URL.revokeObjectURL(objectUrl);
   }
 }
 /** Horizontal padding from `px-3` on the card (left + right). */
@@ -2009,6 +2041,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       const incomingVideoFrameEdges = edges.filter(
         (e) => e.target === id && ((e.targetHandle ?? "") === "startImage" || (e.targetHandle ?? "") === "endImage"),
       );
+      let frameExtractionFailed = false;
       if (incomingVideoFrameEdges.length > 0) {
         const byId = new Map(nodesForVideoInputs.map((n) => [n.id, n]));
         const frameCacheWrites = new Map<string, Partial<AdAssetNodeData>>();
@@ -2044,9 +2077,9 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 ? { videoExtractedLastFrameUrl: extracted }
                 : { videoExtractedFirstFrameUrl: extracted }),
             });
-          } catch {
-            // Keep generation resilient: if extraction fails, existing logic still falls back to
-            // any already-cached frame / other references instead of hard-failing the whole run.
+          } catch (err) {
+            frameExtractionFailed = true;
+            console.warn("[workflow] Failed to auto-extract video frame", err);
           }
         }
         if (frameCacheWrites.size > 0) {
@@ -2086,6 +2119,15 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       const startFrame =
         (data.videoStartImageUrl?.trim() || linkedFromStartPort[0] || nodeRefUrl || "").trim() || undefined;
       const endFrame = (data.videoEndImageUrl?.trim() || linkedFromEndPort[0] || "").trim() || undefined;
+
+      // The user wired a video frame as input but extraction failed AND no fallback frame is
+      // available — abort (refunds credits via the central catch) instead of silently
+      // downgrading to text-to-video, which would ignore the connected start/end image.
+      if (frameExtractionFailed && !startFrame && !endFrame) {
+        throw new Error(
+          "Could not read connected video frame. Open the source video and use its corner bubble to save first/last frame, then run again.",
+        );
+      }
       const referencePool = [...linkedFromReferencesPort];
       if (nodeRefUrl && startFrame !== nodeRefUrl && !referencePool.includes(nodeRefUrl)) {
         referencePool.push(nodeRefUrl);
