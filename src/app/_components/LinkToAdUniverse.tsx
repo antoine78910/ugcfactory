@@ -1296,19 +1296,33 @@ function LinkToAdFullSequencePlayer({
   );
 }
 
+/**
+ * Feature gate for the "App" asset type in Link to Ad. Flip to `true` when the
+ * App pipeline (screenshot capture + scripting) is wired end-to-end. While
+ * `false`, the App option is shown but disabled with a "Soon" badge, and any
+ * persisted "app" snapshot is coerced back to "product" on hydration.
+ */
+const LINK_TO_AD_APP_OPTION_AVAILABLE = false;
+
 function LinkToAdAssetTypeSwitch({
   value,
   onChange,
+  appAvailable = LINK_TO_AD_APP_OPTION_AVAILABLE,
 }: {
   value: "product" | "app";
   onChange: (next: "product" | "app") => void;
+  appAvailable?: boolean;
 }) {
+  // While App is gated, the active value can only be "product"; force the
+  // indicator to stay on the left even if some stale state leaks "app".
+  const effectiveValue = appAvailable ? value : "product";
+  const appDisabled = !appAvailable;
   return (
-    <div className="relative h-[2.7rem] w-[10.25rem] shrink-0 overflow-hidden rounded-2xl border border-violet-400/30 bg-[#0f1016] p-1 shadow-[inset_0_2px_4px_rgba(0,0,0,0.85),0_16px_30px_-14px_rgba(0,0,0,0.65)]">
+    <div className="relative h-[2.7rem] w-[10.75rem] shrink-0 overflow-hidden rounded-2xl border border-violet-400/30 bg-[#0f1016] p-1 shadow-[inset_0_2px_4px_rgba(0,0,0,0.85),0_16px_30px_-14px_rgba(0,0,0,0.65)]">
       <div
         className={cn(
           "pointer-events-none absolute inset-y-1 left-1 w-[calc(50%-0.25rem)] rounded-[0.8rem] border border-violet-200/35 bg-[linear-gradient(145deg,rgba(196,181,253,0.28),rgba(139,92,246,0.06))] shadow-[0_0_18px_rgba(139,92,246,0.4),inset_0_0_12px_rgba(167,139,250,0.25)] transition-transform duration-300 ease-out",
-          value === "app" ? "translate-x-[calc(100%+0.25rem)]" : "translate-x-0",
+          effectiveValue === "app" ? "translate-x-[calc(100%+0.25rem)]" : "translate-x-0",
         )}
       >
         <span className="pointer-events-none absolute left-[10%] top-0 h-px w-[80%] bg-gradient-to-r from-transparent via-white/85 to-transparent" />
@@ -1319,16 +1333,42 @@ function LinkToAdAssetTypeSwitch({
           onClick={() => onChange("product")}
           className="flex flex-1 items-center justify-center gap-1.5 rounded-xl px-2 text-xs font-semibold"
         >
-          <Box className={cn("h-3.5 w-3.5 transition", value === "product" ? "text-violet-50" : "text-white/45")} />
-          <span className={cn("transition", value === "product" ? "text-white" : "text-white/45")}>Product</span>
+          <Box className={cn("h-3.5 w-3.5 transition", effectiveValue === "product" ? "text-violet-50" : "text-white/45")} />
+          <span className={cn("transition", effectiveValue === "product" ? "text-white" : "text-white/45")}>Product</span>
         </button>
         <button
           type="button"
-          onClick={() => onChange("app")}
-          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl px-2 text-xs font-semibold"
+          onClick={() => {
+            if (appDisabled) return;
+            onChange("app");
+          }}
+          disabled={appDisabled}
+          aria-disabled={appDisabled}
+          title={appDisabled ? "App support is coming soon." : undefined}
+          className={cn(
+            "flex flex-1 items-center justify-center gap-1 rounded-xl px-2 text-xs font-semibold",
+            appDisabled && "cursor-not-allowed opacity-70",
+          )}
         >
-          <AppWindow className={cn("h-3.5 w-3.5 transition", value === "app" ? "text-violet-50" : "text-white/45")} />
-          <span className={cn("transition", value === "app" ? "text-white" : "text-white/45")}>App</span>
+          <AppWindow
+            className={cn(
+              "h-3.5 w-3.5 transition",
+              !appDisabled && effectiveValue === "app" ? "text-violet-50" : "text-white/45",
+            )}
+          />
+          <span
+            className={cn(
+              "transition",
+              !appDisabled && effectiveValue === "app" ? "text-white" : "text-white/45",
+            )}
+          >
+            App
+          </span>
+          {appDisabled ? (
+            <span className="shrink-0 rounded-md border border-white/10 bg-white/[0.05] px-1 py-0.5 text-[8.5px] font-bold uppercase tracking-wide text-white/45">
+              Soon
+            </span>
+          ) : null}
         </button>
       </div>
     </div>
@@ -1527,6 +1567,14 @@ export default function LinkToAdUniverse({
   const [scriptsText, setScriptsText] = useState<string>("");
   const [generationMode, setGenerationMode] = useState<"automatic" | "custom_ugc">("automatic");
   const [linkToAdAssetType, setLinkToAdAssetType] = useState<"product" | "app">("product");
+  /**
+   * Whether the user is targeting a mobile/web app instead of a product listing.
+   * Used to relabel "Store URL" steps as "App URL" and to gate the future app-specific
+   * scraping path (mobile + laptop screenshot capture). Stays `false` while
+   * {@link LINK_TO_AD_APP_OPTION_AVAILABLE} is off, even if a stale snapshot tries to set it.
+   */
+  const isLinkToAdAppMode =
+    LINK_TO_AD_APP_OPTION_AVAILABLE && linkToAdAssetType === "app";
   const scriptProvider = "claude" as const;
 
   const [videoDuration, setVideoDuration] = useState<number>(10);
@@ -3044,7 +3092,9 @@ export default function LinkToAdUniverse({
       setSummaryText(snap.summaryText);
       setScriptsText(snap.scriptsText);
       setGenerationMode(snap.generationMode === "custom_ugc" ? "custom_ugc" : "automatic");
-      setLinkToAdAssetType(snap.linkToAdAssetType === "app" ? "app" : "product");
+      setLinkToAdAssetType(
+        LINK_TO_AD_APP_OPTION_AVAILABLE && snap.linkToAdAssetType === "app" ? "app" : "product",
+      );
       setCustomUgcTopic(((snap.customUgcTopic ?? "").trim() || (snap.customUgcIntent ?? "").trim()));
       setCustomUgcOffer((snap.customUgcOffer ?? "").trim());
       setCustomUgcCta((snap.customUgcCta ?? "").trim());
@@ -5421,8 +5471,15 @@ export default function LinkToAdUniverse({
 
   /**
    * @param chainPart2Prompt, If set, runs the second 15s clip only (30s workflow). Do not clear 30s refs.
+   * @param opts.forceRegenerateCharge When true, bills the Seedance Preview Fast price
+   *   (VIP or Normal, per current `ltaSeedanceSpeed`) for non-trial users. Pressed on the
+   *   "Regenerate" video button so a re-render is not free after the URL bundle was paid.
    */
-  async function onGenerateKlingVideo(overrideVideoPrompt?: string, chainPart2Prompt?: string) {
+  async function onGenerateKlingVideo(
+    overrideVideoPrompt?: string,
+    chainPart2Prompt?: string,
+    opts?: { forceRegenerateCharge?: boolean },
+  ) {
     const url = storeUrl.trim();
     const img = nanoBananaImageUrl;
     const idx = nanoBananaSelectedImageIndex;
@@ -5478,7 +5535,27 @@ export default function LinkToAdUniverse({
       }
     }
 
-    const videoSpend = ltaKlingVideoCharge;
+    // Billing rules:
+    // - Trial (`linkToAdTrialEconomy`): keep existing flat charge per call
+    //   (`LINK_TO_AD_TRIAL_FINAL_VIDEO`) — preserves prior behavior for trial users.
+    // - Non-trial initial generation: 0 (already covered by the URL bundle paid in
+    //   `ltaInitialGenerateCharge`).
+    // - Non-trial regenerate: bill the Seedance Preview Fast tariff for the current
+    //   duration and VIP/Normal selection, so re-renders are not free.
+    // - Part 2 of the 30s flow (auto-chained after Part 1): never re-charge — it is a
+    //   continuation of the same already-billed job.
+    const isPart2Chain = Boolean(chainPart2Prompt);
+    const isRegenerate = Boolean(opts?.forceRegenerateCharge);
+    let videoSpend = 0;
+    if (linkToAdTrialEconomy) {
+      videoSpend = ltaKlingVideoCharge;
+    } else if (isRegenerate && !isPart2Chain) {
+      videoSpend = creditsLinkToAdFullPipeline(
+        LINK_TO_AD_DEFAULT_VIDEO_MODEL,
+        videoDuration,
+        ltaSeedanceSpeed,
+      );
+    }
     if (videoSpend > 0) {
       const w0 = creditsBalanceRef.current;
       setLtaFrozenCredits(w0);
@@ -6057,9 +6134,29 @@ export default function LinkToAdUniverse({
     () => (linkToAdTrialEconomy ? LINK_TO_AD_TRIAL_FINAL_VIDEO : 0),
     [linkToAdTrialEconomy],
   );
+  /**
+   * Initial "Generate video from selected image" pill: trial pays the flat trial fee,
+   * non-trial sees 0 (the first render is bundled with the URL pipeline charge).
+   */
   const ltaVideoConfirmCreditsDisplay = useMemo(
     () => (linkToAdTrialEconomy ? LINK_TO_AD_TRIAL_FINAL_VIDEO : 0),
     [linkToAdTrialEconomy],
+  );
+  /**
+   * "Regenerate video" pill + spend: trial keeps the flat fee, non-trial pays the
+   * dynamic Seedance Preview Fast price (VIP or Normal per `ltaSeedanceSpeed`,
+   * scaled by `videoDuration`).
+   */
+  const ltaKlingVideoRegenCharge = useMemo(
+    () =>
+      linkToAdTrialEconomy
+        ? LINK_TO_AD_TRIAL_FINAL_VIDEO
+        : creditsLinkToAdFullPipeline(
+            LINK_TO_AD_DEFAULT_VIDEO_MODEL,
+            videoDuration,
+            ltaSeedanceSpeed,
+          ),
+    [linkToAdTrialEconomy, videoDuration, ltaSeedanceSpeed],
   );
   /** Video-prompt step has no direct credit charge (render charge happens on video generation). */
   const ltaVideoPromptFromImageCreditsDisplay = useMemo(
@@ -6177,7 +6274,7 @@ export default function LinkToAdUniverse({
   function handleGenerateFromUrl() {
     const u = storeUrl.trim();
     if (!u) {
-      toast.error("Enter a store URL.");
+      toast.error(isLinkToAdAppMode ? "Enter an app URL." : "Enter a store URL.");
       return;
     }
     if (!/^https?:\/\//i.test(u)) {
@@ -6327,8 +6424,14 @@ export default function LinkToAdUniverse({
         {!isResumeHydrating && !showBrandHeaderInsteadOfUrl && !isWorking && stage === "idle" ? (
           <div className="flex min-h-[60vh] flex-col items-center gap-6 py-4">
             <div className="text-center">
-              <h2 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">Paste your product link</h2>
-              <p className="mt-1.5 text-sm text-white/50">We scan the page and create a UGC video ad for you.</p>
+              <h2 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
+                {isLinkToAdAppMode ? "Paste your app link" : "Paste your product link"}
+              </h2>
+              <p className="mt-1.5 text-sm text-white/50">
+                {isLinkToAdAppMode
+                  ? "We capture mobile + desktop renders of your app and create a UGC video ad for you."
+                  : "We scan the page and create a UGC video ad for you."}
+              </p>
             </div>
             <div className="w-full max-w-xl space-y-3">
               <div className="flex justify-center">
@@ -6341,7 +6444,9 @@ export default function LinkToAdUniverse({
                     <Input
                       value={storeUrl}
                       onChange={(e) => setStoreUrl(e.target.value)}
-                      placeholder="https://your-product-page.com"
+                      placeholder={
+                        isLinkToAdAppMode ? "https://your-app.com" : "https://your-product-page.com"
+                      }
                       autoFocus
                       className="h-11 w-full border-0 !bg-transparent pl-4 pr-[10.5rem] text-sm text-white placeholder:text-white/25 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 sm:pr-44"
                       onKeyDown={(e) => {
@@ -6784,7 +6889,9 @@ export default function LinkToAdUniverse({
         {!showBrandHeaderInsteadOfUrl ? (
           <div className="space-y-3">
             <div>
-              <Label className="text-base font-medium text-white/80">Store URL</Label>
+              <Label className="text-base font-medium text-white/80">
+                {isLinkToAdAppMode ? "App URL" : "Store URL"}
+              </Label>
               {!isWorking ? (
                 <div className="mt-3 space-y-3 rounded-xl border border-white/10 bg-white/[0.02] p-3">
                   <div>
@@ -6901,11 +7008,24 @@ export default function LinkToAdUniverse({
                 </Button>
               </div>
               <p className="mt-2 max-w-xl text-[11px] leading-snug text-white/40">
-                Use the exact product page URL, not just your shop homepage. We need the specific listing to pull the
-                right images and details.
-                <span className="mt-1 block">
-                  This is for one product only. To test another product, create a new Link to Ad with that product URL.
-                </span>
+                {isLinkToAdAppMode ? (
+                  <>
+                    Use the public landing or App Store / Play Store page that best showcases your app. We render it on
+                    mobile and laptop and pull the visuals + copy.
+                    <span className="mt-1 block">
+                      This is for one app only. To test another app, create a new Link to Ad with that app URL.
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    Use the exact product page URL, not just your shop homepage. We need the specific listing to pull
+                    the right images and details.
+                    <span className="mt-1 block">
+                      This is for one product only. To test another product, create a new Link to Ad with that product
+                      URL.
+                    </span>
+                  </>
+                )}
               </p>
 
               {/* Product photos + avatar are shown only after brief + scripts are generated (next step),
@@ -8986,7 +9106,9 @@ export default function LinkToAdUniverse({
                                     !nanoBananaImageUrl
                                   }
                                   onClick={() => {
-                                    void onGenerateKlingVideo();
+                                    void onGenerateKlingVideo(undefined, undefined, {
+                                      forceRegenerateCharge: true,
+                                    });
                                   }}
                                 >
                                   {isKlingSubmitting || klingRenderingThisReference ? (
@@ -9000,7 +9122,7 @@ export default function LinkToAdUniverse({
                                       Regenerate
                                       {hideCredits ? null : (
                                         <LinkToAdStudioStyleCreditPill
-                                          amount={ltaVideoConfirmCreditsDisplay}
+                                          amount={ltaKlingVideoRegenCharge}
                                           hideCredits={hideCredits}
                                           compact
                                         />
