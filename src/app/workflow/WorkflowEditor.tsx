@@ -3917,6 +3917,8 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
   const [shareOpen, setShareOpen] = useState(false);
   const [publishBusy, setPublishBusy] = useState(false);
   const [publishedTemplateId, setPublishedTemplateId] = useState<string | null>(null);
+  const [removeTemplateBusy, setRemoveTemplateBusy] = useState(false);
+  const [removeTemplateConfirmOpen, setRemoveTemplateConfirmOpen] = useState(false);
   const [publishTemplateOpen, setPublishTemplateOpen] = useState(false);
   const [publishTemplateName, setPublishTemplateName] = useState("");
   const [publishTemplateBlurb, setPublishTemplateBlurb] = useState("");
@@ -4048,13 +4050,17 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
     }
     setPublishBusy(true);
     try {
+      const projectForPublish =
+        storageScope != null
+          ? loadProjectForSpace(storageScope, resolvedSpaceId)
+          : workflowProject;
       const res = await fetch("/api/workflow/community-templates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name,
           blurb: blurb || suggestedBlurb,
-          project: workflowProject,
+          project: projectForPublish,
           templateId: publishedTemplateId,
         }),
       });
@@ -4082,6 +4088,31 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
     }
   }, [publishBusy, publishTemplateName, publishTemplateBlurb, publishedTemplateId, router, workflowProject, storageScope, resolvedSpaceId]);
 
+  const removePublishedTemplate = useCallback(async () => {
+    if (!publishedTemplateId || removeTemplateBusy) return;
+    setRemoveTemplateBusy(true);
+    try {
+      const res = await fetch(`/api/workflow/community-templates/${encodeURIComponent(publishedTemplateId)}`, {
+        method: "DELETE",
+      });
+      const body = (await res.json().catch(() => null)) as { error?: string } | null;
+      if (!res.ok) {
+        toast.error(body?.error || "Could not remove template.");
+        return;
+      }
+      setPublishedTemplateId(null);
+      if (storageScope) {
+        updateSpaceMeta(storageScope, resolvedSpaceId, { publishedCommunityTemplateId: undefined });
+      }
+      setRemoveTemplateConfirmOpen(false);
+      toast.success("Removed from templates");
+    } catch {
+      toast.error("Network error while removing template.");
+    } finally {
+      setRemoveTemplateBusy(false);
+    }
+  }, [publishedTemplateId, removeTemplateBusy, storageScope, resolvedSpaceId]);
+
   return (
     <div className="relative flex min-h-[100dvh] min-w-0 flex-col overflow-hidden bg-[#06070d] text-white">
       <div className="pointer-events-none absolute left-1/2 top-0 h-[420px] w-[900px] -translate-x-1/2 rounded-full bg-violet-600/12 blur-[120px]" />
@@ -4100,6 +4131,20 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          {publishedTemplateId ? (
+            <button
+              type="button"
+              onClick={() => setRemoveTemplateConfirmOpen(true)}
+              disabled={removeTemplateBusy}
+              className={cn(
+                "inline-flex h-9 items-center gap-2 rounded-full border border-red-400/28 bg-red-500/12 px-3.5 text-[13px] font-semibold text-red-100 transition hover:bg-red-500/20",
+                removeTemplateBusy && "cursor-not-allowed opacity-70",
+              )}
+            >
+              {removeTemplateBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+              {removeTemplateBusy ? "Removing…" : "Remove from templates"}
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={onPublishTemplate}
@@ -4182,6 +4227,38 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
               >
                 {publishBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
                 {publishBusy ? "Publishing…" : publishedTemplateId ? "Push modification" : "Publish"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {removeTemplateConfirmOpen ? (
+        <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/70 px-4">
+          <div className="w-full max-w-md rounded-2xl border border-white/12 bg-[#0b0912] p-5 shadow-2xl">
+            <h2 className="text-[17px] font-semibold text-white">Remove from templates?</h2>
+            <p className="mt-1 text-[13px] leading-relaxed text-white/62">
+              This removes this published template from the Templates tab. Your current workflow remains unchanged.
+            </p>
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setRemoveTemplateConfirmOpen(false)}
+                className="inline-flex h-9 items-center rounded-full border border-white/15 px-3 text-[12px] font-semibold text-white/80 transition hover:bg-white/10"
+                disabled={removeTemplateBusy}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void removePublishedTemplate()}
+                disabled={removeTemplateBusy}
+                className={cn(
+                  "inline-flex h-9 items-center gap-2 rounded-full border border-red-400/30 bg-red-500/18 px-3.5 text-[12px] font-semibold text-red-100 transition hover:bg-red-500/28",
+                  removeTemplateBusy && "cursor-not-allowed opacity-70",
+                )}
+              >
+                {removeTemplateBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                {removeTemplateBusy ? "Removing…" : "Remove"}
               </button>
             </div>
           </div>
@@ -4329,7 +4406,9 @@ export function WorkflowTemplatePreview({ templateId }: { templateId: string }) 
     setCommunityLabel(null);
     setCommunityAuthor(null);
     (async () => {
-      const res = await fetch(`/api/workflow/community-templates/${communityUuid}`);
+      const res = await fetch(`/api/workflow/community-templates/${communityUuid}?t=${Date.now()}`, {
+        cache: "no-store",
+      });
       if (cancelled) return;
       if (!res.ok) {
         router.replace("/workflow");

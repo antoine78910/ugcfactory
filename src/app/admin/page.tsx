@@ -11,8 +11,10 @@ import {
   ExternalLink,
   Gift,
   Image as ImageIcon,
+  LayoutTemplate,
   Loader2,
   Search,
+  Trash2,
   Users,
   Video,
   Zap,
@@ -20,7 +22,7 @@ import {
 import { cn } from "@/lib/utils";
 import { ledgerTicksToDisplayCredits } from "@/lib/creditLedgerTicks";
 
-type Tab = "generations" | "runs" | "credits" | "onboarding" | "feedback";
+type Tab = "generations" | "runs" | "credits" | "onboarding" | "feedback" | "templates";
 
 type OnboardingAdminRow = {
   user_id: string;
@@ -140,6 +142,16 @@ type RunRow = {
   generated_image_urls: string[] | null;
   selected_image_url: string | null;
   packshot_urls: string[] | null;
+};
+
+type WorkflowTemplateAdminRow = {
+  id: string;
+  created_by: string | null;
+  created_by_name: string | null;
+  name: string;
+  blurb: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 type Stats = {
@@ -319,6 +331,15 @@ export default function AdminPage() {
   const [feedbackCategory, setFeedbackCategory] = useState("");
   const [feedbackLoading, setFeedbackLoading] = useState(false);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
+  const [templateRows, setTemplateRows] = useState<WorkflowTemplateAdminRow[]>([]);
+  const [templateEmailMap, setTemplateEmailMap] = useState<Record<string, string>>({});
+  const [templateTotal, setTemplateTotal] = useState(0);
+  const [templatePage, setTemplatePage] = useState(1);
+  const [templateSearch, setTemplateSearch] = useState("");
+  const [templateSearchInput, setTemplateSearchInput] = useState("");
+  const [templateLoading, setTemplateLoading] = useState(false);
+  const [templateError, setTemplateError] = useState<string | null>(null);
+  const [deletingTemplateId, setDeletingTemplateId] = useState<string | null>(null);
 
   // Expanded row (for prompt/details)
   const [expandedGenId, setExpandedGenId] = useState<string | null>(null);
@@ -450,6 +471,30 @@ export default function AdminPage() {
     }
   }, [feedbackCategory, feedbackPage, feedbackSearch, perPage]);
 
+  const fetchWorkflowTemplates = useCallback(async () => {
+    setTemplateLoading(true);
+    setTemplateError(null);
+    try {
+      const params = new URLSearchParams({ page: String(templatePage), per_page: String(perPage) });
+      if (templateSearch) params.set("q", templateSearch);
+      const r = await fetch(`/api/admin/workflow-templates?${params}`);
+      const d = (await r.json()) as {
+        rows?: WorkflowTemplateAdminRow[];
+        emailMap?: Record<string, string>;
+        total?: number;
+        error?: string;
+      };
+      if (!r.ok) throw new Error(d.error ?? `HTTP ${r.status}`);
+      setTemplateRows(d.rows ?? []);
+      setTemplateEmailMap(d.emailMap ?? {});
+      setTemplateTotal(d.total ?? 0);
+    } catch (e) {
+      setTemplateError(e instanceof Error ? e.message : "Failed to load templates");
+    } finally {
+      setTemplateLoading(false);
+    }
+  }, [templatePage, templateSearch, perPage]);
+
   const fetchCreditRedeems = useCallback(async () => {
     setCreditLoading(true);
     setCreditError(null);
@@ -515,13 +560,33 @@ export default function AdminPage() {
     }
   }, [fetchCreditRedeems, fetchActivePartnerPlans]);
 
+  const deleteWorkflowTemplate = useCallback(async (id: string) => {
+    setDeletingTemplateId(id);
+    setTemplateError(null);
+    try {
+      const r = await fetch("/api/admin/workflow-templates", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      const d = (await r.json().catch(() => ({}))) as { error?: string };
+      if (!r.ok) throw new Error(d.error ?? `HTTP ${r.status}`);
+      await fetchWorkflowTemplates();
+    } catch (e) {
+      setTemplateError(e instanceof Error ? e.message : "Could not delete template");
+    } finally {
+      setDeletingTemplateId(null);
+    }
+  }, [fetchWorkflowTemplates]);
+
   useEffect(() => {
     if (tab === "generations") void fetchGenerations();
     else if (tab === "runs") void fetchRuns();
     else if (tab === "credits") void fetchCreditRedeems();
     else if (tab === "onboarding") void fetchOnboarding();
     else if (tab === "feedback") void fetchFeedback();
-  }, [tab, fetchGenerations, fetchRuns, fetchCreditRedeems, fetchOnboarding, fetchFeedback]);
+    else if (tab === "templates") void fetchWorkflowTemplates();
+  }, [tab, fetchGenerations, fetchRuns, fetchCreditRedeems, fetchOnboarding, fetchFeedback, fetchWorkflowTemplates]);
 
   useEffect(() => {
     if (tab === "generations" && activeCompPlans.length === 0 && !partnerPlansLoading) {
@@ -533,6 +598,7 @@ export default function AdminPage() {
   const runTotalPages = Math.max(1, Math.ceil(runTotal / perPage));
   const onboardTotalPages = Math.max(1, Math.ceil(onboardTotal / perPage));
   const feedbackTotalPages = Math.max(1, Math.ceil(feedbackTotal / perPage));
+  const templateTotalPages = Math.max(1, Math.ceil(templateTotal / perPage));
   const creditLogTotalPages = Math.max(1, Math.ceil(creditLogTotal / creditLogPerPage));
 
   const copyRedeemLink = useCallback(async (secret: string, rowId: string) => {
@@ -661,6 +727,8 @@ export default function AdminPage() {
               <p className="text-xs text-white/40">
                 {tab === "credits"
                   ? "Credit gift links & redemption audit"
+                  : tab === "templates"
+                    ? "Manage workflow community templates (review and delete)"
                   : tab === "onboarding"
                     ? "Onboarding answers, emails, and subscription status after checkout"
                     : tab === "feedback"
@@ -719,6 +787,16 @@ export default function AdminPage() {
               )}
             >
               Feedback
+            </button>
+            <button
+              type="button"
+              onClick={() => { setTab("templates"); setTemplatePage(1); }}
+              className={cn(
+                "rounded-lg px-3 py-1.5 text-xs font-semibold transition",
+                tab === "templates" ? "bg-violet-500 text-white" : "bg-white/5 text-white/60 hover:bg-white/10",
+              )}
+            >
+              Templates
             </button>
           </div>
         </div>
@@ -784,6 +862,8 @@ export default function AdminPage() {
               placeholder={
                 tab === "generations"
                   ? "Search by label or task ID…"
+                  : tab === "templates"
+                    ? "Search by template name, blurb, or creator…"
                   : tab === "onboarding"
                     ? "Search work type or referral source…"
                     : "Search by URL, title, or prompt…"
@@ -791,12 +871,15 @@ export default function AdminPage() {
               value={
                 tab === "generations"
                   ? genSearchInput
+                  : tab === "templates"
+                    ? templateSearchInput
                   : tab === "onboarding"
                     ? onboardSearchInput
                     : runSearchInput
               }
               onChange={(e) => {
                 if (tab === "generations") setGenSearchInput(e.target.value);
+                else if (tab === "templates") setTemplateSearchInput(e.target.value);
                 else if (tab === "onboarding") setOnboardSearchInput(e.target.value);
                 else setRunSearchInput(e.target.value);
               }}
@@ -805,6 +888,9 @@ export default function AdminPage() {
                   if (tab === "generations") {
                     setGenSearch(genSearchInput);
                     setGenPage(1);
+                  } else if (tab === "templates") {
+                    setTemplateSearch(templateSearchInput);
+                    setTemplatePage(1);
                   } else if (tab === "onboarding") {
                     setOnboardSearch(onboardSearchInput);
                     setOnboardPage(1);
@@ -1539,6 +1625,109 @@ export default function AdminPage() {
                   type="button"
                   disabled={feedbackPage >= feedbackTotalPages}
                   onClick={() => setFeedbackPage((p) => p + 1)}
+                  className="flex h-7 w-7 items-center justify-center rounded-md border border-white/10 bg-white/5 text-white/50 transition hover:bg-white/10 disabled:opacity-30"
+                >
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : tab === "templates" ? (
+          <div className="mt-4 space-y-3">
+            {templateError ? (
+              <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">{templateError}</div>
+            ) : null}
+            {templateLoading && templateRows.length === 0 ? (
+              <div className="mt-6 flex items-center justify-center gap-2 text-white/40">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                Loading templates…
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-white/[0.08]">
+                <table className="w-full min-w-[980px] text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-white/10 text-[10px] uppercase tracking-wide text-white/40">
+                      <th className="px-3 py-2.5 font-semibold">Template</th>
+                      <th className="px-3 py-2.5 font-semibold">Creator</th>
+                      <th className="px-3 py-2.5 font-semibold">Created</th>
+                      <th className="px-3 py-2.5 font-semibold">Updated</th>
+                      <th className="px-3 py-2.5 font-semibold">Source</th>
+                      <th className="px-3 py-2.5 font-semibold">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {templateRows.map((row) => {
+                      const creator =
+                        (row.created_by && templateEmailMap[row.created_by]) ||
+                        row.created_by_name ||
+                        row.created_by ||
+                        "-";
+                      return (
+                        <tr key={row.id} className="border-b border-white/5 transition hover:bg-white/[0.02]">
+                          <td className="max-w-[320px] px-3 py-2.5">
+                            <p className="truncate font-medium text-white/85" title={row.name}>{row.name}</p>
+                            <p className="mt-0.5 truncate text-[11px] text-white/45" title={row.blurb ?? ""}>
+                              {row.blurb?.trim() || "-"}
+                            </p>
+                            <p className="mt-1 font-mono text-[10px] text-white/30">{row.id}</p>
+                          </td>
+                          <td className="max-w-[240px] truncate px-3 py-2.5 text-violet-200/90" title={creator}>{creator}</td>
+                          <td className="whitespace-nowrap px-3 py-2.5 text-white/45">{new Date(row.created_at).toLocaleString()}</td>
+                          <td className="whitespace-nowrap px-3 py-2.5 text-white/45">{new Date(row.updated_at).toLocaleString()}</td>
+                          <td className="px-3 py-2.5">
+                            <span className="inline-flex items-center gap-1 rounded-full border border-violet-500/35 bg-violet-500/15 px-2 py-0.5 text-[10px] font-semibold text-violet-200">
+                              <LayoutTemplate className="h-3 w-3" />
+                              Community
+                            </span>
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <button
+                              type="button"
+                              onClick={() => void deleteWorkflowTemplate(row.id)}
+                              disabled={deletingTemplateId === row.id}
+                              className="inline-flex items-center gap-1 rounded-md border border-red-500/35 bg-red-500/10 px-2 py-1 text-[10px] font-semibold text-red-200 transition hover:bg-red-500/20 disabled:opacity-50"
+                            >
+                              {deletingTemplateId === row.id ? (
+                                <>
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                  Deleting…
+                                </>
+                              ) : (
+                                <>
+                                  <Trash2 className="h-3 w-3" />
+                                  Remove
+                                </>
+                              )}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                {templateRows.length === 0 && !templateLoading ? (
+                  <p className="py-8 text-center text-sm text-white/30">No templates found</p>
+                ) : null}
+              </div>
+            )}
+            <div className="flex items-center justify-between px-1">
+              <p className="text-[11px] text-white/40">{templateTotal} total</p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={templatePage <= 1}
+                  onClick={() => setTemplatePage((p) => p - 1)}
+                  className="flex h-7 w-7 items-center justify-center rounded-md border border-white/10 bg-white/5 text-white/50 transition hover:bg-white/10 disabled:opacity-30"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </button>
+                <span className="text-xs tabular-nums text-white/50">
+                  {templatePage} / {templateTotalPages}
+                </span>
+                <button
+                  type="button"
+                  disabled={templatePage >= templateTotalPages}
+                  onClick={() => setTemplatePage((p) => p + 1)}
                   className="flex h-7 w-7 items-center justify-center rounded-md border border-white/10 bg-white/5 text-white/50 transition hover:bg-white/10 disabled:opacity-30"
                 >
                   <ChevronRight className="h-3.5 w-3.5" />

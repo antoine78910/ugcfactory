@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 
 type Ctx = { params: Promise<{ id: string }> };
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 function isMissingCommunityTemplatesTable(error: { code?: string; message?: string } | null): boolean {
   if (!error) return false;
