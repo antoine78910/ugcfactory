@@ -6397,7 +6397,14 @@ export default function LinkToAdUniverse({
           this paint on the very first render — no flash of the URL form.
         */}
         {isResumeHydrating && !showBrandHeaderInsteadOfUrl ? (
-          <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 py-10">
+          <div className="relative flex min-h-[60vh] flex-col items-center justify-center gap-4 py-10">
+            <Link
+              href="/link-to-ad"
+              className="absolute right-0 top-0 inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/[0.03] px-3 py-1.5 text-xs font-medium text-white/75 transition hover:border-white/25 hover:bg-white/[0.06] hover:text-white"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
+              Return to Link to Ad
+            </Link>
             <div
               className="relative h-12 w-12 rounded-full border-2 border-violet-500/20 border-t-violet-400 motion-safe:animate-spin"
               aria-hidden

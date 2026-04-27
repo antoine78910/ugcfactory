@@ -128,7 +128,7 @@ export async function POST(req: Request) {
   const q = auth.supabase.from("workflow_community_templates");
   const { data, error } = isUpdate
     ? await q
-        .update(payload)
+        .update({ ...payload, updated_at: new Date().toISOString() })
         .eq("id", templateId)
         .eq("created_by", auth.user.id)
         .select("id, name, blurb, created_by_name")
