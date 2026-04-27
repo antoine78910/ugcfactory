@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { DATAFAST_GOALS, trackDatafastGoal } from "@/lib/analytics/datafastGoals";
 import { cn } from "@/lib/utils";
 import SetupClient from "@/app/setup/SetupClient";
 
@@ -142,6 +143,11 @@ export default function OnboardingClient() {
 
   async function handleSubmit() {
     if (!workType || !referralSource || !workOtherOk || !referralOtherOk) return;
+    trackDatafastGoal(DATAFAST_GOALS.onboarding_next_clicked, {
+      step: "personalize",
+      work_type: payloadWorkType(workType, workOtherText),
+      referral_source: payloadReferral(referralSource, referralOtherText),
+    });
     setLoading(true);
     try {
       await fetch("/api/onboarding", {

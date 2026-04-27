@@ -927,6 +927,17 @@ export default function AdminPage() {
               ))}
             </select>
           )}
+          {tab === "generations" && (
+            <button
+              type="button"
+              onClick={() => void fetchGenerations()}
+              disabled={loading}
+              className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs font-medium text-white/75 transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+              Refresh
+            </button>
+          )}
         </div>
 
         {/* Table */}
