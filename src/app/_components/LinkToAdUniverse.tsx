@@ -1408,7 +1408,14 @@ export default function LinkToAdUniverse({
   const _30sUnlocked = false;
   const DEMO_EMAILS = new Set(["anto.delbos@mail.com", "anto.delbos@gmail.com", "app@youry.com"]);
   const isDemoUser = Boolean(_userEmail && DEMO_EMAILS.has(_userEmail.toLowerCase()));
-  const [hideCredits, setHideCredits] = useState(false);
+  const [manualHideCredits, setManualHideCredits] = useState(false);
+  /**
+   * Product rule:
+   * - Non-trial users should never see credit pills in Link to Ad steps.
+   * - Trial users keep seeing them.
+   * - Demo-only hidden toggle can still force-hide for recordings.
+   */
+  const hideCredits = !isTrial || manualHideCredits;
   const [demoReplayActive, setDemoReplayActive] = useState(false);
   const [demoPhaseIndex, setDemoPhaseIndex] = useState(0);
   const DEMO_PHASES = [
@@ -6637,7 +6644,7 @@ export default function LinkToAdUniverse({
                 {isDemoUser ? (
                   <button
                     type="button"
-                    onClick={() => setHideCredits((v) => !v)}
+                    onClick={() => setManualHideCredits((v) => !v)}
                     className="mt-1 h-4 w-4 rounded-sm opacity-[0.08] hover:opacity-30 transition bg-white/20"
                     title=""
                     aria-label="toggle"
