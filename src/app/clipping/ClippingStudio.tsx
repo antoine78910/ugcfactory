@@ -306,10 +306,8 @@ export default function ClippingStudio() {
           deviceId: selectedCameraId ? { exact: selectedCameraId } : undefined,
           facingMode: selectedCameraId ? undefined : "user",
         },
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-        },
+        // Capture video only: exported audio must come from template only.
+        audio: false,
       });
       userMediaStreamRef.current = stream;
       if (webcamVideoRef.current) {
@@ -338,7 +336,7 @@ export default function ClippingStudio() {
       return stream;
     } catch (err) {
       const msg =
-        err instanceof Error ? err.message : "Could not access camera or microphone.";
+        err instanceof Error ? err.message : "Could not access camera.";
       setErrorMessage(msg);
       setStage("error");
       return null;
@@ -361,7 +359,8 @@ export default function ClippingStudio() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { deviceId: { exact: deviceId } },
-          audio: { echoCancellation: true, noiseSuppression: true },
+          // Keep camera switch aligned with the no-microphone recording policy.
+          audio: false,
         });
         userMediaStreamRef.current = stream;
         if (webcamVideoRef.current) {
@@ -556,13 +555,6 @@ export default function ClippingStudio() {
       const audioCtx = new AudioCtor();
       audioContextRef.current = audioCtx;
       const dest = audioCtx.createMediaStreamDestination();
-
-      const micTracks = userStream.getAudioTracks();
-      if (micTracks.length > 0) {
-        const micOnly = new MediaStream(micTracks);
-        const micSource = audioCtx.createMediaStreamSource(micOnly);
-        micSource.connect(dest);
-      }
 
       const tpl = templateVideoRef.current;
       if (tpl) {
@@ -948,7 +940,7 @@ export default function ClippingStudio() {
               {stage === "permission" ? (
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/55 p-6 text-center">
                   <Video className="size-8 text-white/70" aria-hidden />
-                  <p className="text-sm font-semibold">Allow camera + microphone</p>
+                  <p className="text-sm font-semibold">Allow camera access</p>
                   <p className="max-w-[18rem] text-xs text-white/55">
                     We capture only what you record. Nothing leaves your device until
                     you click download.
@@ -1235,7 +1227,7 @@ export default function ClippingStudio() {
                   onClick={handleAllowAccess}
                   className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-semibold hover:bg-violet-500"
                 >
-                  <Video className="size-4" aria-hidden /> Allow camera & mic
+                  <Video className="size-4" aria-hidden /> Allow camera
                 </button>
               ) : (
                 <p className="text-[11px] text-white/45">
@@ -1246,7 +1238,7 @@ export default function ClippingStudio() {
             </div>
 
             <ol className="mt-1 list-decimal space-y-1 pl-4 text-[11px] text-white/45">
-              <li>Allow camera + microphone access</li>
+              <li>Allow camera access</li>
               <li>
                 Upload the template that plays{" "}
                 {templateId === "split_focus_bottom_webcam" ? "on the top 3/4" : "on the bottom half"}

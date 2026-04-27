@@ -28,8 +28,8 @@ const HEADER_H = 22;
 const PORT_R = 3.5;
 const MIN_CARD_W = 132;
 const MIN_CARD_H = 74;
-const PREVIEW_MAX_NODES = 14;
-const PREVIEW_FOCUS_WIDTH = 1400;
+/** Template cards must show the full graph, not only the first left-side modules. */
+const PREVIEW_MAX_NODES = 240;
 
 const CHAR_W_LABEL = 5.6;
 const CHAR_W_BODY = 5.4;
@@ -486,14 +486,12 @@ function layoutNodes(
   const page = project.pages.find((p) => p.id === project.activePageId) ?? project.pages[0];
   if (!page || !Array.isArray(page.nodes) || page.nodes.length === 0) return null;
 
-  // Keep previews readable on large canvases:
-  // focus the "start" of the workflow (left-most area) instead of cramming the full graph.
+  // Show the full workflow graph in template previews (users expect every module
+  // they published to appear in the card snapshot).
   const sortedByStart = [...page.nodes].sort(
     (a, b) => a.position.x - b.position.x || a.position.y - b.position.y,
   );
-  const leftMostX = Math.min(...sortedByStart.map((n) => n.position.x));
-  const nodesInStartWindow = sortedByStart.filter((n) => n.position.x <= leftMostX + PREVIEW_FOCUS_WIDTH);
-  const nodes = (nodesInStartWindow.length > 0 ? nodesInStartWindow : sortedByStart).slice(0, PREVIEW_MAX_NODES);
+  const nodes = sortedByStart.slice(0, PREVIEW_MAX_NODES);
 
   const nodeIds = new Set(nodes.map((n) => n.id));
   const minX = Math.min(...nodes.map((n) => n.position.x));

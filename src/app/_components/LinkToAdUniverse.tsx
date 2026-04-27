@@ -1419,6 +1419,8 @@ export default function LinkToAdUniverse({
   const hideStepCredits = !isTrial || manualHideCredits;
   const hideInitialGenerateCredits = manualHideCredits;
   const hideRegenerateCredits = manualHideCredits;
+  // Backward-compatible alias used by older render closures during HMR.
+  const hideCredits = hideStepCredits;
   const [demoReplayActive, setDemoReplayActive] = useState(false);
   const [demoPhaseIndex, setDemoPhaseIndex] = useState(0);
   const DEMO_PHASES = [
