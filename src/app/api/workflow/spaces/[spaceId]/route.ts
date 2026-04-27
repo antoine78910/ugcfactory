@@ -11,6 +11,30 @@ const MAX_PROJECT_BYTES = 1_800_000;
 
 type Ctx = { params: Promise<{ spaceId: string }> };
 
+function isMissingWorkflowSpacesInfra(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  const msg = (error.message ?? "").toLowerCase();
+  const mentionsWorkflowInfra =
+    msg.includes("workflow_spaces") ||
+    msg.includes("workflow_space_collaborators") ||
+    msg.includes("workflow_invite_tokens");
+  return (
+    error.code === "42P01" ||
+    error.code === "PGRST205" ||
+    (mentionsWorkflowInfra && (msg.includes("schema cache") || msg.includes("does not exist")))
+  );
+}
+
+function workflowInfraMissingResponse() {
+  return NextResponse.json(
+    {
+      error:
+        "Workflow sharing storage is not enabled yet on this database. Run the latest Supabase migration (workflow_spaces), then retry.",
+    },
+    { status: 503 },
+  );
+}
+
 function isValidProject(p: unknown): p is WorkflowProjectStateV1 {
   if (!p || typeof p !== "object") return false;
   const o = p as { v?: unknown; pages?: unknown; activePageId?: unknown };
@@ -54,6 +78,9 @@ export async function GET(_req: Request, ctx: Ctx) {
     .maybeSingle();
 
   if (error) {
+    if (isMissingWorkflowSpacesInfra(error)) {
+      return workflowInfraMissingResponse();
+    }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
   if (!row) {
@@ -144,6 +171,9 @@ export async function PUT(req: Request, ctx: Ctx) {
       .eq("space_id", spaceId);
 
     if (countErr) {
+      if (isMissingWorkflowSpacesInfra(countErr)) {
+        return workflowInfraMissingResponse();
+      }
       return NextResponse.json({ error: countErr.message }, { status: 500 });
     }
 
@@ -154,6 +184,9 @@ export async function PUT(req: Request, ctx: Ctx) {
         role: "owner",
       });
       if (insertErr) {
+        if (isMissingWorkflowSpacesInfra(insertErr)) {
+          return workflowInfraMissingResponse();
+        }
         return NextResponse.json({ error: insertErr.message }, { status: 500 });
       }
       role = "owner";
@@ -197,6 +230,9 @@ export async function PUT(req: Request, ctx: Ctx) {
       updated_at: nowIso,
     });
     if (insertErr) {
+      if (isMissingWorkflowSpacesInfra(insertErr)) {
+        return workflowInfraMissingResponse();
+      }
       return NextResponse.json({ error: insertErr.message }, { status: 500 });
     }
   } else {
@@ -212,6 +248,9 @@ export async function PUT(req: Request, ctx: Ctx) {
       .update(updatePayload)
       .eq("id", spaceId);
     if (updateErr) {
+      if (isMissingWorkflowSpacesInfra(updateErr)) {
+        return workflowInfraMissingResponse();
+      }
       return NextResponse.json({ error: updateErr.message }, { status: 500 });
     }
   }

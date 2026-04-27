@@ -6,6 +6,20 @@ import { NextResponse } from "next/server";
 import { requireSupabaseUser } from "@/lib/supabase/requireUser";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 
+function isMissingWorkflowSpacesInfra(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  const msg = (error.message ?? "").toLowerCase();
+  const mentionsWorkflowInfra =
+    msg.includes("workflow_spaces") ||
+    msg.includes("workflow_space_collaborators") ||
+    msg.includes("workflow_invite_tokens");
+  return (
+    error.code === "42P01" ||
+    error.code === "PGRST205" ||
+    (mentionsWorkflowInfra && (msg.includes("schema cache") || msg.includes("does not exist")))
+  );
+}
+
 /**
  * GET /api/workflow/spaces
  * Lists every workflow space the caller is a collaborator on (owner, editor,
@@ -27,6 +41,15 @@ export async function GET() {
     .eq("user_id", auth.user.id);
 
   if (collabErr) {
+    if (isMissingWorkflowSpacesInfra(collabErr)) {
+      return NextResponse.json(
+        {
+          error:
+            "Workflow sharing storage is not enabled yet on this database. Run the latest Supabase migration (workflow_spaces), then retry.",
+        },
+        { status: 503 },
+      );
+    }
     return NextResponse.json({ error: collabErr.message }, { status: 500 });
   }
 
@@ -41,6 +64,15 @@ export async function GET() {
     .in("id", spaceIds);
 
   if (spaceErr) {
+    if (isMissingWorkflowSpacesInfra(spaceErr)) {
+      return NextResponse.json(
+        {
+          error:
+            "Workflow sharing storage is not enabled yet on this database. Run the latest Supabase migration (workflow_spaces), then retry.",
+        },
+        { status: 503 },
+      );
+    }
     return NextResponse.json({ error: spaceErr.message }, { status: 500 });
   }
 

@@ -4323,7 +4323,8 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
               error:
                 res.status === 401
                   ? "Sign in to share this workspace."
-                  : "Could not sync workspace to the cloud.",
+                  : res.error ||
+                    "Could not sync workspace to the cloud.",
             };
           }
           return { ok: true };
