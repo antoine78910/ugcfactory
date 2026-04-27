@@ -5,6 +5,10 @@ import { ChevronDown } from "lucide-react";
 
 const FAQ_ITEMS = [
   {
+    q: "Can I access and edit the image and video prompts during the Link to Ad process?",
+    a: "Yes. You first go through a step to choose your marketing angles, then generate image prompts. After that, you can review and edit those prompts before generation. We generate 3 images to reduce AI-related errors, then you choose the one you want to use for your video ad. Next, we create the video prompt, and you can also check and edit it before finally generating your video.",
+  },
+  {
     q: "What kind of products work best?",
     a: "Youry works with any e-commerce product: skincare, supplements, fashion, electronics, home goods, and more. If it has a product page, we can turn it into a video ad.",
   },

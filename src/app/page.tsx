@@ -31,17 +31,17 @@ const STEPS = [
     number: "01",
     title: "Paste your product URL",
     description:
-      "Drop in a product or landing page URL and we instantly extract the assets and product context needed to create ad concepts.",
+      "Drop in your product or landing page URL and we decode your brand to understand your persona, their pain points, and the winning CTAs most likely to convert.",
     mediaImage: "/steps/step-link-input.png",
     mediaAlt: "Product URL input field",
   },
   {
     number: "02",
-    title: "Pick the angle and script",
+    title: "Choose your winning angle and persona",
     description:
-      "Select the message you want to test and refine the hook, pain point, benefits, and CTA before generating.",
+      "Choose your winning angle, then choose the persona we created for you from 3 realistic AI avatar images before generating your video.",
     mediaImage: "/steps/step-pick-angle-script.png",
-    mediaAlt: "Product and angle selection",
+    mediaAlt: "Selection between AI-generated avatar images",
   },
   {
     number: "03",
@@ -259,7 +259,7 @@ export default function LandingPage() {
           <div className="pointer-events-none absolute -left-16 top-8 h-48 w-48 rounded-full bg-violet-600/8 blur-[60px]" />
 
           <h2 className="relative text-[clamp(1.25rem,4vw+0.5rem,3rem)] font-extrabold italic leading-tight tracking-tight sm:text-4xl md:text-5xl">
-            YOUR NEXT UGC IS ONE CLICK AWAY
+            YOUR NEXT WINNING UGC IS ONE CLICK AWAY
           </h2>
           <p className="relative mx-auto mt-4 max-w-lg text-sm leading-relaxed text-white/45 sm:mt-5 sm:text-base">
             Turn your product page into your next best-performing UGC. Right now.
