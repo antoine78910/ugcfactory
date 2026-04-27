@@ -3917,7 +3917,8 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
   const resolvedSpaceId = useMemo(() => normalizeWorkflowSpaceId(spaceId), [spaceId]);
 
   const [storageScope, setStorageScope] = useState<string | null>(null);
-  const [authUserId, setAuthUserId] = useState<string | null>(null);
+  /** `undefined` = session not resolved yet (avoid redirecting to /workflow on slow mobile). */
+  const [authUserId, setAuthUserId] = useState<string | null | undefined>(undefined);
   const [workflowProject, setWorkflowProject] = useState<WorkflowProjectStateV1>(() => defaultWorkflowProject());
   const [workflowHydrated, setWorkflowHydrated] = useState(false);
   const [spaceName, setSpaceName] = useState("Untitled workflow");
@@ -4020,7 +4021,10 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
       return;
     }
 
-    if (!authUserId) {
+    if (authUserId === undefined) {
+      return;
+    }
+    if (authUserId === null) {
       router.replace("/workflow");
       return;
     }

@@ -1,6 +1,7 @@
 "use client";
 
 import { Layers, LayoutTemplate, Pencil, Plus, Search, Users } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
 import { toast } from "sonner";
@@ -36,6 +37,9 @@ import {
 } from "./workflowSpacesCloud";
 
 type TabId = "my" | "shared" | "templates";
+
+/** Local row plus optional server-owned entry when this device has no localStorage copy. */
+type MySpaceRow = WorkflowSpaceMeta & { fromCloudOnly?: boolean };
 
 function formatTimeAgo(ts: number): string {
   const s = Math.floor((Date.now() - ts) / 1000);
@@ -250,12 +254,37 @@ export function WorkflowSpacesLanding() {
     return list.filter((s) => s.name.toLowerCase().includes(q));
   }, [cloudSpaces, query]);
 
-  const filteredSpaces = useMemo(() => {
+  /**
+   * "My workflows" = local index + any space you own on the server that is not
+   * on this device yet (e.g. phone after creating workflows on desktop).
+   */
+  const mergedMySpaces = useMemo((): MySpaceRow[] => {
+    const local = spaces.map((s) => ({ ...s, fromCloudOnly: false as const }));
+    const localIds = new Set(local.map((s) => s.id));
+    const extra: MySpaceRow[] = [];
+    if (authUserId) {
+      for (const c of cloudSpaces) {
+        if (!c.isOwn || localIds.has(c.id)) continue;
+        extra.push({
+          id: c.id,
+          name: c.name,
+          updatedAt: Number.isFinite(Date.parse(c.updatedAt)) ? Date.parse(c.updatedAt) : Date.now(),
+          previewDataUrl: c.previewDataUrl ?? undefined,
+          publishedCommunityTemplateId: c.publishedCommunityTemplateId ?? undefined,
+          fromCloudOnly: true,
+        });
+      }
+    }
+    extra.sort((a, b) => b.updatedAt - a.updatedAt);
+    return [...local, ...extra];
+  }, [spaces, cloudSpaces, authUserId]);
+
+  const filteredMySpaces = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const list = spaces;
+    const list = mergedMySpaces;
     if (!q) return list;
     return list.filter((s) => s.name.toLowerCase().includes(q));
-  }, [spaces, query]);
+  }, [mergedMySpaces, query]);
 
   const filteredTemplates = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -296,21 +325,19 @@ export function WorkflowSpacesLanding() {
     router.push(`/workflow/space/${encodeURIComponent(meta.id)}`);
   };
 
-  const openSpace = (id: string) => {
-    router.push(`/workflow/space/${encodeURIComponent(id)}`);
-  };
-
   const openTemplate = (id: string) => {
     router.push(`/workflow/template/${encodeURIComponent(id)}`);
   };
-  const removeSpace = (e: MouseEvent, id: string) => {
+  const removeSpace = (e: MouseEvent, row: MySpaceRow) => {
     e.preventDefault();
     e.stopPropagation();
     if (storageScope === null) return;
-    deleteSpace(storageScope, id);
-    refresh(storageScope);
+    if (!row.fromCloudOnly) {
+      deleteSpace(storageScope, row.id);
+      refresh(storageScope);
+    }
     if (authUserId) {
-      void deleteCloudWorkflowSpace(id).then((ok) => {
+      void deleteCloudWorkflowSpace(row.id).then((ok) => {
         if (ok) void refreshCloudSpaces();
       });
     }
@@ -348,9 +375,10 @@ export function WorkflowSpacesLanding() {
     },
     [storageScope, refreshCommunityTemplates],
   );
-  const startRenameSpace = (e: MouseEvent, space: WorkflowSpaceMeta) => {
+  const startRenameSpace = (e: MouseEvent, space: MySpaceRow) => {
     e.preventDefault();
     e.stopPropagation();
+    if (space.fromCloudOnly) return;
     setEditingSpaceId(space.id);
     setEditingSpaceName(space.name);
   };
@@ -358,8 +386,12 @@ export function WorkflowSpacesLanding() {
   const commitRenameSpace = (spaceId: string) => {
     if (storageScope === null) return;
     const nextName = editingSpaceName.trim();
-    const current = spaces.find((x) => x.id === spaceId);
+    const current = mergedMySpaces.find((x) => x.id === spaceId);
     if (!current) {
+      setEditingSpaceId(null);
+      return;
+    }
+    if (current.fromCloudOnly) {
       setEditingSpaceId(null);
       return;
     }
@@ -369,7 +401,7 @@ export function WorkflowSpacesLanding() {
     setEditingSpaceId(null);
   };
   return (
-    <div className="relative min-h-[100dvh] overflow-hidden bg-[#06070d] text-white">
+    <div className="relative min-h-[100dvh] overflow-x-hidden bg-[#06070d] text-white">
       {/* Dots only on the canvas (`WorkflowEditor`); keep import so the symbol is always defined for bundlers/HMR */}
       <WorkflowAmbientLayer dots={false} />
       <div className="pointer-events-none absolute left-1/2 top-0 z-[1] h-[380px] w-[min(100%,920px)] -translate-x-1/2 rounded-full bg-violet-600/11 blur-[100px]" />
@@ -451,6 +483,8 @@ export function WorkflowSpacesLanding() {
 
         {!hydrated || storageScope === null ? (
           <p className="mt-10 text-center text-sm text-white/40">Loading workflows…</p>
+        ) : tab === "my" && authUserId && cloudLoading && spaces.length === 0 ? (
+          <p className="mt-12 text-center text-sm text-white/45">Loading your workflows…</p>
         ) : tab === "shared" ? (
           !authUserId ? (
             <p className="mt-12 text-center text-sm text-white/45">
@@ -467,17 +501,10 @@ export function WorkflowSpacesLanding() {
                   (s.ownerName?.trim() || s.ownerEmail?.trim() || "a collaborator").slice(0, 80);
                 return (
                   <li key={s.id}>
-                    <div
-                      role="link"
-                      tabIndex={0}
-                      onClick={() => openSpace(s.id)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          openSpace(s.id);
-                        }
-                      }}
-                      className="flex w-full cursor-pointer flex-col overflow-hidden rounded-2xl border border-white/[0.1] bg-[#0b0912]/90 text-left shadow-[0_12px_40px_rgba(0,0,0,0.35)] outline-none transition hover:border-violet-400/30 hover:bg-[#0b0912] hover:shadow-[0_12px_40px_rgba(139,92,246,0.08)] focus-visible:ring-2 focus-visible:ring-violet-500/50"
+                    <Link
+                      href={`/workflow/space/${encodeURIComponent(s.id)}`}
+                      scroll
+                      className="flex w-full touch-manipulation cursor-pointer flex-col overflow-hidden rounded-2xl border border-white/[0.1] bg-[#0b0912]/90 text-left shadow-[0_12px_40px_rgba(0,0,0,0.35)] outline-none transition hover:border-violet-400/30 hover:bg-[#0b0912] hover:shadow-[0_12px_40px_rgba(139,92,246,0.08)] focus-visible:ring-2 focus-visible:ring-violet-500/50"
                     >
                       <div className="relative aspect-[16/10] w-full overflow-hidden bg-gradient-to-br from-violet-900/30 via-[#1a1a22] to-violet-950/35">
                         {s.previewDataUrl ? (
@@ -499,7 +526,7 @@ export function WorkflowSpacesLanding() {
                           {s.role === "editor" ? "Can edit" : s.role === "owner" ? "Owner" : "Can view"}
                         </p>
                       </div>
-                    </div>
+                    </Link>
                   </li>
                 );
               })}
@@ -572,7 +599,7 @@ export function WorkflowSpacesLanding() {
               ))}
             </ul>
           )
-        ) : filteredSpaces.length === 0 ? (
+        ) : filteredMySpaces.length === 0 ? (
           <div className="mt-12 rounded-2xl border border-dashed border-white/15 bg-white/[0.02] px-6 py-14 text-center">
             <p className="text-sm text-white/55">
               {query.trim() ? "No workflows match your search." : "No workflows yet, create your first one above."}
@@ -580,19 +607,12 @@ export function WorkflowSpacesLanding() {
           </div>
         ) : (
           <ul className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {filteredSpaces.map((s) => (
+            {filteredMySpaces.map((s) => (
               <li key={s.id} className="group relative">
-                <div
-                  role="link"
-                  tabIndex={0}
-                  onClick={() => openSpace(s.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      openSpace(s.id);
-                    }
-                  }}
-                  className="flex w-full cursor-pointer flex-col overflow-hidden rounded-2xl border border-white/[0.1] bg-[#0b0912]/90 text-left shadow-[0_12px_40px_rgba(0,0,0,0.35)] outline-none transition hover:border-violet-400/30 hover:bg-[#0b0912] hover:shadow-[0_12px_40px_rgba(139,92,246,0.08)] focus-visible:ring-2 focus-visible:ring-violet-500/50"
+                <Link
+                  href={`/workflow/space/${encodeURIComponent(s.id)}`}
+                  scroll
+                  className="flex w-full touch-manipulation cursor-pointer flex-col overflow-hidden rounded-2xl border border-white/[0.1] bg-[#0b0912]/90 text-left shadow-[0_12px_40px_rgba(0,0,0,0.35)] outline-none transition hover:border-violet-400/30 hover:bg-[#0b0912] hover:shadow-[0_12px_40px_rgba(139,92,246,0.08)] focus-visible:ring-2 focus-visible:ring-violet-500/50"
                 >
                   <div className="relative aspect-[16/10] w-full overflow-hidden bg-gradient-to-br from-violet-900/30 via-[#1a1a22] to-violet-950/35">
                     {typeof s.previewDataUrl === "string" && s.previewDataUrl.trim() ? (
@@ -603,6 +623,8 @@ export function WorkflowSpacesLanding() {
                         loading="lazy"
                         decoding="async"
                       />
+                    ) : s.fromCloudOnly ? (
+                      <div className="absolute inset-0 bg-gradient-to-br from-violet-900/30 via-[#1a1a22] to-violet-950/35" />
                     ) : (
                       <WorkflowSpaceCardPreviewFallback scope={storageScope} spaceId={s.id} />
                     )}
@@ -630,26 +652,28 @@ export function WorkflowSpacesLanding() {
                         ) : (
                           <div className="inline-flex max-w-full items-center gap-1.5">
                             <p className="truncate font-semibold text-white">{s.name}</p>
-                            <button
-                              type="button"
-                              title="Edit name"
-                              onClick={(e) => startRenameSpace(e, s)}
-                              className="nodrag nopan inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-white/55 transition hover:bg-white/10 hover:text-white sm:text-white/40"
-                            >
-                              <Pencil className="h-3.5 w-3.5" strokeWidth={2.2} />
-                            </button>
+                            {!s.fromCloudOnly ? (
+                              <button
+                                type="button"
+                                title="Edit name"
+                                onClick={(e) => startRenameSpace(e, s)}
+                                className="nodrag nopan inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-white/55 transition hover:bg-white/10 hover:text-white sm:text-white/40"
+                              >
+                                <Pencil className="h-3.5 w-3.5" strokeWidth={2.2} />
+                              </button>
+                            ) : null}
                           </div>
                         )}
                       </div>
                       <p className="mt-1 text-[12px] text-white/40">Edited {formatTimeAgo(s.updatedAt)}</p>
                     </div>
                   </div>
-                </div>
+                </Link>
                 <div className="absolute bottom-3 right-3 z-10 flex flex-wrap justify-end gap-1 sm:bottom-4 sm:right-4 sm:gap-1.5">
                   <button
                     type="button"
                     title="Delete workflow"
-                    onClick={(e) => removeSpace(e, s.id)}
+                    onClick={(e) => removeSpace(e, s)}
                     className="rounded-lg border border-white/[0.08] bg-black/50 px-2 py-1 text-[11px] font-semibold text-white/55 shadow-sm backdrop-blur-sm transition hover:bg-red-500/15 hover:text-red-200"
                   >
                     Delete
