@@ -186,7 +186,7 @@ export default function LandingPage() {
             the ring downward vs the section anchor.
         */}
         <div
-          className="pointer-events-none relative z-[2] mt-8 h-[min(360px,44svh)] overflow-hidden sm:absolute sm:inset-x-0 sm:bottom-0 sm:mt-0 sm:h-[min(530px,60svh)] sm:translate-y-6 lg:h-[min(640px,66svh)] lg:translate-y-5"
+          className="pointer-events-none relative z-[2] mt-6 h-[min(260px,32svh)] overflow-hidden sm:absolute sm:inset-x-0 sm:bottom-0 sm:mt-0 sm:h-[min(530px,60svh)] sm:translate-y-6 lg:h-[min(640px,66svh)] lg:translate-y-5"
           aria-hidden
         >
           <HeroVideoCarousel3D srcs={HERO_STUDIO_VIDEOS} />

@@ -106,10 +106,24 @@ export function HeroVideoCarousel3D({ srcs = DEFAULT_SRCS }: Props) {
     };
     document.addEventListener('visibilitychange', onVis);
 
+    /**
+     * Mobile Safari/Chrome can block autoplay until a user gesture.
+     * Retry playback on first touch/pointer interaction in the carousel area.
+     */
+    const retryPlaybackFromGesture = () => {
+      if (running) playAllEligible();
+    };
+    root.addEventListener('touchstart', retryPlaybackFromGesture, { passive: true });
+    root.addEventListener('pointerdown', retryPlaybackFromGesture, { passive: true });
+    root.addEventListener('click', retryPlaybackFromGesture, { passive: true });
+
     return () => {
       io.disconnect();
       stop();
       document.removeEventListener('visibilitychange', onVis);
+      root.removeEventListener('touchstart', retryPlaybackFromGesture);
+      root.removeEventListener('pointerdown', retryPlaybackFromGesture);
+      root.removeEventListener('click', retryPlaybackFromGesture);
     };
   }, []);
 

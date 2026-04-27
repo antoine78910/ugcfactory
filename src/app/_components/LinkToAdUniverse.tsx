@@ -3782,9 +3782,11 @@ export default function LinkToAdUniverse({
       }
       hydrateFromRun(getJson.data, { silent: true, preserveVideoDuration: true, preserveScriptLanguage: true });
       setStage("ready");
-      trackDatafastGoal(DATAFAST_GOALS.lta_angles_generated, {
-        source: "continue_scripts",
-      });
+      if (isTrial) {
+        trackDatafastGoal(DATAFAST_GOALS.lta_angles_generated, {
+          source: "continue_scripts",
+        });
+      }
       toast.success("3 UGC scripts ready");
       onRunsChanged?.();
     } catch (err) {
@@ -3959,10 +3961,12 @@ export default function LinkToAdUniverse({
       toast.error("Missing URL");
       return;
     }
-    trackDatafastGoal(DATAFAST_GOALS.lta_url_submitted, {
-      bypass_saved: opts?.bypassSavedProject ? "1" : "0",
-      generation_mode: generationMode,
-    });
+    if (isTrial) {
+      trackDatafastGoal(DATAFAST_GOALS.lta_url_submitted, {
+        bypass_saved: opts?.bypassSavedProject ? "1" : "0",
+        generation_mode: generationMode,
+      });
+    }
     const epochAtStart = linkToAdFlowEpochRef.current;
     const runningToken = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     activeRunTokenRef.current = runningToken;
@@ -4134,10 +4138,12 @@ export default function LinkToAdUniverse({
         });
       }
       if (pipeResult.scriptsStepOk) {
-        trackDatafastGoal(DATAFAST_GOALS.lta_angles_generated, {
-          source: "initial_pipeline",
-          generation_mode: generationMode,
-        });
+        if (isTrial) {
+          trackDatafastGoal(DATAFAST_GOALS.lta_angles_generated, {
+            source: "initial_pipeline",
+            generation_mode: generationMode,
+          });
+        }
         toast.success("3 UGC scripts ready");
       } else if (pipeResult.scriptsError) {
         toast.warning("Scripts step failed", { description: pipeResult.scriptsError });
@@ -5095,7 +5101,7 @@ export default function LinkToAdUniverse({
       setIsNanoAllImagesSubmitting(false);
 
       const readyCount = urlsByPrompt.filter((u) => typeof u === "string" && u.trim().length > 0).length;
-      if (readyCount > 0) {
+      if (readyCount > 0 && isTrial) {
         trackDatafastGoal(DATAFAST_GOALS.lta_image_generated, {
           ready_count: String(readyCount),
           partial: readyCount < 3 ? "1" : "0",
@@ -5496,7 +5502,7 @@ export default function LinkToAdUniverse({
     }
 
     /** Only count the first user-initiated click, not the auto-chained part 2 of the 30s flow. */
-    if (!chainPart2Prompt) {
+    if (!chainPart2Prompt && isTrial) {
       trackDatafastGoal(DATAFAST_GOALS.lta_video_generate_clicked, {
         duration: String(videoDuration),
         is_trial: linkToAdTrialEconomy ? "1" : "0",

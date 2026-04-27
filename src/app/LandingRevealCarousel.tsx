@@ -206,6 +206,34 @@ export function LandingRevealCarousel() {
   }, []);
 
   useEffect(() => {
+    const section = revealSectionRef.current;
+    if (!section) return;
+    /**
+     * Mobile browsers may require a user gesture before autoplay is honored.
+     * Retry play() for mounted reveal videos on touch/pointer interactions.
+     */
+    const retryMountedVideos = () => {
+      const videos = Array.from(section.querySelectorAll<HTMLVideoElement>("video"));
+      for (const video of videos) {
+        video.muted = true;
+        video.defaultMuted = true;
+        video.playsInline = true;
+        video.setAttribute("playsinline", "");
+        video.setAttribute("webkit-playsinline", "");
+        if (video.paused) void video.play().catch(() => {});
+      }
+    };
+    section.addEventListener("touchstart", retryMountedVideos, { passive: true });
+    section.addEventListener("pointerdown", retryMountedVideos, { passive: true });
+    section.addEventListener("click", retryMountedVideos, { passive: true });
+    return () => {
+      section.removeEventListener("touchstart", retryMountedVideos);
+      section.removeEventListener("pointerdown", retryMountedVideos);
+      section.removeEventListener("click", retryMountedVideos);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!isActive) return;
 
     const trackEl = carouselTrackRef.current;

@@ -11,6 +11,7 @@
   justify-content: center;
   pointer-events: none;
   overflow: hidden;
+  cursor: auto;
 }
 
 .scene {
@@ -28,6 +29,7 @@
   /* Lower value = stronger depth (more hollow center vs big sides). */
   perspective: 560px;
   perspective-origin: 50% 22%;
+  cursor: inherit;
 }
 
 .ring {
@@ -36,6 +38,7 @@
   height: 0;
   transform-style: preserve-3d;
   animation: heroSpin 36s linear infinite;
+  cursor: inherit;
 }
 
 .panel {
@@ -53,6 +56,7 @@
   transform-origin: center center;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
+  cursor: inherit;
 }
 
 .video {
@@ -63,6 +67,7 @@
   pointer-events: none;
   -webkit-touch-callout: none;
   user-select: none;
+  cursor: inherit;
 }
 
 .video::-webkit-media-controls,
