@@ -104,29 +104,6 @@ function drawCover(
   ctx.drawImage(src, cropX, cropY, cropW, cropH, dx, dy, dw, dh);
 }
 
-/**
- * Draws `src` fully visible inside destination rectangle (letterbox/pillarbox
- * if needed), equivalent to CSS `object-fit: contain`.
- */
-function drawContain(
-  ctx: CanvasRenderingContext2D,
-  src: HTMLVideoElement,
-  dx: number,
-  dy: number,
-  dw: number,
-  dh: number,
-): void {
-  const sw = src.videoWidth;
-  const sh = src.videoHeight;
-  if (!sw || !sh) return;
-  const scale = Math.min(dw / sw, dh / sh);
-  const renderW = sw * scale;
-  const renderH = sh * scale;
-  const x = dx + (dw - renderW) / 2;
-  const y = dy + (dh - renderH) / 2;
-  ctx.drawImage(src, x, y, renderW, renderH);
-}
-
 export default function ClippingStudio() {
   const searchParams = useSearchParams();
   const clipId = searchParams.get("id") ?? null;
@@ -382,15 +359,15 @@ export default function ClippingStudio() {
           ctx.scale(-1, 1);
           if (isSplitPhase) {
             // Top half (mirrored coords are flipped horizontally only).
-            drawContain(ctx, webcam, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT / 2);
+            drawCover(ctx, webcam, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT / 2);
           } else {
-            drawContain(ctx, webcam, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+            drawCover(ctx, webcam, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
           }
           ctx.restore();
         } else if (isSplitPhase) {
-          drawContain(ctx, webcam, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT / 2);
+          drawCover(ctx, webcam, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT / 2);
         } else {
-          drawContain(ctx, webcam, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+          drawCover(ctx, webcam, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
         }
       }
 
