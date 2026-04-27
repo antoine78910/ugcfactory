@@ -29,6 +29,11 @@ import {
   workflowCommunityTemplateId,
   type WorkflowTemplateMeta,
 } from "./workflowTemplates";
+import {
+  deleteCloudWorkflowSpace,
+  listCloudWorkflowSpaces,
+  type CloudWorkflowSpace,
+} from "./workflowSpacesCloud";
 
 type TabId = "my" | "shared" | "templates";
 
@@ -80,7 +85,10 @@ export function WorkflowSpacesLanding() {
   const router = useRouter();
   const sb = useSupabaseBrowserClient();
   const [storageScope, setStorageScope] = useState<string | null>(null);
+  const [authUserId, setAuthUserId] = useState<string | null>(null);
   const [spaces, setSpaces] = useState<WorkflowSpaceMeta[]>([]);
+  const [cloudSpaces, setCloudSpaces] = useState<CloudWorkflowSpace[]>([]);
+  const [cloudLoading, setCloudLoading] = useState(false);
   const [communityTemplates, setCommunityTemplates] = useState<WorkflowTemplateMeta[]>([]);
   const [communityLoadFailed, setCommunityLoadFailed] = useState(false);
   const [hydrated, setHydrated] = useState(false);
@@ -126,15 +134,20 @@ export function WorkflowSpacesLanding() {
   useEffect(() => {
     if (!sb) {
       setStorageScope(getWorkflowStorageScope(null));
+      setAuthUserId(null);
       return;
     }
     void sb.auth.getSession().then(({ data }) => {
-      setStorageScope(getWorkflowStorageScope(data.session?.user?.id ?? null));
+      const id = data.session?.user?.id ?? null;
+      setStorageScope(getWorkflowStorageScope(id));
+      setAuthUserId(id);
       if (data.session?.user) void refreshCommunityTemplates();
       else setCommunityTemplates([]);
     });
     const { data: sub } = sb.auth.onAuthStateChange((_event, session) => {
-      setStorageScope(getWorkflowStorageScope(session?.user?.id ?? null));
+      const id = session?.user?.id ?? null;
+      setStorageScope(getWorkflowStorageScope(id));
+      setAuthUserId(id);
       if (session?.user) void refreshCommunityTemplates();
       else {
         setCommunityTemplates([]);
@@ -143,6 +156,29 @@ export function WorkflowSpacesLanding() {
     });
     return () => sub.subscription.unsubscribe();
   }, [sb, refreshCommunityTemplates]);
+
+  /**
+   * Fetch every workflow space the current user is a member of (owner or
+   * collaborator). The "shared" tab uses the subset where the active user is
+   * not the owner — i.e., spaces shared to them via an invite link.
+   */
+  const refreshCloudSpaces = useCallback(async () => {
+    if (!authUserId) {
+      setCloudSpaces([]);
+      return;
+    }
+    setCloudLoading(true);
+    try {
+      const list = await listCloudWorkflowSpaces();
+      setCloudSpaces(list);
+    } finally {
+      setCloudLoading(false);
+    }
+  }, [authUserId]);
+
+  useEffect(() => {
+    void refreshCloudSpaces();
+  }, [refreshCloudSpaces]);
 
   const refresh = useCallback((scope: string) => {
     setSpaces(loadSpacesIndex(scope).spaces);
@@ -201,6 +237,18 @@ export function WorkflowSpacesLanding() {
     if (tab !== "templates") return;
     void refreshCommunityTemplates();
   }, [tab, refreshCommunityTemplates]);
+
+  useEffect(() => {
+    if (tab !== "shared") return;
+    void refreshCloudSpaces();
+  }, [tab, refreshCloudSpaces]);
+
+  const sharedSpaces = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const list = cloudSpaces.filter((s) => !s.isOwn);
+    if (!q) return list;
+    return list.filter((s) => s.name.toLowerCase().includes(q));
+  }, [cloudSpaces, query]);
 
   const filteredSpaces = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -261,6 +309,11 @@ export function WorkflowSpacesLanding() {
     if (storageScope === null) return;
     deleteSpace(storageScope, id);
     refresh(storageScope);
+    if (authUserId) {
+      void deleteCloudWorkflowSpace(id).then((ok) => {
+        if (ok) void refreshCloudSpaces();
+      });
+    }
   };
 
   const removeTemplate = useCallback(
@@ -399,7 +452,59 @@ export function WorkflowSpacesLanding() {
         {!hydrated || storageScope === null ? (
           <p className="mt-10 text-center text-sm text-white/40">Loading workflows…</p>
         ) : tab === "shared" ? (
-          <p className="mt-12 text-center text-sm text-white/45">No shared workflows yet.</p>
+          !authUserId ? (
+            <p className="mt-12 text-center text-sm text-white/45">
+              Sign in to see workflows shared with you.
+            </p>
+          ) : cloudLoading && sharedSpaces.length === 0 ? (
+            <p className="mt-12 text-center text-sm text-white/45">Loading shared workflows…</p>
+          ) : sharedSpaces.length === 0 ? (
+            <p className="mt-12 text-center text-sm text-white/45">No shared workflows yet.</p>
+          ) : (
+            <ul className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {sharedSpaces.map((s) => {
+                const ownerLabel =
+                  (s.ownerName?.trim() || s.ownerEmail?.trim() || "a collaborator").slice(0, 80);
+                return (
+                  <li key={s.id}>
+                    <div
+                      role="link"
+                      tabIndex={0}
+                      onClick={() => openSpace(s.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          openSpace(s.id);
+                        }
+                      }}
+                      className="flex w-full cursor-pointer flex-col overflow-hidden rounded-2xl border border-white/[0.1] bg-[#0b0912]/90 text-left shadow-[0_12px_40px_rgba(0,0,0,0.35)] outline-none transition hover:border-violet-400/30 hover:bg-[#0b0912] hover:shadow-[0_12px_40px_rgba(139,92,246,0.08)] focus-visible:ring-2 focus-visible:ring-violet-500/50"
+                    >
+                      <div className="relative aspect-[16/10] w-full overflow-hidden bg-gradient-to-br from-violet-900/30 via-[#1a1a22] to-violet-950/35">
+                        {s.previewDataUrl ? (
+                          <img
+                            src={s.previewDataUrl}
+                            alt={`${s.name} preview`}
+                            className="absolute inset-0 h-full w-full object-cover"
+                            loading="lazy"
+                            decoding="async"
+                          />
+                        ) : null}
+                      </div>
+                      <div className="p-4">
+                        <p className="truncate font-semibold text-white">{s.name}</p>
+                        <p className="mt-1 text-[12px] text-white/40">
+                          Shared by <span className="text-white/65">{ownerLabel}</span>
+                        </p>
+                        <p className="mt-1 text-[11px] uppercase tracking-wide text-violet-300/70">
+                          {s.role === "editor" ? "Can edit" : s.role === "owner" ? "Owner" : "Can view"}
+                        </p>
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )
         ) : tab === "templates" ? (
           filteredTemplates.length === 0 ? (
             <p className="mt-12 text-center text-sm text-white/45">No templates match your search.</p>

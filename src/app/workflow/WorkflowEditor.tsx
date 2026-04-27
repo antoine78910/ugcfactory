@@ -106,6 +106,10 @@ import {
   updateSpaceMeta,
 } from "./workflowSpacesStorage";
 import {
+  fetchCloudWorkflowSpace,
+  saveCloudWorkflowSpace,
+} from "./workflowSpacesCloud";
+import {
   buildTemplateProject,
   getWorkflowTemplateMeta,
   parseWorkflowCommunityTemplateUuid,
@@ -3913,12 +3917,20 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
   const resolvedSpaceId = useMemo(() => normalizeWorkflowSpaceId(spaceId), [spaceId]);
 
   const [storageScope, setStorageScope] = useState<string | null>(null);
+  const [authUserId, setAuthUserId] = useState<string | null>(null);
   const [workflowProject, setWorkflowProject] = useState<WorkflowProjectStateV1>(() => defaultWorkflowProject());
   const [workflowHydrated, setWorkflowHydrated] = useState(false);
   const [spaceName, setSpaceName] = useState("Untitled workflow");
   const [shareOpen, setShareOpen] = useState(false);
   const [publishBusy, setPublishBusy] = useState(false);
   const [publishedTemplateId, setPublishedTemplateId] = useState<string | null>(null);
+  /**
+   * `null` = not yet checked, `"local"` = owned space living in localStorage,
+   * `"shared"` = the active user is a collaborator (viewer/editor) on a space
+   * owned by someone else; we fetched its state from the server.
+   */
+  const [spaceSource, setSpaceSource] = useState<"local" | "shared" | null>(null);
+  const [spaceRole, setSpaceRole] = useState<string | null>(null);
   const [removeTemplateBusy, setRemoveTemplateBusy] = useState(false);
   const [removeTemplateConfirmOpen, setRemoveTemplateConfirmOpen] = useState(false);
   const [publishTemplateOpen, setPublishTemplateOpen] = useState(false);
@@ -3946,55 +3958,133 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
   useEffect(() => {
     if (!sb) {
       setStorageScope(getWorkflowStorageScope(null));
+      setAuthUserId(null);
       return;
     }
     void sb.auth.getSession().then(({ data }) => {
-      setStorageScope(getWorkflowStorageScope(data.session?.user?.id ?? null));
+      const id = data.session?.user?.id ?? null;
+      setStorageScope(getWorkflowStorageScope(id));
+      setAuthUserId(id);
     });
     const { data: sub } = sb.auth.onAuthStateChange((_event, session) => {
-      setStorageScope(getWorkflowStorageScope(session?.user?.id ?? null));
+      const id = session?.user?.id ?? null;
+      setStorageScope(getWorkflowStorageScope(id));
+      setAuthUserId(id);
     });
     return () => sub.subscription.unsubscribe();
   }, [sb]);
 
+  /**
+   * Hydrate the active space.
+   *
+   * 1. If it lives in the user's local index → load from localStorage (fast path).
+   * 2. Otherwise, when signed in, try to fetch the cloud-stored space; this
+   *    covers two cases: workflows shared via invite, and workflows created on
+   *    another device. We mark them as "shared" so saves go to the server only
+   *    and the workflow does not bleed into the local "My workflows" list.
+   * 3. If neither is available, redirect back to the landing page.
+   */
   useEffect(() => {
     if (storageScope === null) return;
     setWorkflowHydrated(false);
     const idx = loadSpacesIndex(storageScope).spaces;
-    if (!idx.some((s) => s.id === resolvedSpaceId)) {
+    const localMeta = idx.find((s) => s.id === resolvedSpaceId);
+    let cancelled = false;
+
+    const loadRunHistory = () => {
+      try {
+        const raw = localStorage.getItem(runHistoryStorageKey);
+        const arr = raw ? (JSON.parse(raw) as WorkflowRunLogEntry[]) : [];
+        if (Array.isArray(arr)) {
+          setRunHistory(
+            arr
+              .filter((x) => x && typeof x.message === "string" && typeof x.ts === "number")
+              .slice(0, 28),
+          );
+        } else {
+          setRunHistory([]);
+        }
+      } catch {
+        setRunHistory([]);
+      }
+    };
+
+    if (localMeta) {
+      setSpaceSource("local");
+      setSpaceRole(null);
+      setSpaceName(localMeta.name);
+      setPublishedTemplateId(localMeta.publishedCommunityTemplateId ?? null);
+      setWorkflowProject(loadProjectForSpace(storageScope, resolvedSpaceId));
+      loadRunHistory();
+      setWorkflowHydrated(true);
+      return;
+    }
+
+    if (!authUserId) {
       router.replace("/workflow");
       return;
     }
-    const meta = idx.find((s) => s.id === resolvedSpaceId);
-    if (meta) {
-      setSpaceName(meta.name);
-      setPublishedTemplateId(meta.publishedCommunityTemplateId ?? null);
-    } else {
-      setPublishedTemplateId(null);
-    }
-    setWorkflowProject(loadProjectForSpace(storageScope, resolvedSpaceId));
-    try {
-      const raw = localStorage.getItem(runHistoryStorageKey);
-      const arr = raw ? (JSON.parse(raw) as WorkflowRunLogEntry[]) : [];
-      if (Array.isArray(arr)) {
-        setRunHistory(
-          arr
-            .filter((x) => x && typeof x.message === "string" && typeof x.ts === "number")
-            .slice(0, 28),
-        );
-      } else {
-        setRunHistory([]);
+
+    void (async () => {
+      const cloud = await fetchCloudWorkflowSpace(resolvedSpaceId);
+      if (cancelled) return;
+      if (!cloud) {
+        router.replace("/workflow");
+        return;
       }
-    } catch {
-      setRunHistory([]);
-    }
-    setWorkflowHydrated(true);
-  }, [resolvedSpaceId, router, storageScope, runHistoryStorageKey]);
+      setSpaceSource("shared");
+      setSpaceRole(cloud.role);
+      setSpaceName(cloud.name || "Untitled workflow");
+      setPublishedTemplateId(cloud.publishedCommunityTemplateId ?? null);
+      setWorkflowProject(cloud.state);
+      loadRunHistory();
+      setWorkflowHydrated(true);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [resolvedSpaceId, router, storageScope, runHistoryStorageKey, authUserId]);
 
   useEffect(() => {
     if (!workflowHydrated || storageScope === null) return;
-    saveProjectForSpace(storageScope, resolvedSpaceId, workflowProject);
-  }, [workflowHydrated, storageScope, resolvedSpaceId, workflowProject]);
+    if (spaceSource === "local") {
+      saveProjectForSpace(storageScope, resolvedSpaceId, workflowProject);
+    }
+  }, [workflowHydrated, storageScope, resolvedSpaceId, workflowProject, spaceSource]);
+
+  /**
+   * Mirror to the cloud (debounced) so:
+   *  - other collaborators can load up-to-date state, and
+   *  - the share dialog can hand out an invite link that actually points to
+   *    something even before any explicit "save" gesture.
+   *
+   * Viewer access is treated as read-only; editors and owners get full sync.
+   */
+  useEffect(() => {
+    if (!workflowHydrated) return;
+    if (!authUserId) return;
+    if (spaceSource === "shared" && spaceRole === "viewer") return;
+
+    const t = window.setTimeout(() => {
+      void saveCloudWorkflowSpace({
+        spaceId: resolvedSpaceId,
+        name: spaceName,
+        state: workflowProject,
+        publishedCommunityTemplateId: publishedTemplateId,
+      });
+    }, 1500);
+    return () => window.clearTimeout(t);
+  }, [
+    workflowHydrated,
+    authUserId,
+    resolvedSpaceId,
+    workflowProject,
+    spaceName,
+    publishedTemplateId,
+    spaceSource,
+    spaceRole,
+  ]);
 
   const workflowPreviewSavedDataUrl = useMemo(
     () => buildWorkflowPreviewDataUrl(workflowProject),
@@ -4003,6 +4093,7 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
 
   useEffect(() => {
     if (!workflowHydrated || storageScope === null) return;
+    if (spaceSource !== "local") return;
     const next = workflowPreviewSavedDataUrl;
     if (lastSavedPreviewRef.current === next) return;
     // Delay snapshot persistence so freshly generated media has time to settle
@@ -4012,7 +4103,47 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
       lastSavedPreviewRef.current = next;
     }, 10_000);
     return () => window.clearTimeout(t);
-  }, [workflowHydrated, storageScope, resolvedSpaceId, workflowPreviewSavedDataUrl]);
+  }, [workflowHydrated, storageScope, resolvedSpaceId, workflowPreviewSavedDataUrl, spaceSource]);
+
+  /**
+   * A community template can be deleted from Admin/Templates while this workflow
+   * still stores its published id. If the id is now missing, reset local meta so
+   * actions switch back to "Publish template" instead of stale update/remove CTAs.
+   */
+  useEffect(() => {
+    if (!publishedTemplateId) return;
+    const templateId = publishedTemplateId.trim();
+    if (!templateId || !/^[0-9a-f-]{36}$/i.test(templateId)) {
+      setPublishedTemplateId(null);
+      if (storageScope) {
+        updateSpaceMeta(storageScope, resolvedSpaceId, { publishedCommunityTemplateId: undefined });
+      }
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(`/api/workflow/community-templates/${encodeURIComponent(templateId)}?t=${Date.now()}`, {
+          cache: "no-store",
+        });
+        if (cancelled) return;
+        if (res.status === 404) {
+          setPublishedTemplateId((prev) => (prev === templateId ? null : prev));
+          if (storageScope) {
+            updateSpaceMeta(storageScope, resolvedSpaceId, { publishedCommunityTemplateId: undefined });
+          }
+          toast.message("Template reference reset", {
+            description: "This template was deleted. You can publish it again.",
+          });
+        }
+      } catch {
+        /* non-blocking: keep current UI state if validation call fails */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [publishedTemplateId, storageScope, resolvedSpaceId]);
 
   const showOnboarding = workflowHydrated && shouldShowWorkflowOnboarding(workflowProject);
 
@@ -4175,6 +4306,24 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
         onOpenChange={setShareOpen}
         spaceId={resolvedSpaceId}
         spaceName={spaceName}
+        ensureCloudCopy={async () => {
+          const res = await saveCloudWorkflowSpace({
+            spaceId: resolvedSpaceId,
+            name: spaceName,
+            state: workflowProject,
+            publishedCommunityTemplateId: publishedTemplateId,
+          });
+          if (!res.ok) {
+            return {
+              ok: false,
+              error:
+                res.status === 401
+                  ? "Sign in to share this workspace."
+                  : "Could not sync workspace to the cloud.",
+            };
+          }
+          return { ok: true };
+        }}
       />
       {publishTemplateOpen ? (
         <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/70 px-4">

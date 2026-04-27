@@ -34,9 +34,22 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   spaceId: string;
   spaceName: string;
+  /**
+   * Optional hook that pushes the latest local workflow state to the cloud
+   * before an invite link is handed out. Without this, an invitee accepting
+   * the link would land on `/workflow/space/<id>` and find nothing on the
+   * server to load.
+   */
+  ensureCloudCopy?: () => Promise<{ ok: boolean; error?: string }>;
 };
 
-export function ShareWorkflowDialog({ open, onOpenChange, spaceId, spaceName }: Props) {
+export function ShareWorkflowDialog({
+  open,
+  onOpenChange,
+  spaceId,
+  spaceName,
+  ensureCloudCopy,
+}: Props) {
   const sb = useSupabaseBrowserClient();
   const [permission, setPermission] = useState<Permission>("viewer");
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
@@ -106,6 +119,13 @@ export function ShareWorkflowDialog({ open, onOpenChange, spaceId, spaceName }: 
     setGenerating(true);
     setCopied(false);
     try {
+      if (ensureCloudCopy) {
+        const sync = await ensureCloudCopy();
+        if (!sync.ok) {
+          toast.error(sync.error || "Could not save workspace before sharing.");
+          return;
+        }
+      }
       const res = await fetch("/api/workflow/share", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -123,7 +143,7 @@ export function ShareWorkflowDialog({ open, onOpenChange, spaceId, spaceName }: 
     } finally {
       setGenerating(false);
     }
-  }, [spaceId, permission]);
+  }, [spaceId, permission, ensureCloudCopy]);
 
   useEffect(() => {
     if (open && isOwner && !loadingCollabs && !inviteUrl) {
