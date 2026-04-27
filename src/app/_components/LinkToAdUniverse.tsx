@@ -2117,12 +2117,11 @@ export default function LinkToAdUniverse({
   }, []);
 
   const handleReturnToFreshLinkToAd = useCallback(() => {
-    cancelCurrentGeneration({ silent: true });
+    // Reset local state immediately so the UI returns to empty mode without waiting
+    // for parent remount / runs refresh.
+    resetLinkToAdToStart();
     onStartFreshLinkToAdSession?.();
-    toast.message("New Link to Ad session", {
-      description: "Runs already saved in Projects are unchanged.",
-    });
-  }, [cancelCurrentGeneration, onStartFreshLinkToAdSession]);
+  }, [onStartFreshLinkToAdSession, resetLinkToAdToStart]);
 
   const handleSwitchRecentRun = useCallback(
     (runId: string) => {
