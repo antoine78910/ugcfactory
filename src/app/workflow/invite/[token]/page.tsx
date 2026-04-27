@@ -16,6 +16,12 @@ import { toast } from "sonner";
 
 import { useSupabaseBrowserClient } from "@/lib/supabase/BrowserSupabaseProvider";
 import { storeInviteWelcome } from "../../WorkflowInviteWelcome";
+import {
+  createSpace,
+  getWorkflowStorageScope,
+  saveProjectForSpace,
+} from "../../workflowSpacesStorage";
+import { fetchCloudWorkflowSpace } from "../../workflowSpacesCloud";
 
 type InviteInfo = {
   spaceId: string;
@@ -42,6 +48,7 @@ export default function WorkflowInvitePage() {
   const [error, setError] = useState<string | null>(null);
   const [accepting, setAccepting] = useState(false);
   const [accepted, setAccepted] = useState<AcceptResult | null>(null);
+  const [duplicating, setDuplicating] = useState(false);
 
   useEffect(() => {
     if (!supabase) {
@@ -104,6 +111,28 @@ export default function WorkflowInvitePage() {
       setAccepting(false);
     }
   }, [token]);
+
+  const duplicateAsTemplateCopy = useCallback(async () => {
+    if (!accepted || !userId) return;
+    setDuplicating(true);
+    try {
+      const source = await fetchCloudWorkflowSpace(accepted.spaceId);
+      if (!source?.state) {
+        toast.error("Could not load shared workflow content.");
+        return;
+      }
+      const scope = getWorkflowStorageScope(userId);
+      const copyName = `${source.name || "Shared workflow"} (copy)`;
+      const meta = createSpace(scope, copyName);
+      saveProjectForSpace(scope, meta.id, source.state);
+      toast.success("Template copy created in your workflows.");
+      router.push(`/workflow/space/${encodeURIComponent(meta.id)}`);
+    } catch {
+      toast.error("Could not create a template copy.");
+    } finally {
+      setDuplicating(false);
+    }
+  }, [accepted, userId, router]);
 
   useEffect(() => {
     if (userId === null && info) {
@@ -208,18 +237,30 @@ export default function WorkflowInvitePage() {
           <p className="max-w-xs text-[14px] leading-relaxed text-white/55">
             {accepted.alreadyMember
               ? "You're already a collaborator on this space."
-              : `${accepted.invitedBy ?? "A collaborator"} invited you to this workflow space. You can now ${accepted.role === "editor" ? "view and edit" : "view"} it.`}
+              : `${accepted.invitedBy ?? "A collaborator"} invited you to this workflow space. ${accepted.role === "editor" ? "You can view and edit it." : "Viewer access opens it as a template source; duplicate it to keep your own editable copy."}`}
           </p>
-          <button
-            type="button"
-            onClick={() =>
-              router.push(`/workflow/space/${encodeURIComponent(accepted.spaceId)}`)
-            }
-            className="mt-2 inline-flex items-center gap-2 rounded-full bg-violet-500 px-6 py-2.5 text-[13px] font-semibold text-white transition hover:bg-violet-400"
-          >
-            <ExternalLink className="h-4 w-4" />
-            Open workspace
-          </button>
+          {accepted.role === "editor" ? (
+            <button
+              type="button"
+              onClick={() =>
+                router.push(`/workflow/space/${encodeURIComponent(accepted.spaceId)}`)
+              }
+              className="mt-2 inline-flex items-center gap-2 rounded-full bg-violet-500 px-6 py-2.5 text-[13px] font-semibold text-white transition hover:bg-violet-400"
+            >
+              <ExternalLink className="h-4 w-4" />
+              Open workspace
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={duplicating}
+              onClick={() => void duplicateAsTemplateCopy()}
+              className="mt-2 inline-flex items-center gap-2 rounded-full bg-violet-500 px-6 py-2.5 text-[13px] font-semibold text-white transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {duplicating ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
+              {duplicating ? "Creating copy…" : "Duplicate as template copy"}
+            </button>
+          )}
         </div>
       </InviteShell>
     );
