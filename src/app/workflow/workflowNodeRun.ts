@@ -887,6 +887,85 @@ async function resolveLocalWorkflowMediaUrlsForServer(urls: string[] | undefined
   return out;
 }
 
+async function loadImageElementFromBlob(blob: Blob): Promise<HTMLImageElement> {
+  const objectUrl = URL.createObjectURL(blob);
+  try {
+    const img = new Image();
+    img.decoding = "async";
+    await new Promise<void>((resolve, reject) => {
+      const onLoad = () => {
+        img.removeEventListener("load", onLoad);
+        img.removeEventListener("error", onErr);
+        resolve();
+      };
+      const onErr = () => {
+        img.removeEventListener("load", onLoad);
+        img.removeEventListener("error", onErr);
+        reject(new Error("Could not load image."));
+      };
+      img.addEventListener("load", onLoad, { once: true });
+      img.addEventListener("error", onErr, { once: true });
+      img.src = objectUrl;
+    });
+    return img;
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+async function fetchImageBlobForWorkflow(url: string): Promise<Blob> {
+  const trimmed = url.trim();
+  if (!trimmed) throw new Error("Missing image URL.");
+  if (isLocalOnlyWorkflowMediaUrl(trimmed)) {
+    const r = await fetch(trimmed, { cache: "no-store" });
+    if (!r.ok) throw new Error(`Could not read local image (${r.status}).`);
+    return await r.blob();
+  }
+  try {
+    const r = await fetch(`/api/download?url=${encodeURIComponent(trimmed)}`, { cache: "no-store" });
+    if (r.ok) return await r.blob();
+  } catch {
+    // Fall back to direct CORS fetch below.
+  }
+  const direct = await fetch(trimmed, { mode: "cors", cache: "no-store" });
+  if (!direct.ok) throw new Error(`Could not fetch image (${direct.status}).`);
+  return await direct.blob();
+}
+
+/**
+ * Provider guardrail:
+ * Video models reject start/end frames where width or height < 300.
+ * Normalize any incoming image URL (linked or uploaded) so both dimensions
+ * are >= 300 before sending generation requests.
+ */
+async function ensureWorkflowImageMinEdge(url: string, minEdge = 300): Promise<string> {
+  const trimmed = url.trim();
+  if (!trimmed || typeof window === "undefined") return trimmed;
+  const blob = await fetchImageBlobForWorkflow(trimmed);
+  if (!/^image\//i.test(blob.type)) return trimmed;
+  const img = await loadImageElementFromBlob(blob);
+  const w = Math.max(1, img.naturalWidth || 0);
+  const h = Math.max(1, img.naturalHeight || 0);
+  if (w >= minEdge && h >= minEdge) return trimmed;
+
+  const scale = Math.max(minEdge / w, minEdge / h);
+  const tw = Math.max(minEdge, Math.round(w * scale));
+  const th = Math.max(minEdge, Math.round(h * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = tw;
+  canvas.height = th;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return trimmed;
+  ctx.drawImage(img, 0, 0, tw, th);
+  const normalizedDataUrl = canvas.toDataURL("image/jpeg", 0.9);
+  return uploadBlobUrlToCdn(
+    normalizedDataUrl,
+    `workflow-image-min300-${crypto.randomUUID()}.jpg`,
+    "image/jpeg",
+    { kind: "image" },
+  );
+}
+
 export async function runWorkflowImageJob(params: WorkflowRunImageParams): Promise<{ imageUrl: string; taskId: string }> {
   const pickerModel = resolveWorkflowImagePickerModel(params.model);
   if (!params.personalApiKey && !canUseStudioImagePickerModel(params.planId, pickerModel)) {
@@ -967,12 +1046,18 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
   const pKey = params.personalApiKey;
   const piKey = params.piapiApiKey;
   const startRaw = params.referenceImageUrl?.trim() || params.linkedImageUrl?.trim() || "";
-  const startUrl = startRaw ? await resolveLocalWorkflowMediaUrlForServer(startRaw) : undefined;
+  const startResolvedUrl = startRaw ? await resolveLocalWorkflowMediaUrlForServer(startRaw) : undefined;
   const endRaw = params.endImageUrl?.trim() || "";
-  const endUrl = endRaw ? await resolveLocalWorkflowMediaUrlForServer(endRaw) : undefined;
-  const refUrls = await resolveLocalWorkflowMediaUrlsForServer(
+  const endResolvedUrl = endRaw ? await resolveLocalWorkflowMediaUrlForServer(endRaw) : undefined;
+  const resolvedRefUrls = await resolveLocalWorkflowMediaUrlsForServer(
     (params.referenceImageUrls ?? []).map((u) => u.trim()).filter(Boolean),
   );
+  const startUrl = startResolvedUrl ? await ensureWorkflowImageMinEdge(startResolvedUrl) : undefined;
+  const endUrl = endResolvedUrl ? await ensureWorkflowImageMinEdge(endResolvedUrl) : undefined;
+  const refUrls: string[] = [];
+  for (const u of resolvedRefUrls) {
+    refUrls.push(await ensureWorkflowImageMinEdge(u));
+  }
   const quality = klingQualityFromVideoResolution(params.resolution);
   const seedancePri: "normal" | "vip" = params.seedancePriority === "vip" ? "vip" : "normal";
   const duration = coerceWorkflowVideoDurationSec(params.model, params.durationSec);

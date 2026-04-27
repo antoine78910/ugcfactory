@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   CircleDot,
@@ -42,6 +43,15 @@ type Stage =
 interface CamDevice {
   deviceId: string;
   label: string;
+}
+
+type ClippingTemplateId = "classic" | "split_focus_bottom_webcam";
+
+const TEMPLATE_TOP_RATIO = 0.75;
+const TEMPLATE_BOTTOM_RATIO = 0.25;
+
+function parseClippingTemplateId(raw: string | null): ClippingTemplateId {
+  return raw === "split_focus_bottom_webcam" ? "split_focus_bottom_webcam" : "classic";
 }
 
 /**
@@ -104,9 +114,71 @@ function drawCover(
   ctx.drawImage(src, cropX, cropY, cropW, cropH, dx, dy, dw, dh);
 }
 
+function roundedRectPath(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  radius: number,
+): void {
+  const r = Math.max(0, Math.min(radius, Math.min(w, h) / 2));
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function drawCoverRounded(
+  ctx: CanvasRenderingContext2D,
+  src: HTMLVideoElement,
+  dx: number,
+  dy: number,
+  dw: number,
+  dh: number,
+  radius: number,
+  mirror: boolean,
+): void {
+  const sw = src.videoWidth;
+  const sh = src.videoHeight;
+  if (!sw || !sh) return;
+  const targetRatio = dw / dh;
+  const sourceRatio = sw / sh;
+  let cropW = sw;
+  let cropH = sh;
+  let cropX = 0;
+  let cropY = 0;
+  if (sourceRatio > targetRatio) {
+    cropW = sh * targetRatio;
+    cropX = (sw - cropW) / 2;
+  } else {
+    cropH = sw / targetRatio;
+    cropY = (sh - cropH) / 2;
+  }
+  ctx.save();
+  roundedRectPath(ctx, dx, dy, dw, dh, radius);
+  ctx.clip();
+  if (mirror) {
+    ctx.translate(dx + dw, dy);
+    ctx.scale(-1, 1);
+    ctx.drawImage(src, cropX, cropY, cropW, cropH, 0, 0, dw, dh);
+  } else {
+    ctx.drawImage(src, cropX, cropY, cropW, cropH, dx, dy, dw, dh);
+  }
+  ctx.restore();
+}
+
 export default function ClippingStudio() {
   const searchParams = useSearchParams();
   const clipId = searchParams.get("id") ?? null;
+  const templateId = parseClippingTemplateId(searchParams.get("template"));
 
   const [stage, setStage] = useState<Stage>("permission");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -352,42 +424,92 @@ export default function ClippingStudio() {
         phase === "countdown_video" ||
         phase === "recording_video";
 
-      if (webcam && webcam.readyState >= 2) {
+      if (isSplitPhase) {
+        if (templateId === "split_focus_bottom_webcam") {
+          const topH = Math.round(CANVAS_HEIGHT * TEMPLATE_TOP_RATIO);
+          const bottomY = topH;
+          const bottomH = CANVAS_HEIGHT - topH;
+
+          if (template && template.readyState >= 2) {
+            drawCover(ctx, template, 0, 0, CANVAS_WIDTH, topH);
+          } else {
+            ctx.fillStyle = "#0b0912";
+            ctx.fillRect(0, 0, CANVAS_WIDTH, topH);
+          }
+
+          // Green-screen style webcam panel in the bottom 1/4.
+          ctx.fillStyle = "#0f2b1d";
+          ctx.fillRect(0, bottomY, CANVAS_WIDTH, bottomH);
+          ctx.fillStyle = "rgba(88, 214, 141, 0.16)";
+          ctx.fillRect(0, bottomY, CANVAS_WIDTH, bottomH);
+
+          if (webcam && webcam.readyState >= 2) {
+            const padX = Math.round(CANVAS_WIDTH * 0.12);
+            const cardW = CANVAS_WIDTH - padX * 2;
+            const cardH = Math.round(bottomH * 0.82);
+            const cardX = padX;
+            const cardY = bottomY + Math.round((bottomH - cardH) / 2);
+
+            // Soft glow + rounded webcam card for smoother look.
+            ctx.save();
+            roundedRectPath(ctx, cardX - 8, cardY - 8, cardW + 16, cardH + 16, 34);
+            ctx.fillStyle = "rgba(26, 188, 156, 0.22)";
+            ctx.fill();
+            ctx.restore();
+
+            drawCoverRounded(ctx, webcam, cardX, cardY, cardW, cardH, 28, mirrorWebcam);
+            ctx.save();
+            roundedRectPath(ctx, cardX, cardY, cardW, cardH, 28);
+            ctx.strokeStyle = "rgba(255,255,255,0.42)";
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            ctx.restore();
+          }
+
+          // Separator between top template and webcam panel.
+          ctx.fillStyle = "rgba(255,255,255,0.1)";
+          ctx.fillRect(0, topH - 1, CANVAS_WIDTH, 2);
+        } else {
+          if (webcam && webcam.readyState >= 2) {
+            if (mirrorWebcam) {
+              ctx.save();
+              ctx.translate(CANVAS_WIDTH, 0);
+              ctx.scale(-1, 1);
+              drawCover(ctx, webcam, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT / 2);
+              ctx.restore();
+            } else {
+              drawCover(ctx, webcam, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT / 2);
+            }
+          }
+
+          if (template && template.readyState >= 2) {
+            drawCover(
+              ctx,
+              template,
+              0,
+              CANVAS_HEIGHT / 2,
+              CANVAS_WIDTH,
+              CANVAS_HEIGHT / 2,
+            );
+          } else {
+            ctx.fillStyle = "#0b0912";
+            ctx.fillRect(0, CANVAS_HEIGHT / 2, CANVAS_WIDTH, CANVAS_HEIGHT / 2);
+          }
+
+          // Subtle separator between webcam and template.
+          ctx.fillStyle = "rgba(255,255,255,0.08)";
+          ctx.fillRect(0, CANVAS_HEIGHT / 2 - 1, CANVAS_WIDTH, 2);
+        }
+      } else if (webcam && webcam.readyState >= 2) {
         if (mirrorWebcam) {
           ctx.save();
           ctx.translate(CANVAS_WIDTH, 0);
           ctx.scale(-1, 1);
-          if (isSplitPhase) {
-            // Top half (mirrored coords are flipped horizontally only).
-            drawCover(ctx, webcam, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT / 2);
-          } else {
-            drawCover(ctx, webcam, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-          }
+          drawCover(ctx, webcam, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
           ctx.restore();
-        } else if (isSplitPhase) {
-          drawCover(ctx, webcam, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT / 2);
         } else {
           drawCover(ctx, webcam, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
         }
-      }
-
-      if (isSplitPhase) {
-        if (template && template.readyState >= 2) {
-          drawCover(
-            ctx,
-            template,
-            0,
-            CANVAS_HEIGHT / 2,
-            CANVAS_WIDTH,
-            CANVAS_HEIGHT / 2,
-          );
-        } else {
-          ctx.fillStyle = "#0b0912";
-          ctx.fillRect(0, CANVAS_HEIGHT / 2, CANVAS_WIDTH, CANVAS_HEIGHT / 2);
-        }
-        // Subtle separator between webcam and template.
-        ctx.fillStyle = "rgba(255,255,255,0.08)";
-        ctx.fillRect(0, CANVAS_HEIGHT / 2 - 1, CANVAS_WIDTH, 2);
       }
 
       if (previewCanvas) {
@@ -745,18 +867,29 @@ export default function ClippingStudio() {
               <p className="text-xs text-white/45">
                 One take · hook + split-screen template · auto export
                 {clipId ? <span className="ml-2 text-white/35">· id {clipId}</span> : null}
+                <span className="ml-2 text-white/35">
+                  · {templateId === "split_focus_bottom_webcam" ? "Template 2" : "Template 1"}
+                </span>
               </p>
             </div>
           </div>
-          {stage === "done" && exportedUrl ? (
-            <a
-              href={exportedUrl}
-              download={`clip-${clipId ?? "session"}.${exportedExt}`}
-              className="inline-flex items-center gap-2 rounded-xl border border-emerald-400/30 bg-emerald-500/15 px-3 py-2 text-xs font-semibold text-emerald-100 hover:bg-emerald-500/25"
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/clipping/template${clipId ? `?id=${encodeURIComponent(clipId)}` : ""}`}
+              className="inline-flex items-center rounded-xl border border-white/15 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/85 transition hover:bg-white/[0.08]"
             >
-              <Download className="size-4" aria-hidden /> Download
-            </a>
-          ) : null}
+              Change template
+            </Link>
+            {stage === "done" && exportedUrl ? (
+              <a
+                href={exportedUrl}
+                download={`clip-${clipId ?? "session"}.${exportedExt}`}
+                className="inline-flex items-center gap-2 rounded-xl border border-emerald-400/30 bg-emerald-500/15 px-3 py-2 text-xs font-semibold text-emerald-100 hover:bg-emerald-500/25"
+              >
+                <Download className="size-4" aria-hidden /> Download
+              </a>
+            ) : null}
+          </div>
         </header>
 
         <div
@@ -858,8 +991,9 @@ export default function ClippingStudio() {
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/45 p-6 text-center">
                   <p className="text-base font-semibold">Ready for the video?</p>
                   <p className="text-xs text-white/60">
-                    Webcam stays on top, the template plays below. Recording continues
-                    until the template ends.
+                    {templateId === "split_focus_bottom_webcam"
+                      ? "Template plays on top (3/4), webcam records in the bottom panel (1/4). Recording continues until the template ends."
+                      : "Webcam stays on top, the template plays below. Recording continues until the template ends."}
                   </p>
                   <div className="flex flex-wrap items-center justify-center gap-2">
                     <button
@@ -1014,7 +1148,11 @@ export default function ClippingStudio() {
               ) : (
                 <>
                   <span className="text-white/80">Drop or pick a video</span>
-                  <span className="text-white/40">It plays on the bottom half of phase 2</span>
+                  <span className="text-white/40">
+                    {templateId === "split_focus_bottom_webcam"
+                      ? "It plays on the top 3/4 during phase 2"
+                      : "It plays on the bottom half during phase 2"}
+                  </span>
                 </>
               )}
               {templateDurationSec ? (
@@ -1109,7 +1247,10 @@ export default function ClippingStudio() {
 
             <ol className="mt-1 list-decimal space-y-1 pl-4 text-[11px] text-white/45">
               <li>Allow camera + microphone access</li>
-              <li>Upload the template that plays on the bottom half</li>
+              <li>
+                Upload the template that plays{" "}
+                {templateId === "split_focus_bottom_webcam" ? "on the top 3/4" : "on the bottom half"}
+              </li>
               <li>Click ready, record the hook for {hookDuration}s</li>
               <li>Click ready again, record over the template</li>
               <li>Download the single auto-merged clip</li>

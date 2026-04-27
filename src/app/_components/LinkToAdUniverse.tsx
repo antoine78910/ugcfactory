@@ -1411,11 +1411,14 @@ export default function LinkToAdUniverse({
   const [manualHideCredits, setManualHideCredits] = useState(false);
   /**
    * Product rule:
-   * - Non-trial users should never see credit pills in Link to Ad steps.
-   * - Trial users keep seeing them.
+   * - Initial URL "Generate" should always show its credit pill.
+   * - Mid-flow step pills stay hidden for non-trial users.
+   * - Regenerate actions keep showing pills (trial + non-trial).
    * - Demo-only hidden toggle can still force-hide for recordings.
    */
-  const hideCredits = !isTrial || manualHideCredits;
+  const hideStepCredits = !isTrial || manualHideCredits;
+  const hideInitialGenerateCredits = manualHideCredits;
+  const hideRegenerateCredits = manualHideCredits;
   const [demoReplayActive, setDemoReplayActive] = useState(false);
   const [demoPhaseIndex, setDemoPhaseIndex] = useState(0);
   const DEMO_PHASES = [
@@ -6476,7 +6479,7 @@ export default function LinkToAdUniverse({
                         <Sparkles className="h-4 w-4 shrink-0" aria-hidden />
                         <LinkToAdStudioStyleCreditPill
                           amount={ltaInitialGenerateCharge}
-                          hideCredits={hideCredits}
+                          hideCredits={hideInitialGenerateCredits}
                           compact
                         />
                       </span>
@@ -7010,7 +7013,7 @@ export default function LinkToAdUniverse({
                       <Sparkles className="h-5 w-5 shrink-0" aria-hidden />
                       <LinkToAdStudioStyleCreditPill
                         amount={ltaInitialGenerateCharge}
-                        hideCredits={hideCredits}
+                        hideCredits={hideInitialGenerateCredits}
                       />
                     </span>
                   )}
@@ -7609,7 +7612,7 @@ export default function LinkToAdUniverse({
                       <RefreshCw className="h-3 w-3 transition-transform group-hover/regen:rotate-90" aria-hidden />
                     )}
                     {isAnglesRegenerating ? "Regenerating..." : "Regenerate"}
-                    {hideCredits ? null : <CreditCostBadge amount={2} />}
+                    {hideRegenerateCredits ? null : <CreditCostBadge amount={2} />}
                   </button>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-3">
@@ -8163,7 +8166,7 @@ export default function LinkToAdUniverse({
                             <RefreshCw className="h-2.5 w-2.5 transition-transform group-hover/ri:rotate-90" aria-hidden />
                           )}
                           {isThreeImagesBusy ? "Regenerating..." : "Regen 3 images"}
-                          {hideCredits ? null : <CreditCostBadge amount={ltaThreeImagesCharge} className="text-[9px]" />}
+                          {hideRegenerateCredits ? null : <CreditCostBadge amount={ltaThreeImagesCharge} className="text-[9px]" />}
                         </button>
                       ) : null}
                     </div>
@@ -8227,7 +8230,7 @@ export default function LinkToAdUniverse({
                           <RefreshCw className="h-2.5 w-2.5 transition-transform group-hover/regen-sa:rotate-90" aria-hidden />
                         )}
                         {isAnglesRegenerating ? "Regenerating..." : "Regenerate"}
-                        {hideCredits ? null : <CreditCostBadge amount={2} className="px-1 py-px text-[9px]" />}
+                        {hideRegenerateCredits ? null : <CreditCostBadge amount={2} className="px-1 py-px text-[9px]" />}
                       </button>
                     </div>
                     <div className="grid grid-cols-1 gap-2">
@@ -8490,7 +8493,7 @@ export default function LinkToAdUniverse({
                           <Sparkles className="h-5 w-5 shrink-0" aria-hidden />
                           <LinkToAdStudioStyleCreditPill
                             amount={ltaThreeImagesCharge}
-                            hideCredits={hideCredits}
+                            hideCredits={hideStepCredits}
                           />
                         </span>
                       </Button>
@@ -8528,7 +8531,7 @@ export default function LinkToAdUniverse({
                               <RefreshCw className="h-3 w-3 transition-transform group-hover/ri:rotate-90" aria-hidden />
                             )}
                             {isThreeImagesBusy ? "Regenerating 3 images..." : "Regenerate 3 images"}
-                            {hideCredits ? null : <CreditCostBadge amount={ltaThreeImagesCharge} />}
+                            {hideRegenerateCredits ? null : <CreditCostBadge amount={ltaThreeImagesCharge} />}
                           </button>
                         ) : null}
                       </div>
@@ -8642,7 +8645,7 @@ export default function LinkToAdUniverse({
                               <Video className="h-5 w-5 shrink-0" aria-hidden />
                               <LinkToAdStudioStyleCreditPill
                                 amount={ltaVideoPromptFromImageCreditsDisplay}
-                                hideCredits={hideCredits}
+                                hideCredits={hideStepCredits}
                               />
                             </span>
                           )}
@@ -9129,10 +9132,10 @@ export default function LinkToAdUniverse({
                                     <span className="inline-flex items-center gap-2 text-sm font-semibold leading-tight">
                                       <RefreshCw className="h-4 w-4 shrink-0" aria-hidden />
                                       Regenerate
-                                      {hideCredits ? null : (
+                                      {hideRegenerateCredits ? null : (
                                         <LinkToAdStudioStyleCreditPill
                                           amount={ltaKlingVideoRegenCharge}
-                                          hideCredits={hideCredits}
+                                          hideCredits={hideRegenerateCredits}
                                           compact
                                         />
                                       )}
@@ -9296,7 +9299,7 @@ export default function LinkToAdUniverse({
                                 <Video className="h-4 w-4 shrink-0" aria-hidden />
                                 <LinkToAdStudioStyleCreditPill
                                   amount={ltaVideoConfirmCreditsDisplay}
-                                  hideCredits={hideCredits}
+                                  hideCredits={hideStepCredits}
                                 />
                               </span>
                             </Button>
@@ -9332,7 +9335,7 @@ export default function LinkToAdUniverse({
                           <Video className="h-5 w-5 shrink-0" aria-hidden />
                           <LinkToAdStudioStyleCreditPill
                             amount={ltaVideoPromptFromImageCreditsDisplay}
-                            hideCredits={hideCredits}
+                            hideCredits={hideStepCredits}
                           />
                         </span>
                       </Button>
@@ -9472,7 +9475,7 @@ export default function LinkToAdUniverse({
               className="flex h-10 items-center justify-center gap-2 rounded-xl border border-violet-400/25 bg-violet-500/15 text-[13px] font-medium text-white/90 transition-all hover:border-violet-400/40 hover:bg-violet-500/25"
             >
               Regenerate images too
-              {hideCredits ? null : (
+              {hideRegenerateCredits ? null : (
                 <CreditCostBadge amount={ltaThreeImagesCharge} className="px-2" iconClassName="h-3 w-3" />
               )}
             </button>
