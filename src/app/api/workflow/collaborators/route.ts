@@ -138,7 +138,26 @@ export async function PATCH(req: Request) {
     .eq("user_id", auth.user.id)
     .maybeSingle();
 
-  if (!self || self.role !== "owner") {
+  if (!self) {
+    return NextResponse.json({ error: "You are not a member of this space" }, { status: 403 });
+  }
+
+  if (action === "leave") {
+    if (targetUserId !== auth.user.id) {
+      return NextResponse.json({ error: "You can only remove your own access" }, { status: 403 });
+    }
+    if (self.role === "owner") {
+      return NextResponse.json({ error: "Owner cannot leave their own space" }, { status: 400 });
+    }
+    await admin
+      .from("workflow_space_collaborators")
+      .delete()
+      .eq("space_id", spaceId)
+      .eq("user_id", auth.user.id);
+    return NextResponse.json({ ok: true });
+  }
+
+  if (self.role !== "owner") {
     return NextResponse.json({ error: "Only the owner can manage collaborators" }, { status: 403 });
   }
 

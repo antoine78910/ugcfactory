@@ -122,7 +122,8 @@ export default function WorkflowInvitePage() {
         return;
       }
       const scope = getWorkflowStorageScope(userId);
-      const copyName = `${source.name || "Shared workflow"} (copy)`;
+      const sharedBy = (accepted.invitedBy ?? info?.invitedBy ?? "shared").trim();
+      const copyName = `${source.name || "Shared workflow"} (from ${sharedBy})`;
       const meta = createSpace(scope, copyName);
       saveProjectForSpace(scope, meta.id, source.state);
       toast.success("Template copy created in your workflows.");
@@ -132,7 +133,7 @@ export default function WorkflowInvitePage() {
     } finally {
       setDuplicating(false);
     }
-  }, [accepted, userId, router]);
+  }, [accepted, userId, router, info]);
 
   useEffect(() => {
     if (userId === null && info) {

@@ -500,7 +500,7 @@ export function WorkflowSpacesLanding() {
                 const ownerLabel =
                   (s.ownerName?.trim() || s.ownerEmail?.trim() || "a collaborator").slice(0, 80);
                 return (
-                  <li key={s.id}>
+                  <li key={s.id} className="group relative">
                     <Link
                       href={`/workflow/space/${encodeURIComponent(s.id)}`}
                       scroll
@@ -527,6 +527,39 @@ export function WorkflowSpacesLanding() {
                         </p>
                       </div>
                     </Link>
+                    <div className="absolute bottom-3 right-3 z-10 flex flex-wrap justify-end gap-1 sm:bottom-4 sm:right-4 sm:gap-1.5">
+                      <button
+                        type="button"
+                        title="Remove from shared"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (!authUserId) return;
+                          void fetch("/api/workflow/collaborators", {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              spaceId: s.id,
+                              userId: authUserId,
+                              action: "leave",
+                            }),
+                          })
+                            .then(async (res) => {
+                              if (!res.ok) {
+                                const body = (await res.json().catch(() => null)) as { error?: string } | null;
+                                toast.error(body?.error || "Could not remove shared workspace.");
+                                return;
+                              }
+                              toast.success("Removed from shared");
+                              await refreshCloudSpaces();
+                            })
+                            .catch(() => toast.error("Network error"));
+                        }}
+                        className="rounded-lg border border-white/[0.08] bg-black/50 px-2 py-1 text-[11px] font-semibold text-white/55 shadow-sm backdrop-blur-sm transition hover:bg-red-500/15 hover:text-red-200"
+                      >
+                        Remove
+                      </button>
+                    </div>
                   </li>
                 );
               })}
