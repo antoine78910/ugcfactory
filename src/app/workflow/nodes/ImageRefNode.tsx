@@ -1,7 +1,7 @@
 "use client";
 
 import { Handle, Position, useReactFlow, type Node, type NodeProps } from "@xyflow/react";
-import { Clapperboard, CopyPlus, ImageIcon, Maximize2, Trash2, Upload, X } from "lucide-react";
+import { Clapperboard, CopyPlus, ImageIcon, Loader2, Maximize2, Trash2, Upload, X } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { toast } from "sonner";
@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import { uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
 import { cloneWorkflowSelection } from "../workflowClone";
 import type { WorkflowCanvasNode } from "../workflowFlowTypes";
-import { measureImageAspectFromObjectUrl, measureVideoAspectFromObjectUrl } from "../workflowMediaAspect";
+import { isVideoFile, measureImageAspectFromObjectUrl, measureVideoAspectFromObjectUrl } from "../workflowMediaAspect";
 import { WorkflowNodeContextToolbar } from "./WorkflowNodeContextToolbar";
 
 export type ImageRefNodeData = {
@@ -19,12 +19,100 @@ export type ImageRefNodeData = {
   source: "upload" | "avatar";
   mediaKind: "image" | "video";
   intrinsicAspect?: number;
+  videoExtractedFirstFrameUrl?: string;
+  videoExtractedLastFrameUrl?: string;
 };
 
 export type ImageRefNodeType = Node<ImageRefNodeData, "imageRef">;
 
 const FRAME_MAX_LONG = 260;
 const CARD_PAD_X = 0;
+const EXTRACTED_FRAME_MAX_LONG = 520;
+
+async function waitVideoMetadata(video: HTMLVideoElement): Promise<void> {
+  if (video.readyState >= HTMLMediaElement.HAVE_METADATA && Number.isFinite(video.duration) && video.duration > 0) {
+    return;
+  }
+  await new Promise<void>((resolve, reject) => {
+    const onMeta = () => {
+      video.removeEventListener("loadedmetadata", onMeta);
+      video.removeEventListener("error", onErr);
+      if (!Number.isFinite(video.duration) || video.duration <= 0) {
+        reject(new Error("Could not read video metadata."));
+        return;
+      }
+      resolve();
+    };
+    const onErr = () => {
+      video.removeEventListener("loadedmetadata", onMeta);
+      video.removeEventListener("error", onErr);
+      reject(new Error("Could not load video for frame extraction."));
+    };
+    video.addEventListener("loadedmetadata", onMeta, { once: true });
+    video.addEventListener("error", onErr, { once: true });
+  });
+}
+
+async function extractVideoFrameJpegDataUrl(video: HTMLVideoElement, end: boolean): Promise<string> {
+  await waitVideoMetadata(video);
+  const duration = video.duration;
+  const targetT = end ? Math.max(0, duration - 0.08) : 0;
+  await new Promise<void>((resolve, reject) => {
+    const onSeeked = () => {
+      video.removeEventListener("seeked", onSeeked);
+      video.removeEventListener("error", onErr);
+      resolve();
+    };
+    const onErr = () => {
+      video.removeEventListener("seeked", onSeeked);
+      video.removeEventListener("error", onErr);
+      reject(new Error("Could not seek video for frame extraction."));
+    };
+    video.addEventListener("seeked", onSeeked, { once: true });
+    video.addEventListener("error", onErr, { once: true });
+    if (Math.abs(video.currentTime - targetT) < 0.001) {
+      video.removeEventListener("seeked", onSeeked);
+      video.removeEventListener("error", onErr);
+      resolve();
+      return;
+    }
+    video.currentTime = targetT;
+  });
+
+  const vw = video.videoWidth;
+  const vh = video.videoHeight;
+  if (!vw || !vh) throw new Error("Video frame size unavailable.");
+  const scale = Math.min(1, EXTRACTED_FRAME_MAX_LONG / Math.max(vw, vh));
+  const tw = Math.max(1, Math.round(vw * scale));
+  const th = Math.max(1, Math.round(vh * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = tw;
+  canvas.height = th;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas unavailable.");
+  ctx.drawImage(video, 0, 0, tw, th);
+  return canvas.toDataURL("image/jpeg", 0.9);
+}
+
+async function extractVideoFrameJpegDataUrlFromUrl(videoUrl: string, end: boolean): Promise<string> {
+  const trimmed = videoUrl.trim();
+  if (!trimmed) throw new Error("Missing video URL.");
+  const bust = trimmed.includes("?") ? `${trimmed}&_wf_extract=${Date.now()}` : `${trimmed}?_wf_extract=${Date.now()}`;
+  const res = await fetch(`/api/download?url=${encodeURIComponent(bust)}`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`Could not download video (${res.status}).`);
+  const blob = await res.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const v = document.createElement("video");
+  v.preload = "auto";
+  v.muted = true;
+  v.playsInline = true;
+  v.src = objectUrl;
+  try {
+    return await extractVideoFrameJpegDataUrl(v, end);
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
 
 function frameDimensions(intrinsicAspect?: number): { width: number; height: number } {
   const ar = intrinsicAspect && Number.isFinite(intrinsicAspect) && intrinsicAspect > 0 ? intrinsicAspect : 1;
@@ -45,9 +133,11 @@ export function ImageRefNode({ id, data }: NodeProps<ImageRefNodeType>) {
   const [titleDraft, setTitleDraft] = useState(data.label || "Upload");
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
   const [replacing, setReplacing] = useState(false);
+  const [frameExtractBusy, setFrameExtractBusy] = useState<"first" | "last" | null>(null);
   const replaceInputRef = useRef<HTMLInputElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoExtractedForUrlRef = useRef<string | null>(null);
 
   const frame = useMemo(() => frameDimensions(data.intrinsicAspect), [data.intrinsicAspect]);
   const cardWidth = frame.width + CARD_PAD_X;
@@ -135,7 +225,7 @@ export function ImageRefNode({ id, data }: NodeProps<ImageRefNodeType>) {
       const file = e.target.files?.[0];
       e.target.value = "";
       if (!file) return;
-      const isVideo = (file.type || "").startsWith("video/");
+      const isVideo = isVideoFile(file);
       const mediaKind: "image" | "video" = isVideo ? "video" : "image";
       setReplacing(true);
       try {
@@ -160,6 +250,8 @@ export function ImageRefNode({ id, data }: NodeProps<ImageRefNodeType>) {
                     mediaKind,
                     source: "upload",
                     intrinsicAspect: intrinsicAspect && Number.isFinite(intrinsicAspect) ? intrinsicAspect : undefined,
+                    videoExtractedFirstFrameUrl: undefined,
+                    videoExtractedLastFrameUrl: undefined,
                   },
                 } as WorkflowCanvasNode)
               : n,
@@ -176,6 +268,106 @@ export function ImageRefNode({ id, data }: NodeProps<ImageRefNodeType>) {
     },
     [id, setNodes],
   );
+
+  const onExtractVideoFrame = useCallback(
+    async (which: "first" | "last") => {
+      if (!isVideo) return;
+      const src = data.imageUrl?.trim();
+      if (!src) {
+        toast.error("No video", { description: "Upload or replace the video first." });
+        return;
+      }
+      setFrameExtractBusy(which);
+      try {
+        const extracted = await extractVideoFrameJpegDataUrlFromUrl(src, which === "last");
+        setNodes((prev) =>
+          prev.map((n) =>
+            n.id === id
+              ? ({
+                  ...n,
+                  data: {
+                    ...n.data,
+                    ...(which === "first"
+                      ? { videoExtractedFirstFrameUrl: extracted }
+                      : { videoExtractedLastFrameUrl: extracted }),
+                  },
+                } as WorkflowCanvasNode)
+              : n,
+          ),
+        );
+        toast.success(which === "first" ? "Start image extracted" : "End image extracted");
+      } catch (err) {
+        toast.error("Frame extraction failed", {
+          description: err instanceof Error ? err.message : "Please try again.",
+        });
+      } finally {
+        setFrameExtractBusy(null);
+      }
+    },
+    [data.imageUrl, id, isVideo, setNodes],
+  );
+
+  /**
+   * Auto-extract first and last frame as soon as a video upload is hosted on the CDN.
+   * Skipped while the URL is still a local blob (those go through `/api/download` and
+   * would 404). Tracks the URL we already auto-extracted from so re-renders don't loop.
+   */
+  useEffect(() => {
+    if (!isVideo) return;
+    const src = (data.imageUrl ?? "").trim();
+    if (!src) return;
+    if (src.startsWith("blob:")) return;
+    if (autoExtractedForUrlRef.current === src) return;
+    if (data.videoExtractedFirstFrameUrl && data.videoExtractedLastFrameUrl) {
+      autoExtractedForUrlRef.current = src;
+      return;
+    }
+    if (frameExtractBusy) return;
+
+    let cancelled = false;
+    autoExtractedForUrlRef.current = src;
+    void (async () => {
+      try {
+        const updates: Partial<ImageRefNodeData> = {};
+        if (!data.videoExtractedFirstFrameUrl) {
+          const first = await extractVideoFrameJpegDataUrlFromUrl(src, false);
+          if (cancelled) return;
+          updates.videoExtractedFirstFrameUrl = first;
+        }
+        if (!data.videoExtractedLastFrameUrl) {
+          const last = await extractVideoFrameJpegDataUrlFromUrl(src, true);
+          if (cancelled) return;
+          updates.videoExtractedLastFrameUrl = last;
+        }
+        if (Object.keys(updates).length === 0) return;
+        setNodes((prev) =>
+          prev.map((n) =>
+            n.id === id
+              ? ({
+                  ...n,
+                  data: { ...n.data, ...updates },
+                } as WorkflowCanvasNode)
+              : n,
+          ),
+        );
+      } catch {
+        // Silent: the user can still trigger extraction manually by double-clicking the bubbles.
+        autoExtractedForUrlRef.current = null;
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    data.imageUrl,
+    data.videoExtractedFirstFrameUrl,
+    data.videoExtractedLastFrameUrl,
+    frameExtractBusy,
+    id,
+    isVideo,
+    setNodes,
+  ]);
+
   useEffect(() => {
     if (!menuOpen) return;
     const onDown = () => closeMenu();
@@ -197,7 +389,11 @@ export function ImageRefNode({ id, data }: NodeProps<ImageRefNodeType>) {
       <div className="relative flex items-end gap-1">
         <div className="absolute left-0 -top-6 z-[6] flex min-w-0 items-center gap-2.5 pr-2">
           <div className="flex h-6 w-6 items-center justify-center rounded-md border border-violet-500/45 bg-violet-950/65">
-            <ImageIcon className="h-3.5 w-3.5 text-violet-300" />
+            {isVideo ? (
+              <Clapperboard className="h-3.5 w-3.5 text-violet-300" />
+            ) : (
+              <ImageIcon className="h-3.5 w-3.5 text-violet-300" />
+            )}
           </div>
           {titleEditing ? (
             <input
@@ -317,6 +513,62 @@ export function ImageRefNode({ id, data }: NodeProps<ImageRefNodeType>) {
               {isVideo ? <Clapperboard className="h-3.5 w-3.5" aria-hidden /> : <ImageIcon className="h-3.5 w-3.5" aria-hidden />}
             </span>
           </div>
+          {isVideo ? (
+            <>
+              <div className={cn(outputBubbleShellClass, data.videoExtractedFirstFrameUrl && "border-emerald-400/35")}>
+                <Handle
+                  id="videoFirst"
+                  type="source"
+                  position={Position.Right}
+                  className={outputBubbleHandleClass}
+                  title="Start image output, double-click to extract from the uploaded video"
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    void onExtractVideoFrame("first");
+                  }}
+                />
+                <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/85">
+                  {frameExtractBusy === "first" ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                  ) : (
+                    <ImageIcon className="h-3.5 w-3.5" aria-hidden />
+                  )}
+                </span>
+                <span
+                  className="pointer-events-none absolute -bottom-1 -right-1 z-[3] flex h-4 min-w-4 items-center justify-center rounded-full border border-white/15 bg-[#15151a] px-1 text-[8px] font-bold uppercase tracking-wide text-white/85 shadow-[0_2px_6px_rgba(0,0,0,0.35)]"
+                  aria-hidden
+                >
+                  S
+                </span>
+              </div>
+              <div className={cn(outputBubbleShellClass, data.videoExtractedLastFrameUrl && "border-emerald-400/35")}>
+                <Handle
+                  id="videoLast"
+                  type="source"
+                  position={Position.Right}
+                  className={outputBubbleHandleClass}
+                  title="End image output, double-click to extract from the uploaded video"
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    void onExtractVideoFrame("last");
+                  }}
+                />
+                <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/85">
+                  {frameExtractBusy === "last" ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                  ) : (
+                    <ImageIcon className="h-3.5 w-3.5" aria-hidden />
+                  )}
+                </span>
+                <span
+                  className="pointer-events-none absolute -bottom-1 -right-1 z-[3] flex h-4 min-w-4 items-center justify-center rounded-full border border-white/15 bg-[#15151a] px-1 text-[8px] font-bold uppercase tracking-wide text-white/85 shadow-[0_2px_6px_rgba(0,0,0,0.35)]"
+                  aria-hidden
+                >
+                  E
+                </span>
+              </div>
+            </>
+          ) : null}
         </div>
       </div>
 

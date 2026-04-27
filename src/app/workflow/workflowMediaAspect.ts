@@ -1,5 +1,40 @@
 /** Measure width/height ratio from an object URL (e.g. URL.createObjectURL). */
 
+const VIDEO_FILE_EXTENSIONS = new Set([
+  "mp4",
+  "m4v",
+  "mov",
+  "webm",
+  "mkv",
+  "avi",
+  "ogv",
+  "ogg",
+  "3gp",
+  "3g2",
+  "mpeg",
+  "mpg",
+  "wmv",
+  "flv",
+  "ts",
+  "mts",
+  "m2ts",
+]);
+
+/**
+ * Detect a video file even when the browser fails to set a MIME type
+ * (common for `.mov` from iPhone Safari, screen recorders, etc.).
+ */
+export function isVideoFile(file: File | { name?: string; type?: string } | null | undefined): boolean {
+  if (!file) return false;
+  const mime = (file.type ?? "").toLowerCase();
+  if (mime.startsWith("video/")) return true;
+  const name = (file.name ?? "").toLowerCase();
+  const dot = name.lastIndexOf(".");
+  if (dot < 0) return false;
+  const ext = name.slice(dot + 1).trim();
+  return VIDEO_FILE_EXTENSIONS.has(ext);
+}
+
 export function measureImageAspectFromObjectUrl(objectUrl: string): Promise<number> {
   return new Promise((resolve, reject) => {
     const img = new Image();

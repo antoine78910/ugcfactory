@@ -137,6 +137,7 @@ import {
   type WorkflowDragNodeKind,
 } from "./workflowNodeFactory";
 import {
+  isVideoFile,
   measureImageAspectFromObjectUrl,
   measureImageAspectFromUrlSafe,
   measureVideoAspectFromObjectUrl,
@@ -347,6 +348,7 @@ function sourceKindFromNodeHandle(
   if (node.type === "textPrompt" || node.type === "stickyNote") return "text";
   if (node.type === "imageRef") {
     const d = node.data as any;
+    if (h === "videoFirst" || h === "videoLast") return "image";
     return d.mediaKind === "video" ? "video" : "image";
   }
   if (node.type === "promptList") {
@@ -1006,7 +1008,7 @@ function WorkflowReactFlowChrome({
   const addImageNodeFromFile = useCallback(
     (file: File) => {
       const pendingConnect = pendingImageRefConnectRef.current;
-      const isVideo = file.type.startsWith("video/");
+      const isVideo = isVideoFile(file);
       const objectUrl = URL.createObjectURL(file);
       let tempNodeId: string | null = null;
       void (async () => {

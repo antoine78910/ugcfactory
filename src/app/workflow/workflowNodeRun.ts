@@ -482,7 +482,24 @@ export function collectLinkedImageUrlsForHandles(
     }
     if (src.type === "imageRef") {
       const d = src.data as ImageRefNodeData;
-      if (d.mediaKind === "video") continue;
+      if (d.mediaKind === "video") {
+        const srcHandle = e.sourceHandle ?? "out";
+        const first = d.videoExtractedFirstFrameUrl?.trim();
+        const last = d.videoExtractedLastFrameUrl?.trim();
+        const targetHandle = e.targetHandle ?? "in";
+        const picked =
+          srcHandle === "videoFirst"
+            ? first
+            : srcHandle === "videoLast"
+              ? last
+              : targetHandle === "endImage"
+                ? last || first
+                : first || last;
+        if (!picked || seen.has(picked)) continue;
+        seen.add(picked);
+        urls.push(picked);
+        continue;
+      }
       const url = d.imageUrl?.trim();
       if (!url || seen.has(url)) continue;
       seen.add(url);
