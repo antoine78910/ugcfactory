@@ -40,6 +40,8 @@ function isExcludedFromStudioRewrite(pathname: string): boolean {
     /** Onboarding + setup, standalone pages, not part of the studio shell. */
     "onboarding",
     "setup",
+    /** Clipping studio, intentionally hidden / unlisted, must stay outside the studio shell. */
+    "clipping",
   ]).has(first);
 }
 

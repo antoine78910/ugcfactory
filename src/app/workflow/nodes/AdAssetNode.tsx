@@ -421,6 +421,7 @@ async function extractVideoFrameJpegDataUrl(video: HTMLVideoElement, end: boolea
 
   let tw = vw;
   let th = vh;
+  const VIDEO_FRAME_MIN_EDGE = 300;
   const long = Math.max(vw, vh);
   if (long > VIDEO_FRAME_EXTRACT_MAX_LONG) {
     if (vw >= vh) {
@@ -430,6 +431,12 @@ async function extractVideoFrameJpegDataUrl(video: HTMLVideoElement, end: boolea
       th = VIDEO_FRAME_EXTRACT_MAX_LONG;
       tw = Math.max(1, Math.round((vw / vh) * VIDEO_FRAME_EXTRACT_MAX_LONG));
     }
+  }
+  const minEdge = Math.min(tw, th);
+  if (minEdge < VIDEO_FRAME_MIN_EDGE) {
+    const upScale = VIDEO_FRAME_MIN_EDGE / minEdge;
+    tw = Math.max(VIDEO_FRAME_MIN_EDGE, Math.round(tw * upScale));
+    th = Math.max(VIDEO_FRAME_MIN_EDGE, Math.round(th * upScale));
   }
 
   const canvas = document.createElement("canvas");

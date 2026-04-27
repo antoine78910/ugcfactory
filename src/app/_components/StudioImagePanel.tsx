@@ -220,7 +220,7 @@ function applyRefundHints(
 }
 
 export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProps) {
-  const { planId, current: creditsBalance, spendCredits, grantCredits } = useCreditsPlan();
+  const { planId, isTrial, current: creditsBalance, spendCredits, grantCredits } = useCreditsPlan();
   const creditsRef = useRef(creditsBalance);
   creditsRef.current = creditsBalance;
 
@@ -693,10 +693,14 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
           <span className="inline-flex items-center gap-2">
             Generate
             {isStartingGeneration ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}
-            <span className="rounded-md bg-white/15 px-2 py-0.5 text-base tabular-nums">
-              {formatDisplayCredits(totalCredits)}
-            </span>
-            <span className="text-sm font-normal text-white/80">credits</span>
+            {isTrial ? (
+              <>
+                <span className="rounded-md bg-white/15 px-2 py-0.5 text-base tabular-nums">
+                  {formatDisplayCredits(totalCredits)}
+                </span>
+                <span className="text-sm font-normal text-white/80">credits</span>
+              </>
+            ) : null}
           </span>
         </Button>
 

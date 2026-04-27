@@ -2,14 +2,11 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
-import { CreditsPlanProvider } from "@/app/_components/CreditsPlanContext";
-import { StudioAccessGuard } from "@/app/_components/StudioAccessGuard";
-import { BrowserSupabaseProvider } from "@/lib/supabase/BrowserSupabaseProvider";
 import { Toaster } from "@/components/ui/sonner";
 import HeyoInit from "@/app/_components/HeyoInit";
 import ClarityInit from "@/app/_components/ClarityInit";
-import { RedeemTokenGuard } from "@/app/_components/RedeemTokenGuard";
 import { DubAnalyticsInit } from "@/app/_components/DubAnalyticsInit";
+import { RouteAwareAppProviders } from "@/app/_components/RouteAwareAppProviders";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -21,7 +18,7 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const defaultTitle = "Youry | Turn Any Product Into A Video Ad";
+const defaultTitle = "Youry";
 const defaultDescription =
   "Turn any product into realistic AI ads, UGC, reels and stories.";
 
@@ -128,15 +125,17 @@ export default function RootLayout({
         />
         {/* Dub script early so `window.dubAnalytics` exists before auth and other client code runs. */}
         <DubAnalyticsInit />
-        <BrowserSupabaseProvider>
-          <CreditsPlanProvider>
-            <StudioAccessGuard />
-            <RedeemTokenGuard />
-            <HeyoInit />
-            <ClarityInit />
-            {children}
-          </CreditsPlanProvider>
-        </BrowserSupabaseProvider>
+        {/*
+          The Supabase + Credits/Plan + studio guards stack only loads on app
+          routes (anything that isn't `/`). On the marketing LP, this saves
+          ~140 KiB of unused JS that Lighthouse was attributing to the largest
+          first-party chunk. See `RouteAwareAppProviders` for the routing rule.
+        */}
+        <RouteAwareAppProviders>
+          <HeyoInit />
+          <ClarityInit />
+          {children}
+        </RouteAwareAppProviders>
         <Toaster richColors />
       </body>
     </html>

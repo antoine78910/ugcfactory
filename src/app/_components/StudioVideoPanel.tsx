@@ -938,7 +938,7 @@ export default function StudioVideoPanel({
 }: {
   onChangeVoice?: (item: import("@/app/_components/StudioGenerationsHistory").StudioHistoryItem) => void;
 }) {
-  const { planId, current: creditsBalance, spendCredits, grantCredits } = useCreditsPlan();
+  const { planId, isTrial, current: creditsBalance, spendCredits, grantCredits } = useCreditsPlan();
   const [serverHistory, setServerHistory] = useState<boolean | null>(null);
   const creditsRef = useRef(creditsBalance);
   creditsRef.current = creditsBalance;
@@ -4156,7 +4156,9 @@ export default function StudioVideoPanel({
                 ) : (
                   <Sparkles className="h-5 w-5" />
                 )}
-                <span className="rounded-md bg-white/15 px-2 py-0.5 text-base tabular-nums">{editCredits}</span>
+                {isTrial ? (
+                  <span className="rounded-md bg-white/15 px-2 py-0.5 text-base tabular-nums">{editCredits}</span>
+                ) : null}
               </span>
             </Button>
             </div>
@@ -4845,7 +4847,9 @@ export default function StudioVideoPanel({
                 ) : (
                   <Sparkles className="h-5 w-5" />
                 )}
-                <span className="rounded-md bg-white/15 px-2 py-0.5 text-base tabular-nums">{credits}</span>
+                {isTrial ? (
+                  <span className="rounded-md bg-white/15 px-2 py-0.5 text-base tabular-nums">{credits}</span>
+                ) : null}
               </span>
             </Button>
             </div>

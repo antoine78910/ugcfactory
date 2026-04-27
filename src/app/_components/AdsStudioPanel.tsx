@@ -310,7 +310,7 @@ async function pollVideo(taskId: string, personalApiKey?: string, piapiApiKey?: 
 }
 
 export default function AdsStudioPanel() {
-  const { planId } = useCreditsPlan();
+  const { planId, isTrial } = useCreditsPlan();
   const [assetType, setAssetType] = useState<"product" | "app">("product");
   const [seedanceSpeed, setSeedanceSpeed] = useState<LinkToAdSeedanceSpeed>("normal");
   const [videoDurationSec, setVideoDurationSec] = useState<5 | 10 | 15>(10);
@@ -597,7 +597,7 @@ export default function AdsStudioPanel() {
                 <div className="relative flex flex-col items-center gap-0.5 text-white [text-shadow:0px_0px_8px_rgba(255,255,255,0.45)]">
                   <div className="flex items-center gap-1.5">
                     <span>{isGenerating ? "GENERATING" : "GENERATE"}</span>
-                    <span className="opacity-80">+ {generationCredits}</span>
+                    {isTrial ? <span className="opacity-80">+ {generationCredits}</span> : null}
                   </div>
                 </div>
               </Button>

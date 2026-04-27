@@ -28,6 +28,7 @@ export type ImageRefNodeType = Node<ImageRefNodeData, "imageRef">;
 const FRAME_MAX_LONG = 260;
 const CARD_PAD_X = 0;
 const EXTRACTED_FRAME_MAX_LONG = 520;
+const EXTRACTED_FRAME_MIN_EDGE = 300;
 
 async function waitVideoMetadata(video: HTMLVideoElement): Promise<void> {
   if (video.readyState >= HTMLMediaElement.HAVE_METADATA && Number.isFinite(video.duration) && video.duration > 0) {
@@ -83,8 +84,14 @@ async function extractVideoFrameJpegDataUrl(video: HTMLVideoElement, end: boolea
   const vh = video.videoHeight;
   if (!vw || !vh) throw new Error("Video frame size unavailable.");
   const scale = Math.min(1, EXTRACTED_FRAME_MAX_LONG / Math.max(vw, vh));
-  const tw = Math.max(1, Math.round(vw * scale));
-  const th = Math.max(1, Math.round(vh * scale));
+  let tw = Math.max(1, Math.round(vw * scale));
+  let th = Math.max(1, Math.round(vh * scale));
+  const minEdge = Math.min(tw, th);
+  if (minEdge < EXTRACTED_FRAME_MIN_EDGE) {
+    const upScale = EXTRACTED_FRAME_MIN_EDGE / minEdge;
+    tw = Math.max(EXTRACTED_FRAME_MIN_EDGE, Math.round(tw * upScale));
+    th = Math.max(EXTRACTED_FRAME_MIN_EDGE, Math.round(th * upScale));
+  }
   const canvas = document.createElement("canvas");
   canvas.width = tw;
   canvas.height = th;

@@ -9545,26 +9545,6 @@ export default function LinkToAdUniverse({
       title="Choose persona / avatar"
     />
 
-    {isDemoUser && stage === "ready" && !demoReplayActive ? (
-      <div className="fixed bottom-4 right-4 z-[9999] flex flex-col gap-1.5 rounded-xl border border-white/10 bg-black/80 p-3 shadow-2xl backdrop-blur-md"
-        style={{ maxWidth: 200 }}
-      >
-        <span className="text-[10px] font-bold uppercase tracking-widest text-white/30">Demo</span>
-        <button type="button" onClick={startDemoReplay} className="rounded-md bg-violet-600/80 px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-violet-500">
-          Replay pipeline
-        </button>
-        <button type="button" onClick={demoSimulateImageGen} className="rounded-md bg-white/10 px-2.5 py-1.5 text-[11px] font-medium text-white/70 hover:bg-white/20">
-          Simulate image gen
-        </button>
-        <button type="button" onClick={demoSimulateVideoPrompt} className="rounded-md bg-white/10 px-2.5 py-1.5 text-[11px] font-medium text-white/70 hover:bg-white/20">
-          Simulate prompt write
-        </button>
-        <button type="button" onClick={demoSimulateVideoRender} className="rounded-md bg-white/10 px-2.5 py-1.5 text-[11px] font-medium text-white/70 hover:bg-white/20">
-          Simulate video render
-        </button>
-      </div>
-    ) : null}
-
     {isDemoUser && demoReplayActive ? (
       <div className="fixed bottom-4 right-4 z-[9999] flex flex-col items-center gap-2 rounded-xl border border-violet-500/30 bg-black/80 p-3 shadow-2xl backdrop-blur-md"
         style={{ maxWidth: 200 }}

@@ -47,10 +47,40 @@ const nextConfig: NextConfig = {
       { key: "Vary", value: "Origin" },
     ];
 
+    /**
+     * Next.js merges `headers()` rules and the LAST matching rule wins per
+     * header key. We therefore declare the broad extension catch-alls FIRST
+     * and the per-folder rules AFTER, so `/carousel/foo.png` ends up with the
+     * folder's `immutable` header instead of the catch-all 7-day `max-age`.
+     * Previously the carousel/studio/steps PNGs were silently downgraded to a
+     * 1-week TTL, which is exactly what Lighthouse flagged under
+     * "Use efficient cache lifetimes".
+     */
     return [
       {
         source: "/:path*",
         headers: securityHeadersList(),
+      },
+      {
+        source: "/:file(.*\\.(?:png|jpg|jpeg|webp|avif|ico|svg))",
+        headers: [
+          ...PUBLIC_ASSET_CORS,
+          { key: "Cache-Control", value: "public, max-age=604800, stale-while-revalidate=86400" },
+        ],
+      },
+      {
+        source: "/:file(.*\\.(?:woff|woff2|ttf|otf|eot))",
+        headers: [
+          ...PUBLIC_ASSET_CORS,
+          { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
+        ],
+      },
+      {
+        source: "/:file(.*\\.css)",
+        headers: [
+          ...PUBLIC_ASSET_CORS,
+          { key: "Cache-Control", value: "public, max-age=604800, stale-while-revalidate=86400" },
+        ],
       },
       /**
        * Next.js build assets (hashed JS/CSS chunks, fonts, optimized images via next/font).
@@ -83,27 +113,6 @@ const nextConfig: NextConfig = {
         headers: [
           ...PUBLIC_ASSET_CORS,
           { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
-        ],
-      },
-      {
-        source: "/:file(.*\\.(?:png|jpg|jpeg|webp|avif|ico|svg))",
-        headers: [
-          ...PUBLIC_ASSET_CORS,
-          { key: "Cache-Control", value: "public, max-age=604800, stale-while-revalidate=86400" },
-        ],
-      },
-      {
-        source: "/:file(.*\\.(?:woff|woff2|ttf|otf|eot))",
-        headers: [
-          ...PUBLIC_ASSET_CORS,
-          { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
-        ],
-      },
-      {
-        source: "/:file(.*\\.css)",
-        headers: [
-          ...PUBLIC_ASSET_CORS,
-          { key: "Cache-Control", value: "public, max-age=604800, stale-while-revalidate=86400" },
         ],
       },
     ];

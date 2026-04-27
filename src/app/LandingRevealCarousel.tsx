@@ -124,9 +124,16 @@ function RevealSlide({
         alt={imageAlt}
         fill
         className="object-cover"
-        sizes="(max-width:768px) 90vw, 400px"
+        /**
+         * Drop `unoptimized` so Next serves AVIF/WebP at the actual displayed
+         * width (~500px max). Lighthouse was flagging product-1 / product-2 as
+         * "image larger than displayed" because the raw 585x914 PNGs were sent
+         * at 1× regardless of viewport. Combined with `images.minimumCacheTTL`
+         * = 1y, the optimized variants are cached aggressively on the edge.
+         */
+        sizes="(max-width:768px) 46vw, 400px"
         loading={slideIndex === 0 ? "eager" : "lazy"}
-        unoptimized
+        quality={70}
         draggable={false}
       />
       <div
