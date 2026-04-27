@@ -332,6 +332,7 @@ export default function ClippingStudio() {
 
   /* ----------------------------- Render loop ----------------------------- */
   const startRenderLoop = useCallback(() => {
+    if (animationFrameRef.current !== null) return;
     const canvas = canvasRef.current;
     const previewCanvas = previewCanvasRef.current;
     const ctx = canvas?.getContext("2d");
@@ -409,6 +410,11 @@ export default function ClippingStudio() {
 
     animationFrameRef.current = requestAnimationFrame(tick);
   }, [mirrorWebcam]);
+
+  useEffect(() => {
+    // Show live camera preview as soon as setup is reached.
+    if (stage === "setup") startRenderLoop();
+  }, [stage, startRenderLoop]);
 
   /* ----------------------------- Recording ----------------------------- */
   const ensureAudioGraph = useCallback((): MediaStream | null => {
@@ -524,13 +530,9 @@ export default function ClippingStudio() {
   );
 
   const startSession = useCallback(() => {
-    if (!templateObjectUrl) {
-      setErrorMessage("Upload a template video before starting.");
-      return;
-    }
     setStage("ready_for_hook");
     startRenderLoop();
-  }, [startRenderLoop, templateObjectUrl]);
+  }, [startRenderLoop]);
 
   const startHookCountdown = useCallback(() => {
     setStage("countdown_hook");
@@ -564,6 +566,10 @@ export default function ClippingStudio() {
   }, [beginCountdownThen, hookDuration, startMediaRecorder]);
 
   const startVideoCountdown = useCallback(() => {
+    if (!templateObjectUrl) {
+      setErrorMessage("Upload a template video before recording phase 2.");
+      return;
+    }
     const tpl = templateVideoRef.current;
     if (!tpl) {
       setErrorMessage("Template video missing.");
@@ -599,7 +605,7 @@ export default function ClippingStudio() {
         }
       }, 1000);
     });
-  }, [beginCountdownThen, templateDurationSec]);
+  }, [beginCountdownThen, templateDurationSec, templateObjectUrl]);
 
   /** Stop the recorder and end the session. Triggered by template `ended`. */
   const finalizeRecording = useCallback(() => {
@@ -987,8 +993,7 @@ export default function ClippingStudio() {
                 <button
                   type="button"
                   onClick={startSession}
-                  disabled={!templateObjectUrl}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-semibold hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-semibold hover:bg-violet-500"
                 >
                   <Wand2 className="size-4" aria-hidden /> Start session
                 </button>
