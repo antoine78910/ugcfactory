@@ -104,6 +104,29 @@ function drawCover(
   ctx.drawImage(src, cropX, cropY, cropW, cropH, dx, dy, dw, dh);
 }
 
+/**
+ * Draws `src` fully visible inside destination rectangle (letterbox/pillarbox
+ * if needed), equivalent to CSS `object-fit: contain`.
+ */
+function drawContain(
+  ctx: CanvasRenderingContext2D,
+  src: HTMLVideoElement,
+  dx: number,
+  dy: number,
+  dw: number,
+  dh: number,
+): void {
+  const sw = src.videoWidth;
+  const sh = src.videoHeight;
+  if (!sw || !sh) return;
+  const scale = Math.min(dw / sw, dh / sh);
+  const renderW = sw * scale;
+  const renderH = sh * scale;
+  const x = dx + (dw - renderW) / 2;
+  const y = dy + (dh - renderH) / 2;
+  ctx.drawImage(src, x, y, renderW, renderH);
+}
+
 export default function ClippingStudio() {
   const searchParams = useSearchParams();
   const clipId = searchParams.get("id") ?? null;
@@ -127,12 +150,14 @@ export default function ClippingStudio() {
   const [exportedBlob, setExportedBlob] = useState<Blob | null>(null);
   const [exportedUrl, setExportedUrl] = useState<string | null>(null);
   const [exportedExt, setExportedExt] = useState<string>("webm");
+  const [awaitingFinalDecision, setAwaitingFinalDecision] = useState(false);
 
   /** Refs that should not trigger re-renders. */
   const webcamVideoRef = useRef<HTMLVideoElement | null>(null);
   const templateVideoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const templateFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const userMediaStreamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -357,15 +382,15 @@ export default function ClippingStudio() {
           ctx.scale(-1, 1);
           if (isSplitPhase) {
             // Top half (mirrored coords are flipped horizontally only).
-            drawCover(ctx, webcam, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT / 2);
+            drawContain(ctx, webcam, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT / 2);
           } else {
-            drawCover(ctx, webcam, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+            drawContain(ctx, webcam, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
           }
           ctx.restore();
         } else if (isSplitPhase) {
-          drawCover(ctx, webcam, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT / 2);
+          drawContain(ctx, webcam, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT / 2);
         } else {
-          drawCover(ctx, webcam, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+          drawContain(ctx, webcam, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
         }
       }
 
@@ -499,6 +524,7 @@ export default function ClippingStudio() {
       setExportedBlob(blob);
       setExportedUrl(url);
       setExportedExt(fileExtensionFromMime(finalMime));
+      setAwaitingFinalDecision(true);
       setStage("done");
     };
     recorder.start(250);
@@ -631,20 +657,50 @@ export default function ClippingStudio() {
     finalizeRecording();
   }, [finalizeRecording]);
 
-  /* ------------------------------ Reset ------------------------------ */
-  const resetForRetake = useCallback(() => {
-    clearTimers();
-    setPhaseSecondsLeft(null);
-    setCountdown(null);
-    if (recorderRef.current && recorderRef.current.state !== "inactive") {
+  /**
+   * Stop recorder and discard accumulated chunks without producing a final file.
+   * Used when user wants to retake the hook before phase 2 starts.
+   */
+  const discardCurrentRecording = useCallback(() => {
+    const rec = recorderRef.current;
+    if (rec && rec.state !== "inactive") {
       try {
-        recorderRef.current.stop();
+        rec.ondataavailable = null;
+        rec.onstop = null;
+        rec.stop();
       } catch {
         /* ignore */
       }
     }
     recorderRef.current = null;
     recorderChunksRef.current = [];
+  }, []);
+
+  const retakeHookPhase = useCallback(() => {
+    clearTimers();
+    setCountdown(null);
+    setPhaseSecondsLeft(null);
+    setErrorMessage(null);
+    setAwaitingFinalDecision(false);
+    discardCurrentRecording();
+    if (templateVideoRef.current) {
+      try {
+        templateVideoRef.current.pause();
+        templateVideoRef.current.currentTime = 0;
+      } catch {
+        /* ignore */
+      }
+    }
+    setStage("ready_for_hook");
+  }, [clearTimers, discardCurrentRecording]);
+
+  /* ------------------------------ Reset ------------------------------ */
+  const resetForRetake = useCallback(() => {
+    clearTimers();
+    setPhaseSecondsLeft(null);
+    setCountdown(null);
+    setAwaitingFinalDecision(false);
+    discardCurrentRecording();
     if (exportedUrl) URL.revokeObjectURL(exportedUrl);
     setExportedUrl(null);
     setExportedBlob(null);
@@ -657,7 +713,7 @@ export default function ClippingStudio() {
       }
     }
     setStage("ready_for_hook");
-  }, [clearTimers, exportedUrl]);
+  }, [clearTimers, discardCurrentRecording, exportedUrl]);
 
   /* ------------------------------- UI ------------------------------- */
   const currentLabel = useMemo(() => {
@@ -695,6 +751,9 @@ export default function ClippingStudio() {
     stage === "countdown_video" ||
     stage === "recording_video" ||
     stage === "processing";
+  const compactControls =
+    stage !== "permission" && stage !== "setup" && stage !== "error" && stage !== "done";
+  const canEditControls = !isLive || stage === "ready_for_hook";
 
   return (
     <div className="min-h-screen w-full bg-gradient-to-b from-[#06050a] via-[#0a0612] to-[#050307] text-white">
@@ -723,9 +782,21 @@ export default function ClippingStudio() {
           ) : null}
         </header>
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div
+          className={
+            compactControls
+              ? "relative flex min-h-[72vh] items-center justify-center"
+              : "grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_360px]"
+          }
+        >
           {/* ---------- Stage / live preview ---------- */}
-          <section className="relative flex flex-col items-center justify-center gap-4 rounded-3xl border border-white/8 bg-black/40 p-4 sm:p-6">
+          <section
+            className={
+              compactControls
+                ? "relative flex w-full max-w-[520px] flex-col items-center justify-center gap-4 rounded-3xl border border-white/8 bg-black/40 p-4 sm:p-6"
+                : "relative flex flex-col items-center justify-center gap-4 rounded-3xl border border-white/8 bg-black/40 p-4 sm:p-6"
+            }
+          >
             <div
               className="relative w-full max-w-[420px] overflow-hidden rounded-2xl border border-white/10 bg-black"
               style={{ aspectRatio: "9 / 16" }}
@@ -813,13 +884,22 @@ export default function ClippingStudio() {
                     Webcam stays on top, the template plays below. Recording continues
                     until the template ends.
                   </p>
-                  <button
-                    type="button"
-                    onClick={startVideoCountdown}
-                    className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold hover:bg-violet-500"
-                  >
-                    <CircleDot className="size-4" aria-hidden /> Start the template
-                  </button>
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    <button
+                      type="button"
+                      onClick={startVideoCountdown}
+                      className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-semibold hover:bg-violet-500"
+                    >
+                      <CircleDot className="size-4" aria-hidden /> Continue
+                    </button>
+                    <button
+                      type="button"
+                      onClick={retakeHookPhase}
+                      className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/[0.06] px-4 py-2.5 text-sm font-semibold text-white/90 hover:bg-white/[0.12]"
+                    >
+                      <RefreshCw className="size-4" aria-hidden /> Retake hook
+                    </button>
+                  </div>
                 </div>
               ) : null}
 
@@ -901,6 +981,24 @@ export default function ClippingStudio() {
                     <RefreshCw className="size-4" aria-hidden /> Retake
                   </button>
                 </div>
+                {awaitingFinalDecision ? (
+                  <div className="mt-1 flex w-full flex-wrap items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] p-2">
+                    <button
+                      type="button"
+                      onClick={() => setAwaitingFinalDecision(false)}
+                      className="inline-flex items-center gap-2 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold hover:bg-violet-500"
+                    >
+                      Continue
+                    </button>
+                    <button
+                      type="button"
+                      onClick={resetForRetake}
+                      className="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/[0.05] px-3 py-1.5 text-xs font-semibold hover:bg-white/[0.1]"
+                    >
+                      Retake
+                    </button>
+                  </div>
+                ) : null}
                 <p className="text-[11px] text-white/45">
                   File: {exportedBlob ? `${(exportedBlob.size / 1024 / 1024).toFixed(1)} MB` : "—"} ·{" "}
                   {exportedExt.toUpperCase()}
@@ -910,18 +1008,29 @@ export default function ClippingStudio() {
           </section>
 
           {/* ---------- Setup / controls ---------- */}
-          <aside className="flex flex-col gap-4 rounded-3xl border border-white/8 bg-black/30 p-5">
+          <aside
+            className={
+              compactControls
+                ? "absolute right-0 top-0 hidden w-[220px] flex-col gap-2 rounded-2xl border border-white/8 bg-black/45 p-3 lg:flex"
+                : "flex flex-col gap-4 rounded-3xl border border-white/8 bg-black/30 p-5"
+            }
+          >
             <div className="flex items-center gap-2 text-sm font-semibold">
               <UploadCloud className="size-4 text-violet-300" aria-hidden /> Template
               video
             </div>
-            <label className="group relative flex flex-col items-center justify-center gap-1 rounded-2xl border border-dashed border-white/15 bg-white/[0.02] px-3 py-6 text-center text-xs text-white/55 transition hover:border-violet-400/40 hover:bg-white/[0.04]">
+            <div
+              className={`group relative flex flex-col items-center justify-center gap-1 rounded-2xl border border-dashed border-white/15 bg-white/[0.02] text-center text-xs text-white/55 transition hover:border-violet-400/40 hover:bg-white/[0.04] ${
+                compactControls ? "px-2 py-3" : "px-3 py-6"
+              }`}
+            >
               <input
+                ref={templateFileInputRef}
                 type="file"
                 accept="video/*"
-                className="absolute inset-0 cursor-pointer opacity-0"
+                className="hidden"
                 onChange={(e) => onTemplateFile(e.target.files?.[0] ?? null)}
-                disabled={isLive && stage !== "ready_for_hook"}
+                disabled={!canEditControls}
               />
               {templateFile ? (
                 <span className="text-white/85">{templateFile.name}</span>
@@ -936,7 +1045,15 @@ export default function ClippingStudio() {
                   Duration: {templateDurationSec.toFixed(1)}s
                 </span>
               ) : null}
-            </label>
+              <button
+                type="button"
+                onClick={() => templateFileInputRef.current?.click()}
+                disabled={!canEditControls}
+                className="mt-2 rounded-lg border border-white/20 bg-white/[0.04] px-3 py-1.5 text-[11px] font-semibold text-white/85 hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Choose video
+              </button>
+            </div>
 
             <div className="flex flex-col gap-2 text-sm">
               <label className="text-xs font-semibold uppercase tracking-widest text-white/45">
@@ -950,7 +1067,7 @@ export default function ClippingStudio() {
                   value={hookDuration}
                   onChange={(e) => setHookDuration(Number(e.target.value))}
                   className="flex-1"
-                  disabled={isLive}
+                  disabled={!canEditControls}
                 />
                 <span className="w-10 text-right text-xs text-white/70">
                   {hookDuration}s
@@ -967,7 +1084,7 @@ export default function ClippingStudio() {
                   value={selectedCameraId ?? ""}
                   onChange={(e) => switchCamera(e.target.value)}
                   className="rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-xs text-white/85"
-                  disabled={isLive}
+                  disabled={!canEditControls}
                 >
                   {cameras.map((c) => (
                     <option key={c.deviceId} value={c.deviceId}>
@@ -984,7 +1101,7 @@ export default function ClippingStudio() {
                 type="checkbox"
                 checked={mirrorWebcam}
                 onChange={(e) => setMirrorWebcam(e.target.checked)}
-                disabled={isLive}
+                disabled={!canEditControls}
               />
             </label>
 
