@@ -2081,6 +2081,14 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           progressListId,
           listLabel: imageResultsListLabel,
         });
+        emitRunLog(
+          "info",
+          `Image run config: model=${model}, aspect=${aspectRatio}, resolution=${resolution}, prompts=${
+            promptsForRun.length
+          }, promptChars=${promptsForRun.map((p) => p.trim().length).join("/")}, refs=${
+            refsForJob.length
+          }, promptSample="${promptsForRun[0]?.trim().slice(0, 120) ?? ""}".`,
+        );
         const imageResults = await Promise.all(
           promptsForRun.map(async (p, idx) => {
             const { imageUrl } = await runWorkflowImageJob({
@@ -2253,6 +2261,16 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       let pendingTaskIds: string[] = [];
       try {
         const promptsForRun = batchPrompts?.length ? batchPrompts : [singlePrompt];
+        emitRunLog(
+          "info",
+          `Motion run config: model=${model}, quality=${motionQuality}, duration=${detectedDurationSec}s, prompts=${
+            promptsForRun.length
+          }, promptChars=${promptsForRun.map((p) => p.trim().length).join("/")}, imageInput=${
+            motionImageUrl ? "yes" : "no"
+          }, videoInput=${motionVideoUrl ? "yes" : "no"}, promptSample="${
+            promptsForRun[0]?.trim().slice(0, 120) ?? ""
+          }".`,
+        );
         pendingTaskIds = Array.from({ length: promptsForRun.length }, () => "");
         setPendingWorkflowRun({
           mediaKind: "video",
@@ -2455,6 +2473,15 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       };
 
       promptsForRun = batchPrompts?.length ? batchPrompts : [singlePrompt];
+      const promptChars = promptsForRun.map((x) => x.trim().length);
+      emitRunLog(
+        "info",
+        `Video run config: model=${model}, aspect=${aspectRatio}, duration=${data.videoDurationSec ?? "auto"}s, prompts=${
+          promptsForRun.length
+        }, promptChars=${promptChars.join("/")}, startImage=${startFrame ? "yes" : "no"}, endImage=${
+          endFrame ? "yes" : "no"
+        }, refs=${referenceOnly.length}, promptSample="${promptsForRun[0]?.trim().slice(0, 120) ?? ""}".`,
+      );
       const shouldBuildProgressList = fromPromptList && promptsForRun.length > 1;
       const nodeRef = nodes.find((n) => n.id === id);
       if (shouldBuildProgressList && nodeRef) {
@@ -2575,7 +2602,10 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       setLastGenerationErrorDetails(details ?? null);
       setErrorDetailsOpen(false);
       toast.error(msg, details ? { description: details } : undefined);
-      emitRunLog("error", details ? `Video generation failed: ${msg} — ${details}` : `Video generation failed: ${msg}`);
+      emitRunLog(
+        "error",
+        details ? `Video generation failed: ${msg} — ${details}` : `Video generation failed: ${msg}`,
+      );
     } finally {
       if (!ok && !pendingVideoTaskIds.some((t) => t.trim())) {
         setPendingWorkflowRun(null);

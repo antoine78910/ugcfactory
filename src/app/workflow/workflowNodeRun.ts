@@ -1086,6 +1086,48 @@ function dedupeKeepOrder(urls: string[]): string[] {
   return out;
 }
 
+function maxPromptImageMention(prompt: string): number {
+  let max = 0;
+  const re = /@image(\d+)\b/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(prompt)) !== null) {
+    const n = Number(m[1]);
+    if (Number.isFinite(n) && n > max) max = n;
+  }
+  return max;
+}
+
+function workflowVideoDebugContext(args: {
+  modelId: string;
+  marketModel: string;
+  duration: number;
+  aspectRatio?: string;
+  prompt: string;
+  startUrl?: string;
+  endUrl?: string;
+  refUrls: string[];
+  seedancePreviewImageUrls: string[];
+  seedanceProImageUrls: string[];
+  klingElementsCount: number;
+}): string {
+  const promptTrim = args.prompt.trim();
+  const mentionMax = maxPromptImageMention(promptTrim);
+  return [
+    `model=${args.modelId}`,
+    `marketModel=${args.marketModel}`,
+    `duration=${args.duration}s`,
+    `aspect=${args.aspectRatio ?? "auto"}`,
+    `promptChars=${promptTrim.length}`,
+    `promptImageMentionsMax=${mentionMax}`,
+    `start=${args.startUrl ? "yes" : "no"}`,
+    `end=${args.endUrl ? "yes" : "no"}`,
+    `references=${args.refUrls.length}`,
+    `seedancePreviewRefs=${args.seedancePreviewImageUrls.length}`,
+    `seedanceOmniImageRefs=${args.seedanceProImageUrls.length}`,
+    `klingElements=${args.klingElementsCount}`,
+  ].join(", ");
+}
+
 export type WorkflowRunMotionControlParams = {
   planId: AccountPlanId;
   personalApiKey?: string;
@@ -1329,6 +1371,36 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
     ? seedanceProImageUrls.map((url) => ({ type: "image" as const, url }))
     : undefined;
 
+  const promptTrimmed = params.prompt.trim();
+  const promptImageMentionMax = maxPromptImageMention(promptTrimmed);
+  const availableImageRefsForMentions = (() => {
+    if (seedancePreview) return seedancePreviewImageUrls.length;
+    if (seedancePro) return seedanceProImageUrls.length;
+    if (isKling30) return elementsRefPool.length;
+    return 0;
+  })();
+  if (promptImageMentionMax > 0 && availableImageRefsForMentions < promptImageMentionMax) {
+    throw new Error(
+      `Prompt references @image${promptImageMentionMax}, but only ${availableImageRefsForMentions} image reference${
+        availableImageRefsForMentions === 1 ? "" : "s"
+      } are connected. Connect more reference images or reduce @imageN mentions.`,
+    );
+  }
+
+  const debugContext = workflowVideoDebugContext({
+    modelId,
+    marketModel: marketModelForGenerate,
+    duration,
+    aspectRatio: aspectForApi,
+    prompt: params.prompt,
+    startUrl,
+    endUrl,
+    refUrls,
+    seedancePreviewImageUrls,
+    seedanceProImageUrls,
+    klingElementsCount: klingElements?.length ?? 0,
+  });
+
   const generatePayload = {
     accountPlan: params.planId,
     marketModel: marketModelForGenerate,
@@ -1393,12 +1465,27 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
       genRes.status === 504 ||
       /timeout|timed out|aborted|temporar|try again|gateway|fetch failed|network/.test(errLower);
     if (!transient || attempt >= MAX_GENERATE_ATTEMPTS - 1) {
-      throw new Error(genJson.error || `Video task failed (HTTP ${lastStatus || "unknown"}).`);
+      const rawErr = (genJson.error ?? "").trim();
+      const tooGeneric =
+        !rawErr ||
+        /invalid parameters or inputs|bad request|video task failed|unknown error|something went wrong/i.test(rawErr);
+      const summary = tooGeneric
+        ? `Video generation request was rejected before task creation (HTTP ${
+            lastStatus || "unknown"
+          }). Check prompt, references, duration, and model constraints.`
+        : rawErr;
+      throw new Error(`${summary} [${debugContext}]`);
     }
     await new Promise((r) => setTimeout(r, 800 + attempt * 600));
   }
   if (!genJson?.taskId) {
-    throw new Error(genJson?.error || `Video task failed (HTTP ${lastStatus || "unknown"}).`);
+    const rawErr = (genJson?.error ?? "").trim();
+    const tooGeneric =
+      !rawErr || /invalid parameters or inputs|bad request|video task failed|unknown error|something went wrong/i.test(rawErr);
+    const summary = tooGeneric
+      ? `Video generation failed before provider task start (HTTP ${lastStatus || "unknown"}).`
+      : rawErr;
+    throw new Error(`${summary} [${debugContext}]`);
   }
   params.onTaskStarted?.(genJson.taskId);
 
