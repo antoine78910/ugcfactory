@@ -1371,6 +1371,21 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
       error?: string;
     };
     if (genRes.ok && genJson.taskId) break;
+    if (typeof console !== "undefined" && typeof console.error === "function") {
+      const debugPayload = {
+        ...generatePayload,
+        personalApiKey: generatePayload.personalApiKey ? "[redacted]" : undefined,
+        piapiApiKey: generatePayload.piapiApiKey ? "[redacted]" : undefined,
+      };
+      console.error("[workflow.video] /api/kling/generate failed", {
+        status: genRes.status,
+        attempt,
+        error: genJson.error,
+        modelId,
+        marketModel: marketModelForGenerate,
+        payload: debugPayload,
+      });
+    }
     const errLower = (genJson.error ?? "").toLowerCase();
     const transient =
       genRes.status === 502 ||

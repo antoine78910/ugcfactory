@@ -15,11 +15,45 @@ function redactSensitiveFragments(text: string): string {
 }
 
 /**
+ * Server messages we want to surface verbatim instead of collapsing into a generic
+ * "Invalid parameters or inputs" — these already explain what to fix to the user.
+ */
+const PRESERVE_VERBATIM_PATTERNS: RegExp[] = [
+  /^reference (image|media) \d+/i,
+  /^element ".*"/i,
+  /^too many seedance/i,
+  /^invalid duration/i,
+  /^this seedance preview model requires/i,
+  /^seedance requires (`imageurl`|at least one)/i,
+  /^provide `imageurl`/i,
+  /^prompt references @\w+\d+/i,
+  /^missing `prompt`/i,
+  /^add at least one reference image/i,
+  /seedancepreviewimageurls/i,
+  /seedanceomnimedia/i,
+  /klingelements/i,
+  /\bsubscription upgrade required\b/i,
+  /\bplan_upgrade_required\b/i,
+];
+
+function shouldPreserveVerbatim(s: string): boolean {
+  for (const re of PRESERVE_VERBATIM_PATTERNS) if (re.test(s)) return true;
+  return false;
+}
+
+/**
  * Maps provider / network errors to a safe line for the UI. Logs nothing by itself.
  */
 export function userFacingProviderError(raw: string | null | undefined): string {
   const s = (raw ?? "").trim();
   if (!s) return "";
+
+  if (shouldPreserveVerbatim(s)) {
+    let cleaned = redactSensitiveFragments(s);
+    cleaned = cleaned.replace(/\s+/g, " ").trim();
+    if (cleaned.length > 220) cleaned = `${cleaned.slice(0, 217)}…`;
+    return cleaned;
+  }
 
   const lower = s.toLowerCase();
 
@@ -128,4 +162,37 @@ export function userMessageFromCaughtError(e: unknown, fallback = DEFAULT_USER_M
     return userFacingProviderErrorOrDefault(e.message, fallback);
   }
   return fallback;
+}
+
+/**
+ * Like {@link userMessageFromCaughtError}, but also returns the raw underlying message so the UI
+ * can offer a "Show details" expander when the friendly summary is too generic for debugging.
+ */
+export function detailedMessageFromCaughtError(
+  e: unknown,
+  fallback = DEFAULT_USER_MESSAGE,
+): { summary: string; details?: string } {
+  const raw = (() => {
+    if (e instanceof Error && e.message.trim()) return e.message.trim();
+    if (typeof e === "string") return e.trim();
+    if (e && typeof e === "object") {
+      try {
+        return JSON.stringify(e);
+      } catch {
+        return "";
+      }
+    }
+    return "";
+  })();
+
+  const summary = raw ? userFacingProviderErrorOrDefault(raw, fallback) : fallback;
+  if (!raw) return { summary };
+
+  const cleaned = redactSensitiveFragments(raw).replace(/\s+/g, " ").trim();
+  if (!cleaned) return { summary };
+  if (cleaned === summary || cleaned.toLowerCase() === summary.toLowerCase()) {
+    return { summary };
+  }
+  const details = cleaned.length > 600 ? `${cleaned.slice(0, 597)}…` : cleaned;
+  return { summary, details };
 }

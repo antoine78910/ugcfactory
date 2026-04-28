@@ -43,6 +43,7 @@ import {
   useCreditsPlan,
 } from "@/app/_components/CreditsPlanContext";
 import {
+  detailedMessageFromCaughtError,
   userFacingProviderErrorOrDefault,
   userMessageFromCaughtError,
 } from "@/lib/generationUserMessage";
@@ -578,6 +579,8 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
    * Cleared at the start of every new run and when a successful media URL arrives.
    */
   const [lastGenerationError, setLastGenerationError] = useState<string | null>(null);
+  const [lastGenerationErrorDetails, setLastGenerationErrorDetails] = useState<string | null>(null);
+  const [errorDetailsOpen, setErrorDetailsOpen] = useState(false);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [aspectMenuOpen, setAspectMenuOpen] = useState(false);
   const [promptFocused, setPromptFocused] = useState(false);
@@ -1222,6 +1225,8 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                   ? "Video generation request was lost (no provider task id). Try regenerating."
                   : "Image generation request was lost (no provider task id). Try regenerating.";
               setLastGenerationError(lostMsg);
+              setLastGenerationErrorDetails(null);
+              setErrorDetailsOpen(false);
               toast.error(lostMsg);
               emitRunLog("error", lostMsg);
               window.dispatchEvent(
@@ -1280,6 +1285,8 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 : {}),
             });
             setLastGenerationError(null);
+            setLastGenerationErrorDetails(null);
+            setErrorDetailsOpen(false);
           }
           /**
            * Surface provider failures (Kling, PiAPI / Seedance, Veo, NanoBanana…) that came
@@ -1306,8 +1313,10 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                     pendingMediaKind === "video" ? "videos" : "images"
                   } failed: ${friendly}`;
             setLastGenerationError(summary);
-            toast.error(summary);
-            emitRunLog("error", `Generation failed: ${summary}`);
+            setLastGenerationErrorDetails(baseMsg && baseMsg !== summary ? baseMsg : null);
+            setErrorDetailsOpen(false);
+            toast.error(summary, baseMsg && baseMsg !== summary ? { description: baseMsg } : undefined);
+            emitRunLog("error", `Generation failed: ${summary}${baseMsg && baseMsg !== summary ? ` — ${baseMsg}` : ""}`);
           }
           setPendingWorkflowRun(null);
           setGenerating(false);
@@ -1692,6 +1701,8 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   const onGenerate = useCallback(async () => {
     if (generating) return;
     setLastGenerationError(null);
+    setLastGenerationErrorDetails(null);
+    setErrorDetailsOpen(false);
 
     const nodes = getNodes();
     const edges = getEdges();
@@ -2178,7 +2189,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         emitRunLog("success", "Image generation finished.");
         setPendingWorkflowRun(null);
       } catch (e) {
-        const msg = userMessageFromCaughtError(e, "Image generation failed. Try again.");
+        const { summary: msg, details } = detailedMessageFromCaughtError(e, "Image generation failed. Try again.");
         if (progressListId) {
           const completed = promptsForRun
             .map((_, slotIdx) => progressiveImageUrls[slotIdx]?.trim())
@@ -2187,8 +2198,10 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         }
         refundPlatformCredits(platformCharge, grantCredits, creditsRef);
         setLastGenerationError(msg);
-        toast.error(msg);
-        emitRunLog("error", `Image generation failed: ${msg}`);
+        setLastGenerationErrorDetails(details ?? null);
+        setErrorDetailsOpen(false);
+        toast.error(msg, details ? { description: details } : undefined);
+        emitRunLog("error", details ? `Image generation failed: ${msg} — ${details}` : `Image generation failed: ${msg}`);
       } finally {
         if (!ok && !pendingImageTaskIds.some((t) => t.trim())) {
           setPendingWorkflowRun(null);
@@ -2302,11 +2315,13 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         setPendingWorkflowRun(null);
         emitRunLog("success", "Motion control finished.");
       } catch (e) {
-        const msg = userMessageFromCaughtError(e, "Motion control failed. Try again.");
+        const { summary: msg, details } = detailedMessageFromCaughtError(e, "Motion control failed. Try again.");
         refundPlatformCredits(mPlatformCharge, grantCredits, creditsRef);
         setLastGenerationError(msg);
-        toast.error(msg);
-        emitRunLog("error", `Motion control failed: ${msg}`);
+        setLastGenerationErrorDetails(details ?? null);
+        setErrorDetailsOpen(false);
+        toast.error(msg, details ? { description: details } : undefined);
+        emitRunLog("error", details ? `Motion control failed: ${msg} — ${details}` : `Motion control failed: ${msg}`);
       } finally {
         if (!ok && !pendingTaskIds.some((t) => t.trim())) setPendingWorkflowRun(null);
         setGenerating(false);
@@ -2564,7 +2579,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       emitRunLog("success", "Video generation finished.");
       setPendingWorkflowRun(null);
     } catch (e) {
-      const msg = userMessageFromCaughtError(e, "Video generation failed. Try again.");
+      const { summary: msg, details } = detailedMessageFromCaughtError(e, "Video generation failed. Try again.");
       if (progressListId) {
         const completed = promptsForRun
           .map((_, slotIdx) => progressiveVideoUrls[slotIdx]?.trim())
@@ -2573,8 +2588,10 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       }
       refundPlatformCredits(vPlatformCharge, grantCredits, creditsRef);
       setLastGenerationError(msg);
-      toast.error(msg);
-      emitRunLog("error", `Video generation failed: ${msg}`);
+      setLastGenerationErrorDetails(details ?? null);
+      setErrorDetailsOpen(false);
+      toast.error(msg, details ? { description: details } : undefined);
+      emitRunLog("error", details ? `Video generation failed: ${msg} — ${details}` : `Video generation failed: ${msg}`);
     } finally {
       if (!ok && !pendingVideoTaskIds.some((t) => t.trim())) {
         setPendingWorkflowRun(null);
@@ -3394,7 +3411,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
 
           {!generating && lastGenerationError && (data.kind === "image" || data.kind === "video") ? (
             <div
-              className="nodrag nopan absolute inset-0 z-[9] flex flex-col items-center justify-center gap-2.5 bg-[#14141c]/92 backdrop-blur-[2px] px-3 py-3"
+              className="nodrag nopan absolute inset-0 z-[9] flex flex-col items-center justify-center gap-2 bg-[#14141c]/92 backdrop-blur-[2px] px-3 py-3"
               role="alert"
               aria-live="assertive"
               aria-label={data.kind === "video" ? "Video generation failed" : "Image generation failed"}
@@ -3408,12 +3425,67 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               <p className="line-clamp-4 max-w-full text-center text-[10.5px] leading-snug text-white/75">
                 {lastGenerationError}
               </p>
+              {lastGenerationErrorDetails ? (
+                errorDetailsOpen ? (
+                  <div
+                    className="nodrag nopan flex w-full max-w-[260px] flex-col gap-1 rounded-md border border-white/10 bg-black/45 px-2 py-1.5 text-left"
+                    onPointerDown={(e) => e.stopPropagation()}
+                  >
+                    <p className="max-h-[88px] overflow-auto whitespace-pre-wrap break-words text-[9.5px] leading-snug text-white/70 studio-minimal-scrollbar">
+                      {lastGenerationErrorDetails}
+                    </p>
+                    <div className="flex items-center justify-between gap-2 pt-0.5">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setErrorDetailsOpen(false);
+                        }}
+                        className="text-[9px] font-medium text-white/55 underline-offset-2 hover:text-white/85 hover:underline"
+                      >
+                        Hide details
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+                            void navigator.clipboard
+                              .writeText(lastGenerationErrorDetails)
+                              .then(() => toast.success("Error copied"))
+                              .catch(() => toast.error("Could not copy"));
+                          }
+                        }}
+                        className="rounded-full border border-white/15 bg-white/[0.04] px-2 py-0.5 text-[9px] font-medium text-white/75 hover:bg-white/[0.08] hover:text-white"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setErrorDetailsOpen(true);
+                    }}
+                    className="text-[9.5px] font-medium text-white/55 underline-offset-2 hover:text-white/85 hover:underline"
+                  >
+                    Show details
+                  </button>
+                )
+              ) : null}
               <button
                 type="button"
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
                   setLastGenerationError(null);
+                  setLastGenerationErrorDetails(null);
+                  setErrorDetailsOpen(false);
                 }}
                 className="mt-0.5 rounded-full border border-white/15 bg-black/55 px-2.5 py-1 text-[10px] font-medium text-white/80 transition hover:bg-black/75 hover:text-white"
               >
