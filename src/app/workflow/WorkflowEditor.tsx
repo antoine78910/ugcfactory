@@ -114,6 +114,10 @@ import {
   getWorkflowTemplateMeta,
   parseWorkflowCommunityTemplateUuid,
 } from "./workflowTemplates";
+import {
+  projectHasAnyNode,
+  sanitizeProjectForCommunityTemplate,
+} from "./workflowTemplateSanitizer";
 import { WorkflowNodePatchProvider } from "./workflowNodePatchContext";
 import { ShareWorkflowDialog } from "./ShareWorkflowDialog";
 import { WorkflowInviteWelcome } from "./WorkflowInviteWelcome";
@@ -4219,7 +4223,15 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
     setPublishBusy(true);
     try {
       // Parent `workflowProject` lags React Flow by a debounced sync; flush the live graph first.
-      const projectForPublish = structuredClone(canvasProjectFlushRef.current?.() ?? workflowProject);
+      const liveProject = structuredClone(canvasProjectFlushRef.current?.() ?? workflowProject);
+      if (!projectHasAnyNode(liveProject)) {
+        toast.error("Add at least one node to your workflow before publishing.");
+        return;
+      }
+      // Strip ephemeral run state and per-account media URLs so the template stays
+      // small and reusable; without this the payload can exceed the 1.8MB API cap
+      // and the template ends up looking empty after a failed publish.
+      const projectForPublish = sanitizeProjectForCommunityTemplate(liveProject);
       const res = await fetch("/api/workflow/community-templates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -4235,7 +4247,6 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
         toast.error(body?.error || "Could not publish template.");
         return;
       }
-      setWorkflowProject(projectForPublish);
       toast.success("Template published", {
         description: "It is now visible to everyone in the Templates tab.",
       });
@@ -4259,7 +4270,6 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
     publishTemplateBlurb,
     publishedTemplateId,
     router,
-    setWorkflowProject,
     workflowProject,
     storageScope,
     resolvedSpaceId,

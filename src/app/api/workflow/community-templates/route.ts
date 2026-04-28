@@ -155,6 +155,27 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
   if (isUpdate && !data) {
+    // The UPDATE silently affected 0 rows. Two realistic causes:
+    //  1) The template row was deleted (404).
+    //  2) The DB is missing the UPDATE RLS policy added in
+    //     `20260428120000_workflow_community_templates_update_policy.sql`,
+    //     so RLS rejects every update and the row never moves.
+    // Verify the row actually exists before deciding.
+    const { data: ownedRow } = await auth.supabase
+      .from("workflow_community_templates")
+      .select("id")
+      .eq("id", templateId)
+      .eq("created_by", auth.user.id)
+      .maybeSingle();
+    if (ownedRow) {
+      return NextResponse.json(
+        {
+          error:
+            "Update blocked by Row-Level Security. Run the latest Supabase migration (workflow_community_templates UPDATE policy) and retry.",
+        },
+        { status: 503 },
+      );
+    }
     return NextResponse.json({ error: "Template not found or not owned by your account." }, { status: 404 });
   }
 
