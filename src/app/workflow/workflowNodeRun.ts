@@ -1056,7 +1056,7 @@ export type WorkflowRunMotionControlParams = {
   onTaskStarted?: (taskId: string) => void;
 };
 
-async function probeWorkflowVideoDurationSec(url: string): Promise<number | null> {
+export async function probeWorkflowVideoDurationSec(url: string): Promise<number | null> {
   const u = url.trim();
   if (!u || typeof window === "undefined") return null;
   return await new Promise<number | null>((resolve) => {
@@ -1349,7 +1349,7 @@ export function estimateWorkflowAdAssetRunCredits(
   if (data.kind === "motion") {
     const oneVideo = workflowMotionControlChargeCredits({
       quality: (data.resolution ?? "1080p").trim(),
-      durationSec: 10,
+      durationSec: Math.max(0, Number(data.motionInputDurationSec) || 10),
     });
     return oneVideo * runCount;
   }

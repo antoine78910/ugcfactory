@@ -72,6 +72,7 @@ import {
   resolveWorkflowVideoModelId,
   runWorkflowImageJob,
   runWorkflowMotionControlJob,
+  probeWorkflowVideoDurationSec,
   runWorkflowVideoJob,
   estimateWorkflowAdAssetRunCredits,
   workflowImageChargeCredits,
@@ -138,6 +139,8 @@ export type AdAssetNodeData = {
   /** Motion Control params (mirrors Studio Motion Control). */
   motionAutoSettings?: boolean;
   motionBackgroundSource?: "input_video" | "input_image";
+  /** Last detected duration from the connected Motion Control video input. */
+  motionInputDurationSec?: number;
   /**
    * JPEG data URLs of the output video’s first / last frame (grabbed from the preview).
    * When this module’s `out` is wired to another video’s `startImage` / `endImage`, these are used as stills (last frame preferred for continuations).
@@ -586,6 +589,11 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   const previewImageRef = useRef<HTMLImageElement | null>(null);
   const [frameExtractBusy, setFrameExtractBusy] = useState<null | "first" | "last">(null);
   const [outputPreviewLightbox, setOutputPreviewLightbox] = useState(false);
+  const [motionDetectedInputDurationSec, setMotionDetectedInputDurationSec] = useState<number | null>(
+    typeof data.motionInputDurationSec === "number" && Number.isFinite(data.motionInputDurationSec)
+      ? data.motionInputDurationSec
+      : null,
+  );
   const previousReferenceSignatureRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -1467,6 +1475,47 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       [data.kind, id, prompt],
     ),
   );
+  const motionVideoInputUrlForCredits = useStore(
+    useCallback(
+      (s) => {
+        if (data.kind !== "motion") return "";
+        const linked = collectLinkedVideoUrlsForHandles(s.nodes, s.edges, id, ["inVideo"]);
+        return (
+          linked[0]?.trim() ||
+          (data.referenceMediaKind === "video" ? data.referencePreviewUrl?.trim() : "") ||
+          ""
+        );
+      },
+      [data.kind, data.referenceMediaKind, data.referencePreviewUrl, id],
+    ),
+  );
+
+  useEffect(() => {
+    if (data.kind !== "motion") return;
+    const src = motionVideoInputUrlForCredits.trim();
+    if (!src) {
+      setMotionDetectedInputDurationSec(null);
+      if (data.motionInputDurationSec !== undefined) {
+        patch(id, { motionInputDurationSec: undefined });
+      }
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const measured = await probeWorkflowVideoDurationSec(src);
+      if (cancelled) return;
+      const normalized = measured != null && Number.isFinite(measured) && measured > 0 ? measured : null;
+      setMotionDetectedInputDurationSec(normalized);
+      if (normalized == null) return;
+      const rounded = Math.round(normalized * 100) / 100;
+      if (data.motionInputDurationSec !== rounded) {
+        patch(id, { motionInputDurationSec: rounded });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [data.kind, data.motionInputDurationSec, id, motionVideoInputUrlForCredits, patch]);
 
   const estimatedCredits = useMemo(() => {
     const runCount = Math.max(1, batchPromptCount);
@@ -1494,7 +1543,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     if (data.kind === "motion") {
       const oneMotion = workflowMotionControlChargeCredits({
         quality: resolution,
-        durationSec: 10,
+        durationSec: motionDetectedInputDurationSec ?? 10,
       });
       return oneMotion * runCount;
     }
@@ -1508,6 +1557,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     quantity,
     resolution,
     videoPriorityEffective,
+    motionDetectedInputDurationSec,
   ]);
 
   const runFromHereEstimatedCredits = useStore(
@@ -2103,11 +2153,24 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         emitRunLog("error", "Motion control blocked: missing image/video inputs.");
         return;
       }
-      const assumedDurationSec = 10;
       const motionQuality = (resolution === "1080p" ? "1080p" : "720p") as "720p" | "1080p";
+      const detectedDurationSec = await probeWorkflowVideoDurationSec(motionVideoUrl);
+      if (detectedDurationSec == null || !Number.isFinite(detectedDurationSec) || detectedDurationSec <= 0) {
+        toast.error("Could not read motion input duration", {
+          description: "Please use a valid video input (3s to 30s).",
+        });
+        emitRunFinished(false);
+        emitRunLog("error", "Motion control blocked: could not detect input video duration.");
+        return;
+      }
+      setMotionDetectedInputDurationSec(detectedDurationSec);
+      const roundedMotionDuration = Math.round(detectedDurationSec * 100) / 100;
+      if (data.motionInputDurationSec !== roundedMotionDuration) {
+        patch(id, { motionInputDurationSec: roundedMotionDuration });
+      }
       const perMotionCharge = workflowMotionControlChargeCredits({
         quality: motionQuality,
-        durationSec: assumedDurationSec,
+        durationSec: detectedDurationSec,
       });
       const runCount = Math.max(1, batchPrompts?.length ?? 1);
       const mCharge = perMotionCharge * runCount;
