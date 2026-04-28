@@ -19,6 +19,7 @@ import {
   getWorkflowStorageScope,
   loadProjectForSpace,
   loadSpacesIndex,
+  saveProjectForSpace,
   updateSpaceMeta,
   type WorkflowSpaceMeta,
 } from "./workflowSpacesStorage";
