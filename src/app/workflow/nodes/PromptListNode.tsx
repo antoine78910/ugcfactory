@@ -3,12 +3,13 @@
 import { Handle, Position, useReactFlow, type NodeProps } from "@xyflow/react";
 import { Check, Clapperboard, Download, Grid3X3, ImageIcon, List, ListOrdered, Maximize2, Pencil, Plus, Trash2, Type, X } from "lucide-react";
 import { createPortal } from "react-dom";
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type WheelEvent } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
 
 import { primeRemoteMediaForDisplay, splitIntoPromptLines } from "../workflowNodeRun";
 import { useWorkflowNodePatch } from "../workflowNodePatchContext";
+import { keepWheelInsideScrollable } from "../workflowWheelScroll";
 import { WorkflowNodeContextToolbar } from "./WorkflowNodeContextToolbar";
 import {
   PROMPT_LIST_DEFAULT_DATA,
@@ -43,16 +44,6 @@ function formatMediaDuration(totalSeconds: number): string {
   const m = Math.floor(sec / 60);
   const s = sec % 60;
   return `${m}:${String(s).padStart(2, "0")}`;
-}
-
-function keepWheelInsideTextarea(e: WheelEvent<HTMLTextAreaElement>) {
-  const el = e.currentTarget;
-  const canScroll = el.scrollHeight > el.clientHeight;
-  if (!canScroll) return;
-  // Prevent React Flow / page from stealing wheel while editing list items.
-  e.preventDefault();
-  el.scrollTop += e.deltaY;
-  e.stopPropagation();
 }
 
 function triggerMediaDownload(url: string, fallbackName: string) {
@@ -508,7 +499,7 @@ export function PromptListNode({ id, data: rawData, selected }: NodeProps<Prompt
                 <textarea
                   value={text}
                   onChange={(e) => setText(e.target.value)}
-                  onWheelCapture={keepWheelInsideTextarea}
+                  onWheelCapture={keepWheelInsideScrollable}
                   onKeyDown={(e) => {
                     if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
                       e.preventDefault();
@@ -521,7 +512,7 @@ export function PromptListNode({ id, data: rawData, selected }: NodeProps<Prompt
                   }}
                   placeholder="Type text here... (Ctrl/Cmd + Enter to save)"
                   rows={6}
-                  className="nodrag nopan mb-3 min-h-[150px] w-full resize-y border-none bg-transparent px-0 text-[13px] leading-relaxed text-white/90 placeholder:text-white/30 outline-none studio-params-scroll"
+                  className="nodrag nopan nowheel mb-3 min-h-[150px] w-full resize-y border-none bg-transparent px-0 text-[13px] leading-relaxed text-white/90 placeholder:text-white/30 outline-none studio-params-scroll"
                 />
                 <div className="flex items-center justify-between">
                   <span className="inline-flex h-7 items-center justify-center rounded-full border border-white/12 bg-white/[0.06] px-2 text-[12px] font-semibold text-white/70">

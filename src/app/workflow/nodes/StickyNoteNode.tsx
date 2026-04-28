@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 
 import type { WorkflowCanvasNode } from "../workflowFlowTypes";
 import { useWorkflowNodePatch } from "../workflowNodePatchContext";
+import { keepWheelInsideScrollable } from "../workflowWheelScroll";
 import { STICKY_NOTE_DEFAULT_DATA, type StickyNoteNodeData, type StickyNoteNodeType } from "../workflowStickyNoteTypes";
 import { StickyNoteNodeToolbar } from "./StickyNoteNodeToolbar";
 
@@ -142,7 +143,7 @@ export function StickyNoteNode({ id, data: rawData, selected }: NodeProps<Sticky
             id={`workflow-sticky-ed-${id}`}
             aria-labelledby={`workflow-sticky-label-${id}`}
             className={cn(
-              "nodrag nopan max-h-[min(40vh,280px)] min-h-[3.25rem] w-full flex-1 overflow-y-auto outline-none",
+              "nodrag nopan nowheel max-h-[min(40vh,280px)] min-h-[3.25rem] w-full flex-1 overflow-y-auto outline-none",
               "[&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5",
               "[&_p]:text-inherit [&_span]:text-inherit",
             )}
@@ -156,6 +157,7 @@ export function StickyNoteNode({ id, data: rawData, selected }: NodeProps<Sticky
               onInput();
             }}
             onInput={onInput}
+            onWheelCapture={keepWheelInsideScrollable}
           />
         </div>
         <Handle

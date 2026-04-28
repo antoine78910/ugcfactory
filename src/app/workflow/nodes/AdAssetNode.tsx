@@ -61,6 +61,7 @@ import { cn } from "@/lib/utils";
 
 import { useWorkflowNodePatch } from "../workflowNodePatchContext";
 import { buildWorkflowProjectPipelineFromRun } from "../workflowProjectPipeline";
+import { keepWheelInsideScrollable } from "../workflowWheelScroll";
 import type { WorkflowCanvasNode } from "../workflowFlowTypes";
 import {
   collectWorkflowBatchPrompts,
@@ -317,23 +318,6 @@ function findLinkedWorkflowMediaResultsListId(
     .map((e) => e.target)
     .find((tid) => nodes.some((n) => n.id === tid && n.type === "promptList"));
   return linkedId ?? null;
-}
-
-function keepWheelInsideTextarea(e: React.WheelEvent<HTMLTextAreaElement>) {
-  const el = e.currentTarget;
-  // Force wheel ownership to textarea when focused, so canvas/page never steals the wheel.
-  // This is especially important inside React Flow where wheel events are globally captured.
-  if (document.activeElement === el) {
-    e.preventDefault();
-    el.scrollTop += e.deltaY;
-    e.stopPropagation();
-    return;
-  }
-  const canScroll = el.scrollHeight > el.clientHeight;
-  if (!canScroll) return;
-  e.preventDefault();
-  el.scrollTop += e.deltaY;
-  e.stopPropagation();
 }
 
 const selectTriggerClass =
@@ -2691,7 +2675,8 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 value={websiteUrl}
                 onChange={(e) => patch(id, { websiteUrl: e.target.value })}
                 placeholder="https://your-store.com/product-page"
-                className="nodrag nopan h-9 w-full rounded-lg border border-white/12 bg-black/35 px-3 text-[13px] text-white/90 outline-none focus:border-violet-500/40"
+                onWheelCapture={keepWheelInsideScrollable}
+                className="nodrag nopan nowheel h-9 w-full rounded-lg border border-white/12 bg-black/35 px-3 text-[13px] text-white/90 outline-none focus:border-violet-500/40"
               />
             </div>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -2944,10 +2929,11 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               onChange={(e) => patch(id, { prompt: e.target.value })}
               placeholder="Type your prompt for the assistant..."
               rows={4}
+              onWheelCapture={keepWheelInsideScrollable}
               onFocus={() => setPromptFocused(true)}
               onBlur={() => setPromptFocused(false)}
               style={{ minHeight: assistantBodyHeightPx }}
-              className="nodrag nopan w-full resize-y rounded-xl border border-white/12 bg-black/35 px-2.5 py-2 text-[12px] leading-relaxed text-white/92 placeholder:text-white/30 caret-white outline-none focus:border-violet-500/40 focus:ring-1 focus:ring-violet-500/25"
+              className="nodrag nopan nowheel w-full resize-y rounded-xl border border-white/12 bg-black/35 px-2.5 py-2 text-[12px] leading-relaxed text-white/92 placeholder:text-white/30 caret-white outline-none focus:border-violet-500/40 focus:ring-1 focus:ring-violet-500/25"
             />
           ) : (
             <textarea
@@ -2955,9 +2941,10 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               onChange={(e) => patch(id, { assistantOutput: e.target.value })}
               placeholder="No result yet. Switch to Input and run the assistant."
               style={{ height: assistantBodyHeightPx }}
+              onWheelCapture={keepWheelInsideScrollable}
               onFocus={() => setPromptFocused(true)}
               onBlur={() => setPromptFocused(false)}
-              className="nodrag nopan w-full resize-y overflow-y-auto rounded-xl border border-white/12 bg-black/35 px-2.5 py-2 text-[12px] leading-relaxed text-white/88 placeholder:text-white/35 caret-white outline-none focus:border-violet-500/40 focus:ring-1 focus:ring-violet-500/25 studio-minimal-scrollbar"
+              className="nodrag nopan nowheel w-full resize-y overflow-y-auto rounded-xl border border-white/12 bg-black/35 px-2.5 py-2 text-[12px] leading-relaxed text-white/88 placeholder:text-white/35 caret-white outline-none focus:border-violet-500/40 focus:ring-1 focus:ring-violet-500/25 studio-minimal-scrollbar"
             />
           )}
 
@@ -3587,7 +3574,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                   onChange={(e) => patch(id, { prompt: e.target.value })}
                   placeholder={cfg.promptPlaceholder}
                   rows={data.kind === "video" ? 3 : 2}
-                  onWheelCapture={keepWheelInsideTextarea}
+                  onWheelCapture={keepWheelInsideScrollable}
                   onFocus={() => setPromptFocused(true)}
                   onBlur={() => setPromptFocused(false)}
                   className={cn(
@@ -3867,7 +3854,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                   onChange={(e) => patch(id, { prompt: e.target.value })}
                   placeholder={cfg.promptPlaceholder}
                   rows={data.kind === "video" ? 10 : 7}
-                  onWheelCapture={keepWheelInsideTextarea}
+                  onWheelCapture={keepWheelInsideScrollable}
                   onFocus={() => setPromptFocused(true)}
                   onBlur={() => setPromptFocused(false)}
                   className={cn(
@@ -3917,7 +3904,8 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 placeholder="e.g. A creator in a bright kitchen showing the product, natural light, authentic UGC vibe…"
                 rows={4}
                 disabled={assistantLoading}
-                className="min-h-[88px] w-full resize-y rounded-xl border border-white/12 bg-black/40 px-3 py-2 text-[12px] text-white/90 placeholder:text-white/30 outline-none focus:border-violet-500/35 disabled:opacity-60"
+                onWheelCapture={keepWheelInsideScrollable}
+                className="nowheel min-h-[88px] w-full resize-y rounded-xl border border-white/12 bg-black/40 px-3 py-2 text-[12px] text-white/90 placeholder:text-white/30 outline-none focus:border-violet-500/35 disabled:opacity-60"
               />
               <button
                 type="button"
@@ -3947,7 +3935,8 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                     value={assistantResult}
                     onChange={(e) => setAssistantResult(e.target.value)}
                     rows={5}
-                    className="min-h-[100px] w-full resize-y rounded-xl border border-white/12 bg-black/35 px-3 py-2 text-[12px] leading-relaxed text-white/90 outline-none focus:border-violet-500/35"
+                    onWheelCapture={keepWheelInsideScrollable}
+                    className="nowheel min-h-[100px] w-full resize-y rounded-xl border border-white/12 bg-black/35 px-3 py-2 text-[12px] leading-relaxed text-white/90 outline-none focus:border-violet-500/35"
                   />
                   <div className="flex flex-wrap gap-2">
                     <button

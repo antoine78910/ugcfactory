@@ -7,6 +7,7 @@ import { useCallback } from "react";
 import { cn } from "@/lib/utils";
 
 import { useWorkflowNodePatch } from "../workflowNodePatchContext";
+import { keepWheelInsideScrollable } from "../workflowWheelScroll";
 import { WorkflowNodeContextToolbar } from "./WorkflowNodeContextToolbar";
 
 export type TextPromptNodeData = {
@@ -50,7 +51,8 @@ export function TextPromptNode({ id, data: rawData, selected }: NodeProps<TextPr
               onChange={(e) => patch({ prompt: e.target.value })}
               placeholder="Type the prompt to send into connected generators…"
               rows={6}
-              className="nodrag nopan w-full resize-y rounded-lg border border-white/12 bg-black/50 px-2.5 py-2 text-[13px] leading-snug text-white/90 placeholder:text-white/28 outline-none focus:border-violet-500/35"
+              onWheelCapture={keepWheelInsideScrollable}
+              className="nodrag nopan nowheel w-full resize-y rounded-lg border border-white/12 bg-black/50 px-2.5 py-2 text-[13px] leading-snug text-white/90 placeholder:text-white/28 outline-none focus:border-violet-500/35"
             />
           </div>
         </div>
