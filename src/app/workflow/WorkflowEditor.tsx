@@ -510,6 +510,12 @@ type FlowWorkspaceProps = {
   showTemplateUseCta?: boolean;
   onUseTemplate?: () => void;
   useTemplateBusy?: boolean;
+  /**
+   * When set, registers a function that merges the live React Flow graph into the
+   * project (active page). Used before publishing templates — parent `project` state
+   * lags the canvas by ~200ms due to debounced sync.
+   */
+  canvasProjectFlushRef?: React.MutableRefObject<(() => WorkflowProjectStateV1) | null>;
 };
 
 function WorkflowPagesPanel({
@@ -1944,8 +1950,10 @@ function WorkflowFlowWorkspace({
   showTemplateUseCta = false,
   onUseTemplate,
   useTemplateBusy = false,
+  canvasProjectFlushRef,
 }: FlowWorkspaceProps) {
-  const { screenToFlowPosition, flowToScreenPosition, getInternalNode, getNodes, getViewport } = useReactFlow();
+  const { screenToFlowPosition, flowToScreenPosition, getInternalNode, getNodes, getEdges, getViewport } =
+    useReactFlow();
   const activePage = useMemo(
     () => project.pages.find((p) => p.id === project.activePageId) ?? project.pages[0],
     [project.pages, project.activePageId],
@@ -2494,6 +2502,27 @@ function WorkflowFlowWorkspace({
     }, 200);
     return () => window.clearTimeout(t);
   }, [nodes, edges, project.activePageId, setProject]);
+
+  useEffect(() => {
+    if (!canvasProjectFlushRef) return;
+    const flush = (): WorkflowProjectStateV1 => {
+      const id = project.activePageId;
+      const liveNodes = getNodes() as WorkflowCanvasNode[];
+      const liveEdges = getEdges();
+      return {
+        ...project,
+        pages: project.pages.map((p) =>
+          p.id === id ? { ...p, nodes: structuredClone(liveNodes), edges: structuredClone(liveEdges) } : p,
+        ),
+      };
+    };
+    canvasProjectFlushRef.current = flush;
+    return () => {
+      if (canvasProjectFlushRef.current === flush) {
+        canvasProjectFlushRef.current = null;
+      }
+    };
+  }, [canvasProjectFlushRef, project, getNodes, getEdges]);
 
   const selectPage = useCallback(
     (id: string) => {
@@ -3943,6 +3972,8 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
     () => `youry-workflow-run-history-v1:${resolvedSpaceId}`,
     [resolvedSpaceId],
   );
+  /** Live canvas → project merge for publish (parent state sync is debounced ~200ms). */
+  const canvasProjectFlushRef = useRef<(() => WorkflowProjectStateV1) | null>(null);
 
   const appendRunHistory = useCallback((entry: WorkflowRunLogEntry) => {
     setRunHistory((prev) => {
@@ -4187,9 +4218,8 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
     }
     setPublishBusy(true);
     try {
-      // Publish exactly what is currently on the canvas (source of truth),
-      // instead of reloading from localStorage which may lag behind edits.
-      const projectForPublish = structuredClone(workflowProject);
+      // Parent `workflowProject` lags React Flow by a debounced sync; flush the live graph first.
+      const projectForPublish = structuredClone(canvasProjectFlushRef.current?.() ?? workflowProject);
       const res = await fetch("/api/workflow/community-templates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -4205,6 +4235,7 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
         toast.error(body?.error || "Could not publish template.");
         return;
       }
+      setWorkflowProject(projectForPublish);
       toast.success("Template published", {
         description: "It is now visible to everyone in the Templates tab.",
       });
@@ -4222,7 +4253,17 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
     } finally {
       setPublishBusy(false);
     }
-  }, [publishBusy, publishTemplateName, publishTemplateBlurb, publishedTemplateId, router, workflowProject, storageScope, resolvedSpaceId]);
+  }, [
+    publishBusy,
+    publishTemplateName,
+    publishTemplateBlurb,
+    publishedTemplateId,
+    router,
+    setWorkflowProject,
+    workflowProject,
+    storageScope,
+    resolvedSpaceId,
+  ]);
 
   const removePublishedTemplate = useCallback(async () => {
     if (!publishedTemplateId || removeTemplateBusy) return;
@@ -4499,6 +4540,7 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
                     project={workflowProject}
                     setProject={setWorkflowProject}
                     onRunLog={appendRunHistory}
+                    canvasProjectFlushRef={canvasProjectFlushRef}
                   />
                 </ReactFlowProvider>
               ) : (
