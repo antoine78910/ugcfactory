@@ -2649,7 +2649,8 @@ function WorkflowFlowWorkspace({
         return addEdge(
           {
             ...params,
-            targetHandle: resolvedTargetHandle ?? undefined,
+            id: `e-${source}-${target}-${crypto.randomUUID().slice(0, 8)}`,
+            targetHandle: resolvedTargetHandle ?? null,
             style: { stroke: "rgba(167, 139, 250, 0.5)", strokeWidth: 2 },
           },
           base,
