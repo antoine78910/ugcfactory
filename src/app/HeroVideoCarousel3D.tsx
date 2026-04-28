@@ -33,6 +33,14 @@ export function HeroVideoCarousel3D({ srcs = DEFAULT_SRCS }: Props) {
     const videos = Array.from(root.querySelectorAll<HTMLVideoElement>("video"));
     const videoPanels = videos
       .map((video) => {
+        video.muted = true;
+        video.defaultMuted = true;
+        video.autoplay = true;
+        video.playsInline = true;
+        video.setAttribute("muted", "");
+        video.setAttribute("autoplay", "");
+        video.setAttribute("playsinline", "");
+        video.setAttribute("webkit-playsinline", "");
         const panel = video.parentElement;
         return panel ? { video, panel } : null;
       })
@@ -137,7 +145,13 @@ export function HeroVideoCarousel3D({ srcs = DEFAULT_SRCS }: Props) {
 
   const handleLoadedMetadata = (e: SyntheticEvent<HTMLVideoElement>) => {
     const v = e.currentTarget;
+    v.muted = true;
+    v.defaultMuted = true;
+    v.playsInline = true;
+    v.setAttribute("playsinline", "");
+    v.setAttribute("webkit-playsinline", "");
     v.loop = true;
+    void v.play().catch(() => {});
   };
 
   /** If playback resumes near the end of the loop, rewind first. */
@@ -168,11 +182,12 @@ export function HeroVideoCarousel3D({ srcs = DEFAULT_SRCS }: Props) {
                 className={styles.video}
                 src={src}
                 muted
+                defaultMuted
                 loop
                 playsInline
                 autoPlay
                 controls={false}
-                preload="none"
+                preload="metadata"
                 disableRemotePlayback
                 disablePictureInPicture
                 onEnded={handleEnded}

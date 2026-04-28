@@ -281,8 +281,11 @@ export default function LandingPage() {
                 src="/landing/workflow-promo.mp4"
                 autoPlay
                 muted
+                defaultMuted
                 loop
                 playsInline
+                disablePictureInPicture
+                disableRemotePlayback
                 controls={false}
                 preload="metadata"
                 className="h-[220px] w-full object-cover sm:h-[280px] lg:h-[320px]"

@@ -1646,7 +1646,8 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     const batchPrompts = batchContext.batch?.map((x) => x.trim()).filter(Boolean) ?? null;
     const singlePrompt = (batchContext.composedSingle || effectivePrompt).trim();
     const fromPromptList = batchContext.fromPromptList;
-    if (!(batchPrompts?.length || singlePrompt)) {
+    const requiresPrompt = data.kind !== "motion";
+    if (requiresPrompt && !(batchPrompts?.length || singlePrompt)) {
       toast.error("Add a prompt", {
         description: linkedPrompts.length
           ? "Linked nodes had no usable text. Type a prompt in the module or put text in the connected canvas note."

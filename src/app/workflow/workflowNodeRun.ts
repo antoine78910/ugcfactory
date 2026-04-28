@@ -1047,7 +1047,7 @@ export type WorkflowRunVideoParams = {
 export type WorkflowRunMotionControlParams = {
   planId: AccountPlanId;
   personalApiKey?: string;
-  prompt: string;
+  prompt?: string;
   motionFamily: "kling-3.0" | "kling-2.6";
   quality: "720p" | "1080p";
   imageUrl: string;
@@ -1110,6 +1110,7 @@ export async function runWorkflowMotionControlJob(
     throw new Error("Motion reference video must be between 3 and 30 seconds.");
   }
 
+  const motionPrompt = params.prompt?.trim() || undefined;
   const res = await fetch("/api/kling/motion-control", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1120,7 +1121,7 @@ export async function runWorkflowMotionControlJob(
       videoUrl,
       quality: params.quality,
       backgroundSource: params.backgroundSource ?? "input_video",
-      prompt: params.prompt,
+      prompt: motionPrompt,
       personalApiKey: pKey,
     }),
   });
@@ -1129,7 +1130,7 @@ export async function runWorkflowMotionControlJob(
   params.onTaskStarted?.(json.taskId);
   const credits = calculateMotionControlCreditsFromDuration(inputDurationSec, params.quality);
   await registerStudioVideoTask({
-    label: workflowHistoryLabel(params.prompt.slice(0, 120)),
+    label: workflowHistoryLabel((motionPrompt || "Motion control").slice(0, 120)),
     taskId: json.taskId,
     provider: json.provider,
     model: params.motionFamily === "kling-2.6" ? "kling-2.6/motion-control" : "kling-3.0/motion-control",
