@@ -64,15 +64,18 @@ import type { WorkflowCanvasNode } from "../workflowFlowTypes";
 import {
   collectWorkflowBatchPrompts,
   collectLinkedImageUrlsForHandles,
+  collectLinkedVideoUrlsForHandles,
   collectLinkedPromptTexts,
   collectLinkedPromptTextsForHandles,
   composeWorkflowPrompt,
   coerceWorkflowVideoDurationSec,
   resolveWorkflowVideoModelId,
   runWorkflowImageJob,
+  runWorkflowMotionControlJob,
   runWorkflowVideoJob,
   estimateWorkflowAdAssetRunCredits,
   workflowImageChargeCredits,
+  workflowMotionControlChargeCredits,
   workflowVideoChargeCredits,
   WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX,
   splitAssistantOutputToListLines,
@@ -87,7 +90,7 @@ import { linkToAdProductPhotoPickerUrls, readUniverseFromExtracted, splitAllScri
 
 export type AdAssetNodeData = {
   label: string;
-  kind: "image" | "video" | "variation" | "assistant" | "upscale" | "website";
+  kind: "image" | "video" | "motion" | "variation" | "assistant" | "upscale" | "website";
   /** Generation prompt */
   prompt?: string;
   /** Model id (workflow-local; studio wiring later) */
@@ -130,6 +133,9 @@ export type AdAssetNodeData = {
   videoDurationSec?: number;
   /** Video: Seedance 2 Preview / Fast Preview queue tier (doubles credits when VIP). */
   videoPriority?: "normal" | "vip";
+  /** Motion Control params (mirrors Studio Motion Control). */
+  motionAutoSettings?: boolean;
+  motionBackgroundSource?: "input_video" | "input_image";
   /**
    * JPEG data URLs of the output video’s first / last frame (grabbed from the preview).
    * When this module’s `out` is wired to another video’s `startImage` / `endImage`, these are used as stills (last frame preferred for continuations).
@@ -162,6 +168,12 @@ const kindConfig = {
     previewTint: "from-violet-600/[0.08] via-transparent to-black/40",
     title: "Video Generator",
     promptPlaceholder: "Describe the video motion, subject, and style…",
+  },
+  motion: {
+    icon: Clapperboard,
+    previewTint: "from-violet-600/[0.08] via-transparent to-black/40",
+    title: "Motion Control",
+    promptPlaceholder: "Describe the scene/background details while motion follows the reference clip…",
   },
   variation: {
     icon: Sparkles,
@@ -211,6 +223,11 @@ const VIDEO_MODELS: { value: string; label: string }[] = [
   { value: "veo3_lite", label: "Veo 3.1 Lite" },
   { value: "veo3_fast", label: "Veo 3.1 Fast" },
   { value: "veo3", label: "Veo 3.1 Quality" },
+];
+
+const MOTION_CONTROL_MODELS: { value: string; label: string }[] = [
+  { value: "kling-3.0", label: "Kling 3.0 Motion Control" },
+  { value: "kling-2.6", label: "Kling 2.6 Motion Control" },
 ];
 
 const ASSISTANT_MODELS: Array<{ value: "claude-sonnet-4-5" | "gpt-5o"; label: string }> = [
@@ -567,6 +584,42 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   const previewImageRef = useRef<HTMLImageElement | null>(null);
   const [frameExtractBusy, setFrameExtractBusy] = useState<null | "first" | "last">(null);
   const [outputPreviewLightbox, setOutputPreviewLightbox] = useState(false);
+  const previousReferenceSignatureRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (data.kind !== "image" && data.kind !== "video" && data.kind !== "motion") return;
+    const currentSignature = [
+      data.referencePreviewUrl ?? "",
+      data.referenceMediaKind ?? "",
+      data.referenceSource ?? "",
+      data.videoStartImageUrl ?? "",
+      data.videoEndImageUrl ?? "",
+    ].join("|");
+    const previous = previousReferenceSignatureRef.current;
+    if (previous == null) {
+      previousReferenceSignatureRef.current = currentSignature;
+      return;
+    }
+    if (previous === currentSignature) return;
+    previousReferenceSignatureRef.current = currentSignature;
+    if (!data.outputPreviewUrl?.trim()) return;
+    patch(id, {
+      outputPreviewUrl: undefined,
+      outputMediaKind: undefined,
+      videoExtractedFirstFrameUrl: undefined,
+      videoExtractedLastFrameUrl: undefined,
+    });
+  }, [
+    data.kind,
+    data.outputPreviewUrl,
+    data.referencePreviewUrl,
+    data.referenceMediaKind,
+    data.referenceSource,
+    data.videoStartImageUrl,
+    data.videoEndImageUrl,
+    id,
+    patch,
+  ]);
 
   const clearHoverLeaveTimer = () => {
     if (leaveTimerRef.current) {
@@ -1093,11 +1146,11 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   );
 
   useEffect(() => {
-    if (data.kind !== "image" && data.kind !== "video") return;
+    if (data.kind !== "image" && data.kind !== "video" && data.kind !== "motion") return;
     const pending = data.pendingWorkflowRun;
     if (!pending) return;
     const initialTaskIds = pending.taskIds?.map((t) => t.trim()).filter(Boolean) ?? [];
-    const pendingMediaKind = pending.mediaKind ?? (data.kind === "video" ? "video" : "image");
+    const pendingMediaKind = pending.mediaKind ?? (data.kind === "video" || data.kind === "motion" ? "video" : "image");
     const updatedAt = pending.updatedAt ?? 0;
     const fresh = updatedAt > 0 && Date.now() - updatedAt < WORKFLOW_RACE_RECOVERY_WINDOW_MS;
     if (initialTaskIds.length === 0 && !fresh) return;
@@ -1333,7 +1386,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
 
   const aspectLocked =
     data.intrinsicAspect != null && Number.isFinite(data.intrinsicAspect) && data.intrinsicAspect > 0;
-  const defaultRes = data.kind === "video" ? "720p" : "1024";
+  const defaultRes = data.kind === "video" ? "720p" : data.kind === "motion" ? "1080p" : "1024";
   const resolution = useMemo(() => {
     const raw = data.resolution ?? defaultRes;
     if (data.kind === "image") {
@@ -1346,6 +1399,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
 
   const models = useMemo(() => {
     if (data.kind === "video") return VIDEO_MODELS;
+    if (data.kind === "motion") return MOTION_CONTROL_MODELS;
     if (data.kind === "variation" || data.kind === "assistant") return VARIATION_MODELS;
     return IMAGE_MODELS;
   }, [data.kind]);
@@ -1355,13 +1409,13 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   const model = models.some((m) => m.value === rawModel) ? rawModel : modelDefault;
 
   const aspects = useMemo(() => {
-    if (data.kind === "video") return VIDEO_ASPECTS;
+    if (data.kind === "video" || data.kind === "motion") return VIDEO_ASPECTS;
     if (data.kind === "variation" || data.kind === "assistant") return VARIATION_ASPECTS;
     return IMAGE_ASPECTS;
   }, [data.kind]);
 
   const resolutions = useMemo(() => {
-    if (data.kind === "video") return VIDEO_RESOLUTIONS;
+    if (data.kind === "video" || data.kind === "motion") return VIDEO_RESOLUTIONS;
     if (data.kind === "variation" || data.kind === "assistant") return VARIATION_RESOLUTIONS;
     return IMAGE_RESOLUTIONS;
   }, [data.kind]);
@@ -1386,6 +1440,8 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
 
   const videoPriorityEffective: "normal" | "vip" =
     data.kind === "video" && data.videoPriority === "vip" ? "vip" : "normal";
+  const motionAutoSettings = data.motionAutoSettings ?? true;
+  const motionBackgroundSource = data.motionBackgroundSource ?? "input_video";
   const assistantModel = data.assistantModel ?? "gpt-5o";
   const assistantMode = data.assistantMode ?? "input";
   const assistantOutput = data.assistantOutput ?? "";
@@ -1396,7 +1452,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   const batchPromptCount = useStore(
     useCallback(
       (s) => {
-        if (data.kind !== "image" && data.kind !== "video") return 0;
+        if (data.kind !== "image" && data.kind !== "video" && data.kind !== "motion") return 0;
         const { batch } = collectWorkflowBatchPrompts(
           s.nodes,
           s.edges,
@@ -1432,6 +1488,13 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         return oneVideo * quantity * runCount;
       }
       return oneVideo * runCount;
+    }
+    if (data.kind === "motion") {
+      const oneMotion = workflowMotionControlChargeCredits({
+        quality: resolution,
+        durationSec: 10,
+      });
+      return oneMotion * runCount;
     }
     return 0;
   }, [
@@ -1482,7 +1545,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   const hasGeneratedOutput = Boolean(data.outputPreviewUrl?.trim());
   const hasAssistantOutput = Boolean(assistantOutput.trim());
   const hasWebsiteRun = Boolean(data.websiteLastRunAt?.trim());
-  const isGeneratorNode = data.kind === "image" || data.kind === "video";
+  const isGeneratorNode = data.kind === "image" || data.kind === "video" || data.kind === "motion";
   const generatorTextInputWireCount = useStore(
     useCallback(
       (s) => {
@@ -1518,7 +1581,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     const nodes = getNodes();
     const edges = getEdges();
     const linkedPrompts =
-      data.kind === "image" || data.kind === "video"
+      data.kind === "image" || data.kind === "video" || data.kind === "motion"
         ? collectLinkedPromptTextsForHandles(nodes, edges, id, [...WORKFLOW_TEXT_INPUT_HANDLES])
         : collectLinkedPromptTexts(nodes, edges, id);
     const linkedAssistantImageRefs =
@@ -1527,7 +1590,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         : [];
     const effectivePrompt = composeWorkflowPrompt(prompt, linkedPrompts);
     const batchContext =
-      data.kind === "image" || data.kind === "video"
+      data.kind === "image" || data.kind === "video" || data.kind === "motion"
         ? collectWorkflowBatchPrompts(nodes, edges, id, [...WORKFLOW_TEXT_INPUT_HANDLES], prompt)
         : { batch: null, composedSingle: effectivePrompt, fromPromptList: false };
     const batchPrompts = batchContext.batch?.map((x) => x.trim()).filter(Boolean) ?? null;
@@ -1753,15 +1816,15 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       return;
     }
 
-    if (data.kind !== "image" && data.kind !== "video") {
-      toast.message("Coming soon", { description: "Run is available for Image and Video generators." });
+    if (data.kind !== "image" && data.kind !== "video" && data.kind !== "motion") {
+      toast.message("Coming soon", { description: "Run is available for Image, Video, and Motion Control generators." });
       emitRunFinished(false);
       emitRunLog("error", "Run not supported for this module type.");
       return;
     }
 
     const shouldFanOutAsModules =
-      (data.kind === "image" || data.kind === "video") &&
+      (data.kind === "image" || data.kind === "video" || data.kind === "motion") &&
       quantity > 1 &&
       !(batchPrompts?.length && batchPrompts.length > 1);
     const perNodeQuantity = shouldFanOutAsModules ? 1 : quantity;
@@ -2009,6 +2072,109 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         if (!ok && !pendingImageTaskIds.some((t) => t.trim())) {
           setPendingWorkflowRun(null);
         }
+        setGenerating(false);
+        emitRunFinished(ok);
+      }
+      return;
+    }
+
+    if (data.kind === "motion") {
+      emitRunLog("info", "Motion control started.");
+      const motionImageRefs = collectLinkedImageUrlsForHandles(nodes, edges, id, ["startImage"]);
+      const motionVideoRefs = collectLinkedVideoUrlsForHandles(nodes, edges, id, ["inVideo"]);
+      const motionImageUrl =
+        motionImageRefs[0]?.trim() ||
+        (data.referenceMediaKind === "image" ? data.referencePreviewUrl?.trim() : "") ||
+        "";
+      const motionVideoUrl =
+        motionVideoRefs[0]?.trim() ||
+        (data.referenceMediaKind === "video" ? data.referencePreviewUrl?.trim() : "") ||
+        "";
+      if (!motionImageUrl || !motionVideoUrl) {
+        toast.error("Motion Control needs 2 inputs", {
+          description: "Connect one image to Character image and one video to Motion video.",
+        });
+        emitRunFinished(false);
+        emitRunLog("error", "Motion control blocked: missing image/video inputs.");
+        return;
+      }
+      const assumedDurationSec = 10;
+      const motionQuality = (resolution === "1080p" ? "1080p" : "720p") as "720p" | "1080p";
+      const perMotionCharge = workflowMotionControlChargeCredits({
+        quality: motionQuality,
+        durationSec: assumedDurationSec,
+      });
+      const runCount = Math.max(1, batchPrompts?.length ?? 1);
+      const mCharge = perMotionCharge * runCount;
+      if (!creditBypass && creditsRef.current < mCharge) {
+        toast.error("Not enough credits", { description: `You need ${mCharge} credits for this run.` });
+        emitRunFinished(false);
+        emitRunLog("error", `Motion control blocked: not enough credits (${mCharge}).`);
+        return;
+      }
+      const mPlatformCharge = creditBypass ? 0 : mCharge;
+      if (!creditBypass && mPlatformCharge > 0) {
+        spendCredits(mPlatformCharge);
+        creditsRef.current = Math.max(0, creditsRef.current - mPlatformCharge);
+      }
+      setGenerating(true);
+      let ok = false;
+      let pendingTaskIds: string[] = [];
+      try {
+        const promptsForRun = batchPrompts?.length ? batchPrompts : [singlePrompt];
+        pendingTaskIds = Array.from({ length: promptsForRun.length }, () => "");
+        setPendingWorkflowRun({
+          mediaKind: "video",
+          taskIds: pendingTaskIds,
+          listLabel: `${(data.label || cfg.title || "Motion").trim() || "Motion"} results`,
+        });
+        const results = await Promise.all(
+          promptsForRun.map(async (p, idx) => {
+            const { videoUrl } = await runWorkflowMotionControlJob({
+              planId,
+              personalApiKey: personalKey,
+              prompt: p,
+              motionFamily: model === "kling-2.6" ? "kling-2.6" : "kling-3.0",
+              quality: motionQuality,
+              imageUrl: motionImageUrl,
+              videoUrl: motionVideoUrl,
+              backgroundSource: data.motionBackgroundSource ?? "input_video",
+              onTaskStarted: (taskId) => {
+                pendingTaskIds[idx] = taskId;
+                setPendingWorkflowRun({
+                  mediaKind: "video",
+                  taskIds: pendingTaskIds,
+                  listLabel: `${(data.label || cfg.title || "Motion").trim() || "Motion"} results`,
+                });
+              },
+            });
+            primeRemoteMediaForDisplay(videoUrl);
+            return videoUrl;
+          }),
+        );
+        const videoUrl =
+          results
+            .map((u) => u.trim())
+            .filter(Boolean)
+            .at(-1) ?? "";
+        patch(id, {
+          outputPreviewUrl: videoUrl,
+          outputMediaKind: "video",
+          videoExtractedFirstFrameUrl: undefined,
+          videoExtractedLastFrameUrl: undefined,
+        });
+        toast.success("Motion control video ready");
+        ok = true;
+        setPendingWorkflowRun(null);
+        emitRunLog("success", "Motion control finished.");
+      } catch (e) {
+        const msg = userMessageFromCaughtError(e, "Motion control failed. Try again.");
+        refundPlatformCredits(mPlatformCharge, grantCredits, creditsRef);
+        setLastGenerationError(msg);
+        toast.error(msg);
+        emitRunLog("error", `Motion control failed: ${msg}`);
+      } finally {
+        if (!ok && !pendingTaskIds.some((t) => t.trim())) setPendingWorkflowRun(null);
         setGenerating(false);
         emitRunFinished(ok);
       }
@@ -2741,7 +2907,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       >
       <div className="flex min-w-0 flex-1 items-end gap-1">
       {/* Side tools (reference) */}
-      {data.kind === "video" ? (
+      {data.kind === "video" || data.kind === "motion" ? (
         <div className="nodrag nopan flex shrink-0 flex-col gap-1 pb-3">
           <div className={cn(workflowPortBubbleShellClass, "nodrag nopan")}>
             <Handle
@@ -2779,6 +2945,27 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             </button>
           </div>
 
+          {data.kind === "motion" ? (
+            <div className={cn(workflowPortBubbleShellClass, "nodrag nopan")}>
+              <Handle
+                id="inVideo"
+                type="target"
+                position={Position.Left}
+                className={workflowPortTargetHandleClass}
+                aria-label="Motion reference video input"
+              />
+              <button
+                type="button"
+                onPointerDown={(e) => e.stopPropagation()}
+                title="Motion reference video input."
+                className={workflowPortBubbleHitClass}
+              >
+                <Play className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+              </button>
+            </div>
+          ) : null}
+
+          {data.kind === "video" ? (
           <div className={cn(workflowPortBubbleShellClass, "nodrag nopan")}>
             <Handle
               id="endImage"
@@ -2796,7 +2983,9 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               <ImageIcon className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
             </button>
           </div>
+          ) : null}
 
+          {data.kind === "video" ? (
           <div className={cn(workflowPortBubbleShellClass, "nodrag nopan")}>
             <Handle
               id="references"
@@ -2814,6 +3003,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               <Images className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
             </button>
           </div>
+          ) : null}
         </div>
       ) : data.kind === "image" ? (
         <div className="nodrag nopan flex shrink-0 flex-col gap-1 pb-3">
@@ -3214,7 +3404,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 </SelectContent>
               </Select>
 
-              {aspectLocked ? (
+              {data.kind !== "motion" ? (aspectLocked ? (
                 <div
                   className={cn(
                     selectTriggerClass,
@@ -3246,23 +3436,64 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                     ))}
                   </SelectContent>
                 </Select>
-              )}
+              )) : null}
 
-              <Select value={resolution} onValueChange={(v) => patch(id, { resolution: v })}>
-                <SelectTrigger
-                  size="sm"
-                  className={cn(selectTriggerClass, generatorSelectTriggerExtras, "min-w-0 max-w-[4.25rem] shrink-0")}
-                >
-                  <SelectValue placeholder="Res" />
-                </SelectTrigger>
-                <SelectContent className={selectContentClass} position="popper">
-                  {resolutions.map((r) => (
-                    <SelectItem key={r} value={r} className="text-[12px] focus:bg-violet-500/20">
-                      {r}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {data.kind === "motion" && motionAutoSettings ? (
+                <span className="inline-flex h-6 shrink-0 items-center rounded-full border border-white/10 bg-black/25 px-1.5 text-[8px] text-white/45">
+                  Auto
+                </span>
+              ) : (
+                <Select value={resolution} onValueChange={(v) => patch(id, { resolution: v })}>
+                  <SelectTrigger
+                    size="sm"
+                    className={cn(selectTriggerClass, generatorSelectTriggerExtras, "min-w-0 max-w-[4.25rem] shrink-0")}
+                  >
+                    <SelectValue placeholder="Res" />
+                  </SelectTrigger>
+                  <SelectContent className={selectContentClass} position="popper">
+                    {resolutions.map((r) => (
+                      <SelectItem key={r} value={r} className="text-[12px] focus:bg-violet-500/20">
+                        {r}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              {data.kind === "motion" ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => patch(id, { motionAutoSettings: !motionAutoSettings })}
+                    className={cn(
+                      "inline-flex h-6 shrink-0 items-center rounded-full border px-1.5 text-[9px] font-semibold",
+                      motionAutoSettings
+                        ? "border-emerald-400/45 bg-emerald-500/20 text-emerald-100"
+                        : "border-white/12 bg-black/20 text-white/70",
+                    )}
+                  >
+                    Auto
+                  </button>
+                  <Select
+                    value={motionBackgroundSource}
+                    onValueChange={(v) => patch(id, { motionBackgroundSource: v as "input_video" | "input_image" })}
+                  >
+                    <SelectTrigger
+                      size="sm"
+                      className={cn(selectTriggerClass, generatorSelectTriggerExtras, "min-w-0 max-w-[5.5rem] shrink-0")}
+                    >
+                      <SelectValue placeholder="BG" />
+                    </SelectTrigger>
+                    <SelectContent className={selectContentClass} position="popper">
+                      <SelectItem value="input_video" className="text-[12px] focus:bg-violet-500/20">
+                        BG: Video
+                      </SelectItem>
+                      <SelectItem value="input_image" className="text-[12px] focus:bg-violet-500/20">
+                        BG: Image
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </>
+              ) : null}
               {data.kind === "video" && videoDurationOptions.length > 0 ? (
                 <Select
                   value={String(coerceWorkflowVideoDurationSec(model, data.videoDurationSec))}

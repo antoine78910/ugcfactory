@@ -9,13 +9,16 @@ import { calculateVideoCredits } from "@/lib/linkToAd/generationCredits";
 import { studioImageCreditsChargedTotal } from "@/lib/pricing";
 import {
   type AccountPlanId,
+  canUseMotionControl,
   canUseStudioImagePickerModel,
   canUseStudioVideoModel,
+  motionControlUpgradeMessage,
   canUseVeoApiModel,
   studioImagePickerUpgradeMessage,
   studioVideoUpgradeMessage,
   veoUpgradeMessage,
 } from "@/lib/subscriptionModelAccess";
+import { calculateMotionControlCreditsFromDuration } from "@/lib/pricing";
 import {
   isStudioGptImage2PickerModelId,
   isStudioImageKiePickerModelId,
@@ -1041,6 +1044,104 @@ export type WorkflowRunVideoParams = {
   onTaskStarted?: (taskId: string) => void;
 };
 
+export type WorkflowRunMotionControlParams = {
+  planId: AccountPlanId;
+  personalApiKey?: string;
+  prompt: string;
+  motionFamily: "kling-3.0" | "kling-2.6";
+  quality: "720p" | "1080p";
+  imageUrl: string;
+  videoUrl: string;
+  backgroundSource?: "input_video" | "input_image";
+  onTaskStarted?: (taskId: string) => void;
+};
+
+async function probeWorkflowVideoDurationSec(url: string): Promise<number | null> {
+  const u = url.trim();
+  if (!u || typeof window === "undefined") return null;
+  return await new Promise<number | null>((resolve) => {
+    const video = document.createElement("video");
+    video.preload = "metadata";
+    video.muted = true;
+    video.playsInline = true;
+    video.crossOrigin = "anonymous";
+    let settled = false;
+    const finish = (v: number | null) => {
+      if (settled) return;
+      settled = true;
+      try {
+        video.removeAttribute("src");
+        video.load();
+      } catch {
+        /* noop */
+      }
+      resolve(v);
+    };
+    const onLoaded = () => {
+      const d = Number(video.duration);
+      if (Number.isFinite(d) && d > 0) finish(d);
+      else finish(null);
+    };
+    const onErr = () => finish(null);
+    const t = window.setTimeout(() => finish(null), 6000);
+    video.addEventListener("loadedmetadata", () => {
+      window.clearTimeout(t);
+      onLoaded();
+    }, { once: true });
+    video.addEventListener("error", () => {
+      window.clearTimeout(t);
+      onErr();
+    }, { once: true });
+    video.src = u;
+  });
+}
+
+export async function runWorkflowMotionControlJob(
+  params: WorkflowRunMotionControlParams,
+): Promise<{ videoUrl: string; taskId: string; inputDurationSec: number }> {
+  const pKey = params.personalApiKey?.trim() || undefined;
+  if (!pKey && !canUseMotionControl(params.planId)) {
+    throw new Error(motionControlUpgradeMessage(params.planId) ?? "Subscription upgrade required for Motion Control.");
+  }
+  const imageUrl = await ensureWorkflowImageMinEdge(await resolveLocalWorkflowMediaUrlForServer(params.imageUrl));
+  const videoUrl = await resolveLocalWorkflowMediaUrlForServer(params.videoUrl);
+  const inputDurationSec = await probeWorkflowVideoDurationSec(videoUrl);
+  if (inputDurationSec == null || inputDurationSec < 3 || inputDurationSec > 30) {
+    throw new Error("Motion reference video must be between 3 and 30 seconds.");
+  }
+
+  const res = await fetch("/api/kling/motion-control", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      accountPlan: params.planId,
+      motionFamily: params.motionFamily,
+      imageUrl,
+      videoUrl,
+      quality: params.quality,
+      backgroundSource: params.backgroundSource ?? "input_video",
+      prompt: params.prompt,
+      personalApiKey: pKey,
+    }),
+  });
+  const json = (await res.json()) as { taskId?: string; provider?: string; error?: string };
+  if (!res.ok || !json.taskId) throw new Error(json.error || "Motion control failed");
+  params.onTaskStarted?.(json.taskId);
+  const credits = calculateMotionControlCreditsFromDuration(inputDurationSec, params.quality);
+  await registerStudioVideoTask({
+    label: workflowHistoryLabel(params.prompt.slice(0, 120)),
+    taskId: json.taskId,
+    provider: json.provider,
+    model: params.motionFamily === "kling-2.6" ? "kling-2.6/motion-control" : "kling-3.0/motion-control",
+    creditsCharged: credits,
+    personalApiKey: pKey,
+    inputUrls: [imageUrl, videoUrl],
+  });
+  const polledVideoUrl = await pollKlingVideo(json.taskId, pKey);
+  const finalUrl = await completeStudioGenerationTask(json.taskId, polledVideoUrl);
+  return { videoUrl: finalUrl, taskId: json.taskId, inputDurationSec };
+}
+
 export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promise<{ videoUrl: string; taskId: string }> {
   const modelId = resolveWorkflowVideoModelId(params.model);
   const pKey = params.personalApiKey;
@@ -1214,6 +1315,10 @@ export function workflowVideoChargeCredits(params: {
   return base;
 }
 
+export function workflowMotionControlChargeCredits(params: { quality: string; durationSec: number }): number {
+  return calculateMotionControlCreditsFromDuration(params.durationSec, params.quality);
+}
+
 /** Estimate credits for one runnable adAsset node from current graph wiring. */
 export function estimateWorkflowAdAssetRunCredits(
   data: AdAssetNodeData,
@@ -1221,7 +1326,7 @@ export function estimateWorkflowAdAssetRunCredits(
   nodes: Node[],
   edges: Edge[],
 ): number {
-  if (data.kind !== "image" && data.kind !== "video") return 0;
+  if (data.kind !== "image" && data.kind !== "video" && data.kind !== "motion") return 0;
 
   const prompt = (data.prompt ?? "").trim();
   const { batch } = collectWorkflowBatchPrompts(nodes, edges, nodeId, ["text", "in"], prompt);
@@ -1239,6 +1344,14 @@ export function estimateWorkflowAdAssetRunCredits(
       return oneNode * quantity * runCount;
     }
     return workflowImageChargeCredits({ model, resolution, quantity }) * runCount;
+  }
+
+  if (data.kind === "motion") {
+    const oneVideo = workflowMotionControlChargeCredits({
+      quality: (data.resolution ?? "1080p").trim(),
+      durationSec: 10,
+    });
+    return oneVideo * runCount;
   }
 
   const model = (data.model ?? "kling-3.0/video").trim() || "kling-3.0/video";

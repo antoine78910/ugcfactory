@@ -28,6 +28,15 @@ export type BuildAdAssetNodeOptions = {
 function genDefaultsForKind(
   kind: WorkflowDragNodeKind,
 ): Pick<AdAssetNodeData, "prompt" | "model" | "aspectRatio" | "resolution" | "quantity"> {
+  if (kind === "motion") {
+    return {
+      prompt: "",
+      model: "kling-3.0",
+      aspectRatio: "9:16",
+      resolution: "1080p",
+      quantity: 1,
+    };
+  }
   if (kind === "video") {
     return {
       prompt: "",
@@ -73,6 +82,7 @@ export function buildAdAssetNode(
   const labels: Record<WorkflowDragNodeKind, string> = {
     image: "Image Generator",
     video: "Video Generator",
+    motion: "Motion Control",
     variation: "Variation",
     assistant: "Assistant",
     upscale: "Image Upscaler",
@@ -95,6 +105,10 @@ export function buildAdAssetNode(
     data.websiteUrl = "";
     data.websiteOutputMode = "full_flow";
     data.websiteProductImageCount = 3;
+  }
+  if (kind === "motion") {
+    data.motionAutoSettings = true;
+    data.motionBackgroundSource = "input_video";
   }
 
   if (options?.prompt !== undefined) data.prompt = options.prompt;

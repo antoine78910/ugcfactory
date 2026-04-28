@@ -301,6 +301,7 @@ function isEditableElementFocused(): boolean {
 const WORKFLOW_AD_ASSET_DRAG_KINDS: WorkflowDragNodeKind[] = [
   "image",
   "video",
+  "motion",
   "variation",
   "assistant",
   "upscale",
@@ -312,7 +313,7 @@ function isWorkflowAdAssetDragKind(raw: string): raw is WorkflowDragNodeKind {
 }
 
 function isRunnableWorkflowAdAssetKind(kind: AdAssetNodeData["kind"]): boolean {
-  return kind === "image" || kind === "video" || kind === "assistant" || kind === "website";
+  return kind === "image" || kind === "video" || kind === "motion" || kind === "assistant" || kind === "website";
 }
 
 type WorkflowConnectionDataKind = "text" | "image" | "video" | "media";
@@ -370,7 +371,7 @@ function sourceKindFromNodeHandle(
     if (h === "videoFirst" || h === "videoLast" || h === "generated") return "image";
     if (h !== "out") return null;
     if (d.kind === "assistant") return "text";
-    if (d.kind === "video") return "video";
+    if (d.kind === "video" || d.kind === "motion") return "video";
     if (d.kind === "image" || d.kind === "variation" || d.kind === "upscale") return "image";
     return null;
   }
@@ -419,6 +420,12 @@ function targetHandleForNewNodeFromSourceKind(
     if (kind === "video") {
       if (sourceKind === "text") return "text";
       if (sourceKind === "image") return "startImage";
+      return null;
+    }
+    if (kind === "motion") {
+      if (sourceKind === "text") return "text";
+      if (sourceKind === "image") return "startImage";
+      if (sourceKind === "video") return "inVideo";
       return null;
     }
     if (kind === "assistant") {
@@ -1355,6 +1362,18 @@ function WorkflowReactFlowChrome({
                         setFrameOpen(false);
                       }}
                       onClick={() => addNode("video")}
+                    />
+                    <WorkflowAddPaletteRow
+                      icon={Clapperboard}
+                      label="Motion Control"
+                      iconShellClass="border-violet-500/45 bg-violet-950/80"
+                      draggable
+                      onDragStart={(e) => {
+                        setDragPayload(e, "motion");
+                        setAddOpen(false);
+                        setFrameOpen(false);
+                      }}
+                      onClick={() => addNode("motion")}
                     />
                     <WorkflowAddPaletteRow
                       icon={Globe2}
