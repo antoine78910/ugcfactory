@@ -332,20 +332,40 @@ export function WorkflowSpacesLanding() {
   const openTemplate = (id: string) => {
     router.push(`/workflow/template/${encodeURIComponent(id)}`);
   };
-  const removeSpace = (e: MouseEvent, row: MySpaceRow) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (storageScope === null) return;
-    if (!row.fromCloudOnly) {
-      deleteSpace(storageScope, row.id);
-      refresh(storageScope);
-    }
-    if (authUserId) {
-      void deleteCloudWorkflowSpace(row.id).then((ok) => {
-        if (ok) void refreshCloudSpaces();
-      });
-    }
-  };
+  const removeSpace = useCallback(
+    async (e: MouseEvent, row: MySpaceRow) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (storageScope === null) return;
+
+      const publishedTemplateId =
+        typeof row.publishedCommunityTemplateId === "string" ? row.publishedCommunityTemplateId.trim() : "";
+      if (publishedTemplateId && /^[0-9a-f-]{36}$/i.test(publishedTemplateId)) {
+        const res = await fetch(`/api/workflow/community-templates/${encodeURIComponent(publishedTemplateId)}`, {
+          method: "DELETE",
+          cache: "no-store",
+        });
+        if (!res.ok && res.status !== 404 && res.status !== 403) {
+          const body = (await res.json().catch(() => null)) as { error?: string } | null;
+          toast.error(body?.error || "Could not remove published template.");
+          return;
+        }
+        if (authUserId) {
+          void refreshCommunityTemplates();
+        }
+      }
+
+      if (!row.fromCloudOnly) {
+        deleteSpace(storageScope, row.id);
+        refresh(storageScope);
+      }
+      if (authUserId) {
+        const ok = await deleteCloudWorkflowSpace(row.id);
+        if (ok) await refreshCloudSpaces();
+      }
+    },
+    [authUserId, refresh, refreshCloudSpaces, refreshCommunityTemplates, storageScope],
+  );
 
   const duplicateSpace = useCallback(
     async (e: MouseEvent, row: MySpaceRow) => {
@@ -765,7 +785,7 @@ export function WorkflowSpacesLanding() {
                   <button
                     type="button"
                     title="Delete workflow"
-                    onClick={(e) => removeSpace(e, s)}
+                    onClick={(e) => void removeSpace(e, s)}
                     className="rounded-lg border border-white/[0.08] bg-black/50 px-2 py-1 text-[11px] font-semibold text-white/55 shadow-sm backdrop-blur-sm transition hover:bg-red-500/15 hover:text-red-200"
                   >
                     Delete

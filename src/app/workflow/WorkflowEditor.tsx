@@ -2511,12 +2511,23 @@ function WorkflowFlowWorkspace({
     if (!canvasProjectFlushRef) return;
     const flush = (): WorkflowProjectStateV1 => {
       const id = project.activePageId;
-      const liveNodes = getNodes() as WorkflowCanvasNode[];
-      const liveEdges = getEdges();
+      // Prefer the React state snapshot kept in `nodesEdgesRef`: it's plain JSON-shaped
+      // data we set via `setNodes` / `setEdges`, whereas `getNodes()` from the React Flow
+      // store can carry internal fields that occasionally break `structuredClone`.
+      const snap = nodesEdgesRef.current;
+      const liveNodes = (snap?.nodes ?? (getNodes() as WorkflowCanvasNode[])) as WorkflowCanvasNode[];
+      const liveEdges = snap?.edges ?? getEdges();
+      const safeClone = <T,>(value: T): T => {
+        try {
+          return structuredClone(value);
+        } catch {
+          return JSON.parse(JSON.stringify(value)) as T;
+        }
+      };
       return {
         ...project,
         pages: project.pages.map((p) =>
-          p.id === id ? { ...p, nodes: structuredClone(liveNodes), edges: structuredClone(liveEdges) } : p,
+          p.id === id ? { ...p, nodes: safeClone(liveNodes), edges: safeClone(liveEdges) } : p,
         ),
       };
     };
@@ -4223,7 +4234,16 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
     setPublishBusy(true);
     try {
       // Parent `workflowProject` lags React Flow by a debounced sync; flush the live graph first.
-      const liveProject = structuredClone(canvasProjectFlushRef.current?.() ?? workflowProject);
+      const flushed = canvasProjectFlushRef.current?.() ?? workflowProject;
+      // Use a JSON-safe clone here too — `structuredClone` throws on any non-cloneable
+      // field that may have crept into a node, which previously surfaced to the user as
+      // a confusing "empty template" because the throw aborted the publish silently.
+      let liveProject: WorkflowProjectStateV1;
+      try {
+        liveProject = structuredClone(flushed);
+      } catch {
+        liveProject = JSON.parse(JSON.stringify(flushed)) as WorkflowProjectStateV1;
+      }
       if (!projectHasAnyNode(liveProject)) {
         toast.error("Add at least one node to your workflow before publishing.");
         return;
@@ -4576,6 +4596,18 @@ export function WorkflowTemplatePreview({ templateId }: { templateId: string }) 
   const resolvedId = useMemo(() => normalizeWorkflowSpaceId(templateId), [templateId]);
   const [storageScope, setStorageScope] = useState<string | null>(null);
   const [project, setProject] = useState<WorkflowProjectStateV1>(() => defaultWorkflowProject());
+  /**
+   * `WorkflowFlowWorkspace` initializes React Flow's nodes/edges from the
+   * project's active page exactly once on mount; later prop updates do NOT
+   * propagate unless the active page id changes. Both `defaultWorkflowProject`
+   * and any space created by `createSpace` share the same `activePageId`
+   * (`workflow-page-default`), so when the fetched template arrives the page
+   * sync effect skips and the canvas stays empty.
+   *
+   * Gate the workspace mount on `projectReady` so React Flow always boots with
+   * the real fetched/built project, never the placeholder default.
+   */
+  const [projectReady, setProjectReady] = useState(false);
   const [communityLabel, setCommunityLabel] = useState<string | null>(null);
   const [communityAuthor, setCommunityAuthor] = useState<string | null>(null);
   const [useBusy, setUseBusy] = useState(false);
@@ -4596,6 +4628,7 @@ export function WorkflowTemplatePreview({ templateId }: { templateId: string }) 
 
   useEffect(() => {
     if (storageScope === null) return;
+    setProjectReady(false);
     const communityUuid = parseWorkflowCommunityTemplateUuid(resolvedId);
     if (!communityUuid) {
       setCommunityLabel(null);
@@ -4606,6 +4639,7 @@ export function WorkflowTemplatePreview({ templateId }: { templateId: string }) 
         return;
       }
       setProject(p);
+      setProjectReady(true);
       return;
     }
 
@@ -4636,6 +4670,7 @@ export function WorkflowTemplatePreview({ templateId }: { templateId: string }) 
           typeof t.created_by_name === "string" && t.created_by_name.trim() ? t.created_by_name.trim() : null,
         );
         setProject(t.project);
+        setProjectReady(true);
       }
     })();
     return () => {
@@ -4703,16 +4738,22 @@ export function WorkflowTemplatePreview({ templateId }: { templateId: string }) 
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-[#06070d]">
           <div className="relative flex h-full min-h-[480px] min-w-0 flex-1 flex-col">
             <div className="min-h-0 flex-1">
-              <ReactFlowProvider>
-                <WorkflowFlowWorkspace
-                  project={project}
-                  setProject={setProject}
-                  readOnly
-                  showTemplateUseCta
-                  onUseTemplate={onUseTemplate}
-                  useTemplateBusy={useBusy}
-                />
-              </ReactFlowProvider>
+              {projectReady ? (
+                <ReactFlowProvider key={resolvedId}>
+                  <WorkflowFlowWorkspace
+                    project={project}
+                    setProject={setProject}
+                    readOnly
+                    showTemplateUseCta
+                    onUseTemplate={onUseTemplate}
+                    useTemplateBusy={useBusy}
+                  />
+                </ReactFlowProvider>
+              ) : (
+                <div className="flex h-full items-center justify-center text-[12px] text-white/40">
+                  Loading template…
+                </div>
+              )}
             </div>
           </div>
         </div>
