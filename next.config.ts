@@ -115,6 +115,14 @@ const nextConfig: NextConfig = {
           { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
         ],
       },
+      // LP-only assets; filename stays fixed so avoid immutable (users replace the file in place).
+      {
+        source: "/landing/:path*",
+        headers: [
+          ...PUBLIC_ASSET_CORS,
+          { key: "Cache-Control", value: "public, max-age=3600, stale-while-revalidate=86400" },
+        ],
+      },
     ];
   },
 };

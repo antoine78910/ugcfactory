@@ -234,7 +234,25 @@ export default function LandingPage() {
       {/* ── Carousel: Product → Electric Band → UGC (pulled up toward hero 3D strip) ── */}
       <LandingRevealCarousel />
 
-      {/* ── Workflow section ── */}
+      {/* ── CTA text + button ── */}
+      <section className="mx-auto max-w-4xl px-4 pb-16 pt-10 text-center sm:px-5">
+        <p className="mx-auto max-w-3xl text-base leading-relaxed text-white/55 sm:text-xl">
+          Instantly turn flat product shots into dynamic video ads with AI
+          avatars and voiceovers that demand attention and drive sales.
+        </p>
+        <Button
+          asChild
+          className="mt-6 h-12 w-full max-w-md rounded-2xl bg-violet-400 px-6 text-[15px] font-semibold text-black border border-violet-200/40 shadow-[0_7px_0_0_rgba(76,29,149,0.9)] ring-offset-0 transition-all hover:-translate-y-[1px] hover:bg-violet-300 hover:shadow-[0_9px_0_0_rgba(76,29,149,0.9),0_0_36px_rgba(167,139,250,0.55)] focus-visible:border-violet-400/45 focus-visible:ring-violet-400/55 focus-visible:ring-[3px] active:translate-y-[7px] active:shadow-[0_0_0_0_rgba(76,29,149,0.9)] sm:mt-7 sm:h-12 sm:w-auto sm:max-w-none sm:px-8 sm:text-base"
+        >
+          <Link href={studioAppPath("/signup")} prefetch={false} className="inline-flex items-center justify-center gap-2">
+            <Sparkles className="h-4 w-4 shrink-0" />
+            <span>Start your <LandingTrialPriceText className="inline" /> trial</span>
+            <ArrowRight className="h-4 w-4 shrink-0" />
+          </Link>
+        </Button>
+      </section>
+
+      {/* ── Workflow (LP only — video: public/landing/workflow-promo.mp4) ── */}
       <section className="mx-auto max-w-6xl px-4 py-8 sm:px-5 sm:py-12">
         <div className="overflow-hidden rounded-3xl border border-white/[0.08] bg-gradient-to-br from-[#0c0c16] via-[#0a0a10] to-[#100a1e] p-5 sm:p-8">
           <div className="grid items-center gap-6 lg:grid-cols-[1fr_1.28fr]">
@@ -260,7 +278,7 @@ export default function LandingPage() {
             <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-black/40">
               <div className="pointer-events-none absolute inset-0 z-10 bg-gradient-to-tr from-violet-500/10 via-transparent to-violet-300/5" />
               <video
-                src="/workflow-hero/generated-video-preview-9x16.mp4"
+                src="/landing/workflow-promo.mp4"
                 autoPlay
                 muted
                 loop
@@ -272,24 +290,6 @@ export default function LandingPage() {
             </div>
           </div>
         </div>
-      </section>
-
-      {/* ── CTA text + button ── */}
-      <section className="mx-auto max-w-4xl px-4 pb-16 pt-10 text-center sm:px-5">
-        <p className="mx-auto max-w-3xl text-base leading-relaxed text-white/55 sm:text-xl">
-          Instantly turn flat product shots into dynamic video ads with AI
-          avatars and voiceovers that demand attention and drive sales.
-        </p>
-        <Button
-          asChild
-          className="mt-6 h-12 w-full max-w-md rounded-2xl bg-violet-400 px-6 text-[15px] font-semibold text-black border border-violet-200/40 shadow-[0_7px_0_0_rgba(76,29,149,0.9)] ring-offset-0 transition-all hover:-translate-y-[1px] hover:bg-violet-300 hover:shadow-[0_9px_0_0_rgba(76,29,149,0.9),0_0_36px_rgba(167,139,250,0.55)] focus-visible:border-violet-400/45 focus-visible:ring-violet-400/55 focus-visible:ring-[3px] active:translate-y-[7px] active:shadow-[0_0_0_0_rgba(76,29,149,0.9)] sm:mt-7 sm:h-12 sm:w-auto sm:max-w-none sm:px-8 sm:text-base"
-        >
-          <Link href={studioAppPath("/signup")} prefetch={false} className="inline-flex items-center justify-center gap-2">
-            <Sparkles className="h-4 w-4 shrink-0" />
-            <span>Start your <LandingTrialPriceText className="inline" /> trial</span>
-            <ArrowRight className="h-4 w-4 shrink-0" />
-          </Link>
-        </Button>
       </section>
 
       {/* ── Bottom banner ── */}
