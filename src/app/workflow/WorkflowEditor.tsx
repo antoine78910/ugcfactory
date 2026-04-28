@@ -384,6 +384,12 @@ function targetKindFromNodeHandle(
 ): WorkflowConnectionDataKind | null {
   if (!node) return null;
   const h = (handleId ?? "in").trim() || "in";
+  if (node.type === "adAsset" && h === "in") {
+    const kind = (node.data as AdAssetNodeData).kind;
+    // Image / video / motion modules only accept explicit side input ports.
+    // Prevent accidental center-wire drops that bypass those dedicated handles.
+    if (kind === "image" || kind === "video" || kind === "motion") return null;
+  }
   if (h === "text" || h === "inText") return "text";
   if (h === "references" || h === "startImage" || h === "endImage" || h === "inImage") return "image";
   if (h === "inVideo") return "video";
@@ -2615,20 +2621,26 @@ function WorkflowFlowWorkspace({
       const sourceNode = allNodes.find((n) => n.id === source);
       const targetNode = allNodes.find((n) => n.id === target);
       const srcKind = sourceKindFromNodeHandle(sourceNode, sourceHandle);
-      const dstKind = targetKindFromNodeHandle(targetNode, targetHandle);
+      const resolvedTargetHandle =
+        targetHandle ??
+        (targetNode ? targetHandleForNewNodeFromSourceKind(targetNode as WorkflowCanvasNode, srcKind) : null);
+      const dstKind = targetKindFromNodeHandle(targetNode, resolvedTargetHandle);
       if (!canConnectByDataKind(srcKind, dstKind)) {
         toast.error("Incompatible connection", {
           description: "This output type can only connect to a matching input type.",
         });
         return;
       }
-      const handleId = targetHandle ?? "";
+      const handleId = resolvedTargetHandle ?? "";
       let replaceSameHandle = false;
       if (targetNode?.type === "adAsset") {
         const kind = (targetNode.data as AdAssetNodeData).kind;
         if (handleId === "text" && (kind === "image" || kind === "video")) replaceSameHandle = true;
         if (handleId === "startImage" && kind === "video") replaceSameHandle = true;
         if (handleId === "endImage" && kind === "video") replaceSameHandle = true;
+        if (handleId === "text" && kind === "motion") replaceSameHandle = true;
+        if (handleId === "startImage" && kind === "motion") replaceSameHandle = true;
+        if (handleId === "inVideo" && kind === "motion") replaceSameHandle = true;
       }
       setEdges((eds) => {
         const base = replaceSameHandle
@@ -2637,6 +2649,7 @@ function WorkflowFlowWorkspace({
         return addEdge(
           {
             ...params,
+            targetHandle: resolvedTargetHandle ?? undefined,
             style: { stroke: "rgba(167, 139, 250, 0.5)", strokeWidth: 2 },
           },
           base,

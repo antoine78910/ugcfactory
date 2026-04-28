@@ -235,16 +235,38 @@ export function ImageRefNode({ id, data }: NodeProps<ImageRefNodeType>) {
       const isVideo = isVideoFile(file);
       const mediaKind: "image" | "video" = isVideo ? "video" : "image";
       setReplacing(true);
+      const previousUrl = data.imageUrl;
+      const previousMediaKind = data.mediaKind;
+      const previousAspect = data.intrinsicAspect;
+      const localPreviewUrl = URL.createObjectURL(file);
       try {
         let intrinsicAspect: number | undefined;
-        const blobUrl = URL.createObjectURL(file);
         try {
           intrinsicAspect = isVideo
-            ? await measureVideoAspectFromObjectUrl(blobUrl)
-            : await measureImageAspectFromObjectUrl(blobUrl);
+            ? await measureVideoAspectFromObjectUrl(localPreviewUrl)
+            : await measureImageAspectFromObjectUrl(localPreviewUrl);
         } finally {
-          URL.revokeObjectURL(blobUrl);
+          // Keep localPreviewUrl alive until hosted media is written in node state.
         }
+        // Show the newly selected media immediately while CDN upload runs.
+        setNodes((prev) =>
+          prev.map((n) =>
+            n.id === id
+              ? ({
+                  ...n,
+                  data: {
+                    ...n.data,
+                    imageUrl: localPreviewUrl,
+                    mediaKind,
+                    source: "upload",
+                    intrinsicAspect: intrinsicAspect && Number.isFinite(intrinsicAspect) ? intrinsicAspect : undefined,
+                    videoExtractedFirstFrameUrl: undefined,
+                    videoExtractedLastFrameUrl: undefined,
+                  },
+                } as WorkflowCanvasNode)
+              : n,
+          ),
+        );
         const hosted = await uploadFileToCdn(file, { kind: mediaKind });
         setNodes((prev) =>
           prev.map((n) =>
@@ -264,8 +286,26 @@ export function ImageRefNode({ id, data }: NodeProps<ImageRefNodeType>) {
               : n,
           ),
         );
+        URL.revokeObjectURL(localPreviewUrl);
         toast.success("Media replaced");
       } catch (err) {
+        URL.revokeObjectURL(localPreviewUrl);
+        // Restore previous media if upload failed.
+        setNodes((prev) =>
+          prev.map((n) =>
+            n.id === id
+              ? ({
+                  ...n,
+                  data: {
+                    ...n.data,
+                    imageUrl: previousUrl,
+                    mediaKind: previousMediaKind,
+                    intrinsicAspect: previousAspect,
+                  },
+                } as WorkflowCanvasNode)
+              : n,
+          ),
+        );
         toast.error("Replace failed", {
           description: err instanceof Error ? err.message : "Please try another file.",
         });
@@ -273,7 +313,7 @@ export function ImageRefNode({ id, data }: NodeProps<ImageRefNodeType>) {
         setReplacing(false);
       }
     },
-    [id, setNodes],
+    [data.imageUrl, data.intrinsicAspect, data.mediaKind, id, setNodes],
   );
 
   const onExtractVideoFrame = useCallback(
@@ -486,6 +526,14 @@ export function ImageRefNode({ id, data }: NodeProps<ImageRefNodeType>) {
                 draggable={false}
               />
             )}
+            {replacing ? (
+              <div className="pointer-events-none absolute inset-0 z-[5] flex flex-col items-center justify-center gap-2 bg-black/40 backdrop-blur-[1.5px]">
+                <Loader2 className="h-4 w-4 animate-spin text-white/90" aria-hidden />
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-white/80">
+                  Loading new media…
+                </span>
+              </div>
+            ) : null}
 
             {hovered && (
               <div className="absolute inset-0 flex items-end justify-end gap-1.5 bg-gradient-to-t from-black/50 to-transparent p-2">

@@ -1338,7 +1338,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     [data.kind, data.outputMediaKind, data.outputPreviewUrl, generating],
   );
 
-  const showVideoOutputBubbles = data.kind === "video";
+  const showVideoOutputBubbles = data.kind === "video" || data.kind === "motion";
   /** Card width follows preview width exactly for image/video generators. */
   const cardWidthPx = frame.width + CARD_PAD_X_PX;
 
@@ -3733,7 +3733,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           </div>
         ) : null}
 
-        {data.kind !== "video" && data.kind !== "image" ? (
+        {data.kind !== "video" && data.kind !== "image" && data.kind !== "motion" ? (
           <Handle
             id="out"
             type="source"

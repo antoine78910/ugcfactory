@@ -251,7 +251,7 @@ export async function piapiCreateSeedanceTask(opts: {
     input.image_urls = urls;
   }
 
-  const res = await fetch(`${PIAPI_BASE}/api/v1/task`, {
+  const res = await fetchPiapiWithRetry(`${PIAPI_BASE}/api/v1/task`, {
     method: "POST",
     headers: {
       "X-API-Key": apiKey,
@@ -267,7 +267,7 @@ export async function piapiCreateSeedanceTask(opts: {
       },
     }),
     cache: "no-store",
-  });
+  }, 4);
 
   const json = (await res.json().catch(() => ({}))) as {
     code?: number;
