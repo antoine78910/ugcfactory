@@ -182,7 +182,6 @@ export function HeroVideoCarousel3D({ srcs = DEFAULT_SRCS }: Props) {
                 className={styles.video}
                 src={src}
                 muted
-                defaultMuted
                 loop
                 playsInline
                 autoPlay

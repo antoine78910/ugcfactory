@@ -281,7 +281,6 @@ export default function LandingPage() {
                 src="/landing/workflow-promo.mp4"
                 autoPlay
                 muted
-                defaultMuted
                 loop
                 playsInline
                 disablePictureInPicture

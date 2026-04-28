@@ -154,7 +154,6 @@ function RevealSlide({
             autoPlay
             loop
             muted
-            defaultMuted
             playsInline
             controls={false}
             preload="metadata"
