@@ -4187,10 +4187,9 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
     }
     setPublishBusy(true);
     try {
-      const projectForPublish =
-        storageScope != null
-          ? loadProjectForSpace(storageScope, resolvedSpaceId)
-          : workflowProject;
+      // Publish exactly what is currently on the canvas (source of truth),
+      // instead of reloading from localStorage which may lag behind edits.
+      const projectForPublish = structuredClone(workflowProject);
       const res = await fetch("/api/workflow/community-templates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

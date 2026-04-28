@@ -1,6 +1,6 @@
 "use client";
 
-import { Layers, LayoutTemplate, Pencil, Plus, Search, Users } from "lucide-react";
+import { Copy, Layers, LayoutTemplate, Pencil, Plus, Search, Users } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
@@ -32,7 +32,9 @@ import {
 } from "./workflowTemplates";
 import {
   deleteCloudWorkflowSpace,
+  fetchCloudWorkflowSpace,
   listCloudWorkflowSpaces,
+  saveCloudWorkflowSpace,
   type CloudWorkflowSpace,
 } from "./workflowSpacesCloud";
 
@@ -102,6 +104,7 @@ export function WorkflowSpacesLanding() {
   const [newWorkflowName, setNewWorkflowName] = useState("Untitled workflow");
   const [editingSpaceId, setEditingSpaceId] = useState<string | null>(null);
   const [editingSpaceName, setEditingSpaceName] = useState("");
+  const [duplicatingSpaceId, setDuplicatingSpaceId] = useState<string | null>(null);
   const [templateDeleteDialog, setTemplateDeleteDialog] = useState<WorkflowTemplateMeta | null>(null);
 
   const refreshCommunityTemplates = useCallback(async () => {
@@ -342,6 +345,49 @@ export function WorkflowSpacesLanding() {
       });
     }
   };
+
+  const duplicateSpace = useCallback(
+    async (e: MouseEvent, row: MySpaceRow) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (storageScope === null) return;
+      setDuplicatingSpaceId(row.id);
+      try {
+        const sourceProject = row.fromCloudOnly ? (await fetchCloudWorkflowSpace(row.id))?.state ?? null : loadProjectForSpace(storageScope, row.id);
+        if (!sourceProject) {
+          toast.error("Could not load this workflow to duplicate.");
+          return;
+        }
+        const copyName = `${row.name.trim() || "Untitled workflow"} (copy)`;
+        const meta = createSpace(storageScope, copyName);
+        saveProjectForSpace(storageScope, meta.id, sourceProject);
+        updateSpaceMeta(storageScope, meta.id, {
+          previewDataUrl: row.previewDataUrl ?? undefined,
+          publishedCommunityTemplateId: row.publishedCommunityTemplateId,
+        });
+        refresh(storageScope);
+
+        if (authUserId) {
+          await saveCloudWorkflowSpace({
+            spaceId: meta.id,
+            name: copyName,
+            state: sourceProject,
+            previewDataUrl: row.previewDataUrl ?? null,
+            publishedCommunityTemplateId: row.publishedCommunityTemplateId ?? null,
+          });
+          await refreshCloudSpaces();
+        }
+
+        toast.success("Workflow duplicated.");
+        router.push(`/workflow/space/${encodeURIComponent(meta.id)}`);
+      } catch {
+        toast.error("Could not duplicate workflow.");
+      } finally {
+        setDuplicatingSpaceId(null);
+      }
+    },
+    [authUserId, refresh, refreshCloudSpaces, router, storageScope],
+  );
 
   const removeTemplate = useCallback(
     async (template: WorkflowTemplateMeta) => {
@@ -703,6 +749,18 @@ export function WorkflowSpacesLanding() {
                   </div>
                 </Link>
                 <div className="absolute bottom-3 right-3 z-10 flex flex-wrap justify-end gap-1 sm:bottom-4 sm:right-4 sm:gap-1.5">
+                  <button
+                    type="button"
+                    title="Duplicate workflow"
+                    disabled={duplicatingSpaceId === s.id}
+                    onClick={(e) => void duplicateSpace(e, s)}
+                    className="rounded-lg border border-white/[0.08] bg-black/50 px-2 py-1 text-[11px] font-semibold text-white/55 shadow-sm backdrop-blur-sm transition hover:bg-violet-500/20 hover:text-violet-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      <Copy className="h-3 w-3" />
+                      {duplicatingSpaceId === s.id ? "Duplicating…" : "Duplicate"}
+                    </span>
+                  </button>
                   <button
                     type="button"
                     title="Delete workflow"
