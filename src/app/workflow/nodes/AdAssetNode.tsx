@@ -78,6 +78,10 @@ import {
   workflowImageChargeCredits,
   workflowMotionControlChargeCredits,
   workflowVideoChargeCredits,
+  workflowVideoModelHasStartFrame,
+  workflowVideoModelHasEndFrame,
+  workflowVideoModelHasReferences,
+  workflowVideoModelSupportsElements,
   WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX,
   splitAssistantOutputToListLines,
   splitIntoPromptLines,
@@ -1448,6 +1452,24 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     (resolvedVideoModelId === "bytedance/seedance-2-preview" ||
       resolvedVideoModelId === "bytedance/seedance-2-fast-preview");
 
+  /** UI gates derived from the picker capabilities — Seedance has no first/last frame ports. */
+  const videoModelHasStartFrame = useMemo(
+    () => (data.kind === "video" ? workflowVideoModelHasStartFrame(resolvedVideoModelId) : true),
+    [data.kind, resolvedVideoModelId],
+  );
+  const videoModelHasEndFrame = useMemo(
+    () => (data.kind === "video" ? workflowVideoModelHasEndFrame(resolvedVideoModelId) : false),
+    [data.kind, resolvedVideoModelId],
+  );
+  const videoModelHasReferences = useMemo(
+    () => (data.kind === "video" ? workflowVideoModelHasReferences(resolvedVideoModelId) : false),
+    [data.kind, resolvedVideoModelId],
+  );
+  const videoModelSupportsElements = useMemo(
+    () => (data.kind === "video" ? workflowVideoModelSupportsElements(resolvedVideoModelId) : false),
+    [data.kind, resolvedVideoModelId],
+  );
+
   const videoPriorityEffective: "normal" | "vip" =
     data.kind === "video" && data.videoPriority === "vip" ? "vip" : "normal";
   const motionAutoSettings = data.motionAutoSettings ?? true;
@@ -1488,6 +1510,49 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       },
       [data.kind, data.referenceMediaKind, data.referencePreviewUrl, id],
     ),
+  );
+
+  /**
+   * Connected reference image URLs (start frame + references port + node-local upload), in the
+   * order PiAPI binds them to `@image1, @image2, …`. We feed this to the chip strip below the
+   * prompt so users can see the auto-naming and type matching `@imageN` mentions.
+   */
+  const videoElementRefSignature = useStore(
+    useCallback(
+      (s) => {
+        if (data.kind !== "video") return "";
+        const startUrls = collectLinkedImageUrlsForHandles(s.nodes, s.edges, id, ["startImage"]);
+        const refUrls = collectLinkedImageUrlsForHandles(s.nodes, s.edges, id, ["references"]);
+        const nodeRef =
+          data.referenceMediaKind === "image" && data.referencePreviewUrl?.trim()
+            ? [data.referencePreviewUrl.trim()]
+            : [];
+        const start = (data.videoStartImageUrl?.trim() ? [data.videoStartImageUrl.trim()] : []).concat(
+          startUrls,
+        );
+        const all = [...start, ...refUrls, ...nodeRef];
+        const seen = new Set<string>();
+        const out: string[] = [];
+        for (const u of all) {
+          const t = u.trim();
+          if (!t || seen.has(t)) continue;
+          seen.add(t);
+          out.push(t);
+        }
+        return out.join("|");
+      },
+      [
+        data.kind,
+        data.referenceMediaKind,
+        data.referencePreviewUrl,
+        data.videoStartImageUrl,
+        id,
+      ],
+    ),
+  );
+  const videoElementRefUrls = useMemo(
+    () => (videoElementRefSignature ? videoElementRefSignature.split("|").filter(Boolean) : []),
+    [videoElementRefSignature],
   );
 
   useEffect(() => {
@@ -2996,23 +3061,25 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             </button>
           </div>
 
-          <div className={cn(workflowPortBubbleShellClass, "nodrag nopan")}>
-            <Handle
-              id="startImage"
-              type="target"
-              position={Position.Left}
-              className={workflowPortTargetHandleClass}
-              aria-label="Start frame image input"
-            />
-            <button
-              type="button"
-              onPointerDown={(e) => handleInputBubblePointerDown(e, "startImage")}
-              title="Start frame image, one incoming image (first frame / primary reference)."
-              className={workflowPortBubbleHitClass}
-            >
-              <ImageIcon className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-            </button>
-          </div>
+          {data.kind === "motion" || (data.kind === "video" && videoModelHasStartFrame) ? (
+            <div className={cn(workflowPortBubbleShellClass, "nodrag nopan")}>
+              <Handle
+                id="startImage"
+                type="target"
+                position={Position.Left}
+                className={workflowPortTargetHandleClass}
+                aria-label="Start frame image input"
+              />
+              <button
+                type="button"
+                onPointerDown={(e) => handleInputBubblePointerDown(e, "startImage")}
+                title="Start frame image, one incoming image (first frame / primary reference)."
+                className={workflowPortBubbleHitClass}
+              >
+                <ImageIcon className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+              </button>
+            </div>
+          ) : null}
 
           {data.kind === "motion" ? (
             <div className={cn(workflowPortBubbleShellClass, "nodrag nopan")}>
@@ -3034,7 +3101,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             </div>
           ) : null}
 
-          {data.kind === "video" ? (
+          {data.kind === "video" && videoModelHasEndFrame ? (
           <div className={cn(workflowPortBubbleShellClass, "nodrag nopan")}>
             <Handle
               id="endImage"
@@ -3054,7 +3121,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           </div>
           ) : null}
 
-          {data.kind === "video" ? (
+          {data.kind === "video" && videoModelHasReferences ? (
           <div className={cn(workflowPortBubbleShellClass, "nodrag nopan")}>
             <Handle
               id="references"
@@ -3066,7 +3133,11 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             <button
               type="button"
               onPointerDown={(e) => handleInputBubblePointerDown(e, "references")}
-              title="Reference images, unlimited incoming images for models that use extra references."
+              title={
+                videoModelSupportsElements
+                  ? "Reference images. Type @image1, @image2, … in the prompt to bind them."
+                  : "Reference images, multiple incoming images supported by this model."
+              }
               className={workflowPortBubbleHitClass}
             >
               <Images className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
@@ -3396,6 +3467,48 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             )}
           >
             <div className="nodrag nopan relative" onPointerDown={(e) => e.stopPropagation()}>
+              {data.kind === "video" && videoModelHasReferences && videoElementRefUrls.length > 0 ? (
+                <div
+                  className="mb-1 flex w-full items-center gap-1 overflow-x-auto pb-0.5 nowheel"
+                  title={
+                    videoModelSupportsElements
+                      ? "Type @image1, @image2, … in the prompt to bind these references."
+                      : "Reference images that will be sent to the model."
+                  }
+                >
+                  {videoElementRefUrls.slice(0, 6).map((url, idx) => {
+                    const tag = `@image${idx + 1}`;
+                    return (
+                      <button
+                        key={`${tag}-${url}`}
+                        type="button"
+                        title={`Insert ${tag} into prompt`}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={() => {
+                          const current = prompt ?? "";
+                          const needsSep = current.length > 0 && !/\s$/.test(current);
+                          const next = `${current}${needsSep ? " " : ""}${tag} `;
+                          patch(id, { prompt: next });
+                        }}
+                        className="flex shrink-0 items-center gap-1 rounded-full border border-violet-400/30 bg-violet-500/12 pl-0.5 pr-1.5 py-0.5 text-[9px] font-semibold text-violet-100 transition hover:border-violet-300/60 hover:bg-violet-500/22"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={url}
+                          alt={tag}
+                          className="h-4 w-4 rounded-full object-cover ring-1 ring-violet-300/30"
+                        />
+                        <span className="tabular-nums">{tag}</span>
+                      </button>
+                    );
+                  })}
+                  {videoElementRefUrls.length > 6 ? (
+                    <span className="shrink-0 text-[9px] font-semibold text-white/45">
+                      +{videoElementRefUrls.length - 6}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
               {!hasPreviewMedia || !isGeneratorNode || !hasLinkedGeneratorTextInput ? (
                 <textarea
                   value={prompt}

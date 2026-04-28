@@ -1044,6 +1044,48 @@ export type WorkflowRunVideoParams = {
   onTaskStarted?: (taskId: string) => void;
 };
 
+/** True when the picker accepts a discrete first-frame image (image-to-video / first+last). */
+export function workflowVideoModelHasStartFrame(modelId: string): boolean {
+  if (modelId.startsWith("bytedance/seedance")) return false;
+  return true;
+}
+
+/** True when the picker accepts a discrete last-frame image. */
+export function workflowVideoModelHasEndFrame(modelId: string): boolean {
+  if (modelId === "kling-3.0/video") return true;
+  if (modelId === "veo3" || modelId === "veo3_fast" || modelId === "veo3_lite") return true;
+  return false;
+}
+
+/** True when the picker accepts extra reference images (Kling 3.0 elements / Seedance refs). */
+export function workflowVideoModelHasReferences(modelId: string): boolean {
+  if (modelId === "kling-3.0/video") return true;
+  if (modelId.startsWith("bytedance/seedance")) return true;
+  return false;
+}
+
+/** True when the picker resolves @name mentions to an `kling_elements` payload server-side. */
+export function workflowVideoModelSupportsElements(modelId: string): boolean {
+  if (modelId === "kling-3.0/video") return true;
+  if (modelId === "bytedance/seedance-2" || modelId === "bytedance/seedance-2-fast") return true;
+  return false;
+}
+
+const SEEDANCE_PREVIEW_REF_LIMIT = 4;
+const SEEDANCE_PRO_REF_LIMIT = 12;
+
+function dedupeKeepOrder(urls: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const u of urls) {
+    const t = u.trim();
+    if (!t || seen.has(t)) continue;
+    seen.add(t);
+    out.push(t);
+  }
+  return out;
+}
+
 export type WorkflowRunMotionControlParams = {
   planId: AccountPlanId;
   personalApiKey?: string;
@@ -1179,9 +1221,32 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
   const credits =
     seedancePri === "vip" && isWorkflowSeedancePreviewModel(modelId) ? baseCredits * 2 : baseCredits;
 
+  /**
+   * Seedance does not have first/last-frame semantics — when the workflow node’s start/end
+   * ports are wired, fold those URLs into the references pool so the model receives them as
+   * `image_urls` (Preview/Fast Preview) or `omni_reference` items (2 / Fast). This also keeps
+   * older saved workflows compatible after we hide the start/end ports for these models.
+   */
+  const seedancePreview =
+    modelId === "bytedance/seedance-2-preview" || modelId === "bytedance/seedance-2-fast-preview";
+  const seedancePro =
+    modelId === "bytedance/seedance-2" || modelId === "bytedance/seedance-2-fast";
+  const seedancePreviewImageUrls = seedancePreview
+    ? dedupeKeepOrder(
+        [startUrl, endUrl, ...refUrls].filter((u): u is string => Boolean(u && u.trim())),
+      ).slice(0, SEEDANCE_PREVIEW_REF_LIMIT)
+    : [];
+  const seedanceProImageUrls = seedancePro
+    ? dedupeKeepOrder(
+        [startUrl, endUrl, ...refUrls].filter((u): u is string => Boolean(u && u.trim())),
+      ).slice(0, SEEDANCE_PRO_REF_LIMIT)
+    : [];
+
   if (
     isSeedancePicker(modelId) &&
     !startUrl &&
+    seedancePreviewImageUrls.length === 0 &&
+    seedanceProImageUrls.length === 0 &&
     modelId !== "bytedance/seedance-2" &&
     modelId !== "bytedance/seedance-2-fast"
   ) {
@@ -1239,11 +1304,41 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
     Boolean(startUrl ?? refUrls[0]),
   );
 
+  /**
+   * Auto-bind references to `@imageN` mentions in the prompt. We always emit the elements
+   * payload, even when the prompt does not yet `@image1`, so saved Kling 3.0 workflows still
+   * receive their reference images and any ad-hoc `@imageN` typed by the user resolves cleanly.
+   * The PiAPI Seedance mirror auto-prepends missing `@imageN` tags to the prompt, but Kling
+   * keeps prompt text untouched so the elements list is the only binding mechanism there.
+   */
+  const supportsAutoElements = workflowVideoModelSupportsElements(modelId);
+  const elementsRefPool: string[] = supportsAutoElements
+    ? dedupeKeepOrder(
+        [startUrl, ...refUrls].filter((u): u is string => Boolean(u && u.trim())),
+      )
+    : [];
+  const klingElements =
+    isKling30 && elementsRefPool.length > 0
+      ? elementsRefPool.slice(0, 4).map((url, idx) => ({
+          name: `image${idx + 1}`,
+          element_input_urls: [url],
+        }))
+      : undefined;
+
+  const seedanceOmniMedia = seedancePro && seedanceProImageUrls.length > 0
+    ? seedanceProImageUrls.map((url) => ({ type: "image" as const, url }))
+    : undefined;
+
   const generatePayload = {
     accountPlan: params.planId,
     marketModel: marketModelForGenerate,
     prompt: params.prompt,
-    imageUrl: startUrl ?? refUrls[0],
+    imageUrl: seedancePreview || seedancePro ? undefined : startUrl ?? refUrls[0],
+    endImageUrl: seedancePreview || seedancePro ? undefined : endUrl,
+    seedancePreviewImageUrls:
+      seedancePreview && seedancePreviewImageUrls.length > 0 ? seedancePreviewImageUrls : undefined,
+    seedanceOmniMedia,
+    klingElements,
     duration,
     aspectRatio: aspectForApi,
     sound:
@@ -1292,6 +1387,13 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
   }
   params.onTaskStarted?.(genJson.taskId);
 
+  const registerInputUrls = (() => {
+    if (seedancePreview && seedancePreviewImageUrls.length > 0) return seedancePreviewImageUrls;
+    if (seedancePro && seedanceProImageUrls.length > 0) return seedanceProImageUrls;
+    if (startUrl) return [startUrl];
+    if (refUrls[0]) return [refUrls[0]];
+    return undefined;
+  })();
   await registerStudioVideoTask({
     label: workflowHistoryLabel(params.prompt.slice(0, 120)),
     taskId: genJson.taskId,
@@ -1300,7 +1402,7 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
     creditsCharged: credits,
     personalApiKey: pKey,
     piapiApiKey: piKey,
-      inputUrls: (startUrl ? [startUrl] : refUrls[0] ? [refUrls[0]] : undefined),
+    inputUrls: registerInputUrls,
   });
 
   const url = await pollKlingVideo(genJson.taskId, pKey, piKey);
