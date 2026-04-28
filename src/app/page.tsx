@@ -234,6 +234,46 @@ export default function LandingPage() {
       {/* ── Carousel: Product → Electric Band → UGC (pulled up toward hero 3D strip) ── */}
       <LandingRevealCarousel />
 
+      {/* ── Workflow section ── */}
+      <section className="mx-auto max-w-6xl px-4 py-8 sm:px-5 sm:py-12">
+        <div className="overflow-hidden rounded-3xl border border-white/[0.08] bg-gradient-to-br from-[#0c0c16] via-[#0a0a10] to-[#100a1e] p-5 sm:p-8">
+          <div className="grid items-center gap-6 lg:grid-cols-[1fr_1.28fr]">
+            <div>
+              <p className="text-3xl font-bold leading-tight tracking-tight sm:text-4xl">
+                New in Youry,
+                <br />
+                <span className="font-serif italic">Create Workflow.</span>
+              </p>
+              <p className="mt-4 max-w-xl text-sm leading-relaxed text-white/60 sm:text-base">
+                Bring all your tools and ad workflows into one infinite canvas to create, test and scale ads faster as a team
+              </p>
+              <Button
+                asChild
+                className="mt-6 h-11 rounded-2xl border border-violet-200/40 bg-violet-400 px-5 text-sm font-semibold text-black shadow-[0_6px_0_0_rgba(76,29,149,0.9)] transition-all hover:-translate-y-[1px] hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9),0_0_28px_rgba(167,139,250,0.45)] active:translate-y-[6px] active:shadow-[0_0_0_0_rgba(76,29,149,0.9)]"
+              >
+                <Link href={studioAppPath("/signup")} prefetch={false} className="inline-flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 shrink-0" />
+                  <span>Create workflow</span>
+                </Link>
+              </Button>
+            </div>
+            <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-black/40">
+              <div className="pointer-events-none absolute inset-0 z-10 bg-gradient-to-tr from-violet-500/10 via-transparent to-violet-300/5" />
+              <video
+                src="/workflow-hero/generated-video-preview-9x16.mp4"
+                autoPlay
+                muted
+                loop
+                playsInline
+                controls={false}
+                preload="metadata"
+                className="h-[220px] w-full object-cover sm:h-[280px] lg:h-[320px]"
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* ── CTA text + button ── */}
       <section className="mx-auto max-w-4xl px-4 pb-16 pt-10 text-center sm:px-5">
         <p className="mx-auto max-w-3xl text-base leading-relaxed text-white/55 sm:text-xl">
