@@ -1239,28 +1239,57 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
     Boolean(startUrl ?? refUrls[0]),
   );
 
-  const genRes = await fetch("/api/kling/generate", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      accountPlan: params.planId,
-      marketModel: marketModelForGenerate,
-      prompt: params.prompt,
-      imageUrl: startUrl ?? refUrls[0],
-      duration,
-      aspectRatio: aspectForApi,
-      sound:
-        modelId === "kling-3.0/video" || modelId === "kling-2.5-turbo/video" || modelId === "kling-2.6/video"
-          ? true
-          : undefined,
-      mode: isKling30 || isKling25Turbo || isKling26 || isSoraPicker ? quality : undefined,
-      multiShots: isKling30 ? false : undefined,
-      personalApiKey: pKey,
-      piapiApiKey: piKey,
-    }),
-  });
-  const genJson = (await genRes.json()) as { taskId?: string; provider?: string; error?: string };
-  if (!genRes.ok || !genJson.taskId) throw new Error(genJson.error || "Video task failed");
+  const generatePayload = {
+    accountPlan: params.planId,
+    marketModel: marketModelForGenerate,
+    prompt: params.prompt,
+    imageUrl: startUrl ?? refUrls[0],
+    duration,
+    aspectRatio: aspectForApi,
+    sound:
+      modelId === "kling-3.0/video" || modelId === "kling-2.5-turbo/video" || modelId === "kling-2.6/video"
+        ? true
+        : undefined,
+    mode: isKling30 || isKling25Turbo || isKling26 || isSoraPicker ? quality : undefined,
+    multiShots: isKling30 ? false : undefined,
+    personalApiKey: pKey,
+    piapiApiKey: piKey,
+  };
+
+  /**
+   * Retry once on transient provider failures (PiAPI Seedance 502, KIE timeouts) so the
+   * workflow does not surface a hard error every time the upstream service hiccups.
+   */
+  const MAX_GENERATE_ATTEMPTS = 2;
+  let genJson: { taskId?: string; provider?: string; error?: string } | undefined;
+  let lastStatus = 0;
+  for (let attempt = 0; attempt < MAX_GENERATE_ATTEMPTS; attempt++) {
+    const genRes = await fetch("/api/kling/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(generatePayload),
+    });
+    lastStatus = genRes.status;
+    genJson = (await genRes.json().catch(() => ({}))) as {
+      taskId?: string;
+      provider?: string;
+      error?: string;
+    };
+    if (genRes.ok && genJson.taskId) break;
+    const errLower = (genJson.error ?? "").toLowerCase();
+    const transient =
+      genRes.status === 502 ||
+      genRes.status === 503 ||
+      genRes.status === 504 ||
+      /timeout|timed out|aborted|temporar|try again|gateway|fetch failed|network/.test(errLower);
+    if (!transient || attempt >= MAX_GENERATE_ATTEMPTS - 1) {
+      throw new Error(genJson.error || `Video task failed (HTTP ${lastStatus || "unknown"}).`);
+    }
+    await new Promise((r) => setTimeout(r, 800 + attempt * 600));
+  }
+  if (!genJson?.taskId) {
+    throw new Error(genJson?.error || `Video task failed (HTTP ${lastStatus || "unknown"}).`);
+  }
   params.onTaskStarted?.(genJson.taskId);
 
   await registerStudioVideoTask({

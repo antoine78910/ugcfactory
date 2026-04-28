@@ -44,6 +44,19 @@ export function userFacingProviderError(raw: string | null | undefined): string 
   if (/not found|\b404\b|expired|does not exist|task not found/.test(lower)) {
     return "A resource was missing or expired (for example the image link). Re-upload and try again.";
   }
+  /**
+   * PiAPI Seedance often surfaces image-fetch failures as opaque 400/500s with messages like
+   * `image_upload`, `download image failed`, `fetch image`, etc. Catch these BEFORE the
+   * generic "Invalid parameters" branch so the user gets an actionable hint.
+   */
+  if (
+    /image[_\s-]?upload|download(ing)?[_\s-]?image|fetch(ing)?[_\s-]?image|cannot[_\s-]?download[_\s-]?image|image[_\s-]?fetch/.test(
+      lower,
+    ) ||
+    /reference[_\s-]?image.*(failed|invalid|unreachable|unavailable|cannot)/i.test(lower)
+  ) {
+    return "The provider could not load the reference image. Use a clearer JPG/PNG (at least 300×300, under ~10 MB), retry, or upload a fresh image.";
+  }
   // Model / API rejected generation settings (Sora, Veo, etc.), not the Motion/Translate upload limits.
   if (
     /\b(invalid|unsupported|bad|exceeds)\b.*\b(aspect|resolution|dimensions?|width|height)\b/i.test(lower) ||

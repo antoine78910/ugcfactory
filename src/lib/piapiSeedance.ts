@@ -3,7 +3,12 @@ import { walkJsonForHttpsUrls } from "@/lib/walkJsonForHttpsUrls";
 
 const PIAPI_BASE = "https://api.piapi.ai";
 const PIAPI_TASK_PREFIX = "piapi:";
-const PIAPI_FETCH_RETRIES = 3;
+/**
+ * PiAPI returns flaky 502/503 a few times a day even when the input is valid;
+ * we keep a generous retry budget on idempotent reads (`/task/:id`) and short
+ * mutations (`/task` create) since they tolerate duplicates server-side.
+ */
+const PIAPI_FETCH_RETRIES = 4;
 
 /** PiAPI Seedance 2 (Pro), max images in `omni_reference` mode. @see https://piapi.ai/docs/seedance-api/seedance-2 */
 export const SEEDANCE_PRO_MAX_IMAGE_URLS = 12;
@@ -16,6 +21,18 @@ export const SEEDANCE_PREVIEW_MAX_IMAGE_URLS = 9;
 /** Studio compact upload UI for Preview / Fast Preview (ordered `image_urls`, 1–4). */
 export const SEEDANCE_COMPACT_PREVIEW_MAX_IMAGE_URLS = 4;
 
+/**
+ * Exponential backoff with jitter. PiAPI 502/503 storms last 1–4s; the previous flat
+ * 350ms × n window often expired before recovery, surfacing the failure to the user.
+ * @param attempt zero-based attempt index that just failed
+ */
+function piapiBackoffMs(attempt: number): number {
+  const base = 600 * Math.pow(2, attempt);
+  const capped = Math.min(base, 4500);
+  const jitter = Math.floor(Math.random() * 250);
+  return capped + jitter;
+}
+
 async function fetchPiapiWithRetry(
   url: string,
   init: RequestInit,
@@ -27,14 +44,14 @@ async function fetchPiapiWithRetry(
       const res = await fetch(url, init);
       if (res.ok || i === retries - 1) return res;
       if (res.status === 429 || res.status === 502 || res.status === 503 || res.status === 504) {
-        await new Promise((r) => setTimeout(r, 350 * (i + 1)));
+        await new Promise((r) => setTimeout(r, piapiBackoffMs(i)));
         continue;
       }
       return res;
     } catch (err) {
       lastErr = err;
       if (i < retries - 1) {
-        await new Promise((r) => setTimeout(r, 350 * (i + 1)));
+        await new Promise((r) => setTimeout(r, piapiBackoffMs(i)));
         continue;
       }
     }
