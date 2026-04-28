@@ -93,6 +93,8 @@ export type AdAssetNodeData = {
   kind: "image" | "video" | "motion" | "variation" | "assistant" | "upscale" | "website";
   /** Generation prompt */
   prompt?: string;
+  /** Last prompt text actually used on run (includes linked inputs composition). */
+  lastRunPrompt?: string;
   /** Model id (workflow-local; studio wiring later) */
   model?: string;
   aspectRatio?: string;
@@ -1560,10 +1562,8 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     ),
   );
   const hasLinkedGeneratorTextInput = isGeneratorNode && generatorTextInputWireCount > 0;
-  const showPromptPreviewChip =
-    hasPreviewMedia &&
-    prompt.trim().length > 0 &&
-    (!isGeneratorNode || !hasLinkedGeneratorTextInput);
+  const promptPreviewText = (data.lastRunPrompt ?? prompt).trim();
+  const showPromptPreviewChip = hasPreviewMedia && promptPreviewText.length > 0;
 
   useEffect(() => {
     if (data.kind !== "video") return;
@@ -1605,6 +1605,11 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       emitRunFinished(false);
       emitRunLog("error", "Run blocked: prompt is empty.");
       return;
+    }
+
+    const promptUsedForPreview = (batchPrompts?.[0] ?? singlePrompt ?? "").trim();
+    if (promptUsedForPreview) {
+      patch(id, { lastRunPrompt: promptUsedForPreview });
     }
 
     if (data.kind === "assistant") {
@@ -3185,7 +3190,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 ref={previewVideoRef}
                 key={previewUrl}
                 src={previewUrl}
-                className="nodrag nopan absolute inset-0 z-[1] h-full w-full object-cover"
+                className="pointer-events-none absolute inset-0 z-[1] h-full w-full object-cover"
                 controls
                 autoPlay
                 muted
@@ -3200,7 +3205,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 ref={previewImageRef}
                 src={previewUrl}
                 alt=""
-                className="absolute inset-0 z-[1] h-full w-full object-cover"
+                className="pointer-events-none absolute inset-0 z-[1] h-full w-full object-cover"
               />
             )
           ) : null}
@@ -3304,7 +3309,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               title="Click to edit prompt"
             >
               <span className="line-clamp-2 whitespace-pre-wrap">
-                {prompt.trim()}
+                {promptPreviewText}
               </span>
             </button>
           ) : data.kind === "image" || data.kind === "video" ? null : (
