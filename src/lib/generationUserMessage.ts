@@ -91,6 +91,17 @@ export function userFacingProviderError(raw: string | null | undefined): string 
   ) {
     return "The provider could not load the reference image. Use a clearer JPG/PNG (at least 300×300, under ~10 MB), retry, or upload a fresh image.";
   }
+  /**
+   * Seedance / provider face-policy rejections are often returned as 400-class validation errors.
+   * Surface them explicitly instead of collapsing into the generic invalid-params fallback.
+   */
+  if (
+    /only ai faces|no real faces|face input not allowed|anti-deepfake|deepfake policy|real faces? (are|is) not allowed|face policy/i.test(
+      lower,
+    )
+  ) {
+    return "Face-policy rejection from provider: this reference is being classified as a real face. Use more synthetic-looking AI refs (or mask/modify the face), then retry.";
+  }
   // Model / API rejected generation settings (Sora, Veo, etc.), not the Motion/Translate upload limits.
   if (
     /\b(invalid|unsupported|bad|exceeds)\b.*\b(aspect|resolution|dimensions?|width|height)\b/i.test(lower) ||
