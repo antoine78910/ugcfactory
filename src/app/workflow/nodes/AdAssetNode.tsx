@@ -1191,10 +1191,12 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
 
         if (trackedTaskIds.length === 0) {
           // Race recovery: pendingWorkflowRun was persisted before /start returned a task id.
-          // Adopt the closest in-progress workflow row of matching media kind, created near `updatedAt`.
+          // Adopt the closest workflow row (including terminal states) of matching media kind,
+          // created near `updatedAt`. Some providers can complete very quickly.
           const candidates = items.filter((it) => {
             if (it.studioGenerationKind !== expectedKindForMedia) return false;
-            if (it.status !== "generating") return false;
+            if (!it.externalTaskId?.trim()) return false;
+            if (it.status !== "generating" && it.status !== "ready" && it.status !== "failed") return false;
             const created = typeof it.createdAt === "number" ? it.createdAt : NaN;
             if (!Number.isFinite(created)) return false;
             return created >= updatedAt - 5_000 && created <= updatedAt + WORKFLOW_RACE_RECOVERY_WINDOW_MS;
