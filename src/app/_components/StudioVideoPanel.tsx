@@ -1065,12 +1065,16 @@ export default function StudioVideoPanel({
       if (Array.isArray(parsed.seedanceProOmniItems)) {
         const items: SeedanceOmniRefItem[] = parsed.seedanceProOmniItems
           .filter((x): x is Record<string, unknown> => Boolean(x) && typeof x === "object")
-          .map((x) => ({
-            kind: x.kind === "video" || x.kind === "audio" ? x.kind : "image",
-            url: typeof x.url === "string" ? x.url.trim() : "",
-            durationSec: typeof x.durationSec === "number" && Number.isFinite(x.durationSec) ? x.durationSec : undefined,
-            posterUrl: typeof x.posterUrl === "string" ? x.posterUrl.trim() : undefined,
-          }))
+          .map((x): SeedanceOmniRefItem => {
+            const kind: SeedanceOmniRefItem["kind"] =
+              x.kind === "video" || x.kind === "audio" ? x.kind : "image";
+            return {
+              kind,
+              url: typeof x.url === "string" ? x.url.trim() : "",
+              durationSec: typeof x.durationSec === "number" && Number.isFinite(x.durationSec) ? x.durationSec : undefined,
+              posterUrl: typeof x.posterUrl === "string" ? x.posterUrl.trim() : undefined,
+            };
+          })
           .filter((x) => /^https?:\/\//i.test(x.url))
           .slice(0, SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS);
         setSeedanceProOmniItems(items);
