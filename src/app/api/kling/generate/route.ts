@@ -32,6 +32,7 @@ import { isKieServableReferenceImageUrl } from "@/lib/kieSoraReferenceImage";
 import {
   validateStudioVideoJobDuration,
   studioVideoIsSeedance2ProPickerId,
+  studioVideoSupportsReferenceElements,
 } from "@/lib/studioVideoModelCapabilities";
 import { inferSeedanceReferenceKindFromUrl } from "@/lib/seedanceReferenceUrlKind";
 
@@ -425,11 +426,11 @@ export async function POST(req: Request) {
   if (multiNorm && !multiNorm.ok) {
     return NextResponse.json({ error: multiNorm.error }, { status: 400 });
   }
-  const elementUrlMin = rawModel.startsWith("bytedance/seedance") ? 1 : 2;
-  const elementsNorm =
-    model === "kling-3.0/video" || rawModel.startsWith("bytedance/seedance")
-      ? normalizeKlingElements(body.klingElements, { minUrlsPerElement: elementUrlMin })
-      : { ok: true as const, elements: [] };
+  const supportsReferenceElements = studioVideoSupportsReferenceElements(rawModel);
+  const elementUrlMin = studioVideoIsSeedance2ProPickerId(rawModel) ? 1 : 2;
+  const elementsNorm = supportsReferenceElements
+    ? normalizeKlingElements(body.klingElements, { minUrlsPerElement: elementUrlMin })
+    : { ok: true as const, elements: [] };
   if (!elementsNorm.ok) {
     return NextResponse.json({ error: elementsNorm.error }, { status: 400 });
   }
