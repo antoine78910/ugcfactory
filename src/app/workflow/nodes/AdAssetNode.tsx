@@ -2497,6 +2497,13 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           endFrame ? "yes" : "no"
         }, refs=${referenceOnly.length}, promptSample="${promptsForRun[0]?.trim().slice(0, 120) ?? ""}".`,
       );
+      const isSeedanceModel = model.startsWith("bytedance/seedance");
+      if (isSeedanceModel) {
+        emitRunLog(
+          "info",
+          `Seedance input debug: startPort=${linkedFromStartPort.length}, referencesPort=${linkedFromReferencesPort.length}, endPort=${linkedFromEndPort.length}, resolvedStart=${startFrame ? "yes" : "no"}, resolvedRefs=${referenceOnly.length}.`,
+        );
+      }
       const shouldBuildProgressList = fromPromptList && promptsForRun.length > 1;
       const nodeRef = nodes.find((n) => n.id === id);
       if (shouldBuildProgressList && nodeRef) {
@@ -2542,6 +2549,11 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         promptsForRun.map(async (p, idx) => {
           const indexedStartFrame = pickByIndex(indexedStartImages, idx, startFrame);
           const indexedReferenceOnly = referenceOnly.filter((u) => u !== indexedStartFrame && u !== endFrame);
+          if (isSeedanceModel && !indexedStartFrame && indexedReferenceOnly.length === 0) {
+            throw new Error(
+              "Seedance could not resolve any reference image from this node inputs. Connect at least one image to Start image or References on the Video Generator (not Text), then run again.",
+            );
+          }
           const { videoUrl } = await runWorkflowVideoJob({
             planId,
             personalApiKey: personalKey,
