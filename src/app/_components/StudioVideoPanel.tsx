@@ -1063,7 +1063,7 @@ export default function StudioVideoPanel({
         );
       }
       if (Array.isArray(parsed.seedanceProOmniItems)) {
-        const items = parsed.seedanceProOmniItems
+        const items: SeedanceOmniRefItem[] = parsed.seedanceProOmniItems
           .filter((x): x is Record<string, unknown> => Boolean(x) && typeof x === "object")
           .map((x) => ({
             kind: x.kind === "video" || x.kind === "audio" ? x.kind : "image",
