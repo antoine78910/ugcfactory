@@ -4016,6 +4016,8 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
   const [publishTemplateBlurb, setPublishTemplateBlurb] = useState("");
   const [runHistory, setRunHistory] = useState<WorkflowRunLogEntry[]>([]);
   const lastSavedPreviewRef = useRef<string | undefined>(undefined);
+  const lastCloudUpdatedAtRef = useRef<string | null>(null);
+  const cloudConflictToastAtRef = useRef(0);
   const runHistoryStorageKey = useMemo(
     () => `youry-workflow-run-history-v1:${resolvedSpaceId}`,
     [resolvedSpaceId],
@@ -4090,13 +4092,58 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
     };
 
     if (localMeta) {
-      setSpaceSource("local");
-      setSpaceRole(null);
-      setSpaceName(localMeta.name);
-      setPublishedTemplateId(localMeta.publishedCommunityTemplateId ?? null);
-      setWorkflowProject(loadProjectForSpace(storageScope, resolvedSpaceId));
-      loadRunHistory();
-      setWorkflowHydrated(true);
+      if (authUserId === undefined) {
+        return;
+      }
+      const localProject = loadProjectForSpace(storageScope, resolvedSpaceId);
+      const localUpdatedAtMs = Number(localMeta.updatedAt) || 0;
+      if (!authUserId) {
+        setSpaceSource("local");
+        setSpaceRole(null);
+        setSpaceName(localMeta.name);
+        setPublishedTemplateId(localMeta.publishedCommunityTemplateId ?? null);
+        setWorkflowProject(localProject);
+        loadRunHistory();
+        setWorkflowHydrated(true);
+        return;
+      }
+      void (async () => {
+        const cloud = await fetchCloudWorkflowSpace(resolvedSpaceId);
+        if (cancelled) return;
+        const cloudUpdatedAtMs = cloud?.updatedAt ? Date.parse(cloud.updatedAt) : NaN;
+        const preferCloud =
+          Boolean(cloud) &&
+          Number.isFinite(cloudUpdatedAtMs) &&
+          cloudUpdatedAtMs > localUpdatedAtMs;
+
+        if (preferCloud && cloud) {
+          lastCloudUpdatedAtRef.current = cloud.updatedAt;
+          setSpaceSource(cloud.isOwn ? "local" : "shared");
+          setSpaceRole(cloud.role);
+          setSpaceName(cloud.name || "Untitled workflow");
+          setPublishedTemplateId(cloud.publishedCommunityTemplateId ?? null);
+          setWorkflowProject(cloud.state);
+          saveProjectForSpace(storageScope, resolvedSpaceId, cloud.state);
+          updateSpaceMeta(storageScope, resolvedSpaceId, {
+            name: cloud.name || localMeta.name,
+            updatedAt: Number.isFinite(cloudUpdatedAtMs) ? cloudUpdatedAtMs : Date.now(),
+            previewDataUrl: cloud.previewDataUrl ?? undefined,
+            publishedCommunityTemplateId: cloud.publishedCommunityTemplateId ?? undefined,
+          });
+          toast.message("Loaded latest cloud changes", {
+            description: "A newer version from another device replaced the local draft.",
+          });
+        } else {
+          if (cloud?.updatedAt) lastCloudUpdatedAtRef.current = cloud.updatedAt;
+          setSpaceSource("local");
+          setSpaceRole(cloud?.role ?? null);
+          setSpaceName(localMeta.name);
+          setPublishedTemplateId(localMeta.publishedCommunityTemplateId ?? null);
+          setWorkflowProject(localProject);
+        }
+        loadRunHistory();
+        setWorkflowHydrated(true);
+      })();
       return;
     }
 
@@ -4115,6 +4162,7 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
         router.replace("/workflow");
         return;
       }
+      lastCloudUpdatedAtRef.current = cloud.updatedAt;
       setSpaceSource("shared");
       setSpaceRole(cloud.role);
       setSpaceName(cloud.name || "Untitled workflow");
@@ -4150,12 +4198,28 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
     if (spaceSource === "shared" && spaceRole === "viewer") return;
 
     const t = window.setTimeout(() => {
-      void saveCloudWorkflowSpace({
-        spaceId: resolvedSpaceId,
-        name: spaceName,
-        state: workflowProject,
-        publishedCommunityTemplateId: publishedTemplateId,
-      });
+      void (async () => {
+        const res = await saveCloudWorkflowSpace({
+          spaceId: resolvedSpaceId,
+          name: spaceName,
+          state: workflowProject,
+          publishedCommunityTemplateId: publishedTemplateId,
+          expectedUpdatedAt: lastCloudUpdatedAtRef.current,
+        });
+        if (res.ok) {
+          if (res.updatedAt) lastCloudUpdatedAtRef.current = res.updatedAt;
+          return;
+        }
+        if (res.status === 409) {
+          const now = Date.now();
+          if (now - cloudConflictToastAtRef.current > 5000) {
+            cloudConflictToastAtRef.current = now;
+            toast.error("Workspace changed on another device", {
+              description: "Reload this page to avoid overwriting newer edits.",
+            });
+          }
+        }
+      })();
     }, 1500);
     return () => window.clearTimeout(t);
   }, [
@@ -4419,6 +4483,7 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
             name: spaceName,
             state: workflowProject,
             publishedCommunityTemplateId: publishedTemplateId,
+            expectedUpdatedAt: lastCloudUpdatedAtRef.current,
           });
           if (!res.ok) {
             return {
@@ -4426,10 +4491,13 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
               error:
                 res.status === 401
                   ? "Sign in to share this workspace."
+                  : res.status === 409
+                    ? "A newer version exists in the cloud. Reload this page, then share again."
                   : res.error ||
                     "Could not sync workspace to the cloud.",
             };
           }
+          if (res.updatedAt) lastCloudUpdatedAtRef.current = res.updatedAt;
           return { ok: true };
         }}
       />

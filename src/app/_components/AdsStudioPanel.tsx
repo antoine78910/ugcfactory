@@ -463,9 +463,9 @@ export default function AdsStudioPanel() {
   }
 
   return (
-    <div className="space-y-5">
-      <div className="flex min-h-[46vh] items-center justify-center">
-        <div className="relative place-self-center w-full min-w-[580px] max-w-[1140px] overflow-hidden rounded-[20px]">
+    <div className="space-y-10">
+      <section className="flex min-h-[64vh] items-center justify-center">
+        <div className="relative place-self-center w-full max-w-[980px] overflow-hidden rounded-[20px]">
           <div className="relative rounded-[20px] bg-[linear-gradient(0deg,rgba(21,21,21,0.88)_0%,rgba(21,21,21,0.88)_100%),linear-gradient(41deg,rgba(101,189,235,0.24)_25.53%,rgba(101,189,235,0.00)_63.06%)] p-4 shadow-[0_12px_8px_0_rgba(0,0,0,0.20),inset_0_0_0_1px_rgba(255,255,255,0.07)] backdrop-blur-[20px]">
           <div className="absolute -left-20 bottom-0 hidden origin-bottom-right transition-all duration-300 sm:block">
             <div className="h-[120px] min-h-[120px] w-[70px] rounded-[20px] bg-[rgba(0,0,0,0.05)] p-1 shadow-[0_12px_8px_0_rgba(0,0,0,0.20),inset_0_0_0_1px_rgba(255,255,255,0.08)] backdrop-blur-[20px]">
@@ -626,9 +626,10 @@ export default function AdsStudioPanel() {
             }}
           />
         </div>
-      </div>
+        </div>
+      </section>
 
-      <div>
+      <section className="mx-auto w-full max-w-[1140px]">
         <p className="mb-2 text-sm font-semibold text-white/85">Generate across formats</p>
         <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-5">
           {templateVideos.map((tpl, idx) => {
@@ -684,9 +685,7 @@ export default function AdsStudioPanel() {
             </div>
           ) : null}
         </div>
-      </div>
-      </div>
-
+      </section>
     </div>
   );
 }

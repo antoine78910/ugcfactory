@@ -2433,9 +2433,24 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           );
         }
       }
-      const linkedFromStartPort = collectLinkedImageUrlsForHandles(nodesForVideoInputs, edges, id, ["startImage"]);
+      const linkedFromStartPortStrict = collectLinkedImageUrlsForHandles(nodesForVideoInputs, edges, id, ["startImage"]);
       const linkedFromEndPort = collectLinkedImageUrlsForHandles(nodesForVideoInputs, edges, id, ["endImage"]);
-      const linkedFromReferencesPort = collectLinkedImageUrlsForHandles(nodesForVideoInputs, edges, id, ["references"]);
+      const linkedFromReferencesPortStrict = collectLinkedImageUrlsForHandles(
+        nodesForVideoInputs,
+        edges,
+        id,
+        ["references"],
+      );
+      // Legacy workflow compatibility: older canvases could wire image inputs on `in` / `inImage`.
+      // If no explicit modern ports are connected, treat legacy image wires as start/references.
+      const linkedFromLegacyImagePorts = collectLinkedImageUrlsForHandles(nodesForVideoInputs, edges, id, [
+        "in",
+        "inImage",
+      ]);
+      const linkedFromStartPort =
+        linkedFromStartPortStrict.length > 0 ? linkedFromStartPortStrict : linkedFromLegacyImagePorts;
+      const linkedFromReferencesPort =
+        linkedFromReferencesPortStrict.length > 0 ? linkedFromReferencesPortStrict : linkedFromLegacyImagePorts;
       const nodeRefUrl =
         data.referenceMediaKind === "image" && data.referencePreviewUrl?.trim()
           ? data.referencePreviewUrl.trim()

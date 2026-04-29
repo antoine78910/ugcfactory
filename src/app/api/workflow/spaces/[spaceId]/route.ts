@@ -137,6 +137,7 @@ export async function PUT(req: Request, ctx: Ctx) {
     state?: unknown;
     previewDataUrl?: unknown;
     publishedCommunityTemplateId?: unknown;
+    expectedUpdatedAt?: unknown;
   };
   if (!isValidProject(b.state)) {
     return NextResponse.json({ error: "Invalid workflow state." }, { status: 400 });
@@ -209,10 +210,14 @@ export async function PUT(req: Request, ctx: Ctx) {
     /^[0-9a-f-]{36}$/i.test(b.publishedCommunityTemplateId.trim())
       ? b.publishedCommunityTemplateId.trim()
       : null;
+  const expectedUpdatedAt =
+    typeof b.expectedUpdatedAt === "string" && b.expectedUpdatedAt.trim()
+      ? b.expectedUpdatedAt.trim()
+      : null;
 
   const { data: existing } = await admin
     .from("workflow_spaces")
-    .select("id, created_by")
+    .select("id, created_by, updated_at")
     .eq("id", spaceId)
     .maybeSingle();
 
@@ -236,6 +241,21 @@ export async function PUT(req: Request, ctx: Ctx) {
       return NextResponse.json({ error: insertErr.message }, { status: 500 });
     }
   } else {
+    if (expectedUpdatedAt) {
+      const serverUpdatedAtIso = typeof existing.updated_at === "string" ? existing.updated_at : "";
+      const expectedMs = Date.parse(expectedUpdatedAt);
+      const serverMs = Date.parse(serverUpdatedAtIso);
+      if (Number.isFinite(expectedMs) && Number.isFinite(serverMs) && serverMs > expectedMs) {
+        return NextResponse.json(
+          {
+            error: "This workspace changed on another device. Reload the latest version before saving.",
+            code: "WORKFLOW_SPACE_CONFLICT",
+            serverUpdatedAt: serverUpdatedAtIso,
+          },
+          { status: 409 },
+        );
+      }
+    }
     const updatePayload: Record<string, unknown> = {
       name,
       state: b.state,
@@ -255,7 +275,7 @@ export async function PUT(req: Request, ctx: Ctx) {
     }
   }
 
-  return NextResponse.json({ ok: true, role });
+  return NextResponse.json({ ok: true, role, updatedAt: nowIso });
 }
 
 /**

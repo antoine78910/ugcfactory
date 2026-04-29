@@ -15,6 +15,52 @@ type Body = {
   personalApiKey?: string;
 };
 
+function isRetryableUpscaleCreateError(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    /http\s*5\d\d/.test(m) ||
+    /\bcode\s*5\d\d\b/.test(m) ||
+    /internal error|server exception|temporar|timeout|gateway|bad gateway|overload|busy|rate limit|try again|network/.test(
+      m,
+    )
+  );
+}
+
+async function createTopazVideoUpscaleTaskWithRetry(params: {
+  videoUrl: string;
+  upscaleFactor: string;
+  callBackUrl: string;
+  personalKey?: string;
+}): Promise<string> {
+  // 4x jobs are significantly heavier and KIE can return transient 5xx/code 500 before accepting.
+  // Keep normal behavior for 1x/2x, but grant an extra retry window for 4x.
+  const delaysMs = params.upscaleFactor === "4" ? [0, 1500, 3500, 7000] : [0];
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < delaysMs.length; attempt++) {
+    const delay = delaysMs[attempt] ?? 0;
+    if (delay > 0) await new Promise((r) => setTimeout(r, delay));
+    try {
+      return await kieMarketCreateTask(
+        {
+          model: KIE_TOPAZ_VIDEO_UPSCALE_MODEL,
+          callBackUrl: params.callBackUrl,
+          input: {
+            video_url: params.videoUrl,
+            upscale_factor: params.upscaleFactor,
+          },
+        },
+        params.personalKey,
+      );
+    } catch (err) {
+      lastErr = err;
+      const message = err instanceof Error ? err.message : String(err ?? "");
+      const canRetry = isRetryableUpscaleCreateError(message);
+      if (!canRetry || attempt >= delaysMs.length - 1) break;
+    }
+  }
+  throw (lastErr instanceof Error ? lastErr : new Error("Upscale request failed"));
+}
+
 export async function POST(req: Request) {
   const { response } = await requireSupabaseUser();
   if (response) return response;
@@ -42,17 +88,12 @@ export async function POST(req: Request) {
     getEnv("NANOBANANA_CALLBACK_URL") ?? `${getAppUrl()}/api/nanobanana/callback`;
 
   try {
-    const taskId = await kieMarketCreateTask(
-      {
-        model: KIE_TOPAZ_VIDEO_UPSCALE_MODEL,
-        callBackUrl,
-        input: {
-          video_url: videoUrl,
-          upscale_factor: f,
-        },
-      },
+    const taskId = await createTopazVideoUpscaleTaskWithRetry({
+      videoUrl,
+      upscaleFactor: f,
+      callBackUrl,
       personalKey,
-    );
+    });
 
     return NextResponse.json({
       taskId,
