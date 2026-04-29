@@ -96,6 +96,7 @@ const KLING_ELEMENT_MAX = 3;
 /** Total clip length, Kling 3.0 `input.duration` string enum 3…15 must equal sum of `multi_prompt` durations. */
 const KLING_TOTAL_DURATION_MIN = 3;
 const KLING_TOTAL_DURATION_MAX = 15;
+const SEEDANCE_LINK_TO_AD_PREVIEW_PROMPT_MAX_CHARS = 1800;
 
 function normalizeKlingMultiPrompt(body: Body): {
   ok: true;
@@ -242,6 +243,15 @@ function isSeedanceCompactPreviewMarketModel(raw: string): boolean {
     raw === "bytedance/seedance-2-preview-vip" ||
     raw === "bytedance/seedance-2-fast-preview-vip"
   );
+}
+
+function normalizeSeedanceGeneratePrompt(rawPrompt: string, opts: { linkToAd: boolean; preview: boolean }): string {
+  const compact = rawPrompt.replace(/\s+/g, " ").trim();
+  if (!compact) return compact;
+  if (opts.linkToAd && opts.preview && compact.length > SEEDANCE_LINK_TO_AD_PREVIEW_PROMPT_MAX_CHARS) {
+    return compact.slice(0, SEEDANCE_LINK_TO_AD_PREVIEW_PROMPT_MAX_CHARS).trim();
+  }
+  return compact;
 }
 
 function normalizeSeedanceCompactPreviewUrls(
@@ -628,6 +638,13 @@ export async function POST(req: Request) {
       }
       const duration = Number(body.duration ?? 10);
       const maxImages = preview ? SEEDANCE_PREVIEW_MAX_IMAGE_URLS : SEEDANCE_PRO_MAX_IMAGE_URLS;
+      const normalizedSeedancePrompt = normalizeSeedanceGeneratePrompt(prompt, {
+        linkToAd: body.linkToAd === true,
+        preview,
+      });
+      if (!normalizedSeedancePrompt) {
+        return NextResponse.json({ error: "Missing `prompt`." }, { status: 400 });
+      }
 
       const seedanceAspectRatio: PiapiSeedanceAspectRatio =
         body.aspectRatio === "1:1" ? "4:3" : ((body.aspectRatio ?? "9:16") as PiapiSeedanceAspectRatio);
@@ -862,7 +879,7 @@ export async function POST(req: Request) {
 
       const rawTaskId = await piapiCreateSeedanceTask({
         taskType,
-        prompt,
+        prompt: normalizedSeedancePrompt,
         imageUrls: mirroredImg.length ? mirroredImg : undefined,
         videoUrls: mirroredVid.length ? mirroredVid : undefined,
         audioUrls: mirroredAud.length ? mirroredAud : undefined,
@@ -897,7 +914,15 @@ export async function POST(req: Request) {
     const userFacing = userFacingProviderErrorOrDefault(message);
     const isGenericInvalid = /invalid parameters or inputs/i.test(userFacing);
     if (rawModel.startsWith("bytedance/seedance") && isGenericInvalid) {
-      const promptTrimmed = prompt.trim();
+      const isPreviewModel =
+        rawModel === "bytedance/seedance-2-preview" ||
+        rawModel === "bytedance/seedance-2-fast-preview" ||
+        rawModel === "bytedance/seedance-2-preview-vip" ||
+        rawModel === "bytedance/seedance-2-fast-preview-vip";
+      const promptTrimmed = normalizeSeedanceGeneratePrompt(prompt, {
+        linkToAd: body.linkToAd === true,
+        preview: isPreviewModel,
+      });
       const imageMentionMax = maxPromptMediaMention(promptTrimmed, "image");
       const videoMentionMax = maxPromptMediaMention(promptTrimmed, "video");
       const audioMentionMax = maxPromptMediaMention(promptTrimmed, "audio");
