@@ -95,6 +95,25 @@ import { buildPromptListNode } from "../workflowNodeFactory";
 import { buildImageRefNode } from "../workflowNodeFactory";
 import { linkToAdProductPhotoPickerUrls, readUniverseFromExtracted, splitAllScriptOptions } from "@/lib/linkToAdUniverse";
 
+function promptHasUnsupportedElementMentions(prompt: string): boolean {
+  const p = (prompt ?? "").trim();
+  if (!p.includes("@")) return false;
+  // Allowed Seedance/Kling media tags:
+  // - @image1, @video2, @audio1 ...
+  // Any other @token is treated as a saved Element mention (@product, @model, ...) which is not supported
+  // in Seedance Preview models.
+  const re = /@([a-zA-Z_][a-zA-Z0-9_-]*)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(p)) !== null) {
+    const token = (m[1] ?? "").toLowerCase();
+    if (/^image\d+$/.test(token)) continue;
+    if (/^video\d+$/.test(token)) continue;
+    if (/^audio\d+$/.test(token)) continue;
+    return true;
+  }
+  return false;
+}
+
 export type AdAssetNodeData = {
   label: string;
   kind: "image" | "video" | "motion" | "variation" | "assistant" | "upscale" | "website";
@@ -3643,6 +3662,11 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                       : "min-h-[34px] max-h-[72px] overflow-y-scroll studio-params-scroll",
                   )}
                 />
+              ) : null}
+              {data.kind === "video" && !videoModelSupportsElements && (prompt ?? "").includes("@") ? (
+                <p className="mt-1 text-[10px] leading-snug text-white/45">
+                  elements can not be used inside this model, please use seedance 2 or kling 3.0
+                </p>
               ) : null}
               {data.kind !== "image" && data.kind !== "video" ? (
                 <button

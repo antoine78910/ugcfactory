@@ -1097,6 +1097,21 @@ function maxPromptImageMention(prompt: string): number {
   return max;
 }
 
+function promptHasUnsupportedElementMentions(prompt: string): boolean {
+  const p = (prompt ?? "").trim();
+  if (!p.includes("@")) return false;
+  const re = /@([a-zA-Z_][a-zA-Z0-9_-]*)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(p)) !== null) {
+    const token = (m[1] ?? "").toLowerCase();
+    if (/^image\d+$/.test(token)) continue;
+    if (/^video\d+$/.test(token)) continue;
+    if (/^audio\d+$/.test(token)) continue;
+    return true;
+  }
+  return false;
+}
+
 function workflowVideoDebugContext(args: {
   modelId: string;
   marketModel: string;
@@ -1372,6 +1387,9 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
     : undefined;
 
   const promptTrimmed = params.prompt.trim();
+  if (!supportsAutoElements && promptHasUnsupportedElementMentions(promptTrimmed)) {
+    throw new Error("elements can not be used inside this model, please use seedance 2 or kling 3.0");
+  }
   const promptImageMentionMax = maxPromptImageMention(promptTrimmed);
   const availableImageRefsForMentions = (() => {
     if (seedancePreview) return seedancePreviewImageUrls.length;

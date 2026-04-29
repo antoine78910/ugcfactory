@@ -133,6 +133,18 @@ export function ensureSeedancePromptMediaTags(
   return `${parts.join(" ")}, ${p}`.trim();
 }
 
+/**
+ * PiAPI Seedance seems to be sensitive to casing of reference tags.
+ * Normalize `@Image1` / `@Video1` / `@Audio1` → `@image1` / `@video1` / `@audio1`.
+ */
+function normalizeSeedancePromptTagCasing(prompt: string): string {
+  const p = (prompt ?? "").trim();
+  if (!p.includes("@")) return p;
+  return p.replace(/@(image|video|audio)(\d+)\b/gi, (_, kind: string, n: string) => {
+    return `@${String(kind).toLowerCase()}${n}`;
+  });
+}
+
 function validateSeedancePromptMaterialReferences(
   prompt: string,
   counts: { image: number; video: number; audio: number },
@@ -223,14 +235,15 @@ export async function piapiCreateSeedanceTask(opts: {
   const audioUrls = (opts.audioUrls ?? []).map((u) => String(u ?? "").trim()).filter(Boolean);
   const totalRefs = urls.length + videoUrls.length + audioUrls.length;
 
+  const normalizedPrompt = normalizeSeedancePromptTagCasing(opts.prompt);
   const finalPrompt =
     totalRefs > 0
-      ? ensureSeedancePromptMediaTags(opts.prompt, {
+      ? ensureSeedancePromptMediaTags(normalizedPrompt, {
           image: urls.length,
           video: videoUrls.length,
           audio: audioUrls.length,
         })
-      : opts.prompt.trim();
+      : normalizedPrompt.trim();
   validateSeedancePromptMaterialReferences(finalPrompt, {
     image: urls.length,
     video: videoUrls.length,

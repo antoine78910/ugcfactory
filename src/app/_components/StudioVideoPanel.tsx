@@ -139,6 +139,24 @@ const ELEMENT_PICKER_CACHE_TTL_MS = 3 * 60_000;
 /** Cap runs scanned for picker — keeps first paint fast. */
 const LTA_PICKER_RUNS_SLICE = 60;
 
+function promptHasUnsupportedElementMentions(prompt: string): boolean {
+  // Seedance models have a distinct reference-tag syntax for uploaded media: @imageN/@videoN/@audioN.
+  // "Elements" (saved Kling elements) use @element_name, which isn't supported in Seedance Preview models.
+  const p = (prompt ?? "").trim();
+  if (!p.includes("@")) return false;
+  const re = /@([a-zA-Z_][a-zA-Z0-9_-]*)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(p)) !== null) {
+    const token = (m[1] ?? "").toLowerCase();
+    if (/^image\d+$/.test(token)) continue;
+    if (/^video\d+$/.test(token)) continue;
+    if (/^audio\d+$/.test(token)) continue;
+    // Any other @token is considered an Elements mention.
+    return true;
+  }
+  return false;
+}
+
 type KlingShotRow = { id: string; prompt: string; durationSec: number };
 type KlingElementDraft = {
   id: string;
@@ -1325,6 +1343,8 @@ export default function StudioVideoPanel({
       : null;
   const seedancePriorityInfoText =
     "VIP pricing is x2 credits per generation.\n\nPeak hours: From 09:00 to 15:00 GMT, Seedance Preview experiences high traffic. During this period, queue times may extend to several hours.\n\nCurrently outside peak hours: Normal is usually 5-60 min. VIP (fast) is usually 3-5 min.";
+  const elementsUnsupportedHint =
+    !studioVideoSupportsReferenceElements(modelId) && prompt.includes("@");
   /** Prompt @mention picker: saved Elements + live Seedance upload tags (@imageN/@videoN/@audioN). */
   const mentionElementOptions = useMemo<MentionElementOption[]>(() => {
     const supportsElements = studioVideoSupportsReferenceElements(modelId);
@@ -3478,6 +3498,14 @@ export default function StudioVideoPanel({
     }
 
     if (
+      !studioVideoSupportsReferenceElements(modelId) &&
+      promptHasUnsupportedElementMentions(promptForJob)
+    ) {
+      toast.error("elements can not be used inside this model, please use seedance 2 or kling 3.0");
+      return;
+    }
+
+    if (
       meta.family === "kie" &&
       modelId !== "kling-3.0/video" &&
       modelId !== "kling-2.5-turbo/video" &&
@@ -4565,6 +4593,11 @@ export default function StudioVideoPanel({
                     className="mt-4 h-[140px] max-h-[42vh] w-full resize-none overflow-y-scroll [field-sizing:fixed] border-white/10 bg-[#0a0a0d] px-3 py-3 text-sm text-white placeholder:text-white/35 focus-visible:ring-0"
                     rows={4}
                   />
+                  {elementsUnsupportedHint ? (
+                    <p className="mt-2 text-[10px] leading-snug text-white/45">
+                      elements can not be used inside this model, please use seedance 2 or kling 3.0
+                    </p>
+                  ) : null}
                   {(modelId === "kling-3.0/video" && !klingCustomMulti) ||
                   studioVideoSupportsReferenceElements(modelId) ? (
                     <div className="mt-3 space-y-2">
