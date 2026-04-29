@@ -865,8 +865,14 @@ export async function POST(req: Request) {
       const imageMentionMax = maxPromptMediaMention(promptTrimmed, "image");
       const videoMentionMax = maxPromptMediaMention(promptTrimmed, "video");
       const audioMentionMax = maxPromptMediaMention(promptTrimmed, "audio");
-      const seedanceFacePolicyHint =
-        "AI face references might sometimes be rejected due to face-policy tightening. Try with a different AI-generated reference image (or a different pose/angle), then retry. If it still fails, switch to another model.";
+      const messageLc = message.toLowerCase();
+      const looksFacePolicy =
+        /only ai faces|no real faces|face input not allowed|anti-deepfake|deepfake policy|real faces? (are|is) not allowed|face policy/i.test(
+          messageLc,
+        );
+      const seedanceFacePolicyHint = looksFacePolicy
+        ? "AI face references might sometimes be rejected due to face-policy tightening. Try with a different AI-generated reference image (or a different pose/angle), then retry. If it still fails, switch to another model."
+        : "";
       const seedanceDebug =
         `Seedance debug: model=${rawModel}, promptChars=${promptTrimmed.length}, ` +
         `mentions(image/video/audio)=${imageMentionMax}/${videoMentionMax}/${audioMentionMax}, ` +
@@ -874,7 +880,9 @@ export async function POST(req: Request) {
         `compactRefs=${compactNorm.urls.length}, omniRefs=${omniNorm.items.length}, ` +
         `elements=${elementsNorm.ok ? elementsNorm.elements.length : 0}.`;
       return NextResponse.json(
-        { error: `${seedanceFacePolicyHint} ${seedanceDebug}` },
+        {
+          error: `${seedanceFacePolicyHint ? `${seedanceFacePolicyHint} ` : ""}${userFacing} ${seedanceDebug}`.trim(),
+        },
         { status: 502 },
       );
     }
