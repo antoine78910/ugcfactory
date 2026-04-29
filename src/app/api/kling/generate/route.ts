@@ -14,7 +14,9 @@ import {
   piapiCreateSeedanceTask,
   SEEDANCE_COMPACT_PREVIEW_MAX_IMAGE_URLS,
   SEEDANCE_PREVIEW_MAX_IMAGE_URLS,
+  SEEDANCE_PRO_MAX_AUDIO_URLS,
   SEEDANCE_PRO_MAX_IMAGE_URLS,
+  SEEDANCE_PRO_MAX_VIDEO_URLS,
   SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS,
   type PiapiSeedanceAspectRatio,
   type PiapiSeedanceTaskType,
@@ -318,6 +320,15 @@ function normalizeSeedanceOmniMedia(
   const img = items.filter((x) => x.type === "image").length;
   const vid = items.filter((x) => x.type === "video").length;
   const aud = items.filter((x) => x.type === "audio").length;
+  if (img > SEEDANCE_PRO_MAX_IMAGE_URLS) {
+    return { ok: false, error: `At most ${SEEDANCE_PRO_MAX_IMAGE_URLS} Seedance omni images are allowed.` };
+  }
+  if (vid > SEEDANCE_PRO_MAX_VIDEO_URLS) {
+    return { ok: false, error: `At most ${SEEDANCE_PRO_MAX_VIDEO_URLS} Seedance omni video is allowed.` };
+  }
+  if (aud > SEEDANCE_PRO_MAX_AUDIO_URLS) {
+    return { ok: false, error: `At most ${SEEDANCE_PRO_MAX_AUDIO_URLS} Seedance omni audio track is allowed.` };
+  }
   if (items.length > 0 && aud > 0 && img === 0 && vid === 0) {
     return {
       ok: false,
@@ -678,6 +689,30 @@ export async function POST(req: Request) {
             );
           }
           const part = partitionSeedanceReferenceUrls(flat);
+          if (part.imgs.length > SEEDANCE_PRO_MAX_IMAGE_URLS) {
+            return NextResponse.json(
+              {
+                error: `Too many Seedance reference images (${part.imgs.length}). Maximum is ${SEEDANCE_PRO_MAX_IMAGE_URLS}.`,
+              },
+              { status: 400 },
+            );
+          }
+          if (part.vids.length > SEEDANCE_PRO_MAX_VIDEO_URLS) {
+            return NextResponse.json(
+              {
+                error: `Too many Seedance reference videos (${part.vids.length}). Maximum is ${SEEDANCE_PRO_MAX_VIDEO_URLS}.`,
+              },
+              { status: 400 },
+            );
+          }
+          if (part.auds.length > SEEDANCE_PRO_MAX_AUDIO_URLS) {
+            return NextResponse.json(
+              {
+                error: `Too many Seedance reference audios (${part.auds.length}). Maximum is ${SEEDANCE_PRO_MAX_AUDIO_URLS}.`,
+              },
+              { status: 400 },
+            );
+          }
           if (part.auds.length > 0 && part.imgs.length === 0 && part.vids.length === 0) {
             return NextResponse.json(
               {

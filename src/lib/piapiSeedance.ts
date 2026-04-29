@@ -13,10 +13,15 @@ const PIAPI_FETCH_RETRIES = 4;
 /** PiAPI Seedance 2 (Pro), max images in `omni_reference` mode. @see https://piapi.ai/docs/seedance-api/seedance-2 */
 export const SEEDANCE_PRO_MAX_IMAGE_URLS = 12;
 
+/** Pro `omni_reference`: max videos in mixed media references. */
+export const SEEDANCE_PRO_MAX_VIDEO_URLS = 1;
+/** Pro `omni_reference`: max audio tracks in mixed media references. */
+export const SEEDANCE_PRO_MAX_AUDIO_URLS = 1;
 /** Pro `omni_reference`: max total items across image_urls + video_urls + audio_urls. */
-export const SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS = 12;
+export const SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS =
+  SEEDANCE_PRO_MAX_IMAGE_URLS + SEEDANCE_PRO_MAX_VIDEO_URLS + SEEDANCE_PRO_MAX_AUDIO_URLS;
 /** Seedance Preview, max reference images. @see https://piapi.ai/docs/seedance-api/seedance-2-preview */
-export const SEEDANCE_PREVIEW_MAX_IMAGE_URLS = 9;
+export const SEEDANCE_PREVIEW_MAX_IMAGE_URLS = 12;
 
 /** Studio compact upload UI for Preview / Fast Preview (ordered `image_urls`, 1–4). */
 export const SEEDANCE_COMPACT_PREVIEW_MAX_IMAGE_URLS = 4;

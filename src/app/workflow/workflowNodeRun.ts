@@ -32,7 +32,7 @@ import { studioVideoDurationSecOptions, validateStudioVideoJobDuration } from "@
 import { uploadBlobUrlToCdn } from "@/lib/uploadBlobUrlToCdn";
 
 /** Max reference image wires / URLs merged into one workflow Image generator job (Kie / NanoBanana). */
-export const WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX = 14;
+export const WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX = 12;
 const WORKFLOW_HISTORY_LABEL_PREFIX = "[Workflow] ";
 
 function workflowHistoryLabel(label: string): string {

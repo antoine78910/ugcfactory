@@ -99,7 +99,9 @@ import { STUDIO_VIDEO_TAB_KINDS } from "@/lib/studioGenerationKinds";
 import {
   SEEDANCE_COMPACT_PREVIEW_MAX_IMAGE_URLS,
   SEEDANCE_PREVIEW_MAX_IMAGE_URLS,
+  SEEDANCE_PRO_MAX_AUDIO_URLS,
   SEEDANCE_PRO_MAX_IMAGE_URLS,
+  SEEDANCE_PRO_MAX_VIDEO_URLS,
   SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS,
 } from "@/lib/piapiSeedance";
 import {
@@ -2065,6 +2067,22 @@ export default function StudioVideoPanel({
       ),
     [seedanceProOmniItems],
   );
+  const seedanceProOmniImageCount = useMemo(
+    () => seedanceProOmniItems.filter((it) => it.kind === "image").length,
+    [seedanceProOmniItems],
+  );
+  const seedanceProOmniVideoCount = useMemo(
+    () => seedanceProOmniItems.filter((it) => it.kind === "video").length,
+    [seedanceProOmniItems],
+  );
+  const seedanceProOmniAudioCount = useMemo(
+    () => seedanceProOmniItems.filter((it) => it.kind === "audio").length,
+    [seedanceProOmniItems],
+  );
+  const seedanceProCanUploadMore =
+    seedanceProOmniImageCount < SEEDANCE_PRO_MAX_IMAGE_URLS ||
+    seedanceProOmniVideoCount < SEEDANCE_PRO_MAX_VIDEO_URLS ||
+    seedanceProOmniAudioCount < SEEDANCE_PRO_MAX_AUDIO_URLS;
 
   const readMediaDurationSec = useCallback(
     async (file: File, kind: "video" | "audio"): Promise<number> => {
@@ -2127,20 +2145,25 @@ export default function StudioVideoPanel({
     async (file: File, kind: UploadFileKind, durationSec?: number) => {
       const u = await uploadStudioMediaFile(file, kind);
       const mediaKind = kind === "image" ? "image" : kind === "video" ? "video" : "audio";
-      setSeedanceProOmniItems((prev) =>
-        prev.length >= SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS
-          ? prev
-          : [
-              ...prev,
-              {
-                kind: mediaKind,
-                url: u,
-                ...(mediaKind === "video" || mediaKind === "audio"
-                  ? { durationSec: Number.isFinite(durationSec ?? 0) ? durationSec : undefined }
-                  : {}),
-              },
-            ],
-      );
+      setSeedanceProOmniItems((prev) => {
+        const imageCount = prev.filter((it) => it.kind === "image").length;
+        const videoCount = prev.filter((it) => it.kind === "video").length;
+        const audioCount = prev.filter((it) => it.kind === "audio").length;
+        if (prev.length >= SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS) return prev;
+        if (mediaKind === "image" && imageCount >= SEEDANCE_PRO_MAX_IMAGE_URLS) return prev;
+        if (mediaKind === "video" && videoCount >= SEEDANCE_PRO_MAX_VIDEO_URLS) return prev;
+        if (mediaKind === "audio" && audioCount >= SEEDANCE_PRO_MAX_AUDIO_URLS) return prev;
+        return [
+          ...prev,
+          {
+            kind: mediaKind,
+            url: u,
+            ...(mediaKind === "video" || mediaKind === "audio"
+              ? { durationSec: Number.isFinite(durationSec ?? 0) ? durationSec : undefined }
+              : {}),
+          },
+        ];
+      });
     },
     [],
   );
@@ -2184,8 +2207,6 @@ export default function StudioVideoPanel({
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
-    if (seedanceProOmniItems.length >= SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS) return;
-
     const inferred = inferStudioUploadKind(file);
     let kind: UploadFileKind = inferred;
     try {
@@ -2230,6 +2251,18 @@ export default function StudioVideoPanel({
       toast.error("Invalid file", {
         description: err instanceof Error ? err.message : "Choose another file.",
       });
+      return;
+    }
+    if (kind === "image" && seedanceProOmniImageCount >= SEEDANCE_PRO_MAX_IMAGE_URLS) {
+      toast.error(`At most ${SEEDANCE_PRO_MAX_IMAGE_URLS} images.`);
+      return;
+    }
+    if (kind === "video" && seedanceProOmniVideoCount >= SEEDANCE_PRO_MAX_VIDEO_URLS) {
+      toast.error(`At most ${SEEDANCE_PRO_MAX_VIDEO_URLS} video.`);
+      return;
+    }
+    if (kind === "audio" && seedanceProOmniAudioCount >= SEEDANCE_PRO_MAX_AUDIO_URLS) {
+      toast.error(`At most ${SEEDANCE_PRO_MAX_AUDIO_URLS} sound.`);
       return;
     }
 
@@ -2277,7 +2310,9 @@ export default function StudioVideoPanel({
     addSeedanceProOmniUploadedFile,
     readMediaDurationSec,
     seedanceOmniUsedDurationSec,
-    seedanceProOmniItems.length,
+    seedanceProOmniAudioCount,
+    seedanceProOmniImageCount,
+    seedanceProOmniVideoCount,
   ]);
 
   /**
@@ -3615,18 +3650,6 @@ export default function StudioVideoPanel({
         return;
       }
     }
-    if (modelId === "kling-3.0/video" && klingElementsPayloadEarly?.length && !klingCustom) {
-      const p = prompt.trim();
-      for (const el of klingElementsPayloadEarly) {
-        if (!promptUsesKlingElementTag(p, el.name)) {
-          toast.error(`Mention @${el.name} in your prompt`, {
-            description: "So the model knows which element to apply (same idea as Higgsfield-style @references).",
-          });
-          return;
-        }
-      }
-    }
-
     const jobId = crypto.randomUUID();
     const platformChargeCreate = creditBypassCreate ? 0 : credits;
     if (!creditBypassCreate) {
@@ -4402,7 +4425,8 @@ export default function StudioVideoPanel({
                   <Label className="text-xs text-white/65">Reference media</Label>
                   <p className="mt-1 text-[10px] leading-snug text-white/40">
                     Seedance 2 / Fast: optional <span className="text-white/55">images + MP4/MOV + MP3/WAV</span> (max{" "}
-                    {SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS} files, provider). Use{" "}
+                    {SEEDANCE_PRO_MAX_IMAGE_URLS} images + {SEEDANCE_PRO_MAX_VIDEO_URLS} video +{" "}
+                    {SEEDANCE_PRO_MAX_AUDIO_URLS} sound). Use{" "}
                     <span className="text-white/55">@imageN</span> / <span className="text-white/55">@videoN</span> /{" "}
                     <span className="text-white/55">@audioN</span> or tags are prepended. Audio needs an image or video.
                     Empty = text-only.
@@ -4502,13 +4526,13 @@ export default function StudioVideoPanel({
                           ) : null}
                         </div>
                       ))}
-                      {seedanceProOmniItems.length < SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS ? (
+                      {seedanceProCanUploadMore ? (
                         <button
                           type="button"
                           disabled={seedanceProOmniUploadBusy}
                           onClick={() => seedanceProOmniFileRef.current?.click()}
                           className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-white/12 bg-white/[0.04] text-white/45 transition hover:border-violet-400/45 hover:bg-white/[0.08] hover:text-white/80 disabled:opacity-50"
-                          title={`Upload media (${seedanceProOmniItems.length}/${SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS})`}
+                          title={`Upload media (${seedanceProOmniImageCount}/${SEEDANCE_PRO_MAX_IMAGE_URLS} images, ${seedanceProOmniVideoCount}/${SEEDANCE_PRO_MAX_VIDEO_URLS} video, ${seedanceProOmniAudioCount}/${SEEDANCE_PRO_MAX_AUDIO_URLS} sound)`}
                         >
                           <CirclePlus className="h-5 w-5" aria-hidden />
                         </button>
@@ -4517,7 +4541,7 @@ export default function StudioVideoPanel({
                     <p className="mt-2 text-center text-[10px] leading-snug text-white/40">
                       {seedanceProOmniItems.length === 0
                         ? "Upload images, videos or sounds."
-                        : `${seedanceProOmniItems.length}/${SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS} files uploaded · ${Math.max(0, 15 - seedanceOmniUsedDurationSec).toFixed(1)}s video/audio remaining`}
+                        : `${seedanceProOmniImageCount}/${SEEDANCE_PRO_MAX_IMAGE_URLS} images · ${seedanceProOmniVideoCount}/${SEEDANCE_PRO_MAX_VIDEO_URLS} video · ${seedanceProOmniAudioCount}/${SEEDANCE_PRO_MAX_AUDIO_URLS} sound · ${Math.max(0, 15 - seedanceOmniUsedDurationSec).toFixed(1)}s video/audio remaining`}
                     </p>
                   </div>
                 </div>
