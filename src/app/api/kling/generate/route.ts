@@ -221,6 +221,17 @@ function partitionSeedanceReferenceUrls(ordered: string[]): {
   return { imgs, vids, auds };
 }
 
+function maxPromptMediaMention(prompt: string, kind: "image" | "video" | "audio"): number {
+  const re = new RegExp(`@${kind}(\\d+)\\b`, "gi");
+  let max = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(prompt)) !== null) {
+    const n = Number(m[1]);
+    if (Number.isFinite(n) && n > max) max = n;
+  }
+  return max;
+}
+
 function isSeedanceCompactPreviewMarketModel(raw: string): boolean {
   return (
     raw === "bytedance/seedance-2-preview" ||
@@ -847,6 +858,24 @@ export async function POST(req: Request) {
   } catch (err) {
     logGenerationFailure("kling/generate", err, { model });
     const message = err instanceof Error ? err.message : "Unknown error.";
-    return NextResponse.json({ error: userFacingProviderErrorOrDefault(message) }, { status: 502 });
+    const userFacing = userFacingProviderErrorOrDefault(message);
+    const isGenericInvalid = /invalid parameters or inputs/i.test(userFacing);
+    if (rawModel.startsWith("bytedance/seedance") && isGenericInvalid) {
+      const promptTrimmed = prompt.trim();
+      const imageMentionMax = maxPromptMediaMention(promptTrimmed, "image");
+      const videoMentionMax = maxPromptMediaMention(promptTrimmed, "video");
+      const audioMentionMax = maxPromptMediaMention(promptTrimmed, "audio");
+      const seedanceDebug =
+        `Seedance debug: model=${rawModel}, promptChars=${promptTrimmed.length}, ` +
+        `mentions(image/video/audio)=${imageMentionMax}/${videoMentionMax}/${audioMentionMax}, ` +
+        `startImage=${hasKieReferenceImage ? "yes" : "no"}, endImage=${hasKieEndImage ? "yes" : "no"}, ` +
+        `compactRefs=${compactNorm.urls.length}, omniRefs=${omniNorm.items.length}, ` +
+        `elements=${elementsNorm.ok ? elementsNorm.elements.length : 0}.`;
+      return NextResponse.json(
+        { error: `${userFacing} ${seedanceDebug}` },
+        { status: 502 },
+      );
+    }
+    return NextResponse.json({ error: userFacing }, { status: 502 });
   }
 }
