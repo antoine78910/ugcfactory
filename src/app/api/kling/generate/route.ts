@@ -865,6 +865,8 @@ export async function POST(req: Request) {
       const imageMentionMax = maxPromptMediaMention(promptTrimmed, "image");
       const videoMentionMax = maxPromptMediaMention(promptTrimmed, "video");
       const audioMentionMax = maxPromptMediaMention(promptTrimmed, "audio");
+      const seedanceFacePolicyHint =
+        "AI face references might sometimes be rejected due to face-policy tightening. Try with a different AI-generated reference image (or a different pose/angle), then retry. If it still fails, switch to another model.";
       const seedanceDebug =
         `Seedance debug: model=${rawModel}, promptChars=${promptTrimmed.length}, ` +
         `mentions(image/video/audio)=${imageMentionMax}/${videoMentionMax}/${audioMentionMax}, ` +
@@ -872,7 +874,7 @@ export async function POST(req: Request) {
         `compactRefs=${compactNorm.urls.length}, omniRefs=${omniNorm.items.length}, ` +
         `elements=${elementsNorm.ok ? elementsNorm.elements.length : 0}.`;
       return NextResponse.json(
-        { error: `${userFacing} ${seedanceDebug}` },
+        { error: `${seedanceFacePolicyHint} ${seedanceDebug}` },
         { status: 502 },
       );
     }
