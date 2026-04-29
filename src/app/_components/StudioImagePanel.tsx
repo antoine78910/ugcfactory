@@ -172,6 +172,7 @@ async function pollNanoTask(taskId: string, personalApiKey?: string): Promise<st
 }
 
 const LS_STUDIO_IMAGE_HISTORY = "ugc_studio_image_history_v1";
+const LS_STUDIO_IMAGE_DRAFT_V1 = "ugc_studio_image_draft_v1";
 
 /** Supabase list + poll: Studio Image tab only (excludes Link to Ad `link_to_ad_image`). */
 const STUDIO_IMAGE_LIBRARY_KIND_PARAM = STUDIO_IMAGE_TAB_KINDS.join(",");
@@ -220,7 +221,7 @@ function applyRefundHints(
 }
 
 export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProps) {
-  const { planId, isTrial, current: creditsBalance, spendCredits, grantCredits } = useCreditsPlan();
+  const { planId, current: creditsBalance, spendCredits, grantCredits } = useCreditsPlan();
   const creditsRef = useRef(creditsBalance);
   creditsRef.current = creditsBalance;
 
@@ -245,6 +246,61 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
 
   const grantCreditsRef = useRef(grantCredits);
   grantCreditsRef.current = grantCredits;
+
+  useEffect(() => {
+    try {
+      const raw = typeof window !== "undefined" ? window.localStorage.getItem(LS_STUDIO_IMAGE_DRAFT_V1) : null;
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as {
+        prompt?: unknown;
+        model?: unknown;
+        aspect?: unknown;
+        resolution?: unknown;
+        numImages?: unknown;
+        refUrls?: unknown;
+      };
+      if (typeof parsed.prompt === "string") setPrompt(parsed.prompt);
+      if (typeof parsed.model === "string" && isStudioImageKiePickerModelId(parsed.model)) {
+        setModel(parsed.model);
+      }
+      if (typeof parsed.aspect === "string" && parsed.aspect.trim()) setAspect(parsed.aspect);
+      if (
+        typeof parsed.resolution === "string" &&
+        (PRO_RESOLUTIONS as readonly string[]).includes(parsed.resolution)
+      ) {
+        setResolution(parsed.resolution as (typeof PRO_RESOLUTIONS)[number]);
+      }
+      if (typeof parsed.numImages === "number" && Number.isFinite(parsed.numImages)) {
+        setNumImages(Math.min(4, Math.max(1, Math.round(parsed.numImages))));
+      }
+      if (Array.isArray(parsed.refUrls)) {
+        const refs = parsed.refUrls
+          .filter((x): x is string => typeof x === "string")
+          .map((u) => u.trim())
+          .filter((u) => /^https?:\/\//i.test(u))
+          .slice(0, 14);
+        setRefUrls(refs);
+      }
+    } catch {
+      /* ignore malformed local draft */
+    }
+  }, []);
+
+  useEffect(() => {
+    const draft = {
+      prompt,
+      model,
+      aspect,
+      resolution,
+      numImages,
+      refUrls,
+    };
+    try {
+      window.localStorage.setItem(LS_STUDIO_IMAGE_DRAFT_V1, JSON.stringify(draft));
+    } catch {
+      /* ignore quota/localStorage errors */
+    }
+  }, [prompt, model, aspect, resolution, numImages, refUrls]);
 
   useEffect(() => {
     void (async () => {
@@ -693,7 +749,7 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
           <span className="inline-flex items-center gap-2">
             Generate
             {isStartingGeneration ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}
-            {isTrial ? (
+            {totalCredits > 0 ? (
               <>
                 <span className="rounded-md bg-white/15 px-2 py-0.5 text-base tabular-nums">
                   {formatDisplayCredits(totalCredits)}

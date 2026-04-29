@@ -119,6 +119,7 @@ import {
 
 const LS_STUDIO_VIDEO_HISTORY = "ugc_studio_video_history_v1";
 const LS_STUDIO_VIDEO_ELEMENTS_V1 = "ugc_studio_video_elements_v1";
+const LS_STUDIO_VIDEO_CREATE_DRAFT_V1 = "ugc_studio_video_create_draft_v1";
 
 /** Seedance 2 Pro: reference videos must be MP4 or MOV (not WebM). */
 const SEEDANCE_PRO_OMNI_VIDEO_ACCEPT = "video/mp4,video/quicktime,.mp4,.mov";
@@ -1030,6 +1031,116 @@ export default function StudioVideoPanel({
   /** Widen the history / preview column on large screens (not fullscreen). */
   const [wideVideoPreview, setWideVideoPreview] = useState(false);
   const [historyItems, setHistoryItems] = useState<StudioHistoryItem[]>([]);
+
+  useEffect(() => {
+    try {
+      const raw = typeof window !== "undefined" ? window.localStorage.getItem(LS_STUDIO_VIDEO_CREATE_DRAFT_V1) : null;
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as {
+        prompt?: unknown;
+        startUrl?: unknown;
+        endUrl?: unknown;
+        seedanceCompactRefUrls?: unknown;
+        seedanceProOmniItems?: unknown;
+        multiShot?: unknown;
+        klingShots?: unknown;
+        soundOn?: unknown;
+        modelId?: unknown;
+        videoPriority?: unknown;
+        duration?: unknown;
+        aspect?: unknown;
+      };
+      if (typeof parsed.prompt === "string") setPrompt(parsed.prompt);
+      if (typeof parsed.startUrl === "string" && parsed.startUrl.trim()) setStartUrl(parsed.startUrl.trim());
+      if (typeof parsed.endUrl === "string" && parsed.endUrl.trim()) setEndUrl(parsed.endUrl.trim());
+      if (Array.isArray(parsed.seedanceCompactRefUrls)) {
+        setSeedanceCompactRefUrls(
+          parsed.seedanceCompactRefUrls
+            .filter((x): x is string => typeof x === "string")
+            .map((u) => u.trim())
+            .filter((u) => /^https?:\/\//i.test(u))
+            .slice(0, SEEDANCE_COMPACT_PREVIEW_MAX_IMAGE_URLS),
+        );
+      }
+      if (Array.isArray(parsed.seedanceProOmniItems)) {
+        const items = parsed.seedanceProOmniItems
+          .filter((x): x is Record<string, unknown> => Boolean(x) && typeof x === "object")
+          .map((x) => ({
+            kind: x.kind === "video" || x.kind === "audio" ? x.kind : "image",
+            url: typeof x.url === "string" ? x.url.trim() : "",
+            durationSec: typeof x.durationSec === "number" && Number.isFinite(x.durationSec) ? x.durationSec : undefined,
+            posterUrl: typeof x.posterUrl === "string" ? x.posterUrl.trim() : undefined,
+          }))
+          .filter((x) => /^https?:\/\//i.test(x.url))
+          .slice(0, SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS);
+        setSeedanceProOmniItems(items);
+      }
+      if (typeof parsed.multiShot === "boolean") setMultiShot(parsed.multiShot);
+      if (Array.isArray(parsed.klingShots)) {
+        const shots = parsed.klingShots
+          .filter((x): x is Record<string, unknown> => Boolean(x) && typeof x === "object")
+          .map((x, idx) => ({
+            id: typeof x.id === "string" && x.id.trim() ? x.id.trim() : `shot-${idx + 1}`,
+            prompt: typeof x.prompt === "string" ? x.prompt : "",
+            durationSec:
+              typeof x.durationSec === "number" && Number.isFinite(x.durationSec)
+                ? Math.min(KLING_MULTI_SHOT_SEC_MAX, Math.max(KLING_MULTI_SHOT_SEC_MIN, Math.round(x.durationSec)))
+                : 3,
+          }))
+          .slice(0, KLING_MULTI_MAX_SHOTS);
+        if (shots.length > 0) setKlingShots(shots);
+      }
+      if (typeof parsed.soundOn === "boolean") setSoundOn(parsed.soundOn);
+      if (
+        typeof parsed.modelId === "string" &&
+        (VIDEO_MODEL_ACCESS_ORDER as readonly string[]).includes(parsed.modelId)
+      ) {
+        setModelId(parsed.modelId as VideoModelId);
+      }
+      if (parsed.videoPriority === "vip" || parsed.videoPriority === "normal") {
+        setVideoPriority(parsed.videoPriority);
+      }
+      if (typeof parsed.duration === "string" && parsed.duration.trim()) setDuration(parsed.duration.trim());
+      if (typeof parsed.aspect === "string" && parsed.aspect.trim()) setAspect(parsed.aspect.trim());
+    } catch {
+      /* ignore malformed local draft */
+    }
+  }, []);
+
+  useEffect(() => {
+    const draft = {
+      prompt,
+      startUrl,
+      endUrl,
+      seedanceCompactRefUrls,
+      seedanceProOmniItems,
+      multiShot,
+      klingShots,
+      soundOn,
+      modelId,
+      videoPriority,
+      duration,
+      aspect,
+    };
+    try {
+      window.localStorage.setItem(LS_STUDIO_VIDEO_CREATE_DRAFT_V1, JSON.stringify(draft));
+    } catch {
+      /* ignore quota/localStorage errors */
+    }
+  }, [
+    prompt,
+    startUrl,
+    endUrl,
+    seedanceCompactRefUrls,
+    seedanceProOmniItems,
+    multiShot,
+    klingShots,
+    soundOn,
+    modelId,
+    videoPriority,
+    duration,
+    aspect,
+  ]);
 
   const mergeServerWithLocal = useCallback(
     (serverItems: StudioHistoryItem[], prev: StudioHistoryItem[]) =>
