@@ -4847,7 +4847,7 @@ export default function StudioVideoPanel({
                 ) : (
                   <Sparkles className="h-5 w-5" />
                 )}
-                {isTrial ? (
+                {credits > 0 ? (
                   <span className="rounded-md bg-white/15 px-2 py-0.5 text-base tabular-nums">{credits}</span>
                 ) : null}
               </span>
