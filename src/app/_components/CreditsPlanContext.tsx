@@ -284,6 +284,7 @@ type CreditsPlanContextValue = CreditsState & {
    * an active $1 trial (with credits), a paid plan, or unlimited access.
    */
   studioAccessAllowed: boolean;
+  paymentIssue: { brand?: string | null; last4?: string | null } | null;
   setSubscriptionPlan: (planId: SubscriptionPlanId) => void;
   addPackCredits: (packKey: CreditPackKey) => void;
   spendCredits: (n: number) => void;
@@ -366,6 +367,7 @@ export function CreditsPlanProvider({
   const [isUnlimited, setIsUnlimited] = useState(false);
   const [isTrial, setIsTrial] = useState(false);
   const [studioAccessAllowed, setStudioAccessAllowed] = useState(true);
+  const [paymentIssue, setPaymentIssue] = useState<{ brand?: string | null; last4?: string | null } | null>(null);
   const supabase = useSupabaseBrowserClient();
 
   // Hydrate from localStorage after SSR markup (same default as server) to avoid Sidebar / banner mismatches.
@@ -427,6 +429,7 @@ export function CreditsPlanProvider({
             creditBalance?: number;
             isTrial?: boolean;
             studioAccessAllowed?: boolean;
+            paymentIssue?: { brand?: string | null; last4?: string | null } | null;
           } | null,
         ) => {
         if (!data) return;
@@ -440,6 +443,7 @@ export function CreditsPlanProvider({
         if (data.unlimited === true) {
           setIsUnlimited(true);
           setStudioAccessAllowed(true);
+          setPaymentIssue(null);
           setIsTrial(false);
           lsRemove(LS_TRIAL_ACTIVE);
           const confirmedUid = data.userId ?? null;
@@ -467,6 +471,7 @@ export function CreditsPlanProvider({
         }
 
         setIsUnlimited(false);
+        setPaymentIssue(data.paymentIssue ?? null);
 
         setStudioAccessAllowed(
           typeof data.studioAccessAllowed === "boolean" ? data.studioAccessAllowed : true,
@@ -722,6 +727,7 @@ export function CreditsPlanProvider({
       isUnlimited,
       isTrial,
       studioAccessAllowed,
+      paymentIssue,
       setSubscriptionPlan,
       addPackCredits,
       spendCredits,
@@ -735,6 +741,7 @@ export function CreditsPlanProvider({
       isUnlimited,
       isTrial,
       studioAccessAllowed,
+      paymentIssue,
       setSubscriptionPlan,
       addPackCredits,
       spendCredits,

@@ -50,6 +50,14 @@ export type MeSubscriptionResponse = {
    * the $1 trial (with credits) or buy a subscription (`/onboarding?step=setup`).
    */
   studioAccessAllowed?: boolean;
+  /**
+   * Present when Stripe reports a delinquent subscription (past_due/unpaid/incomplete).
+   * UI can show a payment-failed dialog instead of redirecting to onboarding setup.
+   */
+  paymentIssue?: {
+    brand?: string | null;
+    last4?: string | null;
+  };
 };
 
 /**
@@ -193,6 +201,26 @@ export async function GET() {
     try {
       const stripe = new Stripe(secret, { apiVersion: "2026-02-25.clover" });
 
+      async function fetchCardFromCustomer(
+        customerId: string,
+      ): Promise<{ brand?: string | null; last4?: string | null }> {
+        try {
+          const customer = await stripe.customers.retrieve(customerId);
+          if (customer.deleted) return {};
+          const defaultPm = customer.invoice_settings?.default_payment_method;
+          const pmId = typeof defaultPm === "string" ? defaultPm : defaultPm?.id;
+          if (!pmId) return {};
+          const pm = await stripe.paymentMethods.retrieve(pmId);
+          if (pm.type !== "card") return {};
+          return {
+            brand: pm.card?.brand ?? null,
+            last4: pm.card?.last4 ?? null,
+          };
+        } catch {
+          return {};
+        }
+      }
+
       // Find customers matching this email in Stripe
       const customers = await stripe.customers.list({
         email,
@@ -266,6 +294,37 @@ export async function GET() {
         }
       }
 
+      // No active/trialing subscription: check delinquent status to display a recovery popup.
+      for (const customer of customers.data) {
+        const delinquentStatuses: Stripe.SubscriptionListParams.Status[] = [
+          "past_due",
+          "unpaid",
+          "incomplete",
+        ];
+        for (const status of delinquentStatuses) {
+          const delinquent = await stripe.subscriptions.list({
+            customer: customer.id,
+            status,
+            limit: 1,
+          });
+          const sub = delinquent.data[0];
+          if (!sub) continue;
+          const card = await fetchCardFromCustomer(customer.id);
+          const trialMeta = await getTrialAppMetadata();
+          const delinquentBase: MeSubscriptionResponse = {
+            planId: "free",
+            billing: null,
+            userId,
+            studioAccessAllowed: false,
+            paymentIssue: {
+              brand: card.brand ?? null,
+              last4: card.last4 ?? null,
+            },
+          };
+          return NextResponse.json(await withFreeTierTrialFlags(delinquentBase, trialMeta));
+        }
+      }
+
       // No active subscription found in Stripe → ensure DB is set to canceled
       try {
         const admin = createSupabaseServiceClient();
@@ -298,7 +357,7 @@ export async function GET() {
 
     const { data, error } = await admin
       .from("user_subscriptions")
-      .select("plan_id, billing, status")
+      .select("plan_id, billing, status, stripe_customer_id")
       .eq("user_id", auth.user.id)
       .maybeSingle();
 
@@ -307,6 +366,43 @@ export async function GET() {
       return NextResponse.json(await withFreeTierTrialFlags(free, trialMeta));
     }
     if (data.status !== "active" && data.status !== "trialing") {
+      if (data.status === "past_due" || data.status === "unpaid" || data.status === "incomplete") {
+        let card: { brand?: string | null; last4?: string | null } = {};
+        if (secret && typeof data.stripe_customer_id === "string" && data.stripe_customer_id.trim()) {
+          try {
+            const stripe = new Stripe(secret, { apiVersion: "2026-02-25.clover" });
+            const customer = await stripe.customers.retrieve(data.stripe_customer_id.trim());
+            if (!customer.deleted) {
+              const defaultPm = customer.invoice_settings?.default_payment_method;
+              const pmId = typeof defaultPm === "string" ? defaultPm : defaultPm?.id;
+              if (pmId) {
+                const pm = await stripe.paymentMethods.retrieve(pmId);
+                if (pm.type === "card") {
+                  card = { brand: pm.card?.brand ?? null, last4: pm.card?.last4 ?? null };
+                }
+              }
+            }
+          } catch {
+            /* ignore card lookup errors */
+          }
+        }
+        const trialMeta = await getTrialAppMetadata();
+        return NextResponse.json(
+          await withFreeTierTrialFlags(
+            {
+              planId: "free",
+              billing: null,
+              userId,
+              studioAccessAllowed: false,
+              paymentIssue: {
+                brand: card.brand ?? null,
+                last4: card.last4 ?? null,
+              },
+            },
+            trialMeta,
+          ),
+        );
+      }
       const trialMeta = await getTrialAppMetadata();
       return NextResponse.json(await withFreeTierTrialFlags(free, trialMeta));
     }
