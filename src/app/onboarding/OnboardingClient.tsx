@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { useSupabaseBrowserClient } from "@/lib/supabase/BrowserSupabaseProvider";
 import { DATAFAST_GOALS, trackDatafastGoal } from "@/lib/analytics/datafastGoals";
 import { cn } from "@/lib/utils";
 import SetupClient from "@/app/setup/SetupClient";
@@ -129,6 +130,7 @@ function OnboardingSteps({ phase }: { phase: "personalize" | "setup" }) {
 export default function OnboardingClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const supabase = useSupabaseBrowserClient();
   const isSetupStep = searchParams.get("step") === "setup";
 
   const [workType, setWorkType] = useState<WorkType | null>(null);
@@ -163,6 +165,14 @@ export default function OnboardingClient() {
       /* non-blocking */
     }
     router.push("/onboarding?step=setup");
+  }
+
+  async function handleLogout() {
+    try {
+      if (supabase) await supabase.auth.signOut();
+    } finally {
+      window.location.href = "/auth";
+    }
   }
 
   return (
@@ -209,6 +219,15 @@ export default function OnboardingClient() {
           {isSetupStep ? (
             <div className="mx-auto w-full max-w-6xl xl:max-w-[1200px]">
               <SetupClient embedded />
+              <div className="mt-5 flex justify-center">
+                <button
+                  type="button"
+                  onClick={() => void handleLogout()}
+                  className="text-[11px] font-medium text-white/35 transition hover:text-white/60"
+                >
+                  Logout
+                </button>
+              </div>
             </div>
           ) : null}
 
