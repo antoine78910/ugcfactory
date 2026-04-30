@@ -1227,6 +1227,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     setGenerating(true);
 
     const poll = async () => {
+      let done = false;
       try {
         const res = await fetch("/api/studio/generations/poll", {
           method: "POST",
@@ -1283,6 +1284,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                   detail: { nodeId: id, success: false },
                 }),
               );
+              done = true;
               return;
             }
             return;
@@ -1305,7 +1307,9 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         const orderedUrls = taskIdsForPoll.map((tid) => byTask.get(tid)?.mediaUrl?.trim() || "");
         const completedUrls = orderedUrls.filter(Boolean);
         const statuses = taskIdsForPoll.map((tid) => byTask.get(tid)?.status ?? "generating");
-        const allTerminal = statuses.every((s) => s === "ready" || s === "failed");
+        const allTerminalByStatus = statuses.every((s) => s === "ready" || s === "failed");
+        const allResolvedByUrl = orderedUrls.length > 0 && orderedUrls.every((u) => Boolean(u));
+        const allTerminal = allTerminalByStatus || allResolvedByUrl;
 
         if (pending.progressListId) {
           patch(pending.progressListId, {
@@ -1374,12 +1378,13 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               detail: { nodeId: id, success: completedUrls.length > 0 },
             }),
           );
+          done = true;
           return;
         }
       } catch {
         // Keep trying while task metadata exists; transient errors should not break resume.
       } finally {
-        if (alive) timer = setTimeout(poll, WORKFLOW_PENDING_POLL_MS);
+        if (alive && !done) timer = setTimeout(poll, WORKFLOW_PENDING_POLL_MS);
       }
     };
 
