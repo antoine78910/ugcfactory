@@ -193,6 +193,7 @@ const PromptListMediaGalleryCell = memo(function PromptListMediaGalleryCell({
         </div>
       ) : null}
       {!isErrorToken ? (
+      <>
       <div className="absolute left-1.5 top-1.5 z-[2] opacity-0 transition group-hover:opacity-100">
         <button
           type="button"
@@ -234,6 +235,7 @@ const PromptListMediaGalleryCell = memo(function PromptListMediaGalleryCell({
           <Trash2 className="h-3.5 w-3.5" aria-hidden />
         </button>
       </div>
+      </>
       ) : null}
     </div>
   );
