@@ -2019,6 +2019,8 @@ function WorkflowFlowWorkspace({
   const cutTrailActiveRef = useRef(false);
   const cutTrailJustFinishedRef = useRef(false);
   const workspaceRootRef = useRef<HTMLDivElement>(null);
+  const [runFromHereParamLock, setRunFromHereParamLock] = useState(false);
+  const runFromHereLockToastAtRef = useRef(0);
 
   /** Opening the placement menu after a wire drop often triggers a synthetic pane `click` that would clear it immediately. */
   const armPlacementPickerAgainstPaneClick = useCallback(() => {
@@ -2983,29 +2985,34 @@ function WorkflowFlowWorkspace({
       }
 
       void (async () => {
-        const estimatedCredits = orderedRunIds.reduce((sum, nid) => {
+        setRunFromHereParamLock(true);
+        try {
+          const estimatedCredits = orderedRunIds.reduce((sum, nid) => {
           const n = byId.get(nid);
           if (!n || n.type !== "adAsset") return sum;
           const d = n.data as AdAssetNodeData;
           return sum + estimateWorkflowAdAssetRunCredits(d, nid, nodes, edges);
-        }, 0);
-        const creditsLabel =
-          estimatedCredits > 0
-            ? `${orderedRunIds.length} node(s) queued • ~${Math.round(estimatedCredits)} credits (charged step-by-step).`
-            : `${orderedRunIds.length} node(s) queued.`;
-        toast.message("Run from here", { description: creditsLabel });
-        for (let i = 0; i < orderedRunIds.length; i++) {
-          const nodeId = orderedRunIds[i]!;
-          window.dispatchEvent(new CustomEvent("workflow:run-node", { detail: { nodeId } }));
-          const ok = await waitForNodeRun(nodeId);
-          if (!ok) {
-            toast.error("Run chain stopped", {
-              description: `Node ${i + 1}/${orderedRunIds.length} failed or timed out.`,
-            });
-            return;
+          }, 0);
+          const creditsLabel =
+            estimatedCredits > 0
+              ? `${orderedRunIds.length} node(s) queued • ~${Math.round(estimatedCredits)} credits (charged step-by-step).`
+              : `${orderedRunIds.length} node(s) queued.`;
+          toast.message("Run from here", { description: creditsLabel });
+          for (let i = 0; i < orderedRunIds.length; i++) {
+            const nodeId = orderedRunIds[i]!;
+            window.dispatchEvent(new CustomEvent("workflow:run-node", { detail: { nodeId } }));
+            const ok = await waitForNodeRun(nodeId);
+            if (!ok) {
+              toast.error("Run chain stopped", {
+                description: `Node ${i + 1}/${orderedRunIds.length} failed or timed out.`,
+              });
+              return;
+            }
           }
+          toast.success("Run chain completed");
+        } finally {
+          setRunFromHereParamLock(false);
         }
-        toast.success("Run chain completed");
       })();
     };
 
@@ -3026,13 +3033,55 @@ function WorkflowFlowWorkspace({
           PromptListNodeData
       >,
     ) => {
+      const blockedAdAssetParamKeys: (keyof AdAssetNodeData)[] = [
+        "label",
+        "prompt",
+        "model",
+        "aspectRatio",
+        "resolution",
+        "quantity",
+        "assistantModel",
+        "assistantMode",
+        "assistantOutput",
+        "assistantExportMode",
+        "websiteUrl",
+        "websiteOutputMode",
+        "websiteProductImageCount",
+        "videoDurationSec",
+        "videoPriority",
+        "motionAutoSettings",
+        "motionBackgroundSource",
+      ];
+      let blocked = false;
       setNodes((nds) =>
         nds.map((n) =>
-          n.id === nodeId ? ({ ...n, data: { ...n.data, ...patch } } as WorkflowCanvasNode) : n,
+          n.id === nodeId
+            ? (() => {
+                if (runFromHereParamLock && n.type === "adAsset") {
+                  const hasBlockedKey = blockedAdAssetParamKeys.some((k) =>
+                    Object.prototype.hasOwnProperty.call(patch, k),
+                  );
+                  if (hasBlockedKey) {
+                    blocked = true;
+                    return n;
+                  }
+                }
+                return { ...n, data: { ...n.data, ...patch } } as WorkflowCanvasNode;
+              })()
+            : n,
         ),
       );
+      if (blocked) {
+        const now = Date.now();
+        if (now - runFromHereLockToastAtRef.current > 1400) {
+          runFromHereLockToastAtRef.current = now;
+          toast.message("Parameters locked during Run from here", {
+            description: "Wait for the chain to finish before editing module settings.",
+          });
+        }
+      }
     },
-    [setNodes],
+    [runFromHereParamLock, setNodes],
   );
 
   const cloneSelection = useCallback(() => {
@@ -4232,6 +4281,47 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
     spaceSource,
     spaceRole,
   ]);
+
+  /**
+   * Re-sync from cloud when the user returns to this tab (e.g. was editing on
+   * another device). Without this, the phone page stays stale until reloaded.
+   */
+  useEffect(() => {
+    if (!workflowHydrated || !authUserId || storageScope === null) return;
+
+    const handleVisibility = () => {
+      if (document.visibilityState !== "visible") return;
+      void (async () => {
+        const cloud = await fetchCloudWorkflowSpace(resolvedSpaceId);
+        if (!cloud) return;
+        const cloudMs = Date.parse(cloud.updatedAt);
+        const knownMs = lastCloudUpdatedAtRef.current ? Date.parse(lastCloudUpdatedAtRef.current) : 0;
+        if (!Number.isFinite(cloudMs) || cloudMs <= knownMs) return;
+
+        lastCloudUpdatedAtRef.current = cloud.updatedAt;
+        setSpaceName(cloud.name || "Untitled workflow");
+        setPublishedTemplateId(cloud.publishedCommunityTemplateId ?? null);
+        setWorkflowProject(cloud.state);
+
+        if (spaceSource === "local") {
+          saveProjectForSpace(storageScope, resolvedSpaceId, cloud.state);
+          updateSpaceMeta(storageScope, resolvedSpaceId, {
+            name: cloud.name || undefined,
+            updatedAt: cloudMs,
+            previewDataUrl: cloud.previewDataUrl ?? undefined,
+            publishedCommunityTemplateId: cloud.publishedCommunityTemplateId ?? undefined,
+          });
+        }
+
+        toast.message("Synced with another device", {
+          description: "A newer version was loaded from another device.",
+        });
+      })();
+    };
+
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [workflowHydrated, authUserId, resolvedSpaceId, spaceSource, storageScope]);
 
   const workflowPreviewSavedDataUrl = useMemo(
     () => buildWorkflowPreviewDataUrl(workflowProject),

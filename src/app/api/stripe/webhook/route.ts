@@ -194,7 +194,15 @@ export async function POST(req: Request) {
             }, { onConflict: "user_id" });
 
             const credits = SUBSCRIPTION_CREDITS[planId] ?? 0;
-            await resetSubscriptionCredits(admin, userId, credits, periodEnd);
+            try {
+              await resetSubscriptionCredits(admin, userId, credits, periodEnd);
+            } catch (creditErr) {
+              serverLog("stripe_webhook_subscription_start_credit_failed", {
+                userId, planId, credits,
+                error: creditErr instanceof Error ? creditErr.message : "unknown",
+              });
+              return NextResponse.json({ error: "Credit grant failed, Stripe will retry." }, { status: 500 });
+            }
             serverLog("stripe_webhook_subscription_start", { userId, planId, credits });
           }
         }
@@ -381,7 +389,15 @@ export async function POST(req: Request) {
           }).eq("stripe_subscription_id", subId);
 
           const credits = SUBSCRIPTION_CREDITS[effectivePlanId] ?? 0;
-          await resetSubscriptionCredits(admin, row.user_id, credits, renewalPeriodEnd);
+          try {
+            await resetSubscriptionCredits(admin, row.user_id, credits, renewalPeriodEnd);
+          } catch (creditErr) {
+            serverLog("stripe_webhook_subscription_renewal_credit_failed", {
+              userId: row.user_id, planId: effectivePlanId, credits,
+              error: creditErr instanceof Error ? creditErr.message : "unknown",
+            });
+            return NextResponse.json({ error: "Credit renewal failed, Stripe will retry." }, { status: 500 });
+          }
           serverLog("stripe_webhook_subscription_renewal", { userId: row.user_id, planId: effectivePlanId, credits });
         }
         break;

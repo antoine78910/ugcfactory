@@ -562,6 +562,18 @@ export function CreditsPlanProvider({
     fetchAndApplyServerSubscription();
   }, [activeUserId, fetchAndApplyServerSubscription]);
 
+  /** Re-fetch plan + credits when the tab becomes visible (e.g. after Stripe payment completes). */
+  useEffect(() => {
+    if (!activeUserId) return;
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        fetchAndApplyServerSubscription();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [activeUserId, fetchAndApplyServerSubscription]);
+
   const syncFromStorage = useCallback(() => {
     setState(readState(activeUserId));
   }, [activeUserId]);

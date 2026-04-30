@@ -54,11 +54,16 @@ function toNumberSize(v: unknown): number | null {
 
 export function WorkflowGroupNode({ id, data, selected, width, height }: NodeProps<WorkflowGroupNodeType>) {
   const patch = useWorkflowNodePatch();
-  const { setNodes } = useReactFlow<WorkflowGroupNodeType>();
+  const { setNodes, getNodes } = useReactFlow<WorkflowGroupNodeType>();
   const collapsed = Boolean(data.collapsed);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(data.label);
   const inputRef = useRef<HTMLInputElement>(null);
+  const resizeSnapshotRef = useRef<{
+    groupWidth: number;
+    groupHeight: number;
+    children: Array<{ id: string; x: number; y: number; width?: number; height?: number }>;
+  } | null>(null);
 
   useEffect(() => {
     if (editing) inputRef.current?.focus();
@@ -106,6 +111,55 @@ export function WorkflowGroupNode({ id, data, selected, width, height }: NodePro
     patch(id, { collapsed: true, expandedWidth: currentW, expandedHeight: currentH });
   }, [collapsed, data.expandedHeight, data.expandedWidth, height, id, patch, setNodes, width]);
 
+  const onResizeStart = useCallback(() => {
+    const groupWidth = toNumberSize(width) ?? data.expandedWidth ?? 320;
+    const groupHeight = toNumberSize(height) ?? data.expandedHeight ?? 240;
+    const children = getNodes()
+      .filter((n) => n.parentId === id)
+      .map((n) => ({
+        id: n.id,
+        x: n.position.x,
+        y: n.position.y,
+        width: toNumberSize((n.style as { width?: unknown } | undefined)?.width) ?? toNumberSize(n.width ?? null) ?? undefined,
+        height: toNumberSize((n.style as { height?: unknown } | undefined)?.height) ?? toNumberSize(n.height ?? null) ?? undefined,
+      }));
+    resizeSnapshotRef.current = { groupWidth, groupHeight, children };
+  }, [data.expandedHeight, data.expandedWidth, getNodes, height, id, width]);
+
+  const onResizeEnd = useCallback(
+    (_event: unknown, params: { width?: number; height?: number }) => {
+      const snap = resizeSnapshotRef.current;
+      resizeSnapshotRef.current = null;
+      if (!snap) return;
+      const nextWidth = toNumberSize(params?.width) ?? snap.groupWidth;
+      const nextHeight = toNumberSize(params?.height) ?? snap.groupHeight;
+      if (snap.groupWidth <= 0 || snap.groupHeight <= 0) return;
+      const sx = nextWidth / snap.groupWidth;
+      const sy = nextHeight / snap.groupHeight;
+      if (!Number.isFinite(sx) || !Number.isFinite(sy)) return;
+      if (Math.abs(sx - 1) < 0.0001 && Math.abs(sy - 1) < 0.0001) return;
+      const childById = new Map(snap.children.map((c) => [c.id, c]));
+      setNodes((prev) =>
+        prev.map((n) => {
+          const c = childById.get(n.id);
+          if (!c) return n;
+          const nextStyle = { ...(n.style ?? {}) } as Record<string, unknown>;
+          if (typeof c.width === "number" && Number.isFinite(c.width)) nextStyle.width = Math.max(40, Math.round(c.width * sx));
+          if (typeof c.height === "number" && Number.isFinite(c.height)) nextStyle.height = Math.max(32, Math.round(c.height * sy));
+          return {
+            ...n,
+            position: {
+              x: Math.round(c.x * sx),
+              y: Math.round(c.y * sy),
+            },
+            style: nextStyle,
+          };
+        }),
+      );
+    },
+    [setNodes],
+  );
+
   return (
     <>
       <WorkflowNodeContextToolbar
@@ -120,6 +174,8 @@ export function WorkflowGroupNode({ id, data, selected, width, height }: NodePro
         minWidth={200}
         minHeight={160}
         isVisible={selected && !collapsed}
+        onResizeStart={onResizeStart}
+        onResizeEnd={onResizeEnd}
         lineClassName="!border-white/25"
         handleClassName="!h-2.5 !w-2.5 !rounded-sm !border !border-white/40 !bg-[#12101a]"
       />

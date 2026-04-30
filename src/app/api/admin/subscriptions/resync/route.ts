@@ -7,6 +7,7 @@ export const runtime = "nodejs";
  * Body (JSON), one of:
  *   { "user_email": "foo@bar.com" }
  *   { "stripe_subscription_id": "sub_xxx" }
+ *   { "user_email": "foo@bar.com", "reset_credits": true }  ← also resets credits to plan amount
  *
  * GET /api/admin/subscriptions/resync?email=foo@bar.com
  *  , read-only: returns DB row + live Stripe status without writing anything
@@ -16,6 +17,15 @@ import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { createSupabaseServiceClient } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/admin";
+import { resetSubscriptionCredits } from "@/lib/creditGrants";
+import { stripeSubscriptionPeriodEndDate } from "@/lib/stripeSubscriptionPeriodEnd";
+
+const SUBSCRIPTION_CREDITS: Record<string, number> = {
+  starter: 240,
+  growth: 600,
+  pro: 1400,
+  scale: 3200,
+};
 
 export async function GET(req: Request) {
   const { response } = await requireAdmin();
@@ -141,7 +151,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: updateError.message }, { status: 500 });
   }
 
-  return NextResponse.json({
+  const result: Record<string, unknown> = {
     ok: true,
     userId: dbRow.user_id,
     stripe_subscription_id: sub.id,
@@ -151,5 +161,23 @@ export async function POST(req: Request) {
       current_period_end: newPeriodEnd,
       cancel_at_period_end: (sub as any).cancel_at_period_end,
     },
-  });
+  };
+
+  if (body.reset_credits === true && newStatus === "active") {
+    const planId = String(dbRow.plan_id ?? "");
+    const credits = SUBSCRIPTION_CREDITS[planId] ?? 0;
+    if (credits > 0) {
+      const periodEnd = stripeSubscriptionPeriodEndDate(sub) ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      try {
+        await resetSubscriptionCredits(admin, String(dbRow.user_id), credits, periodEnd);
+        result.credits_reset = { planId, credits, periodEnd: periodEnd.toISOString() };
+      } catch (creditErr) {
+        result.credits_reset_error = creditErr instanceof Error ? creditErr.message : "unknown";
+      }
+    } else {
+      result.credits_reset_error = `Unknown plan_id: ${planId}`;
+    }
+  }
+
+  return NextResponse.json(result);
 }

@@ -100,7 +100,7 @@ export async function resetSubscriptionCredits(
     p_amount: ticks,
     p_expires_at: expiresAt.toISOString(),
   });
-  if (error) console.error("[creditGrants] reset_subscription_credits error:", error);
+  if (error) throw new Error(`reset_subscription_credits failed: ${error.message}`);
 }
 
 /** Add one-time pack credits (expire in 3 months). */
