@@ -1,7 +1,7 @@
 "use client";
 
 import { NodeToolbar, Position, useReactFlow, useStore } from "@xyflow/react";
-import { ChevronDown, Copy, MoreHorizontal, Play, Spline, Trash2 } from "lucide-react";
+import { ChevronDown, Copy, MoreHorizontal, Play, Spline, Trash2, Ungroup } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -20,6 +20,7 @@ type WorkflowNodeContextToolbarProps = {
   nodeId: string;
   onRun: () => void;
   onRunFromHere?: () => void;
+  onUngroup?: () => void;
   /** Sticky notes only need duplicate / delete, no run or path controls. */
   variant?: "module" | "sticky";
 };
@@ -32,6 +33,7 @@ export function WorkflowNodeContextToolbar({
   nodeId,
   onRun,
   onRunFromHere,
+  onUngroup,
   variant = "module",
 }: WorkflowNodeContextToolbarProps) {
   const { getNodes, getEdges, setNodes, setEdges } = useReactFlow();
@@ -190,6 +192,15 @@ export function WorkflowNodeContextToolbar({
         <button type="button" className={iconBtn} title="Delete" onClick={removeSubtree}>
           <Trash2 className="h-3.5 w-3.5 text-white" strokeWidth={2} />
         </button>
+
+        {onUngroup ? (
+          <>
+            <ToolbarDivider />
+            <button type="button" className={iconBtn} title="Ungroup" onClick={onUngroup}>
+              <Ungroup className="h-3.5 w-3.5 text-white" strokeWidth={2} />
+            </button>
+          </>
+        ) : null}
 
         <ToolbarDivider />
 

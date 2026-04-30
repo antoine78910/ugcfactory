@@ -160,10 +160,44 @@ export function WorkflowGroupNode({ id, data, selected, width, height }: NodePro
     [setNodes],
   );
 
+  const ungroup = useCallback(() => {
+    const nodes = getNodes();
+    const self = nodes.find((n) => n.id === id);
+    if (!self) return;
+    const baseX = self.position.x;
+    const baseY = self.position.y;
+    const childCount = nodes.filter((n) => n.parentId === id).length;
+    setNodes((prev) =>
+      prev
+        .filter((n) => n.id !== id)
+        .map((n) => {
+          if (n.parentId !== id) return n;
+          const nextStyle = { ...(n.style ?? {}) } as Record<string, unknown>;
+          delete nextStyle.zIndex;
+          return {
+            ...n,
+            parentId: undefined,
+            extent: undefined,
+            position: {
+              x: baseX + n.position.x,
+              y: baseY + n.position.y,
+            },
+            style: nextStyle,
+          };
+        }),
+    );
+    toast.success(
+      childCount > 0
+        ? `Group ungrouped (${childCount} module${childCount > 1 ? "s" : ""})`
+        : "Group ungrouped",
+    );
+  }, [getNodes, id, setNodes]);
+
   return (
     <>
       <WorkflowNodeContextToolbar
         nodeId={id}
+        onUngroup={ungroup}
         onRun={() =>
           toast.message("Run group", {
             description: "End-to-end runs for every module in this group will be available soon.",
