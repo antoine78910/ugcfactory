@@ -1,7 +1,7 @@
 "use client";
 
 import { Handle, Position, useReactFlow, type NodeProps } from "@xyflow/react";
-import { Check, Clapperboard, Download, Grid3X3, ImageIcon, List, ListOrdered, Maximize2, Pencil, Plus, Trash2, Type, X } from "lucide-react";
+import { AlertTriangle, Check, Clapperboard, Download, Grid3X3, ImageIcon, List, ListOrdered, Maximize2, Pencil, Plus, RotateCcw, Trash2, Type, X } from "lucide-react";
 import { createPortal } from "react-dom";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -64,9 +64,26 @@ function triggerMediaDownload(url: string, fallbackName: string) {
 }
 
 const WORKFLOW_PENDING_MEDIA_PREFIX = "__workflow_pending_media__:";
+const WORKFLOW_ERROR_MEDIA_PREFIX = "__workflow_error_media__:";
 
 function isPendingMediaToken(s: string): boolean {
   return s.trim().startsWith(WORKFLOW_PENDING_MEDIA_PREFIX);
+}
+
+function parseWorkflowErrorMediaToken(s: string): { nodeId?: string; message?: string } | null {
+  const t = s.trim();
+  if (!t.startsWith(WORKFLOW_ERROR_MEDIA_PREFIX)) return null;
+  const raw = t.slice(WORKFLOW_ERROR_MEDIA_PREFIX.length);
+  try {
+    const decoded = decodeURIComponent(raw);
+    const parsed = JSON.parse(decoded) as { nodeId?: unknown; message?: unknown };
+    return {
+      nodeId: typeof parsed.nodeId === "string" ? parsed.nodeId : undefined,
+      message: typeof parsed.message === "string" ? parsed.message : undefined,
+    };
+  } catch {
+    return { message: "Generation failed." };
+  }
 }
 
 type PromptListMediaGalleryCellProps = {
@@ -84,19 +101,62 @@ const PromptListMediaGalleryCell = memo(function PromptListMediaGalleryCell({
 }: PromptListMediaGalleryCellProps) {
   const renderUrl = toRenderableMediaUrl(url);
   const pending = isPendingMediaToken(url);
+  const errorToken = parseWorkflowErrorMediaToken(url);
+  const isErrorToken = Boolean(errorToken);
   const fetchPriority = slotIndex < 9 ? ("high" as const) : ("low" as const);
   const [videoDurationLabel, setVideoDurationLabel] = useState<string>("");
 
   useEffect(() => {
-    if (pending) return;
+    if (pending || isErrorToken) return;
     primeRemoteMediaForDisplay(url);
-  }, [pending, url]);
+  }, [isErrorToken, pending, url]);
 
   return (
     <div className="group relative aspect-square min-h-0 overflow-hidden rounded-md border border-white/10 bg-black/35">
       {pending ? (
         <div className="flex h-full w-full min-h-0 items-center justify-center bg-white/[0.04]">
           <div className="h-7 w-7 animate-spin rounded-full border-2 border-white/20 border-t-violet-300/90" />
+        </div>
+      ) : isErrorToken ? (
+        <div className="flex h-full w-full min-h-0 flex-col justify-between bg-rose-950/35 p-2">
+          <div className="inline-flex items-center gap-1 text-[10px] font-semibold text-rose-200">
+            <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
+            Failed
+          </div>
+          <p className="line-clamp-3 text-[10px] leading-tight text-rose-100/90">
+            {errorToken?.message?.trim() || "Generation failed."}
+          </p>
+          <div className="mt-1 flex items-center justify-end gap-1">
+            <button
+              type="button"
+              className="nodrag nopan inline-flex h-6 items-center rounded-md border border-white/20 bg-black/35 px-2 text-[10px] font-semibold text-white/85 hover:bg-black/55"
+              title="Dismiss error"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onDeleteSlot(slotIndex);
+              }}
+            >
+              Dismiss
+            </button>
+            <button
+              type="button"
+              className="nodrag nopan inline-flex h-6 items-center gap-1 rounded-md border border-rose-300/30 bg-rose-500/20 px-2 text-[10px] font-semibold text-rose-100 hover:bg-rose-500/30"
+              title="Regenerate"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (errorToken?.nodeId?.trim()) {
+                  window.dispatchEvent(
+                    new CustomEvent("workflow:run-node", { detail: { nodeId: errorToken.nodeId.trim() } }),
+                  );
+                }
+              }}
+            >
+              <RotateCcw className="h-3 w-3" aria-hidden />
+              Regenerate
+            </button>
+          </div>
         </div>
       ) : isProbablyVideoUrl(url) ? (
         <video
@@ -127,11 +187,12 @@ const PromptListMediaGalleryCell = memo(function PromptListMediaGalleryCell({
           className="h-full w-full min-h-0 object-cover transition group-hover:scale-[1.02]"
         />
       )}
-      {isProbablyVideoUrl(url) && videoDurationLabel ? (
+      {isProbablyVideoUrl(url) && !isErrorToken && videoDurationLabel ? (
         <div className="pointer-events-none absolute right-1.5 top-1.5 z-[2] rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-semibold text-white/90 transition-opacity group-hover:opacity-0">
           {videoDurationLabel}
         </div>
       ) : null}
+      {!isErrorToken ? (
       <div className="absolute left-1.5 top-1.5 z-[2] opacity-0 transition group-hover:opacity-100">
         <button
           type="button"
@@ -173,6 +234,7 @@ const PromptListMediaGalleryCell = memo(function PromptListMediaGalleryCell({
           <Trash2 className="h-3.5 w-3.5" aria-hidden />
         </button>
       </div>
+      ) : null}
     </div>
   );
 });

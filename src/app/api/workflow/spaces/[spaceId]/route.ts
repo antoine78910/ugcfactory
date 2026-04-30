@@ -241,18 +241,6 @@ export async function PUT(req: Request, ctx: Ctx) {
       return NextResponse.json({ error: insertErr.message }, { status: 500 });
     }
   } else {
-    if (!expectedUpdatedAt) {
-      // Client never confirmed the current cloud state (cloud fetch likely failed on mount).
-      // Reject to prevent stale local data from silently overwriting a newer cloud version.
-      return NextResponse.json(
-        {
-          error: "Reload to sync the latest version before saving.",
-          code: "WORKFLOW_SPACE_CONFLICT",
-          serverUpdatedAt: typeof existing.updated_at === "string" ? existing.updated_at : undefined,
-        },
-        { status: 409 },
-      );
-    }
     const serverUpdatedAtIso = typeof existing.updated_at === "string" ? existing.updated_at : "";
     const expectedMs = Date.parse(expectedUpdatedAt);
     const serverMs = Date.parse(serverUpdatedAtIso);

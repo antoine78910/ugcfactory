@@ -1045,6 +1045,7 @@ export default function StudioVideoPanel({
   /** Widen the history / preview column on large screens (not fullscreen). */
   const [wideVideoPreview, setWideVideoPreview] = useState(false);
   const [historyItems, setHistoryItems] = useState<StudioHistoryItem[]>([]);
+  const [historySourceFilter, setHistorySourceFilter] = useState<"all" | "workflow" | "studio">("all");
 
   useEffect(() => {
     try {
@@ -2160,52 +2161,18 @@ export default function StudioVideoPanel({
   );
 
   const onSeedanceCompactFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const files = Array.from(e.target.files ?? []);
     e.target.value = "";
-    if (!file) return;
-    if (file.size > KLING_ELEMENT_MEDIA_MAX_BYTES) {
-      toast.error("File too large", { description: "Each image must be 10MB or less." });
-      return;
-    }
-    const dimsOk = await imageFileMeetsMinDimensions(
-      file,
-      KLING_ELEMENT_MEDIA_MIN_PX,
-      KLING_ELEMENT_MEDIA_MIN_PX,
-    );
-    if (!dimsOk) {
-      toast.error("Image too small", {
-        description: `Use images at least ${KLING_ELEMENT_MEDIA_MIN_PX}×${KLING_ELEMENT_MEDIA_MIN_PX}px.`,
-      });
-      return;
-    }
+    if (!files.length) return;
     setSeedanceCompactUploadBusy(true);
     try {
-      const u = await uploadStudioMediaFile(file, "image");
-      setSeedanceCompactRefUrls((prev) =>
-        prev.length >= SEEDANCE_COMPACT_PREVIEW_MAX_IMAGE_URLS ? prev : [...prev, u],
-      );
-      toast.success("Image added");
-    } catch (err) {
-      toast.error("Upload failed", {
-        description: userMessageFromCaughtError(err, "Use JPEG, PNG, WebP, or GIF."),
-      });
-    } finally {
-      setSeedanceCompactUploadBusy(false);
-    }
-  }, []);
-
-  const onSeedanceProOmniFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    const inferred = inferStudioUploadKind(file);
-    let kind: UploadFileKind = inferred;
-    try {
-      if (inferred === "image") {
-        assertStudioImageUpload(file);
+      let added = 0;
+      let currentCount = seedanceCompactRefUrls.length;
+      for (const file of files) {
+        if (currentCount >= SEEDANCE_COMPACT_PREVIEW_MAX_IMAGE_URLS) break;
         if (file.size > KLING_ELEMENT_MEDIA_MAX_BYTES) {
           toast.error("File too large", { description: "Each image must be 10MB or less." });
-          return;
+          continue;
         }
         const dimsOk = await imageFileMeetsMinDimensions(
           file,
@@ -2216,80 +2183,136 @@ export default function StudioVideoPanel({
           toast.error("Image too small", {
             description: `Use images at least ${KLING_ELEMENT_MEDIA_MIN_PX}×${KLING_ELEMENT_MEDIA_MIN_PX}px.`,
           });
-          return;
+          continue;
         }
-      } else if (inferred === "video") {
-        const ext = fileExtensionLower(file);
-        const mime = file.type || "";
-        const okProVideo =
-          ext === ".mp4" ||
-          ext === ".mov" ||
-          mime === "video/mp4" ||
-          mime === "video/quicktime";
-        if (!okProVideo) {
-          toast.error("Video format", {
-            description: "Seedance 2 reference videos must be MP4 or MOV (not WebM).",
-          });
-          return;
-        }
-        assertStudioVideoUpload(file);
-        kind = "video";
-      } else {
-        assertStudioAudioUpload(file);
-        kind = "audio";
+        const u = await uploadStudioMediaFile(file, "image");
+        setSeedanceCompactRefUrls((prev) =>
+          prev.length >= SEEDANCE_COMPACT_PREVIEW_MAX_IMAGE_URLS ? prev : [...prev, u],
+        );
+        currentCount += 1;
+        added += 1;
       }
+      if (added > 0) toast.success(added === 1 ? "Image added" : `${added} images added`);
     } catch (err) {
-      toast.error("Invalid file", {
-        description: err instanceof Error ? err.message : "Choose another file.",
+      toast.error("Upload failed", {
+        description: userMessageFromCaughtError(err, "Use JPEG, PNG, WebP, or GIF."),
       });
-      return;
+    } finally {
+      setSeedanceCompactUploadBusy(false);
     }
-    if (kind === "image" && seedanceProOmniImageCount >= SEEDANCE_PRO_MAX_IMAGE_URLS) {
-      toast.error(`At most ${SEEDANCE_PRO_MAX_IMAGE_URLS} images.`);
-      return;
-    }
-    if (kind === "video" && seedanceProOmniVideoCount >= SEEDANCE_PRO_MAX_VIDEO_URLS) {
-      toast.error(`At most ${SEEDANCE_PRO_MAX_VIDEO_URLS} video.`);
-      return;
-    }
-    if (kind === "audio" && seedanceProOmniAudioCount >= SEEDANCE_PRO_MAX_AUDIO_URLS) {
-      toast.error(`At most ${SEEDANCE_PRO_MAX_AUDIO_URLS} sound.`);
-      return;
-    }
+  }, [seedanceCompactRefUrls.length]);
+
+  const onSeedanceProOmniFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = "";
+    if (!files.length) return;
 
     setSeedanceProOmniUploadBusy(true);
     try {
-      if (kind === "image") {
-        await addSeedanceProOmniUploadedFile(file, kind);
-        toast.success("Media added");
-        return;
-      }
+      let added = 0;
+      let imgCount = seedanceProOmniImageCount;
+      let vidCount = seedanceProOmniVideoCount;
+      let audCount = seedanceProOmniAudioCount;
+      let usedDuration = seedanceOmniUsedDurationSec;
 
-      const sourceDuration = await readMediaDurationSec(file, kind === "video" ? "video" : "audio");
-      if (!Number.isFinite(sourceDuration) || sourceDuration <= 0) {
-        toast.error("Could not read media duration.");
-        return;
+      for (const file of files) {
+        const inferred = inferStudioUploadKind(file);
+        let kind: UploadFileKind = inferred;
+        try {
+          if (inferred === "image") {
+            assertStudioImageUpload(file);
+            if (file.size > KLING_ELEMENT_MEDIA_MAX_BYTES) {
+              toast.error("File too large", { description: "Each image must be 10MB or less." });
+              continue;
+            }
+            const dimsOk = await imageFileMeetsMinDimensions(
+              file,
+              KLING_ELEMENT_MEDIA_MIN_PX,
+              KLING_ELEMENT_MEDIA_MIN_PX,
+            );
+            if (!dimsOk) {
+              toast.error("Image too small", {
+                description: `Use images at least ${KLING_ELEMENT_MEDIA_MIN_PX}×${KLING_ELEMENT_MEDIA_MIN_PX}px.`,
+              });
+              continue;
+            }
+          } else if (inferred === "video") {
+            const ext = fileExtensionLower(file);
+            const mime = file.type || "";
+            const okProVideo =
+              ext === ".mp4" ||
+              ext === ".mov" ||
+              mime === "video/mp4" ||
+              mime === "video/quicktime";
+            if (!okProVideo) {
+              toast.error("Video format", {
+                description: "Seedance 2 reference videos must be MP4 or MOV (not WebM).",
+              });
+              continue;
+            }
+            assertStudioVideoUpload(file);
+            kind = "video";
+          } else {
+            assertStudioAudioUpload(file);
+            kind = "audio";
+          }
+        } catch (err) {
+          toast.error("Invalid file", {
+            description: err instanceof Error ? err.message : "Choose another file.",
+          });
+          continue;
+        }
+
+        if (kind === "image" && imgCount >= SEEDANCE_PRO_MAX_IMAGE_URLS) {
+          toast.error(`At most ${SEEDANCE_PRO_MAX_IMAGE_URLS} images.`);
+          continue;
+        }
+        if (kind === "video" && vidCount >= SEEDANCE_PRO_MAX_VIDEO_URLS) {
+          toast.error(`At most ${SEEDANCE_PRO_MAX_VIDEO_URLS} video.`);
+          continue;
+        }
+        if (kind === "audio" && audCount >= SEEDANCE_PRO_MAX_AUDIO_URLS) {
+          toast.error(`At most ${SEEDANCE_PRO_MAX_AUDIO_URLS} sound.`);
+          continue;
+        }
+
+        if (kind === "image") {
+          await addSeedanceProOmniUploadedFile(file, kind);
+          imgCount += 1;
+          added += 1;
+          continue;
+        }
+
+        const sourceDuration = await readMediaDurationSec(file, kind === "video" ? "video" : "audio");
+        if (!Number.isFinite(sourceDuration) || sourceDuration <= 0) {
+          toast.error("Could not read media duration.");
+          continue;
+        }
+        const remaining = Math.max(0, 15 - usedDuration);
+        if (remaining <= 0) {
+          toast.error("15s budget reached", {
+            description: "Remove a video/audio reference or trim one before adding more.",
+          });
+          break;
+        }
+        if (sourceDuration > remaining + 0.01) {
+          setSeedanceTrimState({
+            file,
+            kind: kind === "video" ? "video" : "audio",
+            sourceDurationSec: sourceDuration,
+            remainingBudgetSec: remaining,
+            startSec: 0,
+            endSec: Math.min(sourceDuration, remaining),
+          });
+          continue;
+        }
+        await addSeedanceProOmniUploadedFile(file, kind, sourceDuration);
+        usedDuration += sourceDuration;
+        if (kind === "video") vidCount += 1;
+        else audCount += 1;
+        added += 1;
       }
-      const remaining = Math.max(0, 15 - seedanceOmniUsedDurationSec);
-      if (remaining <= 0) {
-        toast.error("15s budget reached", {
-          description: "Remove a video/audio reference or trim one before adding more.",
-        });
-        return;
-      }
-      if (sourceDuration > remaining + 0.01) {
-        setSeedanceTrimState({
-          file,
-          kind: kind === "video" ? "video" : "audio",
-          sourceDurationSec: sourceDuration,
-          remainingBudgetSec: remaining,
-          startSec: 0,
-          endSec: Math.min(sourceDuration, remaining),
-        });
-        return;
-      }
-      await addSeedanceProOmniUploadedFile(file, kind, sourceDuration);
-      toast.success("Media added");
+      if (added > 0) toast.success(added === 1 ? "Media added" : `${added} files added`);
     } catch (err) {
       toast.error("Upload failed", {
         description: userMessageFromCaughtError(err, "Try again."),
@@ -3884,6 +3907,15 @@ export default function StudioVideoPanel({
   const paramsColumnClass = wideVideoPreview
     ? "flex min-w-0 w-full flex-col gap-2 lg:basis-[22%] lg:max-w-[16rem] lg:min-w-[12rem] lg:flex-none lg:shrink-0 lg:min-h-0 lg:overflow-hidden"
     : "flex min-w-0 w-full flex-col gap-2 lg:basis-[30%] lg:max-w-[28rem] lg:flex-none lg:shrink-0 lg:min-h-0 lg:overflow-hidden";
+  const filteredHistoryItems = useMemo(
+    () =>
+      historyItems.filter((item) => {
+        if (historySourceFilter === "workflow") return item.workflowGenerated === true;
+        if (historySourceFilter === "studio") return item.workflowGenerated !== true;
+        return true;
+      }),
+    [historyItems, historySourceFilter],
+  );
 
   const outputHistoryColumn = (
     <div
@@ -3893,6 +3925,50 @@ export default function StudioVideoPanel({
       )}
     >
       <div className="mb-1 flex shrink-0 items-center justify-end gap-2 lg:mb-2">
+        <div className="flex items-center gap-1.5">
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            onClick={() => setHistorySourceFilter("all")}
+            className={cn(
+              "h-8 rounded-lg border px-2.5 text-[11px] font-medium",
+              historySourceFilter === "all"
+                ? "border-white/35 bg-white/15 text-white"
+                : "border-white/15 bg-white/5 text-white/75 hover:bg-white/10",
+            )}
+          >
+            All
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            onClick={() => setHistorySourceFilter("workflow")}
+            className={cn(
+              "h-8 rounded-lg border px-2.5 text-[11px] font-medium",
+              historySourceFilter === "workflow"
+                ? "border-violet-300/55 bg-violet-400/20 text-violet-100"
+                : "border-white/15 bg-white/5 text-white/75 hover:bg-white/10",
+            )}
+          >
+            Workflow
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            onClick={() => setHistorySourceFilter("studio")}
+            className={cn(
+              "h-8 rounded-lg border px-2.5 text-[11px] font-medium",
+              historySourceFilter === "studio"
+                ? "border-emerald-300/50 bg-emerald-400/20 text-emerald-100"
+                : "border-white/15 bg-white/5 text-white/75 hover:bg-white/10",
+            )}
+          >
+            Non-workflow
+          </Button>
+        </div>
         <Button
           type="button"
           variant="secondary"
@@ -3919,7 +3995,7 @@ export default function StudioVideoPanel({
         hasOutput
         output={
           <StudioGenerationsHistory
-            items={historyItems}
+            items={filteredHistoryItems}
             empty={<StudioEmptyExamples variant="video" />}
             mediaLabel="Video"
             onItemDeleted={(id) => setHistoryItems((prev) => prev.filter((i) => i.id !== id))}
@@ -4200,6 +4276,7 @@ export default function StudioVideoPanel({
                     ref={seedanceCompactFileRef}
                     type="file"
                     accept={STUDIO_IMAGE_FILE_ACCEPT}
+                    multiple
                     className="hidden"
                     onChange={onSeedanceCompactFileChange}
                   />
@@ -4284,6 +4361,7 @@ export default function StudioVideoPanel({
                     ref={seedanceProOmniFileRef}
                     type="file"
                     accept={SEEDANCE_PRO_OMNI_FILE_ACCEPT}
+                    multiple
                     className="hidden"
                     onChange={onSeedanceProOmniFileChange}
                   />

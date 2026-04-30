@@ -1112,13 +1112,15 @@ function WorkflowReactFlowChrome({
 
   const onUploadFileChange = useCallback(
     (e: ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
+      const files = Array.from(e.target.files ?? []);
       e.target.value = "";
-      if (!file) {
+      if (!files.length) {
         updatePendingImageRefConnect(null);
         return;
       }
-      addImageNodeFromFile(file);
+      for (const file of files) {
+        addImageNodeFromFile(file);
+      }
     },
     [addImageNodeFromFile, updatePendingImageRefConnect],
   );
@@ -1232,6 +1234,7 @@ function WorkflowReactFlowChrome({
         ref={uploadInputRef}
         type="file"
         accept="image/*,video/*"
+        multiple
         className="hidden"
         onChange={onUploadFileChange}
       />
@@ -4067,6 +4070,8 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
   const lastSavedPreviewRef = useRef<string | undefined>(undefined);
   const lastCloudUpdatedAtRef = useRef<string | null>(null);
   const cloudConflictToastAtRef = useRef(0);
+  const skipNextCloudSaveRef = useRef(false);
+  const skipNextLocalSaveRef = useRef(false);
   const runHistoryStorageKey = useMemo(
     () => `youry-workflow-run-history-v1:${resolvedSpaceId}`,
     [resolvedSpaceId],
@@ -4179,6 +4184,10 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
             previewDataUrl: cloud.previewDataUrl ?? undefined,
             publishedCommunityTemplateId: cloud.publishedCommunityTemplateId ?? undefined,
           });
+          // Hydration already saved everything — skip the reactive save effects that
+          // fire on the initial workflowProject assignment to avoid a timestamp bump.
+          skipNextCloudSaveRef.current = true;
+          skipNextLocalSaveRef.current = true;
           toast.message("Loaded latest cloud changes", {
             description: "A newer version from another device replaced the local draft.",
           });
@@ -4189,6 +4198,9 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
           setSpaceName(localMeta.name);
           setPublishedTemplateId(localMeta.publishedCommunityTemplateId ?? null);
           setWorkflowProject(localProject);
+          // Project is already persisted in localStorage — skip the reactive local-save
+          // that would otherwise call touchSpaceUpdated and bump updatedAt to Date.now().
+          skipNextLocalSaveRef.current = true;
         }
         loadRunHistory();
         setWorkflowHydrated(true);
@@ -4217,6 +4229,8 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
       setSpaceName(cloud.name || "Untitled workflow");
       setPublishedTemplateId(cloud.publishedCommunityTemplateId ?? null);
       setWorkflowProject(cloud.state);
+      // Loaded fresh from cloud — no need to push it straight back.
+      skipNextCloudSaveRef.current = true;
       loadRunHistory();
       setWorkflowHydrated(true);
     })();
@@ -4229,6 +4243,10 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
   useEffect(() => {
     if (!workflowHydrated || storageScope === null) return;
     if (spaceSource === "local") {
+      if (skipNextLocalSaveRef.current) {
+        skipNextLocalSaveRef.current = false;
+        return;
+      }
       saveProjectForSpace(storageScope, resolvedSpaceId, workflowProject);
     }
   }, [workflowHydrated, storageScope, resolvedSpaceId, workflowProject, spaceSource]);
@@ -4246,8 +4264,21 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
     if (!authUserId) return;
     if (spaceSource === "shared" && spaceRole === "viewer") return;
 
+    if (skipNextCloudSaveRef.current) {
+      skipNextCloudSaveRef.current = false;
+      return;
+    }
+
     const t = window.setTimeout(() => {
       void (async () => {
+        // If the initial cloud fetch failed (null ref), fetch now so we can send a
+        // valid expectedUpdatedAt and avoid a false-conflict 409.
+        if (lastCloudUpdatedAtRef.current === null) {
+          const prefetch = await fetchCloudWorkflowSpace(resolvedSpaceId);
+          if (prefetch?.updatedAt) {
+            lastCloudUpdatedAtRef.current = prefetch.updatedAt;
+          }
+        }
         const res = await saveCloudWorkflowSpace({
           spaceId: resolvedSpaceId,
           name: spaceName,
@@ -4301,9 +4332,12 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
         lastCloudUpdatedAtRef.current = cloud.updatedAt;
         setSpaceName(cloud.name || "Untitled workflow");
         setPublishedTemplateId(cloud.publishedCommunityTemplateId ?? null);
+        // Prevent the reactive save effects from re-saving what we just fetched.
+        skipNextCloudSaveRef.current = true;
         setWorkflowProject(cloud.state);
 
         if (spaceSource === "local") {
+          skipNextLocalSaveRef.current = true;
           saveProjectForSpace(storageScope, resolvedSpaceId, cloud.state);
           updateSpaceMeta(storageScope, resolvedSpaceId, {
             name: cloud.name || undefined,

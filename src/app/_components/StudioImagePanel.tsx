@@ -238,6 +238,7 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
   const [refUploadBusy, setRefUploadBusy] = useState(false);
   const [refUploadPreviews, setRefUploadPreviews] = useState<{ id: string; blob: string }[]>([]);
   const [historyItems, setHistoryItems] = useState<StudioHistoryItem[]>([]);
+  const [historySourceFilter, setHistorySourceFilter] = useState<"all" | "workflow" | "studio">("all");
   /** null = unknown; true = Supabase + server poll; false = guest / local only */
   const [serverHistory, setServerHistory] = useState<boolean | null>(null);
   type ImageBilling =
@@ -400,6 +401,15 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
   );
 
   const displayHistoryItems = useMemo(() => dedupeStudioImageHistoryByMediaUrl(historyItems), [historyItems]);
+  const filteredDisplayHistoryItems = useMemo(
+    () =>
+      displayHistoryItems.filter((item) => {
+        if (historySourceFilter === "workflow") return item.workflowGenerated === true;
+        if (historySourceFilter === "studio") return item.workflowGenerated !== true;
+        return true;
+      }),
+    [displayHistoryItems, historySourceFilter],
+  );
 
   const dismissFailedHistoryItem = useCallback((id: string) => {
     setHistoryItems((prev) => prev.filter((i) => i.id !== id));
@@ -782,12 +792,56 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
       </div>
 
       <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col lg:min-h-0 lg:overflow-hidden">
+        <div className="mb-1 flex shrink-0 items-center justify-end gap-1.5 lg:mb-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            onClick={() => setHistorySourceFilter("all")}
+            className={cn(
+              "h-8 rounded-lg border px-2.5 text-[11px] font-medium",
+              historySourceFilter === "all"
+                ? "border-white/35 bg-white/15 text-white"
+                : "border-white/15 bg-white/5 text-white/75 hover:bg-white/10",
+            )}
+          >
+            All
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            onClick={() => setHistorySourceFilter("workflow")}
+            className={cn(
+              "h-8 rounded-lg border px-2.5 text-[11px] font-medium",
+              historySourceFilter === "workflow"
+                ? "border-violet-300/55 bg-violet-400/20 text-violet-100"
+                : "border-white/15 bg-white/5 text-white/75 hover:bg-white/10",
+            )}
+          >
+            Workflow
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            onClick={() => setHistorySourceFilter("studio")}
+            className={cn(
+              "h-8 rounded-lg border px-2.5 text-[11px] font-medium",
+              historySourceFilter === "studio"
+                ? "border-emerald-300/50 bg-emerald-400/20 text-emerald-100"
+                : "border-white/15 bg-white/5 text-white/75 hover:bg-white/10",
+            )}
+          >
+            Non-workflow
+          </Button>
+        </div>
         <StudioOutputPane
           title=""
           hasOutput
           output={
             <StudioGenerationsHistory
-              items={displayHistoryItems}
+              items={filteredDisplayHistoryItems}
               empty={<StudioEmptyExamples variant="image" />}
               mediaLabel="Image"
               failedAutoDismiss

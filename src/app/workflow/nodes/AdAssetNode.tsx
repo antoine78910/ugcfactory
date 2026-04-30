@@ -301,6 +301,7 @@ const WORKFLOW_ASSISTANT_CREDITS_BY_MODEL: Record<"claude-sonnet-4-5" | "gpt-5o"
 };
 const WORKFLOW_TEXT_INPUT_HANDLES = ["text", "in", "inText"] as const;
 const WORKFLOW_PENDING_MEDIA_PREFIX = "__workflow_pending_media__:";
+const WORKFLOW_ERROR_MEDIA_PREFIX = "__workflow_error_media__:";
 const WORKFLOW_PENDING_POLL_MS = 3500;
 
 type WorkflowPollHistoryItem = {
@@ -311,6 +312,34 @@ type WorkflowPollHistoryItem = {
   studioGenerationKind?: string;
   createdAt?: number;
 };
+
+function workflowMediaErrorToken(params: {
+  nodeId: string;
+  prompt: string;
+  kind: "image" | "video";
+  message: string;
+}): string {
+  try {
+    const payload = JSON.stringify({
+      nodeId: params.nodeId,
+      prompt: params.prompt,
+      kind: params.kind,
+      message: params.message,
+    });
+    return `${WORKFLOW_ERROR_MEDIA_PREFIX}${encodeURIComponent(payload)}`;
+  } catch {
+    const fallback = encodeURIComponent(params.message || `${params.kind} generation failed`);
+    return `${WORKFLOW_ERROR_MEDIA_PREFIX}${fallback}`;
+  }
+}
+
+function isWorkflowResolvedMediaLine(line: string): boolean {
+  const t = line.trim();
+  if (!t) return false;
+  if (t.startsWith(WORKFLOW_PENDING_MEDIA_PREFIX)) return false;
+  if (t.startsWith(WORKFLOW_ERROR_MEDIA_PREFIX)) return false;
+  return true;
+}
 
 /** Race window (ms) within which a freshly-started run is allowed to adopt a server-side workflow row that was created without a synced task id. */
 const WORKFLOW_RACE_RECOVERY_WINDOW_MS = 90_000;
@@ -588,6 +617,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   const [aspectMenuOpen, setAspectMenuOpen] = useState(false);
   const [promptFocused, setPromptFocused] = useState(false);
   const [promptEditorOpen, setPromptEditorOpen] = useState(false);
+  const [promptEditorDraft, setPromptEditorDraft] = useState("");
   const [titleEditing, setTitleEditing] = useState(false);
   const [titleDraft, setTitleDraft] = useState(data.label || cfg.title);
   const leaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1707,6 +1737,20 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   const hasLinkedGeneratorTextInput = isGeneratorNode && generatorTextInputWireCount > 0;
   const promptPreviewText = (data.lastRunPrompt ?? prompt).trim();
   const showPromptPreviewChip = hasPreviewMedia && promptPreviewText.length > 0;
+  const openPromptEditor = useCallback(() => {
+    const composedSeed = (() => {
+      if (data.kind !== "image" && data.kind !== "video" && data.kind !== "motion") {
+        return prompt;
+      }
+      const nodes = getNodes();
+      const edges = getEdges();
+      const linked = collectLinkedPromptTextsForHandles(nodes, edges, id, [...WORKFLOW_TEXT_INPUT_HANDLES]);
+      return composeWorkflowPrompt(prompt, linked);
+    })();
+    const seed = (data.lastRunPrompt ?? composedSeed ?? prompt).trim() || prompt;
+    setPromptEditorDraft(seed);
+    setPromptEditorOpen(true);
+  }, [data.kind, data.lastRunPrompt, getEdges, getNodes, id, prompt]);
 
   useEffect(() => {
     if (data.kind !== "video") return;
@@ -2124,7 +2168,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             refsForJob.length
           }, promptSample="${promptsForRun[0]?.trim().slice(0, 120) ?? ""}".`,
         );
-        const imageResults = await Promise.all(
+        const imageSettled = await Promise.allSettled(
           promptsForRun.map(async (p, idx) => {
             const { imageUrl } = await runWorkflowImageJob({
               planId,
@@ -2159,6 +2203,19 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             return imageUrl;
           }),
         );
+        const imageResultLines = promptsForRun.map((promptText, idx) => {
+          const row = imageSettled[idx];
+          if (row?.status === "fulfilled") return row.value.trim();
+          const raw = row?.status === "rejected" ? (row.reason instanceof Error ? row.reason.message : String(row.reason ?? "")) : "";
+          const msg = raw.trim() || "Image generation failed.";
+          return workflowMediaErrorToken({
+            nodeId: id,
+            prompt: promptText,
+            kind: "image",
+            message: msg,
+          });
+        });
+        const imageResults = imageResultLines.filter(isWorkflowResolvedMediaLine);
         const imageUrl =
           imageResults
             .map((u) => u.trim())
@@ -2170,27 +2227,41 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         });
         if (shouldBuildProgressList) {
           if (progressListId) {
-            finalizeProgressMediaList(progressListId, imageResults, imageResultsListLabel);
+            finalizeProgressMediaList(progressListId, imageResultLines, imageResultsListLabel);
           }
-          toast.success(`Batch done (${imageResults.length})`, {
-            description: "Image list updated progressively during generation.",
-          });
+          const failedCount = imageResultLines.length - imageResults.length;
+          if (failedCount > 0) {
+            toast.message(`Batch done (${imageResults.length}/${imageResultLines.length})`, {
+              description: `${failedCount} item(s) failed. See list cards for Dismiss / Regenerate.`,
+            });
+          } else {
+            toast.success(`Batch done (${imageResults.length})`, {
+              description: "Image list updated progressively during generation.",
+            });
+          }
         } else if (fromPromptList && (batchPrompts?.length ?? 0) > 1 && nodeRef) {
           const existingListId = findLinkedWorkflowMediaResultsListId(nodes, edges, id, "image");
           if (existingListId) {
             patch(existingListId, {
               label: imageResultsListLabel,
-              lines: imageResults,
+              lines: imageResultLines,
               mode: "results",
               contentKind: "media",
             });
-            toast.success(`Batch done (${imageResults.length})`, {
-              description: "Connected image list was updated.",
-            });
+            const failedCount = imageResultLines.length - imageResults.length;
+            if (failedCount > 0) {
+              toast.message(`Batch done (${imageResults.length}/${imageResultLines.length})`, {
+                description: `${failedCount} item(s) failed. See list cards for Dismiss / Regenerate.`,
+              });
+            } else {
+              toast.success(`Batch done (${imageResults.length})`, {
+                description: "Connected image list was updated.",
+              });
+            }
           } else {
             const listNode = buildPromptListNode(
               { x: nodeRef.position.x + 380, y: nodeRef.position.y + 18 },
-              { label: "Image results", lines: imageResults, mode: "results" },
+              { label: "Image results", lines: imageResultLines, mode: "results" },
             );
             listNode.data = { ...listNode.data, contentKind: "media" };
             setNodes((prev) => [...prev, listNode]);
@@ -2205,15 +2276,33 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 style: { stroke: "rgba(167, 139, 250, 0.5)", strokeWidth: 2 },
               },
             ]);
-            toast.success(`Batch done (${imageResults.length})`, {
-              description: "A new List node was created with all generated image URLs.",
-            });
+            const failedCount = imageResultLines.length - imageResults.length;
+            if (failedCount > 0) {
+              toast.message(`Batch done (${imageResults.length}/${imageResultLines.length})`, {
+                description: `${failedCount} item(s) failed. See list cards for Dismiss / Regenerate.`,
+              });
+            } else {
+              toast.success(`Batch done (${imageResults.length})`, {
+                description: "A new List node was created with all generated image URLs.",
+              });
+            }
           }
         } else {
-          toast.success("Image ready");
+          if (imageResults.length === promptsForRun.length) {
+            toast.success("Image ready");
+          } else {
+            toast.error("Some images failed", {
+              description: "Check the connected list to dismiss or regenerate failed items.",
+            });
+          }
         }
-        ok = true;
-        emitRunLog("success", "Image generation finished.");
+        ok = imageResults.length === promptsForRun.length;
+        emitRunLog(
+          ok ? "success" : "error",
+          ok
+            ? "Image generation finished."
+            : `Image batch partial failure (${imageResults.length}/${promptsForRun.length} succeeded).`,
+        );
         setPendingWorkflowRun(null);
       } catch (e) {
         const { summary: msg, details } = detailedMessageFromCaughtError(e, "Image generation failed. Try again.");
@@ -2580,7 +2669,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         progressListId,
         listLabel: videoResultsListLabel,
       });
-      const videoResults = await Promise.all(
+      const videoSettled = await Promise.allSettled(
         promptsForRun.map(async (p, idx) => {
           const indexedStartFrame = pickByIndex(indexedStartImages, idx, startFrame);
           const indexedReferenceOnly = referenceOnly.filter((u) => u !== indexedStartFrame && u !== endFrame);
@@ -2627,6 +2716,19 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           return videoUrl;
         }),
       );
+      const videoResultLines = promptsForRun.map((promptText, idx) => {
+        const row = videoSettled[idx];
+        if (row?.status === "fulfilled") return row.value.trim();
+        const raw = row?.status === "rejected" ? (row.reason instanceof Error ? row.reason.message : String(row.reason ?? "")) : "";
+        const msg = raw.trim() || "Video generation failed.";
+        return workflowMediaErrorToken({
+          nodeId: id,
+          prompt: promptText,
+          kind: "video",
+          message: msg,
+        });
+      });
+      const videoResults = videoResultLines.filter(isWorkflowResolvedMediaLine);
       const videoUrl =
         videoResults
           .map((u) => u.trim())
@@ -2640,16 +2742,34 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       });
       if (shouldBuildProgressList) {
         if (progressListId) {
-          finalizeProgressMediaList(progressListId, videoResults, videoResultsListLabel);
+          finalizeProgressMediaList(progressListId, videoResultLines, videoResultsListLabel);
         }
-        toast.success(`Batch done (${videoResults.length})`, {
-          description: "Video list updated progressively during generation.",
-        });
+        const failedCount = videoResultLines.length - videoResults.length;
+        if (failedCount > 0) {
+          toast.message(`Batch done (${videoResults.length}/${videoResultLines.length})`, {
+            description: `${failedCount} item(s) failed. See list cards for Dismiss / Regenerate.`,
+          });
+        } else {
+          toast.success(`Batch done (${videoResults.length})`, {
+            description: "Video list updated progressively during generation.",
+          });
+        }
       } else {
-        toast.success("Video ready");
+        if (videoResults.length === promptsForRun.length) {
+          toast.success("Video ready");
+        } else {
+          toast.error("Some videos failed", {
+            description: "Check the connected list to dismiss or regenerate failed items.",
+          });
+        }
       }
-      ok = true;
-      emitRunLog("success", "Video generation finished.");
+      ok = videoResults.length === promptsForRun.length;
+      emitRunLog(
+        ok ? "success" : "error",
+        ok
+          ? "Video generation finished."
+          : `Video batch partial failure (${videoResults.length}/${promptsForRun.length} succeeded).`,
+      );
       setPendingWorkflowRun(null);
     } catch (e) {
       const { summary: msg, details } = detailedMessageFromCaughtError(e, "Video generation failed. Try again.");
@@ -3599,7 +3719,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 "inset-x-2 rounded-lg",
                 showEditLayer ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0",
               )}
-              onClick={() => setPromptEditorOpen(true)}
+              onClick={openPromptEditor}
               onPointerDown={(e) => e.stopPropagation()}
               title="Click to edit prompt"
             >
@@ -3949,15 +4069,18 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-white/65">Edit prompt</p>
                   <button
                     type="button"
-                    onClick={() => setPromptEditorOpen(false)}
+                    onClick={() => {
+                      patch(id, { prompt: promptEditorDraft });
+                      setPromptEditorOpen(false);
+                    }}
                     className="rounded-md px-2 py-1 text-[11px] text-white/60 transition hover:bg-white/10 hover:text-white"
                   >
                     Done
                   </button>
                 </div>
                 <textarea
-                  value={prompt}
-                  onChange={(e) => patch(id, { prompt: e.target.value })}
+                  value={promptEditorDraft}
+                  onChange={(e) => setPromptEditorDraft(e.target.value)}
                   placeholder={cfg.promptPlaceholder}
                   rows={data.kind === "video" ? 10 : 7}
                   onWheelCapture={keepWheelInsideScrollable}
