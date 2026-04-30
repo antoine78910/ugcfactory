@@ -172,15 +172,42 @@ export function cloneWorkflowSelection(
 
     for (const c of children) {
       const newId = idMap.get(c.id)!;
-      nodesToAdd.push({
+      const common = {
         id: newId,
-        type: c.type,
         parentId: newGid,
         extent: c.extent,
         position: { x: c.position.x, y: c.position.y },
-        data: structuredClone(c.data),
-        selected: false,
+        selected: false as const,
         zIndex: c.zIndex,
+      };
+      if (c.type === "adAsset") {
+        nodesToAdd.push({
+          ...common,
+          type: "adAsset",
+          data: structuredClone(c.data),
+        });
+        continue;
+      }
+      if (c.type === "imageRef") {
+        nodesToAdd.push({
+          ...common,
+          type: "imageRef",
+          data: structuredClone(c.data),
+        });
+        continue;
+      }
+      if (c.type === "textPrompt") {
+        nodesToAdd.push({
+          ...common,
+          type: "textPrompt",
+          data: structuredClone(c.data),
+        });
+        continue;
+      }
+      nodesToAdd.push({
+        ...common,
+        type: "promptList",
+        data: structuredClone(c.data),
       });
     }
   }
