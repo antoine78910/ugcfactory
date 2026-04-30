@@ -1072,6 +1072,20 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       [data.kind, id],
     ),
   );
+  /** Assistant: number of text wires connected to prompt handles (`text` / `in` / `inText`). */
+  const assistantTextInputWireCount = useStore(
+    useCallback(
+      (s) => {
+        if (data.kind !== "assistant") return 0;
+        return s.edges.filter((e) => {
+          if (e.target !== id) return false;
+          const h = e.targetHandle ?? "";
+          return WORKFLOW_TEXT_INPUT_HANDLES.includes(h as (typeof WORKFLOW_TEXT_INPUT_HANDLES)[number]);
+        }).length;
+      },
+      [data.kind, id],
+    ),
+  );
   /** Assistant: linked reference image URLs (for visual preview in card header). */
   const assistantLinkedReferencePreviewUrls = useStore(
     useCallback(
@@ -1712,7 +1726,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     const nodes = getNodes();
     const edges = getEdges();
     const linkedPrompts =
-      data.kind === "image" || data.kind === "video" || data.kind === "motion"
+      data.kind === "image" || data.kind === "video" || data.kind === "motion" || data.kind === "assistant"
         ? collectLinkedPromptTextsForHandles(nodes, edges, id, [...WORKFLOW_TEXT_INPUT_HANDLES])
         : collectLinkedPromptTexts(nodes, edges, id);
     const linkedAssistantImageRefs =
@@ -2997,6 +3011,15 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                     +{assistantLinkedReferencePreviewUrls.length - 3}
                   </span>
                 ) : null}
+              </div>
+            ) : null}
+            {assistantTextInputWireCount > 0 ? (
+              <div
+                className="inline-flex items-center gap-1 rounded-lg border border-violet-400/35 bg-violet-500/12 px-1.5 py-1 text-[10px] font-semibold text-violet-100"
+                title={`Connected text input${assistantTextInputWireCount > 1 ? "s" : ""} are included in the assistant prompt.`}
+              >
+                <Type className="h-3.5 w-3.5" strokeWidth={2} />
+                <span className="tabular-nums">{assistantTextInputWireCount}</span>
               </div>
             ) : null}
           </div>
