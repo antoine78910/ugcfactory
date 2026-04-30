@@ -9,11 +9,12 @@ import {
   isCheckoutGracePeriodActive,
   useCreditsPlanOptional,
 } from "@/app/_components/CreditsPlanContext";
+import { useSupabaseBrowserClient } from "@/lib/supabase/BrowserSupabaseProvider";
 import { isStudioToolPath } from "@/lib/studioPaths";
 import { toast } from "sonner";
 
 const CARD_INPUT_CLASS =
-  "h-14 w-full rounded-xl border border-white/15 bg-white/[0.06] px-4 py-3 text-[18px] text-white";
+  "h-12 w-full rounded-xl border border-white/15 bg-white/[0.06] px-3 py-2 text-[16px] text-white";
 
 type RecoveryIntentResponse = {
   data?: {
@@ -73,18 +74,18 @@ function PaymentRecoveryForm({
   }
 
   return (
-    <div className="mt-6 rounded-3xl border border-violet-400/30 bg-[#0d1018] p-5 sm:p-6">
-      <p className="text-xl font-bold text-white">Update your card to restore access</p>
-      <p className="mt-1 text-sm text-white/60">Secure payment via Stripe.</p>
+    <div className="mt-4 rounded-2xl border border-violet-400/30 bg-[#0d1018] p-4 sm:p-5">
+      <p className="text-lg font-bold text-white">Update your card to restore access</p>
+      <p className="mt-1 text-xs text-white/60">Secure payment via Stripe.</p>
 
-      <div className="mt-4 space-y-3">
+      <div className="mt-3 space-y-2.5">
         <div className={CARD_INPUT_CLASS}>
           <CardNumberElement
             options={{
               style: {
                 base: {
                   color: "#ffffff",
-                  fontSize: "20px",
+                  fontSize: "16px",
                   "::placeholder": { color: "rgba(255,255,255,0.4)" },
                 },
                 invalid: { color: "#f87171" },
@@ -98,7 +99,7 @@ function PaymentRecoveryForm({
               style: {
                 base: {
                   color: "#ffffff",
-                  fontSize: "20px",
+                  fontSize: "16px",
                   "::placeholder": { color: "rgba(255,255,255,0.4)" },
                 },
                 invalid: { color: "#f87171" },
@@ -112,7 +113,7 @@ function PaymentRecoveryForm({
               style: {
                 base: {
                   color: "#ffffff",
-                  fontSize: "20px",
+                  fontSize: "16px",
                   "::placeholder": { color: "rgba(255,255,255,0.4)" },
                 },
                 invalid: { color: "#f87171" },
@@ -126,7 +127,7 @@ function PaymentRecoveryForm({
         type="button"
         onClick={() => void handleSubmit()}
         disabled={submitting || !stripe || !elements}
-        className="mt-5 h-12 w-full rounded-xl border border-violet-200/40 bg-violet-400 text-base font-bold text-black shadow-[0_6px_0_0_rgba(76,29,149,0.9)] transition hover:-translate-y-[1px] hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9)] disabled:cursor-wait disabled:opacity-60"
+        className="mt-4 h-11 w-full rounded-xl border border-violet-200/40 bg-violet-400 text-sm font-bold text-black shadow-[0_5px_0_0_rgba(76,29,149,0.9)] transition hover:-translate-y-[1px] hover:bg-violet-300 hover:shadow-[0_7px_0_0_rgba(76,29,149,0.9)] disabled:cursor-wait disabled:opacity-60"
       >
         {submitting ? "Updating card..." : "Update Card"}
       </button>
@@ -141,11 +142,13 @@ function PaymentRecoveryForm({
 export function StudioAccessGuard() {
   const pathname = usePathname() ?? "";
   const router = useRouter();
+  const supabase = useSupabaseBrowserClient();
   const ctx = useCreditsPlanOptional();
   const [open, setOpen] = useState(false);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [stripePromise, setStripePromise] = useState<ReturnType<typeof loadStripe> | null>(null);
   const [loadingIntent, setLoadingIntent] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const paymentIssue = ctx?.paymentIssue ?? null;
   const cardLabel = useMemo(() => {
     if (!paymentIssue?.last4) return "your card";
@@ -189,17 +192,29 @@ export function StudioAccessGuard() {
     })();
   }, [open, paymentIssue, loadingIntent, clientSecret]);
 
+  async function handleLogout() {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    try {
+      if (supabase) await supabase.auth.signOut();
+    } catch {
+      // Always continue to auth page so users are not blocked in recovery modal.
+    } finally {
+      window.location.href = "/auth";
+    }
+  }
+
   if (!open || !paymentIssue) return null;
 
   return (
-    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60 p-4 backdrop-blur-[3px]">
-      <div className="w-full max-w-[620px] overflow-hidden rounded-2xl border border-violet-400/20 bg-[#0a0c14] text-white shadow-[0_24px_80px_rgba(0,0,0,0.55)]">
-        <div className="max-h-[82vh] overflow-y-auto p-6 sm:p-8">
-          <div className="rounded-xl border border-violet-400/20 bg-violet-500/10 p-4 sm:p-5">
-            <h2 className="text-2xl font-bold leading-tight text-white">
+    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60 p-3 backdrop-blur-[3px]">
+      <div className="w-full max-w-[560px] overflow-hidden rounded-2xl border border-violet-400/20 bg-[#0a0c14] text-white shadow-[0_24px_80px_rgba(0,0,0,0.55)]">
+        <div className="p-4 sm:p-5">
+          <div className="rounded-xl border border-violet-400/20 bg-violet-500/10 p-3.5 sm:p-4">
+            <h2 className="text-xl font-bold leading-tight text-white">
               Payment failed. Your account access is limited right now.
             </h2>
-            <p className="mt-3 text-lg leading-snug text-white/85">
+            <p className="mt-2 text-sm leading-snug text-white/85">
               We&apos;ve tried a number of times to charge {cardLabel}, but it just hasn&apos;t worked out.
               Add a valid card below to restart your subscription immediately.
             </p>
@@ -217,19 +232,18 @@ export function StudioAccessGuard() {
               />
             </Elements>
           ) : (
-            <div className="mt-6 rounded-3xl border border-violet-400/25 bg-[#0d1018] p-5 text-sm text-white/70">
+            <div className="mt-4 rounded-2xl border border-violet-400/25 bg-[#0d1018] p-4 text-sm text-white/70">
               {loadingIntent ? "Loading secure card form..." : "Could not load payment form. Please try again shortly."}
             </div>
           )}
 
           <button
             type="button"
-            onClick={() => {
-              window.location.href = "/auth";
-            }}
-            className="mt-6 h-11 w-full rounded-lg border border-white/10 bg-white/[0.05] text-base font-semibold text-white/70 transition hover:bg-white/[0.08] hover:text-white"
+            onClick={() => void handleLogout()}
+            disabled={loggingOut}
+            className="mt-4 h-10 w-full rounded-lg border border-white/10 bg-white/[0.05] text-sm font-semibold text-white/70 transition hover:bg-white/[0.08] hover:text-white"
           >
-            Logout
+            {loggingOut ? "Logging out..." : "Logout"}
           </button>
         </div>
       </div>
