@@ -52,6 +52,8 @@ import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
 import { uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
 import { STUDIO_IMAGE_FILE_ACCEPT } from "@/lib/studioUploadValidation";
 
+const STUDIO_IMAGE_REFERENCE_MAX = 12;
+
 const ASPECT_RATIOS_PRO = [
   "1:1",
   "9:16",
@@ -278,7 +280,7 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
           .filter((x): x is string => typeof x === "string")
           .map((u) => u.trim())
           .filter((u) => /^https?:\/\//i.test(u))
-          .slice(0, 14);
+          .slice(0, STUDIO_IMAGE_REFERENCE_MAX);
         setRefUrls(refs);
       }
     } catch {
@@ -521,7 +523,15 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
     input.onchange = async () => {
       const files = Array.from(input.files ?? []);
       if (!files.length) return;
-      const slice = files.slice(0, 8);
+      const remainingSlots = Math.max(0, STUDIO_IMAGE_REFERENCE_MAX - refUrls.length);
+      if (remainingSlots === 0) {
+        toast.message(`Maximum ${STUDIO_IMAGE_REFERENCE_MAX} reference images reached.`);
+        return;
+      }
+      const slice = files.slice(0, remainingSlots);
+      if (files.length > slice.length) {
+        toast.message(`Only ${slice.length} image(s) added (limit ${STUDIO_IMAGE_REFERENCE_MAX}).`);
+      }
       const pending = slice.map((f) => ({ id: crypto.randomUUID(), blob: URL.createObjectURL(f), file: f }));
       setRefUploadPreviews((prev) => [...prev, ...pending.map(({ id, blob }) => ({ id, blob }))]);
       setRefUploadBusy(true);
@@ -540,7 +550,7 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
           }
         }
         if (urls.length) {
-          setRefUrls((prev) => [...prev, ...urls].slice(0, 12));
+          setRefUrls((prev) => [...prev, ...urls].slice(0, STUDIO_IMAGE_REFERENCE_MAX));
           toast.success(`${urls.length} reference image(s) added`);
         }
       } finally {
@@ -548,11 +558,19 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
       }
     };
     input.click();
-  }, []);
+  }, [refUrls.length]);
 
   const onPasteRefs = useCallback(async (files: File[]) => {
     if (!files.length) return;
-    const slice = files.slice(0, 8);
+    const remainingSlots = Math.max(0, STUDIO_IMAGE_REFERENCE_MAX - refUrls.length);
+    if (remainingSlots === 0) {
+      toast.message(`Maximum ${STUDIO_IMAGE_REFERENCE_MAX} reference images reached.`);
+      return;
+    }
+    const slice = files.slice(0, remainingSlots);
+    if (files.length > slice.length) {
+      toast.message(`Only ${slice.length} pasted image(s) kept (limit ${STUDIO_IMAGE_REFERENCE_MAX}).`);
+    }
     const pending = slice.map((f) => ({ id: crypto.randomUUID(), blob: URL.createObjectURL(f), file: f }));
     setRefUploadPreviews((prev) => [...prev, ...pending.map(({ id, blob }) => ({ id, blob }))]);
     setRefUploadBusy(true);
@@ -571,13 +589,13 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
         }
       }
       if (urls.length) {
-        setRefUrls((prev) => [...prev, ...urls].slice(0, 12));
+        setRefUrls((prev) => [...prev, ...urls].slice(0, STUDIO_IMAGE_REFERENCE_MAX));
         toast.success(urls.length > 1 ? `${urls.length} reference images pasted` : "Reference image pasted");
       }
     } finally {
       setRefUploadBusy(false);
     }
-  }, []);
+  }, [refUrls.length]);
 
   useEffect(() => {
     const onPaste = (event: ClipboardEvent) => {

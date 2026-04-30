@@ -26,6 +26,8 @@ import { uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
 import { STUDIO_IMAGE_FILE_ACCEPT } from "@/lib/studioUploadValidation";
 import { cn } from "@/lib/utils";
 
+const AVATAR_REFERENCE_MAX = 12;
+
 const LS_AVATAR_HISTORY = "ugc_studio_avatar_history_v1";
 
 const AGE_OPTIONS = ["18-25", "25-35", "35-45", "45-55", "55+"] as const;
@@ -406,7 +408,15 @@ export default function StudioAvatarPanel({
     input.onchange = async () => {
       const files = Array.from(input.files ?? []);
       if (!files.length) return;
-      const slice = files.slice(0, 8);
+      const remainingSlots = Math.max(0, AVATAR_REFERENCE_MAX - avatar360RefUrls.length);
+      if (remainingSlots === 0) {
+        toast.message(`Maximum ${AVATAR_REFERENCE_MAX} reference images reached.`);
+        return;
+      }
+      const slice = files.slice(0, remainingSlots);
+      if (files.length > slice.length) {
+        toast.message(`Only ${slice.length} image(s) added (limit ${AVATAR_REFERENCE_MAX}).`);
+      }
       const pending = slice.map((f) => ({ id: crypto.randomUUID(), blob: URL.createObjectURL(f), file: f }));
       setAvatar360UploadPreviews((prev) => [...prev, ...pending.map(({ id, blob }) => ({ id, blob }))]);
       setAvatar360Uploading(true);
@@ -425,7 +435,7 @@ export default function StudioAvatarPanel({
           }
         }
         if (urls.length) {
-          setAvatar360RefUrls((prev) => [...prev, ...urls].slice(0, 12));
+          setAvatar360RefUrls((prev) => [...prev, ...urls].slice(0, AVATAR_REFERENCE_MAX));
           toast.success(`${urls.length} reference image(s) added`);
         }
       } finally {
@@ -433,7 +443,7 @@ export default function StudioAvatarPanel({
       }
     };
     input.click();
-  }, []);
+  }, [avatar360RefUrls.length]);
 
   const generateAvatar360Profile = useCallback(() => {
     if (serverHistory !== true) {
@@ -526,7 +536,7 @@ export default function StudioAvatarPanel({
     if (!u) return;
     setAvatar360RefUrls((prev) => {
       if (prev.includes(u)) return prev;
-      return [...prev, u].slice(0, 12);
+      return [...prev, u].slice(0, AVATAR_REFERENCE_MAX);
     });
     toast.success("Avatar reference added");
   }, []);
@@ -624,7 +634,7 @@ export default function StudioAvatarPanel({
             <div className="flex flex-col gap-3">
               <div className="flex items-center justify-between gap-2">
                 <Label className="text-[11px] font-semibold uppercase tracking-wide text-white/45">Reference photos</Label>
-                <span className="text-[10px] tabular-nums text-white/35">{avatar360RefUrls.length}/12</span>
+                <span className="text-[10px] tabular-nums text-white/35">{avatar360RefUrls.length}/{AVATAR_REFERENCE_MAX}</span>
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label className="text-[11px] font-semibold uppercase tracking-wide text-white/45">Model</Label>
@@ -655,7 +665,7 @@ export default function StudioAvatarPanel({
                 <AvatarInputCornerBadge
                   align="right"
                   className="!right-2 !top-2"
-                  disabled={isStartingAvatar360 || avatarUrls.length === 0 || avatar360RefUrls.length >= 12}
+                  disabled={isStartingAvatar360 || avatarUrls.length === 0 || avatar360RefUrls.length >= AVATAR_REFERENCE_MAX}
                   onClick={() => setAvatarPickerOpen(true)}
                 />
                 {avatar360RefUrls.length === 0 && avatar360UploadPreviews.length === 0 ? (
@@ -667,7 +677,7 @@ export default function StudioAvatarPanel({
                   >
                     <Plus className="h-4 w-4" />
                     Upload one or more avatar photos
-                    <span className="text-[10px] text-white/30">JPEG, PNG, WebP · up to 12</span>
+                    <span className="text-[10px] text-white/30">JPEG, PNG, WebP · up to {AVATAR_REFERENCE_MAX}</span>
                   </button>
                 ) : (
                   <div className="flex flex-wrap gap-2 rounded-xl border border-white/10 bg-white/[0.02] p-2 pt-8">
@@ -701,7 +711,7 @@ export default function StudioAvatarPanel({
                   ))}
                   <button
                     type="button"
-                    disabled={avatar360Uploading || isStartingAvatar360 || avatar360RefUrls.length >= 12}
+                    disabled={avatar360Uploading || isStartingAvatar360 || avatar360RefUrls.length >= AVATAR_REFERENCE_MAX}
                     onClick={onAddAvatar360Refs}
                     aria-label="Add more reference photos"
                     className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-dashed border-white/15 bg-white/[0.02] text-white/30 transition hover:border-violet-400/40 hover:text-violet-300 disabled:opacity-50"

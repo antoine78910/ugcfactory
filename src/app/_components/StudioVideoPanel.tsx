@@ -74,7 +74,6 @@ import {
   normalizePipelineByAngle,
   readUniverseFromExtracted,
 } from "@/lib/linkToAdUniverse";
-import { completeStudioTask, pollKlingVideo, pollVeoVideo } from "@/lib/studioKlingClientPoll";
 import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
 import { calculateVideoCredits } from "@/lib/linkToAd/generationCredits";
 import { calculateStudioVideoEditCredits } from "@/lib/pricing";
@@ -448,7 +447,6 @@ const SEEDANCE_PREVIEW_MODELS: VideoModelId[] = [
   "bytedance/seedance-2-preview",
   "bytedance/seedance-2-fast-preview",
 ];
-const SEEDANCE_PREVIEW_POLL_MAX_ROUNDS = Math.ceil((12 * 60 * 60 * 1000) / 4000);
 
 const MODEL_OPTIONS: { id: VideoModelId; label: string; family: VideoFamily }[] = [
   { id: "kling-3.0/video", label: "Kling 3.0", family: "kie" },
@@ -908,10 +906,6 @@ function videoHistoryAspectLabel(family: string, aspect: string, veoAspect: stri
   return aspect;
 }
 
-function isSeedancePreviewModelId(id: string): boolean {
-  return id === "bytedance/seedance-2-preview" || id === "bytedance/seedance-2-fast-preview";
-}
-
 /** Preview queue: VIP uses distinct `task_type` via `marketModel` on POST /api/kling/generate. */
 function seedancePreviewMarketModelForApi(pickerId: string, priority: VideoPriority): string {
   if (priority !== "vip") return pickerId;
@@ -1172,9 +1166,6 @@ export default function StudioVideoPanel({
     [],
   );
 
-  const retireInFlightJob = useCallback((_jobId: string, _doneId: string) => {
-    // no-op: time-based merge now handles optimistic retention
-  }, []);
   const grantCreditsRef = useRef(grantCredits);
   grantCreditsRef.current = grantCredits;
 
@@ -3362,32 +3353,9 @@ export default function StudioVideoPanel({
             ),
           );
           setIsEditStartingGeneration(false);
-          toast.message("Motion control started", { description: "Polling…" });
-          const url = await pollKlingVideo(json.taskId, editPKey, getPersonalPiapiApiKey() ?? undefined);
-          void completeStudioTask(json.taskId, url);
-          const doneAt = Date.now();
-          const doneId = `${jobId}-done-${doneAt}`;
-          retireInFlightJob(jobId, doneId);
-          setHistoryItems((prev) => {
-            const rest = prev.filter((i) => i.id !== jobId);
-            return [
-              {
-                id: doneId,
-                kind: "video",
-                status: "ready",
-                label,
-                mediaUrl: url,
-                posterUrl: snap.editMotionImageUrl ?? undefined,
-                createdAt: doneAt,
-                model: "motion_control",
-                modelLabel: "Motion control",
-                studioGenerationId: studioGenId,
-                aspectRatio: aspect,
-              },
-              ...rest,
-            ];
+          toast.message("Motion control started", {
+            description: "Running in backend. You can close the app.",
           });
-          toast.success("Video ready");
           return;
         }
 
@@ -3431,32 +3399,9 @@ export default function StudioVideoPanel({
           ),
         );
         setIsEditStartingGeneration(false);
-        toast.message("Edit started", { description: "Polling provider…" });
-        const url = await pollKlingVideo(json.taskId, editPKey, getPersonalPiapiApiKey() ?? undefined);
-        void completeStudioTask(json.taskId, url);
-        const doneAt = Date.now();
-        const doneId = `${jobId}-done-${doneAt}`;
-        retireInFlightJob(jobId, doneId);
-        setHistoryItems((prev) => {
-          const rest = prev.filter((i) => i.id !== jobId);
-          return [
-            {
-              id: doneId,
-              kind: "video",
-              status: "ready",
-              label,
-              mediaUrl: url,
-              posterUrl: snap.editElementUrls[0] ?? undefined,
-              createdAt: doneAt,
-              model: snap.editPickerId,
-              modelLabel: studioVideoEditPickerDisplayLabel(snap.editPickerId),
-              studioGenerationId: studioGenId,
-              aspectRatio: aspect,
-            },
-            ...rest,
-          ];
+        toast.message("Edit started", {
+          description: "Running in backend. You can close the app.",
         });
-        toast.success("Video ready");
       } catch (e) {
         const msg = userMessageFromCaughtError(e, "Something went wrong while generating. Please try again.");
         // Only refund immediately when no DB row was registered.
@@ -3761,43 +3706,8 @@ export default function StudioVideoPanel({
           setIsCreateStartingGeneration(false);
           toast.message(
             snap.modelId === "openai/sora-2-pro" ? "Sora 2 Pro started" : "Sora 2 started",
-            { description: "Rendering…" },
+            { description: "Running in backend. You can close the app." },
           );
-          const url = await pollKlingVideo(
-            json.taskId,
-            pKey,
-            piKey,
-            isSeedancePreviewModelId(snap.modelId)
-              ? {
-                  maxRounds: SEEDANCE_PREVIEW_POLL_MAX_ROUNDS,
-                  timeoutMessage: "Seedance Preview generation is still processing after 12 hours.",
-                }
-              : undefined,
-          );
-          void completeStudioTask(json.taskId, url);
-          const doneAt = Date.now();
-          const doneId = `${jobId}-done-${doneAt}`;
-          retireInFlightJob(jobId, doneId);
-          setHistoryItems((prev) => {
-            const rest = prev.filter((i) => i.id !== jobId);
-            return [
-              {
-                id: doneId,
-                kind: "video",
-                status: "ready",
-                label,
-                mediaUrl: url,
-                posterUrl: snap.startUrl ?? undefined,
-                createdAt: doneAt,
-                model: snap.modelId,
-                modelLabel: studioVideoDisplayLabel(snap.modelId),
-                studioGenerationId: studioGenId,
-                aspectRatio: snap.historyAspect,
-              },
-              ...rest,
-            ];
-          });
-          toast.success("Video ready");
           return;
         }
 
@@ -3845,32 +3755,9 @@ export default function StudioVideoPanel({
             ),
           );
           setIsCreateStartingGeneration(false);
-          toast.message("Veo started", { description: "Rendering…" });
-          const url = await pollVeoVideo(json.taskId, pKey);
-          void completeStudioTask(json.taskId, url);
-          const doneAt = Date.now();
-          const doneId = `${jobId}-done-${doneAt}`;
-          retireInFlightJob(jobId, doneId);
-          setHistoryItems((prev) => {
-            const rest = prev.filter((i) => i.id !== jobId);
-            return [
-              {
-                id: doneId,
-                kind: "video",
-                status: "ready",
-                label,
-                mediaUrl: url,
-                posterUrl: snap.startUrl ?? undefined,
-                createdAt: doneAt,
-                model: snap.modelId,
-                modelLabel: studioVideoDisplayLabel(snap.modelId),
-                studioGenerationId: studioGenId,
-                aspectRatio: snap.historyAspect,
-              },
-              ...rest,
-            ];
+          toast.message("Veo started", {
+            description: "Running in backend. You can close the app.",
           });
-          toast.success("Video ready");
           return;
         }
 
@@ -3965,47 +3852,9 @@ export default function StudioVideoPanel({
           ),
         );
         setIsCreateStartingGeneration(false);
-        toast.message("Generation started", { description: "Polling provider…" });
-        const url = await pollKlingVideo(
-          json.taskId,
-          pKey,
-          piKey,
-          isSeedancePreviewModelId(snap.modelId)
-            ? {
-                maxRounds: SEEDANCE_PREVIEW_POLL_MAX_ROUNDS,
-                timeoutMessage: "Seedance Preview generation is still processing after 12 hours.",
-              }
-            : undefined,
-        );
-        void completeStudioTask(json.taskId, url);
-        const doneAt = Date.now();
-        const doneId = `${jobId}-done-${doneAt}`;
-        retireInFlightJob(jobId, doneId);
-        setHistoryItems((prev) => {
-          const rest = prev.filter((i) => i.id !== jobId);
-          return [
-            {
-              id: doneId,
-              kind: "video",
-              status: "ready",
-              label,
-              mediaUrl: url,
-              posterUrl:
-                snap.seedanceOmniMedia?.find((x) => x.type === "image")?.url ??
-                snap.seedanceOmniMedia?.[0]?.url ??
-                snap.seedanceCompactRefUrls?.[0] ??
-                snap.startUrl ??
-                undefined,
-              createdAt: doneAt,
-              model: snap.modelId,
-              modelLabel: studioVideoDisplayLabel(snap.modelId),
-              studioGenerationId: studioGenId,
-              aspectRatio: snap.historyAspect,
-            },
-            ...rest,
-          ];
+        toast.message("Generation started", {
+          description: "Running in backend. You can close the app.",
         });
-        toast.success("Video ready");
       } catch (e) {
         const msg = userMessageFromCaughtError(e, "Something went wrong while generating. Please try again.");
         // Only refund immediately when no DB row was registered.
