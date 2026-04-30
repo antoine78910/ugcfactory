@@ -24,6 +24,12 @@ function cloneGroupLabel(label: string): string {
   return t.endsWith("(copy)") ? t : `${t} (copy)`;
 }
 
+function isGroupCloneableChildNode(
+  n: WorkflowCanvasNode,
+): n is AdAssetNodeType | ImageRefNodeType | TextPromptNodeType | PromptListNodeType {
+  return n.type === "adAsset" || n.type === "imageRef" || n.type === "textPrompt" || n.type === "promptList";
+}
+
 /**
  * Node refs that belong to the current selection (same rules as duplicate / cut).
  * Groups include all child generators from the graph; loose generators skip children of selected groups.
@@ -47,7 +53,8 @@ export function collectWorkflowSelectionNodeRefs(
       addedIds.add(groupNode.id);
     }
     const children = allNodes.filter(
-      (n): n is AdAssetNodeType => n.type === "adAsset" && n.parentId === groupNode.id,
+      (n): n is AdAssetNodeType | ImageRefNodeType | TextPromptNodeType | PromptListNodeType =>
+        n.parentId === groupNode.id && isGroupCloneableChildNode(n),
     );
     for (const c of children) {
       if (!addedIds.has(c.id)) {
@@ -141,7 +148,8 @@ export function cloneWorkflowSelection(
     idMap.set(oldGid, newGid);
 
     const children = allNodes.filter(
-      (n): n is AdAssetNodeType => n.type === "adAsset" && n.parentId === oldGid,
+      (n): n is AdAssetNodeType | ImageRefNodeType | TextPromptNodeType | PromptListNodeType =>
+        n.parentId === oldGid && isGroupCloneableChildNode(n),
     );
     for (const c of children) {
       idMap.set(c.id, crypto.randomUUID());
@@ -166,12 +174,13 @@ export function cloneWorkflowSelection(
       const newId = idMap.get(c.id)!;
       nodesToAdd.push({
         id: newId,
-        type: "adAsset",
+        type: c.type,
         parentId: newGid,
-        extent: "parent",
+        extent: c.extent,
         position: { x: c.position.x, y: c.position.y },
         data: structuredClone(c.data),
         selected: false,
+        zIndex: c.zIndex,
       });
     }
   }
@@ -295,6 +304,7 @@ export function canCloneWorkflowSelection(selected: WorkflowCanvasNode[]): boole
       n.type === "adAsset" ||
       n.type === "imageRef" ||
       n.type === "stickyNote" ||
-      n.type === "textPrompt",
+      n.type === "textPrompt" ||
+      n.type === "promptList",
   );
 }
