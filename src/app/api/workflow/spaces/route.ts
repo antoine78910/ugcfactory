@@ -53,15 +53,34 @@ export async function GET() {
     return NextResponse.json({ error: collabErr.message }, { status: 500 });
   }
 
-  const spaceIds = Array.from(new Set((collabRows ?? []).map((r) => r.space_id)));
-  if (spaceIds.length === 0) {
+  const collabSpaceIds = Array.from(new Set((collabRows ?? []).map((r) => r.space_id as string)));
+  const { data: ownedSpaceRows, error: ownedErr } = await admin
+    .from("workflow_spaces")
+    .select("id, name, preview_data_url, published_community_template_id, updated_at, created_by")
+    .eq("created_by", auth.user.id);
+
+  if (ownedErr) {
+    if (isMissingWorkflowSpacesInfra(ownedErr)) {
+      return NextResponse.json(
+        {
+          error:
+            "Workflow sharing storage is not enabled yet on this database. Run the latest Supabase migration (workflow_spaces), then retry.",
+        },
+        { status: 503 },
+      );
+    }
+    return NextResponse.json({ error: ownedErr.message }, { status: 500 });
+  }
+
+  const allSpaceIds = Array.from(new Set([...collabSpaceIds, ...(ownedSpaceRows ?? []).map((r) => r.id as string)]));
+  if (allSpaceIds.length === 0) {
     return NextResponse.json({ spaces: [] });
   }
 
   const { data: spaceRows, error: spaceErr } = await admin
     .from("workflow_spaces")
     .select("id, name, preview_data_url, published_community_template_id, updated_at, created_by")
-    .in("id", spaceIds);
+    .in("id", allSpaceIds);
 
   if (spaceErr) {
     if (isMissingWorkflowSpacesInfra(spaceErr)) {
@@ -101,9 +120,25 @@ export async function GET() {
     });
   }
 
+  const missingOwnerLinks = (spaceRows ?? [])
+    .filter((row) => row.created_by === auth.user.id && !roleBySpaceId.has(row.id as string))
+    .map((row) => row.id as string);
+  if (missingOwnerLinks.length > 0) {
+    const ownerLinks = missingOwnerLinks.map((spaceId) => ({
+      space_id: spaceId,
+      user_id: auth.user.id,
+      role: "owner",
+    }));
+    await admin.from("workflow_space_collaborators").upsert(ownerLinks, { onConflict: "space_id,user_id" });
+    for (const sid of missingOwnerLinks) {
+      roleBySpaceId.set(sid, { role: "owner", createdAt: new Date().toISOString() });
+    }
+  }
+
   const spaces = (spaceRows ?? []).map((row) => {
     const collab = roleBySpaceId.get(row.id as string);
     const owner = ownerById.get(row.created_by as string);
+    const isOwn = row.created_by === auth.user.id;
     return {
       id: row.id as string,
       name: (row.name as string) ?? "Untitled workflow",
@@ -111,11 +146,11 @@ export async function GET() {
       publishedCommunityTemplateId:
         (row.published_community_template_id as string | null) ?? null,
       updatedAt: row.updated_at as string,
-      role: collab?.role ?? "viewer",
+      role: collab?.role ?? (isOwn ? "owner" : "viewer"),
       ownerId: (row.created_by as string) ?? null,
       ownerName: owner?.name ?? null,
       ownerEmail: owner?.email ?? null,
-      isOwn: row.created_by === auth.user.id,
+      isOwn,
     };
   });
 
