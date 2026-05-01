@@ -13,11 +13,6 @@ type LinkToAdReference = {
   steps: string[];
 };
 
-type WorkflowReference = {
-  title: string;
-  assets: string;
-  notes: string;
-};
 
 const LINK_TO_AD_REFERENCES: LinkToAdReference[] = [
   {
@@ -39,19 +34,6 @@ const LINK_TO_AD_REFERENCES: LinkToAdReference[] = [
       "Step-by-step script mapping",
       "Filming guide and checkpoints",
     ],
-  },
-];
-
-const WORKFLOW_REFERENCES: WorkflowReference[] = [
-  {
-    title: "Workflow template · Product explainer UGC",
-    assets: "Images + videos downloadable",
-    notes: "Reusable path from angle research to final filming checklist.",
-  },
-  {
-    title: "Workflow template · Testimonial style ads",
-    assets: "B-roll + references downloadable",
-    notes: "Focus on trust sequence, pacing and claim proof order.",
   },
 ];
 
@@ -131,23 +113,14 @@ export default function ClippingPage() {
           <article className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
             <h2 className="text-base font-semibold text-white">Workflow (templates + downloads)</h2>
             <p className="mt-2 text-sm text-white/65">
-              Open workflow template copies and download supporting images/videos for production
-              prep. Navigation is read-only for clippers.
+              All workflow templates are accessible from clipping in read-only mode so clippers can
+              review the process and download supporting images/videos where available.
             </p>
-            <div className="mt-4 space-y-3">
-              {WORKFLOW_REFERENCES.map((reference) => (
-                <div key={reference.title} className="rounded-xl border border-white/10 bg-black/20 p-3">
-                  <p className="text-sm font-semibold text-white">{reference.title}</p>
-                  <p className="mt-1 text-xs text-white/65">{reference.assets}</p>
-                  <p className="mt-1 text-xs text-white/55">{reference.notes}</p>
-                </div>
-              ))}
-            </div>
             <Link
-              href="/workflow"
+              href="/clipping/workflow"
               className="mt-4 inline-flex items-center justify-center rounded-xl border border-white/15 bg-white/[0.03] px-4 py-2 text-xs font-semibold text-white/90 transition hover:bg-white/[0.08]"
             >
-              Open workflow copies
+              Open all workflow templates
             </Link>
           </article>
         </section>
