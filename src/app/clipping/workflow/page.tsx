@@ -50,7 +50,11 @@ export default function ClippingWorkflowTemplatesPage() {
           cache: "no-store",
         });
         if (!res.ok) {
-          if (mounted) setCommunityLoadFailed(true);
+          // This endpoint requires an authenticated user. When clippers are not
+          // signed in yet, we skip the warning to avoid a false alarm.
+          if (mounted && res.status !== 401 && res.status !== 403) {
+            setCommunityLoadFailed(true);
+          }
           return;
         }
         const json = (await res.json().catch(() => null)) as { templates?: unknown } | null;
