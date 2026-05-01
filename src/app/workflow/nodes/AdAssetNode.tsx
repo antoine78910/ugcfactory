@@ -1267,7 +1267,10 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           });
           if (candidates.length === 0) {
             raceRecoveryAttempts += 1;
-            if (Date.now() - updatedAt > WORKFLOW_RACE_RECOVERY_WINDOW_MS || raceRecoveryAttempts > 8) {
+            // Keep recovering for the full race-recovery window. Providers can
+            // acknowledge task ids late, so aborting after a fixed small poll
+            // count creates false "lost request" failures.
+            if (Date.now() - updatedAt > WORKFLOW_RACE_RECOVERY_WINDOW_MS) {
               setPendingWorkflowRun(null);
               setGenerating(false);
               const lostMsg =

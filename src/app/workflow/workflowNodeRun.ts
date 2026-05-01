@@ -1073,6 +1073,10 @@ export function workflowVideoModelSupportsElements(modelId: string): boolean {
 
 const SEEDANCE_PREVIEW_REF_LIMIT = 4;
 const SEEDANCE_PRO_REF_LIMIT = 12;
+const WORKFLOW_VIDEO_RETRY_ATTEMPTS = 4;
+const WORKFLOW_VIDEO_RETRY_BASE_DELAY_MS = 1200;
+const WORKFLOW_SEEDANCE_PREVIEW_PROMPT_MAX_CHARS = 1800;
+const WORKFLOW_VIDEO_LONG_PROMPT_MAX_CHARS = 3500;
 
 function dedupeKeepOrder(urls: string[]): string[] {
   const seen = new Set<string>();
@@ -1141,6 +1145,12 @@ function workflowVideoDebugContext(args: {
     `seedanceOmniImageRefs=${args.seedanceProImageUrls.length}`,
     `klingElements=${args.klingElementsCount}`,
   ].join(", ");
+}
+
+function compactWorkflowPromptForProvider(prompt: string, maxChars: number): string {
+  const compact = prompt.replace(/\s+/g, " ").trim();
+  if (compact.length <= maxChars) return compact;
+  return compact.slice(0, maxChars).trim();
 }
 
 export type WorkflowRunMotionControlParams = {
@@ -1419,36 +1429,42 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
     klingElementsCount: klingElements?.length ?? 0,
   });
 
-  const generatePayload = {
-    accountPlan: params.planId,
-    marketModel: marketModelForGenerate,
-    prompt: params.prompt,
-    imageUrl: seedancePreview || seedancePro ? undefined : startUrl ?? refUrls[0],
-    endImageUrl: seedancePreview || seedancePro ? undefined : endUrl,
-    seedancePreviewImageUrls:
-      seedancePreview && seedancePreviewImageUrls.length > 0 ? seedancePreviewImageUrls : undefined,
-    seedanceOmniMedia,
-    klingElements,
-    duration,
-    aspectRatio: aspectForApi,
-    sound:
-      modelId === "kling-3.0/video" || modelId === "kling-2.5-turbo/video" || modelId === "kling-2.6/video"
-        ? true
-        : undefined,
-    mode: isKling30 || isKling25Turbo || isKling26 || isSoraPicker ? quality : undefined,
-    multiShots: isKling30 ? false : undefined,
-    personalApiKey: pKey,
-    piapiApiKey: piKey,
-  };
+  const providerPromptMaxChars = seedancePreview
+    ? WORKFLOW_SEEDANCE_PREVIEW_PROMPT_MAX_CHARS
+    : WORKFLOW_VIDEO_LONG_PROMPT_MAX_CHARS;
+  const compactPrompt = compactWorkflowPromptForProvider(params.prompt, providerPromptMaxChars);
+  const useCompactPromptRetry = compactPrompt.length > 0 && compactPrompt !== params.prompt.trim();
 
   /**
    * Retry once on transient provider failures (PiAPI Seedance 502, KIE timeouts) so the
    * workflow does not surface a hard error every time the upstream service hiccups.
    */
-  const MAX_GENERATE_ATTEMPTS = 2;
   let genJson: { taskId?: string; provider?: string; error?: string } | undefined;
   let lastStatus = 0;
-  for (let attempt = 0; attempt < MAX_GENERATE_ATTEMPTS; attempt++) {
+  for (let attempt = 0; attempt < WORKFLOW_VIDEO_RETRY_ATTEMPTS; attempt++) {
+    const promptForAttempt =
+      attempt > 0 && useCompactPromptRetry ? compactPrompt : params.prompt;
+    const generatePayload = {
+      accountPlan: params.planId,
+      marketModel: marketModelForGenerate,
+      prompt: promptForAttempt,
+      imageUrl: seedancePreview || seedancePro ? undefined : startUrl ?? refUrls[0],
+      endImageUrl: seedancePreview || seedancePro ? undefined : endUrl,
+      seedancePreviewImageUrls:
+        seedancePreview && seedancePreviewImageUrls.length > 0 ? seedancePreviewImageUrls : undefined,
+      seedanceOmniMedia,
+      klingElements,
+      duration,
+      aspectRatio: aspectForApi,
+      sound:
+        modelId === "kling-3.0/video" || modelId === "kling-2.5-turbo/video" || modelId === "kling-2.6/video"
+          ? true
+          : undefined,
+      mode: isKling30 || isKling25Turbo || isKling26 || isSoraPicker ? quality : undefined,
+      multiShots: isKling30 ? false : undefined,
+      personalApiKey: pKey,
+      piapiApiKey: piKey,
+    };
     const genRes = await fetch("/api/kling/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1470,6 +1486,7 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
       console.error("[workflow.video] /api/kling/generate failed", {
         status: genRes.status,
         attempt,
+        compactPromptRetry: attempt > 0 && useCompactPromptRetry,
         error: genJson.error,
         modelId,
         marketModel: marketModelForGenerate,
@@ -1482,7 +1499,7 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
       genRes.status === 503 ||
       genRes.status === 504 ||
       /timeout|timed out|aborted|temporar|try again|gateway|fetch failed|network/.test(errLower);
-    if (!transient || attempt >= MAX_GENERATE_ATTEMPTS - 1) {
+    if (!transient || attempt >= WORKFLOW_VIDEO_RETRY_ATTEMPTS - 1) {
       const rawErr = (genJson.error ?? "").trim();
       const tooGeneric =
         !rawErr ||
@@ -1494,7 +1511,9 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
         : rawErr;
       throw new Error(`${summary} [${debugContext}]`);
     }
-    await new Promise((r) => setTimeout(r, 800 + attempt * 600));
+    await new Promise((r) =>
+      setTimeout(r, WORKFLOW_VIDEO_RETRY_BASE_DELAY_MS + attempt * WORKFLOW_VIDEO_RETRY_BASE_DELAY_MS),
+    );
   }
   if (!genJson?.taskId) {
     const rawErr = (genJson?.error ?? "").trim();
