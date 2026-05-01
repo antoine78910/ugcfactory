@@ -61,7 +61,7 @@ export default function ClippingTemplatePage({
               <p className="mt-2 text-sm leading-relaxed text-white/65">{template.description}</p>
               <div className="mt-5 flex items-center gap-2">
                 <Link
-                  href={`/clipping?template=${encodeURIComponent(template.id)}${clipSuffix}`}
+                  href={`/clipping/studio?template=${encodeURIComponent(template.id)}${clipSuffix}`}
                   className="inline-flex items-center justify-center rounded-xl bg-violet-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-violet-500"
                 >
                   Use this template
@@ -73,7 +73,7 @@ export default function ClippingTemplatePage({
 
         <div>
           <Link
-            href={clipId ? `/clipping?id=${encodeURIComponent(clipId)}` : "/clipping"}
+            href={clipId ? `/clipping/studio?id=${encodeURIComponent(clipId)}` : "/clipping/studio"}
             className="inline-flex items-center rounded-xl border border-white/15 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/85 transition hover:bg-white/[0.08]"
           >
             Back to clipping studio

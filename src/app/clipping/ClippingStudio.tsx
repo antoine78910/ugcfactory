@@ -872,6 +872,12 @@ export default function ClippingStudio() {
             >
               Change template
             </Link>
+            <Link
+              href={clipId ? `/clipping?id=${encodeURIComponent(clipId)}` : "/clipping"}
+              className="inline-flex items-center rounded-xl border border-white/15 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/85 transition hover:bg-white/[0.08]"
+            >
+              Back to tools
+            </Link>
             {stage === "done" && exportedUrl ? (
               <a
                 href={exportedUrl}
