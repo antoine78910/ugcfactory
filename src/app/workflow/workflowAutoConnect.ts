@@ -39,6 +39,18 @@ function dist(a: { x: number; y: number }, b: { x: number; y: number }): number 
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
+/** Preset modules expect an explicit manual wire — skip drag-to-neighbor auto-link. */
+function isAutoConnectExcludedTarget(node: Node): boolean {
+  if (node.type !== "adAsset") return false;
+  const data = node.data as {
+    imageWorkflowPreset?: string;
+    assistantVisionPreset?: string;
+  };
+  return (
+    data.imageWorkflowPreset === "profile_360" || data.assistantVisionPreset === "image_to_json"
+  );
+}
+
 /**
  * When a generator node is dropped near another (left/right handles aligned in flow space),
  * returns a directed edge source → target to create.
@@ -70,12 +82,20 @@ export function suggestAutoConnectAfterNodeDrag(
     if (!oAnchors) continue;
 
     const upstreamToDragged = dist(oAnchors.right, dAnchors.left);
-    if (upstreamToDragged < snapFlow && (!best || upstreamToDragged < best.d)) {
+    if (
+      upstreamToDragged < snapFlow &&
+      !isAutoConnectExcludedTarget(dragged) &&
+      (!best || upstreamToDragged < best.d)
+    ) {
       best = { source: o.id, target: draggedId, d: upstreamToDragged };
     }
 
     const draggedToDownstream = dist(dAnchors.right, oAnchors.left);
-    if (draggedToDownstream < snapFlow && (!best || draggedToDownstream < best.d)) {
+    if (
+      draggedToDownstream < snapFlow &&
+      !isAutoConnectExcludedTarget(o) &&
+      (!best || draggedToDownstream < best.d)
+    ) {
       best = { source: draggedId, target: o.id, d: draggedToDownstream };
     }
   }

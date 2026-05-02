@@ -7,7 +7,11 @@ import type { PromptListNodeType } from "./workflowPromptListTypes";
 import type { StickyNoteNodeType } from "./workflowStickyNoteTypes";
 import type { WorkflowGroupNodeType } from "./nodes/WorkflowGroupNode";
 import type { WorkflowCanvasNode } from "./workflowFlowTypes";
-import { collectWorkflowSelectionNodeRefs, type CloneWorkflowResult } from "./workflowClone";
+import {
+  clonePortableImageRefData,
+  collectWorkflowSelectionNodeRefs,
+  type CloneWorkflowResult,
+} from "./workflowClone";
 
 export const WORKFLOW_CLIPBOARD_KIND = "ugc-workflow" as const;
 
@@ -120,15 +124,30 @@ export function remapPastedWorkflowPayload(payload: WorkflowClipboardPayloadV1):
     }
     if (n.type === "imageRef") {
       const r = n as ImageRefNodeType;
+      const mappedParent = r.parentId ? idMap.get(r.parentId) : undefined;
+      if (mappedParent) {
+        return {
+          ...r,
+          id: newId,
+          parentId: mappedParent,
+          extent: "parent" as const,
+          position: { ...r.position },
+          selected: false,
+          data: clonePortableImageRefData(r.data),
+          zIndex: r.zIndex,
+        } satisfies ImageRefNodeType;
+      }
       return {
         ...r,
         id: newId,
+        parentId: undefined,
+        extent: undefined,
         selected: false,
         position: {
           x: r.position.x + PASTE_DX,
           y: r.position.y + PASTE_DY,
         },
-        data: structuredClone(r.data),
+        data: clonePortableImageRefData(r.data),
         zIndex: r.zIndex,
       } satisfies ImageRefNodeType;
     }

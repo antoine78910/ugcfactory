@@ -1,7 +1,7 @@
 import type { Edge } from "@xyflow/react";
 
 import type { AdAssetNodeType } from "./nodes/AdAssetNode";
-import type { ImageRefNodeType } from "./nodes/ImageRefNode";
+import type { ImageRefNodeData, ImageRefNodeType } from "./nodes/ImageRefNode";
 import type { TextPromptNodeType } from "./nodes/TextPromptNode";
 import type { PromptListNodeType } from "./workflowPromptListTypes";
 import type { StickyNoteNodeType } from "./workflowStickyNoteTypes";
@@ -10,6 +10,15 @@ import type { WorkflowCanvasNode } from "./workflowFlowTypes";
 
 const DX = 48;
 const DY = 48;
+
+/** Safe copy of upload/reference node payload (fallback if `structuredClone` rejects). */
+export function clonePortableImageRefData(data: ImageRefNodeData): ImageRefNodeData {
+  try {
+    return structuredClone(data);
+  } catch {
+    return { ...data };
+  }
+}
 
 export type CloneWorkflowResult = {
   nodesToAdd: WorkflowCanvasNode[];
@@ -89,6 +98,8 @@ export function collectWorkflowSelectionNodeRefs(
   const selectedImageRefs = selected.filter((n): n is ImageRefNodeType => n.type === "imageRef");
   for (const r of selectedImageRefs) {
     if (addedIds.has(r.id)) continue;
+    const parentId = r.parentId;
+    if (parentId && selectedGroupIds.has(parentId)) continue;
     const nodeRef = allNodes.find((x) => x.id === r.id) ?? r;
     if (!addedIds.has(nodeRef.id)) {
       out.push(nodeRef);
@@ -192,7 +203,7 @@ export function cloneWorkflowSelection(
         nodesToAdd.push({
           ...common,
           type: "imageRef",
-          data: structuredClone(c.data),
+          data: clonePortableImageRefData(c.data as ImageRefNodeData),
         });
         continue;
       }
@@ -258,17 +269,34 @@ export function cloneWorkflowSelection(
   for (const r of selectedImageRefs) {
     if (idMap.has(r.id)) continue;
 
+    const parentId = r.parentId;
+    if (parentId && selectedGroupIds.has(parentId)) continue;
+
     const newId = crypto.randomUUID();
     idMap.set(r.id, newId);
 
-    nodesToAdd.push({
-      id: newId,
-      type: "imageRef",
-      position: { x: r.position.x + DX, y: r.position.y + DY },
-      data: structuredClone(r.data),
-      selected: false,
-      zIndex: r.zIndex,
-    });
+    const data = clonePortableImageRefData(r.data);
+    nodesToAdd.push(
+      parentId
+        ? {
+            id: newId,
+            type: "imageRef",
+            parentId,
+            extent: "parent" as const,
+            position: { x: r.position.x + DX * 0.5, y: r.position.y + DY * 0.5 },
+            data,
+            selected: false,
+            zIndex: r.zIndex,
+          }
+        : {
+            id: newId,
+            type: "imageRef",
+            position: { x: r.position.x + DX, y: r.position.y + DY },
+            data,
+            selected: false,
+            zIndex: r.zIndex,
+          },
+    );
     selectIds.push(newId);
   }
 

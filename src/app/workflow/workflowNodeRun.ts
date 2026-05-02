@@ -1057,6 +1057,15 @@ export function workflowVideoModelHasEndFrame(modelId: string): boolean {
   return false;
 }
 
+/**
+ * True when another node's video output can wire into this generator's Start / End image ports (frame extraction).
+ * Models without those ports (e.g. references-only Seedance) cannot consume a chained full clip this way.
+ */
+export function workflowVideoGeneratorAcceptsUpstreamVideo(rawModel: string): boolean {
+  const modelId = resolveWorkflowVideoModelId(rawModel);
+  return workflowVideoModelHasStartFrame(modelId) || workflowVideoModelHasEndFrame(modelId);
+}
+
 /** True when the picker accepts extra reference images (Kling 3.0 elements / Seedance refs). */
 export function workflowVideoModelHasReferences(modelId: string): boolean {
   if (modelId === "kling-3.0/video") return true;

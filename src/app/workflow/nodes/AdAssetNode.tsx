@@ -5,6 +5,7 @@ import {
   Position,
   useReactFlow,
   useStore,
+  useStoreApi,
   useUpdateNodeInternals,
   type Edge,
   type Node,
@@ -286,7 +287,7 @@ const WEBSITE_OUTPUT_MODES: Array<{
   {
     value: "profile_360",
     label: "360° profile",
-    hint: "Image in → preset packshot out. Wire a product photo to the Images port (URL not used).",
+    hint: "Adds a preset Image Generator; you wire the source image (avatar, upload, or canvas image).",
   },
 ];
 
@@ -602,6 +603,7 @@ function outputFrameDimensions(ratio: string, intrinsicAspect?: number): { width
 export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) {
   const patch = useWorkflowNodePatch();
   const { getNodes, getEdges, setNodes, setEdges } = useReactFlow();
+  const storeApi = useStoreApi();
   const updateNodeInternals = useUpdateNodeInternals();
   const { planId, current: creditsBalance, spendCredits, grantCredits } = useCreditsPlan();
   const creditsRef = useRef(creditsBalance);
@@ -711,113 +713,14 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     },
     [id],
   );
-  const openOutputCreatePicker = useCallback(
-    (sourceHandleId: string, targetEl: HTMLElement) => {
-      const rect = targetEl.getBoundingClientRect();
-      window.dispatchEvent(
-        new CustomEvent("workflow:open-output-picker", {
-          detail: {
-            sourceNodeId: id,
-            sourceHandleId,
-            screenX: Math.round(rect.right + 10),
-            screenY: Math.round(rect.top + rect.height / 2),
-          },
-        }),
-      );
-    },
-    [id],
-  );
-
-  const handleOutputBubblePointerDown = useCallback(
-    (event: React.PointerEvent<HTMLElement>, sourceHandleId: string) => {
-      event.preventDefault();
-      event.stopPropagation();
-      const el = event.currentTarget;
-      const bubbleRect = el.getBoundingClientRect();
-      const anchorX = Math.round(bubbleRect.left + bubbleRect.width / 2);
-      const anchorY = Math.round(bubbleRect.top + bubbleRect.height / 2);
-      const startX = event.clientX;
-      const startY = event.clientY;
-      let moved = false;
-      let longPress = false;
-      const timer = window.setTimeout(() => {
-        longPress = true;
-      }, 280);
-
-      window.dispatchEvent(
-        new CustomEvent("workflow:output-bubble-preview", {
-          detail: {
-            sourceNodeId: id,
-            sourceHandleId,
-            anchorX,
-            anchorY,
-            screenX: Math.round(startX),
-            screenY: Math.round(startY),
-          },
-        }),
-      );
-
-      const cleanup = () => {
-        window.clearTimeout(timer);
-        window.removeEventListener("pointermove", onMove, true);
-        window.removeEventListener("pointerup", onUp, true);
-        window.removeEventListener("pointercancel", onCancel, true);
-        window.dispatchEvent(
-          new CustomEvent("workflow:output-bubble-preview", {
-            detail: { active: false },
-          }),
-        );
-      };
-
-      const onMove = (ev: PointerEvent) => {
-        if (Math.abs(ev.clientX - startX) > 2 || Math.abs(ev.clientY - startY) > 2) moved = true;
-        window.dispatchEvent(
-          new CustomEvent("workflow:output-bubble-preview", {
-            detail: {
-              sourceNodeId: id,
-              sourceHandleId,
-              anchorX,
-              anchorY,
-              screenX: Math.round(ev.clientX),
-              screenY: Math.round(ev.clientY),
-            },
-          }),
-        );
-      };
-
-      const onCancel = () => cleanup();
-      const onUp = (ev: PointerEvent) => {
-        cleanup();
-        if (longPress || moved) {
-          window.dispatchEvent(
-            new CustomEvent("workflow:output-bubble-drop", {
-              detail: {
-                sourceNodeId: id,
-                sourceHandleId,
-                screenX: Math.round(ev.clientX),
-                screenY: Math.round(ev.clientY),
-              },
-            }),
-          );
-          return;
-        }
-        openOutputCreatePicker(sourceHandleId, el);
-      };
-
-      window.addEventListener("pointermove", onMove, true);
-      window.addEventListener("pointerup", onUp, true);
-      window.addEventListener("pointercancel", onCancel, true);
-    },
-    [id, openOutputCreatePicker],
-  );
 
   const handleInputBubblePointerDown = useCallback(
     (
-      event: React.PointerEvent<HTMLButtonElement>,
+      event: React.PointerEvent<HTMLElement>,
       targetHandle: "text" | "references" | "startImage" | "endImage",
     ) => {
-      event.preventDefault();
-      event.stopPropagation();
+      // While dragging a connector, let React Flow own pointer handling so edges snap correctly.
+      if (storeApi.getState().connection.inProgress) return;
       const el = event.currentTarget;
       const bubbleRect = el.getBoundingClientRect();
       const anchorX = Math.round(bubbleRect.left + bubbleRect.width / 2);
@@ -899,7 +802,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       window.addEventListener("pointerup", onUp, true);
       window.addEventListener("pointercancel", onCancel, true);
     },
-    [openInputCreatePicker],
+    [openInputCreatePicker, storeApi],
   );
 
   const onExtractVideoFrame = useCallback(
@@ -1085,32 +988,36 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     useCallback((s) => s.edges.some((e) => e.source === id), [id]),
   );
 
-  /** Incoming image wires on start + references ports (aligned with Video Generator handle ids). */
+  /** Incoming image wires (360° preset: references only — no dedicated start-frame row). */
   const imageReferenceWireCount = useStore(
     useCallback(
       (s) => {
         if (data.kind !== "image") return 0;
+        const profile360 = data.imageWorkflowPreset === "profile_360";
         return s.edges.filter((e) => {
           if (e.target !== id) return false;
           const h = e.targetHandle ?? "";
+          if (profile360) return h === "references" || h === "inImage";
           return h === "references" || h === "startImage" || h === "inImage";
         }).length;
       },
-      [data.kind, id],
+      [data.kind, data.imageWorkflowPreset, id],
     ),
   );
-  /** Assistant: number of image wires connected to `references`. */
+  /** Assistant: image wires on reference ports (`references`/`inImage`; Image → JSON skips `startImage`). */
   const assistantReferenceWireCount = useStore(
     useCallback(
       (s) => {
         if (data.kind !== "assistant") return 0;
+        const imageToJsonOnlyRefs = data.assistantVisionPreset === "image_to_json";
         return s.edges.filter((e) => {
           if (e.target !== id) return false;
           const h = e.targetHandle ?? "";
+          if (imageToJsonOnlyRefs) return h === "references" || h === "inImage";
           return h === "references" || h === "startImage" || h === "inImage";
         }).length;
       },
-      [data.kind, id],
+      [data.assistantVisionPreset, data.kind, id],
     ),
   );
   /** Assistant: number of text wires connected to prompt handles (`text` / `inText`). */
@@ -1132,13 +1039,18 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     useCallback(
       (s) => {
         if (data.kind !== "assistant") return [] as string[];
+        const imageToJsonOnlyRefs = data.assistantVisionPreset === "image_to_json";
         const byId = new Map(s.nodes.map((n) => [n.id, n]));
         const out: string[] = [];
         const seen = new Set<string>();
         for (const e of s.edges) {
           if (e.target !== id) continue;
           const h = e.targetHandle ?? "";
-          if (h !== "references" && h !== "startImage" && h !== "inImage") continue;
+          if (imageToJsonOnlyRefs) {
+            if (h !== "references" && h !== "inImage") continue;
+          } else if (h !== "references" && h !== "startImage" && h !== "inImage") {
+            continue;
+          }
           const src = byId.get(e.source);
           if (!src) continue;
           if (src.type === "imageRef") {
@@ -1162,7 +1074,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         }
         return out;
       },
-      [data.kind, id],
+      [data.assistantVisionPreset, data.kind, id],
     ),
   );
 
@@ -1432,13 +1344,19 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   const cardWidthPx = frame.width + CARD_PAD_X_PX;
 
   /**
-   * Cover the port shell (a plain `div`, not a `<button>`) so React Flow's handle bounds match the visible circle.
-   * Native buttons can report inconsistent layout/offset sizes for absolutely positioned children.
-   * Override `.react-flow__handle-left` transforms so positioning stays a simple inset box.
+   * Target handles: mirror the OUTPUT bubble pattern (`TextPromptNode`, image/video out column).
+   * Full-size invisible handle stacked above pointer-events-none icon so React Flow can snap wires.
+   * Do not overlay a `<button>` here — it blocks handle hit-testing.
    */
-  /** Fixed 32×32 so `offsetHeight`/`offsetWidth` always match the bubble (RF uses them for the anchor). Avoid `min-h-0` which can collapse in some layouts. */
-  const workflowPortTargetHandleClass =
-    "nodrag nopan !absolute !left-0 !top-0 !box-border !h-8 !w-8 !min-h-8 !min-w-8 !max-h-8 !max-w-8 !rounded-full !border-0 !bg-transparent opacity-0 !transform-none";
+  const workflowPortTargetBubbleHandleClass =
+    "nodrag nopan !absolute !inset-0 !z-[2] !box-border !h-8 !w-8 !min-h-8 !min-w-8 !max-h-8 !max-w-8 !rounded-full !border-0 !bg-transparent opacity-0 !transform-none";
+
+  /** When two logical handles share one circular shell, split hit targets (avoid same-bbox overlap bugs). */
+  const workflowPortTargetBubbleHandleLeftHalfClass =
+    "nodrag nopan !absolute !left-0 !top-0 !z-[2] !box-border !h-8 !w-4 !min-h-8 !min-w-4 !max-h-8 !max-w-4 rounded-l-full !border-0 !bg-transparent opacity-0 !transform-none";
+
+  const workflowPortTargetBubbleHandleRightHalfClass =
+    "nodrag nopan !absolute !left-4 !top-0 !z-[2] !box-border !h-8 !w-4 !min-h-8 !min-w-4 !max-h-8 !max-w-4 rounded-r-full !border-0 !bg-transparent opacity-0 !transform-none";
 
   /**
    * Outer ring for input/output ports. Matches `TextPromptNode` / `ImageRefNode` /
@@ -1449,8 +1367,8 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   const workflowPortBubbleShellClass =
     "workflow-port-create-cursor relative h-8 w-8 shrink-0 rounded-full border border-white/15 bg-[#15151a]/95 transition";
 
-  const workflowPortBubbleHitClass =
-    "workflow-port-create-cursor nodrag nopan absolute inset-0 z-[1] flex cursor-crosshair items-center justify-center rounded-full border-0 bg-transparent p-0 shadow-none outline-none ring-0 text-white/85";
+  const workflowPortBubbleIconClass =
+    "pointer-events-none absolute inset-0 z-[1] flex cursor-crosshair items-center justify-center text-white/85";
 
   /** Invisible full-bubble overlay for source ports on the right column (ids: `generated`, `videoFirst`, `videoLast`). */
   const workflowPortSourceBubbleHandleClass =
@@ -1801,7 +1719,14 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           : collectLinkedPromptTexts(nodes, edges, id);
     const linkedAssistantImageRefs =
       data.kind === "assistant"
-        ? collectLinkedImageUrlsForHandles(nodes, edges, id, ["references", "startImage", "inImage"])
+        ? collectLinkedImageUrlsForHandles(
+            nodes,
+            edges,
+            id,
+            data.assistantVisionPreset === "image_to_json"
+              ? ["references", "inImage"]
+              : ["references", "startImage", "inImage"],
+          )
         : [];
     const effectivePrompt = profile360Preset ? PROFILE_360_IMAGE_PROMPT : composeWorkflowPrompt(prompt, linkedPrompts);
     const batchContext =
@@ -2984,24 +2909,14 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                   id="references"
                   type="target"
                   position={Position.Left}
-                  className={workflowPortTargetHandleClass}
+                  className={workflowPortTargetBubbleHandleClass}
                   aria-label="Website 360° image input"
-                />
-                <Handle
-                  id="inImage"
-                  type="target"
-                  position={Position.Left}
-                  className={workflowPortTargetHandleClass}
-                  aria-label="Alternate website reference images port"
-                />
-                <button
-                  type="button"
+                  title="Connect a product shot, avatar, or image reference to run the 360° preset."
                   onPointerDown={(e) => handleInputBubblePointerDown(e, "references")}
-                  title="Product image for 360° profile branch."
-                  className={workflowPortBubbleHitClass}
-                >
+                />
+                <span className={workflowPortBubbleIconClass} aria-hidden>
                   <Images className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-                </button>
+                </span>
               </div>
             </div>
           ) : (
@@ -3011,24 +2926,25 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                   id="text"
                   type="target"
                   position={Position.Left}
-                  className={workflowPortTargetHandleClass}
+                  className={workflowPortTargetBubbleHandleLeftHalfClass}
                   aria-label="Website notes / prompt text input"
+                  onPointerDown={(e) => handleInputBubblePointerDown(e, "text")}
                 />
                 <Handle
                   id="inText"
                   type="target"
                   position={Position.Left}
-                  className={workflowPortTargetHandleClass}
+                  className={workflowPortTargetBubbleHandleRightHalfClass}
                   aria-label="Alternate website text input"
-                />
-                <button
-                  type="button"
                   onPointerDown={(e) => handleInputBubblePointerDown(e, "text")}
+                />
+                <span
+                  className={workflowPortBubbleIconClass}
                   title="Optional linked text context (same port family as Video Generator)."
-                  className={workflowPortBubbleHitClass}
+                  aria-hidden
                 >
                   <Type className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
-                </button>
+                </span>
               </div>
             </div>
           )}
@@ -3051,7 +2967,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             <div className="space-y-2">
               {profile360Website ? (
                 <div className="rounded-lg border border-white/10 bg-black/25 px-2.5 py-2 text-[11px] leading-snug text-white/60">
-                  Wire a single product photo into Images (left). Run inserts a preset Image Generator (no text)—output is another still.
+                  Wire one image reference on the left (product, avatar upload, etc.). Run adds a preset Image Generator only—choose your source yourself.
                 </div>
               ) : (
                 <div>
@@ -3214,65 +3130,66 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 id="text"
                 type="target"
                 position={Position.Left}
-                className={workflowPortTargetHandleClass}
+                className={workflowPortTargetBubbleHandleLeftHalfClass}
                 aria-label="Assistant text input"
+                onPointerDown={(e) => handleInputBubblePointerDown(e, "text")}
               />
               <Handle
                 id="inText"
                 type="target"
                 position={Position.Left}
-                className={workflowPortTargetHandleClass}
+                className={workflowPortTargetBubbleHandleRightHalfClass}
                 aria-label="Alternate assistant text port"
-              />
-              <button
-                type="button"
                 onPointerDown={(e) => handleInputBubblePointerDown(e, "text")}
-                title="Assistant prompt text input."
-                className={workflowPortBubbleHitClass}
-              >
-                <Type className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
-              </button>
-            </div>
-            <div className={cn(workflowPortBubbleShellClass, "nodrag nopan")}>
-              <Handle
-                id="startImage"
-                type="target"
-                position={Position.Left}
-                className={workflowPortTargetHandleClass}
-                aria-label="Primary assistant reference image"
               />
-              <button
-                type="button"
-                onPointerDown={(e) => handleInputBubblePointerDown(e, "startImage")}
-                title="Primary context image (same port family as Video Generator start frame)."
-                className={workflowPortBubbleHitClass}
-              >
-                <ImageIcon className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-              </button>
+              <span className={workflowPortBubbleIconClass} title="Assistant prompt text input." aria-hidden>
+                <Type className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
+              </span>
             </div>
+            {!assistantImageToJson ? (
+              <div className={cn(workflowPortBubbleShellClass, "nodrag nopan")}>
+                <Handle
+                  id="startImage"
+                  type="target"
+                  position={Position.Left}
+                  className={workflowPortTargetBubbleHandleClass}
+                  aria-label="Primary assistant reference image"
+                  title="Primary context image (same port family as Video Generator start frame)."
+                  onPointerDown={(e) => handleInputBubblePointerDown(e, "startImage")}
+                />
+                <span className={workflowPortBubbleIconClass} aria-hidden>
+                  <ImageIcon className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+                </span>
+              </div>
+            ) : null}
             <div className={cn(workflowPortBubbleShellClass, "nodrag nopan")}>
               <Handle
                 id="references"
                 type="target"
                 position={Position.Left}
-                className={workflowPortTargetHandleClass}
+                className={workflowPortTargetBubbleHandleLeftHalfClass}
                 aria-label="Reference images input"
+                onPointerDown={(e) => handleInputBubblePointerDown(e, "references")}
               />
               <Handle
                 id="inImage"
                 type="target"
                 position={Position.Left}
-                className={workflowPortTargetHandleClass}
+                className={workflowPortTargetBubbleHandleRightHalfClass}
                 aria-label="Alternate assistant reference images port"
-              />
-              <button
-                type="button"
                 onPointerDown={(e) => handleInputBubblePointerDown(e, "references")}
-                title="Additional reference images for Assistant context."
-                className={workflowPortBubbleHitClass}
+              />
+              <span
+                className={workflowPortBubbleIconClass}
+                title={
+                  assistantImageToJson
+                    ? "Reference image for vision (HTTPS URL after upload)."
+                    : "Additional reference images for Assistant context."
+                }
+                aria-hidden
               >
                 <Images className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-              </button>
+              </span>
             </div>
           </div>
           <div
@@ -3493,52 +3410,60 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               id="text"
               type="target"
               position={Position.Left}
-              className={workflowPortTargetHandleClass}
+              className={workflowPortTargetBubbleHandleLeftHalfClass}
               aria-label="Prompt text input port"
+              onPointerDown={(e) => handleInputBubblePointerDown(e, "text")}
             />
             <Handle
               id="inText"
               type="target"
               position={Position.Left}
-              className={workflowPortTargetHandleClass}
-              aria-label="Legacy prompt text input"
-            />
-            <button
-              type="button"
+              className={workflowPortTargetBubbleHandleRightHalfClass}
+              aria-label="Alternate prompt text port"
               onPointerDown={(e) => handleInputBubblePointerDown(e, "text")}
-              title="Prompt text, one incoming wire; compose the main prompt inside the module."
-              className={workflowPortBubbleHitClass}
-            >
+            />
+            <span className={workflowPortBubbleIconClass} title="Prompt text, one incoming wire; compose the main prompt inside the module." aria-hidden>
               <Type className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
-            </button>
+            </span>
           </div>
 
           {data.kind === "motion" || (data.kind === "video" && videoModelHasStartFrame) ? (
             <div className={cn(workflowPortBubbleShellClass, "nodrag nopan")}>
-              <Handle
-                id="startImage"
-                type="target"
-                position={Position.Left}
-                className={workflowPortTargetHandleClass}
-                aria-label="Start frame image input"
-              />
               {data.kind === "motion" || (data.kind === "video" && !videoModelHasReferences) ? (
+                <>
+                  <Handle
+                    id="startImage"
+                    type="target"
+                    position={Position.Left}
+                    className={workflowPortTargetBubbleHandleLeftHalfClass}
+                    aria-label="Start frame image input"
+                    title="Start frame image, primary half of this bubble."
+                    onPointerDown={(e) => handleInputBubblePointerDown(e, "startImage")}
+                  />
+                  <Handle
+                    id="inImage"
+                    type="target"
+                    position={Position.Left}
+                    className={workflowPortTargetBubbleHandleRightHalfClass}
+                    aria-label="Alternate start frame image port"
+                    title="Alternate start-frame port."
+                    onPointerDown={(e) => handleInputBubblePointerDown(e, "startImage")}
+                  />
+                </>
+              ) : (
                 <Handle
-                  id="inImage"
+                  id="startImage"
                   type="target"
                   position={Position.Left}
-                  className={workflowPortTargetHandleClass}
-                  aria-label="Legacy start frame image input"
+                  className={workflowPortTargetBubbleHandleClass}
+                  aria-label="Start frame image input"
+                  title="Start frame image, one incoming image (first frame / primary reference)."
+                  onPointerDown={(e) => handleInputBubblePointerDown(e, "startImage")}
                 />
-              ) : null}
-              <button
-                type="button"
-                onPointerDown={(e) => handleInputBubblePointerDown(e, "startImage")}
-                title="Start frame image, one incoming image (first frame / primary reference)."
-                className={workflowPortBubbleHitClass}
-              >
+              )}
+              <span className={workflowPortBubbleIconClass} aria-hidden>
                 <ImageIcon className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-              </button>
+              </span>
             </div>
           ) : null}
 
@@ -3548,17 +3473,13 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 id="inVideo"
                 type="target"
                 position={Position.Left}
-                className={workflowPortTargetHandleClass}
+                className={workflowPortTargetBubbleHandleClass}
                 aria-label="Motion reference video input"
-              />
-              <button
-                type="button"
-                onPointerDown={(e) => e.stopPropagation()}
                 title="Motion reference video input."
-                className={workflowPortBubbleHitClass}
-              >
+              />
+              <span className={workflowPortBubbleIconClass} aria-hidden>
                 <Play className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-              </button>
+              </span>
             </div>
           ) : null}
 
@@ -3568,17 +3489,14 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               id="endImage"
               type="target"
               position={Position.Left}
-              className={workflowPortTargetHandleClass}
+              className={workflowPortTargetBubbleHandleClass}
               aria-label="End frame image input"
-            />
-            <button
-              type="button"
-              onPointerDown={(e) => handleInputBubblePointerDown(e, "endImage")}
               title="End frame image, one incoming image (last frame when the model supports it)."
-              className={workflowPortBubbleHitClass}
-            >
+              onPointerDown={(e) => handleInputBubblePointerDown(e, "endImage")}
+            />
+            <span className={workflowPortBubbleIconClass} aria-hidden>
               <ImageIcon className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-            </button>
+            </span>
           </div>
           ) : null}
 
@@ -3588,28 +3506,29 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               id="references"
               type="target"
               position={Position.Left}
-              className={workflowPortTargetHandleClass}
+              className={workflowPortTargetBubbleHandleLeftHalfClass}
               aria-label="Reference images input"
+              onPointerDown={(e) => handleInputBubblePointerDown(e, "references")}
             />
             <Handle
               id="inImage"
               type="target"
               position={Position.Left}
-              className={workflowPortTargetHandleClass}
-              aria-label="Legacy image input (references)"
-            />
-            <button
-              type="button"
+              className={workflowPortTargetBubbleHandleRightHalfClass}
+              aria-label="Alternate reference images port"
               onPointerDown={(e) => handleInputBubblePointerDown(e, "references")}
+            />
+            <span
+              className={workflowPortBubbleIconClass}
               title={
                 videoModelSupportsElements
                   ? "Reference images. Type @image1, @image2, … in the prompt to bind them."
                   : "Reference images, multiple incoming images supported by this model."
               }
-              className={workflowPortBubbleHitClass}
+              aria-hidden
             >
               <Images className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-            </button>
+            </span>
           </div>
           ) : null}
         </div>
@@ -3623,81 +3542,84 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 id="text"
                 type="target"
                 position={Position.Left}
-                className={workflowPortTargetHandleClass}
+                className={workflowPortTargetBubbleHandleLeftHalfClass}
                 aria-label="Prompt text input port"
+                onPointerDown={(e) => handleInputBubblePointerDown(e, "text")}
               />
               <Handle
                 id="inText"
                 type="target"
                 position={Position.Left}
-                className={workflowPortTargetHandleClass}
+                className={workflowPortTargetBubbleHandleRightHalfClass}
                 aria-label="Alternate prompt text port"
-              />
-              <button
-                type="button"
                 onPointerDown={(e) => handleInputBubblePointerDown(e, "text")}
-                title="Prompt text, one incoming wire; compose the main prompt inside the module."
-                className={workflowPortBubbleHitClass}
-              >
+              />
+              <span className={workflowPortBubbleIconClass} title="Prompt text, one incoming wire; compose the main prompt inside the module." aria-hidden>
                 <Type className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
-              </button>
+              </span>
             </div>
           ) : null}
 
           {data.kind === "image" ? (
             <>
-              <div className={cn(workflowPortBubbleShellClass, "nodrag nopan")}>
-                <Handle
-                  id="startImage"
-                  type="target"
-                  position={Position.Left}
-                  className={workflowPortTargetHandleClass}
-                  aria-label="Primary reference image input"
-                />
-                <button
-                  type="button"
-                  onPointerDown={(e) => handleInputBubblePointerDown(e, "startImage")}
-                  title="Primary image / first reference (same port family as Video Generator start frame)."
-                  className={workflowPortBubbleHitClass}
-                >
-                  <ImageIcon className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-                </button>
-              </div>
+              {!profile360ImageUi ? (
+                <div className={cn(workflowPortBubbleShellClass, "nodrag nopan")}>
+                  <Handle
+                    id="startImage"
+                    type="target"
+                    position={Position.Left}
+                    className={workflowPortTargetBubbleHandleClass}
+                    aria-label="Primary reference image input"
+                    title="Primary image / start frame (same role as Video Generator)."
+                    onPointerDown={(e) => handleInputBubblePointerDown(e, "startImage")}
+                  />
+                  <span className={workflowPortBubbleIconClass} aria-hidden>
+                    <ImageIcon className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+                  </span>
+                </div>
+              ) : null}
               <div className={cn(workflowPortBubbleShellClass, "nodrag nopan relative")}>
                 <Handle
                   id="references"
                   type="target"
                   position={Position.Left}
-                  className={workflowPortTargetHandleClass}
+                  className={workflowPortTargetBubbleHandleLeftHalfClass}
                   aria-label="Reference images input"
+                  onPointerDown={(e) => handleInputBubblePointerDown(e, "references")}
                 />
                 <Handle
                   id="inImage"
                   type="target"
                   position={Position.Left}
-                  className={workflowPortTargetHandleClass}
+                  className={workflowPortTargetBubbleHandleRightHalfClass}
                   aria-label="Alternate reference images port"
-                />
-                <button
-                  type="button"
                   onPointerDown={(e) => handleInputBubblePointerDown(e, "references")}
-                  title={`Reference images, ${imageReferenceWireCount}/${WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX} connected (max ${WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX} for this job).`}
-                  className={workflowPortBubbleHitClass}
-                >
-                  <Images className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-                </button>
+                />
                 <span
-                  className="pointer-events-none absolute -right-0.5 -top-1 rounded px-[3px] py-px text-[8px] font-bold tabular-nums leading-none text-white/70 shadow-[0_1px_6px_rgba(0,0,0,0.65)] ring-1 ring-white/12"
-                  style={{
-                    background:
-                      imageReferenceWireCount >= WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX
-                        ? "rgba(251,113,133,0.35)"
-                        : "rgba(24,24,27,0.92)",
-                  }}
+                  className={workflowPortBubbleIconClass}
+                  title={
+                    profile360ImageUi
+                      ? `Reference image (${imageReferenceWireCount} wired). Upload, avatar, or image node OK.`
+                      : `Reference images, ${imageReferenceWireCount}/${WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX} connected (max ${WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX} for this job).`
+                  }
                   aria-hidden
                 >
-                  {imageReferenceWireCount}/{WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX}
+                  <Images className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
                 </span>
+                {!profile360ImageUi ? (
+                  <span
+                    className="pointer-events-none absolute -right-0.5 -top-1 z-[3] rounded px-[3px] py-px text-[8px] font-bold tabular-nums leading-none text-white/70 shadow-[0_1px_6px_rgba(0,0,0,0.65)] ring-1 ring-white/12"
+                    style={{
+                      background:
+                        imageReferenceWireCount >= WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX
+                          ? "rgba(251,113,133,0.35)"
+                          : "rgba(24,24,27,0.92)",
+                    }}
+                    aria-hidden
+                  >
+                    {imageReferenceWireCount}/{WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX}
+                  </span>
+                ) : null}
               </div>
             </>
           ) : (
@@ -3707,41 +3629,35 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                   id="startImage"
                   type="target"
                   position={Position.Left}
-                  className={workflowPortTargetHandleClass}
+                  className={workflowPortTargetBubbleHandleClass}
                   aria-label="Primary reference image input"
-                />
-                <button
-                  type="button"
-                  onPointerDown={(e) => handleInputBubblePointerDown(e, "startImage")}
                   title="Primary image input (aligned with Video Generator ports)."
-                  className={workflowPortBubbleHitClass}
-                >
+                  onPointerDown={(e) => handleInputBubblePointerDown(e, "startImage")}
+                />
+                <span className={workflowPortBubbleIconClass} aria-hidden>
                   <ImageIcon className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-                </button>
+                </span>
               </div>
               <div className={cn(workflowPortBubbleShellClass, "nodrag nopan")}>
                 <Handle
                   id="references"
                   type="target"
                   position={Position.Left}
-                  className={workflowPortTargetHandleClass}
+                  className={workflowPortTargetBubbleHandleLeftHalfClass}
                   aria-label="Reference images input"
+                  onPointerDown={(e) => handleInputBubblePointerDown(e, "references")}
                 />
                 <Handle
                   id="inImage"
                   type="target"
                   position={Position.Left}
-                  className={workflowPortTargetHandleClass}
+                  className={workflowPortTargetBubbleHandleRightHalfClass}
                   aria-label="Alternate reference images port"
-                />
-                <button
-                  type="button"
                   onPointerDown={(e) => handleInputBubblePointerDown(e, "references")}
-                  title="Additional reference images (same layout as Video Generator)."
-                  className={workflowPortBubbleHitClass}
-                >
+                />
+                <span className={workflowPortBubbleIconClass} title="Additional reference images (same layout as Video Generator)." aria-hidden>
                   <Images className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-                </button>
+                </span>
               </div>
             </>
           )}

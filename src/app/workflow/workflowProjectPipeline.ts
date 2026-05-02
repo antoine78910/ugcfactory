@@ -31,8 +31,8 @@ function makeEdge(
 }
 
 /**
- * Image-in → image-out branch: optional wiring node + a preset Image Generator (no text prompt UI).
- * With `sourceImageUrl`, only the generator node is created (reference embedded).
+ * Image-in → image-out branch: a preset Image Generator only (no text prompt UI).
+ * Wire an avatar / image ref manually to References or embed with `sourceImageUrl`.
  */
 export function buildWorkflow360ProfileBranch(
   origin: XYPosition,
@@ -62,24 +62,13 @@ export function buildWorkflow360ProfileBranch(
     return { nodes: [gen], edges: [] };
   }
 
-  const inputRef = buildImageRefNode(
-    { x: ox, y: oy },
-    { label: "360° input", imageUrl: "about:blank", source: "upload", mediaKind: "image" },
-  );
-  const gen = buildAdAssetNode("image", { x: ox + 300, y: oy }, sharedGenOptions);
-  return {
-    nodes: [inputRef, gen],
-    edges: [
-      makeEdge(inputRef.id, gen.id, {
-        sourceHandle: "out",
-        targetHandle: "references",
-      }),
-    ],
-  };
+  const gen = buildAdAssetNode("image", { x: ox + 40, y: oy }, sharedGenOptions);
+  return { nodes: [gen], edges: [] };
 }
 
 /**
- * Image reference → Assistant (vision) preset that emits structured JSON text.
+ * Assistant (vision) preset that emits structured JSON. Does not create a separate image ref node;
+ * connect avatar, upload, or another node’s image output to this module’s image ports.
  */
 export function buildWorkflowImageToJsonBranch(origin: XYPosition): {
   nodes: WorkflowCanvasNode[];
@@ -88,13 +77,9 @@ export function buildWorkflowImageToJsonBranch(origin: XYPosition): {
   const ox = origin.x;
   const oy = origin.y;
 
-  const inputRef = buildImageRefNode(
-    { x: ox, y: oy },
-    { label: "Image → JSON input", imageUrl: "about:blank", source: "upload", mediaKind: "image" },
-  );
   const assistant = buildAdAssetNode(
     "assistant",
-    { x: ox + 320, y: oy },
+    { x: ox + 40, y: oy },
     {
       label: "Image → JSON",
       prompt: WORKFLOW_IMAGE_TO_JSON_USER_PROMPT,
@@ -102,15 +87,7 @@ export function buildWorkflowImageToJsonBranch(origin: XYPosition): {
     },
   );
 
-  return {
-    nodes: [inputRef, assistant],
-    edges: [
-      makeEdge(inputRef.id, assistant.id, {
-        sourceHandle: "out",
-        targetHandle: "references",
-      }),
-    ],
-  };
+  return { nodes: [assistant], edges: [] };
 }
 
 /**

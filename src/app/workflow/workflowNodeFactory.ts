@@ -99,7 +99,7 @@ export function buildAdAssetNode(
     label: options?.label ?? labels[kind],
     ...genDefaults,
   };
-  if (kind === "assistant") {
+    if (kind === "assistant") {
     data.assistantModel = "gpt-5o";
     data.assistantMode = "input";
     data.assistantOutput = "";

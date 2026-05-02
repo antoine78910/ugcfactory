@@ -150,6 +150,7 @@ import {
   buildWorkflow360ProfileBranch,
   buildWorkflowImageToJsonBranch,
 } from "./workflowProjectPipeline";
+import { WORKFLOW_IMAGE_TO_JSON_USER_PROMPT } from "./workflowImageToJsonPreset";
 import {
   isVideoFile,
   measureImageAspectFromObjectUrl,
@@ -157,7 +158,16 @@ import {
   measureVideoAspectFromObjectUrl,
 } from "./workflowMediaAspect";
 import type { StickyNoteNodeData } from "./workflowStickyNoteTypes";
-import { estimateWorkflowAdAssetRunCredits } from "./workflowNodeRun";
+import {
+  estimateWorkflowAdAssetRunCredits,
+  resolveWorkflowVideoModelId,
+  workflowVideoGeneratorAcceptsUpstreamVideo,
+  workflowVideoModelHasEndFrame,
+  workflowVideoModelHasStartFrame,
+} from "./workflowNodeRun";
+
+/** Matches `workflowNodeFactory` default for new Video Generator nodes (picker chaining eligibility). */
+const DEFAULT_NEW_VIDEO_GENERATOR_MODEL = "kling-3.0/video";
 
 const nodeTypes = {
   adAsset: AdAssetNode,
@@ -426,6 +436,12 @@ function targetHandleForNewNodeFromSourceKind(
     if (kind === "video") {
       if (sourceKind === "text") return "text";
       if (sourceKind === "image") return "startImage";
+      if (sourceKind === "video") {
+        const vm = resolveWorkflowVideoModelId(d.model ?? "");
+        if (workflowVideoModelHasStartFrame(vm)) return "startImage";
+        if (workflowVideoModelHasEndFrame(vm)) return "endImage";
+        return null;
+      }
       return null;
     }
     if (kind === "motion") {
@@ -436,7 +452,8 @@ function targetHandleForNewNodeFromSourceKind(
     }
     if (kind === "assistant") {
       if (sourceKind === "text") return "text";
-      if (sourceKind === "image") return "startImage";
+      if (sourceKind === "image")
+        return d.assistantVisionPreset === "image_to_json" ? "references" : "startImage";
       return null;
     }
     if (kind === "website") {
@@ -460,6 +477,38 @@ function targetHandleForNewNodeFromSourceKind(
     return sourceKind === "text" ? "in" : null;
   }
   return null;
+}
+
+/** Full video clip (`out`) → Video Generator Start/End ports (runner extracts frames upstream). */
+function workflowVideoChainsToGeneratorFramePorts(
+  sourceNode: WorkflowCanvasNode | undefined,
+  sourceHandle: string | null | undefined,
+  targetNode: WorkflowCanvasNode | undefined,
+  targetHandle: string | null | undefined,
+): boolean {
+  if (!sourceNode || !targetNode) return false;
+  const srcKind = sourceKindFromNodeHandle(sourceNode, sourceHandle);
+  if (srcKind !== "video") return false;
+  if (targetNode.type !== "adAsset") return false;
+  const d = targetNode.data as AdAssetNodeData;
+  if (d.kind !== "video") return false;
+  const h = (targetHandle ?? "").trim();
+  const vm = resolveWorkflowVideoModelId(d.model ?? "");
+  if (h === "startImage") return workflowVideoModelHasStartFrame(vm);
+  if (h === "endImage") return workflowVideoModelHasEndFrame(vm);
+  return false;
+}
+
+function workflowHandlesAllowConnect(
+  sourceNode: WorkflowCanvasNode | undefined,
+  sourceHandle: string | null | undefined,
+  targetNode: WorkflowCanvasNode | undefined,
+  targetHandle: string | null | undefined,
+): boolean {
+  const srcKind = sourceKindFromNodeHandle(sourceNode, sourceHandle);
+  const dstKind = targetKindFromNodeHandle(targetNode, targetHandle);
+  if (canConnectByDataKind(srcKind, dstKind)) return true;
+  return workflowVideoChainsToGeneratorFramePorts(sourceNode, sourceHandle, targetNode, targetHandle);
 }
 
 function WorkflowAddPaletteRow({
@@ -957,7 +1006,7 @@ function WorkflowReactFlowChrome({
     setEdges((prev) => [...prev, ...built.edges]);
     setAddOpen(false);
     setFrameOpen(false);
-    toast.success("360° profile flow added");
+    toast.success("360° profile generator added — wire your own image reference.");
   }, [screenToFlowPosition, setNodes, setEdges, setAddOpen, setFrameOpen]);
 
   const addWorkflowImageToJsonBranch = useCallback(() => {
@@ -970,7 +1019,7 @@ function WorkflowReactFlowChrome({
     setEdges((prev) => [...prev, ...built.edges]);
     setAddOpen(false);
     setFrameOpen(false);
-    toast.success("Image → JSON flow added");
+    toast.success("Image → JSON assistant added — connect an HTTPS image.");
   }, [screenToFlowPosition, setNodes, setEdges, setAddOpen, setFrameOpen]);
 
   const [addPlusTab, setAddPlusTab] = useState<"basics" | "upload">("basics");
@@ -1575,8 +1624,8 @@ function WorkflowReactFlowChrome({
             type="button"
             title={
               canClone
-                ? "Duplicate selection, group, generator, prompt text, or canvas note"
-                : "Select a group, generator, prompt text, or canvas note to duplicate"
+                ? "Duplicate selection, group, generator, prompt text, upload, or canvas note"
+                : "Select a group, generator, prompt text, upload node, or canvas note to duplicate"
             }
             disabled={!canClone}
             onClick={() => {
@@ -1826,7 +1875,7 @@ function WorkflowReactFlowChrome({
                 title={
                   canClone
                     ? "Duplicate selection"
-                    : "Select a group, a generator, a prompt text module, or a canvas note to duplicate"
+                    : "Select a group, generator, prompt text module, upload, or canvas note to duplicate"
                 }
                 disabled={!canClone}
                 onClick={() => {
@@ -2676,8 +2725,7 @@ function WorkflowFlowWorkspace({
       const resolvedTargetHandle =
         targetHandle ??
         (targetNode ? targetHandleForNewNodeFromSourceKind(targetNode as WorkflowCanvasNode, srcKind) : null);
-      const dstKind = targetKindFromNodeHandle(targetNode, resolvedTargetHandle);
-      if (!canConnectByDataKind(srcKind, dstKind)) {
+      if (!workflowHandlesAllowConnect(sourceNode, sourceHandle, targetNode, resolvedTargetHandle)) {
         toast.error("Incompatible connection", {
           description: "This output type can only connect to a matching input type.",
         });
@@ -2734,9 +2782,7 @@ function WorkflowFlowWorkspace({
       const allNodes = getNodes() as WorkflowCanvasNode[];
       const sourceNode = allNodes.find((n) => n.id === source);
       const targetNode = allNodes.find((n) => n.id === target);
-      const srcKind = sourceKindFromNodeHandle(sourceNode, sourceHandle);
-      const dstKind = targetKindFromNodeHandle(targetNode, targetHandle);
-      return canConnectByDataKind(srcKind, dstKind);
+      return workflowHandlesAllowConnect(sourceNode, sourceHandle, targetNode, targetHandle);
     },
     [getNodes],
   );
@@ -3945,6 +3991,19 @@ function WorkflowFlowWorkspace({
                 </button>
                 <button
                   type="button"
+                  className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-emerald-500/15 hover:border-emerald-400/40"
+                  onClick={() =>
+                    placeNodeAtPicker("assistant", {
+                      label: "Image → JSON",
+                      prompt: WORKFLOW_IMAGE_TO_JSON_USER_PROMPT,
+                      assistantVisionPreset: "image_to_json",
+                    })
+                  }
+                >
+                  Image → JSON
+                </button>
+                <button
+                  type="button"
                   className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
                   onClick={() => placeNodeAtPicker("assistant")}
                 >
@@ -3960,6 +4019,15 @@ function WorkflowFlowWorkspace({
               </>
             ) : placementPicker.connectFrom && placementSourceKind === "video" ? (
               <>
+                {workflowVideoGeneratorAcceptsUpstreamVideo(DEFAULT_NEW_VIDEO_GENERATOR_MODEL) ? (
+                  <button
+                    type="button"
+                    className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
+                    onClick={() => placeNodeAtPicker("video")}
+                  >
+                    Video generator
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
@@ -4027,6 +4095,19 @@ function WorkflowFlowWorkspace({
                 </button>
                 <button
                   type="button"
+                  className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-emerald-400/40 hover:bg-emerald-500/15"
+                  onClick={() =>
+                    placeNodeAtPicker("assistant", {
+                      label: "Image → JSON",
+                      prompt: WORKFLOW_IMAGE_TO_JSON_USER_PROMPT,
+                      assistantVisionPreset: "image_to_json",
+                    })
+                  }
+                >
+                  Image → JSON
+                </button>
+                <button
+                  type="button"
                   className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
                   onClick={pickAvatarAtPlacement}
                 >
@@ -4055,6 +4136,19 @@ function WorkflowFlowWorkspace({
                   onClick={() => placeNodeAtPicker("video")}
                 >
                   Video generator
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-emerald-400/40 hover:bg-emerald-500/15"
+                  onClick={() =>
+                    placeNodeAtPicker("assistant", {
+                      label: "Image → JSON",
+                      prompt: WORKFLOW_IMAGE_TO_JSON_USER_PROMPT,
+                      assistantVisionPreset: "image_to_json",
+                    })
+                  }
+                >
+                  Image → JSON
                 </button>
                 <button
                   type="button"
