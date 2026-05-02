@@ -22,6 +22,7 @@ import {
   type XYPosition,
 } from "@xyflow/react";
 import {
+  Braces,
   ChevronDown,
   Clapperboard,
   Copy,
@@ -41,6 +42,7 @@ import {
   MousePointer2,
   Plus,
   Redo2,
+  RotateCw,
   Scissors,
   Share2,
   Shapes,
@@ -144,6 +146,10 @@ import {
   type BuildAdAssetNodeOptions,
   type WorkflowDragNodeKind,
 } from "./workflowNodeFactory";
+import {
+  buildWorkflow360ProfileBranch,
+  buildWorkflowImageToJsonBranch,
+} from "./workflowProjectPipeline";
 import {
   isVideoFile,
   measureImageAspectFromObjectUrl,
@@ -384,18 +390,11 @@ function targetKindFromNodeHandle(
 ): WorkflowConnectionDataKind | null {
   if (!node) return null;
   const h = (handleId ?? "in").trim() || "in";
-  if (node.type === "adAsset" && h === "in") {
-    const kind = (node.data as AdAssetNodeData).kind;
-    // Image / video / motion modules only accept explicit side input ports.
-    // Prevent accidental center-wire drops that bypass those dedicated handles.
-    if (kind === "image" || kind === "video" || kind === "motion") return null;
-  }
   if (h === "text" || h === "inText") return "text";
   if (h === "references" || h === "startImage" || h === "endImage" || h === "inImage") return "image";
   if (h === "inVideo") return "video";
   if (node.type === "imageRef" && h === "in") return "media";
   if (node.type === "promptList" && h === "in") return "text";
-  if (node.type === "adAsset" && h === "in") return "text";
   return null;
 }
 
@@ -417,10 +416,11 @@ function targetHandleForNewNodeFromSourceKind(
 ): string | null {
   if (!sourceKind) return null;
   if (newNode.type === "adAsset") {
-    const kind = (newNode.data as AdAssetNodeData).kind;
-    if (kind === "image") {
+    const d = newNode.data as AdAssetNodeData;
+    const kind = d.kind;
+    if (kind === "image" || kind === "variation" || kind === "upscale") {
       if (sourceKind === "text") return "text";
-      if (sourceKind === "image") return "references";
+      if (sourceKind === "image") return "startImage";
       return null;
     }
     if (kind === "video") {
@@ -436,10 +436,19 @@ function targetHandleForNewNodeFromSourceKind(
     }
     if (kind === "assistant") {
       if (sourceKind === "text") return "text";
-      if (sourceKind === "image") return "references";
+      if (sourceKind === "image") return "startImage";
       return null;
     }
-    return sourceKind === "text" ? "in" : null;
+    if (kind === "website") {
+      const profile360 = d.websiteOutputMode === "profile_360";
+      if (profile360) {
+        if (sourceKind === "image") return "references";
+        return null;
+      }
+      if (sourceKind === "text") return "text";
+      return null;
+    }
+    return null;
   }
   if (newNode.type === "promptList") {
     if (sourceKind === "text") return "inText";
@@ -938,6 +947,32 @@ function WorkflowReactFlowChrome({
     toast.success("List added");
   }, [screenToFlowPosition, setNodes, setAddOpen, setFrameOpen]);
 
+  const addWorkflow360ProfileBranch = useCallback(() => {
+    const position = screenToFlowPosition({
+      x: window.innerWidth / 2,
+      y: window.innerHeight / 2,
+    });
+    const built = buildWorkflow360ProfileBranch(position);
+    setNodes((prev) => [...prev, ...built.nodes]);
+    setEdges((prev) => [...prev, ...built.edges]);
+    setAddOpen(false);
+    setFrameOpen(false);
+    toast.success("360° profile flow added");
+  }, [screenToFlowPosition, setNodes, setEdges, setAddOpen, setFrameOpen]);
+
+  const addWorkflowImageToJsonBranch = useCallback(() => {
+    const position = screenToFlowPosition({
+      x: window.innerWidth / 2,
+      y: window.innerHeight / 2,
+    });
+    const built = buildWorkflowImageToJsonBranch(position);
+    setNodes((prev) => [...prev, ...built.nodes]);
+    setEdges((prev) => [...prev, ...built.edges]);
+    setAddOpen(false);
+    setFrameOpen(false);
+    toast.success("Image → JSON flow added");
+  }, [screenToFlowPosition, setNodes, setEdges, setAddOpen, setFrameOpen]);
+
   const [addPlusTab, setAddPlusTab] = useState<"basics" | "upload">("basics");
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   const [avatarUrls, setAvatarUrls] = useState<string[]>([]);
@@ -1390,6 +1425,18 @@ function WorkflowReactFlowChrome({
                       iconShellClass="border-cyan-500/45 bg-cyan-950/80"
                       soon
                       onClick={() => addNode("website")}
+                    />
+                    <WorkflowAddPaletteRow
+                      icon={RotateCw}
+                      label="360° profile (image → image)"
+                      iconShellClass="border-violet-500/45 bg-violet-950/80"
+                      onClick={() => addWorkflow360ProfileBranch()}
+                    />
+                    <WorkflowAddPaletteRow
+                      icon={Braces}
+                      label="Image → JSON (structured text)"
+                      iconShellClass="border-emerald-500/45 bg-emerald-950/80"
+                      onClick={() => addWorkflowImageToJsonBranch()}
                     />
                     <WorkflowAddPaletteRow
                       icon={Sparkles}
@@ -2640,12 +2687,28 @@ function WorkflowFlowWorkspace({
       let replaceSameHandle = false;
       if (targetNode?.type === "adAsset") {
         const kind = (targetNode.data as AdAssetNodeData).kind;
-        if (handleId === "text" && (kind === "image" || kind === "video")) replaceSameHandle = true;
-        if (handleId === "startImage" && kind === "video") replaceSameHandle = true;
+        if (
+          handleId === "text" &&
+          (kind === "image" ||
+            kind === "video" ||
+            kind === "variation" ||
+            kind === "upscale" ||
+            kind === "assistant")
+        )
+          replaceSameHandle = true;
+        if (
+          handleId === "startImage" &&
+          (kind === "image" || kind === "video" || kind === "variation" || kind === "upscale")
+        )
+          replaceSameHandle = true;
+        if (handleId === "startImage" && kind === "assistant") replaceSameHandle = true;
         if (handleId === "endImage" && kind === "video") replaceSameHandle = true;
         if (handleId === "text" && kind === "motion") replaceSameHandle = true;
         if (handleId === "startImage" && kind === "motion") replaceSameHandle = true;
         if (handleId === "inVideo" && kind === "motion") replaceSameHandle = true;
+        if (handleId === "references" && kind === "website") replaceSameHandle = true;
+        if (handleId === "text" && kind === "website") replaceSameHandle = true;
+        if (handleId === "references" && kind === "assistant") replaceSameHandle = true;
       }
       setEdges((eds) => {
         const base = replaceSameHandle
@@ -2712,17 +2775,29 @@ function WorkflowFlowWorkspace({
         setEdges((eds) => {
           if (eds.some((e) => e.source === pair.source && e.target === pair.target)) return eds;
           const srcNode = all.find((n) => n.id === pair.source);
+          const tgtNode = all.find((n) => n.id === pair.target);
+          const srcAdKind =
+            srcNode?.type === "adAsset" ? (srcNode.data as AdAssetNodeData).kind : undefined;
           const srcHandle =
-            srcNode?.type === "adAsset" && (srcNode.data as AdAssetNodeData).kind === "image"
+            srcNode?.type === "adAsset" &&
+            (srcAdKind === "image" || srcAdKind === "variation" || srcAdKind === "upscale")
               ? "generated"
               : "out";
+          const srcKind = sourceKindFromNodeHandle(srcNode as WorkflowCanvasNode | undefined, srcHandle);
+          const targetHandleResolved =
+            tgtNode?.type === "adAsset"
+              ? targetHandleForNewNodeFromSourceKind(tgtNode as WorkflowCanvasNode, srcKind)
+              : tgtNode?.type === "imageRef"
+                ? "in"
+                : null;
+          if (!targetHandleResolved) return eds;
           return addEdge(
             {
               id: `e-${pair.source}-${pair.target}-${crypto.randomUUID().slice(0, 8)}`,
               source: pair.source,
               sourceHandle: srcHandle,
               target: pair.target,
-              targetHandle: "in",
+              targetHandle: targetHandleResolved,
               style: { stroke: "rgba(167, 139, 250, 0.5)", strokeWidth: 2 },
             },
             eds,

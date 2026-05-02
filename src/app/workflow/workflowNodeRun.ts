@@ -1600,7 +1600,7 @@ export function estimateWorkflowAdAssetRunCredits(
   if (data.kind !== "image" && data.kind !== "video" && data.kind !== "motion") return 0;
 
   const prompt = (data.prompt ?? "").trim();
-  const { batch } = collectWorkflowBatchPrompts(nodes, edges, nodeId, ["text", "in"], prompt);
+  const { batch } = collectWorkflowBatchPrompts(nodes, edges, nodeId, ["text", "inText"], prompt);
   const batchPromptCount = batch?.length ?? 0;
   const runCount = Math.max(1, batchPromptCount);
   const multiBatchFromList = batchPromptCount > 1;

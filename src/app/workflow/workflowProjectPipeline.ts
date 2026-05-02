@@ -10,6 +10,9 @@ import {
   type LinkToAdAnglePipelineV1,
 } from "@/lib/linkToAdUniverse";
 
+import { WORKFLOW_IMAGE_TO_JSON_USER_PROMPT } from "./workflowImageToJsonPreset";
+import { PROFILE_360_IMAGE_PROMPT } from "./workflowProfile360Preset";
+
 const EDGE_STYLE = { stroke: "rgba(167, 139, 250, 0.5)", strokeWidth: 2 };
 
 function makeEdge(
@@ -24,6 +27,89 @@ function makeEdge(
     target,
     targetHandle: opts?.targetHandle ?? "in",
     style: EDGE_STYLE,
+  };
+}
+
+/**
+ * Image-in → image-out branch: optional wiring node + a preset Image Generator (no text prompt UI).
+ * With `sourceImageUrl`, only the generator node is created (reference embedded).
+ */
+export function buildWorkflow360ProfileBranch(
+  origin: XYPosition,
+  opts?: { sourceImageUrl?: string },
+): {
+  nodes: WorkflowCanvasNode[];
+  edges: Edge[];
+} {
+  const ox = origin.x;
+  const oy = origin.y;
+
+  const sharedGenOptions = {
+    label: "360° profile",
+    prompt: PROFILE_360_IMAGE_PROMPT,
+    imageWorkflowPreset: "profile_360" as const,
+    intrinsicAspect: 1,
+  };
+
+  const src = opts?.sourceImageUrl?.trim();
+  if (src) {
+    const gen = buildAdAssetNode("image", { x: ox + 40, y: oy }, {
+      ...sharedGenOptions,
+      referencePreviewUrl: src,
+      referenceSource: "upload" as const,
+      referenceMediaKind: "image" as const,
+    });
+    return { nodes: [gen], edges: [] };
+  }
+
+  const inputRef = buildImageRefNode(
+    { x: ox, y: oy },
+    { label: "360° input", imageUrl: "about:blank", source: "upload", mediaKind: "image" },
+  );
+  const gen = buildAdAssetNode("image", { x: ox + 300, y: oy }, sharedGenOptions);
+  return {
+    nodes: [inputRef, gen],
+    edges: [
+      makeEdge(inputRef.id, gen.id, {
+        sourceHandle: "out",
+        targetHandle: "references",
+      }),
+    ],
+  };
+}
+
+/**
+ * Image reference → Assistant (vision) preset that emits structured JSON text.
+ */
+export function buildWorkflowImageToJsonBranch(origin: XYPosition): {
+  nodes: WorkflowCanvasNode[];
+  edges: Edge[];
+} {
+  const ox = origin.x;
+  const oy = origin.y;
+
+  const inputRef = buildImageRefNode(
+    { x: ox, y: oy },
+    { label: "Image → JSON input", imageUrl: "about:blank", source: "upload", mediaKind: "image" },
+  );
+  const assistant = buildAdAssetNode(
+    "assistant",
+    { x: ox + 320, y: oy },
+    {
+      label: "Image → JSON",
+      prompt: WORKFLOW_IMAGE_TO_JSON_USER_PROMPT,
+      assistantVisionPreset: "image_to_json",
+    },
+  );
+
+  return {
+    nodes: [inputRef, assistant],
+    edges: [
+      makeEdge(inputRef.id, assistant.id, {
+        sourceHandle: "out",
+        targetHandle: "references",
+      }),
+    ],
   };
 }
 

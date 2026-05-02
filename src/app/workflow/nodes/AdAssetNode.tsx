@@ -60,7 +60,8 @@ import {
 import { cn } from "@/lib/utils";
 
 import { useWorkflowNodePatch } from "../workflowNodePatchContext";
-import { buildWorkflowProjectPipelineFromRun } from "../workflowProjectPipeline";
+import { buildWorkflow360ProfileBranch, buildWorkflowProjectPipelineFromRun } from "../workflowProjectPipeline";
+import { PROFILE_360_IMAGE_PROMPT } from "../workflowProfile360Preset";
 import { keepWheelInsideScrollable } from "../workflowWheelScroll";
 import type { WorkflowCanvasNode } from "../workflowFlowTypes";
 import {
@@ -146,10 +147,14 @@ export type AdAssetNodeData = {
   assistantMode?: "input" | "output";
   /** Assistant run export behavior. */
   assistantExportMode?: "text" | "list";
+  /** When set, `/api/gpt/workflow-assistant-chat` uses vision + preset developer copy. */
+  assistantVisionPreset?: "image_to_json";
   /** Website module URL input. */
   websiteUrl?: string;
   /** Website module output behavior after run. */
-  websiteOutputMode?: "product_images" | "angles" | "full_flow";
+  websiteOutputMode?: "product_images" | "angles" | "full_flow" | "profile_360";
+  /** Image-only preset workflows (canvas hides text prompt). */
+  imageWorkflowPreset?: "profile_360";
   /** Product image nodes to emit when `websiteOutputMode=product_images`. */
   websiteProductImageCount?: 1 | 3 | 5;
   /** Website module has successfully run at least once. */
@@ -271,13 +276,18 @@ const ASSISTANT_EXPORT_MODES: Array<{ value: "text" | "list"; label: string }> =
 ];
 
 const WEBSITE_OUTPUT_MODES: Array<{
-  value: "product_images" | "angles" | "full_flow";
+  value: "product_images" | "angles" | "full_flow" | "profile_360";
   label: string;
   hint: string;
 }> = [
   { value: "full_flow", label: "Build full flow", hint: "Creates a full Link-to-Ad workflow branch." },
   { value: "angles", label: "Extract 3 angles", hint: "Exports script angles into a List node." },
   { value: "product_images", label: "Extract product images", hint: "Creates media nodes from product photos." },
+  {
+    value: "profile_360",
+    label: "360° profile",
+    hint: "Image in → preset packshot out. Wire a product photo to the Images port (URL not used).",
+  },
 ];
 
 const VARIATION_MODELS: { value: string; label: string }[] = [
@@ -299,7 +309,8 @@ const WORKFLOW_ASSISTANT_CREDITS_BY_MODEL: Record<"claude-sonnet-4-5" | "gpt-5o"
   "claude-sonnet-4-5": 2,
   "gpt-5o": 0,
 };
-const WORKFLOW_TEXT_INPUT_HANDLES = ["text", "in", "inText"] as const;
+/** Match Video Generator sidebar text ports only (legacy center `in` handle removed). */
+const WORKFLOW_TEXT_INPUT_HANDLES = ["text", "inText"] as const;
 const WORKFLOW_PENDING_MEDIA_PREFIX = "__workflow_pending_media__:";
 const WORKFLOW_ERROR_MEDIA_PREFIX = "__workflow_error_media__:";
 const WORKFLOW_PENDING_POLL_MS = 3500;
@@ -1074,15 +1085,15 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     useCallback((s) => s.edges.some((e) => e.source === id), [id]),
   );
 
-  /** Incoming wires counted like `collectLinkedImageUrlsForHandles(..., ["references","in"])`. */
+  /** Incoming image wires on start + references ports (aligned with Video Generator handle ids). */
   const imageReferenceWireCount = useStore(
     useCallback(
       (s) => {
         if (data.kind !== "image") return 0;
         return s.edges.filter((e) => {
           if (e.target !== id) return false;
-          const h = e.targetHandle ?? "in";
-          return h === "references" || h === "in" || h === "inImage";
+          const h = e.targetHandle ?? "";
+          return h === "references" || h === "startImage" || h === "inImage";
         }).length;
       },
       [data.kind, id],
@@ -1096,13 +1107,13 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         return s.edges.filter((e) => {
           if (e.target !== id) return false;
           const h = e.targetHandle ?? "";
-          return h === "references" || h === "in" || h === "inImage";
+          return h === "references" || h === "startImage" || h === "inImage";
         }).length;
       },
       [data.kind, id],
     ),
   );
-  /** Assistant: number of text wires connected to prompt handles (`text` / `in` / `inText`). */
+  /** Assistant: number of text wires connected to prompt handles (`text` / `inText`). */
   const assistantTextInputWireCount = useStore(
     useCallback(
       (s) => {
@@ -1127,7 +1138,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         for (const e of s.edges) {
           if (e.target !== id) continue;
           const h = e.targetHandle ?? "";
-          if (h !== "references" && h !== "in" && h !== "inImage") continue;
+          if (h !== "references" && h !== "startImage" && h !== "inImage") continue;
           const src = byId.get(e.source);
           if (!src) continue;
           if (src.type === "imageRef") {
@@ -1462,6 +1473,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     showImageGeneratorOutputBubble,
     imageGeneratorOutputReady,
     showVideoOutputBubbles,
+    data.imageWorkflowPreset,
   ]);
 
   const aspectLocked =
@@ -1547,6 +1559,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   const websiteUrl = (data.websiteUrl ?? "").trim();
   const websiteOutputMode = data.websiteOutputMode ?? "full_flow";
   const websiteProductImageCount = data.websiteProductImageCount ?? 3;
+  const profile360ImageUi = data.kind === "image" && data.imageWorkflowPreset === "profile_360";
   const batchPromptCount = useStore(
     useCallback(
       (s) => {
@@ -1567,7 +1580,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     useCallback(
       (s) => {
         if (data.kind !== "motion") return "";
-        const linked = collectLinkedVideoUrlsForHandles(s.nodes, s.edges, id, ["inVideo", "in"]);
+        const linked = collectLinkedVideoUrlsForHandles(s.nodes, s.edges, id, ["inVideo"]);
         return (
           linked[0]?.trim() ||
           (data.referenceMediaKind === "video" ? data.referencePreviewUrl?.trim() : "") ||
@@ -1589,7 +1602,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         if (data.kind !== "video") return "";
         const startUrls = collectLinkedImageUrlsForHandles(s.nodes, s.edges, id, ["startImage"]);
         const refUrls = collectLinkedImageUrlsForHandles(s.nodes, s.edges, id, ["references"]);
-        const legacyImg = collectLinkedImageUrlsForHandles(s.nodes, s.edges, id, ["in", "inImage"]);
+        const legacyImg = collectLinkedImageUrlsForHandles(s.nodes, s.edges, id, ["inImage"]);
         const nodeRef =
           data.referenceMediaKind === "image" && data.referencePreviewUrl?.trim()
             ? [data.referencePreviewUrl.trim()]
@@ -1745,7 +1758,8 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   );
   const hasLinkedGeneratorTextInput = isGeneratorNode && generatorTextInputWireCount > 0;
   const promptPreviewText = (data.lastRunPrompt ?? prompt).trim();
-  const showPromptPreviewChip = hasPreviewMedia && promptPreviewText.length > 0;
+  const showPromptPreviewChip =
+    hasPreviewMedia && promptPreviewText.length > 0 && !profile360ImageUi;
   const openPromptEditor = useCallback(() => {
     const composedSeed = (() => {
       if (data.kind !== "image" && data.kind !== "video" && data.kind !== "motion") {
@@ -1778,23 +1792,28 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
 
     const nodes = getNodes();
     const edges = getEdges();
+    const profile360Preset = data.kind === "image" && data.imageWorkflowPreset === "profile_360";
     const linkedPrompts =
-      data.kind === "image" || data.kind === "video" || data.kind === "motion" || data.kind === "assistant"
-        ? collectLinkedPromptTextsForHandles(nodes, edges, id, [...WORKFLOW_TEXT_INPUT_HANDLES])
-        : collectLinkedPromptTexts(nodes, edges, id);
+      profile360Preset
+        ? ([] as string[])
+        : data.kind === "image" || data.kind === "video" || data.kind === "motion" || data.kind === "assistant"
+          ? collectLinkedPromptTextsForHandles(nodes, edges, id, [...WORKFLOW_TEXT_INPUT_HANDLES])
+          : collectLinkedPromptTexts(nodes, edges, id);
     const linkedAssistantImageRefs =
       data.kind === "assistant"
-        ? collectLinkedImageUrlsForHandles(nodes, edges, id, ["references", "in", "inImage"])
+        ? collectLinkedImageUrlsForHandles(nodes, edges, id, ["references", "startImage", "inImage"])
         : [];
-    const effectivePrompt = composeWorkflowPrompt(prompt, linkedPrompts);
+    const effectivePrompt = profile360Preset ? PROFILE_360_IMAGE_PROMPT : composeWorkflowPrompt(prompt, linkedPrompts);
     const batchContext =
       data.kind === "image" || data.kind === "video" || data.kind === "motion"
-        ? collectWorkflowBatchPrompts(nodes, edges, id, [...WORKFLOW_TEXT_INPUT_HANDLES], prompt)
+        ? profile360Preset
+          ? { batch: null, composedSingle: PROFILE_360_IMAGE_PROMPT, fromPromptList: false }
+          : collectWorkflowBatchPrompts(nodes, edges, id, [...WORKFLOW_TEXT_INPUT_HANDLES], prompt)
         : { batch: null, composedSingle: effectivePrompt, fromPromptList: false };
     const batchPrompts = batchContext.batch?.map((x) => x.trim()).filter(Boolean) ?? null;
     const singlePrompt = (batchContext.composedSingle || effectivePrompt).trim();
     const fromPromptList = batchContext.fromPromptList;
-    const requiresPrompt = data.kind !== "motion";
+    const requiresPrompt = data.kind !== "motion" && !profile360Preset;
     if (requiresPrompt && !(batchPrompts?.length || singlePrompt)) {
       toast.error("Add a prompt", {
         description: linkedPrompts.length
@@ -1814,19 +1833,44 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     if (data.kind === "assistant") {
       emitRunLog("info", "Assistant run started.");
       const assistantListLabel = `${(data.label || cfg.title || "Assistant").trim() || "Assistant"} prompts`;
+      const httpsVisionUrls = linkedAssistantImageRefs
+        .map((u) => (typeof u === "string" ? u.trim() : ""))
+        .filter((u) => /^https:\/\//i.test(u))
+        .slice(0, 12);
+      const assistantVisionPreset = data.assistantVisionPreset === "image_to_json" ? "image_to_json" : undefined;
+      if (assistantVisionPreset === "image_to_json" && httpsVisionUrls.length === 0) {
+        toast.error("Connect an image", {
+          description:
+            "Image → JSON needs a wired image hosted at HTTPS (upload first so it gets a public URL).",
+        });
+        emitRunFinished(false);
+        emitRunLog("error", "Assistant (image→JSON): no HTTPS reference image URLs.");
+        return;
+      }
+
+      const promptForApi =
+        httpsVisionUrls.length > 0
+          ? singlePrompt.trim()
+          : linkedAssistantImageRefs.length > 0
+            ? `${singlePrompt.trim()}\n\nReference image URLs:\n${linkedAssistantImageRefs.map((u) => `- ${u}`).join("\n")}`
+            : singlePrompt.trim();
+
       setGenerating(true);
       let ok = false;
       try {
-        const promptWithRefs =
-          linkedAssistantImageRefs.length > 0
-            ? `${singlePrompt}\n\nReference image URLs:\n${linkedAssistantImageRefs.map((u) => `- ${u}`).join("\n")}`
-            : singlePrompt;
         const res = await fetch("/api/gpt/workflow-assistant-chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            prompt: promptWithRefs,
+            prompt:
+              assistantVisionPreset === "image_to_json" && !promptForApi
+                ? "Return the structured JSON analysis for the attached image per your instructions."
+                : promptForApi,
             model: assistantModel,
+            ...(httpsVisionUrls.length > 0 ? { imageUrls: httpsVisionUrls } : {}),
+            ...(assistantVisionPreset === "image_to_json"
+              ? { visionPreset: "image_to_json" as const }
+              : {}),
           }),
         });
         const json = (await res.json()) as { output?: string; error?: string };
@@ -1845,7 +1889,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               (e) =>
                 e.source === id &&
                 (e.sourceHandle ?? "out") === "out" &&
-                (e.targetHandle === "inText" || e.targetHandle === "in" || !e.targetHandle),
+                (e.targetHandle === "inText" || e.targetHandle === "text" || !e.targetHandle),
             );
             const linkedListId = outEdges
               .map((e) => e.target)
@@ -1910,6 +1954,50 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     }
 
     if (data.kind === "website") {
+      if (websiteOutputMode === "profile_360") {
+        const imgs = collectLinkedImageUrlsForHandles(nodes, edges, id, ["references", "inImage"]);
+        const img = imgs
+          .map((u) => (typeof u === "string" ? u.trim() : ""))
+          .find((u) => u && u !== "about:blank");
+        if (!img) {
+          toast.error("Connect a source image", {
+            description: "Use the Images input and wire a product photo or image reference node.",
+          });
+          emitRunFinished(false);
+          emitRunLog("error", "Website module (360° profile): no image connected.");
+          return;
+        }
+        emitRunLog("info", "Website module (360° profile) started.");
+        setGenerating(true);
+        let ok = false;
+        try {
+          const self = nodes.find((n) => n.id === id);
+          if (!self) throw new Error("Could not find node position.");
+          const built = buildWorkflow360ProfileBranch(
+            { x: self.position.x + 520, y: self.position.y + 40 },
+            { sourceImageUrl: img },
+          );
+          setNodes((prev) => [...prev, ...built.nodes]);
+          setEdges((prev) => [...prev, ...built.edges]);
+          patch(id, { websiteLastRunAt: new Date().toISOString() });
+          toast.success("360° profile branch created");
+          ok = true;
+          emitRunLog("success", "Website module (360° profile) finished.");
+        } catch (e) {
+          toast.error("Website module failed", {
+            description: userMessageFromCaughtError(e, "Try again."),
+          });
+          emitRunLog(
+            "error",
+            `Website module (360° profile) failed: ${userMessageFromCaughtError(e, "Try again.")}`,
+          );
+        } finally {
+          setGenerating(false);
+          emitRunFinished(ok);
+        }
+        return;
+      }
+
       if (!/^https?:\/\//i.test(websiteUrl)) {
         toast.error("Enter a valid website URL", {
           description: "Use a full URL starting with http:// or https://",
@@ -2091,7 +2179,11 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     if (data.kind === "image") {
       emitRunLog("info", "Image generation started.");
       const imageResultsListLabel = `${(data.label || cfg.title || "Image").trim() || "Image"} results`;
-      const linkedImageReferences = collectLinkedImageUrlsForHandles(nodes, edges, id, ["references", "in", "inImage"]);
+      const linkedImageReferences = collectLinkedImageUrlsForHandles(nodes, edges, id, [
+        "references",
+        "startImage",
+        "inImage",
+      ]);
       const mergedImageReferences = Array.from(
         new Set([...(refImageForImageGen ? [refImageForImageGen] : []), ...linkedImageReferences]),
       );
@@ -2101,6 +2193,14 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           description: `Using the first ${WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX} of ${refsForJob.length} reference images.`,
         });
         refsForJob = refsForJob.slice(0, WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX);
+      }
+      if (profile360Preset && refsForJob.length === 0) {
+        toast.error("Connect a source image", {
+          description: "Wire your product photo into the Images port, or upload one in the preview slot.",
+        });
+        emitRunFinished(false);
+        emitRunLog("error", "360° profile preset blocked: no reference image.");
+        return;
       }
       const perRunCharge = workflowImageChargeCredits({
         model,
@@ -2339,12 +2439,8 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
 
     if (data.kind === "motion") {
       emitRunLog("info", "Motion control started.");
-      const motionImageRefs = collectLinkedImageUrlsForHandles(nodes, edges, id, [
-        "startImage",
-        "in",
-        "inImage",
-      ]);
-      const motionVideoRefs = collectLinkedVideoUrlsForHandles(nodes, edges, id, ["inVideo", "in"]);
+      const motionImageRefs = collectLinkedImageUrlsForHandles(nodes, edges, id, ["startImage", "inImage"]);
+      const motionVideoRefs = collectLinkedVideoUrlsForHandles(nodes, edges, id, ["inVideo"]);
       const motionImageUrl =
         motionImageRefs[0]?.trim() ||
         (data.referenceMediaKind === "image" ? data.referencePreviewUrl?.trim() : "") ||
@@ -2578,10 +2674,8 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         id,
         ["references"],
       );
-      // Legacy workflow compatibility: older canvases could wire image inputs on `in` / `inImage`.
-      // If no explicit modern ports are connected, treat legacy image wires as start/references.
+      // Legacy: `inImage` when no explicit start/references wiring (center `in` removed from nodes).
       const linkedFromLegacyImagePorts = collectLinkedImageUrlsForHandles(nodesForVideoInputs, edges, id, [
-        "in",
         "inImage",
       ]);
       const linkedFromStartPort =
@@ -2812,6 +2906,8 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     data.kind,
     data.referenceMediaKind,
     data.referencePreviewUrl,
+    data.imageWorkflowPreset,
+    data.assistantVisionPreset,
     data.videoDurationSec,
     data.videoPriority,
     data.videoStartImageUrl,
@@ -2872,120 +2968,188 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   if (data.kind === "website") {
     const websiteCardWidth = Math.max(cardWidthPx, 520);
     const modeMeta = WEBSITE_OUTPUT_MODES.find((m) => m.value === websiteOutputMode);
+    const profile360Website = websiteOutputMode === "profile_360";
     return (
       <>
         <WorkflowNodeContextToolbar nodeId={id} onRun={runThisNodeOnly} onRunFromHere={runFromHere} />
         <div
-          className={cn(
-            "relative overflow-visible rounded-2xl border border-white/[0.08] bg-[#121212]/98 px-3 pb-3 pt-2.5 shadow-[0_12px_40px_rgba(0,0,0,0.5)] backdrop-blur-sm",
-            selected ? "ring-2 ring-violet-500/85 ring-offset-2 ring-offset-[#06070d]" : "",
-          )}
-          style={{ width: websiteCardWidth }}
-          onPointerDown={(e) => e.stopPropagation()}
+          className="relative flex items-end gap-1"
           onMouseEnter={() => window.dispatchEvent(new CustomEvent("workflow:hover-node", { detail: { nodeId: id } }))}
           onMouseLeave={() => window.dispatchEvent(new CustomEvent("workflow:unhover-node"))}
         >
-          <Handle id="in" type="target" position={Position.Left} className="!h-3 !w-3 !border-2 !border-violet-500/45 !bg-[#06070d]" />
-          <Handle id="out" type="source" position={Position.Right} className="!h-3 !w-3 !border-2 !border-violet-500/45 !bg-[#06070d]" />
-
-          <div className="mb-2 flex items-center gap-2">
-            <Icon className="h-4 w-4 shrink-0 text-white/75" strokeWidth={2} aria-hidden />
-            <p className="min-w-0 truncate text-[13px] font-semibold tracking-tight text-white">Website module #{displayIndex}</p>
-          </div>
-
-          <div className="space-y-2">
-            <div>
-              <p className="mb-1 text-[11px] font-medium text-white/60">Website URL</p>
-              <input
-                value={websiteUrl}
-                onChange={(e) => patch(id, { websiteUrl: e.target.value })}
-                placeholder="https://your-store.com/product-page"
-                onWheelCapture={keepWheelInsideScrollable}
-                className="nodrag nopan nowheel h-9 w-full rounded-lg border border-white/12 bg-black/35 px-3 text-[13px] text-white/90 outline-none focus:border-violet-500/40"
-              />
-            </div>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <div>
-                <p className="mb-1 text-[11px] font-medium text-white/60">Output</p>
-                <Select
-                  value={websiteOutputMode}
-                  onValueChange={(v) =>
-                    patch(id, { websiteOutputMode: v as "product_images" | "angles" | "full_flow" })
-                  }
+          {profile360Website ? (
+            <div className="nodrag nopan flex shrink-0 flex-col gap-1 pb-3">
+              <div className={cn(workflowPortBubbleShellClass, "nodrag nopan relative")}>
+                <Handle
+                  id="references"
+                  type="target"
+                  position={Position.Left}
+                  className={workflowPortTargetHandleClass}
+                  aria-label="Website 360° image input"
+                />
+                <Handle
+                  id="inImage"
+                  type="target"
+                  position={Position.Left}
+                  className={workflowPortTargetHandleClass}
+                  aria-label="Alternate website reference images port"
+                />
+                <button
+                  type="button"
+                  onPointerDown={(e) => handleInputBubblePointerDown(e, "references")}
+                  title="Product image for 360° profile branch."
+                  className={workflowPortBubbleHitClass}
                 >
-                  <SelectTrigger size="sm" className={cn(selectTriggerClass, "w-full")}>
-                    <SelectValue placeholder="Output mode" />
-                  </SelectTrigger>
-                  <SelectContent className={selectContentClass} position="popper">
-                    {WEBSITE_OUTPUT_MODES.map((m) => (
-                      <SelectItem key={m.value} value={m.value} className="text-[12px] focus:bg-violet-500/20">
-                        {m.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  <Images className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+                </button>
               </div>
-              {websiteOutputMode === "product_images" ? (
+            </div>
+          ) : (
+            <div className="nodrag nopan flex shrink-0 flex-col gap-1 pb-3">
+              <div className={cn(workflowPortBubbleShellClass, "nodrag nopan")}>
+                <Handle
+                  id="text"
+                  type="target"
+                  position={Position.Left}
+                  className={workflowPortTargetHandleClass}
+                  aria-label="Website notes / prompt text input"
+                />
+                <Handle
+                  id="inText"
+                  type="target"
+                  position={Position.Left}
+                  className={workflowPortTargetHandleClass}
+                  aria-label="Alternate website text input"
+                />
+                <button
+                  type="button"
+                  onPointerDown={(e) => handleInputBubblePointerDown(e, "text")}
+                  title="Optional linked text context (same port family as Video Generator)."
+                  className={workflowPortBubbleHitClass}
+                >
+                  <Type className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div
+            className={cn(
+              "relative overflow-visible rounded-2xl border border-white/[0.08] bg-[#121212]/98 px-3 pb-3 pt-2.5 shadow-[0_12px_40px_rgba(0,0,0,0.5)] backdrop-blur-sm",
+              selected ? "ring-2 ring-violet-500/85 ring-offset-2 ring-offset-[#06070d]" : "",
+            )}
+            style={{ width: websiteCardWidth }}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <Handle id="out" type="source" position={Position.Right} className="!h-3 !w-3 !border-2 !border-violet-500/45 !bg-[#06070d]" />
+
+            <div className="mb-2 flex items-center gap-2">
+              <Icon className="h-4 w-4 shrink-0 text-white/75" strokeWidth={2} aria-hidden />
+              <p className="min-w-0 truncate text-[13px] font-semibold tracking-tight text-white">Website module #{displayIndex}</p>
+            </div>
+
+            <div className="space-y-2">
+              {profile360Website ? (
+                <div className="rounded-lg border border-white/10 bg-black/25 px-2.5 py-2 text-[11px] leading-snug text-white/60">
+                  Wire a single product photo into Images (left). Run inserts a preset Image Generator (no text)—output is another still.
+                </div>
+              ) : (
                 <div>
-                  <p className="mb-1 text-[11px] font-medium text-white/60">Image count</p>
+                  <p className="mb-1 text-[11px] font-medium text-white/60">Website URL</p>
+                  <input
+                    value={websiteUrl}
+                    onChange={(e) => patch(id, { websiteUrl: e.target.value })}
+                    placeholder="https://your-store.com/product-page"
+                    onWheelCapture={keepWheelInsideScrollable}
+                    className="nodrag nopan nowheel h-9 w-full rounded-lg border border-white/12 bg-black/35 px-3 text-[13px] text-white/90 outline-none focus:border-violet-500/40"
+                  />
+                </div>
+              )}
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <div>
+                  <p className="mb-1 text-[11px] font-medium text-white/60">Output</p>
                   <Select
-                    value={String(websiteProductImageCount)}
-                    onValueChange={(v) => patch(id, { websiteProductImageCount: Number(v) as 1 | 3 | 5 })}
+                    value={websiteOutputMode}
+                    onValueChange={(v) =>
+                      patch(id, {
+                        websiteOutputMode: v as "product_images" | "angles" | "full_flow" | "profile_360",
+                      })
+                    }
                   >
                     <SelectTrigger size="sm" className={cn(selectTriggerClass, "w-full")}>
-                      <SelectValue placeholder="Count" />
+                      <SelectValue placeholder="Output mode" />
                     </SelectTrigger>
                     <SelectContent className={selectContentClass} position="popper">
-                      <SelectItem value="1" className="text-[12px] focus:bg-violet-500/20">1 image</SelectItem>
-                      <SelectItem value="3" className="text-[12px] focus:bg-violet-500/20">3 images</SelectItem>
-                      <SelectItem value="5" className="text-[12px] focus:bg-violet-500/20">5 images</SelectItem>
+                      {WEBSITE_OUTPUT_MODES.map((m) => (
+                        <SelectItem key={m.value} value={m.value} className="text-[12px] focus:bg-violet-500/20">
+                          {m.label}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
-              ) : (
-                <div className="rounded-lg border border-white/10 bg-black/25 px-2.5 py-2 text-[11px] text-white/55">
-                  {modeMeta?.hint ?? ""}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="mt-2 flex items-center gap-2">
-            <div className="relative ml-auto">
-            <button
-              type="button"
-              title={generating ? "Running website module…" : "Run website module"}
-              disabled={generating}
-              className="nodrag nopan flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-zinc-900 shadow-md transition hover:bg-white/95 disabled:cursor-not-allowed disabled:opacity-55"
-              onClick={onGenerateButtonClick}
-            >
-              {generating ? (
-                <Loader2 className="h-4 w-4 animate-spin text-zinc-900" aria-hidden />
-              ) : hasWebsiteRun ? (
-                <RotateCcw className="h-4 w-4 text-zinc-900" strokeWidth={2.25} />
-              ) : (
-                <ArrowRight className="h-4 w-4 text-zinc-900" strokeWidth={2.25} />
-              )}
-            </button>
-            {runChoiceOpen && hasDownstreamModules ? (
-              <div className="absolute bottom-[calc(100%+8px)] right-0 z-50 min-w-[170px] rounded-xl border border-white/12 bg-[#14141a]/95 p-1.5 shadow-[0_12px_36px_rgba(0,0,0,0.6)] backdrop-blur-md">
-                <button
-                  type="button"
-                  className="flex w-full items-center rounded-lg px-2.5 py-2 text-left text-[12px] font-medium text-white/90 transition hover:bg-white/[0.08]"
-                  onClick={runThisNodeOnly}
-                >
-                  This node only
-                </button>
-                <button
-                  type="button"
-                  className="flex w-full items-center rounded-lg px-2.5 py-2 text-left text-[12px] font-medium text-white/90 transition hover:bg-white/[0.08]"
-                  onClick={runFromHere}
-                >
-                  Run from here
-                  {runFromHereEstimatedCredits > 0 ? ` (${runFromHereEstimatedCredits} cr)` : ""}
-                </button>
+                {websiteOutputMode === "product_images" ? (
+                  <div>
+                    <p className="mb-1 text-[11px] font-medium text-white/60">Image count</p>
+                    <Select
+                      value={String(websiteProductImageCount)}
+                      onValueChange={(v) => patch(id, { websiteProductImageCount: Number(v) as 1 | 3 | 5 })}
+                    >
+                      <SelectTrigger size="sm" className={cn(selectTriggerClass, "w-full")}>
+                        <SelectValue placeholder="Count" />
+                      </SelectTrigger>
+                      <SelectContent className={selectContentClass} position="popper">
+                        <SelectItem value="1" className="text-[12px] focus:bg-violet-500/20">1 image</SelectItem>
+                        <SelectItem value="3" className="text-[12px] focus:bg-violet-500/20">3 images</SelectItem>
+                        <SelectItem value="5" className="text-[12px] focus:bg-violet-500/20">5 images</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-white/10 bg-black/25 px-2.5 py-2 text-[11px] text-white/55">
+                    {modeMeta?.hint ?? ""}
+                  </div>
+                )}
               </div>
-            ) : null}
+            </div>
+
+            <div className="mt-2 flex items-center gap-2">
+              <div className="relative ml-auto">
+                <button
+                  type="button"
+                  title={generating ? "Running website module…" : "Run website module"}
+                  disabled={generating}
+                  className="nodrag nopan flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-zinc-900 shadow-md transition hover:bg-white/95 disabled:cursor-not-allowed disabled:opacity-55"
+                  onClick={onGenerateButtonClick}
+                >
+                  {generating ? (
+                    <Loader2 className="h-4 w-4 animate-spin text-zinc-900" aria-hidden />
+                  ) : hasWebsiteRun ? (
+                    <RotateCcw className="h-4 w-4 text-zinc-900" strokeWidth={2.25} />
+                  ) : (
+                    <ArrowRight className="h-4 w-4 text-zinc-900" strokeWidth={2.25} />
+                  )}
+                </button>
+                {runChoiceOpen && hasDownstreamModules ? (
+                  <div className="absolute bottom-[calc(100%+8px)] right-0 z-50 min-w-[170px] rounded-xl border border-white/12 bg-[#14141a]/95 p-1.5 shadow-[0_12px_36px_rgba(0,0,0,0.6)] backdrop-blur-md">
+                    <button
+                      type="button"
+                      className="flex w-full items-center rounded-lg px-2.5 py-2 text-left text-[12px] font-medium text-white/90 transition hover:bg-white/[0.08]"
+                      onClick={runThisNodeOnly}
+                    >
+                      This node only
+                    </button>
+                    <button
+                      type="button"
+                      className="flex w-full items-center rounded-lg px-2.5 py-2 text-left text-[12px] font-medium text-white/90 transition hover:bg-white/[0.08]"
+                      onClick={runFromHere}
+                    >
+                      Run from here
+                      {runFromHereEstimatedCredits > 0 ? ` (${runFromHereEstimatedCredits} cr)` : ""}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
             </div>
           </div>
         </div>
@@ -2994,6 +3158,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   }
 
   if (data.kind === "assistant") {
+    const assistantImageToJson = data.assistantVisionPreset === "image_to_json";
     const assistantCardWidth = Math.max(cardWidthPx, 420);
     const assistantBodyHeightPx = Math.max(248, assistantCardWidth - 114);
     return (
@@ -3057,7 +3222,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 type="target"
                 position={Position.Left}
                 className={workflowPortTargetHandleClass}
-                aria-label="Legacy assistant text input"
+                aria-label="Alternate assistant text port"
               />
               <button
                 type="button"
@@ -3066,6 +3231,23 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 className={workflowPortBubbleHitClass}
               >
                 <Type className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
+              </button>
+            </div>
+            <div className={cn(workflowPortBubbleShellClass, "nodrag nopan")}>
+              <Handle
+                id="startImage"
+                type="target"
+                position={Position.Left}
+                className={workflowPortTargetHandleClass}
+                aria-label="Primary assistant reference image"
+              />
+              <button
+                type="button"
+                onPointerDown={(e) => handleInputBubblePointerDown(e, "startImage")}
+                title="Primary context image (same port family as Video Generator start frame)."
+                className={workflowPortBubbleHitClass}
+              >
+                <ImageIcon className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
               </button>
             </div>
             <div className={cn(workflowPortBubbleShellClass, "nodrag nopan")}>
@@ -3081,12 +3263,12 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 type="target"
                 position={Position.Left}
                 className={workflowPortTargetHandleClass}
-                aria-label="Legacy assistant reference images input"
+                aria-label="Alternate assistant reference images port"
               />
               <button
                 type="button"
                 onPointerDown={(e) => handleInputBubblePointerDown(e, "references")}
-                title="Reference images for Assistant context."
+                title="Additional reference images for Assistant context."
                 className={workflowPortBubbleHitClass}
               >
                 <Images className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
@@ -3101,13 +3283,6 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             style={{ width: assistantCardWidth }}
             onPointerDown={(e) => e.stopPropagation()}
           >
-          <Handle
-            id="in"
-            type="target"
-            position={Position.Left}
-            className="nodrag nopan !absolute left-0 top-1/2 z-[6] !h-3 !w-3 -translate-y-1/2 !border-2 !border-violet-500/45 !bg-[#06070d]"
-            title="Legacy text input"
-          />
           <div className="nodrag nopan absolute -right-10 top-2 z-[7]">
             <div className={cn(workflowPortBubbleShellClass, "nodrag nopan relative border-violet-400/35 bg-[#15151a]/95")}>
               <Handle
@@ -3179,10 +3354,20 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           </div>
 
           {assistantMode === "input" ? (
+            <>
+              {assistantImageToJson ? (
+                <p className="nodrag nopan mb-2 rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-[10px] leading-snug text-white/52">
+                  Image → JSON uses vision on your wired HTTPS image. The Result tab holds one JSON object (no markdown). Add optional notes in the brief below.
+                </p>
+              ) : null}
             <textarea
               value={prompt}
               onChange={(e) => patch(id, { prompt: e.target.value })}
-              placeholder="Type your prompt for the assistant..."
+              placeholder={
+                assistantImageToJson
+                  ? "Optional extra instructions (preset already requests structured JSON)…"
+                  : "Type your prompt for the assistant..."
+              }
               rows={4}
               onWheelCapture={keepWheelInsideScrollable}
               onFocus={() => setPromptFocused(true)}
@@ -3190,6 +3375,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               style={{ minHeight: assistantBodyHeightPx }}
               className="nodrag nopan nowheel w-full resize-y rounded-xl border border-white/12 bg-black/35 px-2.5 py-2 text-[12px] leading-relaxed text-white/92 placeholder:text-white/30 caret-white outline-none focus:border-violet-500/40 focus:ring-1 focus:ring-violet-500/25"
             />
+            </>
           ) : (
             <textarea
               value={assistantOutput}
@@ -3427,90 +3613,140 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           </div>
           ) : null}
         </div>
-      ) : data.kind === "image" ? (
+      ) : data.kind === "image" ||
+        data.kind === "variation" ||
+        data.kind === "upscale" ? (
         <div className="nodrag nopan flex shrink-0 flex-col gap-1 pb-3">
-          <div className={cn(workflowPortBubbleShellClass, "nodrag nopan")}>
-            <Handle
-              id="text"
-              type="target"
-              position={Position.Left}
-              className={workflowPortTargetHandleClass}
-              aria-label="Prompt text input port"
-            />
-            <Handle
-              id="inText"
-              type="target"
-              position={Position.Left}
-              className={workflowPortTargetHandleClass}
-              aria-label="Legacy prompt text input"
-            />
-            <button
-              type="button"
-              onPointerDown={(e) => handleInputBubblePointerDown(e, "text")}
-              title="Prompt text, one incoming wire; compose the main prompt inside the module."
-              className={workflowPortBubbleHitClass}
-            >
-              <Type className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
-            </button>
-          </div>
+          {!profile360ImageUi || data.kind !== "image" ? (
+            <div className={cn(workflowPortBubbleShellClass, "nodrag nopan")}>
+              <Handle
+                id="text"
+                type="target"
+                position={Position.Left}
+                className={workflowPortTargetHandleClass}
+                aria-label="Prompt text input port"
+              />
+              <Handle
+                id="inText"
+                type="target"
+                position={Position.Left}
+                className={workflowPortTargetHandleClass}
+                aria-label="Alternate prompt text port"
+              />
+              <button
+                type="button"
+                onPointerDown={(e) => handleInputBubblePointerDown(e, "text")}
+                title="Prompt text, one incoming wire; compose the main prompt inside the module."
+                className={workflowPortBubbleHitClass}
+              >
+                <Type className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
+              </button>
+            </div>
+          ) : null}
 
-          <div className={cn(workflowPortBubbleShellClass, "nodrag nopan relative")}>
-            <Handle
-              id="references"
-              type="target"
-              position={Position.Left}
-              className={workflowPortTargetHandleClass}
-              aria-label="Reference images input"
-            />
-            <Handle
-              id="inImage"
-              type="target"
-              position={Position.Left}
-              className={workflowPortTargetHandleClass}
-              aria-label="Legacy reference images input"
-            />
-            <button
-              type="button"
-              onPointerDown={(e) => handleInputBubblePointerDown(e, "references")}
-              title={`Reference images, ${imageReferenceWireCount}/${WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX} connected (max ${WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX} for this job).`}
-              className={workflowPortBubbleHitClass}
-            >
-              <Images className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-            </button>
-            <span
-              className="pointer-events-none absolute -right-0.5 -top-1 rounded px-[3px] py-px text-[8px] font-bold tabular-nums leading-none text-white/70 shadow-[0_1px_6px_rgba(0,0,0,0.65)] ring-1 ring-white/12"
-              style={{
-                background:
-                  imageReferenceWireCount >= WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX
-                    ? "rgba(251,113,133,0.35)"
-                    : "rgba(24,24,27,0.92)",
-              }}
-              aria-hidden
-            >
-              {imageReferenceWireCount}/{WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX}
-            </span>
-          </div>
+          {data.kind === "image" ? (
+            <>
+              <div className={cn(workflowPortBubbleShellClass, "nodrag nopan")}>
+                <Handle
+                  id="startImage"
+                  type="target"
+                  position={Position.Left}
+                  className={workflowPortTargetHandleClass}
+                  aria-label="Primary reference image input"
+                />
+                <button
+                  type="button"
+                  onPointerDown={(e) => handleInputBubblePointerDown(e, "startImage")}
+                  title="Primary image / first reference (same port family as Video Generator start frame)."
+                  className={workflowPortBubbleHitClass}
+                >
+                  <ImageIcon className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+                </button>
+              </div>
+              <div className={cn(workflowPortBubbleShellClass, "nodrag nopan relative")}>
+                <Handle
+                  id="references"
+                  type="target"
+                  position={Position.Left}
+                  className={workflowPortTargetHandleClass}
+                  aria-label="Reference images input"
+                />
+                <Handle
+                  id="inImage"
+                  type="target"
+                  position={Position.Left}
+                  className={workflowPortTargetHandleClass}
+                  aria-label="Alternate reference images port"
+                />
+                <button
+                  type="button"
+                  onPointerDown={(e) => handleInputBubblePointerDown(e, "references")}
+                  title={`Reference images, ${imageReferenceWireCount}/${WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX} connected (max ${WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX} for this job).`}
+                  className={workflowPortBubbleHitClass}
+                >
+                  <Images className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+                </button>
+                <span
+                  className="pointer-events-none absolute -right-0.5 -top-1 rounded px-[3px] py-px text-[8px] font-bold tabular-nums leading-none text-white/70 shadow-[0_1px_6px_rgba(0,0,0,0.65)] ring-1 ring-white/12"
+                  style={{
+                    background:
+                      imageReferenceWireCount >= WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX
+                        ? "rgba(251,113,133,0.35)"
+                        : "rgba(24,24,27,0.92)",
+                  }}
+                  aria-hidden
+                >
+                  {imageReferenceWireCount}/{WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX}
+                </span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className={cn(workflowPortBubbleShellClass, "nodrag nopan")}>
+                <Handle
+                  id="startImage"
+                  type="target"
+                  position={Position.Left}
+                  className={workflowPortTargetHandleClass}
+                  aria-label="Primary reference image input"
+                />
+                <button
+                  type="button"
+                  onPointerDown={(e) => handleInputBubblePointerDown(e, "startImage")}
+                  title="Primary image input (aligned with Video Generator ports)."
+                  className={workflowPortBubbleHitClass}
+                >
+                  <ImageIcon className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+                </button>
+              </div>
+              <div className={cn(workflowPortBubbleShellClass, "nodrag nopan")}>
+                <Handle
+                  id="references"
+                  type="target"
+                  position={Position.Left}
+                  className={workflowPortTargetHandleClass}
+                  aria-label="Reference images input"
+                />
+                <Handle
+                  id="inImage"
+                  type="target"
+                  position={Position.Left}
+                  className={workflowPortTargetHandleClass}
+                  aria-label="Alternate reference images port"
+                />
+                <button
+                  type="button"
+                  onPointerDown={(e) => handleInputBubblePointerDown(e, "references")}
+                  title="Additional reference images (same layout as Video Generator)."
+                  className={workflowPortBubbleHitClass}
+                >
+                  <Images className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+                </button>
+              </div>
+            </>
+          )}
         </div>
-      ) : (
-        <div className="nodrag nopan flex shrink-0 flex-col gap-1 pb-3">
-          <button
-            type="button"
-            title="Reference text (soon)"
-            className="flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-[#15151a]/95 text-[11px] font-bold text-white/85 transition"
-            onClick={() => toast.message("Coming soon", { description: "Attach reference text to this node." })}
-          >
-            <Type className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            title="Reference image (soon)"
-            className="flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-[#15151a]/95 text-white/85 transition"
-            onClick={() => toast.message("Coming soon", { description: "Attach a reference image to this node." })}
-          >
-            <ImageIcon className="h-3.5 w-3.5" strokeWidth={2} />
-          </button>
-        </div>
-      )}
+      ) : null}
 
       <div
         className="contents"
@@ -3584,23 +3820,6 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           }, 220);
         }}
       >
-        {data.kind === "image" || data.kind === "video" || data.kind === "motion" ? (
-          <Handle
-            id="in"
-            type="target"
-            position={Position.Left}
-            className="nodrag nopan !absolute left-0 top-1/2 z-[7] !h-3 !w-3 -translate-y-1/2 !border-2 !border-violet-500/45 !bg-[#06070d]"
-            title="Legacy combined input"
-          />
-        ) : (
-          <Handle
-            id="in"
-            type="target"
-            position={Position.Left}
-            className="!h-3 !w-3 !border-2 !border-violet-500/45 !bg-[#06070d]"
-          />
-        )}
-
         <div
           className={cn(
             "relative w-full overflow-hidden",
@@ -3868,7 +4087,11 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                   ) : null}
                 </div>
               ) : null}
-              {!hasPreviewMedia || !isGeneratorNode || !hasLinkedGeneratorTextInput ? (
+              {profile360ImageUi ? (
+                <p className="nodrag nopan rounded-lg border border-white/10 bg-black/35 px-2 py-1.5 text-[10px] leading-snug text-white/52">
+                  360° profile preset uses your wired image only; the model applies a fixed packshot brief.
+                </p>
+              ) : !hasPreviewMedia || !isGeneratorNode || !hasLinkedGeneratorTextInput ? (
                 <textarea
                   value={prompt}
                   onChange={(e) => patch(id, { prompt: e.target.value })}

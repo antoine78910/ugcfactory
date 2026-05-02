@@ -23,6 +23,10 @@ export type BuildAdAssetNodeOptions = {
   referencePreviewUrl?: string;
   referenceSource?: "upload" | "avatar";
   referenceMediaKind?: "image" | "video";
+  /** Image-only preset flows (hides text prompt UI on the canvas). */
+  imageWorkflowPreset?: "profile_360";
+  /** Assistant: use vision API + preset developer instructions when set. */
+  assistantVisionPreset?: "image_to_json";
 };
 
 function genDefaultsForKind(
@@ -100,6 +104,9 @@ export function buildAdAssetNode(
     data.assistantMode = "input";
     data.assistantOutput = "";
     data.assistantExportMode = "text";
+    if (options?.assistantVisionPreset) {
+      data.assistantVisionPreset = options.assistantVisionPreset;
+    }
   }
   if (kind === "website") {
     data.websiteUrl = "";
@@ -112,6 +119,9 @@ export function buildAdAssetNode(
   }
 
   if (options?.prompt !== undefined) data.prompt = options.prompt;
+  if (kind === "image" && options?.imageWorkflowPreset) {
+    data.imageWorkflowPreset = options.imageWorkflowPreset;
+  }
 
   if (options?.intrinsicAspect != null && Number.isFinite(options.intrinsicAspect) && options.intrinsicAspect > 0) {
     data.intrinsicAspect = options.intrinsicAspect;
