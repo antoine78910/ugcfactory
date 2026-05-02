@@ -168,6 +168,7 @@ import {
 
 /** Matches `workflowNodeFactory` default for new Video Generator nodes (picker chaining eligibility). */
 const DEFAULT_NEW_VIDEO_GENERATOR_MODEL = "kling-3.0/video";
+const VIDEO_CHAIN_NEW_NODE_DEFAULT_MODEL = "bytedance/seedance-2-fast";
 
 const nodeTypes = {
   adAsset: AdAssetNode,
@@ -569,6 +570,25 @@ function cloneWorkflowCanvasSnapshot(nodes: WorkflowCanvasNode[], edges: Edge[])
 
 function workflowCanvasSnapshotsEqual(a: WorkflowCanvasSnapshot, b: WorkflowCanvasSnapshot): boolean {
   return JSON.stringify(a.nodes) === JSON.stringify(b.nodes) && JSON.stringify(a.edges) === JSON.stringify(b.edges);
+}
+
+/**
+ * Avoid false cloud-conflict alerts when a delayed save races with another save from this same workspace.
+ * If payload already matches cloud, we only advance `updatedAt` and skip the "another device" toast.
+ */
+function workflowCloudPayloadMatchesLocal(
+  cloud: { name?: string | null; publishedCommunityTemplateId?: string | null; state: WorkflowProjectStateV1 },
+  local: { name: string; publishedCommunityTemplateId: string | null; state: WorkflowProjectStateV1 },
+): boolean {
+  const cloudName = (cloud.name ?? "").trim();
+  const localName = (local.name ?? "").trim();
+  const cloudTemplateId = (cloud.publishedCommunityTemplateId ?? "").trim();
+  const localTemplateId = (local.publishedCommunityTemplateId ?? "").trim();
+  return (
+    cloudName === localName &&
+    cloudTemplateId === localTemplateId &&
+    JSON.stringify(cloud.state) === JSON.stringify(local.state)
+  );
 }
 
 function ZoomLabel() {
@@ -4023,11 +4043,20 @@ function WorkflowFlowWorkspace({
                   <button
                     type="button"
                     className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
-                    onClick={() => placeNodeAtPicker("video")}
+                    onClick={() =>
+                      placeNodeAtPicker("video", {
+                        model: VIDEO_CHAIN_NEW_NODE_DEFAULT_MODEL,
+                        videoInputMode: "seedance_only",
+                      })
+                    }
                   >
                     Video generator
                   </button>
                 ) : null}
+                <p className="rounded-lg border border-white/10 bg-black/20 px-2.5 py-2 text-[11px] leading-snug text-white/58">
+                  Video generator (from video output) is limited to Seedance 2 / Seedance 2 Fast. Seedance 2 Fast is
+                  preselected.
+                </p>
                 <button
                   type="button"
                   className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
@@ -4460,6 +4489,20 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
           return;
         }
         if (res.status === 409) {
+          const latest = await fetchCloudWorkflowSpace(resolvedSpaceId);
+          if (latest?.updatedAt) {
+            lastCloudUpdatedAtRef.current = latest.updatedAt;
+          }
+          if (
+            latest &&
+            workflowCloudPayloadMatchesLocal(latest, {
+              name: spaceName,
+              publishedCommunityTemplateId: publishedTemplateId,
+              state: workflowProject,
+            })
+          ) {
+            return;
+          }
           const now = Date.now();
           if (now - cloudConflictToastAtRef.current > 5000) {
             cloudConflictToastAtRef.current = now;

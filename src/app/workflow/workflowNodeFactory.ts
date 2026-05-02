@@ -18,6 +18,8 @@ export type BuildAdAssetNodeOptions = {
   label?: string;
   /** Initial prompt on the node (e.g. template pipelines). */
   prompt?: string;
+  /** Optional explicit model override for special entry points. */
+  model?: string;
   /** width/height, when set, card preview uses this exact shape. */
   intrinsicAspect?: number;
   referencePreviewUrl?: string;
@@ -27,6 +29,8 @@ export type BuildAdAssetNodeOptions = {
   imageWorkflowPreset?: "profile_360";
   /** Assistant: use vision API + preset developer instructions when set. */
   assistantVisionPreset?: "image_to_json";
+  /** Video node was created from an upstream video output picker. */
+  videoInputMode?: "seedance_only";
 };
 
 function genDefaultsForKind(
@@ -119,8 +123,12 @@ export function buildAdAssetNode(
   }
 
   if (options?.prompt !== undefined) data.prompt = options.prompt;
+  if (options?.model !== undefined) data.model = options.model;
   if (kind === "image" && options?.imageWorkflowPreset) {
     data.imageWorkflowPreset = options.imageWorkflowPreset;
+  }
+  if (kind === "video" && options?.videoInputMode) {
+    data.videoInputMode = options.videoInputMode;
   }
 
   if (options?.intrinsicAspect != null && Number.isFinite(options.intrinsicAspect) && options.intrinsicAspect > 0) {

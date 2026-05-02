@@ -126,18 +126,16 @@ export function WorkflowGroupNode({ id, data, selected, width, height }: NodePro
     resizeSnapshotRef.current = { groupWidth, groupHeight, children };
   }, [data.expandedHeight, data.expandedWidth, getNodes, height, id, width]);
 
-  const onResizeEnd = useCallback(
-    (_event: unknown, params: { width?: number; height?: number }) => {
+  const applyResizeScale = useCallback(
+    (nextWidthRaw: number | undefined, nextHeightRaw: number | undefined) => {
       const snap = resizeSnapshotRef.current;
-      resizeSnapshotRef.current = null;
       if (!snap) return;
-      const nextWidth = toNumberSize(params?.width) ?? snap.groupWidth;
-      const nextHeight = toNumberSize(params?.height) ?? snap.groupHeight;
+      const nextWidth = toNumberSize(nextWidthRaw) ?? snap.groupWidth;
+      const nextHeight = toNumberSize(nextHeightRaw) ?? snap.groupHeight;
       if (snap.groupWidth <= 0 || snap.groupHeight <= 0) return;
       const sx = nextWidth / snap.groupWidth;
       const sy = nextHeight / snap.groupHeight;
       if (!Number.isFinite(sx) || !Number.isFinite(sy)) return;
-      if (Math.abs(sx - 1) < 0.0001 && Math.abs(sy - 1) < 0.0001) return;
       const childById = new Map(snap.children.map((c) => [c.id, c]));
       setNodes((prev) =>
         prev.map((n) => {
@@ -158,6 +156,21 @@ export function WorkflowGroupNode({ id, data, selected, width, height }: NodePro
       );
     },
     [setNodes],
+  );
+
+  const onResize = useCallback(
+    (_event: unknown, params: { width?: number; height?: number }) => {
+      applyResizeScale(params?.width, params?.height);
+    },
+    [applyResizeScale],
+  );
+
+  const onResizeEnd = useCallback(
+    (_event: unknown, params: { width?: number; height?: number }) => {
+      applyResizeScale(params?.width, params?.height);
+      resizeSnapshotRef.current = null;
+    },
+    [applyResizeScale],
   );
 
   const ungroup = useCallback(() => {
@@ -209,6 +222,7 @@ export function WorkflowGroupNode({ id, data, selected, width, height }: NodePro
         minHeight={160}
         isVisible={selected && !collapsed}
         onResizeStart={onResizeStart}
+        onResize={onResize}
         onResizeEnd={onResizeEnd}
         lineClassName="!border-white/25"
         handleClassName="!h-2.5 !w-2.5 !rounded-sm !border !border-white/40 !bg-[#12101a]"

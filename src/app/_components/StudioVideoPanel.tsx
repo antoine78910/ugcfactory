@@ -5544,6 +5544,8 @@ export default function StudioVideoPanel({
                         const pickUrl = (item.mediaUrl ?? "").trim();
                         const thumbUrl = (item.posterUrl ?? "").trim();
                         if (!pickUrl) return null;
+                        const previewVideoUrl = proxiedMediaSrc(pickUrl);
+                        const previewPosterUrl = thumbUrl ? proxiedMediaSrc(thumbUrl) : undefined;
                         return (
                           <button
                             key={item.id}
@@ -5556,14 +5558,30 @@ export default function StudioVideoPanel({
                             }}
                             className="group relative aspect-square overflow-hidden rounded-xl border border-white/12 bg-black/40 transition hover:border-violet-400/45"
                           >
-                            {thumbUrl ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img src={thumbUrl} alt="" className="h-full w-full object-cover" />
-                            ) : (
-                              <span className="flex h-full w-full items-center justify-center">
-                                <VideoIcon className="h-8 w-8 text-white/65" aria-hidden />
-                              </span>
-                            )}
+                            {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                            <video
+                              src={previewVideoUrl}
+                              poster={previewPosterUrl}
+                              className="h-full w-full object-cover"
+                              muted
+                              playsInline
+                              preload={previewPosterUrl ? "metadata" : "auto"}
+                              onLoadedData={
+                                previewPosterUrl
+                                  ? undefined
+                                  : (e) => {
+                                      const v = e.currentTarget;
+                                      try {
+                                        v.pause();
+                                        const d = Number(v.duration);
+                                        v.currentTime = Number.isFinite(d) && d > 0 ? Math.min(0.05, d * 0.01) : 0.001;
+                                      } catch {
+                                        /* ignore */
+                                      }
+                                    }
+                              }
+                            />
+                            <span className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/0 via-transparent to-black/35" />
                             <span className="pointer-events-none absolute left-2 top-2 rounded-md bg-black/55 px-1.5 py-0.5 text-[10px] font-semibold text-white/90">
                               Video
                             </span>

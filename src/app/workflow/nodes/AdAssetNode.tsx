@@ -167,6 +167,8 @@ export type AdAssetNodeData = {
   videoDurationSec?: number;
   /** Video: Seedance 2 Preview / Fast Preview queue tier (doubles credits when VIP). */
   videoPriority?: "normal" | "vip";
+  /** Video node born from video-output chaining flow (restrict picker models). */
+  videoInputMode?: "seedance_only";
   /** Motion Control params (mirrors Studio Motion Control). */
   motionAutoSettings?: boolean;
   motionBackgroundSource?: "input_video" | "input_image";
@@ -259,6 +261,10 @@ const VIDEO_MODELS: { value: string; label: string }[] = [
   { value: "veo3_lite", label: "Veo 3.1 Lite" },
   { value: "veo3_fast", label: "Veo 3.1 Fast" },
   { value: "veo3", label: "Veo 3.1 Quality" },
+];
+const VIDEO_CHAIN_SEEDANCE_MODELS: { value: string; label: string }[] = [
+  { value: "bytedance/seedance-2-fast", label: "Seedance 2 Fast" },
+  { value: "bytedance/seedance-2", label: "Seedance 2" },
 ];
 
 const MOTION_CONTROL_MODELS: { value: string; label: string }[] = [
@@ -1408,11 +1414,14 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   const quantity = Math.min(10, Math.max(1, data.quantity ?? 1));
 
   const models = useMemo(() => {
-    if (data.kind === "video") return VIDEO_MODELS;
+    if (data.kind === "video") {
+      if (data.videoInputMode === "seedance_only") return VIDEO_CHAIN_SEEDANCE_MODELS;
+      return VIDEO_MODELS;
+    }
     if (data.kind === "motion") return MOTION_CONTROL_MODELS;
     if (data.kind === "variation" || data.kind === "assistant") return VARIATION_MODELS;
     return IMAGE_MODELS;
-  }, [data.kind]);
+  }, [data.kind, data.videoInputMode]);
 
   const modelDefault = models[0]?.value ?? "nano";
   const rawModel = data.model ?? modelDefault;
@@ -4088,6 +4097,14 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                   ))}
                 </SelectContent>
               </Select>
+              {data.kind === "video" && data.videoInputMode === "seedance_only" ? (
+                <span
+                  className="inline-flex h-6 items-center rounded-full border border-emerald-400/35 bg-emerald-500/10 px-1.5 text-[8px] text-emerald-100/90"
+                  title="Video-chain mode: only Seedance 2 / Seedance 2 Fast are available. Fast is selected by default."
+                >
+                  Seedance 2 / Fast only
+                </span>
+              ) : null}
 
               {data.kind !== "motion" ? (aspectLocked ? (
                 <div
