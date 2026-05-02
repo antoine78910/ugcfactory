@@ -340,9 +340,9 @@ export function PromptListNode({ id, data: rawData, selected }: NodeProps<Prompt
   const outputHandleId = listOutputKind === "image" ? "outImage" : listOutputKind === "video" ? "outVideo" : "outText";
   const activeWireKind: null | "text" | "image" | "video" = incomingInputKind;
   const outputBubbleShellClass =
-    "workflow-port-create-cursor nodrag nopan relative h-8 w-8 shrink-0 rounded-full border bg-[#15151a]/95 transition";
+    "workflow-port-create-cursor nodrag nopan relative h-8 w-8 shrink-0 rounded-full border border-transparent bg-transparent shadow-none";
   const inputBubbleShellClass =
-    "workflow-port-create-cursor nodrag nopan relative h-8 w-8 shrink-0 rounded-full border bg-[#15151a]/95 transition";
+    "workflow-port-create-cursor nodrag nopan relative h-8 w-8 shrink-0 rounded-full border border-transparent bg-transparent shadow-none";
   const inputBubbleHandleClass =
     "workflow-port-create-cursor nodrag nopan !absolute !left-0 !top-0 !box-border !h-8 !w-8 !min-h-8 !min-w-8 !max-h-8 !max-w-8 !rounded-full !border-0 !bg-transparent opacity-0 !transform-none";
   const outputBubbleHandleClass =
@@ -406,25 +406,25 @@ export function PromptListNode({ id, data: rawData, selected }: NodeProps<Prompt
       >
         <div className="nodrag nopan relative z-[7] flex shrink-0 flex-col gap-1 self-end pb-3">
           {(!incomingInputKind || incomingInputKind === "text") ? (
-            <div className={cn(inputBubbleShellClass, "border-white/15")}>
+            <div className={inputBubbleShellClass}>
               <Handle id="inText" type="target" position={Position.Left} className={inputBubbleHandleClass} />
-              <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/85">
+              <span className="pointer-events-none absolute inset-0 z-[1] hidden flex items-center justify-center text-white/85">
                 <Type className="h-3.5 w-3.5" aria-hidden />
               </span>
             </div>
           ) : null}
           {(!incomingInputKind || incomingInputKind === "image") ? (
-            <div className={cn(inputBubbleShellClass, "border-white/15")}>
+            <div className={inputBubbleShellClass}>
               <Handle id="inImage" type="target" position={Position.Left} className={inputBubbleHandleClass} />
-              <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/85">
+              <span className="pointer-events-none absolute inset-0 z-[1] hidden flex items-center justify-center text-white/85">
                 <ImageIcon className="h-3.5 w-3.5" aria-hidden />
               </span>
             </div>
           ) : null}
           {(!incomingInputKind || incomingInputKind === "video") ? (
-            <div className={cn(inputBubbleShellClass, "border-white/15")}>
+            <div className={inputBubbleShellClass}>
               <Handle id="inVideo" type="target" position={Position.Left} className={inputBubbleHandleClass} />
-              <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/85">
+              <span className="pointer-events-none absolute inset-0 z-[1] hidden flex items-center justify-center text-white/85">
                 <Clapperboard className="h-3.5 w-3.5" aria-hidden />
               </span>
             </div>
@@ -688,25 +688,25 @@ export function PromptListNode({ id, data: rawData, selected }: NodeProps<Prompt
         </div>
         <div className="nodrag nopan relative z-[7] flex shrink-0 flex-col gap-1 mt-2">
           {(!activeWireKind || activeWireKind === "text") ? (
-            <div className={cn(outputBubbleShellClass, "border-white/15")}>
+            <div className={outputBubbleShellClass}>
               <Handle id="outText" type="source" position={Position.Right} className={outputBubbleHandleClass} />
-              <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/85">
+              <span className="pointer-events-none absolute inset-0 z-[1] hidden flex items-center justify-center text-white/85">
                 <Type className="h-3.5 w-3.5" aria-hidden />
               </span>
             </div>
           ) : null}
           {(!activeWireKind || activeWireKind === "image") ? (
-            <div className={cn(outputBubbleShellClass, "border-white/15")}>
+            <div className={outputBubbleShellClass}>
               <Handle id="outImage" type="source" position={Position.Right} className={outputBubbleHandleClass} />
-              <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/85">
+              <span className="pointer-events-none absolute inset-0 z-[1] hidden flex items-center justify-center text-white/85">
                 <ImageIcon className="h-3.5 w-3.5" aria-hidden />
               </span>
             </div>
           ) : null}
           {(!activeWireKind || activeWireKind === "video") ? (
-            <div className={cn(outputBubbleShellClass, "border-white/15")}>
+            <div className={outputBubbleShellClass}>
               <Handle id="outVideo" type="source" position={Position.Right} className={outputBubbleHandleClass} />
-              <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/85">
+              <span className="pointer-events-none absolute inset-0 z-[1] hidden flex items-center justify-center text-white/85">
                 <Clapperboard className="h-3.5 w-3.5" aria-hidden />
               </span>
             </div>

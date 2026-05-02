@@ -164,17 +164,17 @@ export function StickyNoteNode({ id, data: rawData, selected }: NodeProps<Sticky
           id="in"
           type="target"
           position={Position.Left}
-          className="!h-3 !w-3 !border-2 !border-amber-600/45 !bg-amber-100"
+          className="workflow-port-create-cursor nodrag nopan !box-border !h-8 !w-8 !min-h-8 !min-w-8 !max-h-8 !max-w-8 !rounded-full !border-0 !bg-transparent opacity-0"
         />
         <Handle
           id="out"
           type="source"
           position={Position.Right}
-          className="!h-3 !w-3 !border-2 !border-amber-600/45 !bg-amber-100"
+          className="workflow-port-create-cursor nodrag nopan !box-border !h-8 !w-8 !min-h-8 !min-w-8 !max-h-8 !max-w-8 !rounded-full !border-0 !bg-transparent opacity-0"
         />
         <button
           type="button"
-          className="workflow-port-create-cursor absolute -right-4 top-1/2 z-[6] h-6 w-6 -translate-y-1/2 cursor-crosshair rounded-full"
+          className="workflow-port-create-cursor absolute -right-4 top-1/2 z-[6] h-8 w-8 -translate-y-1/2 cursor-crosshair rounded-full bg-transparent opacity-0"
           title="Click to add a connected module"
           onPointerDown={(e) => {
             e.preventDefault();

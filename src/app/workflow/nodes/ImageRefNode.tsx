@@ -150,7 +150,7 @@ export function ImageRefNode({ id, data }: NodeProps<ImageRefNodeType>) {
   const cardWidth = frame.width + CARD_PAD_X;
   const isVideo = data.mediaKind === "video";
   const outputBubbleShellClass =
-    "workflow-port-create-cursor nodrag nopan relative h-8 w-8 shrink-0 rounded-full border border-white/15 bg-[#15151a]/95 transition";
+    "workflow-port-create-cursor nodrag nopan relative h-8 w-8 shrink-0 rounded-full border border-transparent bg-transparent shadow-none";
   const outputBubbleHandleClass =
     "workflow-port-create-cursor nodrag nopan !absolute !inset-0 !z-[2] !box-border !h-8 !w-8 !min-h-8 !min-w-8 !max-h-8 !max-w-8 !rounded-full !border-0 !bg-transparent opacity-0 !transform-none";
 
@@ -564,13 +564,13 @@ export function ImageRefNode({ id, data }: NodeProps<ImageRefNodeType>) {
         <div className="nodrag nopan relative z-[7] mt-2 flex shrink-0 flex-col gap-1">
           <div className={outputBubbleShellClass}>
             <Handle id="out" type="source" position={Position.Right} className={outputBubbleHandleClass} />
-            <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/85">
+            <span className="pointer-events-none absolute inset-0 z-[1] hidden flex items-center justify-center text-white/85">
               {isVideo ? <Clapperboard className="h-3.5 w-3.5" aria-hidden /> : <ImageIcon className="h-3.5 w-3.5" aria-hidden />}
             </span>
           </div>
           {isVideo ? (
             <>
-              <div className={cn(outputBubbleShellClass, data.videoExtractedFirstFrameUrl && "border-emerald-400/35")}>
+              <div className={outputBubbleShellClass}>
                 <Handle
                   id="videoFirst"
                   type="source"
@@ -582,7 +582,7 @@ export function ImageRefNode({ id, data }: NodeProps<ImageRefNodeType>) {
                     void onExtractVideoFrame("first");
                   }}
                 />
-                <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/85">
+                <span className="pointer-events-none absolute inset-0 z-[1] hidden flex items-center justify-center text-white/85">
                   {frameExtractBusy === "first" ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
                   ) : (
@@ -596,7 +596,7 @@ export function ImageRefNode({ id, data }: NodeProps<ImageRefNodeType>) {
                   S
                 </span>
               </div>
-              <div className={cn(outputBubbleShellClass, data.videoExtractedLastFrameUrl && "border-emerald-400/35")}>
+              <div className={outputBubbleShellClass}>
                 <Handle
                   id="videoLast"
                   type="source"
@@ -608,7 +608,7 @@ export function ImageRefNode({ id, data }: NodeProps<ImageRefNodeType>) {
                     void onExtractVideoFrame("last");
                   }}
                 />
-                <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/85">
+                <span className="pointer-events-none absolute inset-0 z-[1] hidden flex items-center justify-center text-white/85">
                   {frameExtractBusy === "last" ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
                   ) : (

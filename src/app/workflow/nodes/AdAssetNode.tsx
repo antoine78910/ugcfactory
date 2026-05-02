@@ -1365,16 +1365,14 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     "nodrag nopan !absolute !left-4 !top-0 !z-[2] !box-border !h-8 !w-4 !min-h-8 !min-w-4 !max-h-8 !max-w-4 rounded-r-full !border-0 !bg-transparent opacity-0 !transform-none";
 
   /**
-   * Outer ring for input/output ports. Matches `TextPromptNode` / `ImageRefNode` /
-   * `PromptListNode` exactly (`border-white/15`, `bg-[#15151a]/95`) so every node
-   * type renders the same circular connector. State accents (violet for "ready",
-   * emerald for "frame extracted") are layered on via `cn()` overrides at usage sites.
+   * Invisible wrapper for wiring hit targets — keeps React Flow snapping without
+   * drawing circular chrome (icons/overlays hidden via workflowPortBubbleIconClass).
    */
   const workflowPortBubbleShellClass =
-    "workflow-port-create-cursor relative h-8 w-8 shrink-0 rounded-full border border-white/15 bg-[#15151a]/95 transition";
+    "workflow-port-create-cursor relative h-8 w-8 shrink-0 rounded-full border border-transparent bg-transparent shadow-none";
 
   const workflowPortBubbleIconClass =
-    "pointer-events-none absolute inset-0 z-[1] flex cursor-crosshair items-center justify-center text-white/85";
+    "pointer-events-none absolute inset-0 z-[1] hidden cursor-crosshair items-center justify-center text-white/85";
 
   /** Invisible full-bubble overlay for source ports on the right column (ids: `generated`, `videoFirst`, `videoLast`). */
   const workflowPortSourceBubbleHandleClass =
@@ -2966,7 +2964,12 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             style={{ width: websiteCardWidth }}
             onPointerDown={(e) => e.stopPropagation()}
           >
-            <Handle id="out" type="source" position={Position.Right} className="!h-3 !w-3 !border-2 !border-violet-500/45 !bg-[#06070d]" />
+            <Handle
+              id="out"
+              type="source"
+              position={Position.Right}
+              className="workflow-port-create-cursor nodrag nopan !box-border !h-8 !w-8 !min-h-8 !min-w-8 !max-h-8 !max-w-8 !rounded-full !border-0 !bg-transparent opacity-0"
+            />
 
             <div className="mb-2 flex items-center gap-2">
               <Icon className="h-4 w-4 shrink-0 text-white/75" strokeWidth={2} aria-hidden />
@@ -3210,7 +3213,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             onPointerDown={(e) => e.stopPropagation()}
           >
           <div className="nodrag nopan absolute -right-10 top-2 z-[7]">
-            <div className={cn(workflowPortBubbleShellClass, "nodrag nopan relative border-violet-400/35 bg-[#15151a]/95")}>
+            <div className={cn(workflowPortBubbleShellClass, "nodrag nopan relative")}>
               <Handle
                 id="out"
                 type="source"
@@ -3219,7 +3222,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 aria-label="Assistant text output"
                 title="Assistant text output"
               />
-              <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-[11px] font-bold leading-none text-violet-200/90">
+              <span className="pointer-events-none absolute inset-0 z-[1] hidden flex items-center justify-center text-[11px] font-bold leading-none text-violet-200/90">
                 <Type className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
               </span>
             </div>
@@ -4440,7 +4443,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             id="out"
             type="source"
             position={Position.Right}
-            className="!h-3 !w-3 !border-2 !border-violet-500/45 !bg-[#06070d]"
+            className="workflow-port-create-cursor nodrag nopan !box-border !h-8 !w-8 !min-h-8 !min-w-8 !max-h-8 !max-w-8 !rounded-full !border-0 !bg-transparent opacity-0"
             title="Drag or hold to create a linked module"
           />
         ) : null}
@@ -4450,14 +4453,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       </div>
   {showImageGeneratorOutputBubble ? (
         <div className="nodrag nopan relative z-[5] flex shrink-0 flex-col gap-1 self-start pt-5">
-          <div
-            className={cn(
-              workflowPortBubbleShellClass,
-              "nodrag nopan relative",
-              imageGeneratorOutputReady && "border-violet-400/35",
-              !imageGeneratorOutputReady && "opacity-70",
-            )}
-          >
+          <div className={cn(workflowPortBubbleShellClass, "nodrag nopan relative")}>
             <Handle
               id="generated"
               type="source"
@@ -4478,7 +4474,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               aria-label="Legacy generated image output"
               title="Legacy output handle (same as generated image)."
             />
-            <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/85">
+            <span className="pointer-events-none absolute inset-0 z-[1] hidden flex items-center justify-center text-white/85">
               <ImageIcon className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
             </span>
           </div>
@@ -4486,7 +4482,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       ) : null}
   {showVideoOutputBubbles ? (
         <div className="nodrag nopan relative z-[5] flex shrink-0 flex-col gap-1 self-start pt-5">
-          <div className={cn(workflowPortBubbleShellClass, "nodrag nopan relative border-violet-400/35")}>
+          <div className={cn(workflowPortBubbleShellClass, "nodrag nopan relative")}>
             <Handle
               id="out"
               type="source"
@@ -4495,17 +4491,11 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               aria-label="Generated video output"
               title="Drag to wire this generated video into a list or downstream video input."
             />
-            <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-violet-200/90">
+            <span className="pointer-events-none absolute inset-0 z-[1] hidden flex items-center justify-center text-violet-200/90">
               <Clapperboard className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
             </span>
           </div>
-          <div
-            className={cn(
-              workflowPortBubbleShellClass,
-              "nodrag nopan relative",
-              data.videoExtractedFirstFrameUrl && "border-emerald-400/35",
-            )}
-          >
+          <div className={cn(workflowPortBubbleShellClass, "nodrag nopan relative")}>
             <Handle
               id="videoFirst"
               type="source"
@@ -4518,7 +4508,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 void onExtractVideoFrame("first");
               }}
             />
-            <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/85">
+            <span className="pointer-events-none absolute inset-0 z-[1] hidden flex items-center justify-center text-white/85">
               {frameExtractBusy === "first" ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} aria-hidden />
               ) : (
@@ -4526,13 +4516,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               )}
             </span>
           </div>
-          <div
-            className={cn(
-              workflowPortBubbleShellClass,
-              "nodrag nopan relative",
-              data.videoExtractedLastFrameUrl && "border-emerald-400/35",
-            )}
-          >
+          <div className={cn(workflowPortBubbleShellClass, "nodrag nopan relative")}>
             <Handle
               id="videoLast"
               type="source"
@@ -4545,7 +4529,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 void onExtractVideoFrame("last");
               }}
             />
-            <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/85">
+            <span className="pointer-events-none absolute inset-0 z-[1] hidden flex items-center justify-center text-white/85">
               {frameExtractBusy === "last" ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} aria-hidden />
               ) : (

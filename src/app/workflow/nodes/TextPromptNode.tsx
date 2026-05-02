@@ -23,7 +23,7 @@ export function TextPromptNode({ id, data: rawData, selected }: NodeProps<TextPr
   const patchAll = useWorkflowNodePatch();
   const patch = useCallback((p: Partial<TextPromptNodeData>) => patchAll(id, p), [id, patchAll]);
   const outputBubbleShellClass =
-    "workflow-port-create-cursor nodrag nopan relative h-8 w-8 shrink-0 rounded-full border border-white/15 bg-[#15151a]/95 transition";
+    "workflow-port-create-cursor nodrag nopan relative h-8 w-8 shrink-0 rounded-full border border-transparent bg-transparent shadow-none";
   const outputBubbleHandleClass =
     "workflow-port-create-cursor nodrag nopan !absolute !inset-0 !z-[2] !box-border !h-8 !w-8 !min-h-8 !min-w-8 !max-h-8 !max-w-8 !rounded-full !border-0 !bg-transparent opacity-0 !transform-none";
 
@@ -59,7 +59,7 @@ export function TextPromptNode({ id, data: rawData, selected }: NodeProps<TextPr
         <div className="nodrag nopan relative z-[7] mt-2 flex shrink-0 flex-col gap-1">
           <div className={outputBubbleShellClass}>
             <Handle id="out" type="source" position={Position.Right} className={outputBubbleHandleClass} />
-            <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/85">
+            <span className="pointer-events-none absolute inset-0 z-[1] hidden flex items-center justify-center text-white/85">
               <Type className="h-3.5 w-3.5" aria-hidden />
             </span>
           </div>

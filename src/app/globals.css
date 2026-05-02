@@ -383,6 +383,20 @@
   cursor: crosshair !important;
 }
 
+/* Hide React Flow handle chrome (workflow uses custom overlays / invisible shells). */
+.workflow-flow .react-flow__handle {
+  background: transparent !important;
+  border: none !important;
+  opacity: 0 !important;
+  box-shadow: none !important;
+}
+.workflow-flow .react-flow__handle.connectingfrom,
+.workflow-flow .react-flow__handle.connectionindicator {
+  opacity: 0 !important;
+  background: transparent !important;
+  border: none !important;
+}
+
 /* One-shot snip overlay, pivot ≈ blade crossing in 24×24 icon space. */
 .workflow-cut-fx-root {
   position: fixed;
