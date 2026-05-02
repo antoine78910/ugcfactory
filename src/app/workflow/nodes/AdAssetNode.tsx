@@ -1082,7 +1082,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         return s.edges.filter((e) => {
           if (e.target !== id) return false;
           const h = e.targetHandle ?? "in";
-          return h === "references" || h === "in";
+          return h === "references" || h === "in" || h === "inImage";
         }).length;
       },
       [data.kind, id],
@@ -1096,7 +1096,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         return s.edges.filter((e) => {
           if (e.target !== id) return false;
           const h = e.targetHandle ?? "";
-          return h === "references";
+          return h === "references" || h === "in" || h === "inImage";
         }).length;
       },
       [data.kind, id],
@@ -1127,7 +1127,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         for (const e of s.edges) {
           if (e.target !== id) continue;
           const h = e.targetHandle ?? "";
-          if (h !== "references") continue;
+          if (h !== "references" && h !== "in" && h !== "inImage") continue;
           const src = byId.get(e.source);
           if (!src) continue;
           if (src.type === "imageRef") {
@@ -1567,7 +1567,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     useCallback(
       (s) => {
         if (data.kind !== "motion") return "";
-        const linked = collectLinkedVideoUrlsForHandles(s.nodes, s.edges, id, ["inVideo"]);
+        const linked = collectLinkedVideoUrlsForHandles(s.nodes, s.edges, id, ["inVideo", "in"]);
         return (
           linked[0]?.trim() ||
           (data.referenceMediaKind === "video" ? data.referencePreviewUrl?.trim() : "") ||
@@ -1589,6 +1589,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         if (data.kind !== "video") return "";
         const startUrls = collectLinkedImageUrlsForHandles(s.nodes, s.edges, id, ["startImage"]);
         const refUrls = collectLinkedImageUrlsForHandles(s.nodes, s.edges, id, ["references"]);
+        const legacyImg = collectLinkedImageUrlsForHandles(s.nodes, s.edges, id, ["in", "inImage"]);
         const nodeRef =
           data.referenceMediaKind === "image" && data.referencePreviewUrl?.trim()
             ? [data.referencePreviewUrl.trim()]
@@ -1596,7 +1597,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         const start = (data.videoStartImageUrl?.trim() ? [data.videoStartImageUrl.trim()] : []).concat(
           startUrls,
         );
-        const all = [...start, ...refUrls, ...nodeRef];
+        const all = [...start, ...refUrls, ...legacyImg, ...nodeRef];
         const seen = new Set<string>();
         const out: string[] = [];
         for (const u of all) {
@@ -1783,7 +1784,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         : collectLinkedPromptTexts(nodes, edges, id);
     const linkedAssistantImageRefs =
       data.kind === "assistant"
-        ? collectLinkedImageUrlsForHandles(nodes, edges, id, ["references"])
+        ? collectLinkedImageUrlsForHandles(nodes, edges, id, ["references", "in", "inImage"])
         : [];
     const effectivePrompt = composeWorkflowPrompt(prompt, linkedPrompts);
     const batchContext =
@@ -2090,7 +2091,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     if (data.kind === "image") {
       emitRunLog("info", "Image generation started.");
       const imageResultsListLabel = `${(data.label || cfg.title || "Image").trim() || "Image"} results`;
-      const linkedImageReferences = collectLinkedImageUrlsForHandles(nodes, edges, id, ["references", "in"]);
+      const linkedImageReferences = collectLinkedImageUrlsForHandles(nodes, edges, id, ["references", "in", "inImage"]);
       const mergedImageReferences = Array.from(
         new Set([...(refImageForImageGen ? [refImageForImageGen] : []), ...linkedImageReferences]),
       );
@@ -2338,8 +2339,12 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
 
     if (data.kind === "motion") {
       emitRunLog("info", "Motion control started.");
-      const motionImageRefs = collectLinkedImageUrlsForHandles(nodes, edges, id, ["startImage"]);
-      const motionVideoRefs = collectLinkedVideoUrlsForHandles(nodes, edges, id, ["inVideo"]);
+      const motionImageRefs = collectLinkedImageUrlsForHandles(nodes, edges, id, [
+        "startImage",
+        "in",
+        "inImage",
+      ]);
+      const motionVideoRefs = collectLinkedVideoUrlsForHandles(nodes, edges, id, ["inVideo", "in"]);
       const motionImageUrl =
         motionImageRefs[0]?.trim() ||
         (data.referenceMediaKind === "image" ? data.referencePreviewUrl?.trim() : "") ||
@@ -3047,6 +3052,13 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 className={workflowPortTargetHandleClass}
                 aria-label="Assistant text input"
               />
+              <Handle
+                id="inText"
+                type="target"
+                position={Position.Left}
+                className={workflowPortTargetHandleClass}
+                aria-label="Legacy assistant text input"
+              />
               <button
                 type="button"
                 onPointerDown={(e) => handleInputBubblePointerDown(e, "text")}
@@ -3063,6 +3075,13 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 position={Position.Left}
                 className={workflowPortTargetHandleClass}
                 aria-label="Reference images input"
+              />
+              <Handle
+                id="inImage"
+                type="target"
+                position={Position.Left}
+                className={workflowPortTargetHandleClass}
+                aria-label="Legacy assistant reference images input"
               />
               <button
                 type="button"
@@ -3082,6 +3101,13 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             style={{ width: assistantCardWidth }}
             onPointerDown={(e) => e.stopPropagation()}
           >
+          <Handle
+            id="in"
+            type="target"
+            position={Position.Left}
+            className="nodrag nopan !absolute left-0 top-1/2 z-[6] !h-3 !w-3 -translate-y-1/2 !border-2 !border-violet-500/45 !bg-[#06070d]"
+            title="Legacy text input"
+          />
           <div className="nodrag nopan absolute -right-10 top-2 z-[7]">
             <div className={cn(workflowPortBubbleShellClass, "nodrag nopan relative border-violet-400/35 bg-[#15151a]/95")}>
               <Handle
@@ -3284,6 +3310,13 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               className={workflowPortTargetHandleClass}
               aria-label="Prompt text input port"
             />
+            <Handle
+              id="inText"
+              type="target"
+              position={Position.Left}
+              className={workflowPortTargetHandleClass}
+              aria-label="Legacy prompt text input"
+            />
             <button
               type="button"
               onPointerDown={(e) => handleInputBubblePointerDown(e, "text")}
@@ -3303,6 +3336,15 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 className={workflowPortTargetHandleClass}
                 aria-label="Start frame image input"
               />
+              {data.kind === "motion" || (data.kind === "video" && !videoModelHasReferences) ? (
+                <Handle
+                  id="inImage"
+                  type="target"
+                  position={Position.Left}
+                  className={workflowPortTargetHandleClass}
+                  aria-label="Legacy start frame image input"
+                />
+              ) : null}
               <button
                 type="button"
                 onPointerDown={(e) => handleInputBubblePointerDown(e, "startImage")}
@@ -3363,6 +3405,13 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               className={workflowPortTargetHandleClass}
               aria-label="Reference images input"
             />
+            <Handle
+              id="inImage"
+              type="target"
+              position={Position.Left}
+              className={workflowPortTargetHandleClass}
+              aria-label="Legacy image input (references)"
+            />
             <button
               type="button"
               onPointerDown={(e) => handleInputBubblePointerDown(e, "references")}
@@ -3388,6 +3437,13 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               className={workflowPortTargetHandleClass}
               aria-label="Prompt text input port"
             />
+            <Handle
+              id="inText"
+              type="target"
+              position={Position.Left}
+              className={workflowPortTargetHandleClass}
+              aria-label="Legacy prompt text input"
+            />
             <button
               type="button"
               onPointerDown={(e) => handleInputBubblePointerDown(e, "text")}
@@ -3405,6 +3461,13 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               position={Position.Left}
               className={workflowPortTargetHandleClass}
               aria-label="Reference images input"
+            />
+            <Handle
+              id="inImage"
+              type="target"
+              position={Position.Left}
+              className={workflowPortTargetHandleClass}
+              aria-label="Legacy reference images input"
             />
             <button
               type="button"
@@ -3521,7 +3584,15 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           }, 220);
         }}
       >
-        {data.kind === "image" || data.kind === "video" ? null : (
+        {data.kind === "image" || data.kind === "video" || data.kind === "motion" ? (
+          <Handle
+            id="in"
+            type="target"
+            position={Position.Left}
+            className="nodrag nopan !absolute left-0 top-1/2 z-[7] !h-3 !w-3 -translate-y-1/2 !border-2 !border-violet-500/45 !bg-[#06070d]"
+            title="Legacy combined input"
+          />
+        ) : (
           <Handle
             id="in"
             type="target"
@@ -4242,6 +4313,14 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                   ? "Drag to wire this generated image into references, start frame, or another module."
                   : "Run once to produce an image; then drag from here to chain into the next module."
               }
+            />
+            <Handle
+              id="out"
+              type="source"
+              position={Position.Right}
+              className={workflowPortSourceBubbleHandleClass}
+              aria-label="Legacy generated image output"
+              title="Legacy output handle (same as generated image)."
             />
             <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/85">
               <ImageIcon className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
