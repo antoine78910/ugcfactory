@@ -297,6 +297,14 @@ function isEditableElementFocused(): boolean {
   return false;
 }
 
+/** Avoid firing canvas shortcuts while typing or inside modal dialogs (Radix overlays). */
+function shouldIgnoreWorkflowCanvasShortcuts(): boolean {
+  if (isEditableElementFocused()) return true;
+  const el = document.activeElement;
+  if (el instanceof HTMLElement && el.closest('[role="dialog"]')) return true;
+  return false;
+}
+
 const WORKFLOW_AD_ASSET_DRAG_KINDS: WorkflowDragNodeKind[] = [
   "image",
   "video",
@@ -1329,6 +1337,85 @@ function WorkflowReactFlowChrome({
     e.dataTransfer.effectAllowed = "copy";
   }, []);
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (readOnly) return;
+      if (shouldIgnoreWorkflowCanvasShortcuts()) return;
+
+      if (e.key === "Escape") {
+        if (feedbackOpen || avatarPickerOpen) return;
+        if (addOpen) {
+          e.preventDefault();
+          setAddOpen(false);
+          return;
+        }
+        if (frameOpen) {
+          e.preventDefault();
+          setFrameOpen(false);
+          return;
+        }
+        return;
+      }
+
+      const mod = e.ctrlKey || e.metaKey;
+
+      if (mod && e.shiftKey && !e.altKey && e.key.toLowerCase() === "a") {
+        e.preventDefault();
+        setAddOpen((was) => {
+          const next = !was;
+          if (next) setAddPlusTab("basics");
+          return next;
+        });
+        setFrameOpen(false);
+        return;
+      }
+
+      if (mod || e.altKey) return;
+
+      const k = e.key.toLowerCase();
+      if (k === "v") {
+        e.preventDefault();
+        setTool("select");
+        setAddOpen(false);
+        setFrameOpen(false);
+        return;
+      }
+      if (k === "h") {
+        e.preventDefault();
+        setTool("pan");
+        setAddOpen(false);
+        setFrameOpen(false);
+        return;
+      }
+      if (k === "e") {
+        e.preventDefault();
+        setAddOpen(false);
+        setFrameOpen(false);
+        setTool((t) => (t === "cutTarget" ? "pan" : "cutTarget"));
+        return;
+      }
+      if (k === "n") {
+        e.preventDefault();
+        setAddOpen(false);
+        setFrameOpen(false);
+        setTool((t) => (t === "stickyPlace" ? "pan" : "stickyPlace"));
+        return;
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [
+    readOnly,
+    addOpen,
+    frameOpen,
+    feedbackOpen,
+    avatarPickerOpen,
+    setTool,
+    setAddOpen,
+    setFrameOpen,
+    setAddPlusTab,
+  ]);
+
   if (readOnly) {
     return (
       <>
@@ -1410,7 +1497,7 @@ function WorkflowReactFlowChrome({
           <div className="relative flex w-full flex-col items-center">
             <button
               type="button"
-              title="Add node"
+              title="Add node (Ctrl+Shift+A)"
               onClick={() => {
                 setAddOpen((was) => {
                   const next = !was;
@@ -1622,7 +1709,7 @@ function WorkflowReactFlowChrome({
 
           <button
             type="button"
-            title="Select, drag on empty canvas to box-select; Ctrl/Cmd+click to add to selection"
+            title="Select (V) — drag on empty canvas to box-select; Ctrl/Cmd+click to add to selection"
             onClick={() => setTool("select")}
             className={cn(
               "flex h-9 w-9 items-center justify-center rounded-full transition-colors",
@@ -1635,7 +1722,7 @@ function WorkflowReactFlowChrome({
           </button>
           <button
             type="button"
-            title="Pan"
+            title="Pan (H)"
             onClick={() => setTool("pan")}
             className={cn(
               "flex h-9 w-9 items-center justify-center rounded-full transition-colors",
@@ -1649,7 +1736,13 @@ function WorkflowReactFlowChrome({
 
           <button
             type="button"
-            title={readOnly ? "Cut tool (view only)" : tool === "cutTarget" ? "Cut tool active" : "Cut tool"}
+            title={
+              readOnly
+                ? "Cut tool (view only)"
+                : tool === "cutTarget"
+                  ? "Cut tool active (E)"
+                  : "Cut tool (E)"
+            }
             disabled={readOnly}
             onClick={() => {
               if (readOnly) return;
@@ -1700,8 +1793,8 @@ function WorkflowReactFlowChrome({
             type="button"
             title={
               canClone
-                ? "Duplicate selection, group, generator, prompt text, upload, or canvas note"
-                : "Select a group, generator, prompt text, upload node, or canvas note to duplicate"
+                ? "Duplicate selection (Ctrl+D)"
+                : "Select a group, generator, prompt text, upload node, or canvas note to duplicate (Ctrl+D)"
             }
             disabled={!canClone}
             onClick={() => {
@@ -1722,8 +1815,8 @@ function WorkflowReactFlowChrome({
             type="button"
             title={
               tool === "stickyPlace"
-                ? "Canvas note tool, click to place (Esc to cancel)"
-                : "Canvas note, click the canvas to place a note"
+                ? "Canvas note tool (N), click to place (Esc to cancel)"
+                : "Canvas note (N), click the canvas to place a note"
             }
             onClick={() => {
               setTool(tool === "stickyPlace" ? "pan" : "stickyPlace");
@@ -1950,8 +2043,8 @@ function WorkflowReactFlowChrome({
                 type="button"
                 title={
                   canClone
-                    ? "Duplicate selection"
-                    : "Select a group, generator, prompt text module, upload, or canvas note to duplicate"
+                    ? "Duplicate selection (Ctrl+D)"
+                    : "Select a group, generator, prompt text module, upload, or canvas note to duplicate (Ctrl+D)"
                 }
                 disabled={!canClone}
                 onClick={() => {
@@ -1967,7 +2060,7 @@ function WorkflowReactFlowChrome({
               </button>
               <button
                 type="button"
-                title="Remove selection"
+                title="Remove selection (Delete or Backspace)"
                 disabled={!canCut}
                 onClick={() => {
                   if (!canCut) return;
@@ -1981,7 +2074,13 @@ function WorkflowReactFlowChrome({
               </button>
               <button
                 type="button"
-                title={readOnly ? "Cut tool (view only)" : tool === "cutTarget" ? "Cut tool active" : "Cut tool"}
+                title={
+                  readOnly
+                    ? "Cut tool (view only)"
+                    : tool === "cutTarget"
+                      ? "Cut tool active (E)"
+                      : "Cut tool (E)"
+                }
                 disabled={readOnly}
                 onClick={() => {
                   if (readOnly) return;
@@ -2001,7 +2100,7 @@ function WorkflowReactFlowChrome({
               </button>
               <button
                 type="button"
-                title={canCut ? "Copy selection" : "Nothing to copy in this selection"}
+                title={canCut ? "Copy selection (Ctrl+C)" : "Nothing to copy in this selection"}
                 disabled={!canCut}
                 onClick={() => {
                   if (!canCut) return;
@@ -3418,7 +3517,7 @@ function WorkflowFlowWorkspace({
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
       if (readOnly) return;
-      if (isEditableElementFocused()) return;
+      if (shouldIgnoreWorkflowCanvasShortcuts()) return;
       const imageFiles = clipboardImageFiles(e);
       if (imageFiles.length > 0) {
         e.preventDefault();
@@ -3491,9 +3590,31 @@ function WorkflowFlowWorkspace({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (shouldIgnoreWorkflowCanvasShortcuts()) return;
+
+      const mod = e.ctrlKey || e.metaKey;
+      if (mod && !e.shiftKey && !e.altKey && (e.key === "/" || e.code === "Slash")) {
+        e.preventDefault();
+        toast.message("Workflow keyboard shortcuts", {
+          description: readOnly
+            ? "View-only canvas. Press Ctrl+/ or Cmd+/ to open this list."
+            : "V Select · H Pan · E Cut links · N Canvas note · Ctrl/Cmd+Shift+A Add · Ctrl/Cmd+Shift+S Share · Delete or Backspace Remove · Ctrl/Cmd+Z Undo · Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y Redo · Ctrl/Cmd+D Duplicate · Ctrl/Cmd+C or X Copy/Cut · Paste images or workflow JSON",
+          duration: 10_000,
+        });
+        return;
+      }
+
       if (readOnly) return;
-      if (!e.ctrlKey && !e.metaKey) return;
-      if (isEditableElementFocused()) return;
+
+      if (!mod && !e.altKey && (e.key === "Delete" || e.key === "Backspace")) {
+        if (!buildWorkflowClipboardPayload(nodes, edges, selectedNodes)) return;
+        e.preventDefault();
+        deleteSelection();
+        return;
+      }
+
+      if (!mod) return;
+
       const k = e.key.toLowerCase();
       if (k === "z") {
         if (e.shiftKey) {
@@ -3545,13 +3666,23 @@ function WorkflowFlowWorkspace({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [readOnly, nodes, edges, selectedNodes, cutSelection, cloneSelection, onUndo, onRedo]);
+  }, [
+    readOnly,
+    nodes,
+    edges,
+    selectedNodes,
+    cutSelection,
+    cloneSelection,
+    deleteSelection,
+    onUndo,
+    onRedo,
+  ]);
 
   useEffect(() => {
     if (readOnly || (tool !== "stickyPlace" && tool !== "cutTarget")) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      if (isEditableElementFocused()) return;
+      if (shouldIgnoreWorkflowCanvasShortcuts()) return;
       setTool("pan");
     };
     window.addEventListener("keydown", onKey);
@@ -4871,6 +5002,19 @@ export function WorkflowEditor({
 
   const hideViewerHeaderActions = workspaceReadOnly;
 
+  useEffect(() => {
+    if (!workflowHydrated || hideViewerHeaderActions) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || !e.shiftKey || e.altKey) return;
+      if (e.key.toLowerCase() !== "s") return;
+      if (shouldIgnoreWorkflowCanvasShortcuts()) return;
+      e.preventDefault();
+      setShareOpen(true);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [workflowHydrated, hideViewerHeaderActions]);
+
   const onDuplicateSharePreview = useCallback(() => {
     if (duplicateShareBusy) return;
     if (authUserId === null || authUserId === undefined) {
@@ -5019,6 +5163,7 @@ export function WorkflowEditor({
               </button>
               <button
                 type="button"
+                title="Share workspace (Ctrl+Shift+S)"
                 onClick={() => setShareOpen(true)}
                 className="inline-flex h-9 items-center gap-2 rounded-full border border-violet-400/35 bg-white px-3.5 text-[13px] font-semibold text-zinc-900 shadow-sm transition hover:bg-white/95"
               >

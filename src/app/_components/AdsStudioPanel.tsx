@@ -930,15 +930,26 @@ export default function AdsStudioPanel() {
           </div>
       </aside>
 
-        <div className="flex w-full flex-col items-center gap-8 px-2 sm:px-3 md:ml-[var(--ads-projects-w)]">
-          <div className="flex w-full max-w-[1200px] flex-col items-center gap-4">
-          <h2 className="w-full text-left text-xl font-semibold tracking-tight text-white sm:text-2xl">
-            Turn any product into a video ad
+        <div
+          className={cn(
+            "box-border flex w-full min-w-0 flex-col items-center gap-10 pb-2 md:gap-12",
+            "px-3 sm:px-5 md:ml-[var(--ads-projects-w)] md:px-6 lg:px-10",
+          )}
+        >
+          <div className="mx-auto flex w-full max-w-[1080px] min-w-0 flex-col items-center gap-6 md:gap-8">
+          <h2 className="relative max-w-[44rem] px-3 text-center text-[1.625rem] font-semibold leading-[1.18] tracking-tight sm:text-3xl sm:leading-[1.15] md:text-[2.125rem] md:leading-[1.12]">
+            <span
+              aria-hidden
+              className="pointer-events-none absolute inset-x-4 top-1/2 -z-10 h-[62%] -translate-y-1/2 rounded-full bg-violet-500/14 blur-[46px] md:inset-x-8"
+            />
+            <span className="bg-gradient-to-br from-white via-zinc-100 to-violet-300/85 bg-clip-text text-transparent">
+              Turn any product into a video ad
+            </span>
           </h2>
-          <div className="flex min-h-[min(58vh,540px)] w-full justify-center">
+          <div className="flex min-h-[min(58vh,540px)] w-full min-w-0 justify-center">
         <div
           ref={composerPanelRef}
-          className="relative w-full max-w-[1200px] scroll-mt-6 rounded-[20px] md:scroll-mt-8"
+          className="relative w-full min-w-0 max-w-[1080px] scroll-mt-6 rounded-[20px] md:scroll-mt-8"
         >
           <div className="relative rounded-[20px] bg-[linear-gradient(0deg,rgba(21,21,21,0.88)_0%,rgba(21,21,21,0.88)_100%),linear-gradient(41deg,rgba(101,189,235,0.24)_25.53%,rgba(101,189,235,0.00)_63.06%)] p-4 shadow-[0_12px_8px_0_rgba(0,0,0,0.20),inset_0_0_0_1px_rgba(255,255,255,0.07)] backdrop-blur-[20px]">
           <div className="flex w-full min-w-0 flex-col gap-3 rounded-[20px] sm:flex-row sm:items-start">
@@ -1230,7 +1241,7 @@ export default function AdsStudioPanel() {
 
           {selectedHistoryOrJob?.kind === "history" ? (
             <div
-              className="mx-auto w-full max-w-[1200px] overflow-hidden rounded-2xl border border-white/10 bg-black/45 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]"
+              className="mx-auto w-full max-w-[1080px] overflow-hidden rounded-2xl border border-white/10 bg-black/45 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]"
               aria-label="Selected project video"
             >
               {selectedHistoryOrJob.item.videoUrl ? (
@@ -1248,10 +1259,15 @@ export default function AdsStudioPanel() {
               )}
             </div>
           ) : null}
-        </div>
 
-      <section className="w-full max-w-[1200px]">
-        <div className="mb-5 flex justify-center sm:mb-6">
+      <section
+        className={cn(
+          "w-full min-w-0",
+          // Align with composer prompt column: p-4 + (sm: mode rail + gap) + plus btn + gap-2
+          "pl-[calc(1rem+1.75rem+0.5rem)] sm:pl-[calc(1rem+70px+0.75rem+1.75rem+0.5rem)]",
+        )}
+      >
+        <div className="mb-5 flex justify-start sm:mb-6">
           <h2 className="flex items-center gap-2.5 text-xl font-semibold tracking-tight text-white sm:gap-3 sm:text-2xl md:text-[1.75rem] md:leading-snug">
             <Zap
               className="size-7 shrink-0 text-fuchsia-400 drop-shadow-[0_0_14px_rgba(232,121,249,0.55)] sm:size-8 md:size-9"
@@ -1301,8 +1317,13 @@ export default function AdsStudioPanel() {
                 <button
                   type="button"
                   onClick={() => recreateFromTemplate(label)}
-                  className="absolute bottom-3 left-1/2 z-20 h-9 -translate-x-1/2 rounded-full border border-white/25 bg-white/90 px-5 text-sm font-semibold text-black opacity-0 transition hover:bg-white group-hover:opacity-100 focus-visible:opacity-100"
+                  className={cn(
+                    "absolute bottom-3 left-1/2 z-20 flex h-9 -translate-x-1/2 items-center justify-center gap-1.5 rounded-full px-4 text-[13px] font-semibold text-white opacity-0 shadow-[0_4px_0_0_rgba(76,29,149,0.88)] ring-1 ring-violet-300/35 transition",
+                    "border border-violet-300/45 bg-violet-500 hover:bg-violet-400 hover:shadow-[0_5px_0_0_rgba(76,29,149,0.88)] active:-translate-x-1/2 active:translate-y-px active:shadow-none",
+                    "group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/55",
+                  )}
                 >
+                  <Sparkles className="size-3.5 shrink-0 opacity-95" aria-hidden />
                   Recreate
                 </button>
               </div>
@@ -1315,6 +1336,7 @@ export default function AdsStudioPanel() {
           ) : null}
         </div>
       </section>
+          </div>
         </div>
     </div>
   );
