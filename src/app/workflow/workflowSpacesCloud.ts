@@ -54,6 +54,37 @@ export async function listCloudWorkflowSpaces(): Promise<CloudWorkflowSpace[]> {
   }
 }
 
+/** Public snapshot from GET /api/workflow/share-preview (no auth). */
+export type WorkflowSharePreviewSpace = {
+  id: string;
+  name: string;
+  state: WorkflowProjectStateV1;
+  previewDataUrl: string | null;
+  publishedCommunityTemplateId: string | null;
+  updatedAt: string;
+  ownerId: string | null;
+  linkPermission: string;
+};
+
+export async function fetchWorkflowSharePreview(
+  spaceId: string,
+  token: string,
+): Promise<WorkflowSharePreviewSpace | null> {
+  try {
+    const qs = new URLSearchParams({
+      token,
+      spaceId,
+      t: String(Date.now()),
+    });
+    const res = await fetch(`/api/workflow/share-preview?${qs}`, { method: "GET", cache: "no-store" });
+    if (!res.ok) return null;
+    const j = (await res.json()) as { space?: WorkflowSharePreviewSpace };
+    return j.space ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchCloudWorkflowSpace(
   spaceId: string,
 ): Promise<CloudWorkflowSpaceFull | null> {

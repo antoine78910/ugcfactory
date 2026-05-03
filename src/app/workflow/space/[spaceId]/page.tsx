@@ -11,14 +11,19 @@ export const metadata: Metadata = {
 
 export default async function WorkflowSpacePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ spaceId: string }>;
+  searchParams: Promise<{ share?: string; token?: string }>;
 }) {
   const { spaceId } = await params;
+  const sp = await searchParams;
+  const raw = (typeof sp.share === "string" && sp.share.trim() ? sp.share : sp.token)?.trim();
+  const shareToken = raw || undefined;
 
   return (
     <StudioShell>
-      <WorkflowEditor spaceId={spaceId} />
+      <WorkflowEditor spaceId={spaceId} shareToken={shareToken} />
     </StudioShell>
   );
 }

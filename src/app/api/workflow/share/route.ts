@@ -71,7 +71,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       token: activeToken.token,
       permission,
-      inviteUrl: buildInviteUrl(req, activeToken.token),
+      inviteUrl: buildShareableWorkspaceUrl(req, spaceId, activeToken.token),
     });
   }
 
@@ -92,13 +92,14 @@ export async function POST(req: Request) {
   return NextResponse.json({
     token: newToken.token,
     permission,
-    inviteUrl: buildInviteUrl(req, newToken.token),
+    inviteUrl: buildShareableWorkspaceUrl(req, spaceId, newToken.token),
   });
 }
 
-function buildInviteUrl(req: Request, token: string): string {
+/** Opens the canvas directly; guests can view without an account when they have the token. */
+function buildShareableWorkspaceUrl(req: Request, spaceId: string, token: string): string {
   const url = new URL(req.url);
-  return `${url.origin}/workflow/invite/${token}`;
+  return `${url.origin}/workflow/space/${encodeURIComponent(spaceId)}?share=${encodeURIComponent(token)}`;
 }
 
 /**

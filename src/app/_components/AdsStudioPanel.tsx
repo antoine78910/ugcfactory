@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { LayoutList, Loader2, Pencil, Plus, Smartphone, Package2, Sparkles, X } from "lucide-react";
+import { LayoutList, Loader2, Pencil, Plus, Smartphone, Package2, Sparkles, X, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import ElementMentionTextarea, {
@@ -932,10 +932,13 @@ export default function AdsStudioPanel() {
 
         <div className="flex w-full flex-col items-center gap-8 px-2 sm:px-3 md:ml-[var(--ads-projects-w)]">
           <div className="flex w-full max-w-[1200px] flex-col items-center gap-4">
+          <h2 className="w-full text-left text-xl font-semibold tracking-tight text-white sm:text-2xl">
+            Turn any product into a video ad
+          </h2>
           <div className="flex min-h-[min(58vh,540px)] w-full justify-center">
         <div
           ref={composerPanelRef}
-          className="relative w-full max-w-[980px] scroll-mt-6 rounded-[20px] md:scroll-mt-8"
+          className="relative w-full max-w-[1200px] scroll-mt-6 rounded-[20px] md:scroll-mt-8"
         >
           <div className="relative rounded-[20px] bg-[linear-gradient(0deg,rgba(21,21,21,0.88)_0%,rgba(21,21,21,0.88)_100%),linear-gradient(41deg,rgba(101,189,235,0.24)_25.53%,rgba(101,189,235,0.00)_63.06%)] p-4 shadow-[0_12px_8px_0_rgba(0,0,0,0.20),inset_0_0_0_1px_rgba(255,255,255,0.07)] backdrop-blur-[20px]">
           <div className="flex w-full min-w-0 flex-col gap-3 rounded-[20px] sm:flex-row sm:items-start">
@@ -1248,7 +1251,16 @@ export default function AdsStudioPanel() {
         </div>
 
       <section className="w-full max-w-[1200px]">
-        <p className="mb-2 text-sm font-semibold text-white/85">Generate across formats</p>
+        <div className="mb-5 flex justify-center sm:mb-6">
+          <h2 className="flex items-center gap-2.5 text-xl font-semibold tracking-tight text-white sm:gap-3 sm:text-2xl md:text-[1.75rem] md:leading-snug">
+            <Zap
+              className="size-7 shrink-0 text-fuchsia-400 drop-shadow-[0_0_14px_rgba(232,121,249,0.55)] sm:size-8 md:size-9"
+              aria-hidden
+              strokeWidth={2.35}
+            />
+            Generate across formats
+          </h2>
+        </div>
         <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-5">
           {templateVideos.map((tpl, idx) => {
             const label = tpl.label || `Template ${idx + 1}`;

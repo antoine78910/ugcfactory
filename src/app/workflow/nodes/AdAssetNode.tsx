@@ -695,7 +695,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
 
   const openInputCreatePicker = useCallback(
     (
-      targetHandle: "text" | "references" | "startImage" | "endImage",
+      targetHandle: "text" | "references" | "startImage" | "endImage" | "inVideo",
       targetEl: HTMLElement,
       opts?: { screenX?: number; screenY?: number; forceIntent?: "text-or-image" },
     ) => {
@@ -719,7 +719,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   const handleInputBubblePointerDown = useCallback(
     (
       event: React.PointerEvent<HTMLElement>,
-      targetHandle: "text" | "references" | "startImage" | "endImage",
+      targetHandle: "text" | "references" | "startImage" | "endImage" | "inVideo",
     ) => {
       // While dragging a connector, let React Flow own pointer handling so edges snap correctly.
       if (storeApi.getState().connection.inProgress) return;
@@ -2989,6 +2989,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     getNodes,
     grantCredits,
     id,
+    resolvedVideoModelId,
     model,
     aspectRatio,
     resolution,
@@ -3628,7 +3629,8 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 position={Position.Left}
                 className={workflowPortTargetBubbleHandleClass}
                 aria-label="Motion reference video input"
-                title="Motion reference video input."
+                title="Motion reference video — click to add upload, list, or video generator."
+                onPointerDown={(e) => handleInputBubblePointerDown(e, "inVideo")}
               />
               <span className={workflowPortBubbleIconClass} aria-hidden>
                 <Play className="h-4 w-4" strokeWidth={2} aria-hidden="true" />

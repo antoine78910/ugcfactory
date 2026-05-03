@@ -166,7 +166,7 @@ export function ShareWorkflowDialog({
     try {
       await navigator.clipboard.writeText(inviteUrl);
       setCopied(true);
-      toast.success("Invite link copied");
+      toast.success("Link copied");
       setTimeout(() => setCopied(false), 2500);
     } catch {
       toast.error("Could not copy link");
@@ -234,8 +234,8 @@ export function ShareWorkflowDialog({
           </div>
 
           <p className="mb-2 text-[13px] leading-relaxed text-white/50">
-            To collaborate in a space, you can use shared projects with a Teams plan or invite
-            others with an invite link.
+            Anyone with the link can open the workflow canvas (sign-in is only needed to edit or
+            duplicate). Invite collaborators so they join this space on their account.
           </p>
           <p className="mb-5 text-[12px] text-white/40">
             Workspace: <span className="font-medium text-white/70">{spaceName}</span>
@@ -314,7 +314,7 @@ export function ShareWorkflowDialog({
                 ) : (
                   <Copy className="h-4 w-4" />
                 )}
-                {copied ? "Copied!" : "Copy invite link"}
+                {copied ? "Copied!" : "Copy link"}
               </button>
             </div>
           ) : userId ? (

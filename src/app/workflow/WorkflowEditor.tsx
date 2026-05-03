@@ -90,6 +90,7 @@ import {
   type WorkflowGroupNodeType,
 } from "./nodes/WorkflowGroupNode";
 import type { WorkflowCanvasNode } from "./workflowFlowTypes";
+import { storeInviteWelcome } from "./WorkflowInviteWelcome";
 import { WorkflowOnboarding, starterNodeForKind, type WorkflowStarterKind } from "./WorkflowOnboarding";
 import {
   defaultWorkflowProject,
@@ -100,6 +101,7 @@ import {
 } from "./workflowProjectStorage";
 import { buildWorkflowPreviewDataUrl } from "./workflowPreviewRenderer";
 import {
+  createSpace,
   createSpaceFromTemplate,
   getWorkflowStorageScope,
   loadProjectForSpace,
@@ -109,6 +111,7 @@ import {
 } from "./workflowSpacesStorage";
 import {
   fetchCloudWorkflowSpace,
+  fetchWorkflowSharePreview,
   saveCloudWorkflowSpace,
 } from "./workflowSpacesCloud";
 import {
@@ -199,12 +202,12 @@ type WorkflowPlacementPickerState = {
   /** When the user clicked an input handle, new node links into this target input. */
   connectTo?: { nodeId: string; handleId: string };
   /** Optional preset to show context-aware creation choices. */
-  intent?: "text-input" | "image-input" | "text-or-image" | "generic";
+  intent?: "text-input" | "image-input" | "video-input" | "text-or-image" | "generic";
 };
 
 type WorkflowOpenInputPickerDetail = {
   targetNodeId: string;
-  targetHandleId: "text" | "references" | "startImage" | "endImage";
+  targetHandleId: "text" | "references" | "startImage" | "endImage" | "inVideo";
   screenX: number;
   screenY: number;
   forceIntent?: "text-or-image";
@@ -314,6 +317,24 @@ function isRunnableWorkflowAdAssetKind(kind: AdAssetNodeData["kind"]): boolean {
 
 type WorkflowConnectionDataKind = "text" | "image" | "video" | "media";
 
+/** Narrow shape from `getInternalNode` for endpoint geometry (avoids `any`). */
+type WorkflowRfInternalLayout = {
+  internals?: {
+    positionAbsolute?: XYPosition;
+    handleBounds?: Partial<
+      Record<
+        "source" | "target",
+        Array<{ id?: string | null; x: number; y: number; width: number; height: number }>
+      >
+    >;
+  };
+  measured?: { width?: number | null; height?: number | null };
+  width?: number | null;
+  height?: number | null;
+  position?: XYPosition;
+  positionAbsolute?: XYPosition;
+};
+
 function isProbablyImageUrl(s: string): boolean {
   const u = s.trim().toLowerCase();
   if (!u.startsWith("http")) return false;
@@ -352,7 +373,7 @@ function sourceKindFromNodeHandle(
   const h = (handleId ?? "out").trim() || "out";
   if (node.type === "textPrompt" || node.type === "stickyNote") return "text";
   if (node.type === "imageRef") {
-    const d = node.data as any;
+    const d = node.data as ImageRefNodeData;
     if (h === "videoFirst" || h === "videoLast") return "image";
     return d.mediaKind === "video" ? "video" : "image";
   }
@@ -592,6 +613,14 @@ type FlowWorkspaceProps = {
   showTemplateUseCta?: boolean;
   onUseTemplate?: () => void;
   useTemplateBusy?: boolean;
+  /** Shared link preview (guest or not yet joined): duplicate / sign up */
+  showSharePreviewCta?: boolean;
+  sharePreviewDuplicateLabel?: string;
+  onDuplicateSharePreview?: () => void;
+  duplicateSharePreviewBusy?: boolean;
+  sharePreviewJoinLabel?: string;
+  onJoinShareWorkspace?: () => void;
+  joinShareWorkspaceBusy?: boolean;
   /**
    * When set, registers a function that merges the live React Flow graph into the
    * project (active page). Used before publishing templates — parent `project` state
@@ -717,20 +746,40 @@ function WorkflowPagesPanel({
   );
 }
 
+/** Padding ratio — larger leaves more breathing room for a bird's-eye overview. */
+const WORKFLOW_OPEN_FIT_PADDING = 0.38;
+
 function FitViewOnPageChange({ activePageId }: { activePageId: string }) {
   const { fitView } = useReactFlow();
-  const prev = useRef(activePageId);
+  const prevPageId = useRef<string | null>(null);
   useEffect(() => {
-    if (prev.current === activePageId) return;
-    prev.current = activePageId;
-    const timer = window.setTimeout(() => {
+    const alreadyHandledSamePage =
+      prevPageId.current !== null && prevPageId.current === activePageId;
+    if (alreadyHandledSamePage) return;
+    prevPageId.current = activePageId;
+
+    const runFit = () => {
       try {
-        void fitView({ padding: 0.2, duration: 200 });
+        void fitView({
+          padding: WORKFLOW_OPEN_FIT_PADDING,
+          duration: 420,
+          interpolate: "smooth",
+          minZoom: 0.05,
+        });
       } catch {
         /* ignore */
       }
-    }, 120);
-    return () => window.clearTimeout(timer);
+    };
+
+    const t1 = window.setTimeout(() => {
+      requestAnimationFrame(runFit);
+    }, 160);
+    const t2 = window.setTimeout(runFit, 520);
+
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+    };
   }, [activePageId, fitView]);
   return null;
 }
@@ -855,6 +904,7 @@ function WorkflowReactFlowChrome({
     } catch {
       return null;
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- recomputes when layoutRev / viewport / eligible sigs change
   }, [
     canGroup,
     eligibleForGroup,
@@ -1106,7 +1156,7 @@ function WorkflowReactFlowChrome({
     window.addEventListener("workflow:open-avatar-picker", onOpen as EventListener);
     return () => window.removeEventListener("workflow:open-avatar-picker", onOpen as EventListener);
   }, []);
-  const [pendingImageRefConnect, setPendingImageRefConnect] = useState<{
+  const [, setPendingImageRefConnect] = useState<{
     targetNodeId: string;
     targetHandleId: string;
     flow: XYPosition;
@@ -1605,7 +1655,7 @@ function WorkflowReactFlowChrome({
               if (readOnly) return;
               setAddOpen(false);
               setFrameOpen(false);
-              setTool(tool === "cutTarget" ? "select" : "cutTarget");
+              setTool(tool === "cutTarget" ? "pan" : "cutTarget");
             }}
             className={cn(
               "flex h-9 w-9 items-center justify-center rounded-full transition-colors",
@@ -1658,7 +1708,7 @@ function WorkflowReactFlowChrome({
               if (!canClone) return;
               setAddOpen(false);
               setFrameOpen(false);
-              if (tool === "cutTarget") setTool("select");
+              if (tool === "cutTarget") setTool("pan");
               onCloneSelection();
             }}
             className={cn(
@@ -1676,7 +1726,7 @@ function WorkflowReactFlowChrome({
                 : "Canvas note, click the canvas to place a note"
             }
             onClick={() => {
-              setTool(tool === "stickyPlace" ? "select" : "stickyPlace");
+              setTool(tool === "stickyPlace" ? "pan" : "stickyPlace");
               setAddOpen(false);
               setFrameOpen(false);
             }}
@@ -1908,7 +1958,7 @@ function WorkflowReactFlowChrome({
                   if (!canClone) return;
                   setAddOpen(false);
                   setFrameOpen(false);
-                  if (tool === "cutTarget") setTool("select");
+                  if (tool === "cutTarget") setTool("pan");
                   onCloneSelection();
                 }}
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white/90 transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-35"
@@ -1938,7 +1988,7 @@ function WorkflowReactFlowChrome({
                   setAddOpen(false);
                   setFrameOpen(false);
                   setSelectionBarExpanded(false);
-                  setTool(tool === "cutTarget" ? "select" : "cutTarget");
+                  setTool(tool === "cutTarget" ? "pan" : "cutTarget");
                 }}
                 className={cn(
                   "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-35",
@@ -2104,6 +2154,13 @@ function WorkflowFlowWorkspace({
   showTemplateUseCta = false,
   onUseTemplate,
   useTemplateBusy = false,
+  showSharePreviewCta = false,
+  sharePreviewDuplicateLabel = "Duplicate",
+  onDuplicateSharePreview,
+  duplicateSharePreviewBusy = false,
+  sharePreviewJoinLabel,
+  onJoinShareWorkspace,
+  joinShareWorkspaceBusy = false,
   canvasProjectFlushRef,
 }: FlowWorkspaceProps) {
   const { screenToFlowPosition, flowToScreenPosition, getInternalNode, getNodes, getEdges, getViewport } =
@@ -2118,7 +2175,7 @@ function WorkflowFlowWorkspace({
   const [alignGuides, setAlignGuides] = useState<{ x: number | null; y: number | null }>({ x: null, y: null });
   const alignHoldCandidateRef = useRef<{ nodeId: string; guideX: number | null; guideY: number | null; sinceMs: number } | null>(null);
   const lastAlignTargetRef = useRef<{ nodeId: string; x: number | null; y: number | null } | null>(null);
-  const [tool, setTool] = useState<Tool>(readOnly ? "pan" : "select");
+  const [tool, setTool] = useState<Tool>("pan");
   const [addOpen, setAddOpen] = useState(false);
   const [frameOpen, setFrameOpen] = useState(false);
   const [selectionBarExpanded, setSelectionBarExpanded] = useState(false);
@@ -2181,6 +2238,7 @@ function WorkflowFlowWorkspace({
   useLayoutEffect(() => {
     const p = project.pages.find((x) => x.id === project.activePageId);
     if (p) lastSnapshotRef.current = cloneWorkflowCanvasSnapshot(p.nodes, p.edges);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- seed undo baseline once on mount only
   }, []);
 
   const prevActiveId = useRef(project.activePageId);
@@ -2198,7 +2256,7 @@ function WorkflowFlowWorkspace({
       setEdges(migrateImageGeneratorOutEdgesToGenerated(p.nodes as WorkflowCanvasNode[], p.edges));
       setFrameOpen(false);
       setPlacementPicker(null);
-      setTool("select");
+      setTool("pan");
       bumpHistoryUi();
     }
   }, [project.activePageId, project.pages, setNodes, setEdges, bumpHistoryUi, setTool]);
@@ -2296,7 +2354,7 @@ function WorkflowFlowWorkspace({
         return;
       }
     },
-    [readOnly, screenToFlowPosition, setEdges, setNodes],
+    [readOnly, screenToFlowPosition, setNodes],
   );
 
   useEffect(() => {
@@ -2317,6 +2375,7 @@ function WorkflowFlowWorkspace({
         text: -100,
         startImage: -67,
         endImage: -33,
+        inVideo: -40,
         references: 0,
       };
       const fallbackFlow = screenToFlowPosition({ x: detail.screenX, y: detail.screenY });
@@ -2330,7 +2389,13 @@ function WorkflowFlowWorkspace({
         screenX: detail.screenX,
         screenY: detail.screenY,
         connectTo: { nodeId: detail.targetNodeId, handleId: detail.targetHandleId },
-        intent: detail.forceIntent ?? (detail.targetHandleId === "text" ? "text-input" : "image-input"),
+        intent:
+          detail.forceIntent ??
+          (detail.targetHandleId === "text"
+            ? "text-input"
+            : detail.targetHandleId === "inVideo"
+              ? "video-input"
+              : "image-input"),
       });
     };
     window.addEventListener("workflow:open-input-picker", onOpenInputPicker as EventListener);
@@ -2368,7 +2433,7 @@ function WorkflowFlowWorkspace({
     const onDrop = (ev: Event) => {
       const detail = (ev as CustomEvent<{
         targetNodeId: string;
-        targetHandleId: "text" | "references" | "startImage" | "endImage";
+        targetHandleId: WorkflowOpenInputPickerDetail["targetHandleId"];
         screenX: number;
         screenY: number;
       }>).detail;
@@ -2384,7 +2449,12 @@ function WorkflowFlowWorkspace({
         screenX: detail.screenX,
         screenY: detail.screenY,
         connectTo: { nodeId: targetNodeId, handleId: targetHandleId },
-        intent: targetHandleId === "text" ? "text-input" : "image-input",
+        intent:
+          targetHandleId === "text"
+            ? "text-input"
+            : targetHandleId === "inVideo"
+              ? "video-input"
+              : "image-input",
       });
     };
 
@@ -2498,7 +2568,10 @@ function WorkflowFlowWorkspace({
       }
       if (to && connectableTo) {
         const newAd = newNode.type === "adAsset" ? (newNode.data as AdAssetNodeData) : null;
-        const outHandle = newAd?.kind === "image" ? "generated" : "out";
+        let outHandle = newAd?.kind === "image" ? "generated" : "out";
+        if (newNode.type === "promptList" && to.handleId === "inVideo") {
+          outHandle = "outVideo";
+        }
         setEdges((eds) =>
           addEdge(
             {
@@ -2533,6 +2606,9 @@ function WorkflowFlowWorkspace({
       const target = (nodes as WorkflowCanvasNode[]).find((n) => n.id === pendingConnect.targetNodeId);
       if (target?.type === "adAsset") {
         const d = target.data as AdAssetNodeData;
+        if (d.kind === "motion" && pendingConnect.targetHandleId === "inVideo") {
+          fileAccept = WORKFLOW_SEEDANCE_2_PRO_VIDEO_FILE_ACCEPT;
+        }
         if (d.kind === "video") {
           const vm = resolveWorkflowVideoModelId(d.model ?? "");
           if (vm === "bytedance/seedance-2" || vm === "bytedance/seedance-2-fast") {
@@ -2799,7 +2875,7 @@ function WorkflowFlowWorkspace({
       };
       requestAnimationFrame(() => requestAnimationFrame(tryLink));
     },
-    [readOnly, getInternalNode, getNodes, setEdges, setAlignGuides],
+    [readOnly, getInternalNode, getNodes, setEdges, setNodes, setAlignGuides],
   );
 
   const onNodeDrag = useCallback(
@@ -3249,7 +3325,7 @@ function WorkflowFlowWorkspace({
 
   const edgeEndpointFlowPoint = useCallback(
     (nodeId: string, edgeHandleId: string | null | undefined, side: "source" | "target"): { x: number; y: number } | null => {
-      const n = getInternalNode(nodeId) as any;
+      const n = getInternalNode(nodeId) as WorkflowRfInternalLayout | undefined;
       if (!n) return null;
       const abs = n.internals?.positionAbsolute ?? n.positionAbsolute ?? n.position;
       if (!abs || typeof abs.x !== "number" || typeof abs.y !== "number") return null;
@@ -3476,7 +3552,7 @@ function WorkflowFlowWorkspace({
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       if (isEditableElementFocused()) return;
-      setTool("select");
+      setTool("pan");
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -3591,7 +3667,7 @@ function WorkflowFlowWorkspace({
           nodeTypes={nodeTypes}
           colorMode="dark"
           fitView={false}
-          minZoom={0.1}
+          minZoom={0.05}
           panOnDrag={readOnly ? true : tool === "pan"}
           selectionOnDrag={readOnly ? false : tool === "select"}
           selectionMode={SelectionMode.Partial}
@@ -3687,6 +3763,7 @@ function WorkflowFlowWorkspace({
           className={cn(
             "workflow-flow relative z-[1] !bg-transparent",
             readOnly && "workflow-template-readonly",
+            (readOnly || tool === "pan") && "workflow-pan-mode",
             !readOnly && tool === "select" && "workflow-select-mode",
             !readOnly && tool === "stickyPlace" && "workflow-sticky-place-mode",
             !readOnly && tool === "cutTarget" && "workflow-cut-target-mode",
@@ -3839,6 +3916,37 @@ function WorkflowFlowWorkspace({
         </div>
       ) : null}
 
+      {readOnly && showSharePreviewCta && onDuplicateSharePreview ? (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center px-4 pb-5 pt-8">
+          <div className="pointer-events-auto flex w-full max-w-[min(100%,560px)] flex-col gap-2.5 rounded-2xl border border-white/[0.1] bg-[#14141a]/95 px-4 py-3 shadow-[0_12px_40px_rgba(0,0,0,0.5)] backdrop-blur-md sm:flex-row sm:items-center sm:gap-4 sm:py-2.5 sm:pl-5 sm:pr-2">
+            <Eye className="mx-auto h-4 w-4 shrink-0 text-white/55 sm:mx-0" strokeWidth={2} aria-hidden />
+            <p className="min-w-0 flex-1 text-center text-[12px] leading-snug text-white/75 sm:text-left sm:text-[13px]">
+              You&apos;re viewing a shared workflow. Sign up or duplicate to edit in your own workspace.
+            </p>
+            <div className="flex shrink-0 flex-col items-stretch gap-2 sm:flex-row sm:items-center">
+              {onJoinShareWorkspace && sharePreviewJoinLabel ? (
+                <button
+                  type="button"
+                  disabled={joinShareWorkspaceBusy}
+                  onClick={onJoinShareWorkspace}
+                  className="rounded-full border border-violet-400/40 bg-violet-500/15 px-4 py-2 text-[12px] font-semibold text-violet-100 transition hover:bg-violet-500/25 disabled:cursor-not-allowed disabled:opacity-60 sm:text-[13px]"
+                >
+                  {joinShareWorkspaceBusy ? "Joining…" : sharePreviewJoinLabel}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                disabled={duplicateSharePreviewBusy}
+                onClick={onDuplicateSharePreview}
+                className="rounded-full bg-white px-4 py-2 text-[12px] font-semibold text-zinc-900 shadow-sm transition hover:bg-white/95 disabled:cursor-not-allowed disabled:opacity-60 sm:px-5 sm:text-[13px]"
+              >
+                {duplicateSharePreviewBusy ? "Working…" : sharePreviewDuplicateLabel}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {placementPicker ? (
         <div
           ref={placementRef}
@@ -3858,6 +3966,8 @@ function WorkflowFlowWorkspace({
               ? "Prompt text is the black module for generation copy. Canvas note is only for annotations on the board."
               : placementPicker.intent === "text-or-image"
                 ? "Add a canvas note (annotation) or an image block."
+              : placementPicker.intent === "video-input"
+                ? "Add a motion reference video: upload a clip, wire a video generator, or use a list of video URLs."
               : placementPicker.intent === "image-input"
                 ? "Choose media source or generator for this image input."
                 : placementPicker.connectFrom
@@ -4023,6 +4133,30 @@ function WorkflowFlowWorkspace({
                   Assistant
                 </button>
               </>
+            ) : placementPicker.intent === "video-input" ? (
+              <>
+                <button
+                  type="button"
+                  className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
+                  onClick={pickUploadAtPlacement}
+                >
+                  Upload video
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
+                  onClick={() => placeNodeAtPicker("video")}
+                >
+                  Video generator
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-left text-[13px] font-medium text-white/90 transition hover:border-violet-400/35 hover:bg-violet-500/15"
+                  onClick={() => placeNodeAtPicker("promptList")}
+                >
+                  List
+                </button>
+              </>
             ) : placementPicker.intent === "image-input" ? (
               <>
                 <button
@@ -4148,10 +4282,18 @@ function normalizeWorkflowSpaceId(raw: string): string {
   }
 }
 
-export function WorkflowEditor({ spaceId }: { spaceId: string }) {
+export function WorkflowEditor({
+  spaceId,
+  shareToken,
+}: {
+  spaceId: string;
+  /** When set, loads a public snapshot from the share token (via `?share=` on the space URL). */
+  shareToken?: string;
+}) {
   const router = useRouter();
   const sb = useSupabaseBrowserClient();
   const resolvedSpaceId = useMemo(() => normalizeWorkflowSpaceId(spaceId), [spaceId]);
+  const shareTokenTrimmed = useMemo(() => (typeof shareToken === "string" ? shareToken.trim() : ""), [shareToken]);
 
   const [storageScope, setStorageScope] = useState<string | null>(null);
   /** `undefined` = session not resolved yet (avoid redirecting to /workflow on slow mobile). */
@@ -4174,6 +4316,10 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
   const [publishTemplateOpen, setPublishTemplateOpen] = useState(false);
   const [publishTemplateName, setPublishTemplateName] = useState("");
   const [publishTemplateBlurb, setPublishTemplateBlurb] = useState("");
+  /** Loaded via `/api/workflow/share-preview` (guest or signed-in user not yet a collaborator). */
+  const [loadedFromShareLink, setLoadedFromShareLink] = useState(false);
+  const [duplicateShareBusy, setDuplicateShareBusy] = useState(false);
+  const [joinShareBusy, setJoinShareBusy] = useState(false);
   const [runHistory, setRunHistory] = useState<WorkflowRunLogEntry[]>([]);
   const lastSavedPreviewRef = useRef<string | undefined>(undefined);
   const lastCloudUpdatedAtRef = useRef<string | null>(null);
@@ -4220,16 +4366,22 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
   /**
    * Hydrate the active space.
    *
-   * 1. If it lives in the user's local index → load from localStorage (fast path).
-   * 2. Otherwise, when signed in, try to fetch the cloud-stored space; this
+   * 1. Optional `?share=` token: try cloud when signed in (collaborator path), else a
+   *    public snapshot so guests can view the canvas without an account.
+   * 2. If it lives in the user's local index → load from localStorage (fast path).
+   * 3. Otherwise, when signed in, try to fetch the cloud-stored space; this
    *    covers two cases: workflows shared via invite, and workflows created on
    *    another device. We mark them as "shared" so saves go to the server only
    *    and the workflow does not bleed into the local "My workflows" list.
-   * 3. If neither is available, redirect back to the landing page.
+   * 4. If neither is available, redirect back to the landing page.
    */
   useEffect(() => {
     if (storageScope === null) return;
     setWorkflowHydrated(false);
+    if (!shareTokenTrimmed) {
+      setLoadedFromShareLink(false);
+    }
+
     const idx = loadSpacesIndex(storageScope).spaces;
     const localMeta = idx.find((s) => s.id === resolvedSpaceId);
     let cancelled = false;
@@ -4251,6 +4403,64 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
         setRunHistory([]);
       }
     };
+
+    if (shareTokenTrimmed) {
+      if (authUserId === undefined) {
+        return;
+      }
+
+      void (async () => {
+        if (authUserId) {
+          const cloud = await fetchCloudWorkflowSpace(resolvedSpaceId);
+          if (cancelled) return;
+          if (cloud) {
+            lastCloudUpdatedAtRef.current = cloud.updatedAt;
+            setSpaceSource(cloud.isOwn ? "local" : "shared");
+            setSpaceRole(cloud.role);
+            setSpaceName(cloud.name || "Untitled workflow");
+            setPublishedTemplateId(cloud.publishedCommunityTemplateId ?? null);
+            setWorkflowProject(cloud.state);
+            setLoadedFromShareLink(false);
+            skipNextCloudSaveRef.current = true;
+            if (cloud.isOwn) {
+              saveProjectForSpace(storageScope, resolvedSpaceId, cloud.state);
+              updateSpaceMeta(storageScope, resolvedSpaceId, {
+                name: cloud.name || "Untitled workflow",
+                updatedAt: Date.parse(cloud.updatedAt) || Date.now(),
+                previewDataUrl: cloud.previewDataUrl ?? undefined,
+                publishedCommunityTemplateId: cloud.publishedCommunityTemplateId ?? undefined,
+              });
+            }
+            skipNextLocalSaveRef.current = true;
+            loadRunHistory();
+            setWorkflowHydrated(true);
+            return;
+          }
+        }
+
+        const snap = await fetchWorkflowSharePreview(resolvedSpaceId, shareTokenTrimmed);
+        if (cancelled) return;
+        if (!snap) {
+          router.replace("/workflow");
+          return;
+        }
+        lastCloudUpdatedAtRef.current = snap.updatedAt;
+        setSpaceSource("shared");
+        setSpaceRole("viewer");
+        setSpaceName(snap.name || "Untitled workflow");
+        setPublishedTemplateId(snap.publishedCommunityTemplateId ?? null);
+        setWorkflowProject(snap.state);
+        setLoadedFromShareLink(true);
+        skipNextCloudSaveRef.current = true;
+        skipNextLocalSaveRef.current = true;
+        loadRunHistory();
+        setWorkflowHydrated(true);
+      })();
+
+      return () => {
+        cancelled = true;
+      };
+    }
 
     if (localMeta) {
       if (authUserId === undefined) {
@@ -4328,7 +4538,7 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
         return;
       }
       lastCloudUpdatedAtRef.current = cloud.updatedAt;
-      setSpaceSource("shared");
+      setSpaceSource(cloud.isOwn ? "local" : "shared");
       setSpaceRole(cloud.role);
       setSpaceName(cloud.name || "Untitled workflow");
       setPublishedTemplateId(cloud.publishedCommunityTemplateId ?? null);
@@ -4342,7 +4552,7 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [resolvedSpaceId, router, storageScope, runHistoryStorageKey, authUserId]);
+  }, [resolvedSpaceId, router, storageScope, runHistoryStorageKey, authUserId, shareTokenTrimmed]);
 
   useEffect(() => {
     if (!workflowHydrated || storageScope === null) return;
@@ -4648,6 +4858,101 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
     }
   }, [publishedTemplateId, removeTemplateBusy, storageScope, resolvedSpaceId]);
 
+  const signupRedirectTarget = useMemo(
+    () =>
+      shareTokenTrimmed
+        ? `/workflow/space/${encodeURIComponent(resolvedSpaceId)}?share=${encodeURIComponent(shareTokenTrimmed)}`
+        : `/workflow/space/${encodeURIComponent(resolvedSpaceId)}`,
+    [resolvedSpaceId, shareTokenTrimmed],
+  );
+
+  const workspaceReadOnly =
+    workflowHydrated && spaceSource === "shared" && spaceRole === "viewer";
+
+  const hideViewerHeaderActions = workspaceReadOnly;
+
+  const onDuplicateSharePreview = useCallback(() => {
+    if (duplicateShareBusy) return;
+    if (authUserId === null || authUserId === undefined) {
+      router.push(`/signup?redirect=${encodeURIComponent(signupRedirectTarget)}`);
+      return;
+    }
+    setDuplicateShareBusy(true);
+    try {
+      const flushed = canvasProjectFlushRef.current?.() ?? workflowProject;
+      let liveProject: WorkflowProjectStateV1;
+      try {
+        liveProject = structuredClone(flushed);
+      } catch {
+        liveProject = JSON.parse(JSON.stringify(flushed)) as WorkflowProjectStateV1;
+      }
+      const scope = getWorkflowStorageScope(authUserId);
+      const label = `${spaceName.trim() || "Workflow"} (copy)`;
+      const meta = createSpace(scope, label);
+      saveProjectForSpace(scope, meta.id, liveProject);
+      toast.success("Copy created in your workflows.");
+      router.push(`/workflow/space/${encodeURIComponent(meta.id)}`);
+    } catch {
+      toast.error("Could not duplicate this workflow.");
+    } finally {
+      setDuplicateShareBusy(false);
+    }
+  }, [
+    duplicateShareBusy,
+    authUserId,
+    router,
+    signupRedirectTarget,
+    workflowProject,
+    spaceName,
+  ]);
+
+  const onJoinShareWorkspace = useCallback(async () => {
+    if (joinShareBusy || !shareTokenTrimmed) return;
+    setJoinShareBusy(true);
+    try {
+      const res = await fetch("/api/workflow/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: shareTokenTrimmed }),
+      });
+      const body = (await res.json().catch(() => null)) as {
+        error?: string;
+        spaceId?: string;
+        role?: string;
+        invitedBy?: string;
+        alreadyMember?: boolean;
+      } | null;
+      if (!res.ok) {
+        toast.error(body?.error || "Could not join this workspace.");
+        return;
+      }
+      if (body?.spaceId && body.role) {
+        storeInviteWelcome({
+          invitedBy: body.invitedBy ?? "A collaborator",
+          spaceId: body.spaceId,
+          role: body.role,
+        });
+      }
+      toast.success(body?.alreadyMember ? "You already have access" : "You've joined this workspace!");
+      const cloud = await fetchCloudWorkflowSpace(resolvedSpaceId);
+      if (cloud) {
+        lastCloudUpdatedAtRef.current = cloud.updatedAt;
+        setSpaceSource(cloud.isOwn ? "local" : "shared");
+        setSpaceRole(cloud.role);
+        setSpaceName(cloud.name || "Untitled workflow");
+        setPublishedTemplateId(cloud.publishedCommunityTemplateId ?? null);
+        setWorkflowProject(cloud.state);
+        setLoadedFromShareLink(false);
+        skipNextCloudSaveRef.current = true;
+        skipNextLocalSaveRef.current = true;
+      }
+    } catch {
+      toast.error("Network error");
+    } finally {
+      setJoinShareBusy(false);
+    }
+  }, [joinShareBusy, shareTokenTrimmed, resolvedSpaceId]);
+
   return (
     <div className="relative flex min-h-[100dvh] min-w-0 flex-col overflow-hidden bg-[#06070d] text-white">
       <div className="pointer-events-none absolute left-1/2 top-0 h-[420px] w-[900px] -translate-x-1/2 rounded-full bg-violet-600/12 blur-[120px]" />
@@ -4663,43 +4968,65 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
               <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-violet-400/55" aria-hidden />
               <span className="truncate">{spaceName}</span>
             </span>
+            {shareTokenTrimmed && workflowHydrated && authUserId === null ? (
+              <>
+                <span className="text-white/25">·</span>
+                <Link
+                  href={`/signup?redirect=${encodeURIComponent(signupRedirectTarget)}`}
+                  className="shrink-0 text-[12px] font-semibold text-violet-200/90 hover:text-violet-100"
+                >
+                  Sign up
+                </Link>
+                <span className="text-white/30">/</span>
+                <Link
+                  href={`/signin?redirect=${encodeURIComponent(signupRedirectTarget)}`}
+                  className="shrink-0 text-[12px] font-semibold text-white/55 hover:text-white/80"
+                >
+                  Sign in
+                </Link>
+              </>
+            ) : null}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {publishedTemplateId ? (
-            <button
-              type="button"
-              onClick={() => setRemoveTemplateConfirmOpen(true)}
-              disabled={removeTemplateBusy}
-              className={cn(
-                "inline-flex h-9 items-center gap-2 rounded-full border border-red-400/28 bg-red-500/12 px-3.5 text-[13px] font-semibold text-red-100 transition hover:bg-red-500/20",
-                removeTemplateBusy && "cursor-not-allowed opacity-70",
-              )}
-            >
-              {removeTemplateBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-              {removeTemplateBusy ? "Removing…" : "Remove from templates"}
-            </button>
-          ) : null}
-          <button
-            type="button"
-            onClick={onPublishTemplate}
-            disabled={publishBusy}
-            className={cn(
-              "inline-flex h-9 items-center gap-2 rounded-full border border-white/16 bg-white/5 px-3.5 text-[13px] font-semibold text-white/85 transition hover:bg-white/10",
-              publishBusy && "cursor-not-allowed opacity-70",
-            )}
-          >
-            {publishBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Globe2 className="h-3.5 w-3.5" />}
-            {publishBusy ? "Publishing…" : publishedTemplateId ? "Push modification" : "Publish template"}
-          </button>
-          <button
-            type="button"
-            onClick={() => setShareOpen(true)}
-            className="inline-flex h-9 items-center gap-2 rounded-full border border-violet-400/35 bg-white px-3.5 text-[13px] font-semibold text-zinc-900 shadow-sm transition hover:bg-white/95"
-          >
-            <Share2 className="h-3.5 w-3.5" />
-            Share
-          </button>
+          {hideViewerHeaderActions ? null : (
+            <>
+              {publishedTemplateId ? (
+                <button
+                  type="button"
+                  onClick={() => setRemoveTemplateConfirmOpen(true)}
+                  disabled={removeTemplateBusy}
+                  className={cn(
+                    "inline-flex h-9 items-center gap-2 rounded-full border border-red-400/28 bg-red-500/12 px-3.5 text-[13px] font-semibold text-red-100 transition hover:bg-red-500/20",
+                    removeTemplateBusy && "cursor-not-allowed opacity-70",
+                  )}
+                >
+                  {removeTemplateBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                  {removeTemplateBusy ? "Removing…" : "Remove from templates"}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={onPublishTemplate}
+                disabled={publishBusy}
+                className={cn(
+                  "inline-flex h-9 items-center gap-2 rounded-full border border-white/16 bg-white/5 px-3.5 text-[13px] font-semibold text-white/85 transition hover:bg-white/10",
+                  publishBusy && "cursor-not-allowed opacity-70",
+                )}
+              >
+                {publishBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Globe2 className="h-3.5 w-3.5" />}
+                {publishBusy ? "Publishing…" : publishedTemplateId ? "Push modification" : "Publish template"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShareOpen(true)}
+                className="inline-flex h-9 items-center gap-2 rounded-full border border-violet-400/35 bg-white px-3.5 text-[13px] font-semibold text-zinc-900 shadow-sm transition hover:bg-white/95"
+              >
+                <Share2 className="h-3.5 w-3.5" />
+                Share
+              </button>
+            </>
+          )}
         </div>
       </header>
 
@@ -4901,8 +5228,18 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
                   <WorkflowFlowWorkspace
                     project={workflowProject}
                     setProject={setWorkflowProject}
+                    readOnly={workspaceReadOnly}
                     onRunLog={appendRunHistory}
                     canvasProjectFlushRef={canvasProjectFlushRef}
+                    showSharePreviewCta={loadedFromShareLink}
+                    sharePreviewDuplicateLabel={
+                      authUserId ? "Duplicate to my workflows" : "Sign up to duplicate"
+                    }
+                    onDuplicateSharePreview={onDuplicateSharePreview}
+                    duplicateSharePreviewBusy={duplicateShareBusy}
+                    sharePreviewJoinLabel={authUserId ? "Join workspace" : undefined}
+                    onJoinShareWorkspace={authUserId ? onJoinShareWorkspace : undefined}
+                    joinShareWorkspaceBusy={joinShareBusy}
                   />
                 </ReactFlowProvider>
               ) : (
@@ -4944,6 +5281,7 @@ export function WorkflowTemplatePreview({ templateId }: { templateId: string }) 
   const [communityAuthor, setCommunityAuthor] = useState<string | null>(null);
   const [useBusy, setUseBusy] = useState(false);
 
+  /* eslint-disable react-hooks/set-state-in-effect -- template preview bootstraps scope + project when deps change */
   useEffect(() => {
     if (!sb) {
       setStorageScope(getWorkflowStorageScope(null));
@@ -5009,6 +5347,7 @@ export function WorkflowTemplatePreview({ templateId }: { templateId: string }) 
       cancelled = true;
     };
   }, [resolvedId, router, storageScope]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const templateMeta = getWorkflowTemplateMeta(resolvedId, storageScope);
   const title = communityLabel ?? templateMeta?.name ?? "Template";

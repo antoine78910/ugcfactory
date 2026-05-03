@@ -341,6 +341,15 @@
   -webkit-mask-image: radial-gradient(ellipse 54% 50% at 50% 46%, #000 0%, transparent 98%);
 }
 
+/* Hand / pan tool (default when opening a workflow): grab cursor on empty canvas. */
+.workflow-flow.workflow-pan-mode .react-flow__pane {
+  cursor: grab !important;
+}
+
+.workflow-flow.workflow-pan-mode .react-flow__pane:active {
+  cursor: grabbing !important;
+}
+
 /* Sticky note placement tool: custom cursor on empty canvas (asset: public/workflow/sticky-note-cursor.png). */
 .workflow-flow.workflow-select-mode .react-flow__pane {
   cursor: default !important;
