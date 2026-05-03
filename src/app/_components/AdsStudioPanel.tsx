@@ -271,11 +271,81 @@ function normalizeTemplateLabel(label: string): string {
     .trim();
 }
 
-/** True for unboxing template cards (not Tutorial) so Recreate can fill product + avatar for @image1 / @image2. */
-function isUnboxingBundledRecreateLabel(normalizedLabel: string): boolean {
+/**
+ * Froggy Prince ASMR packshots only — generic “Unboxing” cards.
+ * Numbered variants (Unboxing 2/3/4…) use different creatives; refs come from template video frames instead.
+ */
+function isBundledFroggyUnboxingTemplateLabel(normalizedLabel: string): boolean {
   const n = normalizedLabel;
   if (n.includes("tutorial")) return false;
-  return n.includes("unboxing") || n.includes("unoboxing");
+  if (!n.includes("unboxing") && !n.includes("unoboxing")) return false;
+  if (/\bunboxing\s*[234]\b/u.test(n) || /\bunboxing[234]\b/u.test(n)) return false;
+  if (/\bunoboxing\s*[234]\b/u.test(n)) return false;
+  return true;
+}
+
+/** Grab two JPEG frames from a template preview MP4 (same-origin) for Product + Avatar refs. */
+async function captureTwoFramesFromTemplateVideo(videoUrl: string): Promise<[Blob, Blob]> {
+  const absUrl = typeof window !== "undefined" ? new URL(videoUrl, window.location.origin).href : videoUrl;
+  const video = document.createElement("video");
+  video.muted = true;
+  video.playsInline = true;
+  video.preload = "auto";
+  video.src = absUrl;
+
+  await new Promise<void>((resolve, reject) => {
+    video.onloadedmetadata = () => resolve();
+    video.onerror = () => reject(new Error("Could not load template preview."));
+  });
+
+  const dur = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 4;
+  const t1 = Math.min(0.12, Math.max(dur - 0.1, 0.05));
+  let t2 = Math.min(Math.max(dur * 0.42, 0.22), dur - 0.08);
+  if (Math.abs(t2 - t1) < 0.18) {
+    t2 = Math.min(t1 + 0.55, dur - 0.08);
+  }
+
+  async function grabAt(t: number): Promise<Blob> {
+    video.currentTime = Math.min(Math.max(t, 0.05), dur - 0.05);
+    await new Promise<void>((resolve, reject) => {
+      video.onseeked = () => resolve();
+      video.onerror = () => reject(new Error("Seek failed."));
+    });
+    const w = video.videoWidth;
+    const h = video.videoHeight;
+    if (!w || !h) throw new Error("Missing video dimensions.");
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Canvas unsupported.");
+    ctx.drawImage(video, 0, 0);
+    return await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("Frame export failed."))), "image/jpeg", 0.9);
+    });
+  }
+
+  try {
+    const b1 = await grabAt(t1);
+    const b2 = await grabAt(t2);
+    return [b1, b2];
+  } finally {
+    video.removeAttribute("src");
+    video.load();
+  }
+}
+
+async function uploadTemplateRefsFromPreviewVideo(videoUrl: string): Promise<{ productUrl: string; avatarUrl: string }> {
+  const [blob1, blob2] = await captureTwoFramesFromTemplateVideo(videoUrl);
+  const productUrl = await uploadFileToCdn(
+    new File([blob1], "ads-template-product.jpg", { type: "image/jpeg" }),
+    { kind: "image" },
+  );
+  const avatarUrl = await uploadFileToCdn(
+    new File([blob2], "ads-template-avatar.jpg", { type: "image/jpeg" }),
+    { kind: "image" },
+  );
+  return { productUrl, avatarUrl };
 }
 
 /** Matches promptForTemplateLabel “try on 2” templates (e.g. UGC Virtual Try On 2). */
@@ -803,7 +873,7 @@ export default function AdsStudioPanel() {
     });
   }
 
-  function recreateFromTemplate(label: string) {
+  async function recreateFromTemplate(label: string, tpl?: TemplateVideoItem) {
     const n = normalizeTemplateLabel(label);
     const isTutorial2 =
       n.includes("tutorial 2") || n.includes("tutorial2") || n.includes("tutorial (2)");
@@ -826,13 +896,36 @@ export default function AdsStudioPanel() {
       scrollComposerIntoView();
       return;
     }
-    if (isUnboxingBundledRecreateLabel(n)) {
+    if (isBundledFroggyUnboxingTemplateLabel(n)) {
       setAssetType("product");
       setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UNBOXING_PRODUCT_PATH));
       setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UNBOXING_AVATAR_PATH));
       scrollComposerIntoView();
       return;
     }
+
+    const tplUrl = tpl?.url?.trim();
+    if (tplUrl) {
+      setUploadingRefSlot(true);
+      setUploadingAvatar(true);
+      try {
+        const { productUrl, avatarUrl } = await uploadTemplateRefsFromPreviewVideo(tplUrl);
+        setAssetType("product");
+        setAppRefUrl(productUrl);
+        setAvatarUrl(avatarUrl);
+        toast.success("References added", {
+          description: "Two frames from the template preview were uploaded for Product and Avatar.",
+        });
+      } catch {
+        toast.message("References not filled automatically", {
+          description: "Upload Product and Avatar manually to match this template.",
+        });
+      } finally {
+        setUploadingRefSlot(false);
+        setUploadingAvatar(false);
+      }
+    }
+
     scrollComposerIntoView();
   }
 
@@ -1008,8 +1101,8 @@ export default function AdsStudioPanel() {
                     }
                     showCreateElementButton={false}
                     className={cn(
-                      "min-h-36 w-full rounded-xl border border-white/10 bg-white/[0.03] shadow-none",
-                      "[&_textarea]:min-h-36 [&_textarea]:pb-10 [&_textarea]:text-sm [&_textarea]:leading-relaxed [&_textarea]:caret-violet-300 [&_textarea]:placeholder:text-white/35",
+                      "max-h-[min(288px,46vh)] min-h-36 w-full overflow-hidden rounded-xl border border-white/10 bg-white/[0.03] shadow-none",
+                      "[&_textarea]:max-h-[min(248px,40vh)] [&_textarea]:min-h-36 [&_textarea]:pb-10 [&_textarea]:text-sm [&_textarea]:leading-relaxed [&_textarea]:caret-violet-300 [&_textarea]:placeholder:text-white/35",
                       "focus-within:ring-0",
                     )}
                   />
@@ -1315,7 +1408,7 @@ export default function AdsStudioPanel() {
                 <p className="pointer-events-none absolute left-3 top-2 text-[11px] font-semibold text-white/90">{label}</p>
                 <button
                   type="button"
-                  onClick={() => recreateFromTemplate(label)}
+                  onClick={() => void recreateFromTemplate(label, tpl)}
                   className={cn(
                     "absolute bottom-3 left-1/2 z-20 flex h-9 -translate-x-1/2 items-center justify-center gap-1.5 rounded-full px-4 text-[13px] font-semibold text-white opacity-0 shadow-[0_4px_0_0_rgba(76,29,149,0.88)] ring-1 ring-violet-300/35 transition",
                     "border border-violet-300/45 bg-violet-500 hover:bg-violet-400 hover:shadow-[0_5px_0_0_rgba(76,29,149,0.88)] active:-translate-x-1/2 active:translate-y-px active:shadow-none",

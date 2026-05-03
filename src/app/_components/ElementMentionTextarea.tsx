@@ -351,33 +351,16 @@ export default function ElementMentionTextarea({
       )}
     >
       {/**
-       * Single grid cell stacks textarea + highlight so they share the same content box (padding
-       * from `className` applies once). Absolute overlay + inset-* breaks as soon as the parent
-       * has padding — caret/scroll no longer match.
+       * Highlight overlay is absolutely stacked so long prompts cannot inflate layout height — only
+       * the textarea’s box size controls height (scroll inside). Padding lives on this wrapper once.
        */}
       <div
         className={cn(
-          "grid grid-cols-1 grid-rows-1 overflow-hidden rounded-md border border-input bg-transparent shadow-xs transition-[color,box-shadow] min-h-16",
+          "relative overflow-hidden rounded-md border border-input bg-transparent shadow-xs transition-[color,box-shadow] min-h-16",
           TEXTAREA_INNER_LAYOUT,
           className,
         )}
       >
-        {value ? (
-          <div
-            aria-hidden="true"
-            className="col-start-1 row-start-1 z-0 h-full min-h-0 min-w-0 overflow-hidden pointer-events-none"
-          >
-            <div
-              className="w-full whitespace-pre-wrap break-words text-white [font:inherit]"
-              style={{
-                transform: `translate(${-overlayScrollLeft}px, ${-overlayScrollTop}px)`,
-                paddingRight: scrollbarReserveX,
-              }}
-            >
-              {renderedOverlay}
-            </div>
-          </div>
-        ) : null}
         <textarea
           ref={textareaRef}
           value={value}
@@ -410,7 +393,7 @@ export default function ElementMentionTextarea({
           rows={rows}
           data-slot="textarea"
           className={cn(
-            "col-start-1 row-start-1 z-10 h-full min-h-16 min-w-0 box-border block w-full resize-none overflow-y-auto bg-transparent p-0 shadow-none outline-none ring-0 studio-params-scroll",
+            "relative z-10 block min-h-16 min-w-0 w-full resize-none overflow-y-auto bg-transparent p-0 shadow-none outline-none ring-0 studio-params-scroll box-border",
             "border-0 placeholder:text-muted-foreground focus-visible:border-transparent focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-transparent dark:bg-transparent",
             "focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50",
             /** Hidden scrollbar: thin thumb looked like a second caret; wheel/trackpad still scrolls. */
@@ -419,6 +402,22 @@ export default function ElementMentionTextarea({
               : "",
           )}
         />
+        {value ? (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 z-0 overflow-hidden rounded-[inherit]"
+          >
+            <div
+              className="h-full w-full whitespace-pre-wrap break-words text-white [font:inherit]"
+              style={{
+                transform: `translate(${-overlayScrollLeft}px, ${-overlayScrollTop}px)`,
+                paddingRight: scrollbarReserveX,
+              }}
+            >
+              {renderedOverlay}
+            </div>
+          </div>
+        ) : null}
       </div>
       {showMenu ? (
         <div
