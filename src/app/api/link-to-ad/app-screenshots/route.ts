@@ -62,8 +62,7 @@ async function uploadShot(
  * 4xx/5xx with a stable `code` so the caller can decide whether to retry,
  * fall back to manual upload, or give up gracefully.
  *
- * NOTE: this endpoint is currently dormant — `LINK_TO_AD_APP_OPTION_AVAILABLE`
- * gates the App switch in the UI. Wire it up when the App pipeline is enabled.
+ * Called from Link to Ad when the user selects App mode and runs the initial pipeline.
  */
 export async function POST(req: Request) {
   const { user, response } = await requireSupabaseUser();

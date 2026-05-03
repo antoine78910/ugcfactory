@@ -35,6 +35,7 @@ import {
   isStudioShellPath,
   pathnameWithoutLegacyAppPrefix,
 } from "@/lib/studioPaths";
+import { warmStudioTemplateVideosFetch } from "@/lib/studioTemplateVideosClient";
 
 const SIDEBAR_COLLAPSED_LS = "youry-studio-sidebar-collapsed";
 /** Last studio section for deep links back; CREATE highlight is cleared on /credits and /subscription. */
@@ -314,6 +315,13 @@ function StudioShellInner({
     }
   }, [isStudioShell, pathname]);
 
+  useEffect(() => {
+    const p = pathnameWithoutLegacyAppPrefix(pathname);
+    if (p === "/ads-studio" || p.startsWith("/ads-studio/")) {
+      warmStudioTemplateVideosFetch();
+    }
+  }, [pathname]);
+
   const activeSection: StudioNavSection | null = useMemo(() => {
     if (controlled && studioSection) return studioSection;
     if (isStudioShell) return sectionFromPathname(pathname);
@@ -523,6 +531,8 @@ function StudioShellInner({
                             navCollapsed && "px-2.5 py-3.5",
                           )}
                           title={label}
+                          onMouseEnter={linkId === "ads_studio" ? warmStudioTemplateVideosFetch : undefined}
+                          onFocus={linkId === "ads_studio" ? warmStudioTemplateVideosFetch : undefined}
                           onClick={(event) => {
                             if (
                               event.defaultPrevented ||

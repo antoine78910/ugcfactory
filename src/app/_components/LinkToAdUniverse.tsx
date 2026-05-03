@@ -5,9 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { toast } from "sonner";
 import Link from "next/link";
 import {
-  AppWindow,
   ArrowLeft,
-  Box,
   Check,
   ChevronDown,
   ChevronRight,
@@ -80,6 +78,9 @@ import {
 import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
 import { LtaTrialVideoUpgradeDialog } from "@/app/_components/LtaTrialVideoUpgradeDialog";
 import { LinkToAdUniverseStepper } from "@/app/_components/LinkToAdUniverseStepper";
+import { LINK_TO_AD_APP_OPTION_AVAILABLE, LinkToAdAssetTypeSwitch } from "@/app/_components/LinkToAdAssetTypeSwitch";
+import { LinkToAdProductSetupDialog } from "@/app/_components/LinkToAdProductSetupDialog";
+import { LinkToAdUrlFlowProgressOverlay } from "@/app/_components/LinkToAdUrlFlowProgressOverlay";
 import { WebsiteScanChecklist } from "@/app/_components/WebsiteScanChecklist";
 import { WebsiteScanLoader } from "@/app/_components/WebsiteScanLoader";
 import { TextShimmer } from "@/components/ui/text-shimmer";
@@ -1296,85 +1297,6 @@ function LinkToAdFullSequencePlayer({
   );
 }
 
-/**
- * Feature gate for the "App" asset type in Link to Ad. Flip to `true` when the
- * App pipeline (screenshot capture + scripting) is wired end-to-end. While
- * `false`, the App option is shown but disabled with a "Soon" badge, and any
- * persisted "app" snapshot is coerced back to "product" on hydration.
- */
-const LINK_TO_AD_APP_OPTION_AVAILABLE = false;
-
-function LinkToAdAssetTypeSwitch({
-  value,
-  onChange,
-  appAvailable = LINK_TO_AD_APP_OPTION_AVAILABLE,
-}: {
-  value: "product" | "app";
-  onChange: (next: "product" | "app") => void;
-  appAvailable?: boolean;
-}) {
-  // While App is gated, the active value can only be "product"; force the
-  // indicator to stay on the left even if some stale state leaks "app".
-  const effectiveValue = appAvailable ? value : "product";
-  const appDisabled = !appAvailable;
-  return (
-    <div className="relative h-[2.7rem] w-[10.75rem] shrink-0 overflow-hidden rounded-2xl border border-violet-400/30 bg-[#0f1016] p-1 shadow-[inset_0_2px_4px_rgba(0,0,0,0.85),0_16px_30px_-14px_rgba(0,0,0,0.65)]">
-      <div
-        className={cn(
-          "pointer-events-none absolute inset-y-1 left-1 w-[calc(50%-0.25rem)] rounded-[0.8rem] border border-violet-200/35 bg-[linear-gradient(145deg,rgba(196,181,253,0.28),rgba(139,92,246,0.06))] shadow-[0_0_18px_rgba(139,92,246,0.4),inset_0_0_12px_rgba(167,139,250,0.25)] transition-transform duration-300 ease-out",
-          effectiveValue === "app" ? "translate-x-[calc(100%+0.25rem)]" : "translate-x-0",
-        )}
-      >
-        <span className="pointer-events-none absolute left-[10%] top-0 h-px w-[80%] bg-gradient-to-r from-transparent via-white/85 to-transparent" />
-      </div>
-      <div className="relative z-10 flex h-full items-center">
-        <button
-          type="button"
-          onClick={() => onChange("product")}
-          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl px-2 text-xs font-semibold"
-        >
-          <Box className={cn("h-3.5 w-3.5 transition", effectiveValue === "product" ? "text-violet-50" : "text-white/45")} />
-          <span className={cn("transition", effectiveValue === "product" ? "text-white" : "text-white/45")}>Product</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            if (appDisabled) return;
-            onChange("app");
-          }}
-          disabled={appDisabled}
-          aria-disabled={appDisabled}
-          title={appDisabled ? "App support is coming soon." : undefined}
-          className={cn(
-            "flex flex-1 items-center justify-center gap-1 rounded-xl px-2 text-xs font-semibold",
-            appDisabled && "cursor-not-allowed opacity-70",
-          )}
-        >
-          <AppWindow
-            className={cn(
-              "h-3.5 w-3.5 transition",
-              !appDisabled && effectiveValue === "app" ? "text-violet-50" : "text-white/45",
-            )}
-          />
-          <span
-            className={cn(
-              "transition",
-              !appDisabled && effectiveValue === "app" ? "text-white" : "text-white/45",
-            )}
-          >
-            App
-          </span>
-          {appDisabled ? (
-            <span className="shrink-0 rounded-md border border-white/10 bg-white/[0.05] px-1 py-0.5 text-[8.5px] font-bold uppercase tracking-wide text-white/45">
-              Soon
-            </span>
-          ) : null}
-        </button>
-      </div>
-    </div>
-  );
-}
-
 export default function LinkToAdUniverse({
   resumeRunId,
   onResumeConsumed,
@@ -1581,12 +1503,21 @@ export default function LinkToAdUniverse({
   const [linkToAdAssetType, setLinkToAdAssetType] = useState<"product" | "app">("product");
   /**
    * Whether the user is targeting a mobile/web app instead of a product listing.
-   * Used to relabel "Store URL" steps as "App URL" and to gate the future app-specific
-   * scraping path (mobile + laptop screenshot capture). Stays `false` while
-   * {@link LINK_TO_AD_APP_OPTION_AVAILABLE} is off, even if a stale snapshot tries to set it.
+   * Relabels URL copy, runs `/api/link-to-ad/app-screenshots` before the initial pipeline,
+   * and passes `linkToAdAssetType` into script/image routes. When {@link LINK_TO_AD_APP_OPTION_AVAILABLE}
+   * is off, persisted `"app"` snapshots hydrate as product.
    */
   const isLinkToAdAppMode =
     LINK_TO_AD_APP_OPTION_AVAILABLE && linkToAdAssetType === "app";
+  /** Session-only display name override (shown in the brand header until you switch runs or reset). */
+  const [userOverrideProductTitle, setUserOverrideProductTitle] = useState<string | null>(null);
+  const [productSetupDialogOpen, setProductSetupDialogOpen] = useState(false);
+  const [showUrlFlowProgressOverlay, setShowUrlFlowProgressOverlay] = useState(false);
+  const [ltaAppScreenshotPreferred, setLtaAppScreenshotPreferred] = useState<"desktop" | "mobile">("desktop");
+  const ltaAppScreenshotPreferredRef = useRef(ltaAppScreenshotPreferred);
+  useEffect(() => {
+    ltaAppScreenshotPreferredRef.current = ltaAppScreenshotPreferred;
+  }, [ltaAppScreenshotPreferred]);
   const scriptProvider = "claude" as const;
 
   const [videoDuration, setVideoDuration] = useState<number>(10);
@@ -2108,6 +2039,10 @@ export default function LinkToAdUniverse({
     setNanoPromptTechnicalTails(["", "", ""]);
     setGenerationMode("automatic");
     setLinkToAdAssetType("product");
+    setUserOverrideProductTitle(null);
+    setProductSetupDialogOpen(false);
+    setShowUrlFlowProgressOverlay(false);
+    setLtaAppScreenshotPreferred("desktop");
     setCustomUgcTopic("");
     setCustomUgcOffer("");
     setCustomUgcCta("");
@@ -2142,6 +2077,7 @@ export default function LinkToAdUniverse({
         toast.message("Already on this generation");
         return;
       }
+      setUserOverrideProductTitle(null);
       cancelCurrentGeneration({ silent: true });
       onSwitchLinkToAdRun?.(runId);
     },
@@ -3077,6 +3013,7 @@ export default function LinkToAdUniverse({
       setUniverseRunId(run.id);
       setStoreUrl(typeof run.store_url === "string" ? run.store_url : "");
       setExtractedTitle(typeof run.title === "string" ? run.title : null);
+      setUserOverrideProductTitle(null);
       setCleanCandidate(snap.cleanCandidate);
       setFallbackImageUrl(snap.fallbackImageUrl);
       setConfidence(snap.confidence);
@@ -3967,6 +3904,7 @@ export default function LinkToAdUniverse({
         generation_mode: generationMode,
       });
     }
+    setShowUrlFlowProgressOverlay(false);
     const epochAtStart = linkToAdFlowEpochRef.current;
     const runningToken = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     activeRunTokenRef.current = runningToken;
@@ -3976,9 +3914,6 @@ export default function LinkToAdUniverse({
       startedAt: Date.now(),
       runId: universeRunId,
     });
-
-    /** Re-run step 1: do not reuse neutral upload (UI should clear like the brief). */
-    const userUploadedImageUrl = opts?.bypassSavedProject ? null : neutralUploadUrl;
 
     /** Saved run for this URL hydrates in place unless bypass (redo step 1). */
     const tryHydrateFromSavedRun = !opts?.bypassSavedProject;
@@ -4001,10 +3936,12 @@ export default function LinkToAdUniverse({
             if (linkToAdFlowEpochRef.current !== epochAtStart) {
               setIsWorking(false);
               setLtaVideoDurationLocked(false);
+              setShowUrlFlowProgressOverlay(false);
               return;
             }
             setStage("ready");
             setIsWorking(false);
+            setShowUrlFlowProgressOverlay(false);
             return;
           }
         }
@@ -4026,9 +3963,57 @@ export default function LinkToAdUniverse({
     }
     lastLtaUrlGenerateChargeRef.current = initialCharge;
     chargedFullBundle = true;
+    setShowUrlFlowProgressOverlay(true);
 
     const pipelineProductUrls = [...productOnlyImageUrls];
     const pipelinePersonaUrls = [...personaPhotoUrls];
+
+    let neutralForPipeline: string | null = opts?.bypassSavedProject ? null : neutralUploadUrl;
+
+    if (LINK_TO_AD_APP_OPTION_AVAILABLE && linkToAdAssetType === "app") {
+      try {
+        const shotRes = await fetch("/api/link-to-ad/app-screenshots", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url }),
+        });
+        const shotJson = (await shotRes.json()) as {
+          desktopUrl?: string | null;
+          mobileUrl?: string | null;
+          error?: string;
+        };
+        if (!shotRes.ok) {
+          throw new Error(shotJson.error || "Could not capture app screenshots");
+        }
+        const pref = ltaAppScreenshotPreferredRef.current;
+        const chosen =
+          pref === "mobile"
+            ? shotJson.mobileUrl || shotJson.desktopUrl
+            : shotJson.desktopUrl || shotJson.mobileUrl;
+        const chosenStr = typeof chosen === "string" ? chosen.trim() : "";
+        if (!chosenStr || !/^https?:\/\//i.test(chosenStr)) {
+          throw new Error("No app screenshot was produced");
+        }
+        neutralForPipeline = chosenStr;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "App screenshot failed";
+        if (!isPlatformCreditBypassActive()) {
+          grantCredits(initialCharge);
+          creditsBalanceRef.current += initialCharge;
+        }
+        setLtaFrozenCredits(null);
+        setIsWorking(false);
+        setStage("idle");
+        setLtaVideoDurationLocked(false);
+        removeRunningLinkToAdProject(runningToken);
+        if (activeRunTokenRef.current === runningToken) activeRunTokenRef.current = null;
+        setShowUrlFlowProgressOverlay(false);
+        chargedFullBundle = false;
+        toast.error("Could not capture app preview", { description: msg });
+        return;
+      }
+    }
 
     setSummaryText("");
     setScriptsText("");
@@ -4073,7 +4058,7 @@ export default function LinkToAdUniverse({
         browserPipelineFetch,
         {
           storeUrl: url,
-          neutralUploadUrl: userUploadedImageUrl,
+          neutralUploadUrl: neutralForPipeline,
           userProductImageUrls: pipelineProductUrls,
           personaImageUrls: pipelinePersonaUrls,
           generationMode,
@@ -4167,6 +4152,7 @@ export default function LinkToAdUniverse({
     } finally {
       setServerPipelineStepIndex(null);
       setIsWorking(false);
+      setShowUrlFlowProgressOverlay(false);
       removeRunningLinkToAdProject(runningToken);
       if (activeRunTokenRef.current === runningToken) activeRunTokenRef.current = null;
     }
@@ -6319,13 +6305,15 @@ export default function LinkToAdUniverse({
   );
 
   const brandDisplayName = useMemo(() => {
+    const o = userOverrideProductTitle?.trim();
+    if (o) return o;
     const t = extractedTitle?.trim();
     if (t) return t;
     const h = storeHostnameResolved;
     if (h) return h;
     const u = storeUrl.trim();
     return u || "Store";
-  }, [extractedTitle, storeHostnameResolved, storeUrl]);
+  }, [userOverrideProductTitle, extractedTitle, storeHostnameResolved, storeUrl]);
 
   const brandFaviconSrc = useMemo(() => {
     const h = storeHostnameResolved;
@@ -6649,6 +6637,38 @@ export default function LinkToAdUniverse({
                           className="h-10 border-white/10 bg-black/30 text-sm text-white/85 placeholder:text-white/30"
                         />
                       </div>
+                    </div>
+                  </div>
+                ) : null}
+                {isLinkToAdAppMode ? (
+                  <div className="rounded-lg border border-white/[0.07] bg-white/[0.02] p-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">
+                      App screenshot for generation
+                    </p>
+                    <p className="mt-1 text-xs text-white/45">
+                      Choose desktop or mobile as the main reference image when you generate.
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {(
+                        [
+                          { id: "desktop" as const, label: "Desktop" },
+                          { id: "mobile" as const, label: "Mobile" },
+                        ] as const
+                      ).map((opt) => (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => setLtaAppScreenshotPreferred(opt.id)}
+                          className={cn(
+                            "rounded-lg border px-3 py-1.5 text-xs font-semibold transition",
+                            ltaAppScreenshotPreferred === opt.id
+                              ? "border-violet-400/50 bg-violet-500/20 text-white"
+                              : "border-white/10 bg-white/[0.03] text-white/55 hover:border-white/20",
+                          )}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 ) : null}
@@ -7100,6 +7120,20 @@ export default function LinkToAdUniverse({
                     )}
                   </div>
                   <div className="group relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-[#050507]">
+                    <button
+                      type="button"
+                      disabled={isWorking}
+                      aria-label="Edit product or app"
+                      title="Edit product or app"
+                      className="absolute bottom-1 left-1 z-[1] flex h-7 w-7 items-center justify-center rounded-lg bg-black/60 text-white opacity-0 shadow transition-opacity hover:bg-black/70 hover:text-white/90 group-hover:opacity-100 disabled:pointer-events-none disabled:opacity-0"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setProductSetupDialogOpen(true);
+                      }}
+                    >
+                      <PenLine className="h-4 w-4" aria-hidden />
+                    </button>
                     {resolvedPreviewUrl && !imgError ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
@@ -7386,6 +7420,20 @@ export default function LinkToAdUniverse({
                       {/* Brand color intentionally hidden (not useful in Link to Ad UI). */}
                     </div>
                     <div className="group relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-[#050507]">
+                      <button
+                        type="button"
+                        disabled={isWorking}
+                        aria-label="Edit product or app"
+                        title="Edit product or app"
+                        className="absolute bottom-1 left-1 z-[21] flex h-7 w-7 items-center justify-center rounded-lg bg-black/60 text-white opacity-0 shadow transition-opacity hover:bg-black/70 hover:text-white/90 group-hover:opacity-100 disabled:pointer-events-none disabled:opacity-0"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setProductSetupDialogOpen(true);
+                        }}
+                      >
+                        <PenLine className="h-4 w-4" aria-hidden />
+                      </button>
                       {resolvedPreviewUrl && !imgError ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -7838,6 +7886,20 @@ export default function LinkToAdUniverse({
                     </div>
                   </div>
                   <div className="group relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-[#050507]">
+                    <button
+                      type="button"
+                      disabled={isWorking}
+                      aria-label="Edit product or app"
+                      title="Edit product or app"
+                      className="absolute bottom-1 left-1 z-[21] flex h-7 w-7 items-center justify-center rounded-lg bg-black/60 text-white opacity-0 shadow transition-opacity hover:bg-black/70 hover:text-white/90 group-hover:opacity-100 disabled:pointer-events-none disabled:opacity-0"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setProductSetupDialogOpen(true);
+                      }}
+                    >
+                      <PenLine className="h-4 w-4" aria-hidden />
+                    </button>
                     {resolvedPreviewUrl && !imgError ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
@@ -9574,6 +9636,40 @@ export default function LinkToAdUniverse({
         </button>
       </div>
     ) : null}
+    <LinkToAdUrlFlowProgressOverlay
+      open={showUrlFlowProgressOverlay && isWorking}
+      assetKind={linkToAdAssetType === "app" ? "app" : "product"}
+      stage={stage}
+      serverPipelineStepIndex={serverPipelineStepIndex}
+    />
+    <LinkToAdProductSetupDialog
+      open={productSetupDialogOpen}
+      onOpenChange={setProductSetupDialogOpen}
+      initialUrl={storeUrl}
+      initialDisplayName={(userOverrideProductTitle ?? extractedTitle ?? "").trim()}
+      initialAssetType={linkToAdAssetType}
+      initialScreenshotPreferred={ltaAppScreenshotPreferred}
+      recentRuns={recentLinkToAdRunsForDisplay}
+      previewThumbUrl={resolvedPreviewUrl}
+      onPickRecentRun={handleSwitchRecentRun}
+      onCreateManually={() => photoInputRef.current?.click()}
+      onGenerate={async (payload) => {
+        setStoreUrl(payload.url);
+        setLinkToAdAssetType(payload.assetType);
+        setLtaAppScreenshotPreferred(payload.screenshotPreferred);
+        setUserOverrideProductTitle(payload.displayName.trim() ? payload.displayName.trim() : null);
+        setProductSetupDialogOpen(false);
+        if (!payload.url.trim()) {
+          toast.error("Missing URL");
+          return;
+        }
+        if (!/^https?:\/\//i.test(payload.url.trim())) {
+          toast.error("URL must start with https:// (or http://).");
+          return;
+        }
+        await onRun();
+      }}
+    />
     </>
   );
 }

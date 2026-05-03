@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { LayoutList, Loader2, Pencil, Plus, Smartphone, Package2, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,8 @@ import { calculateVideoCreditsForModel } from "@/lib/pricing";
 import { AdsStudioRefSourceDialog } from "@/app/_components/AdsStudioRefSourceDialog";
 import type { AdsStudioMentionEntry } from "@/app/_components/AdsStudioMentionMenu";
 import { loadAvatarUrls } from "@/lib/avatarLibrary";
+import { getStudioTemplateVideosCached } from "@/lib/studioTemplateVideosClient";
+import type { StudioTemplateVideoItem } from "@/lib/studioTemplateVideosTypes";
 
 /** Ads Studio: PiAPI Seedance 2 (non–fast) only. */
 const ADS_STUDIO_SEEDANCE_MODEL = "bytedance/seedance-2" as const;
@@ -151,8 +153,6 @@ const LS_ADS_STUDIO_HISTORY = "ugc_ads_studio_history_v1";
 const LS_ADS_STUDIO_ACTIVE_JOBS = "ugc_ads_studio_active_jobs_v1";
 /** Drop persisted jobs older than this so stale rows do not poll forever */
 const ADS_STUDIO_MAX_ACTIVE_JOB_AGE_MS = 1000 * 60 * 60 * 24;
-
-type TemplateVideoItem = { filename: string; label: string; url: string };
 
 const TEMPLATE_PROMPT_HYPER_MOTION = `chocolate japanese style commercial, with chocolate crunching, pieces breaking, hands passing chocolate to each other, japanese happy people smiling while biting, and these little characters animated`;
 
@@ -579,7 +579,7 @@ export default function AdsStudioPanel() {
   const [activeJobs, setActiveJobs] = useState<AdsStudioActiveJob[]>([]);
   const [selectedSidebarKey, setSelectedSidebarKey] = useState<string | null>(null);
   const [history, setHistory] = useState<AdsStudioHistoryItem[]>([]);
-  const [templateVideos, setTemplateVideos] = useState<TemplateVideoItem[]>([]);
+  const [templateVideos, setTemplateVideos] = useState<StudioTemplateVideoItem[]>([]);
   const [uploadingRefSlot, setUploadingRefSlot] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [refSourceDialogOpen, setRefSourceDialogOpen] = useState(false);
@@ -648,15 +648,11 @@ export default function AdsStudioPanel() {
     }
   }, [activeJobs, activeJobsStorageReady]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     let cancelled = false;
-    (async () => {
-      const res = await fetch(`/api/studio/template-videos?t=${Date.now()}`, { cache: "no-store" });
-      const json = (await res.json().catch(() => null)) as { videos?: TemplateVideoItem[] } | null;
-      if (cancelled) return;
-      const videos = Array.isArray(json?.videos) ? json.videos : [];
-      setTemplateVideos(videos);
-    })();
+    void getStudioTemplateVideosCached().then((videos) => {
+      if (!cancelled) setTemplateVideos(videos);
+    });
     return () => {
       cancelled = true;
     };
@@ -1569,7 +1565,7 @@ export default function AdsStudioPanel() {
                     muted
                     loop
                     playsInline
-                    preload="metadata"
+                    preload={idx < 3 ? "auto" : "metadata"}
                     className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
                   />
                 ) : (
@@ -1589,11 +1585,6 @@ export default function AdsStudioPanel() {
               </div>
             );
           })}
-          {templateVideos.length === 0 ? (
-            <div className="col-span-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white/50">
-              No template videos found in <code>/public/studio/template</code>.
-            </div>
-          ) : null}
         </div>
       </section>
     </div>
