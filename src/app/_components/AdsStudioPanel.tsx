@@ -31,6 +31,21 @@ import { loadAvatarUrls } from "@/lib/avatarLibrary";
 /** Ads Studio: PiAPI Seedance 2 (non–fast) only. */
 const ADS_STUDIO_SEEDANCE_MODEL = "bytedance/seedance-2" as const;
 
+/** Tutorial (2) bundled references: image 1 → avatar, image 2 → product (public/studio/ads-studio/). */
+const ADS_STUDIO_TUTORIAL_2_AVATAR_PATH = "/studio/ads-studio/tutorial-2-avatar.png";
+const ADS_STUDIO_TUTORIAL_2_PRODUCT_PATH = "/studio/ads-studio/tutorial-2-product.png";
+
+function resolveAdsStudioPublicImage(path: string): string {
+  if (typeof window === "undefined") return path;
+  return new URL(path, window.location.origin).href;
+}
+
+type AdsStudioRunGenerateRefOverride = {
+  appRefUrl: string;
+  avatarUrl: string;
+  assetType: "product" | "app";
+};
+
 const ADS_STUDIO_DURATION_MIN = 4;
 const ADS_STUDIO_DURATION_MAX = 15;
 const ADS_STUDIO_DURATION_CHOICES = Array.from(
@@ -604,9 +619,13 @@ export default function AdsStudioPanel() {
     }
   }
 
-  function runGenerate(promptOverride?: string) {
+  function runGenerate(promptOverride?: string, refOverride?: AdsStudioRunGenerateRefOverride) {
+    const snapAssetType = refOverride?.assetType ?? assetType;
+    const snapAppRef = (refOverride?.appRefUrl ?? appRefUrl).trim();
+    const snapAvatar = (refOverride?.avatarUrl ?? avatarUrl).trim();
+
     const trimmed = (promptOverride ?? prompt).trim();
-    const hasUploadedRefs = Boolean(appRefUrl.trim() || avatarUrl.trim());
+    const hasUploadedRefs = Boolean(snapAppRef || snapAvatar);
     if (!trimmed && !hasUploadedRefs) {
       toast.error("Ads Studio", {
         description: "Add a prompt in the text box or upload at least one reference image.",
@@ -615,14 +634,10 @@ export default function AdsStudioPanel() {
     }
     const p =
       trimmed ||
-      (refImageUrls?.length
+      (hasUploadedRefs
         ? "Create a high-converting vertical ad that follows the reference images for subject, branding, and composition."
         : "");
     if (!p) return;
-
-    const snapAssetType = assetType;
-    const snapAppRef = appRefUrl.trim();
-    const snapAvatar = avatarUrl.trim();
     const snapAspect = outputAspect;
     const snapDur = videoDurationSec;
     const snapRes = videoResolution;
@@ -743,10 +758,26 @@ export default function AdsStudioPanel() {
   }
 
   function recreateFromTemplate(label: string) {
+    const n = normalizeTemplateLabel(label);
+    const isTutorial2 =
+      n.includes("tutorial 2") || n.includes("tutorial2") || n.includes("tutorial (2)");
     const nextPrompt = promptForTemplateLabel(label);
     // Always replace current prompt (never append), even when input already contains text.
     setPrompt(nextPrompt);
-    void runGenerate(nextPrompt);
+    if (isTutorial2) {
+      const avatarResolved = resolveAdsStudioPublicImage(ADS_STUDIO_TUTORIAL_2_AVATAR_PATH);
+      const productResolved = resolveAdsStudioPublicImage(ADS_STUDIO_TUTORIAL_2_PRODUCT_PATH);
+      setAssetType("product");
+      setAppRefUrl(productResolved);
+      setAvatarUrl(avatarResolved);
+      void runGenerate(nextPrompt, {
+        assetType: "product",
+        appRefUrl: productResolved,
+        avatarUrl: avatarResolved,
+      });
+    } else {
+      void runGenerate(nextPrompt);
+    }
   }
 
   return (
