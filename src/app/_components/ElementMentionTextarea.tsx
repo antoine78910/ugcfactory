@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AtSign, Music2, VideoIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -8,6 +9,8 @@ export type MentionElementOption = {
   id: string;
   name: string;
   description?: string;
+  /** When set, shown on the inline chip instead of the formatted @name (e.g. “Product”, “Avatar”). */
+  chipLabel?: string;
   previewUrl?: string;
   previewKind?: "image" | "video" | "audio";
 };
@@ -23,6 +26,10 @@ type Props = {
   onPickElement?: (el: MentionElementOption) => void;
   /** Fires when the empty-state "Create element" shortcut is clicked. */
   onCreateNew?: () => void;
+  /** Replaces default Video empty copy when no `elements` exist. */
+  emptyElementsHint?: string;
+  /** When false, hides “Create element” in the empty state (e.g. Ads Studio). */
+  showCreateElementButton?: boolean;
 };
 
 /** Padding + type scale shared by textarea and highlight overlay so the caret stays aligned (twMerge with className). */
@@ -74,6 +81,79 @@ function findMentionRangeAroundCursor(
   return null;
 }
 
+function buildMentionOverlayNodes(
+  text: string,
+  elements: MentionElementOption[],
+  formatLabel: (name: string) => string,
+): ReactNode {
+  const mentionByName = new Map(
+    elements.map((el) => [el.name.trim().toLowerCase(), el] as const),
+  );
+  const nodes: React.ReactNode[] = [];
+  const mentionRe = /@([a-zA-Z0-9_]+)\b/g;
+  let cursor = 0;
+  let m: RegExpExecArray | null;
+  while ((m = mentionRe.exec(text)) !== null) {
+    const atIndex = m.index;
+    const full = m[0]!;
+    const rawName = m[1]!;
+    if (atIndex > cursor) {
+      nodes.push(<span key={`txt-${cursor}`}>{text.slice(cursor, atIndex)}</span>);
+    }
+    const opt = mentionByName.get(rawName.toLowerCase());
+    if (!opt) {
+      nodes.push(<span key={`raw-${atIndex}`}>{full}</span>);
+    } else {
+      const kind = opt.previewKind ?? "image";
+      const chipClass =
+        "inline-flex h-5 items-center gap-0.5 rounded-md bg-white/[0.06] px-0.5 align-middle";
+      const labelClass = "whitespace-nowrap text-[12px] font-medium tracking-[-0.01em] text-white/92";
+      nodes.push(
+        <span key={`chip-wrap-${atIndex}-${opt.id}`} className="relative inline-block align-baseline">
+          {/* Reserve exactly the raw token width used by the real textarea caret. */}
+          <span className="invisible">{full}</span>
+          <span className={`pointer-events-none absolute left-0 top-1/2 flex h-5 w-full -translate-y-1/2 items-center overflow-hidden ${chipClass}`}>
+            <span className="relative h-3 w-3 shrink-0 overflow-hidden rounded-[3px] bg-black/45">
+              {opt.previewUrl && kind === "video" ? (
+                <video
+                  src={opt.previewUrl}
+                  className="h-full w-full object-cover"
+                  muted
+                  playsInline
+                  preload="metadata"
+                />
+              ) : opt.previewUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={opt.previewUrl} alt="" className="h-full w-full object-cover" />
+              ) : kind === "audio" ? (
+                <span className="flex h-full w-full items-center justify-center text-white/70">
+                  <Music2 className="h-2.5 w-2.5" aria-hidden />
+                </span>
+              ) : kind === "video" ? (
+                <span className="flex h-full w-full items-center justify-center text-white/70">
+                  <VideoIcon className="h-2.5 w-2.5" aria-hidden />
+                </span>
+              ) : (
+                <span className="flex h-full w-full items-center justify-center text-white/70">
+                  <AtSign className="h-2.5 w-2.5" aria-hidden />
+                </span>
+              )}
+            </span>
+            <span className={`min-w-0 truncate ${labelClass}`}>
+              {opt.chipLabel?.trim() ? opt.chipLabel.trim() : formatLabel(opt.name)}
+            </span>
+          </span>
+        </span>,
+      );
+    }
+    cursor = atIndex + full.length;
+  }
+  if (cursor < text.length) {
+    nodes.push(<span key={`txt-tail-${cursor}`}>{text.slice(cursor)}</span>);
+  }
+  return <>{nodes}</>;
+}
+
 /**
  * Textarea with an `@mention` autocomplete for saved video Elements (Higgsfield-style).
  *
@@ -90,6 +170,8 @@ export default function ElementMentionTextarea({
   elements,
   onPickElement,
   onCreateNew,
+  emptyElementsHint,
+  showCreateElementButton = true,
 }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [open, setOpen] = useState(false);
@@ -122,25 +204,30 @@ export default function ElementMentionTextarea({
     const items = elements.filter((e) => e.name.trim().length > 0);
     const t = token.trim().toLowerCase();
     if (!t) return items;
-    const starts = items.filter((e) => e.name.toLowerCase().startsWith(t));
-    const contains = items.filter(
-      (e) => !e.name.toLowerCase().startsWith(t) && e.name.toLowerCase().includes(t),
-    );
+    const starts = items.filter((e) => {
+      const n = e.name.toLowerCase();
+      const chip = (e.chipLabel ?? "").toLowerCase();
+      const desc = (e.description ?? "").toLowerCase();
+      return n.startsWith(t) || chip.startsWith(t) || desc.startsWith(t);
+    });
+    const contains = items.filter((e) => {
+      const n = e.name.toLowerCase();
+      const chip = (e.chipLabel ?? "").toLowerCase();
+      const desc = (e.description ?? "").toLowerCase();
+      if (n.startsWith(t) || chip.startsWith(t) || desc.startsWith(t)) return false;
+      return n.includes(t) || chip.includes(t) || desc.includes(t);
+    });
     return [...starts, ...contains];
   }, [elements, token]);
 
-  useEffect(() => {
-    if (!open) {
-      setActiveIdx(0);
-      return;
-    }
-    setActiveIdx((idx) => Math.min(idx, Math.max(0, filtered.length - 1)));
-  }, [filtered.length, open]);
+  const menuHighlightIdx =
+    open && filtered.length > 0 ? Math.min(activeIdx, filtered.length - 1) : 0;
 
   const closeMenu = useCallback(() => {
     setOpen(false);
     setToken("");
     setTokenStart(null);
+    setActiveIdx(0);
   }, []);
 
   const updateMentionFromState = useCallback(
@@ -222,7 +309,7 @@ export default function ElementMentionTextarea({
       setActiveIdx((i) => (i - 1 + filtered.length) % filtered.length);
     } else if (e.key === "Enter" || e.key === "Tab") {
       e.preventDefault();
-      const pick = filtered[activeIdx];
+      const pick = filtered[menuHighlightIdx];
       if (pick) handleSelect(pick);
     } else if (e.key === "Escape") {
       e.preventDefault();
@@ -239,9 +326,8 @@ export default function ElementMentionTextarea({
   const showMenu =
     open && (filtered.length > 0 || (!hasAnyElements && token.length === 0));
 
-  const mentionByName = useMemo(
-    () => new Map(elements.map((el) => [el.name.trim().toLowerCase(), el] as const)),
-    [elements],
+  const mentionByName = new Map(
+    elements.map((el) => [el.name.trim().toLowerCase(), el] as const),
   );
 
   const formatMentionLabel = useCallback((name: string) => {
@@ -254,73 +340,7 @@ export default function ElementMentionTextarea({
     return n;
   }, []);
 
-  const renderedOverlay = useMemo(() => {
-    if (!value) return null;
-    const nodes: React.ReactNode[] = [];
-    const mentionRe = /@([a-zA-Z0-9_]+)\b/g;
-    let cursor = 0;
-    let m: RegExpExecArray | null;
-    while ((m = mentionRe.exec(value)) !== null) {
-      const atIndex = m.index;
-      const full = m[0]!;
-      const rawName = m[1]!;
-      if (atIndex > cursor) {
-        nodes.push(
-          <span key={`txt-${cursor}`}>{value.slice(cursor, atIndex)}</span>,
-        );
-      }
-      const opt = mentionByName.get(rawName.toLowerCase());
-      if (!opt) {
-        nodes.push(<span key={`raw-${atIndex}`}>{full}</span>);
-      } else {
-        const kind = opt.previewKind ?? "image";
-        const chipClass =
-          "inline-flex h-5 items-center gap-0.5 rounded-md bg-white/[0.06] px-0.5 align-middle";
-        const labelClass = "whitespace-nowrap text-[12px] font-medium tracking-[-0.01em] text-white/92";
-        nodes.push(
-          <span key={`chip-wrap-${atIndex}-${opt.id}`} className="relative inline-block align-baseline">
-            {/* Reserve exactly the raw token width used by the real textarea caret. */}
-            <span className="invisible">{full}</span>
-            <span className={`pointer-events-none absolute left-0 top-1/2 flex h-5 w-full -translate-y-1/2 items-center overflow-hidden ${chipClass}`}>
-              <span className="relative h-3 w-3 shrink-0 overflow-hidden rounded-[3px] bg-black/45">
-                {opt.previewUrl && kind === "video" ? (
-                  // eslint-disable-next-line jsx-a11y/media-has-caption
-                  <video
-                    src={opt.previewUrl}
-                    className="h-full w-full object-cover"
-                    muted
-                    playsInline
-                    preload="metadata"
-                  />
-                ) : opt.previewUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={opt.previewUrl} alt="" className="h-full w-full object-cover" />
-                ) : kind === "audio" ? (
-                  <span className="flex h-full w-full items-center justify-center text-white/70">
-                    <Music2 className="h-2.5 w-2.5" aria-hidden />
-                  </span>
-                ) : kind === "video" ? (
-                  <span className="flex h-full w-full items-center justify-center text-white/70">
-                    <VideoIcon className="h-2.5 w-2.5" aria-hidden />
-                  </span>
-                ) : (
-                  <span className="flex h-full w-full items-center justify-center text-white/70">
-                    <AtSign className="h-2.5 w-2.5" aria-hidden />
-                  </span>
-                )}
-              </span>
-              <span className={`min-w-0 truncate ${labelClass}`}>{formatMentionLabel(opt.name)}</span>
-            </span>
-          </span>,
-        );
-      }
-      cursor = atIndex + full.length;
-    }
-    if (cursor < value.length) {
-      nodes.push(<span key={`txt-tail-${cursor}`}>{value.slice(cursor)}</span>);
-    }
-    return nodes;
-  }, [formatMentionLabel, mentionByName, value]);
+  const renderedOverlay = value ? buildMentionOverlayNodes(value, elements, formatMentionLabel) : null;
 
   return (
     <div className="relative isolate">
@@ -396,7 +416,7 @@ export default function ElementMentionTextarea({
       </div>
       {showMenu ? (
         <div
-          className="absolute left-0 right-0 top-full z-40 mt-1 overflow-hidden rounded-xl border border-white/12 bg-[#0b0912]/98 shadow-[0_12px_40px_rgba(0,0,0,0.55)] backdrop-blur"
+          className="absolute left-0 right-0 top-full z-[200] mt-1 overflow-hidden rounded-xl border border-white/12 bg-[#0b0912]/98 shadow-[0_12px_40px_rgba(0,0,0,0.55)] backdrop-blur"
           role="listbox"
           /** Prevents blur before the click actually fires. */
           onMouseDown={(e) => e.preventDefault()}
@@ -408,17 +428,16 @@ export default function ElementMentionTextarea({
                   <button
                     type="button"
                     role="option"
-                    aria-selected={i === activeIdx}
+                    aria-selected={i === menuHighlightIdx}
                     className={cn(
                       "flex w-full items-center gap-2.5 px-2.5 py-1.5 text-left transition",
-                      i === activeIdx ? "bg-violet-500/20" : "hover:bg-white/[0.05]",
+                      i === menuHighlightIdx ? "bg-violet-500/20" : "hover:bg-white/[0.05]",
                     )}
                     onMouseEnter={() => setActiveIdx(i)}
                     onClick={() => handleSelect(el)}
                   >
                     <span className="relative h-9 w-9 shrink-0 overflow-hidden rounded-md border border-white/10 bg-black/50">
                       {el.previewUrl && el.previewKind === "video" ? (
-                        // eslint-disable-next-line jsx-a11y/media-has-caption
                         <video
                           src={el.previewUrl}
                           className="h-full w-full object-cover"
@@ -449,9 +468,13 @@ export default function ElementMentionTextarea({
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-xs font-semibold text-white/88">
-                        @{el.name.trim()}
+                        {el.chipLabel?.trim() ?? `@${el.name.trim()}`}
                       </span>
-                      {el.description?.trim() ? (
+                      {el.chipLabel?.trim() ? (
+                        <span className="block truncate font-mono text-[10px] text-white/40">
+                          @{el.name.trim()}
+                        </span>
+                      ) : el.description?.trim() ? (
                         <span className="block truncate text-[10px] text-white/40">
                           {el.description.trim()}
                         </span>
@@ -463,8 +486,10 @@ export default function ElementMentionTextarea({
             </ul>
           ) : (
             <div className="flex items-center justify-between gap-3 px-3 py-2.5">
-              <span className="text-xs text-white/55">No elements saved yet.</span>
-              {onCreateNew ? (
+              <span className="text-xs text-white/55">
+                {emptyElementsHint ?? "No elements saved yet."}
+              </span>
+              {showCreateElementButton && onCreateNew ? (
                 <button
                   type="button"
                   onClick={() => {

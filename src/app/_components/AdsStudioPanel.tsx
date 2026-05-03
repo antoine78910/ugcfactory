@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ChangeEvent, KeyboardEvent } from "react";
 import { LayoutList, Loader2, Pencil, Plus, Smartphone, Package2, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import ElementMentionTextarea, {
+  type MentionElementOption,
+} from "@/app/_components/ElementMentionTextarea";
 import {
   Select,
   SelectContent,
@@ -21,11 +22,7 @@ import { STUDIO_IMAGE_FILE_ACCEPT } from "@/lib/studioUploadValidation";
 import { cn } from "@/lib/utils";
 import { calculateVideoCreditsForModel } from "@/lib/pricing";
 import { AdsStudioRefSourceDialog } from "@/app/_components/AdsStudioRefSourceDialog";
-import {
-  AdsStudioMentionMenu,
-  filterAdsStudioMentionEntries,
-  type AdsStudioMentionEntry,
-} from "@/app/_components/AdsStudioMentionMenu";
+import type { AdsStudioMentionEntry } from "@/app/_components/AdsStudioMentionMenu";
 import { loadAvatarUrls } from "@/lib/avatarLibrary";
 
 /** Ads Studio: PiAPI Seedance 2 (non–fast) only. */
@@ -35,13 +32,61 @@ const ADS_STUDIO_SEEDANCE_MODEL = "bytedance/seedance-2" as const;
 const ADS_STUDIO_TUTORIAL_2_AVATAR_PATH = "/studio/ads-studio/tutorial-2-avatar.png";
 const ADS_STUDIO_TUTORIAL_2_PRODUCT_PATH = "/studio/ads-studio/tutorial-2-product.png";
 
-/** Unboxing “Recreate” bundled refs: @image1 product/unboxing scene, @image2 avatar (public/studio/ads-studio/). */
-const ADS_STUDIO_UNBOXING_PRODUCT_PATH = "/studio/ads-studio/unboxing-recreate-product.png";
-const ADS_STUDIO_UNBOXING_AVATAR_PATH = "/studio/ads-studio/unboxing-recreate-avatar.png";
+/** UGC (2) “Recreate”: @image1 product, @image2 avatar. */
+const ADS_STUDIO_UGC_2_AVATAR_PATH = "/studio/ads-studio/ugc-2-avatar.png";
+const ADS_STUDIO_UGC_2_PRODUCT_PATH = "/studio/ads-studio/ugc-2-product.png";
 
-/** UGC Virtual Try On 2 “Recreate”: @image1 product, @image2 avatar (public/studio/ads-studio/). */
+/** Unboxing (4) “Recreate”: @image1 product, @image2 avatar. */
+const ADS_STUDIO_UNBOXING_4_AVATAR_PATH = "/studio/ads-studio/unboxing-4-avatar.png";
+const ADS_STUDIO_UNBOXING_4_PRODUCT_PATH = "/studio/ads-studio/unboxing-4-product.png";
+
+/** Unboxing (2) “Recreate”: @image1 product, @image2 avatar. */
+const ADS_STUDIO_UNBOXING_2_AVATAR_PATH = "/studio/ads-studio/unboxing-2-avatar.png";
+const ADS_STUDIO_UNBOXING_2_PRODUCT_PATH = "/studio/ads-studio/unboxing-2-product.png";
+
+/** Generic Unboxing (default gallery) — @image1 product only, no bundled avatar. */
+const ADS_STUDIO_UNBOXING_DEFAULT_PRODUCT_PATH = "/studio/ads-studio/unboxing-default-product.png";
+
+/** Pro Try On “Recreate”: @image1 product, @image2 avatar. */
+const ADS_STUDIO_PRO_TRY_ON_PRODUCT_PATH = "/studio/ads-studio/pro-try-on-product.png";
+const ADS_STUDIO_PRO_TRY_ON_AVATAR_PATH = "/studio/ads-studio/pro-try-on-avatar.png";
+
+/** UGC (tryon) 5 “Recreate”: @image1 product, @image2 avatar. */
+const ADS_STUDIO_UGC_TRYON_5_AVATAR_PATH = "/studio/ads-studio/ugc-tryon-5-avatar.png";
+const ADS_STUDIO_UGC_TRYON_5_PRODUCT_PATH = "/studio/ads-studio/ugc-tryon-5-product.png";
+
+/** UGC / Virtual Try On 2 “Recreate”: @image1 product, @image2 avatar. */
 const ADS_STUDIO_VIRTUAL_TRY_ON_2_PRODUCT_PATH = "/studio/ads-studio/virtual-try-on-2-product.png";
 const ADS_STUDIO_VIRTUAL_TRY_ON_2_AVATAR_PATH = "/studio/ads-studio/virtual-try-on-2-avatar.png";
+
+/** UGC Woman (default gallery card) — @image1 product, @image2 avatar. */
+const ADS_STUDIO_UGC_WOMAN_PRODUCT_PATH = "/studio/ads-studio/ugc-woman-product.png";
+const ADS_STUDIO_UGC_WOMAN_AVATAR_PATH = "/studio/ads-studio/ugc-woman-avatar.png";
+
+/** UGC try on (street row) — @image1 product, @image2 avatar. */
+const ADS_STUDIO_UGC_TRY_ON_PRODUCT_PATH = "/studio/ads-studio/ugc-try-on-product.png";
+const ADS_STUDIO_UGC_TRY_ON_AVATAR_PATH = "/studio/ads-studio/ugc-try-on-avatar.png";
+
+/** UGC try on 3 / 4 — shared outfit product; distinct avatars. */
+const ADS_STUDIO_UGC_TRY_ON_3_4_PRODUCT_PATH = "/studio/ads-studio/ugc-try-on-3-4-product.png";
+const ADS_STUDIO_UGC_TRY_ON_3_AVATAR_PATH = "/studio/ads-studio/ugc-try-on-3-avatar.png";
+const ADS_STUDIO_UGC_TRY_ON_4_AVATAR_PATH = "/studio/ads-studio/ugc-try-on-4-avatar.png";
+
+/** UGC (3) — @image1 product, @image2 avatar. */
+const ADS_STUDIO_UGC_3_AVATAR_PATH = "/studio/ads-studio/ugc-3-avatar.png";
+const ADS_STUDIO_UGC_3_PRODUCT_PATH = "/studio/ads-studio/ugc-3-product.png";
+
+/** UGC (4) — @image1 product, @image2 avatar. */
+const ADS_STUDIO_UGC_4_AVATAR_PATH = "/studio/ads-studio/ugc-4-avatar.png";
+const ADS_STUDIO_UGC_4_PRODUCT_PATH = "/studio/ads-studio/ugc-4-product.png";
+
+/** Plain UGC (5) — @image1 product, @image2 avatar (not UGC (tryon) 5). */
+const ADS_STUDIO_UGC_5_AVATAR_PATH = "/studio/ads-studio/ugc-5-avatar.png";
+const ADS_STUDIO_UGC_5_PRODUCT_PATH = "/studio/ads-studio/ugc-5-product.png";
+
+/** UGC (6) tumbler row — @image1 product, @image2 avatar (not Try On 6). */
+const ADS_STUDIO_UGC_6_AVATAR_PATH = "/studio/ads-studio/ugc-6-avatar.png";
+const ADS_STUDIO_UGC_6_PRODUCT_PATH = "/studio/ads-studio/ugc-6-product.png";
 
 function resolveAdsStudioPublicImage(path: string): string {
   if (typeof window === "undefined") return path;
@@ -94,9 +139,18 @@ type AdsStudioActiveJob = {
   promptSnippet: string;
   thumbUrl?: string;
   error?: string;
+  /** PiAPI task id — polling can resume after reload */
+  taskId?: string;
+  /** Full prompt + refs for the history row when the remote render completes */
+  promptFull?: string;
+  jobAssetType?: "product" | "app";
+  previewStillUrl?: string;
 };
 
 const LS_ADS_STUDIO_HISTORY = "ugc_ads_studio_history_v1";
+const LS_ADS_STUDIO_ACTIVE_JOBS = "ugc_ads_studio_active_jobs_v1";
+/** Drop persisted jobs older than this so stale rows do not poll forever */
+const ADS_STUDIO_MAX_ACTIVE_JOB_AGE_MS = 1000 * 60 * 60 * 24;
 
 type TemplateVideoItem = { filename: string; label: string; url: string };
 
@@ -125,29 +179,6 @@ She holds the case up to the front camera with both hands, the clear front facin
 She tilts the case again slowly, the camera close on the front face, the charms tumbling through the glitter liquid in slow motion — the smiley faces, the unicorn, the rubber duck all visible shifting through the holographic confetti stars. She brings it even closer to the front lens so the charms fill the frame: "There is a dinosaur in here. And a duck. WHY is there a duck."
 She switches to the back camera, holds the case flat and then tips it vertically — the charms and glitter cascade downward through the liquid in a slow satisfying drift, the rainbow border glowing in the warm light, the holographic stars catching every shift of light. She tilts it back the other way, the whole contents drifting again: "I cannot stop doing this."
 She props the phone and holds the case up with both hands, shaking it gently — the glitter and charms swirl in all directions, the liquid catching the light in shifting rainbow patches, the tiny 3D charms tumbling through. She looks at the camera, shakes it once more slowly: "This is genuinely the most satisfying thing I own right now." She holds it still beside her face on the front camera, the rainbow border glowing, smiles directly into the lens: "That's it. That's the review."`;
-
-const TEMPLATE_PROMPT_UGC_TRY_ON = `Style: UGC, get ready with me, iPhone front camera, fashion vlog, playful energy
-
-A stylish young girl is filming herself in her room while getting dressed. The room is aesthetic — mirror, clothes, soft natural daylight, slight creative mess.
-
-Shot on iPhone front camera, vertical 9:16, natural HDR, slight handheld movement, real skin tones, no color grading.
-
-Outfit is laid out or partially worn: white top with red stars, camo skirt, bold red furry boots.
-
-She walks into frame adjusting her top, looks into camera: “Okay, I’m getting ready and I don’t know if this outfit is crazy or—”
-
-Suddenly, someone (guy/friend) walks into frame casually from the side. She immediately reacts, pushes him out of frame: “Hey— no, get out!” She laughs.
-
-She turns back to camera like nothing happened: “Anyway… I kinda love it.”
-
-She steps back slightly to show full outfit.
-
-“It’s a little chaotic…”
-“But it works.”
-
-She poses slightly: “I’m wearing this.”
-
-Natural messy UGC vibe, playful interruption moment, confident energy, full body outfit visible, light humor.`;
 
 const TEMPLATE_PROMPT_UGC_3 = `Vertical 9:16 UGC sneaker unboxing and review, shot on iPhone front and back camera mix, bright natural daylight from a window, casual bedroom energy, handheld selfie perspective, real skin tones, no filters, fun and expressive creator vibe
 A bright casual bedroom or living room — natural daylight from the side, a clean floor space visible, the pair of FUNNY STEPS sneakers sitting on the floor or a surface in front of her — multicolor upper panels in blue mesh, orange, green, yellow and purple leather panels, white laces with multicolored eyelets, a FUNNY STEPS logo tab on the tongue and side, and a clear transparent air bubble sole filled with tiny 3D charms and confetti pieces — miniature teddy bears, stars, colorful shapes all visible floating inside the sole.
@@ -287,11 +318,162 @@ function normalizeTemplateLabel(label: string): string {
     .trim();
 }
 
-/** True for unboxing template cards (not Tutorial) so Recreate can fill product + avatar for @image1 / @image2. */
-function isUnboxingBundledRecreateLabel(normalizedLabel: string): boolean {
+/** Unboxing (4) only — avatar + product for Recreate. */
+function isUnboxing4BundledRecreateLabel(normalizedLabel: string): boolean {
   const n = normalizedLabel;
   if (n.includes("tutorial")) return false;
+  return n.includes("unboxing 4") || n.includes("unboxing4") || (n.includes("unboxing") && n.includes("(4)"));
+}
+
+/** Unboxing (2) — gym bike row; not Unboxing 4. */
+function isUnboxing2BundledRecreateLabel(normalizedLabel: string): boolean {
+  const n = normalizedLabel;
+  if (n.includes("tutorial")) return false;
+  return (
+    n.includes("unboxing 2") ||
+    n.includes("unboxing2") ||
+    n.includes("unoboxing 2") ||
+    n.includes("unoboxing2") ||
+    (n.includes("unboxing") && n.includes("(2)"))
+  );
+}
+
+/** Default “Unboxing” card (not 2 / 3 / 4) — product ref only, clear avatar. */
+function isDefaultUnboxingProductOnlyRecreateLabel(normalizedLabel: string): boolean {
+  const n = normalizedLabel;
+  if (n.includes("tutorial")) return false;
+  if (isUnboxing2BundledRecreateLabel(n) || isUnboxing4BundledRecreateLabel(n)) return false;
+  if (n.includes("unboxing 3") || n.includes("unboxing3")) return false;
   return n.includes("unboxing") || n.includes("unoboxing");
+}
+
+/** Pro Try On — product + avatar for Recreate. */
+function isProTryOnBundledRecreateLabel(normalizedLabel: string): boolean {
+  const n = normalizedLabel;
+  if (n.includes("tutorial")) return false;
+  return n.includes("pro") && (n.includes("try on") || n.includes("try-on") || n.includes("tryon"));
+}
+
+/** UGC (tryon) 5 — same prompt family as UGC 5 with bundled refs (must run before generic try-on / ugc 5). */
+function isUgcTryon5BundledRecreateLabel(normalizedLabel: string): boolean {
+  const n = normalizedLabel;
+  return n.includes("ugc") && n.includes("5") && (n.includes("tryon") || n.includes("try-on"));
+}
+
+/** UGC (5) shopping-bag row — not UGC (tryon) 5 (`isUgcTryon5BundledRecreateLabel` runs first in Recreate). */
+function isUgc5BundledRecreateLabel(normalizedLabel: string): boolean {
+  const n = normalizedLabel;
+  if (n.includes("tutorial")) return false;
+  if (isUgcTryon5BundledRecreateLabel(n)) return false;
+  return n.includes("ugc 5") || n.includes("ugc5") || (n.includes("ugc") && n.includes("(5)"));
+}
+
+/** Plain UGC (2) template — excludes Virtual Try On 2 and other try-on rows. */
+function isUgc2BundledRecreateLabel(normalizedLabel: string): boolean {
+  const n = normalizedLabel;
+  if (n.includes("tutorial")) return false;
+  if (n.includes("unboxing") || n.includes("unoboxing")) return false;
+  if (isVirtualTryOn2BundledRecreateLabel(n)) return false;
+  if (n.includes("tryon") || n.includes("try on") || n.includes("try-on")) return false;
+  return (n.includes("ugc") && (n.includes("(2)") || /\bugc\s*2\b/.test(n))) || n.includes("ugc 2");
+}
+
+/** Default “UGC Woman” gallery label (`toLabel` maps base filename `ugc`). */
+function isUgcWomanBundledRecreateLabel(normalizedLabel: string): boolean {
+  return normalizedLabel.includes("ugc woman");
+}
+
+/** UGC try on 4 — numbered row (not street try-on). */
+function isUgcTryOn4BundledRecreateLabel(normalizedLabel: string): boolean {
+  const n = normalizedLabel;
+  if (n.includes("tutorial")) return false;
+  return (
+    n.includes("ugc") &&
+    (n.includes("try on 4") || n.includes("try-on 4") || n.includes("tryon 4") || n.includes("tryon4"))
+  );
+}
+
+/** UGC try on 3 — numbered row (not street try-on). */
+function isUgcTryOn3BundledRecreateLabel(normalizedLabel: string): boolean {
+  const n = normalizedLabel;
+  if (n.includes("tutorial")) return false;
+  return (
+    n.includes("ugc") &&
+    (n.includes("try on 3") || n.includes("try-on 3") || n.includes("tryon 3") || n.includes("tryon3"))
+  );
+}
+
+/**
+ * UGC try-on street template — has “try on” but not Try On 2/3/4/6 or Pro / (tryon) 5 rows.
+ * Must run after `isVirtualTryOn2BundledRecreateLabel` / `isProTryOnBundledRecreateLabel` / numbered try-on 3–4.
+ */
+function isUgcTryOnBundledRecreateLabel(normalizedLabel: string): boolean {
+  const n = normalizedLabel;
+  if (n.includes("tutorial")) return false;
+  if (isVirtualTryOn2BundledRecreateLabel(n)) return false;
+  if (
+    n.includes("try on 6") ||
+    n.includes("try-on 6") ||
+    n.includes("tryon 6") ||
+    n.includes("tryon6")
+  ) {
+    return false;
+  }
+  if (n.includes("try on 4") || n.includes("try-on 4") || n.includes("tryon 4") || n.includes("tryon4")) {
+    return false;
+  }
+  if (n.includes("try on 3") || n.includes("try-on 3") || n.includes("tryon 3") || n.includes("tryon3")) {
+    return false;
+  }
+  if (isProTryOnBundledRecreateLabel(n)) return false;
+  if (isUgcTryon5BundledRecreateLabel(n)) return false;
+  return n.includes("ugc") && (n.includes("try on") || n.includes("try-on") || n.includes("tryon"));
+}
+
+/** UGC (3) sneaker template — not UGC Try On 3. */
+function isUgc3BundledRecreateLabel(normalizedLabel: string): boolean {
+  const n = normalizedLabel;
+  if (n.includes("tutorial")) return false;
+  if (n.includes("try on 3") || n.includes("try-on 3") || n.includes("tryon 3") || n.includes("tryon3")) {
+    return false;
+  }
+  return (
+    (n.includes("ugc") && (n.includes("(3)") || /\bugc\s*3\b/.test(n))) ||
+    n.includes("ugc 3") ||
+    n.includes("ugc3")
+  );
+}
+
+/** UGC (4) markers template — distinct from UGC (3). */
+function isUgc4BundledRecreateLabel(normalizedLabel: string): boolean {
+  const n = normalizedLabel;
+  if (n.includes("tutorial")) return false;
+  return (
+    (n.includes("ugc") && (n.includes("(4)") || /\bugc\s*4\b/.test(n))) ||
+    n.includes("ugc 4") ||
+    n.includes("ugc4")
+  );
+}
+
+/** UGC (6) — not UGC Try On 6. */
+function isUgc6BundledRecreateLabel(normalizedLabel: string): boolean {
+  const n = normalizedLabel;
+  if (n.includes("tutorial")) return false;
+  if (
+    n.includes("try on 6") ||
+    n.includes("try-on 6") ||
+    n.includes("tryon 6") ||
+    n.includes("tryon6") ||
+    n.includes("tr on 6") ||
+    n.includes("tron 6")
+  ) {
+    return false;
+  }
+  return (
+    (n.includes("ugc") && (n.includes("(6)") || /\bugc\s*6\b/.test(n))) ||
+    n.includes("ugc 6") ||
+    n.includes("ugc6")
+  );
 }
 
 /** Matches promptForTemplateLabel “try on 2” templates (e.g. UGC Virtual Try On 2). */
@@ -327,6 +509,9 @@ function promptForTemplateLabel(label: string): string {
   ) {
     return TEMPLATE_PROMPT_UGC_TRY_ON_6;
   }
+  if (n.includes("try on 4") || n.includes("try-on 4") || n.includes("tryon 4") || n.includes("tryon4")) {
+    return TEMPLATE_PROMPT_UGC_TRY_ON_3;
+  }
   if (n.includes("try on 3") || n.includes("try-on 3") || n.includes("tryon 3") || n.includes("tryon3")) {
     return TEMPLATE_PROMPT_UGC_TRY_ON_3;
   }
@@ -334,6 +519,9 @@ function promptForTemplateLabel(label: string): string {
     return TEMPLATE_PROMPT_UGC_TRY_ON_2;
   }
   if (n.includes("ugc 6") || n.includes("ugc6")) return TEMPLATE_PROMPT_UGC_6;
+  if (n.includes("ugc") && n.includes("5") && (n.includes("tryon") || n.includes("try-on"))) {
+    return TEMPLATE_PROMPT_UGC_5;
+  }
   if (n.includes("ugc 5") || n.includes("ugc5")) return TEMPLATE_PROMPT_UGC_5;
   if (n.includes("try on")) return TEMPLATE_PROMPT_UGC_TRY_ON_STREET;
   if ((n.includes("ugc") && (n.includes(" 4") || n.endsWith("4") || n.includes("(4)"))) || n.includes("ugc4")) {
@@ -398,13 +586,12 @@ export default function AdsStudioPanel() {
   const [refSourceDialogMode, setRefSourceDialogMode] = useState<"product" | "avatar">("product");
   const [avatarLibraryUrls, setAvatarLibraryUrls] = useState<string[]>([]);
   const [avatarLibLoading, setAvatarLibLoading] = useState(false);
-  const [mentionOpen, setMentionOpen] = useState(false);
-  const [mentionFilter, setMentionFilter] = useState("");
-  const [mentionHighlight, setMentionHighlight] = useState(0);
-  const mentionStartRef = useRef(0);
-  const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const composerPanelRef = useRef<HTMLDivElement>(null);
   const appInputRef = useRef<HTMLInputElement>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
+  /** Same-tab: polling already running for this job id (prevents duplicate pollers after taskId is written). */
+  const adsStudioPollingStartedRef = useRef(new Set<string>());
+  const [activeJobsStorageReady, setActiveJobsStorageReady] = useState(false);
 
   useEffect(() => {
     try {
@@ -427,6 +614,41 @@ export default function AdsStudioPanel() {
   }, [history]);
 
   useEffect(() => {
+    try {
+      const raw = localStorage.getItem(LS_ADS_STUDIO_ACTIVE_JOBS);
+      if (!raw) {
+        setActiveJobsStorageReady(true);
+        return;
+      }
+      const parsed = JSON.parse(raw) as AdsStudioActiveJob[];
+      if (!Array.isArray(parsed)) {
+        setActiveJobsStorageReady(true);
+        return;
+      }
+      const now = Date.now();
+      const cleaned = parsed
+        .filter((j) => j && typeof j.id === "string")
+        .filter((j) => now - j.createdAt < ADS_STUDIO_MAX_ACTIVE_JOB_AGE_MS)
+        /** Cannot resume without a server task id (request may still finish remotely, but we cannot poll). */
+        .filter((j) => !(j.phase === "submitting" && !j.taskId))
+        .slice(0, 32);
+      setActiveJobs(cleaned);
+    } catch {
+      /* ignore */
+    }
+    setActiveJobsStorageReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!activeJobsStorageReady) return;
+    try {
+      localStorage.setItem(LS_ADS_STUDIO_ACTIVE_JOBS, JSON.stringify(activeJobs.slice(0, 32)));
+    } catch {
+      /* ignore */
+    }
+  }, [activeJobs, activeJobsStorageReady]);
+
+  useEffect(() => {
     let cancelled = false;
     (async () => {
       const res = await fetch(`/api/studio/template-videos?t=${Date.now()}`, { cache: "no-store" });
@@ -440,14 +662,20 @@ export default function AdsStudioPanel() {
     };
   }, []);
 
-  const refImageUrls = useMemo(() => {
-    const out: string[] = [];
-    const app = appRefUrl.trim();
-    const av = avatarUrl.trim();
-    if (app) out.push(app);
-    if (av && !out.includes(av)) out.push(av);
-    return out.length ? out : undefined;
-  }, [appRefUrl, avatarUrl]);
+  useEffect(() => {
+    let cancelled = false;
+    setAvatarLibLoading(true);
+    void loadAvatarUrls()
+      .then((urls) => {
+        if (!cancelled) setAvatarLibraryUrls(urls);
+      })
+      .finally(() => {
+        if (!cancelled) setAvatarLibLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const mentionEntries = useMemo((): AdsStudioMentionEntry[] => {
     const hasP = Boolean(appRefUrl.trim());
@@ -494,101 +722,36 @@ export default function AdsStudioPanel() {
     return out;
   }, [appRefUrl, avatarUrl, assetType, avatarLibraryUrls]);
 
-  const filteredMentionEntries = useMemo(
-    () => filterAdsStudioMentionEntries(mentionEntries, mentionFilter),
-    [mentionEntries, mentionFilter],
-  );
-
-  useEffect(() => {
-    if (!mentionOpen) return;
-    let cancelled = false;
-    setAvatarLibLoading(true);
-    void loadAvatarUrls()
-      .then((urls) => {
-        if (!cancelled) setAvatarLibraryUrls(urls);
-      })
-      .finally(() => {
-        if (!cancelled) setAvatarLibLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [mentionOpen]);
-
-  useEffect(() => {
-    if (mentionOpen) setMentionHighlight(0);
-  }, [mentionOpen, mentionFilter]);
-
-  useEffect(() => {
-    setMentionHighlight((h) => Math.min(h, Math.max(0, filteredMentionEntries.length - 1)));
-  }, [filteredMentionEntries.length]);
-
-  const pickMention = useCallback((entry: AdsStudioMentionEntry) => {
-    const ta = promptTextareaRef.current;
-    const v = ta?.value ?? "";
-    const sel = ta?.selectionStart ?? v.length;
-    const start = mentionStartRef.current;
-    if (entry.section === "avatar") {
-      setAvatarUrl(entry.thumbnailUrl);
-    }
-    const newVal = `${v.slice(0, start)}${entry.token} ${v.slice(sel)}`;
-    setPrompt(newVal);
-    setMentionOpen(false);
-    requestAnimationFrame(() => {
-      const pos = start + entry.token.length + 1;
-      ta?.focus();
-      ta?.setSelectionRange(pos, pos);
+  const mentionElementOptions = useMemo((): MentionElementOption[] => {
+    return mentionEntries.map((e) => {
+      const chipLabel =
+        e.id === "attached-product"
+          ? assetType === "app"
+            ? "App"
+            : "Product"
+          : e.id === "attached-avatar-upload"
+            ? "Avatar"
+            : e.label;
+      return {
+        id: e.id,
+        name: e.token.replace(/^@/, ""),
+        previewUrl: e.thumbnailUrl,
+        previewKind: "image",
+        chipLabel,
+        description: e.token,
+      };
     });
-  }, []);
+  }, [mentionEntries, assetType]);
 
-  function handlePromptChange(e: ChangeEvent<HTMLTextAreaElement>) {
-    const v = e.target.value;
-    const sel = e.target.selectionStart ?? v.length;
-    setPrompt(v);
-
-    const before = v.slice(0, sel);
-    const at = before.lastIndexOf("@");
-    if (at >= 0) {
-      const fragment = before.slice(at + 1);
-      if (!/\s/.test(fragment)) {
-        mentionStartRef.current = at;
-        setMentionFilter(fragment);
-        setMentionOpen(true);
-        return;
+  const handlePickMentionElement = useCallback(
+    (el: MentionElementOption) => {
+      const entry = mentionEntries.find((row) => row.id === el.id);
+      if (entry?.section === "avatar") {
+        setAvatarUrl(entry.thumbnailUrl);
       }
-    }
-    setMentionOpen(false);
-  }
-
-  function handlePromptKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === "Escape" && mentionOpen) {
-      e.preventDefault();
-      setMentionOpen(false);
-      return;
-    }
-
-    if (!mentionOpen) return;
-
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      if (filteredMentionEntries.length === 0) return;
-      setMentionHighlight((h) => Math.min(filteredMentionEntries.length - 1, h + 1));
-      return;
-    }
-    if (e.key === "ArrowUp") {
-      e.preventDefault();
-      if (filteredMentionEntries.length === 0) return;
-      setMentionHighlight((h) => Math.max(0, h - 1));
-      return;
-    }
-    if (e.key === "Enter" && !e.shiftKey) {
-      if (filteredMentionEntries.length === 0) return;
-      e.preventDefault();
-      const entry = filteredMentionEntries[mentionHighlight];
-      if (entry) pickMention(entry);
-      return;
-    }
-  }
+    },
+    [mentionEntries],
+  );
 
   const runningJobCount = useMemo(
     () => activeJobs.filter((j) => j.phase === "submitting" || j.phase === "rendering").length,
@@ -678,11 +841,18 @@ export default function AdsStudioPanel() {
     const promptSnippet = p.length > 100 ? `${p.slice(0, 97)}…` : p;
     const thumbUrl = snapAppRef || snapAvatar || undefined;
 
-    const toastId = toast.loading("Sending request to Seedance 2.0…");
-
     setActiveJobs((prev) => {
       const next: AdsStudioActiveJob[] = [
-        { id: jobId, createdAt: Date.now(), phase: "submitting", promptSnippet, thumbUrl },
+        {
+          id: jobId,
+          createdAt: Date.now(),
+          phase: "submitting",
+          promptSnippet,
+          thumbUrl,
+          promptFull: p,
+          jobAssetType: snapAssetType,
+          previewStillUrl: snapAppRef || snapAvatar || undefined,
+        },
         ...prev,
       ];
       return next.slice(0, 32);
@@ -747,11 +917,12 @@ export default function AdsStudioPanel() {
         const videoJson = (await videoRes.json()) as { taskId?: string; error?: string };
         if (!videoRes.ok || !videoJson.taskId) throw new Error(videoJson.error || "Video generation failed");
 
-        toast.dismiss(toastId);
-        toast.message("Video task accepted — rendering…");
+        adsStudioPollingStartedRef.current.add(jobId);
 
         setActiveJobs((prev) =>
-          prev.map((j) => (j.id === jobId ? { ...j, phase: "rendering" as const } : j)),
+          prev.map((j) =>
+            j.id === jobId ? { ...j, phase: "rendering" as const, taskId: videoJson.taskId } : j,
+          ),
         );
 
         const vUrl = await pollVideo(videoJson.taskId, personalApiKey ?? undefined, piapiApiKey ?? undefined);
@@ -773,7 +944,6 @@ export default function AdsStudioPanel() {
 
         toast.success("Ads Studio generation complete");
       } catch (err) {
-        toast.dismiss(toastId);
         const msg = err instanceof Error ? err.message : "Unknown error";
         setActiveJobs((prev) =>
           prev.map((j) => (j.id === jobId ? { ...j, phase: "failed" as const, error: msg } : j)),
@@ -781,6 +951,60 @@ export default function AdsStudioPanel() {
         toast.error("Ads Studio", { description: msg });
       }
     })();
+  }
+
+  /** After reload: resume polling for persisted jobs (remote render continues server-side). */
+  useEffect(() => {
+    if (!activeJobsStorageReady) return;
+
+    for (const job of activeJobs) {
+      if (!job.taskId || job.phase === "failed") continue;
+      if (adsStudioPollingStartedRef.current.has(job.id)) continue;
+      adsStudioPollingStartedRef.current.add(job.id);
+
+      const jobId = job.id;
+      const taskId = job.taskId;
+      void (async () => {
+        const personalApiKey = getPersonalApiKey();
+        const piapiApiKey = getPersonalPiapiApiKey();
+        try {
+          const vUrl = await pollVideo(taskId, personalApiKey ?? undefined, piapiApiKey ?? undefined);
+          const p = (job.promptFull ?? job.promptSnippet).trim() || " ";
+          const snapAssetType = job.jobAssetType ?? "product";
+          const previewStillUrl = job.previewStillUrl ?? job.thumbUrl;
+          const historyId = crypto.randomUUID();
+          const item: AdsStudioHistoryItem = {
+            id: historyId,
+            createdAt: Date.now(),
+            assetType: snapAssetType,
+            prompt: p,
+            imageUrl: previewStillUrl,
+            videoUrl: vUrl,
+          };
+          setHistory((prev) => [item, ...prev].slice(0, 24));
+
+          setActiveJobs((prev) => prev.filter((j) => j.id !== jobId));
+
+          setSelectedSidebarKey(`history:${historyId}`);
+
+          toast.success("Ads Studio generation complete");
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "Unknown error";
+          setActiveJobs((prev) =>
+            prev.map((j) => (j.id === jobId ? { ...j, phase: "failed" as const, error: msg } : j)),
+          );
+          toast.error("Ads Studio", { description: msg });
+        }
+      })();
+    }
+  }, [activeJobs, activeJobsStorageReady]);
+
+  function scrollComposerIntoView() {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        composerPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    });
   }
 
   function recreateFromTemplate(label: string) {
@@ -796,19 +1020,115 @@ export default function AdsStudioPanel() {
       setAssetType("product");
       setAppRefUrl(productResolved);
       setAvatarUrl(avatarResolved);
+      scrollComposerIntoView();
+      return;
+    }
+    if (isUgcTryon5BundledRecreateLabel(n)) {
+      setAssetType("product");
+      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_TRYON_5_PRODUCT_PATH));
+      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_TRYON_5_AVATAR_PATH));
+      scrollComposerIntoView();
+      return;
+    }
+    if (isUgc5BundledRecreateLabel(n)) {
+      setAssetType("product");
+      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_5_PRODUCT_PATH));
+      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_5_AVATAR_PATH));
+      scrollComposerIntoView();
       return;
     }
     if (isVirtualTryOn2BundledRecreateLabel(n)) {
       setAssetType("product");
       setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_VIRTUAL_TRY_ON_2_PRODUCT_PATH));
       setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_VIRTUAL_TRY_ON_2_AVATAR_PATH));
+      scrollComposerIntoView();
       return;
     }
-    if (isUnboxingBundledRecreateLabel(n)) {
+    if (isProTryOnBundledRecreateLabel(n)) {
       setAssetType("product");
-      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UNBOXING_PRODUCT_PATH));
-      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UNBOXING_AVATAR_PATH));
+      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_PRO_TRY_ON_PRODUCT_PATH));
+      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_PRO_TRY_ON_AVATAR_PATH));
+      scrollComposerIntoView();
+      return;
     }
+    if (isUgcTryOn4BundledRecreateLabel(n)) {
+      setAssetType("product");
+      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_TRY_ON_3_4_PRODUCT_PATH));
+      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_TRY_ON_4_AVATAR_PATH));
+      scrollComposerIntoView();
+      return;
+    }
+    if (isUgcTryOn3BundledRecreateLabel(n)) {
+      setAssetType("product");
+      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_TRY_ON_3_4_PRODUCT_PATH));
+      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_TRY_ON_3_AVATAR_PATH));
+      scrollComposerIntoView();
+      return;
+    }
+    if (isUgcTryOnBundledRecreateLabel(n)) {
+      setAssetType("product");
+      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_TRY_ON_PRODUCT_PATH));
+      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_TRY_ON_AVATAR_PATH));
+      scrollComposerIntoView();
+      return;
+    }
+    if (isUnboxing2BundledRecreateLabel(n)) {
+      setAssetType("product");
+      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UNBOXING_2_PRODUCT_PATH));
+      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UNBOXING_2_AVATAR_PATH));
+      scrollComposerIntoView();
+      return;
+    }
+    if (isUnboxing4BundledRecreateLabel(n)) {
+      setAssetType("product");
+      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UNBOXING_4_PRODUCT_PATH));
+      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UNBOXING_4_AVATAR_PATH));
+      scrollComposerIntoView();
+      return;
+    }
+    if (isDefaultUnboxingProductOnlyRecreateLabel(n)) {
+      setAssetType("product");
+      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UNBOXING_DEFAULT_PRODUCT_PATH));
+      setAvatarUrl("");
+      scrollComposerIntoView();
+      return;
+    }
+    if (isUgc3BundledRecreateLabel(n)) {
+      setAssetType("product");
+      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_3_PRODUCT_PATH));
+      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_3_AVATAR_PATH));
+      scrollComposerIntoView();
+      return;
+    }
+    if (isUgc4BundledRecreateLabel(n)) {
+      setAssetType("product");
+      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_4_PRODUCT_PATH));
+      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_4_AVATAR_PATH));
+      scrollComposerIntoView();
+      return;
+    }
+    if (isUgc6BundledRecreateLabel(n)) {
+      setAssetType("product");
+      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_6_PRODUCT_PATH));
+      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_6_AVATAR_PATH));
+      scrollComposerIntoView();
+      return;
+    }
+    if (isUgc2BundledRecreateLabel(n)) {
+      setAssetType("product");
+      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_2_PRODUCT_PATH));
+      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_2_AVATAR_PATH));
+      scrollComposerIntoView();
+      return;
+    }
+    if (isUgcWomanBundledRecreateLabel(n)) {
+      setAssetType("product");
+      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_WOMAN_PRODUCT_PATH));
+      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_WOMAN_AVATAR_PATH));
+      scrollComposerIntoView();
+      return;
+    }
+    scrollComposerIntoView();
   }
 
   return (
@@ -847,6 +1167,7 @@ export default function AdsStudioPanel() {
                 >
                   <div className="relative size-11 shrink-0 overflow-hidden rounded-lg bg-black/40">
                     {job.thumbUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- remote CDN thumbs
                       <img src={job.thumbUrl} alt="" className="h-full w-full object-cover" />
                     ) : (
                       <div className="flex h-full w-full items-center justify-center text-[10px] text-white/35">—</div>
@@ -884,6 +1205,7 @@ export default function AdsStudioPanel() {
                 >
                   <div className="relative size-11 shrink-0 overflow-hidden rounded-lg bg-black/40">
                     {h.imageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- remote CDN thumbs
                       <img src={h.imageUrl} alt="" className="h-full w-full object-cover" />
                     ) : (
                       <div className="flex h-full w-full items-center justify-center text-[9px] text-white/40">Clip</div>
@@ -902,45 +1224,11 @@ export default function AdsStudioPanel() {
         </aside>
 
         <div className="min-w-0 flex-1 space-y-4">
-          {selectedHistoryOrJob ? (
-            <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/40 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]">
-              {selectedHistoryOrJob.kind === "history" && selectedHistoryOrJob.item.videoUrl ? (
-                <video
-                  key={selectedHistoryOrJob.item.id}
-                  src={selectedHistoryOrJob.item.videoUrl}
-                  controls
-                  playsInline
-                  className="mx-auto max-h-[min(52vh,520px)] w-full bg-black object-contain"
-                />
-              ) : selectedHistoryOrJob.kind === "history" && !selectedHistoryOrJob.item.videoUrl ? (
-                <div className="flex min-h-[120px] items-center justify-center px-4 py-8 text-sm text-white/45">
-                  No video URL for this project.
-                </div>
-              ) : selectedHistoryOrJob.kind === "job" && selectedHistoryOrJob.job.phase === "failed" ? (
-                <div className="flex min-h-[140px] flex-col justify-center gap-2 px-4 py-6">
-                  <p className="text-sm font-semibold text-red-300/95">Generation failed</p>
-                  <p className="text-xs leading-snug text-white/55">{selectedHistoryOrJob.job.error}</p>
-                </div>
-              ) : selectedHistoryOrJob.kind === "job" ? (
-                <div className="relative flex min-h-[200px] flex-col items-center justify-center gap-3 overflow-hidden bg-gradient-to-b from-white/[0.04] to-black/50 px-4 py-10">
-                  {selectedHistoryOrJob.job.thumbUrl ? (
-                    <img
-                      src={selectedHistoryOrJob.job.thumbUrl}
-                      alt=""
-                      className="absolute inset-0 h-full w-full object-cover opacity-25"
-                    />
-                  ) : null}
-                  <Loader2 className="relative z-10 size-8 shrink-0 animate-spin text-violet-300" aria-hidden />
-                  <p className="relative z-10 text-center text-sm text-white/80">
-                    {selectedHistoryOrJob.job.phase === "submitting" ? "Submitting to Seedance…" : "Rendering video…"}
-                  </p>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-
           <div className="flex min-h-[64vh] items-center justify-center">
-        <div className="relative w-full max-w-[980px] rounded-[20px]">
+        <div
+          ref={composerPanelRef}
+          className="relative w-full max-w-[980px] scroll-mt-6 rounded-[20px] md:scroll-mt-8"
+        >
           <div className="relative rounded-[20px] bg-[linear-gradient(0deg,rgba(21,21,21,0.88)_0%,rgba(21,21,21,0.88)_100%),linear-gradient(41deg,rgba(101,189,235,0.24)_25.53%,rgba(101,189,235,0.00)_63.06%)] p-4 shadow-[0_12px_8px_0_rgba(0,0,0,0.20),inset_0_0_0_1px_rgba(255,255,255,0.07)] backdrop-blur-[20px]">
           <div className="flex w-full min-w-0 flex-col gap-3 rounded-[20px] sm:flex-row sm:items-start">
             <div
@@ -980,23 +1268,24 @@ export default function AdsStudioPanel() {
                   <Plus className="size-3.5" />
                 </button>
                 <div className="relative z-20 flex min-w-0 flex-1 flex-col">
-                  <AdsStudioMentionMenu
-                    open={mentionOpen}
-                    entries={filteredMentionEntries}
-                    hasAnySource={mentionEntries.length > 0}
-                    loadingAvatarLibrary={avatarLibLoading}
-                    highlightedIndex={mentionHighlight}
-                    onHighlight={setMentionHighlight}
-                    onSelect={pickMention}
-                  />
-                  <Textarea
-                    ref={promptTextareaRef}
+                  <ElementMentionTextarea
                     value={prompt}
-                    onChange={handlePromptChange}
-                    onKeyDown={handlePromptKeyDown}
+                    onChange={setPrompt}
                     placeholder="Describe the ad. Type @ to insert Product, Avatar, or library avatars (@image1 / @image2 match uploaded references)."
                     rows={5}
-                    className="h-36 w-full resize-none overflow-y-auto [field-sizing:fixed] rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm leading-relaxed text-white caret-violet-300 placeholder:text-white/35 focus-visible:ring-0"
+                    elements={mentionElementOptions}
+                    onPickElement={handlePickMentionElement}
+                    emptyElementsHint={
+                      avatarLibLoading
+                        ? "Loading avatar library…"
+                        : "Upload Product or App and Avatar references above, then type @ to insert @image1 / @image2."
+                    }
+                    showCreateElementButton={false}
+                    className={cn(
+                      "min-h-36 w-full rounded-xl border border-white/10 bg-white/[0.03] shadow-none",
+                      "[&_textarea]:min-h-36 [&_textarea]:text-sm [&_textarea]:leading-relaxed [&_textarea]:caret-violet-300 [&_textarea]:placeholder:text-white/35",
+                      "focus-within:ring-0",
+                    )}
                   />
                 </div>
               </div>
@@ -1077,6 +1366,7 @@ export default function AdsStudioPanel() {
                 ) : null}
                 {!uploadingRefSlot && appRefUrl.trim() ? (
                   <>
+                    {/* eslint-disable-next-line @next/next/no-img-element -- user/CDN URL */}
                     <img
                       src={appRefUrl.trim()}
                       alt={assetType === "app" ? "App reference" : "Product reference"}
@@ -1136,6 +1426,7 @@ export default function AdsStudioPanel() {
                 ) : null}
                 {!uploadingAvatar && avatarUrl.trim() ? (
                   <>
+                    {/* eslint-disable-next-line @next/next/no-img-element -- user/CDN URL */}
                     <img src={avatarUrl.trim()} alt="Avatar" className="absolute inset-0 h-full w-full rounded-xl object-cover" />
                     <div className="absolute inset-0 rounded-xl bg-gradient-to-b from-transparent to-[#202020]" />
                     <div className="pointer-events-none absolute left-1 right-1 top-1 z-20 flex justify-between gap-1 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100">
@@ -1187,6 +1478,7 @@ export default function AdsStudioPanel() {
             </div>
           </div>
           </div>
+          </div>
           <input
             ref={appInputRef}
             type="file"
@@ -1224,7 +1516,27 @@ export default function AdsStudioPanel() {
           />
         </div>
         </div>
-          </div>
+
+          {selectedHistoryOrJob?.kind === "history" ? (
+            <div
+              className="mx-auto w-full max-w-[1200px] overflow-hidden rounded-2xl border border-white/10 bg-black/45 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]"
+              aria-label="Selected project video"
+            >
+              {selectedHistoryOrJob.item.videoUrl ? (
+                <video
+                  key={selectedHistoryOrJob.item.id}
+                  src={selectedHistoryOrJob.item.videoUrl}
+                  controls
+                  playsInline
+                  className="mx-auto max-h-[min(85vh,920px)] min-h-[280px] w-full bg-black object-contain"
+                />
+              ) : (
+                <div className="flex min-h-[160px] items-center justify-center px-4 py-12 text-sm text-white/45">
+                  No video URL for this project.
+                </div>
+              )}
+            </div>
+          ) : null}
         </div>
       </section>
 
