@@ -54,9 +54,9 @@ async function withJsonServer(
 }
 
 test("postDubTrackLead posts bearer auth and JSON payload", async () => {
-  let mod: typeof import("./dubApiClient.ts");
+  let mod: typeof import("./dubApiClient");
   try {
-    mod = await import("./dubApiClient.ts");
+    mod = await import("./dubApiClient");
   } catch (error) {
     assert.fail(`dubApiClient module missing: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -100,9 +100,9 @@ test("postDubTrackLead posts bearer auth and JSON payload", async () => {
 });
 
 test("postDubTrackSale posts to the sale endpoint", async () => {
-  let mod: typeof import("./dubApiClient.ts");
+  let mod: typeof import("./dubApiClient");
   try {
-    mod = await import("./dubApiClient.ts");
+    mod = await import("./dubApiClient");
   } catch (error) {
     assert.fail(`dubApiClient module missing: ${error instanceof Error ? error.message : String(error)}`);
   }

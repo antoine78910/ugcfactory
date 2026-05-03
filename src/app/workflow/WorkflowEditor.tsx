@@ -201,28 +201,6 @@ type WorkflowPlacementPickerState = {
   intent?: "text-input" | "image-input" | "text-or-image" | "generic";
 };
 
-type WorkflowInputBubblePreviewState =
-  | {
-      targetNodeId: string;
-      targetHandleId: "text" | "references" | "startImage" | "endImage";
-      anchorX: number;
-      anchorY: number;
-      screenX: number;
-      screenY: number;
-    }
-  | null;
-
-type WorkflowOutputBubblePreviewState =
-  | {
-      sourceNodeId: string;
-      sourceHandleId: string;
-      anchorX: number;
-      anchorY: number;
-      screenX: number;
-      screenY: number;
-    }
-  | null;
-
 type WorkflowOpenInputPickerDetail = {
   targetNodeId: string;
   targetHandleId: "text" | "references" | "startImage" | "endImage";
@@ -520,6 +498,7 @@ function WorkflowAddPaletteRow({
   draggable,
   onDragStart,
   soon,
+  isNew,
 }: {
   icon: LucideIcon;
   label: string;
@@ -528,6 +507,8 @@ function WorkflowAddPaletteRow({
   draggable?: boolean;
   onDragStart?: (e: DragEvent) => void;
   soon?: boolean;
+  /** Small “New” pill next to the label (Basics palette). */
+  isNew?: boolean;
 }) {
   return (
     <button
@@ -549,7 +530,12 @@ function WorkflowAddPaletteRow({
       >
         <Icon className="h-4 w-4 text-white" strokeWidth={2} />
       </span>
-      <span className="text-[13px] font-medium text-white/90">{label}</span>
+      <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-white/90">{label}</span>
+      {isNew ? (
+        <span className="shrink-0 rounded-full border border-violet-400/45 bg-violet-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-200/95">
+          New
+        </span>
+      ) : null}
       {soon ? (
         <span className="ml-auto rounded-full border border-white/20 bg-white/[0.06] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white/70">
           Soon
@@ -1499,12 +1485,14 @@ function WorkflowReactFlowChrome({
                       icon={RotateCw}
                       label="360° profile (image → image)"
                       iconShellClass="border-violet-500/45 bg-violet-950/80"
+                      isNew
                       onClick={() => addWorkflow360ProfileBranch()}
                     />
                     <WorkflowAddPaletteRow
                       icon={Braces}
                       label="Image → JSON (structured text)"
                       iconShellClass="border-emerald-500/45 bg-emerald-950/80"
+                      isNew
                       onClick={() => addWorkflowImageToJsonBranch()}
                     />
                     <WorkflowAddPaletteRow
@@ -2124,8 +2112,6 @@ function WorkflowFlowWorkspace({
   const selectedNodes = useMemo(() => nodes.filter((n) => n.selected), [nodes]);
   const [placementPicker, setPlacementPicker] = useState<WorkflowPlacementPickerState | null>(null);
   const placementRef = useRef<HTMLDivElement>(null);
-  const [inputBubblePreview, setInputBubblePreview] = useState<WorkflowInputBubblePreviewState>(null);
-  const [outputBubblePreview, setOutputBubblePreview] = useState<WorkflowOutputBubblePreviewState>(null);
   const cutTargetBusyRef = useRef(false);
   const cutSuppressNextPaneClickRef = useRef(false);
   /** After a wire drop that opens the placement menu, ignore the synthetic pane click that would clear it. */
@@ -2138,6 +2124,8 @@ function WorkflowFlowWorkspace({
   const cutTrailActiveRef = useRef(false);
   const cutTrailJustFinishedRef = useRef(false);
   const workspaceRootRef = useRef<HTMLDivElement>(null);
+  /** Fallback when ⌘/Ctrl+D fires but React Flow has not updated `node.selected` yet. */
+  const lastClickedWorkflowNodeIdRef = useRef<string | null>(null);
   const [runFromHereParamLock, setRunFromHereParamLock] = useState(false);
   const runFromHereLockToastAtRef = useRef(0);
 
@@ -2359,51 +2347,6 @@ function WorkflowFlowWorkspace({
   useEffect(() => {
     if (readOnly) return;
 
-    const onPreview = (ev: Event) => {
-      const detail = (ev as CustomEvent<
-        | { active?: boolean }
-        | {
-            targetNodeId: string;
-            targetHandleId: "text" | "references" | "startImage" | "endImage";
-            anchorX: number;
-            anchorY: number;
-            screenX: number;
-            screenY: number;
-          }
-      >).detail;
-      if (!detail) return;
-
-      if ("active" in detail && detail.active === false) {
-        setInputBubblePreview(null);
-        return;
-      }
-
-      if (
-        !("targetNodeId" in detail) ||
-        !("targetHandleId" in detail) ||
-        !("anchorX" in detail) ||
-        !("anchorY" in detail) ||
-        !("screenX" in detail) ||
-        !("screenY" in detail) ||
-        typeof detail.targetNodeId !== "string" ||
-        typeof detail.targetHandleId !== "string" ||
-        typeof detail.anchorX !== "number" ||
-        typeof detail.anchorY !== "number" ||
-        typeof detail.screenX !== "number" ||
-        typeof detail.screenY !== "number"
-      ) {
-        return;
-      }
-      setInputBubblePreview({
-        targetNodeId: detail.targetNodeId,
-        targetHandleId: detail.targetHandleId,
-        anchorX: detail.anchorX,
-        anchorY: detail.anchorY,
-        screenX: detail.screenX,
-        screenY: detail.screenY,
-      });
-    };
-
     const onDrop = (ev: Event) => {
       const detail = (ev as CustomEvent<{
         targetNodeId: string;
@@ -2417,7 +2360,6 @@ function WorkflowFlowWorkspace({
       const targetNodeId = detail.targetNodeId;
       const flow = screenToFlowPosition({ x: detail.screenX, y: detail.screenY });
 
-      setInputBubblePreview(null);
       armPlacementPickerAgainstPaneClick();
       setPlacementPicker({
         flow,
@@ -2428,10 +2370,8 @@ function WorkflowFlowWorkspace({
       });
     };
 
-    window.addEventListener("workflow:input-bubble-preview", onPreview as EventListener);
     window.addEventListener("workflow:input-bubble-drop", onDrop as EventListener);
     return () => {
-      window.removeEventListener("workflow:input-bubble-preview", onPreview as EventListener);
       window.removeEventListener("workflow:input-bubble-drop", onDrop as EventListener);
     };
   }, [readOnly, screenToFlowPosition, armPlacementPickerAgainstPaneClick]);
@@ -2458,52 +2398,6 @@ function WorkflowFlowWorkspace({
   useEffect(() => {
     if (readOnly) return;
 
-    const onPreview = (ev: Event) => {
-      const detail = (ev as CustomEvent<
-        | { active?: boolean }
-        | {
-            sourceNodeId: string;
-            sourceHandleId: string;
-            anchorX: number;
-            anchorY: number;
-            screenX: number;
-            screenY: number;
-          }
-      >).detail;
-      if (!detail) return;
-
-      if ("active" in detail && detail.active === false) {
-        setOutputBubblePreview(null);
-        return;
-      }
-
-      if (
-        !("sourceNodeId" in detail) ||
-        !("sourceHandleId" in detail) ||
-        !("anchorX" in detail) ||
-        !("anchorY" in detail) ||
-        !("screenX" in detail) ||
-        !("screenY" in detail) ||
-        typeof detail.sourceNodeId !== "string" ||
-        typeof detail.sourceHandleId !== "string" ||
-        typeof detail.anchorX !== "number" ||
-        typeof detail.anchorY !== "number" ||
-        typeof detail.screenX !== "number" ||
-        typeof detail.screenY !== "number"
-      ) {
-        return;
-      }
-
-      setOutputBubblePreview({
-        sourceNodeId: detail.sourceNodeId,
-        sourceHandleId: detail.sourceHandleId,
-        anchorX: detail.anchorX,
-        anchorY: detail.anchorY,
-        screenX: detail.screenX,
-        screenY: detail.screenY,
-      });
-    };
-
     const onDrop = (ev: Event) => {
       const detail = (ev as CustomEvent<{
         sourceNodeId: string;
@@ -2512,7 +2406,6 @@ function WorkflowFlowWorkspace({
         screenY: number;
       }>).detail;
       if (!detail) return;
-      setOutputBubblePreview(null);
       armPlacementPickerAgainstPaneClick();
       setPlacementPicker({
         flow: screenToFlowPosition({ x: detail.screenX, y: detail.screenY }),
@@ -2522,10 +2415,8 @@ function WorkflowFlowWorkspace({
       });
     };
 
-    window.addEventListener("workflow:output-bubble-preview", onPreview as EventListener);
     window.addEventListener("workflow:output-bubble-drop", onDrop as EventListener);
     return () => {
-      window.removeEventListener("workflow:output-bubble-preview", onPreview as EventListener);
       window.removeEventListener("workflow:output-bubble-drop", onDrop as EventListener);
     };
   }, [readOnly, screenToFlowPosition, armPlacementPickerAgainstPaneClick]);
@@ -3228,25 +3119,29 @@ function WorkflowFlowWorkspace({
     [runFromHereParamLock, setNodes],
   );
 
-  const cloneSelection = useCallback(() => {
-    const res = cloneWorkflowSelection(nodes, edges, selectedNodes);
-    if (!res) {
-      toast.error("Nothing to duplicate", {
-        description: "Select a group, a generator, a prompt text module, or a canvas note.",
-      });
-      return;
-    }
-    const { nodesToAdd, edgesToAdd, selectIds } = res;
-    const selectSet = new Set(selectIds);
-    const nextNodes = [
-      ...nodes.map((n) => ({ ...n, selected: false })),
-      ...nodesToAdd.map((n) => ({ ...n, selected: selectSet.has(n.id) })),
-    ];
-    const nextEdges = migrateImageGeneratorOutEdgesToGenerated(nextNodes, [...edges, ...edgesToAdd]);
-    setNodes(nextNodes);
-    setEdges(nextEdges);
-    toast.success("Duplicated");
-  }, [nodes, edges, selectedNodes, setNodes, setEdges]);
+  const cloneSelection = useCallback(
+    (selectionOverride?: WorkflowCanvasNode[]) => {
+      const effectiveSelection = selectionOverride ?? selectedNodes;
+      const res = cloneWorkflowSelection(nodes, edges, effectiveSelection);
+      if (!res) {
+        toast.error("Nothing to duplicate", {
+          description: "Select a group, a generator, a prompt text module, or a canvas note.",
+        });
+        return;
+      }
+      const { nodesToAdd, edgesToAdd, selectIds } = res;
+      const selectSet = new Set(selectIds);
+      const nextNodes = [
+        ...nodes.map((n) => ({ ...n, selected: false })),
+        ...nodesToAdd.map((n) => ({ ...n, selected: selectSet.has(n.id) })),
+      ];
+      const nextEdges = migrateImageGeneratorOutEdgesToGenerated(nextNodes, [...edges, ...edgesToAdd]);
+      setNodes(nextNodes);
+      setEdges(nextEdges);
+      toast.success("Duplicated");
+    },
+    [nodes, edges, selectedNodes, setNodes, setEdges],
+  );
 
   const canCutSelection = useMemo(
     () => !readOnly && buildWorkflowClipboardPayload(nodes, edges, selectedNodes) !== null,
@@ -3507,9 +3402,19 @@ function WorkflowFlowWorkspace({
         return;
       }
       if (k === "d") {
-        if (!canCloneWorkflowSelection(selectedNodes)) return;
+        let duplicateTargets: WorkflowCanvasNode[] | null = null;
+        if (canCloneWorkflowSelection(selectedNodes) && selectedNodes.length > 0) {
+          duplicateTargets = selectedNodes;
+        } else {
+          const lastId = lastClickedWorkflowNodeIdRef.current;
+          const lastNode = lastId ? nodes.find((n) => n.id === lastId) : undefined;
+          if (lastNode && canCloneWorkflowSelection([lastNode])) {
+            duplicateTargets = [lastNode];
+          }
+        }
+        if (!duplicateTargets?.length) return;
         e.preventDefault();
-        cloneSelection();
+        cloneSelection(duplicateTargets);
         return;
       }
       if (k === "x") {
@@ -3633,6 +3538,13 @@ function WorkflowFlowWorkspace({
           connectionRadius={WORKFLOW_CONNECTION_RADIUS}
           onNodeDrag={readOnly ? undefined : onNodeDrag}
           onNodeDragStop={readOnly ? undefined : onNodeDragStop}
+          onNodeClick={
+            readOnly
+              ? undefined
+              : (_event, node) => {
+                  lastClickedWorkflowNodeIdRef.current = node.id;
+                }
+          }
           onDragOver={readOnly ? undefined : onDragOver}
           onDrop={readOnly ? undefined : onDrop}
           nodesDraggable={!readOnly}
@@ -3888,44 +3800,6 @@ function WorkflowFlowWorkspace({
               {useTemplateBusy ? "Working…" : "Use template"}
             </button>
           </div>
-        </div>
-      ) : null}
-
-      {inputBubblePreview ? (
-        <div className="pointer-events-none fixed inset-0 z-[210]" aria-hidden>
-          <svg
-            className="pointer-events-none fixed inset-0 z-[210]"
-            width="100%"
-            height="100%"
-            viewBox={`0 0 ${typeof window !== "undefined" ? window.innerWidth : 1} ${typeof window !== "undefined" ? window.innerHeight : 1}`}
-            fill="none"
-          >
-            <path
-              d={`M ${inputBubblePreview.anchorX} ${inputBubblePreview.anchorY} C ${inputBubblePreview.anchorX - 90} ${inputBubblePreview.anchorY}, ${inputBubblePreview.screenX + 90} ${inputBubblePreview.screenY}, ${inputBubblePreview.screenX} ${inputBubblePreview.screenY}`}
-              stroke="rgba(167, 139, 250, 0.5)"
-              strokeWidth="2"
-            />
-            <circle cx={inputBubblePreview.screenX} cy={inputBubblePreview.screenY} r="3" fill="rgba(167,139,250,0.72)" />
-          </svg>
-        </div>
-      ) : null}
-
-      {outputBubblePreview ? (
-        <div className="pointer-events-none fixed inset-0 z-[210]" aria-hidden>
-          <svg
-            className="pointer-events-none fixed inset-0 z-[210]"
-            width="100%"
-            height="100%"
-            viewBox={`0 0 ${typeof window !== "undefined" ? window.innerWidth : 1} ${typeof window !== "undefined" ? window.innerHeight : 1}`}
-            fill="none"
-          >
-            <path
-              d={`M ${outputBubblePreview.anchorX} ${outputBubblePreview.anchorY} C ${outputBubblePreview.anchorX + 90} ${outputBubblePreview.anchorY}, ${outputBubblePreview.screenX - 90} ${outputBubblePreview.screenY}, ${outputBubblePreview.screenX} ${outputBubblePreview.screenY}`}
-              stroke="rgba(167, 139, 250, 0.5)"
-              strokeWidth="2"
-            />
-            <circle cx={outputBubblePreview.screenX} cy={outputBubblePreview.screenY} r="3" fill="rgba(167,139,250,0.72)" />
-          </svg>
         </div>
       ) : null}
 

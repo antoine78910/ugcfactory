@@ -564,7 +564,7 @@ export function ImageRefNode({ id, data }: NodeProps<ImageRefNodeType>) {
         <div className="nodrag nopan relative z-[7] mt-2 flex shrink-0 flex-col gap-1">
           <div className={outputBubbleShellClass}>
             <Handle id="out" type="source" position={Position.Right} className={outputBubbleHandleClass} />
-            <span className="pointer-events-none absolute inset-0 z-[1] hidden flex items-center justify-center text-white/85">
+            <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/85">
               {isVideo ? <Clapperboard className="h-3.5 w-3.5" aria-hidden /> : <ImageIcon className="h-3.5 w-3.5" aria-hidden />}
             </span>
           </div>
@@ -582,7 +582,7 @@ export function ImageRefNode({ id, data }: NodeProps<ImageRefNodeType>) {
                     void onExtractVideoFrame("first");
                   }}
                 />
-                <span className="pointer-events-none absolute inset-0 z-[1] hidden flex items-center justify-center text-white/85">
+                <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/85">
                   {frameExtractBusy === "first" ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
                   ) : (
@@ -608,7 +608,7 @@ export function ImageRefNode({ id, data }: NodeProps<ImageRefNodeType>) {
                     void onExtractVideoFrame("last");
                   }}
                 />
-                <span className="pointer-events-none absolute inset-0 z-[1] hidden flex items-center justify-center text-white/85">
+                <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/85">
                   {frameExtractBusy === "last" ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
                   ) : (

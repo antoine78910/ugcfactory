@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -117,7 +117,6 @@ const CREATE_NAV: CreateNavEntry[] = [
     href: "/workflow",
     label: "Workflow",
     icon: GitBranch,
-    beta: true,
   },
   { kind: "route", id: "avatar", label: "Avatar", icon: UserRound },
   { kind: "route", id: "ad_clone", label: "Translate", icon: Languages },
@@ -224,6 +223,12 @@ function StudioShellInner({
   const [persistedStudioSection, setPersistedStudioSection] =
     useState<StudioNavSection>("link_to_ad");
   const supabase = useSupabaseBrowserClient();
+  /**
+   * Workflow canvas needs width: collapse the studio rail when opening Workflow or entering it from
+   * another tool. Collapse only on first paint / when entering from another tool — not when switching
+   * workflow projects so a user can expand the rail and keep it.
+   */
+  const wasOnWorkflowRef = useRef<boolean | null>(null);
 
   useEffect(() => {
     try {
@@ -232,6 +237,20 @@ function StudioShellInner({
       /* ignore */
     }
   }, []);
+
+  useEffect(() => {
+    const stripped = pathnameWithoutLegacyAppPrefix(pathname);
+    const first = stripped.split("/").filter(Boolean)[0] ?? "";
+    const onWorkflow = first === "workflow";
+    if (!onWorkflow) {
+      wasOnWorkflowRef.current = false;
+      return;
+    }
+    if (wasOnWorkflowRef.current === null || wasOnWorkflowRef.current === false) {
+      setNavCollapsedPref(true);
+    }
+    wasOnWorkflowRef.current = true;
+  }, [pathname]);
 
   useEffect(() => {
     try {

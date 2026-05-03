@@ -31,6 +31,8 @@ import { pollKlingVideo, pollVeoVideo } from "@/lib/studioKlingClientPoll";
 import { studioVideoDurationSecOptions, validateStudioVideoJobDuration } from "@/lib/studioVideoModelCapabilities";
 import { uploadBlobUrlToCdn } from "@/lib/uploadBlobUrlToCdn";
 
+import { workflowVideoResolutionToPiapiSeedance } from "./workflowVideoExportDimensions";
+
 /** Max reference image wires / URLs merged into one workflow Image generator job (Kie / NanoBanana). */
 export const WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX = 12;
 const WORKFLOW_HISTORY_LABEL_PREFIX = "[Workflow] ";
@@ -207,7 +209,7 @@ export function splitAssistantOutputToListLines(raw: string): string[] {
   const last = cur.join("\n").trim();
   if (last) blocks.push(last);
 
-  let numbered = dedupeBlocksPreserveOrder(blocks);
+  const numbered = dedupeBlocksPreserveOrder(blocks);
   if (numbered.length >= 2) {
     const firstLine = numbered[0].split("\n")[0] ?? "";
     if (!isWorkflowTextListSectionStartLine(firstLine) && numbered[1]) {
@@ -1465,6 +1467,10 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
       klingElements,
       duration,
       aspectRatio: aspectForApi,
+      /** PiAPI Seedance only — maps workflow 720p/1080p; avoids provider default 480p output. */
+      videoResolution: modelId.startsWith("bytedance/seedance")
+        ? workflowVideoResolutionToPiapiSeedance(params.resolution)
+        : undefined,
       sound:
         modelId === "kling-3.0/video" || modelId === "kling-2.5-turbo/video" || modelId === "kling-2.6/video"
           ? true

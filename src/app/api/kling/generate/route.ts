@@ -85,6 +85,8 @@ type Body = {
   seedanceOmniMedia?: { type: "image" | "video" | "audio"; url: string }[];
   personalApiKey?: string;
   piapiApiKey?: string;
+  /** PiAPI Seedance output tier (480p / 720p / 1080p). Omit → server uses 720p (workflow default). */
+  videoResolution?: "480p" | "720p" | "1080p";
 };
 
 /** Per-shot length, Kling 3.0 Market API: integer 1–12 seconds each. @see https://docs.kie.ai/market/kling/kling-3-0 */
@@ -649,6 +651,11 @@ export async function POST(req: Request) {
       const seedanceAspectRatio: PiapiSeedanceAspectRatio =
         body.aspectRatio === "1:1" ? "4:3" : ((body.aspectRatio ?? "9:16") as PiapiSeedanceAspectRatio);
 
+      const seedanceResolutionTier: "480p" | "720p" | "1080p" =
+        body.videoResolution === "480p" || body.videoResolution === "720p" || body.videoResolution === "1080p"
+          ? body.videoResolution
+          : "720p";
+
       if (useSeedanceProOmniRefs) {
         const items = omniNorm.items;
         if (items.length > SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS) {
@@ -781,6 +788,7 @@ export async function POST(req: Request) {
           forceOmniReference: elementsNorm.elements.length > 0,
           duration,
           aspectRatio: seedanceAspectRatio,
+          resolution: seedanceResolutionTier,
           overrideApiKey: piapiKey,
         });
         return NextResponse.json({
@@ -887,6 +895,7 @@ export async function POST(req: Request) {
         forceOmniReference: elementsNorm.elements.length > 0,
         duration,
         aspectRatio: seedanceAspectRatio,
+        resolution: seedanceResolutionTier,
         overrideApiKey: piapiKey,
       });
       return NextResponse.json({

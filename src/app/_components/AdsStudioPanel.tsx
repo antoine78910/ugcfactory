@@ -1,15 +1,56 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Smartphone, Package2, Plus } from "lucide-react";
+import { Loader2, Pencil, Plus, Smartphone, Package2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { studioSelectContentClass, studioSelectItemClass } from "@/app/_components/StudioModelPicker";
+import type { NanoBananaProAspectRatio } from "@/lib/nanobanana";
+import type { PiapiSeedanceAspectRatio } from "@/lib/piapiSeedance";
 import { useCreditsPlan, getPersonalApiKey, getPersonalPiapiApiKey } from "@/app/_components/CreditsPlanContext";
 import { uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
 import { STUDIO_IMAGE_FILE_ACCEPT } from "@/lib/studioUploadValidation";
 import { cn } from "@/lib/utils";
-import { linkToAdVideoCredits, type LinkToAdSeedanceSpeed } from "@/lib/pricing";
+import { calculateVideoCreditsForModel } from "@/lib/pricing";
+import { AdsStudioRefSourceDialog } from "@/app/_components/AdsStudioRefSourceDialog";
+
+/** Ads Studio: PiAPI Seedance 2 (non–fast) only. */
+const ADS_STUDIO_SEEDANCE_MODEL = "bytedance/seedance-2" as const;
+
+const ADS_STUDIO_DURATION_MIN = 4;
+const ADS_STUDIO_DURATION_MAX = 15;
+const ADS_STUDIO_DURATION_CHOICES = Array.from(
+  { length: ADS_STUDIO_DURATION_MAX - ADS_STUDIO_DURATION_MIN + 1 },
+  (_, i) => ADS_STUDIO_DURATION_MIN + i,
+);
+
+const ADS_STUDIO_SEEDANCE_ASPECTS = [
+  "auto",
+  "16:9",
+  "9:16",
+  "4:3",
+  "3:4",
+  "1:1",
+  "21:9",
+] as const satisfies readonly PiapiSeedanceAspectRatio[];
+
+type AdsStudioOutputAspect = (typeof ADS_STUDIO_SEEDANCE_ASPECTS)[number];
+
+const ADS_STUDIO_SEEDANCE_RESOLUTIONS = ["480p", "720p", "1080p"] as const;
+type AdsStudioVideoResolution = (typeof ADS_STUDIO_SEEDANCE_RESOLUTIONS)[number];
+
+function adsStudioAspectForNanoBanana(aspect: AdsStudioOutputAspect): NanoBananaProAspectRatio {
+  if (aspect === "auto") return "auto";
+  return aspect;
+}
 
 type AdsStudioHistoryItem = {
   id: string;
@@ -115,6 +156,14 @@ const TEMPLATE_PROMPT_TUTORIAL = `A 15-second vertical UGC product review video,
 13–15s: Takes a sip, looks at the blender, then back to camera with a nod: "Yeah. Worth it."
 Style: Raw UGC product review, vertical 9:16, warm natural light, clean kitchen counter, blender always in frame, handheld shaky cam, no text overlays.`;
 
+const TEMPLATE_PROMPT_TUTORIAL_2 = `Authentic amateur-style UGC in a bright bathroom: white tiles, soft natural daylight from a window, real-life details (folded towel, small plant, simple ceramics). Handheld feel with subtle micro-shake, natural smartphone-lens look, no cinematic grading. Feels like a real girl filming a quick clip for friends. The phone, camera, and any mirror reflection of a phone or hands holding a phone must never be visible. No mirrors showing the filming setup at all — if a mirror appears, it only shows her face and the room, never a device.
+0–2s — Visual hook: Extreme close-up of the girl's face, slightly off-center, lit by soft window light. She leans in fast with wide surprised eyes and a half-smile, like she just noticed something amazing on her skin. Natural ambient sound: faint water drip + her soft excited "okay wait—". Tiny handheld wobble. No on-screen text.
+2–4s: Quick cut — her hand brings [PRODUCT] up next to her cheek, turning it once so the label catches the light. She says in casual upbeat American English: "I literally cannot believe how good this is."
+4–7s: Tight close-up of her hands applying [PRODUCT] to her skin — real texture, real motion, product visibly going on. Soft bathroom room tone. Voiceover: "Look how it just melts in — my skin already feels insane."
+7–10s: Medium shot of her face and shoulders, soft daylight, she touches the area where she applied it and turns her face gently side to side in the light to show the glow. Small natural giggle. Says: "Okay, I'm obsessed. I'm not going back."
+10–12s: Final close-up: both hands hold [PRODUCT] up near her face, she gives a small playful shrug and a genuine smile, clip ends mid-motion like a real social post.
+Audio: Only her voice + natural bathroom room tone (faint water, soft tile echo). No music, no sound effects, no narrator. Voice: warm, friendly, mid-20s American accent, conversational, natural breaths and pauses, never stiff or over-rehearsed.`;
+
 const TEMPLATE_PROMPT_UGC_5 = `HOOK (0–2 sec) POV handheld shot, slightly shaky. A bright red shopping bag with gold text "MAISON BRUNÉ" gets tossed onto a white unmade bed from above — lands with a satisfying thud, tissue paper rustling. Natural bedroom lighting, warm tones. Authentic, raw, no tripod.
 JUMP CUT 1 (2–4 sec) Close-up hands grabbing the red bag handles, pulling it closer. Camera slightly out of focus then snaps sharp. Nail polish, casual outfit visible at edges. Breathing audible.
 JUMP CUT 2 (4–7 sec) Hands pull out the pink dustbag — "MAISON BRUNÉ PARIS" printed in rose. Fabric sliding sound. Slow squeeze of the dustbag, then quick reveal yank.
@@ -205,6 +254,9 @@ function normalizeTemplateLabel(label: string): string {
 
 function promptForTemplateLabel(label: string): string {
   const n = normalizeTemplateLabel(label);
+  if (n.includes("tutorial 2") || n.includes("tutorial2") || n.includes("tutorial (2)")) {
+    return TEMPLATE_PROMPT_TUTORIAL_2;
+  }
   if (n.includes("tutorial")) return TEMPLATE_PROMPT_TUTORIAL;
   if (n.includes("unboxing 4") || n.includes("unboxing4")) return TEMPLATE_PROMPT_UNBOXING_4;
   if (n.includes("unboxing 3") || n.includes("unboxing3")) return TEMPLATE_PROMPT_UNBOXING_3;
@@ -310,10 +362,11 @@ async function pollVideo(taskId: string, personalApiKey?: string, piapiApiKey?: 
 }
 
 export default function AdsStudioPanel() {
-  const { planId, isTrial } = useCreditsPlan();
+  const { planId } = useCreditsPlan();
   const [assetType, setAssetType] = useState<"product" | "app">("product");
-  const [seedanceSpeed, setSeedanceSpeed] = useState<LinkToAdSeedanceSpeed>("normal");
-  const [videoDurationSec, setVideoDurationSec] = useState<5 | 10 | 15>(10);
+  const [videoDurationSec, setVideoDurationSec] = useState(10);
+  const [outputAspect, setOutputAspect] = useState<AdsStudioOutputAspect>("9:16");
+  const [videoResolution, setVideoResolution] = useState<AdsStudioVideoResolution>("720p");
   const [prompt, setPrompt] = useState("");
   const [appRefUrl, setAppRefUrl] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
@@ -322,6 +375,10 @@ export default function AdsStudioPanel() {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [history, setHistory] = useState<AdsStudioHistoryItem[]>([]);
   const [templateVideos, setTemplateVideos] = useState<TemplateVideoItem[]>([]);
+  const [uploadingRefSlot, setUploadingRefSlot] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [refSourceDialogOpen, setRefSourceDialogOpen] = useState(false);
+  const [refSourceDialogMode, setRefSourceDialogMode] = useState<"product" | "avatar">("product");
   const appInputRef = useRef<HTMLInputElement>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
@@ -359,10 +416,26 @@ export default function AdsStudioPanel() {
     };
   }, []);
 
-  const canGenerate = useMemo(() => prompt.trim().length > 0 && !isGenerating, [prompt, isGenerating]);
+  const refImageUrls = useMemo(() => {
+    const out: string[] = [];
+    const app = appRefUrl.trim();
+    const av = avatarUrl.trim();
+    if (app) out.push(app);
+    if (av && !out.includes(av)) out.push(av);
+    return out.length ? out : undefined;
+  }, [appRefUrl, avatarUrl]);
+
+  /** Do not tie disabled state to uploads — a stuck upload flag would gray out Generate permanently. */
+  const canGenerate = useMemo(() => !isGenerating, [isGenerating]);
   const generationCredits = useMemo(
-    () => linkToAdVideoCredits("seedance", videoDurationSec, seedanceSpeed),
-    [videoDurationSec, seedanceSpeed],
+    () =>
+      calculateVideoCreditsForModel({
+        modelId: ADS_STUDIO_SEEDANCE_MODEL,
+        duration: videoDurationSec,
+        audio: true,
+        videoResolution,
+      }),
+    [videoDurationSec, videoResolution],
   );
   const presetPreviewVideos = useMemo(
     () => history.map((h) => h.videoUrl).filter((u): u is string => typeof u === "string" && u.length > 0),
@@ -370,18 +443,41 @@ export default function AdsStudioPanel() {
   );
 
   async function uploadRef(file: File, kind: "app" | "avatar") {
+    if (kind === "app") setUploadingRefSlot(true);
+    else setUploadingAvatar(true);
     try {
       const url = await uploadFileToCdn(file, { kind: "image" });
       if (kind === "app") setAppRefUrl(url);
       else setAvatarUrl(url);
-      toast.success(kind === "app" ? "App reference uploaded" : "Avatar uploaded");
+      toast.success(
+        kind === "app"
+          ? assetType === "app"
+            ? "App reference uploaded"
+            : "Product reference uploaded"
+          : "Avatar uploaded",
+      );
     } catch (err) {
       toast.error("Upload failed", { description: err instanceof Error ? err.message : "Unknown error" });
+    } finally {
+      if (kind === "app") setUploadingRefSlot(false);
+      else setUploadingAvatar(false);
     }
   }
 
   async function runGenerate(promptOverride?: string) {
-    const p = (promptOverride ?? prompt).trim();
+    const trimmed = (promptOverride ?? prompt).trim();
+    const hasUploadedRefs = Boolean(appRefUrl.trim() || avatarUrl.trim());
+    if (!trimmed && !hasUploadedRefs) {
+      toast.error("Ads Studio", {
+        description: "Add a prompt in the text box or upload at least one reference image.",
+      });
+      return;
+    }
+    const p =
+      trimmed ||
+      (refImageUrls?.length
+        ? "Create a high-converting vertical ad that follows the reference images for subject, branding, and composition."
+        : "");
     if (!p) return;
     const personalApiKey = getPersonalApiKey();
     const piapiApiKey = getPersonalPiapiApiKey();
@@ -389,10 +485,15 @@ export default function AdsStudioPanel() {
     setImageUrl(null);
     setVideoUrl(null);
     try {
-      const enrichedPrompt =
+      const basePrompt =
         assetType === "app"
           ? `${p}\n\nCreate an APP-focused ad visual (UI usage, mobile screen context, feature/value outcomes).`
           : `${p}\n\nCreate a PRODUCT-focused ad visual (packaging, product handling, realistic creator environment).`;
+      let enrichedPrompt = basePrompt;
+      if (avatarUrl.trim()) {
+        enrichedPrompt +=
+          "\n\nIf a human subject appears, match their face and overall appearance to the avatar reference image.";
+      }
       const imageRes = await fetch("/api/nanobanana/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -400,9 +501,9 @@ export default function AdsStudioPanel() {
           accountPlan: planId,
           model: "pro",
           prompt: enrichedPrompt,
-          imageUrls: appRefUrl.trim() ? [appRefUrl.trim()] : undefined,
+          imageUrls: refImageUrls,
           resolution: "2K",
-          aspectRatio: "9:16",
+          aspectRatio: adsStudioAspectForNanoBanana(outputAspect),
           personalApiKey: personalApiKey ?? undefined,
         }),
       });
@@ -414,21 +515,54 @@ export default function AdsStudioPanel() {
       if (!firstImage) throw new Error("No generated image URL.");
       setImageUrl(firstImage);
 
-      const videoPrompt = `${enrichedPrompt}\n\nMake this a high-converting short vertical ad clip.`;
+      const productUrl = appRefUrl.trim();
+      const avUrl = avatarUrl.trim();
+      const klingElements: { name: string; description: string; element_input_urls: string[] }[] = [];
+      if (productUrl) {
+        klingElements.push({
+          name: assetType === "app" ? "app" : "product",
+          description:
+            assetType === "app"
+              ? "Uploaded app or UI reference image"
+              : "Uploaded product reference image",
+          element_input_urls: [productUrl],
+        });
+      }
+      if (avUrl) {
+        klingElements.push({
+          name: "avatar",
+          description: "Uploaded avatar or on-camera talent reference",
+          element_input_urls: [avUrl],
+        });
+      }
+
+      let videoPrompt = `${enrichedPrompt}\n\nMake this a high-converting short ad clip.`;
+      const extraImageSlots = (productUrl ? 1 : 0) + (avUrl ? 1 : 0);
+      if (extraImageSlots > 0) {
+        const parts: string[] = ["@image1 = generated start frame"];
+        let n = 2;
+        if (productUrl) {
+          parts.push(`@image${n++} = ${assetType === "app" ? "app / UI" : "product"} upload`);
+        }
+        if (avUrl) {
+          parts.push(`@image${n++} = avatar upload`);
+        }
+        videoPrompt += `\n\nSeedance references: ${parts.join("; ")}. You may mention @image1, @image2, @image3 in the scene description to direct cuts or focus.`;
+      }
+
       const videoRes = await fetch("/api/kling/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           accountPlan: planId,
-          marketModel:
-            seedanceSpeed === "vip"
-              ? "bytedance/seedance-2-preview-vip"
-              : "bytedance/seedance-2-preview",
+          marketModel: ADS_STUDIO_SEEDANCE_MODEL,
           prompt: videoPrompt,
           imageUrl: firstImage,
           duration: videoDurationSec,
-          aspectRatio: "9:16",
+          aspectRatio: outputAspect,
           sound: true,
+          videoResolution,
+          ...(klingElements.length > 0 ? { klingElements } : {}),
           personalApiKey: personalApiKey ?? undefined,
           piapiApiKey: piapiApiKey ?? undefined,
         }),
@@ -465,38 +599,37 @@ export default function AdsStudioPanel() {
   return (
     <div className="space-y-10">
       <section className="flex min-h-[64vh] items-center justify-center">
-        <div className="relative place-self-center w-full max-w-[980px] overflow-hidden rounded-[20px]">
+        <div className="relative place-self-center w-full max-w-[980px] rounded-[20px]">
           <div className="relative rounded-[20px] bg-[linear-gradient(0deg,rgba(21,21,21,0.88)_0%,rgba(21,21,21,0.88)_100%),linear-gradient(41deg,rgba(101,189,235,0.24)_25.53%,rgba(101,189,235,0.00)_63.06%)] p-4 shadow-[0_12px_8px_0_rgba(0,0,0,0.20),inset_0_0_0_1px_rgba(255,255,255,0.07)] backdrop-blur-[20px]">
-          <div className="absolute -left-20 bottom-0 hidden origin-bottom-right transition-all duration-300 sm:block">
-            <div className="h-[120px] min-h-[120px] w-[70px] rounded-[20px] bg-[rgba(0,0,0,0.05)] p-1 shadow-[0_12px_8px_0_rgba(0,0,0,0.20),inset_0_0_0_1px_rgba(255,255,255,0.08)] backdrop-blur-[20px]">
-              <div className="flex h-full min-h-0 flex-col justify-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => setAssetType("product")}
-                  className={cn(
-                    "relative z-0 flex min-h-0 w-full flex-1 basis-0 flex-col items-center justify-center gap-1 rounded-[16px] px-3 py-1.5 text-[10px] font-semibold leading-[14px] transition-colors",
-                    assetType === "product" ? "bg-white/[0.06] text-white" : "text-white/50 hover:text-white/70",
-                  )}
-                >
-                  <Package2 className="size-4 shrink-0" />
-                  <span>Product</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAssetType("app")}
-                  className={cn(
-                    "relative z-0 flex min-h-0 w-full flex-1 basis-0 flex-col items-center justify-center gap-1 rounded-[16px] px-3 py-1.5 text-[10px] font-semibold leading-[14px] transition-colors",
-                    assetType === "app" ? "bg-white/[0.06] text-white" : "text-white/50 hover:text-white/70",
-                  )}
-                >
-                  <Smartphone className="size-4 shrink-0" />
-                  <span>App</span>
-                </button>
-              </div>
+          <div className="flex w-full min-w-0 flex-col gap-3 rounded-[20px] sm:flex-row sm:items-start">
+            <div
+              className="relative z-20 order-first flex w-full min-h-[52px] shrink-0 gap-1 rounded-[20px] bg-[rgba(0,0,0,0.05)] p-1 shadow-[0_12px_8px_0_rgba(0,0,0,0.20),inset_0_0_0_1px_rgba(255,255,255,0.08)] backdrop-blur-[20px] sm:order-none sm:h-[120px] sm:min-h-0 sm:w-[70px] sm:flex-col sm:justify-center"
+              aria-label="Product or App ad mode"
+            >
+              <button
+                type="button"
+                onClick={() => setAssetType("product")}
+                className={cn(
+                  "relative z-0 flex min-h-0 min-w-0 flex-1 basis-0 flex-row items-center justify-center gap-2 rounded-[16px] px-2 py-2 text-[10px] font-semibold leading-[14px] transition-colors sm:flex-col sm:gap-1 sm:py-1.5",
+                  assetType === "product" ? "bg-white/[0.06] text-white" : "text-white/50 hover:text-white/70",
+                )}
+              >
+                <Package2 className="size-4 shrink-0" />
+                <span>Product</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setAssetType("app")}
+                className={cn(
+                  "relative z-0 flex min-h-0 min-w-0 flex-1 basis-0 flex-row items-center justify-center gap-2 rounded-[16px] px-2 py-2 text-[10px] font-semibold leading-[14px] transition-colors sm:flex-col sm:gap-1 sm:py-1.5",
+                  assetType === "app" ? "bg-white/[0.06] text-white" : "text-white/50 hover:text-white/70",
+                )}
+              >
+                <Smartphone className="size-4 shrink-0" />
+                <span>App</span>
+              </button>
             </div>
-          </div>
-
-          <div className="grid w-full grid-cols-[1fr_auto] items-center gap-3 rounded-[20px]">
+          <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
             <div className="flex min-h-0 min-w-0 flex-1 flex-col">
               <div className="flex min-h-0 flex-1 items-start gap-3 overflow-hidden">
                 <button
@@ -509,99 +642,211 @@ export default function AdsStudioPanel() {
                   <Textarea
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
-                    placeholder="Describe what happens in the ad..."
+                    placeholder="Describe what happens in the ad. With Product/App or Avatar uploads, reference frames as @image1 (start frame), @image2, @image3 in order in your text."
                     className="h-[72px] max-h-[112px] resize-none overflow-y-auto border-0 bg-transparent p-0 text-sm text-white caret-violet-300 placeholder:text-white/35 focus-visible:ring-0"
                   />
                 </div>
               </div>
 
-              <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                <span className="flex h-8 items-center gap-1.5 rounded-lg bg-white/[0.04] px-2.5 text-xs font-semibold text-white">
-                  <span>UGC</span>
-                </span>
-                <span className="flex h-8 items-center gap-1 rounded-lg bg-white/[0.04] px-2 text-xs font-semibold text-white/90">
-                  Mobile
-                </span>
-                <span className="flex h-8 items-center gap-1 rounded-lg bg-white/[0.04] px-2 text-xs font-semibold text-white/90">
-                  3:4
-                </span>
-                <div className="inline-flex h-8 items-center rounded-lg bg-white/[0.04] px-1">
-                  {([5, 10, 15] as const).map((d) => (
-                    <button
-                      key={d}
-                      type="button"
-                      onClick={() => setVideoDurationSec(d)}
-                      className={cn(
-                        "rounded px-1.5 py-1 text-xs font-semibold transition",
-                        videoDurationSec === d ? "bg-white text-black" : "text-white/85 hover:text-white",
-                      )}
+              <div className="flex min-w-0 flex-wrap items-end gap-2">
+                <div className="flex min-w-0 flex-col gap-0.5">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Aspect ratio</span>
+                  <Select
+                    value={outputAspect}
+                    onValueChange={(v) => setOutputAspect(v as AdsStudioOutputAspect)}
+                  >
+                    <SelectTrigger
+                      size="sm"
+                      className="h-8 w-[min(100%,9.5rem)] rounded-lg border-white/15 bg-white/[0.04] text-xs text-white shadow-none hover:bg-white/[0.07]"
                     >
-                      {d}s
-                    </button>
-                  ))}
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent position="popper" className={studioSelectContentClass}>
+                      {ADS_STUDIO_SEEDANCE_ASPECTS.map((ar) => (
+                        <SelectItem key={ar} value={ar} className={studioSelectItemClass}>
+                          {ar === "auto" ? "Auto" : ar}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-                <div className="inline-flex h-8 items-center rounded-lg bg-white/[0.04] px-1">
-                  {(["normal", "vip"] as const).map((tier) => (
-                    <button
-                      key={tier}
-                      type="button"
-                      onClick={() => setSeedanceSpeed(tier)}
-                      className={cn(
-                        "rounded px-1.5 py-1 text-xs font-semibold transition",
-                        seedanceSpeed === tier ? "bg-white text-black" : "text-white/85 hover:text-white",
-                      )}
+                <div className="flex min-w-0 flex-col gap-0.5">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Quality</span>
+                  <Select
+                    value={videoResolution}
+                    onValueChange={(v) => setVideoResolution(v as AdsStudioVideoResolution)}
+                  >
+                    <SelectTrigger
+                      size="sm"
+                      className="h-8 w-[min(100%,5.5rem)] rounded-lg border-white/15 bg-white/[0.04] text-xs text-white shadow-none hover:bg-white/[0.07]"
                     >
-                      {tier === "vip" ? "VIP" : "Normal"}
-                    </button>
-                  ))}
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent position="popper" className={studioSelectContentClass}>
+                      {ADS_STUDIO_SEEDANCE_RESOLUTIONS.map((r) => (
+                        <SelectItem key={r} value={r} className={studioSelectItemClass}>
+                          {r}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex min-w-0 flex-col gap-0.5">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Duration</span>
+                  <Select
+                    value={String(videoDurationSec)}
+                    onValueChange={(v) => setVideoDurationSec(Number(v))}
+                  >
+                    <SelectTrigger
+                      size="sm"
+                      className="h-8 w-[min(100%,4.25rem)] rounded-lg border-white/15 bg-white/[0.04] text-xs text-white shadow-none hover:bg-white/[0.07]"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent position="popper" className={studioSelectContentClass}>
+                      {ADS_STUDIO_DURATION_CHOICES.map((d) => (
+                        <SelectItem key={d} value={String(d)} className={studioSelectItemClass}>
+                          {d}s
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             </div>
 
-            <div className="flex items-start gap-1.5">
-              <button
-                type="button"
-                onClick={() => appInputRef.current?.click()}
-                className="group relative flex h-20 w-[80px] flex-col items-start justify-between overflow-hidden rounded-xl bg-white/[0.05] p-1.5 shadow-[10px_34px_24px_0_rgba(0,0,0,0.15),1px_3px_4px_0_rgba(0,0,0,0.32),0px_1px_2px_0_rgba(0,0,0,0.32)]"
-              >
-                <span className="inline-flex size-5 items-center justify-center rounded-full border border-white/30 bg-white/[0.06]">
-                  <Plus className="size-3 text-white" />
-                </span>
-                <p className="text-[12px] font-bold uppercase text-white">App</p>
-              </button>
-              <button
-                type="button"
-                onClick={() => avatarInputRef.current?.click()}
-                className="group relative flex h-20 w-[80px] flex-col items-start justify-between overflow-hidden rounded-xl p-1.5 shadow-[10px_34px_24px_0_rgba(0,0,0,0.15),1px_3px_4px_0_rgba(0,0,0,0.32),0px_1px_2px_0_rgba(0,0,0,0.32)]"
-              >
-                {avatarUrl ? (
+            <div className="flex shrink-0 flex-wrap items-start justify-end gap-1.5">
+              <div className="group relative flex h-20 w-[80px] flex-col items-start justify-between overflow-hidden rounded-xl bg-white/[0.05] p-1.5 shadow-[10px_34px_24px_0_rgba(0,0,0,0.15),1px_3px_4px_0_rgba(0,0,0,0.32),0px_1px_2px_0_rgba(0,0,0,0.32)]">
+                {uploadingRefSlot ? (
+                  <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-1.5 rounded-xl bg-black/60 backdrop-blur-[2px]">
+                    <Loader2 className="size-6 shrink-0 animate-spin text-white" aria-hidden />
+                    <span className="text-center text-[9px] font-semibold uppercase leading-tight text-white/95">Uploading</span>
+                  </div>
+                ) : null}
+                {!uploadingRefSlot && !appRefUrl.trim() ? (
+                  <button
+                    type="button"
+                    aria-label={assetType === "app" ? "Upload app reference photo" : "Upload product reference photo"}
+                    disabled={uploadingRefSlot}
+                    onClick={() => appInputRef.current?.click()}
+                    className="absolute inset-0 z-10 flex flex-col items-start justify-between p-1.5 text-left transition hover:bg-white/[0.04] disabled:pointer-events-none"
+                  >
+                    <div className="absolute inset-0 rounded-xl bg-white/[0.05]" />
+                    <span className="relative z-10 inline-flex size-5 items-center justify-center rounded-full border border-white/30 bg-white/[0.06]">
+                      <Plus className="size-3 text-white" />
+                    </span>
+                    <p className="relative z-10 mt-auto text-[12px] font-bold uppercase text-white [text-shadow:0_1px_6px_rgba(0,0,0,0.75)]">
+                      {assetType === "app" ? "App" : "Product"}
+                    </p>
+                  </button>
+                ) : null}
+                {!uploadingRefSlot && appRefUrl.trim() ? (
                   <>
-                    <img src={avatarUrl} alt="Avatar" className="absolute inset-0 h-full w-full rounded-xl object-cover" />
+                    <img
+                      src={appRefUrl.trim()}
+                      alt={assetType === "app" ? "App reference" : "Product reference"}
+                      className="absolute inset-0 h-full w-full rounded-xl object-cover"
+                    />
                     <div className="absolute inset-0 rounded-xl bg-gradient-to-b from-transparent to-[#202020]" />
+                    <div className="pointer-events-none absolute left-1 right-1 top-1 z-20 flex justify-between gap-1 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100">
+                      <button
+                        type="button"
+                        aria-label="Choose product reference source"
+                        className="pointer-events-auto inline-flex size-7 shrink-0 items-center justify-center rounded-full border border-white/35 bg-black/45 text-white shadow backdrop-blur-[2px] transition hover:bg-black/60"
+                        onClick={() => {
+                          setRefSourceDialogMode("product");
+                          setRefSourceDialogOpen(true);
+                        }}
+                      >
+                        <Pencil className="size-3.5" aria-hidden />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Remove product reference"
+                        className="pointer-events-auto inline-flex size-7 shrink-0 items-center justify-center rounded-full border border-white/35 bg-black/45 text-white shadow backdrop-blur-[2px] transition hover:bg-black/60"
+                        onClick={() => setAppRefUrl("")}
+                      >
+                        <X className="size-3.5" aria-hidden />
+                      </button>
+                    </div>
+                    <p className="relative z-10 mt-auto text-[12px] font-bold uppercase text-white [text-shadow:0_1px_6px_rgba(0,0,0,0.75)]">
+                      {assetType === "app" ? "App" : "Product"}
+                    </p>
                   </>
-                ) : (
-                  <div className="absolute inset-0 rounded-xl bg-white/[0.05]" />
-                )}
-                <p className="relative z-10 text-[12px] font-bold uppercase text-white">Avatar</p>
-              </button>
+                ) : null}
+              </div>
+              <div className="group relative flex h-20 w-[80px] flex-col items-start justify-between overflow-hidden rounded-xl p-1.5 shadow-[10px_34px_24px_0_rgba(0,0,0,0.15),1px_3px_4px_0_rgba(0,0,0,0.32),0px_1px_2px_0_rgba(0,0,0,0.32)]">
+                {uploadingAvatar ? (
+                  <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-1.5 rounded-xl bg-black/60 backdrop-blur-[2px]">
+                    <Loader2 className="size-6 shrink-0 animate-spin text-white" aria-hidden />
+                    <span className="text-center text-[9px] font-semibold uppercase leading-tight text-white/95">Uploading</span>
+                  </div>
+                ) : null}
+                {!uploadingAvatar && !avatarUrl.trim() ? (
+                  <button
+                    type="button"
+                    aria-label="Upload avatar photo"
+                    disabled={uploadingAvatar}
+                    onClick={() => avatarInputRef.current?.click()}
+                    className="absolute inset-0 z-10 flex flex-col items-start justify-between p-1.5 text-left transition hover:bg-white/[0.04] disabled:pointer-events-none"
+                  >
+                    <div className="absolute inset-0 rounded-xl bg-white/[0.05]" />
+                    <span className="relative z-10 inline-flex size-5 items-center justify-center rounded-full border border-white/30 bg-white/[0.06]">
+                      <Plus className="size-3 text-white" />
+                    </span>
+                    <p className="relative z-10 mt-auto text-[12px] font-bold uppercase text-white [text-shadow:0_1px_6px_rgba(0,0,0,0.75)]">
+                      Avatar
+                    </p>
+                  </button>
+                ) : null}
+                {!uploadingAvatar && avatarUrl.trim() ? (
+                  <>
+                    <img src={avatarUrl.trim()} alt="Avatar" className="absolute inset-0 h-full w-full rounded-xl object-cover" />
+                    <div className="absolute inset-0 rounded-xl bg-gradient-to-b from-transparent to-[#202020]" />
+                    <div className="pointer-events-none absolute left-1 right-1 top-1 z-20 flex justify-between gap-1 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100">
+                      <button
+                        type="button"
+                        aria-label="Choose avatar reference source"
+                        className="pointer-events-auto inline-flex size-7 shrink-0 items-center justify-center rounded-full border border-white/35 bg-black/45 text-white shadow backdrop-blur-[2px] transition hover:bg-black/60"
+                        onClick={() => {
+                          setRefSourceDialogMode("avatar");
+                          setRefSourceDialogOpen(true);
+                        }}
+                      >
+                        <Pencil className="size-3.5" aria-hidden />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Remove avatar reference"
+                        className="pointer-events-auto inline-flex size-7 shrink-0 items-center justify-center rounded-full border border-white/35 bg-black/45 text-white shadow backdrop-blur-[2px] transition hover:bg-black/60"
+                        onClick={() => setAvatarUrl("")}
+                      >
+                        <X className="size-3.5" aria-hidden />
+                      </button>
+                    </div>
+                    <p className="relative z-10 mt-auto text-[12px] font-bold uppercase text-white [text-shadow:0_1px_6px_rgba(0,0,0,0.75)]">
+                      Avatar
+                    </p>
+                  </>
+                ) : null}
+              </div>
               <Button
                 type="button"
                 onClick={() => void runGenerate()}
                 disabled={!canGenerate}
-                className="group relative flex h-[88px] w-[152px] items-center justify-center overflow-hidden rounded-xl border border-white/10 px-6 py-[30px] font-grotesk text-xs font-bold uppercase text-white shadow-[10px_34px_24px_0_rgba(0,0,0,0.15),8px_21px_6px_0_rgba(0,0,0,0.01),0px_13px_16px_0_rgba(254,23,73,0.13),3px_7px_5px_0_rgba(0,0,0,0.25),1px_3px_4px_0_rgba(0,0,0,0.43),0px_1px_2px_0_rgba(0,0,0,0.49)] transition-[transform,filter,opacity] duration-200 enabled:hover:brightness-110 enabled:active:scale-[0.99] disabled:opacity-60"
+                className="group relative z-10 flex h-[88px] w-[152px] shrink-0 items-center justify-center overflow-hidden rounded-xl border border-violet-400/45 bg-violet-500 px-6 py-[30px] font-grotesk text-xs font-bold uppercase text-white shadow-[0_6px_0_0_rgba(76,29,149,0.95),0_0_28px_rgba(139,92,246,0.22)] transition-[transform,box-shadow,opacity] duration-200 enabled:hover:bg-violet-400 enabled:hover:shadow-[0_8px_0_0_rgba(76,29,149,0.95),0_0_36px_rgba(167,139,250,0.35)] enabled:active:translate-y-1 enabled:active:shadow-[0_2px_0_0_rgba(76,29,149,0.95)] disabled:pointer-events-none disabled:opacity-45"
               >
-                <div className="absolute inset-0 rounded-xl bg-[#ff4f9a]" />
-                <div className="absolute inset-0 rounded-xl bg-[linear-gradient(180deg,rgba(255,255,255,0.2)_0%,rgba(0,0,0,0)_100%)] mix-blend-overlay" />
-                <div className="absolute inset-0 rounded-xl bg-[linear-gradient(180deg,rgba(255,255,255,0.32)_0%,rgba(0,0,0,0)_100%)] mix-blend-hard-light" />
-                <div className="absolute inset-0 rounded-xl bg-[radial-gradient(79%_44%_at_44%_124%,rgba(255,28,138,1)_0%,rgba(255,28,138,0)_100%)]" />
-                <div className="relative flex flex-col items-center gap-0.5 text-white [text-shadow:0px_0px_8px_rgba(255,255,255,0.45)]">
+                <div className="pointer-events-none absolute inset-0 rounded-xl bg-gradient-to-b from-white/20 via-transparent to-violet-950/25" />
+                <div className="pointer-events-none absolute inset-0 rounded-xl bg-[radial-gradient(85%_70%_at_50%_100%,rgba(167,139,250,0.35)_0%,transparent_60%)]" />
+                <div className="relative z-10 flex flex-col items-center gap-0.5 text-white [text-shadow:0_1px_12px_rgba(76,29,149,0.55)]">
                   <div className="flex items-center gap-1.5">
                     <span>{isGenerating ? "GENERATING" : "GENERATE"}</span>
-                    {isTrial ? <span className="opacity-80">+ {generationCredits}</span> : null}
+                    <span className="opacity-90">+ {generationCredits}</span>
                   </div>
                 </div>
               </Button>
             </div>
+          </div>
           </div>
           <input
             ref={appInputRef}
@@ -623,6 +868,19 @@ export default function AdsStudioPanel() {
               const f = e.target.files?.[0];
               if (f) void uploadRef(f, "avatar");
               e.currentTarget.value = "";
+            }}
+          />
+          <AdsStudioRefSourceDialog
+            open={refSourceDialogOpen}
+            onOpenChange={setRefSourceDialogOpen}
+            mode={refSourceDialogMode}
+            onPickUrl={(url) => {
+              if (refSourceDialogMode === "product") setAppRefUrl(url);
+              else setAvatarUrl(url);
+            }}
+            onRequestFileUpload={() => {
+              if (refSourceDialogMode === "product") appInputRef.current?.click();
+              else avatarInputRef.current?.click();
             }}
           />
         </div>

@@ -28,7 +28,6 @@ import {
   Globe2,
   Maximize2,
   Download,
-  Trash2,
   Type,
   Wand2,
   X,
@@ -88,33 +87,14 @@ import {
   workflowVideoModelSupportsElements,
   WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX,
   splitAssistantOutputToListLines,
-  splitIntoPromptLines,
   primeRemoteMediaForDisplay,
 } from "../workflowNodeRun";
+import { workflowVideoExportPixelDimensions } from "../workflowVideoExportDimensions";
 import { WorkflowNodeContextToolbar } from "./WorkflowNodeContextToolbar";
 import type { ImageRefNodeData } from "./ImageRefNode";
 import { buildPromptListNode } from "../workflowNodeFactory";
 import { buildImageRefNode } from "../workflowNodeFactory";
 import { linkToAdProductPhotoPickerUrls, readUniverseFromExtracted, splitAllScriptOptions } from "@/lib/linkToAdUniverse";
-
-function promptHasUnsupportedElementMentions(prompt: string): boolean {
-  const p = (prompt ?? "").trim();
-  if (!p.includes("@")) return false;
-  // Allowed Seedance/Kling media tags:
-  // - @image1, @video2, @audio1 ...
-  // Any other @token is treated as a saved Element mention (@product, @model, ...) which is not supported
-  // in Seedance Preview models.
-  const re = /@([a-zA-Z_][a-zA-Z0-9_-]*)/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(p)) !== null) {
-    const token = (m[1] ?? "").toLowerCase();
-    if (/^image\d+$/.test(token)) continue;
-    if (/^video\d+$/.test(token)) continue;
-    if (/^audio\d+$/.test(token)) continue;
-    return true;
-  }
-  return false;
-}
 
 export type AdAssetNodeData = {
   label: string;
@@ -606,6 +586,9 @@ function outputFrameDimensions(ratio: string, intrinsicAspect?: number): { width
   return { width, height };
 }
 
+const WORKFLOW_PROMPT_EDITOR_WIDTH_MIN = 300;
+const WORKFLOW_PROMPT_EDITOR_WIDTH_MAX = 920;
+
 export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) {
   const patch = useWorkflowNodePatch();
   const { getNodes, getEdges, setNodes, setEdges } = useReactFlow();
@@ -637,6 +620,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   const [promptFocused, setPromptFocused] = useState(false);
   const [promptEditorOpen, setPromptEditorOpen] = useState(false);
   const [promptEditorDraft, setPromptEditorDraft] = useState("");
+  const [promptEditorWidthPx, setPromptEditorWidthPx] = useState(480);
   const [titleEditing, setTitleEditing] = useState(false);
   const [titleDraft, setTitleDraft] = useState(data.label || cfg.title);
   const leaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -644,6 +628,9 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   const aspectMenuOpenRef = useRef(false);
   const assistantOpenRef = useRef(false);
   const promptFocusedRef = useRef(false);
+  const promptEditorOpenRef = useRef(false);
+  const promptEditorTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const promptEditorResizeRef = useRef<{ pointerId: number; startX: number; startW: number } | null>(null);
   const previewVideoRef = useRef<HTMLVideoElement | null>(null);
   const previewImageRef = useRef<HTMLImageElement | null>(null);
   const [frameExtractBusy, setFrameExtractBusy] = useState<null | "first" | "last">(null);
@@ -728,9 +715,6 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       // While dragging a connector, let React Flow own pointer handling so edges snap correctly.
       if (storeApi.getState().connection.inProgress) return;
       const el = event.currentTarget;
-      const bubbleRect = el.getBoundingClientRect();
-      const anchorX = Math.round(bubbleRect.left + bubbleRect.width / 2);
-      const anchorY = Math.round(bubbleRect.top + bubbleRect.height / 2);
       const startX = event.clientX;
       const startY = event.clientY;
       let moved = false;
@@ -739,46 +723,14 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         longPress = true;
       }, 280);
 
-      // Preview marker follows the pointer while you drag this bubble.
-      window.dispatchEvent(
-        new CustomEvent("workflow:input-bubble-preview", {
-          detail: {
-            targetNodeId: id,
-            targetHandleId: targetHandle,
-            anchorX,
-            anchorY,
-            screenX: Math.round(startX),
-            screenY: Math.round(startY),
-          },
-        }),
-      );
-
       const cleanup = () => {
         window.clearTimeout(timer);
         window.removeEventListener("pointermove", onMove, true);
         window.removeEventListener("pointerup", onUp, true);
         window.removeEventListener("pointercancel", onCancel, true);
-
-        window.dispatchEvent(
-          new CustomEvent("workflow:input-bubble-preview", {
-            detail: { active: false },
-          }),
-        );
       };
       const onMove = (ev: PointerEvent) => {
         if (Math.abs(ev.clientX - startX) > 2 || Math.abs(ev.clientY - startY) > 2) moved = true;
-        window.dispatchEvent(
-          new CustomEvent("workflow:input-bubble-preview", {
-            detail: {
-              targetNodeId: id,
-              targetHandleId: targetHandle,
-              anchorX,
-              anchorY,
-              screenX: Math.round(ev.clientX),
-              screenY: Math.round(ev.clientY),
-            },
-          }),
-        );
       };
       const onCancel = () => cleanup();
       const onUp = (ev: PointerEvent) => {
@@ -808,7 +760,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       window.addEventListener("pointerup", onUp, true);
       window.addEventListener("pointercancel", onCancel, true);
     },
-    [openInputCreatePicker, storeApi],
+    [id, openInputCreatePicker, storeApi],
   );
 
   const onExtractVideoFrame = useCallback(
@@ -911,6 +863,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   aspectMenuOpenRef.current = aspectMenuOpen;
   assistantOpenRef.current = assistantOpen;
   promptFocusedRef.current = promptFocused;
+  promptEditorOpenRef.current = promptEditorOpen;
 
   useEffect(() => {
     if (modelMenuOpen || aspectMenuOpen) clearHoverLeaveTimer();
@@ -1151,7 +1104,6 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     let alive = true;
     let timer: ReturnType<typeof setTimeout> | null = null;
     let trackedTaskIds = initialTaskIds.slice();
-    let raceRecoveryAttempts = 0;
     const expectedKindForMedia = pendingMediaKind === "video" ? "workflow_video" : "workflow_image";
     setGenerating(true);
 
@@ -1195,7 +1147,6 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             return created >= updatedAt - 5_000 && created <= updatedAt + WORKFLOW_RACE_RECOVERY_WINDOW_MS;
           });
           if (candidates.length === 0) {
-            raceRecoveryAttempts += 1;
             // Keep recovering for the full race-recovery window. Providers can
             // acknowledge task ids late, so aborting after a fixed small poll
             // count creates false "lost request" failures.
@@ -1365,14 +1316,13 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     "nodrag nopan !absolute !left-4 !top-0 !z-[2] !box-border !h-8 !w-4 !min-h-8 !min-w-4 !max-h-8 !max-w-4 rounded-r-full !border-0 !bg-transparent opacity-0 !transform-none";
 
   /**
-   * Invisible wrapper for wiring hit targets — keeps React Flow snapping without
-   * drawing circular chrome (icons/overlays hidden via workflowPortBubbleIconClass).
+   * Invisible wrapper for wiring hit targets — keeps React Flow snapping; icons sit above as visible chrome.
    */
   const workflowPortBubbleShellClass =
     "workflow-port-create-cursor relative h-8 w-8 shrink-0 rounded-full border border-transparent bg-transparent shadow-none";
 
   const workflowPortBubbleIconClass =
-    "pointer-events-none absolute inset-0 z-[1] hidden cursor-crosshair items-center justify-center text-white/85";
+    "pointer-events-none absolute inset-0 z-[1] flex cursor-crosshair items-center justify-center text-white/85";
 
   /** Invisible full-bubble overlay for source ports on the right column (ids: `generated`, `videoFirst`, `videoLast`). */
   const workflowPortSourceBubbleHandleClass =
@@ -1409,6 +1359,13 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     }
     return raw;
   }, [data.kind, data.resolution, defaultRes]);
+
+  const videoExportDimensionLabel = useMemo(() => {
+    if (data.kind !== "video" && data.kind !== "motion") return null;
+    const d = workflowVideoExportPixelDimensions(resolution, aspectRatio);
+    return `${d.width} × ${d.height}`;
+  }, [aspectRatio, data.kind, resolution]);
+
   const quantity = Math.min(10, Math.max(1, data.quantity ?? 1));
 
   const models = useMemo(() => {
@@ -1622,7 +1579,6 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     batchPromptCount,
     data.kind,
     data.videoDurationSec,
-    data.videoPriority,
     model,
     quantity,
     resolution,
@@ -1685,6 +1641,12 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   const promptPreviewText = (data.lastRunPrompt ?? prompt).trim();
   const showPromptPreviewChip =
     hasPreviewMedia && promptPreviewText.length > 0 && !profile360ImageUi;
+  const expandPromptEditorOnFocus =
+    data.kind === "image" ||
+    data.kind === "video" ||
+    data.kind === "motion" ||
+    data.kind === "variation" ||
+    data.kind === "upscale";
   const openPromptEditor = useCallback(() => {
     const composedSeed = (() => {
       if (data.kind !== "image" && data.kind !== "video" && data.kind !== "motion") {
@@ -1697,8 +1659,82 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     })();
     const seed = (data.lastRunPrompt ?? composedSeed ?? prompt).trim() || prompt;
     setPromptEditorDraft(seed);
+    setPromptEditorWidthPx(
+      Math.min(
+        WORKFLOW_PROMPT_EDITOR_WIDTH_MAX,
+        Math.max(WORKFLOW_PROMPT_EDITOR_WIDTH_MIN, Math.round(cardWidthPx * 1.15)),
+      ),
+    );
     setPromptEditorOpen(true);
-  }, [data.kind, data.lastRunPrompt, getEdges, getNodes, id, prompt]);
+  }, [cardWidthPx, data.kind, data.lastRunPrompt, getEdges, getNodes, id, prompt]);
+
+  const closePromptEditor = useCallback(() => {
+    patch(id, { prompt: promptEditorDraft });
+    setPromptEditorOpen(false);
+  }, [id, patch, promptEditorDraft]);
+
+  const onPromptEditorResizePointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      e.stopPropagation();
+      promptEditorResizeRef.current = {
+        pointerId: e.pointerId,
+        startX: e.clientX,
+        startW: promptEditorWidthPx,
+      };
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
+      }
+    },
+    [promptEditorWidthPx],
+  );
+
+  useEffect(() => {
+    if (!promptEditorOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        closePromptEditor();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [closePromptEditor, promptEditorOpen]);
+
+  useEffect(() => {
+    if (!promptEditorOpen) return;
+    const raf = requestAnimationFrame(() => promptEditorTextareaRef.current?.focus());
+    return () => cancelAnimationFrame(raf);
+  }, [promptEditorOpen]);
+
+  useEffect(() => {
+    if (!promptEditorOpen) return;
+    const onMove = (e: PointerEvent) => {
+      const st = promptEditorResizeRef.current;
+      if (!st || e.pointerId !== st.pointerId) return;
+      const dx = e.clientX - st.startX;
+      const next = Math.min(
+        WORKFLOW_PROMPT_EDITOR_WIDTH_MAX,
+        Math.max(WORKFLOW_PROMPT_EDITOR_WIDTH_MIN, st.startW + dx),
+      );
+      setPromptEditorWidthPx(next);
+    };
+    const onEnd = (e: PointerEvent) => {
+      const st = promptEditorResizeRef.current;
+      if (!st || e.pointerId !== st.pointerId) return;
+      promptEditorResizeRef.current = null;
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onEnd);
+    window.addEventListener("pointercancel", onEnd);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onEnd);
+      window.removeEventListener("pointercancel", onEnd);
+    };
+  }, [promptEditorOpen]);
 
   useEffect(() => {
     if (data.kind !== "video") return;
@@ -2835,11 +2871,15 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
       emitRunFinished(ok);
     }
   }, [
+    cfg,
+    data.assistantVisionPreset,
+    data.imageWorkflowPreset,
     data.kind,
+    data.label,
+    data.motionBackgroundSource,
+    data.motionInputDurationSec,
     data.referenceMediaKind,
     data.referencePreviewUrl,
-    data.imageWorkflowPreset,
-    data.assistantVisionPreset,
     data.videoDurationSec,
     data.videoPriority,
     data.videoStartImageUrl,
@@ -2868,6 +2908,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     emitRunFinished,
     emitRunLog,
     setPendingWorkflowRun,
+    finalizeProgressMediaList,
   ]);
 
   const runThisNodeOnly = useCallback(() => {
@@ -3222,7 +3263,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 aria-label="Assistant text output"
                 title="Assistant text output"
               />
-              <span className="pointer-events-none absolute inset-0 z-[1] hidden flex items-center justify-center text-[11px] font-bold leading-none text-violet-200/90">
+              <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-[11px] font-bold leading-none text-violet-200/90">
                 <Type className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
               </span>
             </div>
@@ -3741,7 +3782,8 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               !modelMenuOpenRef.current &&
               !aspectMenuOpenRef.current &&
               !assistantOpenRef.current &&
-              !promptFocusedRef.current
+              !promptFocusedRef.current &&
+              !promptEditorOpenRef.current
             ) {
               setCardHovered(false);
             }
@@ -3770,30 +3812,37 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             <div className="absolute inset-0 bg-black" aria-hidden />
           )}
           {previewUrl ? (
-            previewMediaKind === "video" ||
-            (data.kind === "video" && previewMediaKind !== "image") ? (
-              <video
-                ref={previewVideoRef}
-                key={previewUrl}
-                src={previewUrl}
-                className="pointer-events-none absolute inset-0 z-[1] h-full w-full object-cover"
-                controls
-                autoPlay
-                muted
-                loop
-                playsInline
-                preload="metadata"
-                title="Generated video preview"
-              />
-            ) : (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                ref={previewImageRef}
-                src={previewUrl}
-                alt=""
-                className="pointer-events-none absolute inset-0 z-[1] h-full w-full object-cover"
-              />
-            )
+            <div
+              className={cn(
+                "absolute inset-0 z-[1] h-full w-full transition-[filter,opacity] duration-200 ease-out",
+                promptEditorOpen && "opacity-[0.38] blur-[2px]",
+              )}
+            >
+              {previewMediaKind === "video" ||
+              (data.kind === "video" && previewMediaKind !== "image") ? (
+                <video
+                  ref={previewVideoRef}
+                  key={previewUrl}
+                  src={previewUrl}
+                  className="pointer-events-none h-full w-full object-cover"
+                  controls
+                  autoPlay
+                  muted
+                  loop
+                  playsInline
+                  preload="metadata"
+                  title="Generated video preview"
+                />
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  ref={previewImageRef}
+                  src={previewUrl}
+                  alt=""
+                  className="pointer-events-none h-full w-full object-cover"
+                />
+              )}
+            </div>
           ) : null}
           {hasPreviewMedia && (data.kind === "image" || data.kind === "video") ? (
             <div className="nodrag nopan absolute left-2 top-2 z-[6] flex flex-col items-center gap-1 opacity-0 transition group-hover/card:opacity-100">
@@ -3934,7 +3983,9 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               generating && (data.kind === "image" || data.kind === "video") && "opacity-35",
             )}
           >
-            {frame.width} × {frame.height}
+            {data.kind === "video" || data.kind === "motion"
+              ? (videoExportDimensionLabel ?? `${frame.width} × ${frame.height}`)
+              : `${frame.width} × ${frame.height}`}
           </div>
 
           {showPromptPreviewChip ? (
@@ -4026,7 +4077,13 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                   placeholder={cfg.promptPlaceholder}
                   rows={data.kind === "video" ? 3 : 2}
                   onWheelCapture={keepWheelInsideScrollable}
-                  onFocus={() => setPromptFocused(true)}
+                  onFocus={(e) => {
+                    setPromptFocused(true);
+                    if (expandPromptEditorOnFocus) {
+                      openPromptEditor();
+                      requestAnimationFrame(() => e.currentTarget.blur());
+                    }
+                  }}
                   onBlur={() => setPromptFocused(false)}
                   className={cn(
                     "nodrag nopan nowheel w-full resize-none rounded-lg border border-white/10 bg-black/55 px-2 py-1 pr-7 text-[10px] leading-snug text-white/88 placeholder:text-white/26 outline-none focus:border-violet-500/40 focus:ring-1 focus:ring-violet-500/25",
@@ -4299,24 +4356,39 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
 
           {promptEditorOpen ? (
             <div
-              className="nodrag nopan absolute inset-0 z-[24] flex flex-col justify-end bg-black/35 backdrop-blur-md"
+              className="nodrag nopan absolute inset-0 z-[24] flex items-center justify-center p-2 sm:p-3"
               onPointerDown={(e) => e.stopPropagation()}
             >
-              <div className="rounded-t-xl border-t border-white/20 bg-[#111116]/88 p-3">
-                <div className="mb-2 flex items-center justify-between">
+              <button
+                type="button"
+                aria-label="Close prompt editor"
+                className="absolute inset-0 z-0 bg-black/50 backdrop-blur-sm"
+                onClick={closePromptEditor}
+              />
+              <div
+                className="relative z-[25] flex max-h-[min(78vh,92%)] flex-col rounded-xl border border-violet-400/40 bg-[#15151a]/96 p-3 shadow-[0_18px_48px_rgba(0,0,0,0.55)] backdrop-blur-md"
+                style={{ width: promptEditorWidthPx, maxWidth: "min(920px, calc(100vw - 24px))" }}
+                onPointerDown={(e) => e.stopPropagation()}
+              >
+                <div
+                  role="separator"
+                  aria-orientation="vertical"
+                  title="Drag to resize width"
+                  onPointerDown={onPromptEditorResizePointerDown}
+                  className="nodrag nopan absolute -right-1 bottom-2 top-2 z-[2] w-3 cursor-ew-resize rounded-full border border-white/10 bg-white/[0.06] hover:bg-white/[0.12]"
+                />
+                <div className="mb-2 flex items-center justify-between gap-2">
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-white/65">Edit prompt</p>
                   <button
                     type="button"
-                    onClick={() => {
-                      patch(id, { prompt: promptEditorDraft });
-                      setPromptEditorOpen(false);
-                    }}
+                    onClick={closePromptEditor}
                     className="rounded-md px-2 py-1 text-[11px] text-white/60 transition hover:bg-white/10 hover:text-white"
                   >
                     Done
                   </button>
                 </div>
                 <textarea
+                  ref={promptEditorTextareaRef}
                   value={promptEditorDraft}
                   onChange={(e) => setPromptEditorDraft(e.target.value)}
                   placeholder={cfg.promptPlaceholder}
@@ -4328,7 +4400,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                     "nodrag nopan nowheel w-full resize-y rounded-xl border border-white/15 bg-black/45 px-3 py-2 text-[13px] leading-relaxed text-white/92 placeholder:text-white/35 outline-none focus:border-violet-500/40 focus:ring-1 focus:ring-violet-500/25",
                     data.kind === "video"
                       ? "min-h-[220px] max-h-[52vh] overflow-y-scroll studio-params-scroll"
-                      : "min-h-[160px]",
+                      : "min-h-[160px] max-h-[52vh] overflow-y-scroll studio-params-scroll",
                   )}
                 />
               </div>
@@ -4474,7 +4546,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               aria-label="Legacy generated image output"
               title="Legacy output handle (same as generated image)."
             />
-            <span className="pointer-events-none absolute inset-0 z-[1] hidden flex items-center justify-center text-white/85">
+            <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/85">
               <ImageIcon className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
             </span>
           </div>
@@ -4491,7 +4563,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               aria-label="Generated video output"
               title="Drag to wire this generated video into a list or downstream video input."
             />
-            <span className="pointer-events-none absolute inset-0 z-[1] hidden flex items-center justify-center text-violet-200/90">
+            <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-violet-200/90">
               <Clapperboard className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
             </span>
           </div>
@@ -4508,7 +4580,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 void onExtractVideoFrame("first");
               }}
             />
-            <span className="pointer-events-none absolute inset-0 z-[1] hidden flex items-center justify-center text-white/85">
+            <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/85">
               {frameExtractBusy === "first" ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} aria-hidden />
               ) : (
@@ -4529,7 +4601,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 void onExtractVideoFrame("last");
               }}
             />
-            <span className="pointer-events-none absolute inset-0 z-[1] hidden flex items-center justify-center text-white/85">
+            <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/85">
               {frameExtractBusy === "last" ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} aria-hidden />
               ) : (

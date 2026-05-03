@@ -723,8 +723,15 @@ export function is1080pVideoQuality(quality: string | undefined): boolean {
 /**
  * Kling 3.0, provider Our price ($/s) × 2 → retail $/s → credits/s at $0.07/credit (same as Sora sheet).
  * Sheet: 1080p+audio $0.135/s → 4 cr/s · 1080p $0.09/s → 3 · 720p+audio $0.10/s → 3 · 720p $0.07/s → 2
+ * · 480p+audio: below 720p tier (PiAPI Seedance); ~$0.075/s our → 2 cr/s
  */
 export function kling30CreditsPerSecondFromSheet(quality: string | undefined, audio: boolean): number {
+  const q = (quality ?? "std").toLowerCase();
+  if (q === "480p" || q === "480") {
+    const ourPerSec = audio ? 0.075 : 0.052;
+    const retailPerSec = ourPerSec * 2;
+    return Math.max(1, Math.round(retailPerSec / 0.07));
+  }
   const is1080 = is1080pVideoQuality(quality);
   const ourPerSec = is1080
     ? audio
@@ -1097,11 +1104,22 @@ export type VideoCreditOptions = {
   audio?: boolean;
   /** Kling studio: `std` = 720p, `pro` = 1080p. Motion: `720p` / `1080p`. */
   quality?: string;
+  /** PiAPI Seedance 2 output resolution (billing); maps to Kling 3.0–style $/s tiers. */
+  videoResolution?: "480p" | "720p" | "1080p";
 };
 
 /**
  * Video billing: Kling uses duration × quality × audio; Sora uses tier table.
  */
+function seedance2QualityFromVideoResolution(
+  resolution: VideoCreditOptions["videoResolution"],
+): "480p" | "std" | "pro" {
+  if (resolution === "1080p") return "pro";
+  if (resolution === "720p") return "std";
+  if (resolution === "480p") return "480p";
+  return "pro";
+}
+
 export function calculateVideoCreditsForModel(opts: VideoCreditOptions): number {
   const d = Math.max(0, Number(opts.duration) || 0);
   const audio = Boolean(opts.audio);
@@ -1143,11 +1161,14 @@ export function calculateVideoCreditsForModel(opts: VideoCreditOptions): number 
     case "bytedance/seedance-2-preview":
     case "bytedance/seedance-2-preview-vip":
     case "bytedance/seedance-2":
-      return Math.max(1, calculateKling30VideoCredits(d, "pro", true));
+      return Math.max(1, calculateKling30VideoCredits(d, seedance2QualityFromVideoResolution(opts.videoResolution), true));
     case "bytedance/seedance-2-fast-preview":
     case "bytedance/seedance-2-fast-preview-vip":
     case "bytedance/seedance-2-fast":
-      return Math.max(1, Math.ceil(calculateKling30VideoCredits(d, "pro", true) * 0.82));
+      return Math.max(
+        1,
+        Math.ceil(calculateKling30VideoCredits(d, seedance2QualityFromVideoResolution(opts.videoResolution), true) * 0.82),
+      );
 
     default:
       // Veo, etc.: anchor tier until per-model tables exist

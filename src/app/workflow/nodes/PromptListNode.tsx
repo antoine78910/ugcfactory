@@ -408,7 +408,7 @@ export function PromptListNode({ id, data: rawData, selected }: NodeProps<Prompt
           {(!incomingInputKind || incomingInputKind === "text") ? (
             <div className={inputBubbleShellClass}>
               <Handle id="inText" type="target" position={Position.Left} className={inputBubbleHandleClass} />
-              <span className="pointer-events-none absolute inset-0 z-[1] hidden flex items-center justify-center text-white/85">
+              <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/85">
                 <Type className="h-3.5 w-3.5" aria-hidden />
               </span>
             </div>
@@ -416,7 +416,7 @@ export function PromptListNode({ id, data: rawData, selected }: NodeProps<Prompt
           {(!incomingInputKind || incomingInputKind === "image") ? (
             <div className={inputBubbleShellClass}>
               <Handle id="inImage" type="target" position={Position.Left} className={inputBubbleHandleClass} />
-              <span className="pointer-events-none absolute inset-0 z-[1] hidden flex items-center justify-center text-white/85">
+              <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/85">
                 <ImageIcon className="h-3.5 w-3.5" aria-hidden />
               </span>
             </div>
@@ -424,7 +424,7 @@ export function PromptListNode({ id, data: rawData, selected }: NodeProps<Prompt
           {(!incomingInputKind || incomingInputKind === "video") ? (
             <div className={inputBubbleShellClass}>
               <Handle id="inVideo" type="target" position={Position.Left} className={inputBubbleHandleClass} />
-              <span className="pointer-events-none absolute inset-0 z-[1] hidden flex items-center justify-center text-white/85">
+              <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/85">
                 <Clapperboard className="h-3.5 w-3.5" aria-hidden />
               </span>
             </div>
@@ -690,7 +690,7 @@ export function PromptListNode({ id, data: rawData, selected }: NodeProps<Prompt
           {(!activeWireKind || activeWireKind === "text") ? (
             <div className={outputBubbleShellClass}>
               <Handle id="outText" type="source" position={Position.Right} className={outputBubbleHandleClass} />
-              <span className="pointer-events-none absolute inset-0 z-[1] hidden flex items-center justify-center text-white/85">
+              <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/85">
                 <Type className="h-3.5 w-3.5" aria-hidden />
               </span>
             </div>
@@ -698,7 +698,7 @@ export function PromptListNode({ id, data: rawData, selected }: NodeProps<Prompt
           {(!activeWireKind || activeWireKind === "image") ? (
             <div className={outputBubbleShellClass}>
               <Handle id="outImage" type="source" position={Position.Right} className={outputBubbleHandleClass} />
-              <span className="pointer-events-none absolute inset-0 z-[1] hidden flex items-center justify-center text-white/85">
+              <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/85">
                 <ImageIcon className="h-3.5 w-3.5" aria-hidden />
               </span>
             </div>
@@ -706,7 +706,7 @@ export function PromptListNode({ id, data: rawData, selected }: NodeProps<Prompt
           {(!activeWireKind || activeWireKind === "video") ? (
             <div className={outputBubbleShellClass}>
               <Handle id="outVideo" type="source" position={Position.Right} className={outputBubbleHandleClass} />
-              <span className="pointer-events-none absolute inset-0 z-[1] hidden flex items-center justify-center text-white/85">
+              <span className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-white/85">
                 <Clapperboard className="h-3.5 w-3.5" aria-hidden />
               </span>
             </div>

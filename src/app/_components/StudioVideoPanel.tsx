@@ -69,11 +69,6 @@ import {
 } from "@/app/_components/CreditsPlanContext";
 import { mergeStudioHistoryWithServer } from "@/lib/mergeStudioHistoryWithLocal";
 import { isKieServableReferenceImageUrl } from "@/lib/kieSoraReferenceImage";
-import {
-  linkToAdProductPhotoPickerUrls,
-  normalizePipelineByAngle,
-  readUniverseFromExtracted,
-} from "@/lib/linkToAdUniverse";
 import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
 import { calculateVideoCredits } from "@/lib/linkToAd/generationCredits";
 import { calculateStudioVideoEditCredits } from "@/lib/pricing";
@@ -117,6 +112,12 @@ import {
   studioVideoSupportsReferenceElements,
   STUDIO_VEO_DURATION_HINT,
 } from "@/lib/studioVideoModelCapabilities";
+import {
+  buildLtaGroupsFromRunsListJson,
+  type ElementRefPickLtaGroup,
+  type ElementRefPickLtaMedia,
+  type LtaRunsListJson,
+} from "@/lib/ltaRunsRefGroups";
 
 const LS_STUDIO_VIDEO_HISTORY = "ugc_studio_video_history_v1";
 const LS_STUDIO_VIDEO_ELEMENTS_V1 = "ugc_studio_video_elements_v1";
@@ -137,8 +138,6 @@ const KLING_SHOT_DURATION_OPTIONS = Array.from(
 );
 /** Media library cache: longer TTL so Projects / uploads feel instant on reopen (Higgsfield-like). */
 const ELEMENT_PICKER_CACHE_TTL_MS = 3 * 60_000;
-/** Cap runs scanned for picker — keeps first paint fast. */
-const LTA_PICKER_RUNS_SLICE = 60;
 
 function promptHasUnsupportedElementMentions(prompt: string): boolean {
   // Seedance models have a distinct reference-tag syntax for uploaded media: @imageN/@videoN/@audioN.
@@ -170,13 +169,6 @@ type KlingElementDraft = {
 
 type ElementLibraryTab = "uploads" | "image_generations" | "video_generations" | "elements" | "lta_generated";
 type ElementRefPickUploadRow = { url: string; createdAt: number };
-type ElementRefPickLtaMedia = { url: string; kind: "image" | "video"; posterUrl?: string };
-type ElementRefPickLtaGroup = {
-  id: string;
-  createdAt: number;
-  generatedMedia: ElementRefPickLtaMedia[];
-  productMedia: ElementRefPickLtaMedia[];
-};
 
 type ElementRefPickState =
   | { open: false }
@@ -198,79 +190,6 @@ type ElementRefPickCache = {
   ltaGroups: ElementRefPickLtaGroup[];
   projectsModeByRunId: Record<string, "generated" | "product">;
 };
-
-type RunsListJson = { data?: { id?: string; created_at?: string; extracted?: unknown }[] };
-
-function buildLtaGroupsFromRunsListJson(runsJson: RunsListJson): {
-  ltaGroups: ElementRefPickLtaGroup[];
-  projectsModeByRunId: Record<string, "generated" | "product">;
-} {
-  const ltaGroups: ElementRefPickLtaGroup[] = [];
-  for (const row of (runsJson.data ?? []).slice(0, LTA_PICKER_RUNS_SLICE)) {
-    const snap = readUniverseFromExtracted(row.extracted);
-    if (!snap) continue;
-    const productMedia = linkToAdProductPhotoPickerUrls(snap)
-      .map((x) => x.trim())
-      .filter((x) => x.length > 0)
-      .slice(0, 3)
-      .map((url) => ({ url, kind: "image" as const }));
-    const generatedMap = new Map<string, ElementRefPickLtaMedia>();
-    const addGenerated = (
-      u: string | null | undefined,
-      kind: "image" | "video",
-      videoPosterUrl?: string | null,
-    ) => {
-      const t = String(u ?? "").trim();
-      if (!t) return;
-      const key = `${kind}:${t}`;
-      if (generatedMap.has(key)) return;
-      const poster = videoPosterUrl?.trim();
-      generatedMap.set(
-        key,
-        kind === "video" && poster ? { url: t, kind, posterUrl: poster } : { url: t, kind },
-      );
-    };
-    for (const u of snap.nanoBananaImageUrls ?? []) addGenerated(u, "image");
-    addGenerated(snap.nanoBananaImageUrl, "image");
-    const triple = normalizePipelineByAngle(snap);
-    for (const p of triple) {
-      for (const u of p.nanoBananaImageUrls ?? []) addGenerated(u, "image");
-      addGenerated(p.nanoBananaImageUrl, "image");
-      const slots = p.klingByReferenceIndex ?? [];
-      for (let si = 0; si < slots.length; si++) {
-        const slot = slots[si];
-        const frameUrl =
-          (Array.isArray(p.nanoBananaImageUrls) && p.nanoBananaImageUrls[si]?.trim()) ||
-          p.nanoBananaImageUrl?.trim() ||
-          undefined;
-        addGenerated(slot?.videoUrl, "video", frameUrl);
-        addGenerated(slot?.videoUrlPart2, "video", frameUrl);
-      }
-    }
-    const selIdx = snap.nanoBananaSelectedImageIndex ?? 0;
-    const klingPoster =
-      snap.nanoBananaImageUrls?.[selIdx]?.trim() ||
-      snap.nanoBananaImageUrl?.trim() ||
-      snap.nanoBananaImageUrls?.[0]?.trim() ||
-      undefined;
-    addGenerated(snap.klingVideoUrl, "video", klingPoster);
-    const generatedMedia = [...generatedMap.values()].slice(0, 6);
-    if (productMedia.length === 0 && generatedMedia.length === 0) continue;
-    const createdAt = row.created_at ? new Date(row.created_at).getTime() : 0;
-    ltaGroups.push({
-      id: row.id || `lta-${createdAt}-${generatedMedia[0]?.url ?? productMedia[0]?.url ?? "run"}`,
-      createdAt: Number.isFinite(createdAt) ? createdAt : 0,
-      generatedMedia,
-      productMedia,
-    });
-  }
-  ltaGroups.sort((a, b) => b.createdAt - a.createdAt);
-  const projectsModeByRunId: Record<string, "generated" | "product"> = {};
-  for (const g of ltaGroups) {
-    projectsModeByRunId[g.id] = g.generatedMedia.length > 0 ? "generated" : "product";
-  }
-  return { ltaGroups, projectsModeByRunId };
-}
 
 type SeedanceTrimState = {
   file: File;
@@ -2867,12 +2786,12 @@ export default function StudioVideoPanel({
         const runsFetch = fetch("/api/runs/list", { cache: "no-store" });
         const studioFetch = fetch(studioUrl, { cache: "no-store" });
 
-        const runsJsonPromise: Promise<RunsListJson> = runsFetch.then(async (res) => {
+        const runsJsonPromise: Promise<LtaRunsListJson> = runsFetch.then(async (res) => {
           if (!res.ok) {
             const t = await res.text().catch(() => "");
             throw new Error(t || `HTTP ${res.status}`);
           }
-          return (await res.json()) as RunsListJson;
+          return (await res.json()) as LtaRunsListJson;
         });
 
         void runsJsonPromise.then((runsJson) => {

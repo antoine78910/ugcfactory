@@ -221,6 +221,8 @@ export async function piapiCreateSeedanceTask(opts: {
   preferOmniReference?: boolean;
   duration: number;
   aspectRatio?: PiapiSeedanceAspectRatio;
+  /** Output size tier; PiAPI defaults to 480p when omitted. */
+  resolution?: "480p" | "720p" | "1080p";
   overrideApiKey?: string;
 }): Promise<string> {
   const apiKey = opts.overrideApiKey?.trim() || getPiApiKey();
@@ -259,6 +261,7 @@ export async function piapiCreateSeedanceTask(opts: {
     prompt: finalPrompt,
     duration,
     aspect_ratio: opts.aspectRatio ?? "9:16",
+    resolution: opts.resolution ?? "720p",
   };
 
   if (pro) {
