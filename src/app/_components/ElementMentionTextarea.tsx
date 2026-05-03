@@ -343,7 +343,13 @@ export default function ElementMentionTextarea({
   const renderedOverlay = value ? buildMentionOverlayNodes(value, elements, formatMentionLabel) : null;
 
   return (
-    <div className="relative isolate">
+    <div
+      className={cn(
+        "relative",
+        /** Lift above sibling panels (e.g. Studio Parameters model row) while the menu overflows downward. */
+        showMenu && "z-[300]",
+      )}
+    >
       {/**
        * Single grid cell stacks textarea + highlight so they share the same content box (padding
        * from `className` applies once). Absolute overlay + inset-* breaks as soon as the parent

@@ -794,7 +794,7 @@ function FitViewOnPageChange({ activePageId }: { activePageId: string }) {
 
 type ChromeProps = {
   tool: Tool;
-  setTool: (t: Tool) => void;
+  setTool: React.Dispatch<React.SetStateAction<Tool>>;
   addOpen: boolean;
   setAddOpen: (v: boolean | ((b: boolean) => boolean)) => void;
   setNodes: React.Dispatch<React.SetStateAction<WorkflowCanvasNode[]>>;
