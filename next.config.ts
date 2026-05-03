@@ -3,9 +3,30 @@ import path from "path";
 import { withSentryConfig } from "@sentry/nextjs";
 import { securityHeadersList } from "./src/lib/securityHeaders";
 
+/** Studio wizard lives under `src/app/app/[...sections]` → URLs are `/app/<slug>/…`. Production often rewrites bare `/link-to-ad` etc.; mirror that locally so dev matches deploy. */
+const STUDIO_ROOT_REWRITE_SLUGS = [
+  "link-to-ad",
+  "ads-studio",
+  "avatar",
+  "translate",
+  "voice",
+  "motion-control",
+  "image",
+  "video",
+  "upscale",
+  "my-projects",
+] as const;
+
 const nextConfig: NextConfig = {
   turbopack: {
     root: path.join(__dirname),
+  },
+  async rewrites() {
+    const rules = STUDIO_ROOT_REWRITE_SLUGS.flatMap((slug) => [
+      { source: `/${slug}`, destination: `/app/${slug}` },
+      { source: `/${slug}/:path*`, destination: `/app/${slug}/:path*` },
+    ]);
+    return { beforeFiles: rules };
   },
   /**
    * Tree-shake icon / animation libs we touch from many client components so the

@@ -109,7 +109,6 @@ const CREATE_NAV: CreateNavEntry[] = [
     href: "/ads-studio",
     label: "Ads Studio",
     icon: Sparkles,
-    soon: true,
   },
   {
     kind: "custom-link",
@@ -224,11 +223,11 @@ function StudioShellInner({
     useState<StudioNavSection>("link_to_ad");
   const supabase = useSupabaseBrowserClient();
   /**
-   * Workflow canvas needs width: collapse the studio rail when opening Workflow or entering it from
+   * Workflow / Ads Studio need width: collapse the studio rail when opening them or entering from
    * another tool. Collapse only on first paint / when entering from another tool — not when switching
    * workflow projects so a user can expand the rail and keep it.
    */
-  const wasOnWorkflowRef = useRef<boolean | null>(null);
+  const wasOnFullWidthStudioRef = useRef<boolean | null>(null);
 
   useEffect(() => {
     try {
@@ -241,15 +240,16 @@ function StudioShellInner({
   useEffect(() => {
     const stripped = pathnameWithoutLegacyAppPrefix(pathname);
     const first = stripped.split("/").filter(Boolean)[0] ?? "";
-    const onWorkflow = first === "workflow";
-    if (!onWorkflow) {
-      wasOnWorkflowRef.current = false;
+    const onFullWidth =
+      first === "workflow" || first === "ads-studio";
+    if (!onFullWidth) {
+      wasOnFullWidthStudioRef.current = false;
       return;
     }
-    if (wasOnWorkflowRef.current === null || wasOnWorkflowRef.current === false) {
+    if (wasOnFullWidthStudioRef.current === null || wasOnFullWidthStudioRef.current === false) {
       setNavCollapsedPref(true);
     }
-    wasOnWorkflowRef.current = true;
+    wasOnFullWidthStudioRef.current = true;
   }, [pathname]);
 
   useEffect(() => {
@@ -301,8 +301,8 @@ function StudioShellInner({
     if (!isStudioShell) return;
     const stripped = pathname.replace(/^\/app\/?/, "");
     const firstSeg = stripped.split("/").filter(Boolean)[0] ?? "";
-    // Workflow uses its own nav row; don’t reset remembered CREATE tab to Link to Ad.
-    if (firstSeg === "workflow") return;
+    // Workflow / Ads Studio use their own layout; don’t reset remembered CREATE tab to Link to Ad.
+    if (firstSeg === "workflow" || firstSeg === "ads-studio") return;
     const s = sectionFromPathname(pathname);
     setPersistedStudioSection(s);
     try {
@@ -319,9 +319,15 @@ function StudioShellInner({
     return persistedStudioSection;
   }, [controlled, studioSection, isStudioShell, pathname, persistedStudioSection]);
 
-  const onWorkflowRoute = useMemo(() => {
+  /** CREATE rail highlights are suppressed on full-width tool routes (they use separate chrome). */
+  const onFullWidthStudioRoute = useMemo(() => {
     const p = pathname.replace(/^\/app(?=\/|$)/, "") || pathname;
-    return p === "/workflow" || p.startsWith("/workflow/");
+    return (
+      p === "/workflow" ||
+      p.startsWith("/workflow/") ||
+      p === "/ads-studio" ||
+      p.startsWith("/ads-studio/")
+    );
   }, [pathname]);
 
   useEffect(() => {
@@ -577,7 +583,7 @@ function StudioShellInner({
                     );
                   }
                   const { id, label } = entry;
-                  const active = !onWorkflowRoute && activeSection === id;
+                  const active = !onFullWidthStudioRoute && activeSection === id;
                   if (controlled) {
                     return (
                       <button
@@ -628,7 +634,7 @@ function StudioShellInner({
                   <button
                     type="button"
                     className={cn(
-                      navButtonClass(!onWorkflowRoute && activeSection === PROJECTS_NAV.id),
+                      navButtonClass(!onFullWidthStudioRoute && activeSection === PROJECTS_NAV.id),
                       navCollapsed && "px-2.5 py-3.5",
                     )}
                     title={PROJECTS_NAV.label}
@@ -636,7 +642,7 @@ function StudioShellInner({
                   >
                     <span className={cn("flex min-w-0 items-center gap-2.5", navCollapsed && "justify-center")}>
                       <ProjectsNavIcon
-                        className={`h-5 w-5 shrink-0 ${navRowIconClass(!onWorkflowRoute && activeSection === PROJECTS_NAV.id)}`}
+                        className={`h-5 w-5 shrink-0 ${navRowIconClass(!onFullWidthStudioRoute && activeSection === PROJECTS_NAV.id)}`}
                         aria-hidden
                       />
                       <span className={cn("min-w-0 truncate", navCollapsed && "sr-only")}>
@@ -648,14 +654,14 @@ function StudioShellInner({
                   <Link
                     href={sectionHref(PROJECTS_NAV.id, studioProjectId ?? null)}
                     className={cn(
-                      navButtonClass(!onWorkflowRoute && activeSection === PROJECTS_NAV.id),
+                      navButtonClass(!onFullWidthStudioRoute && activeSection === PROJECTS_NAV.id),
                       navCollapsed && "px-2.5 py-3.5",
                     )}
                     title={PROJECTS_NAV.label}
                   >
                     <span className={cn("flex min-w-0 items-center gap-2.5", navCollapsed && "justify-center")}>
                       <ProjectsNavIcon
-                        className={`h-5 w-5 shrink-0 ${navRowIconClass(!onWorkflowRoute && activeSection === PROJECTS_NAV.id)}`}
+                        className={`h-5 w-5 shrink-0 ${navRowIconClass(!onFullWidthStudioRoute && activeSection === PROJECTS_NAV.id)}`}
                         aria-hidden
                       />
                       <span className={cn("min-w-0 truncate", navCollapsed && "sr-only")}>

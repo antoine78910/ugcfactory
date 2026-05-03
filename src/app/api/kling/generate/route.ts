@@ -70,7 +70,7 @@ type Body = {
   /**
    * Kling 3.0: `@name` in prompts + `kling_elements` in the Market payload.
    * Seedance: same shape; URLs are flattened (start → element refs → end), then split into image / video / audio lists for the provider.
-   * Prompt uses `@imageN` / `@videoN` / `@audioN` (tags may be auto-prefixed). Max 12 refs (Pro) / 9 (Preview) total; Preview elements are images only.
+   * Prompt uses `@imageN` / `@videoN` / `@audioN` (tags may be auto-prefixed). Max 12 refs (Pro) / 9 (Preview) image URLs; Preview elements are images only.
    */
   klingElements?: KlingElementInput[];
   /**

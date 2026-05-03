@@ -99,6 +99,22 @@ export function studioVideoDurationRangeLabel(pickerId: string): string {
   return lo === hi ? `${lo}s` : `${lo}–${hi}s`;
 }
 
+/**
+ * Create-tab aspect ratio dropdown options aligned with PiAPI Seedance OpenAPI.
+ * - Preview / Fast Preview: `16:9`, `9:16`, `4:3`, `3:4` only.
+ * - Seedance 2 / Fast (Pro): full set incl. `21:9`, `1:1`, `auto` ({@link https://piapi.ai/docs/seedance-api/seedance-2}).
+ * Returns `null` → caller keeps legacy 9:16 / 16:9 / 1:1 for other models.
+ */
+export function studioVideoCreateAspectRatioOptions(pickerId: string): readonly string[] | null {
+  if (pickerId === "bytedance/seedance-2-preview" || pickerId === "bytedance/seedance-2-fast-preview") {
+    return ["16:9", "9:16", "4:3", "3:4"];
+  }
+  if (pickerId === "bytedance/seedance-2" || pickerId === "bytedance/seedance-2-fast") {
+    return ["21:9", "16:9", "4:3", "1:1", "3:4", "9:16", "auto"];
+  }
+  return null;
+}
+
 export function studioVideoSupportsQualityPicker(pickerId: string): boolean {
   return (
     pickerId === "kling-3.0/video" ||

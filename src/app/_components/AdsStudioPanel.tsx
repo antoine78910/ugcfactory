@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, KeyboardEvent } from "react";
-import { Coins, LayoutList, Loader2, Pencil, Plus, Smartphone, Package2, X } from "lucide-react";
+import { LayoutList, Loader2, Pencil, Plus, Smartphone, Package2, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -567,6 +567,10 @@ export default function AdsStudioPanel() {
     () => activeJobs.filter((j) => j.phase === "submitting" || j.phase === "rendering").length,
     [activeJobs],
   );
+  const hasSubmittingJob = useMemo(
+    () => activeJobs.some((j) => j.phase === "submitting"),
+    [activeJobs],
+  );
 
   const selectedHistoryOrJob = useMemo(() => {
     if (!selectedSidebarKey) return null;
@@ -675,21 +679,6 @@ export default function AdsStudioPanel() {
         const productUrl = snapAppRef;
         const avUrl = snapAvatar;
 
-        let startFrameUrl = "";
-        const klingElements: { name: string; description: string; element_input_urls: string[] }[] = [];
-        if (productUrl && avUrl) {
-          startFrameUrl = productUrl;
-          klingElements.push({
-            name: "avatar",
-            description: "Uploaded avatar or on-camera talent reference",
-            element_input_urls: [avUrl],
-          });
-        } else if (productUrl) {
-          startFrameUrl = productUrl;
-        } else if (avUrl) {
-          startFrameUrl = avUrl;
-        }
-
         let videoPrompt = `${enrichedPrompt}\n\nMake this a high-converting short ad clip.`;
         if (productUrl && avUrl) {
           videoPrompt += `\n\nSeedance references: @image1 = ${snapAssetType === "app" ? "app / UI" : "product"} reference (start frame); @image2 = avatar reference. You may mention @image1 and @image2 in the scene description.`;
@@ -710,8 +699,18 @@ export default function AdsStudioPanel() {
           personalApiKey: personalApiKey ?? undefined,
           piapiApiKey: piapiApiKey ?? undefined,
         };
-        if (startFrameUrl) videoPayload.imageUrl = startFrameUrl;
-        if (klingElements.length > 0) videoPayload.klingElements = klingElements;
+        // Two references: use omni image list only (same as Studio → Video). Avoid imageUrl + klingElements,
+        // which forced element/omni paths and extra provider-side reference handling per ref.
+        if (productUrl && avUrl) {
+          videoPayload.seedanceOmniMedia = [
+            { type: "image", url: productUrl },
+            { type: "image", url: avUrl },
+          ];
+        } else if (productUrl) {
+          videoPayload.imageUrl = productUrl;
+        } else if (avUrl) {
+          videoPayload.imageUrl = avUrl;
+        }
 
         const videoRes = await fetch("/api/kling/generate", {
           method: "POST",
@@ -729,7 +728,7 @@ export default function AdsStudioPanel() {
         );
 
         const vUrl = await pollVideo(videoJson.taskId, personalApiKey ?? undefined, piapiApiKey ?? undefined);
-        const previewStillUrl = startFrameUrl || undefined;
+        const previewStillUrl = productUrl || avUrl || undefined;
         const historyId = crypto.randomUUID();
         const item: AdsStudioHistoryItem = {
           id: historyId,
@@ -770,13 +769,6 @@ export default function AdsStudioPanel() {
       setAssetType("product");
       setAppRefUrl(productResolved);
       setAvatarUrl(avatarResolved);
-      void runGenerate(nextPrompt, {
-        assetType: "product",
-        appRefUrl: productResolved,
-        avatarUrl: avatarResolved,
-      });
-    } else {
-      void runGenerate(nextPrompt);
     }
   }
 
@@ -937,15 +929,15 @@ export default function AdsStudioPanel() {
               </button>
             </div>
           <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-stretch gap-3">
-            <div className="grid min-h-[min(62vh,560px)] w-full min-w-0 grid-rows-[minmax(0,3fr)_auto] gap-2">
-              <div className="flex min-h-0 items-stretch gap-2 overflow-hidden">
+            <div className="grid w-full min-w-0 grid-rows-[auto_auto] gap-2">
+              <div className="flex items-start gap-2 overflow-hidden">
                 <button
                   type="button"
-                  className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-white/[0.04] text-white/85 shadow-[0_2px_1.5px_-0.5px_rgba(0,0,0,0.1)]"
+                  className="mt-1 flex size-7 shrink-0 items-center justify-center rounded-lg bg-white/[0.04] text-white/85 shadow-[0_2px_1.5px_-0.5px_rgba(0,0,0,0.1)]"
                 >
                   <Plus className="size-3.5" />
                 </button>
-                <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+                <div className="relative flex min-w-0 flex-1 flex-col">
                   <AdsStudioMentionMenu
                     open={mentionOpen}
                     entries={filteredMentionEntries}
@@ -961,7 +953,8 @@ export default function AdsStudioPanel() {
                     onChange={handlePromptChange}
                     onKeyDown={handlePromptKeyDown}
                     placeholder="Describe the ad. Type @ to insert Product, Avatar, or library avatars (@image1 / @image2 match uploaded references)."
-                    className="min-h-0 w-full flex-1 resize-none overflow-y-auto rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm leading-relaxed text-white caret-violet-300 placeholder:text-white/35 focus-visible:ring-0"
+                    rows={5}
+                    className="h-36 w-full resize-none overflow-y-auto [field-sizing:fixed] rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm leading-relaxed text-white caret-violet-300 placeholder:text-white/35 focus-visible:ring-0"
                   />
                 </div>
               </div>
@@ -1133,29 +1126,21 @@ export default function AdsStudioPanel() {
               <Button
                 type="button"
                 onClick={() => void runGenerate()}
-                className="group relative z-10 flex h-[88px] w-[152px] shrink-0 items-center justify-center overflow-hidden rounded-xl border border-violet-400/45 bg-violet-500 px-6 py-[30px] font-grotesk text-xs font-bold uppercase text-white shadow-[0_6px_0_0_rgba(76,29,149,0.95),0_0_28px_rgba(139,92,246,0.22)] transition-[transform,box-shadow,opacity] duration-200 enabled:hover:bg-violet-400 enabled:hover:shadow-[0_8px_0_0_rgba(76,29,149,0.95),0_0_36px_rgba(167,139,250,0.35)] enabled:active:translate-y-1 enabled:active:shadow-[0_2px_0_0_rgba(76,29,149,0.95)]"
+                className="flex h-[88px] w-[152px] shrink-0 items-center justify-center rounded-xl border border-violet-300/40 bg-violet-500 px-3 text-base font-semibold text-white shadow-[0_6px_0_0_rgba(76,29,149,0.85)] transition-all hover:-translate-y-px hover:bg-violet-400 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.85)] active:translate-y-1 active:shadow-none"
               >
-                <div className="pointer-events-none absolute inset-0 rounded-xl bg-gradient-to-b from-white/20 via-transparent to-violet-950/25" />
-                <div className="pointer-events-none absolute inset-0 rounded-xl bg-[radial-gradient(85%_70%_at_50%_100%,rgba(167,139,250,0.35)_0%,transparent_60%)]" />
-                <div className="relative z-10 flex flex-col items-center gap-1 text-white [text-shadow:0_1px_12px_rgba(76,29,149,0.55)]">
-                  <span className="relative inline-flex items-center justify-center">
-                    GENERATE
-                    {runningJobCount > 0 ? (
-                      <span className="absolute -right-3 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-300 px-1 text-[9px] font-bold leading-none text-violet-950 ring-1 ring-white/30">
-                        {runningJobCount > 9 ? "9+" : runningJobCount}
-                      </span>
-                    ) : null}
-                  </span>
-                  <span
-                    className="inline-flex items-center gap-1 rounded-full bg-black/25 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-white/95 ring-1 ring-white/20"
-                    title="Credits for this generation"
-                    aria-label={`${generationCredits} credits`}
-                  >
-                    <Coins className="size-3 shrink-0 text-violet-100 opacity-95" strokeWidth={2.2} aria-hidden />
-                    <span aria-hidden>+</span>
-                    <span aria-hidden>{generationCredits}</span>
-                  </span>
-                </div>
+                <span className="inline-flex flex-wrap items-center justify-center gap-2">
+                  Generate
+                  {hasSubmittingJob ? (
+                    <Loader2 className="h-5 w-5 shrink-0 animate-spin" aria-hidden />
+                  ) : (
+                    <Sparkles className="h-5 w-5 shrink-0" aria-hidden />
+                  )}
+                  {generationCredits > 0 ? (
+                    <span className="rounded-md bg-white/15 px-2 py-0.5 text-base tabular-nums" title="Credits for this generation">
+                      {generationCredits}
+                    </span>
+                  ) : null}
+                </span>
               </Button>
             </div>
           </div>

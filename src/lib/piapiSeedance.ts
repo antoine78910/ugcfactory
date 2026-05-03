@@ -21,10 +21,10 @@ export const SEEDANCE_PRO_MAX_AUDIO_URLS = 1;
 export const SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS =
   SEEDANCE_PRO_MAX_IMAGE_URLS + SEEDANCE_PRO_MAX_VIDEO_URLS + SEEDANCE_PRO_MAX_AUDIO_URLS;
 /** Seedance Preview, max reference images. @see https://piapi.ai/docs/seedance-api/seedance-2-preview */
-export const SEEDANCE_PREVIEW_MAX_IMAGE_URLS = 12;
+export const SEEDANCE_PREVIEW_MAX_IMAGE_URLS = 9;
 
-/** Studio compact upload UI for Preview / Fast Preview (ordered `image_urls`, 1–4). */
-export const SEEDANCE_COMPACT_PREVIEW_MAX_IMAGE_URLS = 4;
+/** Studio compact upload UI for Preview / Fast Preview (ordered `image_urls`). Matches Preview API max. */
+export const SEEDANCE_COMPACT_PREVIEW_MAX_IMAGE_URLS = SEEDANCE_PREVIEW_MAX_IMAGE_URLS;
 
 /**
  * Exponential backoff with jitter. PiAPI 502/503 storms last 1–4s; the previous flat

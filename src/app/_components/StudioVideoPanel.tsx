@@ -99,6 +99,7 @@ import {
   SEEDANCE_PRO_OMNI_MAX_MEDIA_ITEMS,
 } from "@/lib/piapiSeedance";
 import {
+  studioVideoCreateAspectRatioOptions,
   studioVideoDurationRangeLabel,
   studioVideoDurationSecOptions,
   studioVideoIsSeedance2ProPickerId,
@@ -472,7 +473,7 @@ const VIDEO_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
     subtitle: "Early access, longer wait",
     icon: "seedance",
     newBadge: true,
-    resolution: "9:16 / 16:9 / 1:1",
+    resolution: "480p (std); 720p / 1080p (VIP)",
     durationRange: studioVideoDurationRangeLabel("bytedance/seedance-2-preview"),
     searchText: "seedance preview provider bytedance",
   },
@@ -481,7 +482,7 @@ const VIDEO_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
     label: "Seedance 2 Fast Preview",
     subtitle: "Fast, lower cost",
     icon: "seedance",
-    resolution: "9:16 / 16:9 / 1:1",
+    resolution: "480p (std); 720p / 1080p (VIP)",
     durationRange: studioVideoDurationRangeLabel("bytedance/seedance-2-fast-preview"),
     searchText: "seedance fast preview provider",
   },
@@ -490,7 +491,7 @@ const VIDEO_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
     label: "Seedance 2",
     subtitle: "Pro, higher quality",
     icon: "seedance",
-    resolution: "9:16 / 16:9 / 1:1",
+    resolution: "480p / 720p / 1080p · 21:9–auto",
     durationRange: studioVideoDurationRangeLabel("bytedance/seedance-2"),
     searchText: "seedance 2 pro provider",
   },
@@ -499,7 +500,7 @@ const VIDEO_MODEL_PICKER_ITEMS: StudioModelPickerItem[] = [
     label: "Seedance 2 Fast",
     subtitle: "Fast, lower cost",
     icon: "seedance",
-    resolution: "9:16 / 16:9 / 1:1",
+    resolution: "480p / 720p / 1080p · 21:9–auto",
     durationRange: studioVideoDurationRangeLabel("bytedance/seedance-2-fast"),
     searchText: "seedance 2 fast provider",
   },
@@ -1356,6 +1357,17 @@ export default function StudioVideoPanel({
     modelId === "kling-2.6/video" ||
     studioVideoIsSeedance2ProPickerId(modelId);
   const durationChoices = studioVideoDurationSecOptions(modelId);
+
+  const createAspectRatioChoices = useMemo(
+    () => studioVideoCreateAspectRatioOptions(modelId) ?? ["9:16", "16:9", "1:1"],
+    [modelId],
+  );
+
+  useEffect(() => {
+    setAspect((prev) =>
+      createAspectRatioChoices.includes(prev) ? prev : createAspectRatioChoices[0]!,
+    );
+  }, [modelId, createAspectRatioChoices]);
 
   const klingCustomMulti = modelId === "kling-3.0/video" && multiShot;
   const klingMultiTotalSec = useMemo(
@@ -4792,15 +4804,11 @@ export default function StudioVideoPanel({
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent position="popper" className={studioSelectContentClass}>
-                          <SelectItem value="9:16" className={studioSelectItemClass}>
-                            9:16
-                          </SelectItem>
-                          <SelectItem value="16:9" className={studioSelectItemClass}>
-                            16:9
-                          </SelectItem>
-                          <SelectItem value="1:1" className={studioSelectItemClass}>
-                            1:1
-                          </SelectItem>
+                          {createAspectRatioChoices.map((ar) => (
+                            <SelectItem key={ar} value={ar} className={studioSelectItemClass}>
+                              {ar === "auto" ? "Auto" : ar}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
