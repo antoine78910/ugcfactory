@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, Pencil, Plus, Smartphone, Package2, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ChangeEvent, KeyboardEvent } from "react";
+import { Coins, LayoutList, Loader2, Pencil, Plus, Smartphone, Package2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -13,7 +14,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { studioSelectContentClass, studioSelectItemClass } from "@/app/_components/StudioModelPicker";
-import type { NanoBananaProAspectRatio } from "@/lib/nanobanana";
 import type { PiapiSeedanceAspectRatio } from "@/lib/piapiSeedance";
 import { useCreditsPlan, getPersonalApiKey, getPersonalPiapiApiKey } from "@/app/_components/CreditsPlanContext";
 import { uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
@@ -21,6 +21,12 @@ import { STUDIO_IMAGE_FILE_ACCEPT } from "@/lib/studioUploadValidation";
 import { cn } from "@/lib/utils";
 import { calculateVideoCreditsForModel } from "@/lib/pricing";
 import { AdsStudioRefSourceDialog } from "@/app/_components/AdsStudioRefSourceDialog";
+import {
+  AdsStudioMentionMenu,
+  filterAdsStudioMentionEntries,
+  type AdsStudioMentionEntry,
+} from "@/app/_components/AdsStudioMentionMenu";
+import { loadAvatarUrls } from "@/lib/avatarLibrary";
 
 /** Ads Studio: PiAPI Seedance 2 (non–fast) only. */
 const ADS_STUDIO_SEEDANCE_MODEL = "bytedance/seedance-2" as const;
@@ -47,11 +53,6 @@ type AdsStudioOutputAspect = (typeof ADS_STUDIO_SEEDANCE_ASPECTS)[number];
 const ADS_STUDIO_SEEDANCE_RESOLUTIONS = ["480p", "720p", "1080p"] as const;
 type AdsStudioVideoResolution = (typeof ADS_STUDIO_SEEDANCE_RESOLUTIONS)[number];
 
-function adsStudioAspectForNanoBanana(aspect: AdsStudioOutputAspect): NanoBananaProAspectRatio {
-  if (aspect === "auto") return "auto";
-  return aspect;
-}
-
 type AdsStudioHistoryItem = {
   id: string;
   createdAt: number;
@@ -59,6 +60,17 @@ type AdsStudioHistoryItem = {
   prompt: string;
   imageUrl?: string;
   videoUrl?: string;
+};
+
+type AdsStudioJobPhase = "submitting" | "rendering" | "failed";
+
+type AdsStudioActiveJob = {
+  id: string;
+  createdAt: number;
+  phase: AdsStudioJobPhase;
+  promptSnippet: string;
+  thumbUrl?: string;
+  error?: string;
 };
 
 const LS_ADS_STUDIO_HISTORY = "ugc_ads_studio_history_v1";
@@ -300,42 +312,6 @@ function promptForTemplateLabel(label: string): string {
   return `${label} style, short high-converting vertical ad.`;
 }
 
-async function pollNanoTask(taskId: string, personalApiKey?: string): Promise<string[]> {
-  const max = 90;
-  const keyParam = personalApiKey ? `&personalApiKey=${encodeURIComponent(personalApiKey)}` : "";
-  for (let i = 0; i < max; i++) {
-    const res = await fetch(`/api/nanobanana/task?taskId=${encodeURIComponent(taskId)}${keyParam}`, { cache: "no-store" });
-    const json = (await res.json()) as {
-      data?: { successFlag?: number; response?: Record<string, unknown>; errorMessage?: string };
-      error?: string;
-    };
-    if (!res.ok || !json.data) throw new Error(json.error || "Image poll failed");
-    const s = json.data.successFlag ?? 0;
-    if (s === 0) {
-      await new Promise((r) => setTimeout(r, 1800));
-      continue;
-    }
-    if (s === 1) {
-      const resp = json.data.response ?? {};
-      const candidates: unknown[] = [
-        (resp as { resultImageUrl?: unknown }).resultImageUrl,
-        (resp as { resultUrls?: unknown }).resultUrls,
-        (resp as { resultUrl?: unknown }).resultUrl,
-        (resp as { result_image_url?: unknown }).result_image_url,
-      ];
-      const urls = candidates.flatMap((v) => {
-        if (Array.isArray(v)) return v.filter((x): x is string => typeof x === "string");
-        if (typeof v === "string") return [v];
-        return [];
-      });
-      if (!urls.length) throw new Error("No image URL in result.");
-      return urls;
-    }
-    throw new Error(json.data.errorMessage || "Image generation failed.");
-  }
-  throw new Error("Timeout waiting for image.");
-}
-
 async function pollVideo(taskId: string, personalApiKey?: string, piapiApiKey?: string): Promise<string> {
   const max = 120;
   const keyParam = `${personalApiKey ? `&personalApiKey=${encodeURIComponent(personalApiKey)}` : ""}${piapiApiKey ? `&piapiApiKey=${encodeURIComponent(piapiApiKey)}` : ""}`;
@@ -348,7 +324,7 @@ async function pollVideo(taskId: string, personalApiKey?: string, piapiApiKey?: 
     if (!res.ok || !json.data) throw new Error(json.error || "Video poll failed");
     const st = json.data.status ?? "IN_PROGRESS";
     if (st === "IN_PROGRESS") {
-      await new Promise((r) => setTimeout(r, 2000));
+      await new Promise((r) => setTimeout(r, 1500));
       continue;
     }
     if (st === "SUCCESS") {
@@ -370,15 +346,21 @@ export default function AdsStudioPanel() {
   const [prompt, setPrompt] = useState("");
   const [appRefUrl, setAppRefUrl] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [activeJobs, setActiveJobs] = useState<AdsStudioActiveJob[]>([]);
+  const [selectedSidebarKey, setSelectedSidebarKey] = useState<string | null>(null);
   const [history, setHistory] = useState<AdsStudioHistoryItem[]>([]);
   const [templateVideos, setTemplateVideos] = useState<TemplateVideoItem[]>([]);
   const [uploadingRefSlot, setUploadingRefSlot] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [refSourceDialogOpen, setRefSourceDialogOpen] = useState(false);
   const [refSourceDialogMode, setRefSourceDialogMode] = useState<"product" | "avatar">("product");
+  const [avatarLibraryUrls, setAvatarLibraryUrls] = useState<string[]>([]);
+  const [avatarLibLoading, setAvatarLibLoading] = useState(false);
+  const [mentionOpen, setMentionOpen] = useState(false);
+  const [mentionFilter, setMentionFilter] = useState("");
+  const [mentionHighlight, setMentionHighlight] = useState(0);
+  const mentionStartRef = useRef(0);
+  const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
   const appInputRef = useRef<HTMLInputElement>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
@@ -425,8 +407,166 @@ export default function AdsStudioPanel() {
     return out.length ? out : undefined;
   }, [appRefUrl, avatarUrl]);
 
-  /** Do not tie disabled state to uploads — a stuck upload flag would gray out Generate permanently. */
-  const canGenerate = useMemo(() => !isGenerating, [isGenerating]);
+  const mentionEntries = useMemo((): AdsStudioMentionEntry[] => {
+    const hasP = Boolean(appRefUrl.trim());
+    const avTrim = avatarUrl.trim();
+    const hasA = Boolean(avTrim);
+    /** Matches Seedance ordering: @image1 = product/app start frame, @image2 = avatar when both uploads exist. */
+    let nextLibrarySlot = 1;
+    if (hasP) nextLibrarySlot += 1;
+    if (hasA) nextLibrarySlot += 1;
+    const out: AdsStudioMentionEntry[] = [];
+
+    if (hasP) {
+      out.push({
+        id: "attached-product",
+        section: "attached",
+        label: assetType === "app" ? "App reference" : "Product reference",
+        thumbnailUrl: appRefUrl.trim(),
+        token: "@image1",
+      });
+    }
+    if (hasA) {
+      out.push({
+        id: "attached-avatar-upload",
+        section: "attached",
+        label: "Avatar (uploaded)",
+        thumbnailUrl: avTrim,
+        token: hasP ? "@image2" : "@image1",
+      });
+    }
+
+    avatarLibraryUrls.forEach((url, i) => {
+      const u = url.trim();
+      if (!u) return;
+      if (avTrim && u === avTrim) return;
+      out.push({
+        id: `avatar-lib-${i}-${u.slice(-16)}`,
+        section: "avatar",
+        label: `Library avatar ${i + 1}`,
+        thumbnailUrl: u,
+        token: `@image${nextLibrarySlot + i}`,
+      });
+    });
+
+    return out;
+  }, [appRefUrl, avatarUrl, assetType, avatarLibraryUrls]);
+
+  const filteredMentionEntries = useMemo(
+    () => filterAdsStudioMentionEntries(mentionEntries, mentionFilter),
+    [mentionEntries, mentionFilter],
+  );
+
+  useEffect(() => {
+    if (!mentionOpen) return;
+    let cancelled = false;
+    setAvatarLibLoading(true);
+    void loadAvatarUrls()
+      .then((urls) => {
+        if (!cancelled) setAvatarLibraryUrls(urls);
+      })
+      .finally(() => {
+        if (!cancelled) setAvatarLibLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [mentionOpen]);
+
+  useEffect(() => {
+    if (mentionOpen) setMentionHighlight(0);
+  }, [mentionOpen, mentionFilter]);
+
+  useEffect(() => {
+    setMentionHighlight((h) => Math.min(h, Math.max(0, filteredMentionEntries.length - 1)));
+  }, [filteredMentionEntries.length]);
+
+  const pickMention = useCallback((entry: AdsStudioMentionEntry) => {
+    const ta = promptTextareaRef.current;
+    const v = ta?.value ?? "";
+    const sel = ta?.selectionStart ?? v.length;
+    const start = mentionStartRef.current;
+    if (entry.section === "avatar") {
+      setAvatarUrl(entry.thumbnailUrl);
+    }
+    const newVal = `${v.slice(0, start)}${entry.token} ${v.slice(sel)}`;
+    setPrompt(newVal);
+    setMentionOpen(false);
+    requestAnimationFrame(() => {
+      const pos = start + entry.token.length + 1;
+      ta?.focus();
+      ta?.setSelectionRange(pos, pos);
+    });
+  }, []);
+
+  function handlePromptChange(e: ChangeEvent<HTMLTextAreaElement>) {
+    const v = e.target.value;
+    const sel = e.target.selectionStart ?? v.length;
+    setPrompt(v);
+
+    const before = v.slice(0, sel);
+    const at = before.lastIndexOf("@");
+    if (at >= 0) {
+      const fragment = before.slice(at + 1);
+      if (!/\s/.test(fragment)) {
+        mentionStartRef.current = at;
+        setMentionFilter(fragment);
+        setMentionOpen(true);
+        return;
+      }
+    }
+    setMentionOpen(false);
+  }
+
+  function handlePromptKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Escape" && mentionOpen) {
+      e.preventDefault();
+      setMentionOpen(false);
+      return;
+    }
+
+    if (!mentionOpen) return;
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      if (filteredMentionEntries.length === 0) return;
+      setMentionHighlight((h) => Math.min(filteredMentionEntries.length - 1, h + 1));
+      return;
+    }
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      if (filteredMentionEntries.length === 0) return;
+      setMentionHighlight((h) => Math.max(0, h - 1));
+      return;
+    }
+    if (e.key === "Enter" && !e.shiftKey) {
+      if (filteredMentionEntries.length === 0) return;
+      e.preventDefault();
+      const entry = filteredMentionEntries[mentionHighlight];
+      if (entry) pickMention(entry);
+      return;
+    }
+  }
+
+  const runningJobCount = useMemo(
+    () => activeJobs.filter((j) => j.phase === "submitting" || j.phase === "rendering").length,
+    [activeJobs],
+  );
+
+  const selectedHistoryOrJob = useMemo(() => {
+    if (!selectedSidebarKey) return null;
+    if (selectedSidebarKey.startsWith("history:")) {
+      const id = selectedSidebarKey.slice(8);
+      const item = history.find((h) => h.id === id);
+      return item ? ({ kind: "history" as const, item } as const) : null;
+    }
+    if (selectedSidebarKey.startsWith("job:")) {
+      const id = selectedSidebarKey.slice(4);
+      const job = activeJobs.find((j) => j.id === id);
+      return job ? ({ kind: "job" as const, job } as const) : null;
+    }
+    return null;
+  }, [selectedSidebarKey, history, activeJobs]);
   const generationCredits = useMemo(
     () =>
       calculateVideoCreditsForModel({
@@ -464,7 +604,7 @@ export default function AdsStudioPanel() {
     }
   }
 
-  async function runGenerate(promptOverride?: string) {
+  function runGenerate(promptOverride?: string) {
     const trimmed = (promptOverride ?? prompt).trim();
     const hasUploadedRefs = Boolean(appRefUrl.trim() || avatarUrl.trim());
     if (!trimmed && !hasUploadedRefs) {
@@ -479,114 +619,127 @@ export default function AdsStudioPanel() {
         ? "Create a high-converting vertical ad that follows the reference images for subject, branding, and composition."
         : "");
     if (!p) return;
-    const personalApiKey = getPersonalApiKey();
-    const piapiApiKey = getPersonalPiapiApiKey();
-    setIsGenerating(true);
-    setImageUrl(null);
-    setVideoUrl(null);
-    try {
-      const basePrompt =
-        assetType === "app"
-          ? `${p}\n\nCreate an APP-focused ad visual (UI usage, mobile screen context, feature/value outcomes).`
-          : `${p}\n\nCreate a PRODUCT-focused ad visual (packaging, product handling, realistic creator environment).`;
-      let enrichedPrompt = basePrompt;
-      if (avatarUrl.trim()) {
-        enrichedPrompt +=
-          "\n\nIf a human subject appears, match their face and overall appearance to the avatar reference image.";
-      }
-      const imageRes = await fetch("/api/nanobanana/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          accountPlan: planId,
-          model: "pro",
-          prompt: enrichedPrompt,
-          imageUrls: refImageUrls,
-          resolution: "2K",
-          aspectRatio: adsStudioAspectForNanoBanana(outputAspect),
-          personalApiKey: personalApiKey ?? undefined,
-        }),
-      });
-      const imageJson = (await imageRes.json()) as { taskId?: string; error?: string };
-      if (!imageRes.ok || !imageJson.taskId) throw new Error(imageJson.error || "Image generation failed");
-      toast.message("Image generation started");
-      const imageUrls = await pollNanoTask(imageJson.taskId, personalApiKey ?? undefined);
-      const firstImage = imageUrls[0] ?? "";
-      if (!firstImage) throw new Error("No generated image URL.");
-      setImageUrl(firstImage);
 
-      const productUrl = appRefUrl.trim();
-      const avUrl = avatarUrl.trim();
-      const klingElements: { name: string; description: string; element_input_urls: string[] }[] = [];
-      if (productUrl) {
-        klingElements.push({
-          name: assetType === "app" ? "app" : "product",
-          description:
-            assetType === "app"
-              ? "Uploaded app or UI reference image"
-              : "Uploaded product reference image",
-          element_input_urls: [productUrl],
-        });
-      }
-      if (avUrl) {
-        klingElements.push({
-          name: "avatar",
-          description: "Uploaded avatar or on-camera talent reference",
-          element_input_urls: [avUrl],
-        });
-      }
+    const snapAssetType = assetType;
+    const snapAppRef = appRefUrl.trim();
+    const snapAvatar = avatarUrl.trim();
+    const snapAspect = outputAspect;
+    const snapDur = videoDurationSec;
+    const snapRes = videoResolution;
+    const snapPlan = planId;
 
-      let videoPrompt = `${enrichedPrompt}\n\nMake this a high-converting short ad clip.`;
-      const extraImageSlots = (productUrl ? 1 : 0) + (avUrl ? 1 : 0);
-      if (extraImageSlots > 0) {
-        const parts: string[] = ["@image1 = generated start frame"];
-        let n = 2;
-        if (productUrl) {
-          parts.push(`@image${n++} = ${assetType === "app" ? "app / UI" : "product"} upload`);
+    const jobId = crypto.randomUUID();
+    const promptSnippet = p.length > 100 ? `${p.slice(0, 97)}…` : p;
+    const thumbUrl = snapAppRef || snapAvatar || undefined;
+
+    const toastId = toast.loading("Sending request to Seedance 2.0…");
+
+    setActiveJobs((prev) => {
+      const next: AdsStudioActiveJob[] = [
+        { id: jobId, createdAt: Date.now(), phase: "submitting", promptSnippet, thumbUrl },
+        ...prev,
+      ];
+      return next.slice(0, 32);
+    });
+    setSelectedSidebarKey(`job:${jobId}`);
+
+    void (async () => {
+      const personalApiKey = getPersonalApiKey();
+      const piapiApiKey = getPersonalPiapiApiKey();
+      try {
+        const basePrompt =
+          snapAssetType === "app"
+            ? `${p}\n\nCreate an APP-focused ad visual (UI usage, mobile screen context, feature/value outcomes).`
+            : `${p}\n\nCreate a PRODUCT-focused ad visual (packaging, product handling, realistic creator environment).`;
+        let enrichedPrompt = basePrompt;
+        if (snapAvatar) {
+          enrichedPrompt +=
+            "\n\nIf a human subject appears, match their face and overall appearance to the avatar reference image.";
         }
-        if (avUrl) {
-          parts.push(`@image${n++} = avatar upload`);
-        }
-        videoPrompt += `\n\nSeedance references: ${parts.join("; ")}. You may mention @image1, @image2, @image3 in the scene description to direct cuts or focus.`;
-      }
 
-      const videoRes = await fetch("/api/kling/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          accountPlan: planId,
+        const productUrl = snapAppRef;
+        const avUrl = snapAvatar;
+
+        let startFrameUrl = "";
+        const klingElements: { name: string; description: string; element_input_urls: string[] }[] = [];
+        if (productUrl && avUrl) {
+          startFrameUrl = productUrl;
+          klingElements.push({
+            name: "avatar",
+            description: "Uploaded avatar or on-camera talent reference",
+            element_input_urls: [avUrl],
+          });
+        } else if (productUrl) {
+          startFrameUrl = productUrl;
+        } else if (avUrl) {
+          startFrameUrl = avUrl;
+        }
+
+        let videoPrompt = `${enrichedPrompt}\n\nMake this a high-converting short ad clip.`;
+        if (productUrl && avUrl) {
+          videoPrompt += `\n\nSeedance references: @image1 = ${snapAssetType === "app" ? "app / UI" : "product"} reference (start frame); @image2 = avatar reference. You may mention @image1 and @image2 in the scene description.`;
+        } else if (productUrl) {
+          videoPrompt += `\n\nSeedance reference: @image1 = ${snapAssetType === "app" ? "app / UI" : "product"} reference (start frame).`;
+        } else if (avUrl) {
+          videoPrompt += `\n\nSeedance reference: @image1 = avatar reference (start frame).`;
+        }
+
+        const videoPayload: Record<string, unknown> = {
+          accountPlan: snapPlan,
           marketModel: ADS_STUDIO_SEEDANCE_MODEL,
           prompt: videoPrompt,
-          imageUrl: firstImage,
-          duration: videoDurationSec,
-          aspectRatio: outputAspect,
+          duration: snapDur,
+          aspectRatio: snapAspect,
           sound: true,
-          videoResolution,
-          ...(klingElements.length > 0 ? { klingElements } : {}),
+          videoResolution: snapRes,
           personalApiKey: personalApiKey ?? undefined,
           piapiApiKey: piapiApiKey ?? undefined,
-        }),
-      });
-      const videoJson = (await videoRes.json()) as { taskId?: string; error?: string };
-      if (!videoRes.ok || !videoJson.taskId) throw new Error(videoJson.error || "Video generation failed");
-      toast.message("Video generation started");
-      const vUrl = await pollVideo(videoJson.taskId, personalApiKey ?? undefined, piapiApiKey ?? undefined);
-      setVideoUrl(vUrl);
-      const item: AdsStudioHistoryItem = {
-        id: crypto.randomUUID(),
-        createdAt: Date.now(),
-        assetType,
-        prompt: p,
-        imageUrl: firstImage,
-        videoUrl: vUrl,
-      };
-      setHistory((prev) => [item, ...prev].slice(0, 24));
-      toast.success("Ads Studio generation complete");
-    } catch (err) {
-      toast.error("Ads Studio", { description: err instanceof Error ? err.message : "Unknown error" });
-    } finally {
-      setIsGenerating(false);
-    }
+        };
+        if (startFrameUrl) videoPayload.imageUrl = startFrameUrl;
+        if (klingElements.length > 0) videoPayload.klingElements = klingElements;
+
+        const videoRes = await fetch("/api/kling/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(videoPayload),
+        });
+        const videoJson = (await videoRes.json()) as { taskId?: string; error?: string };
+        if (!videoRes.ok || !videoJson.taskId) throw new Error(videoJson.error || "Video generation failed");
+
+        toast.dismiss(toastId);
+        toast.message("Video task accepted — rendering…");
+
+        setActiveJobs((prev) =>
+          prev.map((j) => (j.id === jobId ? { ...j, phase: "rendering" as const } : j)),
+        );
+
+        const vUrl = await pollVideo(videoJson.taskId, personalApiKey ?? undefined, piapiApiKey ?? undefined);
+        const previewStillUrl = startFrameUrl || undefined;
+        const historyId = crypto.randomUUID();
+        const item: AdsStudioHistoryItem = {
+          id: historyId,
+          createdAt: Date.now(),
+          assetType: snapAssetType,
+          prompt: p,
+          imageUrl: previewStillUrl,
+          videoUrl: vUrl,
+        };
+        setHistory((prev) => [item, ...prev].slice(0, 24));
+
+        setActiveJobs((prev) => prev.filter((j) => j.id !== jobId));
+
+        setSelectedSidebarKey(`history:${historyId}`);
+
+        toast.success("Ads Studio generation complete");
+      } catch (err) {
+        toast.dismiss(toastId);
+        const msg = err instanceof Error ? err.message : "Unknown error";
+        setActiveJobs((prev) =>
+          prev.map((j) => (j.id === jobId ? { ...j, phase: "failed" as const, error: msg } : j)),
+        );
+        toast.error("Ads Studio", { description: msg });
+      }
+    })();
   }
 
   function recreateFromTemplate(label: string) {
@@ -598,8 +751,131 @@ export default function AdsStudioPanel() {
 
   return (
     <div className="space-y-10">
-      <section className="flex min-h-[64vh] items-center justify-center">
-        <div className="relative place-self-center w-full max-w-[980px] rounded-[20px]">
+      <section className="mx-auto flex w-full max-w-[1320px] flex-col gap-5 px-2 lg:flex-row lg:items-start">
+        <aside className="flex w-full shrink-0 flex-col gap-2 rounded-2xl border border-white/10 bg-[rgba(12,12,14,0.72)] p-3 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.05)] backdrop-blur-md lg:sticky lg:top-6 lg:max-h-[min(92vh,940px)] lg:w-[280px]">
+          <div className="flex items-center gap-2 px-1 pb-1">
+            <LayoutList className="size-4 shrink-0 text-violet-300/90" aria-hidden />
+            <span className="text-xs font-semibold uppercase tracking-wide text-white/65">Projects</span>
+            {runningJobCount > 0 ? (
+              <span className="ml-auto rounded-full bg-violet-500/25 px-2 py-0.5 text-[10px] font-semibold tabular-nums text-violet-100 ring-1 ring-violet-400/25">
+                {runningJobCount} active
+              </span>
+            ) : null}
+          </div>
+          <div className="flex max-h-[220px] flex-col gap-2 overflow-y-auto overscroll-contain pr-1 lg:max-h-[calc(min(92vh,940px)-3rem)]">
+            {activeJobs.length === 0 && history.length === 0 ? (
+              <p className="px-1 py-6 text-center text-[11px] leading-snug text-white/40">
+                Generations show up here. Start another anytime — jobs run in the background.
+              </p>
+            ) : null}
+            {activeJobs.map((job) => {
+              const selected = selectedSidebarKey === `job:${job.id}`;
+              return (
+                <button
+                  key={job.id}
+                  type="button"
+                  onClick={() => setSelectedSidebarKey(`job:${job.id}`)}
+                  className={cn(
+                    "flex w-full gap-2 rounded-xl border px-2 py-2 text-left transition",
+                    selected ? "border-violet-400/45 bg-white/[0.07]" : "border-transparent bg-white/[0.03] hover:bg-white/[0.06]",
+                  )}
+                >
+                  <div className="relative size-11 shrink-0 overflow-hidden rounded-lg bg-black/40">
+                    {job.thumbUrl ? (
+                      <img src={job.thumbUrl} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-[10px] text-white/35">—</div>
+                    )}
+                    {(job.phase === "submitting" || job.phase === "rendering") ? (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/55">
+                        <Loader2 className="size-5 animate-spin text-white" aria-hidden />
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="line-clamp-2 text-[11px] font-medium leading-snug text-white/90">{job.promptSnippet}</p>
+                    <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-white/45">
+                      {job.phase === "failed"
+                        ? "Failed"
+                        : job.phase === "submitting"
+                          ? "Submitting…"
+                          : "Rendering…"}
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
+            {history.map((h) => {
+              const selected = selectedSidebarKey === `history:${h.id}`;
+              return (
+                <button
+                  key={h.id}
+                  type="button"
+                  onClick={() => setSelectedSidebarKey(`history:${h.id}`)}
+                  className={cn(
+                    "flex w-full gap-2 rounded-xl border px-2 py-2 text-left transition",
+                    selected ? "border-violet-400/45 bg-white/[0.07]" : "border-transparent bg-white/[0.03] hover:bg-white/[0.06]",
+                  )}
+                >
+                  <div className="relative size-11 shrink-0 overflow-hidden rounded-lg bg-black/40">
+                    {h.imageUrl ? (
+                      <img src={h.imageUrl} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-[9px] text-white/40">Clip</div>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="line-clamp-2 text-[11px] font-medium leading-snug text-white/90">
+                      {h.prompt.length > 90 ? `${h.prompt.slice(0, 87)}…` : h.prompt}
+                    </p>
+                    <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-400/90">Ready</p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </aside>
+
+        <div className="min-w-0 flex-1 space-y-4">
+          {selectedHistoryOrJob ? (
+            <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/40 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]">
+              {selectedHistoryOrJob.kind === "history" && selectedHistoryOrJob.item.videoUrl ? (
+                <video
+                  key={selectedHistoryOrJob.item.id}
+                  src={selectedHistoryOrJob.item.videoUrl}
+                  controls
+                  playsInline
+                  className="mx-auto max-h-[min(52vh,520px)] w-full bg-black object-contain"
+                />
+              ) : selectedHistoryOrJob.kind === "history" && !selectedHistoryOrJob.item.videoUrl ? (
+                <div className="flex min-h-[120px] items-center justify-center px-4 py-8 text-sm text-white/45">
+                  No video URL for this project.
+                </div>
+              ) : selectedHistoryOrJob.kind === "job" && selectedHistoryOrJob.job.phase === "failed" ? (
+                <div className="flex min-h-[140px] flex-col justify-center gap-2 px-4 py-6">
+                  <p className="text-sm font-semibold text-red-300/95">Generation failed</p>
+                  <p className="text-xs leading-snug text-white/55">{selectedHistoryOrJob.job.error}</p>
+                </div>
+              ) : selectedHistoryOrJob.kind === "job" ? (
+                <div className="relative flex min-h-[200px] flex-col items-center justify-center gap-3 overflow-hidden bg-gradient-to-b from-white/[0.04] to-black/50 px-4 py-10">
+                  {selectedHistoryOrJob.job.thumbUrl ? (
+                    <img
+                      src={selectedHistoryOrJob.job.thumbUrl}
+                      alt=""
+                      className="absolute inset-0 h-full w-full object-cover opacity-25"
+                    />
+                  ) : null}
+                  <Loader2 className="relative z-10 size-8 shrink-0 animate-spin text-violet-300" aria-hidden />
+                  <p className="relative z-10 text-center text-sm text-white/80">
+                    {selectedHistoryOrJob.job.phase === "submitting" ? "Submitting to Seedance…" : "Rendering video…"}
+                  </p>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          <div className="flex min-h-[64vh] items-center justify-center">
+        <div className="relative w-full max-w-[980px] rounded-[20px]">
           <div className="relative rounded-[20px] bg-[linear-gradient(0deg,rgba(21,21,21,0.88)_0%,rgba(21,21,21,0.88)_100%),linear-gradient(41deg,rgba(101,189,235,0.24)_25.53%,rgba(101,189,235,0.00)_63.06%)] p-4 shadow-[0_12px_8px_0_rgba(0,0,0,0.20),inset_0_0_0_1px_rgba(255,255,255,0.07)] backdrop-blur-[20px]">
           <div className="flex w-full min-w-0 flex-col gap-3 rounded-[20px] sm:flex-row sm:items-start">
             <div
@@ -629,89 +905,82 @@ export default function AdsStudioPanel() {
                 <span>App</span>
               </button>
             </div>
-          <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-              <div className="flex min-h-0 flex-1 items-start gap-3 overflow-hidden">
+          <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-stretch gap-3">
+            <div className="grid min-h-[min(62vh,560px)] w-full min-w-0 grid-rows-[minmax(0,3fr)_auto] gap-2">
+              <div className="flex min-h-0 items-stretch gap-2 overflow-hidden">
                 <button
                   type="button"
-                  className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.04] text-white/85 shadow-[0_2px_1.5px_-0.5px_rgba(0,0,0,0.1)]"
+                  className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-white/[0.04] text-white/85 shadow-[0_2px_1.5px_-0.5px_rgba(0,0,0,0.1)]"
                 >
-                  <Plus className="size-4" />
+                  <Plus className="size-3.5" />
                 </button>
-                <div className="min-w-0 flex-1 pb-2">
+                <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+                  <AdsStudioMentionMenu
+                    open={mentionOpen}
+                    entries={filteredMentionEntries}
+                    hasAnySource={mentionEntries.length > 0}
+                    loadingAvatarLibrary={avatarLibLoading}
+                    highlightedIndex={mentionHighlight}
+                    onHighlight={setMentionHighlight}
+                    onSelect={pickMention}
+                  />
                   <Textarea
+                    ref={promptTextareaRef}
                     value={prompt}
-                    onChange={(e) => setPrompt(e.target.value)}
-                    placeholder="Describe what happens in the ad. With Product/App or Avatar uploads, reference frames as @image1 (start frame), @image2, @image3 in order in your text."
-                    className="h-[72px] max-h-[112px] resize-none overflow-y-auto border-0 bg-transparent p-0 text-sm text-white caret-violet-300 placeholder:text-white/35 focus-visible:ring-0"
+                    onChange={handlePromptChange}
+                    onKeyDown={handlePromptKeyDown}
+                    placeholder="Describe the ad. Type @ to insert Product, Avatar, or library avatars (@image1 / @image2 match uploaded references)."
+                    className="min-h-0 w-full flex-1 resize-none overflow-y-auto rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm leading-relaxed text-white caret-violet-300 placeholder:text-white/35 focus-visible:ring-0"
                   />
                 </div>
               </div>
 
-              <div className="flex min-w-0 flex-wrap items-end gap-2">
-                <div className="flex min-w-0 flex-col gap-0.5">
-                  <span className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Aspect ratio</span>
-                  <Select
-                    value={outputAspect}
-                    onValueChange={(v) => setOutputAspect(v as AdsStudioOutputAspect)}
+              <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                <Select value={outputAspect} onValueChange={(v) => setOutputAspect(v as AdsStudioOutputAspect)}>
+                  <SelectTrigger
+                    size="sm"
+                    className="h-7 w-[min(100%,8.25rem)] rounded-md border-white/12 bg-white/[0.04] px-2 text-[11px] text-white shadow-none hover:bg-white/[0.07]"
                   >
-                    <SelectTrigger
-                      size="sm"
-                      className="h-8 w-[min(100%,9.5rem)] rounded-lg border-white/15 bg-white/[0.04] text-xs text-white shadow-none hover:bg-white/[0.07]"
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent position="popper" className={studioSelectContentClass}>
-                      {ADS_STUDIO_SEEDANCE_ASPECTS.map((ar) => (
-                        <SelectItem key={ar} value={ar} className={studioSelectItemClass}>
-                          {ar === "auto" ? "Auto" : ar}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex min-w-0 flex-col gap-0.5">
-                  <span className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Quality</span>
-                  <Select
-                    value={videoResolution}
-                    onValueChange={(v) => setVideoResolution(v as AdsStudioVideoResolution)}
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent position="popper" className={studioSelectContentClass}>
+                    {ADS_STUDIO_SEEDANCE_ASPECTS.map((ar) => (
+                      <SelectItem key={ar} value={ar} className={studioSelectItemClass}>
+                        {ar === "auto" ? "Auto" : ar}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={videoResolution} onValueChange={(v) => setVideoResolution(v as AdsStudioVideoResolution)}>
+                  <SelectTrigger
+                    size="sm"
+                    className="h-7 w-[min(100%,4.75rem)] rounded-md border-white/12 bg-white/[0.04] px-2 text-[11px] text-white shadow-none hover:bg-white/[0.07]"
                   >
-                    <SelectTrigger
-                      size="sm"
-                      className="h-8 w-[min(100%,5.5rem)] rounded-lg border-white/15 bg-white/[0.04] text-xs text-white shadow-none hover:bg-white/[0.07]"
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent position="popper" className={studioSelectContentClass}>
-                      {ADS_STUDIO_SEEDANCE_RESOLUTIONS.map((r) => (
-                        <SelectItem key={r} value={r} className={studioSelectItemClass}>
-                          {r}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex min-w-0 flex-col gap-0.5">
-                  <span className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Duration</span>
-                  <Select
-                    value={String(videoDurationSec)}
-                    onValueChange={(v) => setVideoDurationSec(Number(v))}
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent position="popper" className={studioSelectContentClass}>
+                    {ADS_STUDIO_SEEDANCE_RESOLUTIONS.map((r) => (
+                      <SelectItem key={r} value={r} className={studioSelectItemClass}>
+                        {r}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={String(videoDurationSec)} onValueChange={(v) => setVideoDurationSec(Number(v))}>
+                  <SelectTrigger
+                    size="sm"
+                    className="h-7 w-[min(100%,3.75rem)] rounded-md border-white/12 bg-white/[0.04] px-2 text-[11px] text-white shadow-none hover:bg-white/[0.07]"
                   >
-                    <SelectTrigger
-                      size="sm"
-                      className="h-8 w-[min(100%,4.25rem)] rounded-lg border-white/15 bg-white/[0.04] text-xs text-white shadow-none hover:bg-white/[0.07]"
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent position="popper" className={studioSelectContentClass}>
-                      {ADS_STUDIO_DURATION_CHOICES.map((d) => (
-                        <SelectItem key={d} value={String(d)} className={studioSelectItemClass}>
-                          {d}s
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent position="popper" className={studioSelectContentClass}>
+                    {ADS_STUDIO_DURATION_CHOICES.map((d) => (
+                      <SelectItem key={d} value={String(d)} className={studioSelectItemClass}>
+                        {d}s
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
@@ -833,16 +1102,28 @@ export default function AdsStudioPanel() {
               <Button
                 type="button"
                 onClick={() => void runGenerate()}
-                disabled={!canGenerate}
-                className="group relative z-10 flex h-[88px] w-[152px] shrink-0 items-center justify-center overflow-hidden rounded-xl border border-violet-400/45 bg-violet-500 px-6 py-[30px] font-grotesk text-xs font-bold uppercase text-white shadow-[0_6px_0_0_rgba(76,29,149,0.95),0_0_28px_rgba(139,92,246,0.22)] transition-[transform,box-shadow,opacity] duration-200 enabled:hover:bg-violet-400 enabled:hover:shadow-[0_8px_0_0_rgba(76,29,149,0.95),0_0_36px_rgba(167,139,250,0.35)] enabled:active:translate-y-1 enabled:active:shadow-[0_2px_0_0_rgba(76,29,149,0.95)] disabled:pointer-events-none disabled:opacity-45"
+                className="group relative z-10 flex h-[88px] w-[152px] shrink-0 items-center justify-center overflow-hidden rounded-xl border border-violet-400/45 bg-violet-500 px-6 py-[30px] font-grotesk text-xs font-bold uppercase text-white shadow-[0_6px_0_0_rgba(76,29,149,0.95),0_0_28px_rgba(139,92,246,0.22)] transition-[transform,box-shadow,opacity] duration-200 enabled:hover:bg-violet-400 enabled:hover:shadow-[0_8px_0_0_rgba(76,29,149,0.95),0_0_36px_rgba(167,139,250,0.35)] enabled:active:translate-y-1 enabled:active:shadow-[0_2px_0_0_rgba(76,29,149,0.95)]"
               >
                 <div className="pointer-events-none absolute inset-0 rounded-xl bg-gradient-to-b from-white/20 via-transparent to-violet-950/25" />
                 <div className="pointer-events-none absolute inset-0 rounded-xl bg-[radial-gradient(85%_70%_at_50%_100%,rgba(167,139,250,0.35)_0%,transparent_60%)]" />
-                <div className="relative z-10 flex flex-col items-center gap-0.5 text-white [text-shadow:0_1px_12px_rgba(76,29,149,0.55)]">
-                  <div className="flex items-center gap-1.5">
-                    <span>{isGenerating ? "GENERATING" : "GENERATE"}</span>
-                    <span className="opacity-90">+ {generationCredits}</span>
-                  </div>
+                <div className="relative z-10 flex flex-col items-center gap-1 text-white [text-shadow:0_1px_12px_rgba(76,29,149,0.55)]">
+                  <span className="relative inline-flex items-center justify-center">
+                    GENERATE
+                    {runningJobCount > 0 ? (
+                      <span className="absolute -right-3 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-300 px-1 text-[9px] font-bold leading-none text-violet-950 ring-1 ring-white/30">
+                        {runningJobCount > 9 ? "9+" : runningJobCount}
+                      </span>
+                    ) : null}
+                  </span>
+                  <span
+                    className="inline-flex items-center gap-1 rounded-full bg-black/25 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-white/95 ring-1 ring-white/20"
+                    title="Credits for this generation"
+                    aria-label={`${generationCredits} credits`}
+                  >
+                    <Coins className="size-3 shrink-0 text-violet-100 opacity-95" strokeWidth={2.2} aria-hidden />
+                    <span aria-hidden>+</span>
+                    <span aria-hidden>{generationCredits}</span>
+                  </span>
                 </div>
               </Button>
             </div>
@@ -885,9 +1166,11 @@ export default function AdsStudioPanel() {
           />
         </div>
         </div>
+          </div>
+        </div>
       </section>
 
-      <section className="mx-auto w-full max-w-[1140px]">
+      <section className="mx-auto w-full max-w-[1140px] px-2">
         <p className="mb-2 text-sm font-semibold text-white/85">Generate across formats</p>
         <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-5">
           {templateVideos.map((tpl, idx) => {
@@ -929,8 +1212,7 @@ export default function AdsStudioPanel() {
                 <button
                   type="button"
                   onClick={() => recreateFromTemplate(label)}
-                  disabled={isGenerating}
-                  className="absolute bottom-3 left-1/2 z-20 h-9 -translate-x-1/2 rounded-full border border-white/25 bg-white/90 px-5 text-sm font-semibold text-black opacity-0 transition hover:bg-white group-hover:opacity-100 focus-visible:opacity-100 disabled:opacity-40"
+                  className="absolute bottom-3 left-1/2 z-20 h-9 -translate-x-1/2 rounded-full border border-white/25 bg-white/90 px-5 text-sm font-semibold text-black opacity-0 transition hover:bg-white group-hover:opacity-100 focus-visible:opacity-100"
                 >
                   Recreate
                 </button>

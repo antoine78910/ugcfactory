@@ -747,6 +747,14 @@ function klingQualityFromVideoResolution(res: string): "std" | "pro" {
   return res.trim() === "1080p" ? "pro" : "std";
 }
 
+/** Maps workflow video picker resolution to PiAPI Seedance billing tiers. */
+function workflowSeedanceVideoResolution(res: string): "480p" | "720p" | "1080p" {
+  const t = res.trim().toLowerCase();
+  if (t === "480p") return "480p";
+  if (t === "1080p") return "1080p";
+  return "720p";
+}
+
 function veoAspectFromWorkflowAspect(aspect: string): KieVeoAspectRatio {
   if (aspect === "9:16") return "9:16";
   if (aspect === "16:9") return "16:9";
@@ -802,10 +810,6 @@ function seedancePreviewMarketModelForGenerate(modelId: string, priority: "norma
   if (modelId === "bytedance/seedance-2-preview") return "bytedance/seedance-2-preview-vip";
   if (modelId === "bytedance/seedance-2-fast-preview") return "bytedance/seedance-2-fast-preview-vip";
   return modelId;
-}
-
-function isWorkflowSeedancePreviewModel(modelId: string): boolean {
-  return modelId === "bytedance/seedance-2-preview" || modelId === "bytedance/seedance-2-fast-preview";
 }
 
 /** Clamp stored duration to allowed values for the resolved workflow video model. */
@@ -1289,15 +1293,17 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
   } catch (err) {
     throw new Error(err instanceof Error ? err.message : "Invalid video duration.");
   }
+  const seedanceRes = workflowSeedanceVideoResolution(params.resolution);
+  const modelIdForCredits = seedancePreviewMarketModelForGenerate(modelId, seedancePri);
   const baseCredits = calculateVideoCredits({
-    modelId,
+    modelId: modelIdForCredits,
     duration,
     audio:
       modelId === "kling-3.0/video" || modelId === "kling-2.5-turbo/video" || modelId === "kling-2.6/video",
     quality,
+    videoResolution: modelId.startsWith("bytedance/seedance") ? seedanceRes : undefined,
   });
-  const credits =
-    seedancePri === "vip" && isWorkflowSeedancePreviewModel(modelId) ? baseCredits * 2 : baseCredits;
+  const credits = baseCredits;
 
   /**
    * Seedance does not have first/last-frame semantics — when the workflow node’s start/end
@@ -1589,16 +1595,17 @@ export function workflowVideoChargeCredits(params: {
   const modelId = resolveWorkflowVideoModelId(params.model);
   const quality = klingQualityFromVideoResolution(params.resolution);
   const duration = coerceWorkflowVideoDurationSec(params.model, params.durationSec);
-  const base = calculateVideoCredits({
-    modelId,
+  const seedanceRes = workflowSeedanceVideoResolution(params.resolution);
+  const pri = params.seedancePriority === "vip" ? "vip" : "normal";
+  const modelIdForCredits = seedancePreviewMarketModelForGenerate(modelId, pri);
+  return calculateVideoCredits({
+    modelId: modelIdForCredits,
     duration,
     audio:
       modelId === "kling-3.0/video" || modelId === "kling-2.5-turbo/video" || modelId === "kling-2.6/video",
     quality,
+    videoResolution: modelId.startsWith("bytedance/seedance") ? seedanceRes : undefined,
   });
-  const pri = params.seedancePriority === "vip" ? "vip" : "normal";
-  if (pri === "vip" && isWorkflowSeedancePreviewModel(modelId)) return base * 2;
-  return base;
 }
 
 export function workflowMotionControlChargeCredits(params: { quality: string; durationSec: number }): number {

@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,7 +29,9 @@ export default function AuthClient({ mode = "signin", redirectTo }: { mode?: Aut
   const [firstName, setFirstName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [googlePending, setGooglePending] = useState(false);
 
   useEffect(() => {
     window.datafast?.(mode === "signup" ? "view_signup" : "view_signin");
@@ -172,77 +174,92 @@ export default function AuthClient({ mode = "signin", redirectTo }: { mode?: Aut
     }
   }
 
-  async function onMagicLink() {
-    setIsLoading(true);
+  const isSignIn = mode === "signin";
+
+  async function onGoogle() {
+    setGooglePending(true);
     try {
-      const { error } = await client.auth.signInWithOtp({
-        email: email.trim(),
-        options: { emailRedirectTo: getAuthCallbackUrl(redirectTo) },
+      const { data, error } = await client.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: getAuthCallbackUrl(redirectTo) },
       });
       if (error) throw error;
-      toast.success("Magic link sent", { description: "Check your email inbox." });
+      if (data.url) {
+        window.location.assign(data.url);
+        return;
+      }
+      throw new Error("No OAuth URL returned. Enable Google in Supabase Auth providers.");
     } catch (err) {
-      toast.error("Magic link error", {
+      toast.error("Google sign-in error", {
         description: err instanceof Error ? err.message : "Unknown error",
       });
-    } finally {
-      setIsLoading(false);
+      setGooglePending(false);
     }
   }
 
-  const isSignIn = mode === "signin";
-  const primaryBtnClass =
-    "h-11 w-full rounded-2xl bg-violet-400 text-black font-semibold border border-violet-200/40 shadow-[0_6px_0_0_rgba(76,29,149,0.9)] transition-all hover:-translate-y-[1px] hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9)] active:translate-y-[6px] active:shadow-[0_0_0_0_rgba(76,29,149,0.9)]";
-
   return (
-    <div className="min-h-[100dvh] min-h-screen overflow-x-hidden bg-[#050507] text-white">
-      <div
-        className="pointer-events-none absolute left-1/2 top-0 -z-0 h-[min(420px,70vh)] w-[min(100vw,900px)] max-w-[100vw] -translate-x-1/2 rounded-full bg-violet-600/15 blur-[100px] sm:h-[520px] sm:blur-[140px]"
-        aria-hidden
-      />
-
-      <main className="relative z-10 mx-auto flex min-h-[100dvh] min-h-screen w-full max-w-6xl items-stretch justify-center px-4 py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))] sm:items-center sm:px-5 sm:py-14">
-        <div className="grid w-full min-w-0 max-w-5xl self-center overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02] backdrop-blur-xl sm:rounded-3xl md:grid-cols-[1.05fr_1fr]">
-          <div className="min-w-0 border-b border-white/10 p-5 sm:p-8 md:border-b-0 md:border-r">
-            <Link href="/" className="inline-flex items-center">
+    <div className="min-h-[100dvh] overflow-x-hidden bg-black text-white antialiased">
+      <main className="mx-auto flex min-h-[100dvh] w-full max-w-[440px] flex-col px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))] sm:justify-center sm:py-10">
+        <div className="w-full rounded-2xl border border-white/10 bg-[#0a0a0c] px-5 py-6 shadow-[0_24px_80px_rgba(0,0,0,0.55)] sm:px-8 sm:py-8">
+          <div className="flex flex-col items-center text-center">
+            <Link href="/" className="inline-flex">
               <Image
                 src="/youry-logo.png"
                 alt="Youry"
-                width={174}
-                height={52}
-                className="h-9 w-auto sm:h-10"
+                width={160}
+                height={48}
+                className="h-8 w-auto sm:h-9"
                 priority
               />
             </Link>
-
-            <h1 className="mt-6 text-2xl font-extrabold tracking-tight sm:mt-8 sm:text-3xl md:text-4xl">
-              {isSignIn ? "Welcome back" : "Create your account"}
+            <h1 className="mt-4 text-2xl font-bold tracking-tight sm:mt-5 sm:text-[1.65rem]">
+              {isSignIn ? "Welcome back" : "Welcome to Youry"}
             </h1>
-            <p className="mt-3 max-w-sm text-sm leading-relaxed text-white/55">
-              {isSignIn
-                ? "Sign in to continue building high-converting video ads in minutes."
-                : "Sign up and start turning product pages into scroll-stopping video ads."}
-            </p>
-
-            <div className="mt-6 space-y-2.5 text-sm text-white/70 sm:mt-10 sm:space-y-3">
-              {[
-                "Cut your creative production costs by 10x",
-                "Generate 10+ ad concepts in seconds",
-                "Test faster than your competitors",
-                "Never run out of creatives again",
-                "Scale your ad testing effortlessly",
-              ].map((line) => (
-                <p key={line} className="flex items-start gap-2.5">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300/90" />
-                  <span className="min-w-0 break-words">{line}</span>
-                </p>
-              ))}
-            </div>
+            <p className="mt-2 max-w-md text-sm leading-snug text-white/50">AI-powered ad creation platform</p>
           </div>
 
-          <div className="min-w-0 p-5 sm:p-8">
+          {/* Google first so it stays above the fold on mobile */}
+          <div className="mt-6 space-y-4 sm:mt-7">
+            <button
+              type="button"
+              className="flex h-12 w-full cursor-pointer items-center justify-center gap-3 rounded-xl border border-white/25 bg-black font-semibold text-white transition hover:border-white/40 hover:bg-white/[0.04] active:scale-[0.99] disabled:opacity-50"
+              disabled={googlePending || isLoading}
+              onClick={() => void onGoogle()}
+            >
+              {googlePending ? (
+                <Loader2 className="h-5 w-5 shrink-0 animate-spin" aria-hidden />
+              ) : (
+                <svg className="h-5 w-5 shrink-0" viewBox="0 0 256 262" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+                  <path
+                    fill="#4285F4"
+                    d="M255.878 133.451c0-10.734-.871-18.567-2.756-26.69H130.55v48.448h71.947c-1.45 12.04-9.283 30.172-26.69 42.356l-.244 1.622 38.755 30.023 2.685.268c24.659-22.774 38.875-56.282 38.875-96.027"
+                  />
+                  <path
+                    fill="#34A853"
+                    d="M130.55 261.1c35.248 0 64.839-11.605 86.453-31.622l-41.196-31.913c-11.024 7.688-25.82 13.055-45.257 13.055-34.523 0-63.824-22.773-74.269-54.25l-1.531.13-40.298 31.187-.527 1.465C35.393 231.798 79.49 261.1 130.55 261.1"
+                  />
+                  <path
+                    fill="#FBBC05"
+                    d="M56.281 156.37c-2.756-8.123-4.351-16.827-4.351-25.82 0-8.994 1.595-17.697 4.206-25.82l-.073-1.73L15.26 71.312l-1.335.635C5.077 89.644 0 109.517 0 130.55s5.077 40.905 13.925 58.602l42.356-32.782"
+                  />
+                  <path
+                    fill="#EA4335"
+                    d="M130.55 50.479c24.514 0 41.05 10.589 50.479 19.438l36.844-35.974C195.245 12.91 165.798 0 130.55 0 79.49 0 35.393 29.301 13.925 71.947l42.211 32.783c10.59-31.477 39.891-54.251 74.414-54.251"
+                  />
+                </svg>
+              )}
+              <span>{googlePending ? "Redirecting…" : "Continue with Google"}</span>
+            </button>
+
+            <div className="relative py-0.5">
+              <div className="h-px w-full bg-white/15" />
+              <span className="absolute left-1/2 top-1/2 w-max max-w-[calc(100%-1rem)] -translate-x-1/2 -translate-y-1/2 bg-[#0a0a0c] px-3 text-center text-[11px] text-white/45">
+                {isSignIn ? "Or sign in with email" : "Or sign up with email"}
+              </span>
+            </div>
+
             <form
-              className="space-y-4"
+              className="space-y-3.5"
               onSubmit={(e) => {
                 e.preventDefault();
                 if (isSignIn) void onSignIn();
@@ -250,9 +267,9 @@ export default function AuthClient({ mode = "signin", redirectTo }: { mode?: Aut
               }}
             >
               {!isSignIn ? (
-                <div className="space-y-2">
-                  <Label htmlFor="auth-first-name" className="text-white/80">
-                    First name
+                <div className="space-y-1.5 text-left">
+                  <Label htmlFor="auth-first-name" className="text-xs font-medium text-white/55">
+                    Full name
                   </Label>
                   <Input
                     id="auth-first-name"
@@ -261,111 +278,74 @@ export default function AuthClient({ mode = "signin", redirectTo }: { mode?: Aut
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
                     placeholder="Alex"
-                    className="h-11 border-white/15 bg-white/[0.03] text-base text-white placeholder:text-white/30 md:text-sm"
+                    className="h-11 rounded-xl border-white/15 bg-white/[0.05] text-base text-white placeholder:text-white/35 md:text-sm"
                   />
                 </div>
               ) : null}
 
-              <div className="space-y-2">
-                <Label htmlFor="auth-email" className="text-white/80">
-                  Email
+              <div className="space-y-1.5 text-left">
+                <Label htmlFor="auth-email" className="text-xs font-medium text-white/55">
+                  Email address
                 </Label>
                 <Input
                   id="auth-email"
                   name="email"
                   autoComplete="email"
+                  inputMode="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@domain.com"
-                  className="h-11 border-white/15 bg-white/[0.03] text-base text-white placeholder:text-white/30 md:text-sm"
+                  placeholder="you@company.com"
+                  className="h-11 rounded-xl border-white/15 bg-white/[0.05] text-base text-white placeholder:text-white/35 md:text-sm"
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="auth-password" className="text-white/80">
+              <div className="space-y-1.5 text-left">
+                <Label htmlFor="auth-password" className="text-xs font-medium text-white/55">
                   Password
                 </Label>
-                <Input
-                  id="auth-password"
-                  name="password"
-                  autoComplete={isSignIn ? "current-password" : "new-password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  type="password"
-                  placeholder="••••••••"
-                  className="h-11 border-white/15 bg-white/[0.03] text-base text-white placeholder:text-white/30 md:text-sm"
-                />
+                <div className="relative">
+                  <Input
+                    id="auth-password"
+                    name="password"
+                    autoComplete={isSignIn ? "current-password" : "new-password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    type={showPassword ? "text" : "password"}
+                    placeholder="••••••••"
+                    className="h-11 rounded-xl border-white/15 bg-white/[0.05] pr-11 text-base text-white placeholder:text-white/35 md:text-sm"
+                  />
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    className="absolute right-2 top-1/2 flex size-9 -translate-y-1/2 items-center justify-center rounded-lg text-white/45 transition hover:bg-white/10 hover:text-white"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    onClick={() => setShowPassword((s) => !s)}
+                  >
+                    {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                  </button>
+                </div>
               </div>
 
-              {isSignIn ? (
-                <Button type="submit" className={`mt-2 ${primaryBtnClass}`} disabled={isLoading}>
-                  {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                  Sign in
-                </Button>
-              ) : (
-                <Button type="submit" className={`mt-2 ${primaryBtnClass}`} disabled={isLoading}>
-                  {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                  Create account
-                </Button>
-              )}
-
-              <div className="relative py-1">
-                <div className="h-px w-full bg-white/15" />
-                <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#050507] px-2 text-[11px] uppercase tracking-[0.16em] text-white/40">
-                  or
-                </span>
-              </div>
-
-              {/* Google button */}
-              <button
-                type="button"
-                className="flex h-11 w-full cursor-pointer items-center justify-center gap-2.5 rounded-2xl border border-white/15 bg-white/[0.06] font-semibold text-white transition-all hover:bg-white/10 active:scale-[0.98] disabled:opacity-50"
+              <Button
+                type="submit"
+                className="mt-1 h-11 w-full rounded-2xl border border-violet-200/40 bg-violet-400 font-semibold text-black shadow-[0_6px_0_0_rgba(76,29,149,0.9)] transition-all hover:-translate-y-px hover:bg-violet-300 hover:shadow-[0_8px_0_0_rgba(76,29,149,0.9)] active:translate-y-[6px] active:shadow-none disabled:opacity-50"
                 disabled={isLoading}
-                onClick={async () => {
-                  setIsLoading(true);
-                  try {
-                    const { data, error } = await client.auth.signInWithOAuth({
-                      provider: "google",
-                      options: { redirectTo: getAuthCallbackUrl(redirectTo) },
-                    });
-                    if (error) throw error;
-                    if (data.url) {
-                      window.location.assign(data.url);
-                      return;
-                    }
-                    throw new Error("No OAuth URL returned. Enable Google in Supabase Auth providers.");
-                  } catch (err) {
-                    toast.error("Google sign-in error", {
-                      description: err instanceof Error ? err.message : "Unknown error",
-                    });
-                    setIsLoading(false);
-                  }
-                }}
               >
-                {isLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <svg className="h-5 w-5 flex-shrink-0" viewBox="0 0 256 262" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M255.878 133.451c0-10.734-.871-18.567-2.756-26.69H130.55v48.448h71.947c-1.45 12.04-9.283 30.172-26.69 42.356l-.244 1.622 38.755 30.023 2.685.268c24.659-22.774 38.875-56.282 38.875-96.027" fill="currentColor" fillOpacity=".7"/>
-                    <path d="M130.55 261.1c35.248 0 64.839-11.605 86.453-31.622l-41.196-31.913c-11.024 7.688-25.82 13.055-45.257 13.055-34.523 0-63.824-22.773-74.269-54.25l-1.531.13-40.298 31.187-.527 1.465C35.393 231.798 79.49 261.1 130.55 261.1" fill="currentColor" fillOpacity=".7"/>
-                    <path d="M56.281 156.37c-2.756-8.123-4.351-16.827-4.351-25.82 0-8.994 1.595-17.697 4.206-25.82l-.073-1.73L15.26 71.312l-1.335.635C5.077 89.644 0 109.517 0 130.55s5.077 40.905 13.925 58.602l42.356-32.782" fill="currentColor" fillOpacity=".7"/>
-                    <path d="M130.55 50.479c24.514 0 41.05 10.589 50.479 19.438l36.844-35.974C195.245 12.91 165.798 0 130.55 0 79.49 0 35.393 29.301 13.925 71.947l42.211 32.783c10.59-31.477 39.891-54.251 74.414-54.251" fill="currentColor" fillOpacity=".7"/>
-                  </svg>
-                )}
-                <span>{isLoading ? "Signing in…" : "Continue with Google"}</span>
-              </button>
+                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                {isSignIn ? "Sign in" : "Create account"}
+              </Button>
             </form>
-
-            <p className="mt-6 text-center text-sm text-white/50">
-              {isSignIn ? "No account yet?" : "Already have an account?"}{" "}
-              <Link
-                href={isSignIn ? `/signup${redirectQuery}` : `/signin${redirectQuery}`}
-                className="text-violet-400 hover:text-violet-300"
-              >
-                {isSignIn ? "Create one" : "Sign in"}
-              </Link>
-            </p>
           </div>
+
+          <p className="mt-6 text-center text-sm text-white/45">
+            {isSignIn ? "No account yet?" : "Already have an account?"}{" "}
+            <Link
+              href={isSignIn ? `/signup${redirectQuery}` : `/signin${redirectQuery}`}
+              className="font-medium text-violet-400 underline-offset-4 hover:text-violet-300 hover:underline"
+            >
+              {isSignIn ? "Create one" : "Sign in"}
+            </Link>
+          </p>
         </div>
       </main>
     </div>

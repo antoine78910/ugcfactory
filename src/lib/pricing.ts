@@ -37,23 +37,8 @@ export const STARTER_CREDIT_VALUE_USD = 29.99 / 250;
 
 // ---------------------------------------------------------------------------
 // Link to Ad, Seedance normal (preview): video slice only (full URL Generate adds scan + 3× ref images)
+// Billing: {@link linkToAdVideoCredits} → Seedance Fast @ 720p via PiAPI $/s × retail × credits.
 // ---------------------------------------------------------------------------
-
-/** Link to Ad Priority = Normal (Seedance 2 Fast Preview). */
-export const LINK_TO_AD_SEEDANCE_VIDEO_CREDITS_BY_DURATION_SEC: Record<5 | 10 | 15 | 30, number> = {
-  5: 29,
-  10: 45,
-  15: 61,
-  30: 108,
-};
-
-/** Link to Ad Priority = VIP (Seedance 2 Fast Preview VIP). */
-export const LINK_TO_AD_SEEDANCE_VIP_VIDEO_CREDITS_BY_DURATION_SEC: Record<5 | 10 | 15 | 30, number> = {
-  5: 45,
-  10: 76,
-  15: 108,
-  30: 202,
-};
 
 /** Link to Ad image→video: PiAPI `task_type` maps to these ids for `/api/kling/generate`. */
 export type LinkToAdSeedanceSpeed = "normal" | "vip";
@@ -76,23 +61,6 @@ export type LinkToAdVideoModelId = keyof typeof LINK_TO_AD_VIDEO_MODELS;
 export const LINK_TO_AD_VIDEO_MARKET_MODEL = LINK_TO_AD_VIDEO_MODELS.seedance.marketModelNormal;
 
 export const CLAUDE_AI_CREDITS = 5;
-
-export function linkToAdVideoCredits(
-  model: LinkToAdVideoModelId,
-  durationSec: number,
-  seedanceSpeed: LinkToAdSeedanceSpeed = "normal",
-): number {
-  void LINK_TO_AD_VIDEO_MODELS[model];
-  const table =
-    seedanceSpeed === "vip"
-      ? LINK_TO_AD_SEEDANCE_VIP_VIDEO_CREDITS_BY_DURATION_SEC
-      : LINK_TO_AD_SEEDANCE_VIDEO_CREDITS_BY_DURATION_SEC;
-  const d = normalizeUgcScriptVideoDurationSec(durationSec);
-  if (d === 5 || d === 10 || d === 15 || d === 30) return table[d];
-
-  const ref15 = table[15];
-  return Math.max(1, Math.ceil((d / 15) * ref15));
-}
 
 // ---------------------------------------------------------------------------
 // Images (fixed credits)
@@ -723,7 +691,7 @@ export function is1080pVideoQuality(quality: string | undefined): boolean {
 /**
  * Kling 3.0, provider Our price ($/s) × 2 → retail $/s → credits/s at $0.07/credit (same as Sora sheet).
  * Sheet: 1080p+audio $0.135/s → 4 cr/s · 1080p $0.09/s → 3 · 720p+audio $0.10/s → 3 · 720p $0.07/s → 2
- * · 480p+audio: below 720p tier (PiAPI Seedance); ~$0.075/s our → 2 cr/s
+ * · 480p+audio: legacy low tier (~$0.075/s our → 2 cr/s). **Seedance** billing uses {@link calculateSeedanceVideoCredits}.
  */
 export function kling30CreditsPerSecondFromSheet(quality: string | undefined, audio: boolean): number {
   const q = (quality ?? "std").toLowerCase();
@@ -1102,24 +1070,130 @@ export type VideoCreditOptions = {
   duration: number;
   /** Kling: sound on/off. */
   audio?: boolean;
-  /** Kling studio: `std` = 720p, `pro` = 1080p. Motion: `720p` / `1080p`. */
+  /** Kling studio: `std` = 720p, `pro` = 1080p. Motion: `720p` / `1080p`. Used as fallback when `videoResolution` is omitted (e.g. Studio). */
   quality?: string;
-  /** PiAPI Seedance 2 output resolution (billing); maps to Kling 3.0–style $/s tiers. */
+  /** PiAPI Seedance output resolution — drives $/s from {@link SEEDANCE_2_PROVIDER_USD_PER_SECOND} / Fast. */
   videoResolution?: "480p" | "720p" | "1080p";
 };
 
+/** Retail ×2 on provider $/s; credits = round(retail / $0.07) per second — same baseline as Kling 3.0 dynamic rows. */
+const VIDEO_DYNAMIC_CREDIT_USD = 0.07;
+
+/** PiAPI provider $/s — Seedance 2 (standard / preview billing family). */
+export const SEEDANCE_2_PROVIDER_USD_PER_SECOND = {
+  "480p": 0.1,
+  "720p": 0.2,
+  "1080p": 0.5,
+} as const;
+
 /**
- * Video billing: Kling uses duration × quality × audio; Sora uses tier table.
+ * PiAPI provider $/s — Seedance 2 Fast.
+ * 1080p not on sheet; set with same 720p ratio vs Seedance 2 as other tiers (0.16/0.20 × 0.5).
  */
-function seedance2QualityFromVideoResolution(
-  resolution: VideoCreditOptions["videoResolution"],
-): "480p" | "std" | "pro" {
-  if (resolution === "1080p") return "pro";
-  if (resolution === "720p") return "std";
-  if (resolution === "480p") return "480p";
-  return "pro";
+export const SEEDANCE_2_FAST_PROVIDER_USD_PER_SECOND = {
+  "480p": 0.08,
+  "720p": 0.16,
+  "1080p": 0.4,
+} as const;
+
+export type SeedanceBillingResolution = keyof typeof SEEDANCE_2_PROVIDER_USD_PER_SECOND;
+
+export function seedanceVariantFromMarketModelId(modelId: string): "seedance-2" | "seedance-2-fast" {
+  return modelId.includes("seedance-2-fast") ? "seedance-2-fast" : "seedance-2";
 }
 
+/** True for PiAPI Preview / Fast Preview task types (distinct $/s from Seedance 2 / 2 Fast “pro”). */
+export function isSeedancePreviewMarketModel(modelId: string): boolean {
+  return (
+    modelId === "bytedance/seedance-2-preview" ||
+    modelId === "bytedance/seedance-2-preview-vip" ||
+    modelId === "bytedance/seedance-2-fast-preview" ||
+    modelId === "bytedance/seedance-2-fast-preview-vip"
+  );
+}
+
+/**
+ * Provider $/s for Preview SKUs (sheet Feb 2026).
+ * Fast Preview (+ VIP): 480p $0.08 · 720p $0.16 (VIP row); 1080p inferred $0.40.
+ * Seedance 2 Preview (+ VIP): 480p $0.10 · 720p $0.20 · 1080p $0.50 (VIP rows at 720/1080).
+ * Must match `seedance-2-fast-preview` before `seedance-2-preview` substring checks.
+ */
+export function seedancePreviewProviderUsdPerSecond(
+  modelId: string,
+  resolution: SeedanceBillingResolution,
+): number {
+  if (modelId.includes("seedance-2-fast-preview")) {
+    return (
+      {
+        "480p": 0.08,
+        "720p": 0.16,
+        "1080p": 0.4,
+      } as const
+    )[resolution];
+  }
+  if (modelId.includes("seedance-2-preview")) {
+    return (
+      {
+        "480p": 0.1,
+        "720p": 0.2,
+        "1080p": 0.5,
+      } as const
+    )[resolution];
+  }
+  throw new Error(`seedancePreviewProviderUsdPerSecond: not a preview model: ${modelId}`);
+}
+
+function creditsFromProviderOurPerSecond(durationSec: number, ourPerSecond: number): number {
+  const d = Math.max(0, Number(durationSec) || 0);
+  const retailPerSec = ourPerSecond * 2;
+  const perSec = Math.max(1, Math.round(retailPerSec / VIDEO_DYNAMIC_CREDIT_USD));
+  return Math.max(1, Math.ceil(d * perSec));
+}
+
+export function seedanceCreditsPerSecond(opts: {
+  variant: "seedance-2" | "seedance-2-fast";
+  resolution: SeedanceBillingResolution;
+}): number {
+  const our =
+    opts.variant === "seedance-2"
+      ? SEEDANCE_2_PROVIDER_USD_PER_SECOND[opts.resolution]
+      : SEEDANCE_2_FAST_PROVIDER_USD_PER_SECOND[opts.resolution];
+  const retailPerSec = our * 2;
+  return Math.max(1, Math.round(retailPerSec / VIDEO_DYNAMIC_CREDIT_USD));
+}
+
+export function calculateSeedanceVideoCredits(
+  durationSec: number,
+  variant: "seedance-2" | "seedance-2-fast",
+  resolution: SeedanceBillingResolution,
+): number {
+  const d = Math.max(0, Number(durationSec) || 0);
+  const perSec = seedanceCreditsPerSecond({ variant, resolution });
+  return Math.max(1, Math.ceil(d * perSec));
+}
+
+export function calculateSeedancePreviewVideoCredits(
+  durationSec: number,
+  modelId: string,
+  resolution: SeedanceBillingResolution,
+): number {
+  const our = seedancePreviewProviderUsdPerSecond(modelId, resolution);
+  return creditsFromProviderOurPerSecond(durationSec, our);
+}
+
+function seedanceResolutionFromVideoOptions(opts: VideoCreditOptions): SeedanceBillingResolution {
+  const vr = opts.videoResolution;
+  if (vr === "480p" || vr === "720p" || vr === "1080p") return vr;
+  const q = (opts.quality ?? "").toLowerCase().trim();
+  if (q === "480p" || q === "480") return "480p";
+  if (q === "pro" || q === "1080p") return "1080p";
+  if (q === "std" || q === "720p") return "720p";
+  return "720p";
+}
+
+/**
+ * Video billing: Kling uses duration × quality × audio; Sora uses tier table; Seedance uses PiAPI $/s × 2.
+ */
 export function calculateVideoCreditsForModel(opts: VideoCreditOptions): number {
   const d = Math.max(0, Number(opts.duration) || 0);
   const audio = Boolean(opts.audio);
@@ -1161,20 +1235,56 @@ export function calculateVideoCreditsForModel(opts: VideoCreditOptions): number 
     case "bytedance/seedance-2-preview":
     case "bytedance/seedance-2-preview-vip":
     case "bytedance/seedance-2":
-      return Math.max(1, calculateKling30VideoCredits(d, seedance2QualityFromVideoResolution(opts.videoResolution), true));
     case "bytedance/seedance-2-fast-preview":
     case "bytedance/seedance-2-fast-preview-vip":
-    case "bytedance/seedance-2-fast":
-      return Math.max(
-        1,
-        Math.ceil(calculateKling30VideoCredits(d, seedance2QualityFromVideoResolution(opts.videoResolution), true) * 0.82),
-      );
+    case "bytedance/seedance-2-fast": {
+      const resolution = seedanceResolutionFromVideoOptions(opts);
+      if (isSeedancePreviewMarketModel(opts.modelId)) {
+        return calculateSeedancePreviewVideoCredits(d, opts.modelId, resolution);
+      }
+      const variant = seedanceVariantFromMarketModelId(opts.modelId);
+      return calculateSeedanceVideoCredits(d, variant, resolution);
+    }
 
     default:
       // Veo, etc.: anchor tier until per-model tables exist
       return Math.max(1, calculateKling30VideoCredits(d, "pro", true));
   }
 }
+
+/**
+ * Link to Ad final video: Seedance 2 **Fast** @ **720p** (matches generate route + no resolution UI).
+ */
+export function linkToAdVideoCredits(
+  model: LinkToAdVideoModelId,
+  durationSec: number,
+  seedanceSpeed: LinkToAdSeedanceSpeed = "normal",
+): number {
+  void LINK_TO_AD_VIDEO_MODELS[model];
+  const d = normalizeUgcScriptVideoDurationSec(durationSec);
+  const modelId = linkToAdSeedanceMarketModel(seedanceSpeed);
+  return calculateVideoCreditsForModel({
+    modelId,
+    duration: d,
+    audio: true,
+    videoResolution: "720p",
+  });
+}
+
+/** Reference snapshot for marketing / tests — Seedance Fast @ 720p, normal vs VIP. */
+export const LINK_TO_AD_SEEDANCE_VIDEO_CREDITS_BY_DURATION_SEC: Record<5 | 10 | 15 | 30, number> = {
+  5: linkToAdVideoCredits("seedance", 5, "normal"),
+  10: linkToAdVideoCredits("seedance", 10, "normal"),
+  15: linkToAdVideoCredits("seedance", 15, "normal"),
+  30: linkToAdVideoCredits("seedance", 30, "normal"),
+};
+
+export const LINK_TO_AD_SEEDANCE_VIP_VIDEO_CREDITS_BY_DURATION_SEC: Record<5 | 10 | 15 | 30, number> = {
+  5: linkToAdVideoCredits("seedance", 5, "vip"),
+  10: linkToAdVideoCredits("seedance", 10, "vip"),
+  15: linkToAdVideoCredits("seedance", 15, "vip"),
+  30: linkToAdVideoCredits("seedance", 30, "vip"),
+};
 
 /**
  * Studio Edit Video tab, `studio-edit/…` picker ids.

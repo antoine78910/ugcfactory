@@ -1364,20 +1364,34 @@ export default function StudioVideoPanel({
   );
   const billingDurationSec = klingCustomMulti ? klingMultiTotalSec : Number(duration);
 
+  const seedanceVideoResolution = useMemo((): "480p" | "720p" | "1080p" | undefined => {
+    if (!modelId.startsWith("bytedance/seedance")) return undefined;
+    return klingMode === "pro" ? "1080p" : "720p";
+  }, [modelId, klingMode]);
+
+  /** Preview VIP uses distinct market ids + sheet $/s; other models keep ×2 on VIP queue. */
+  const pricingModelIdForCredits = useMemo(
+    () => seedancePreviewMarketModelForApi(modelId, videoPriority),
+    [modelId, videoPriority],
+  );
+
   const baseCredits = useMemo(
     () =>
       calculateVideoCredits({
-        modelId,
+        modelId: pricingModelIdForCredits,
         duration: billingDurationSec,
         audio: soundOn,
         quality: klingMode,
+        videoResolution: seedanceVideoResolution,
       }),
-    [modelId, billingDurationSec, soundOn, klingMode],
+    [pricingModelIdForCredits, billingDurationSec, soundOn, klingMode, seedanceVideoResolution],
   );
-  const credits = useMemo(
-    () => (videoPriority === "vip" ? baseCredits * 2 : baseCredits),
-    [baseCredits, videoPriority],
-  );
+  const credits = useMemo(() => {
+    const previewPicker =
+      modelId === "bytedance/seedance-2-preview" || modelId === "bytedance/seedance-2-fast-preview";
+    if (previewPicker) return baseCredits;
+    return videoPriority === "vip" ? baseCredits * 2 : baseCredits;
+  }, [modelId, baseCredits, videoPriority]);
 
   useEffect(() => {
     if (!klingCustomMulti) return;
