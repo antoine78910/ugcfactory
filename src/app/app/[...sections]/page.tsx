@@ -82,6 +82,7 @@ import { clipboardImageFiles } from "@/lib/clipboardImage";
 import { UploadBusyOverlay } from "@/app/_components/UploadBusyOverlay";
 import { AvatarInputCornerBadge } from "@/app/_components/AvatarInputCornerBadge";
 import { AvatarPickerDialog } from "@/app/_components/AvatarPickerDialog";
+import { PromptEnhanceCornerButton } from "@/app/_components/PromptEnhanceCornerButton";
 import { loadAvatarUrls } from "@/lib/avatarLibrary";
 import { userMessageFromCaughtError } from "@/lib/generationUserMessage";
 import {
@@ -4223,13 +4224,20 @@ export default function AppBrandWizard() {
                                 <p className="text-[10px] leading-snug text-white/35">
                                   Optional text sent to Kling Motion Control (`prompt`, max 2500 characters).
                                 </p>
-                                <Textarea
-                                  value={motionPrompt}
-                                  onChange={(e) => setMotionPrompt(e.target.value)}
-                                  placeholder="Example: The character dances with subtle upper-body motion."
-                                  className="min-h-[84px] w-full resize-none rounded-xl border-white/15 bg-[#0a0a0d] text-xs text-white placeholder:text-white/35"
-                                  rows={4}
-                                />
+                                <div className="relative">
+                                  <Textarea
+                                    value={motionPrompt}
+                                    onChange={(e) => setMotionPrompt(e.target.value)}
+                                    placeholder="Example: The character dances with subtle upper-body motion."
+                                    className="min-h-[84px] w-full resize-none rounded-xl border-white/15 bg-[#0a0a0d] px-3 pb-10 pt-2 text-xs text-white placeholder:text-white/35"
+                                    rows={4}
+                                  />
+                                  <PromptEnhanceCornerButton
+                                    value={motionPrompt}
+                                    onApply={setMotionPrompt}
+                                    surface="studio-video"
+                                  />
+                                </div>
                               </div>
                             </details>
                           </div>

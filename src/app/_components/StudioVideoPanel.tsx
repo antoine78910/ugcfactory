@@ -34,6 +34,7 @@ import { Textarea } from "@/components/ui/textarea";
 import ElementMentionTextarea, {
   type MentionElementOption,
 } from "@/app/_components/ElementMentionTextarea";
+import { PromptEnhanceCornerButton } from "@/app/_components/PromptEnhanceCornerButton";
 import { AvatarInputCornerBadge } from "@/app/_components/AvatarInputCornerBadge";
 import { StudioEmptyExamples, StudioOutputPane } from "@/app/_components/StudioEmptyExamples";
 import { StudioGenerationsHistory } from "@/app/_components/StudioGenerationsHistory";
@@ -4054,25 +4055,31 @@ export default function StudioVideoPanel({
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Parametres avances</p>
                   <div className="space-y-1.5">
                     <Label className="text-xs text-white/45">Prompt</Label>
-                    <Textarea
-                      value={editPrompt}
-                      onChange={(e) => setEditPrompt(e.target.value)}
-                      placeholder="Describe background and scene details - e.g., 'A corgi runs in' or 'Snowy park setting'. Motion is controlled by your reference video."
-                      className="min-h-[100px] w-full resize-none rounded-xl border-white/10 bg-[#0a0a0d] px-3 py-3 text-sm text-white placeholder:text-white/35 focus-visible:ring-0"
-                      rows={4}
-                    />
+                    <div className="relative">
+                      <Textarea
+                        value={editPrompt}
+                        onChange={(e) => setEditPrompt(e.target.value)}
+                        placeholder="Describe background and scene details - e.g., 'A corgi runs in' or 'Snowy park setting'. Motion is controlled by your reference video."
+                        className="min-h-[100px] w-full resize-none rounded-xl border-white/10 bg-[#0a0a0d] px-3 pb-10 pt-3 text-sm text-white placeholder:text-white/35 focus-visible:ring-0"
+                        rows={4}
+                      />
+                      <PromptEnhanceCornerButton value={editPrompt} onApply={setEditPrompt} surface="studio-video" />
+                    </div>
                   </div>
                 </div>
               ) : (
                 <div>
                   <Label className="text-xs text-white/45">Prompt</Label>
-                  <Textarea
-                    value={editPrompt}
-                    onChange={(e) => setEditPrompt(e.target.value)}
-                    placeholder="Describe the change you want, like 'Make it snow'. Add elements using @"
-                    className="mt-2 min-h-[120px] w-full resize-none rounded-xl border-white/10 bg-[#0a0a0d] px-3 py-3 text-sm text-white placeholder:text-white/35 focus-visible:ring-0"
-                    rows={4}
-                  />
+                  <div className="relative mt-2">
+                    <Textarea
+                      value={editPrompt}
+                      onChange={(e) => setEditPrompt(e.target.value)}
+                      placeholder="Describe the change you want, like 'Make it snow'. Add elements using @"
+                      className="min-h-[120px] w-full resize-none rounded-xl border-white/10 bg-[#0a0a0d] px-3 pb-10 pt-3 text-sm text-white placeholder:text-white/35 focus-visible:ring-0"
+                      rows={4}
+                    />
+                    <PromptEnhanceCornerButton value={editPrompt} onApply={setEditPrompt} surface="studio-video" />
+                  </div>
                   <div className="mt-2">
                     <Button
                       type="button"
@@ -4472,23 +4479,26 @@ export default function StudioVideoPanel({
                 </p>
               ) : (
                 <>
-                  <ElementMentionTextarea
-                    value={prompt}
-                    onChange={setPrompt}
-                    elements={mentionElementOptions}
-                    onCreateNew={openKlingElementsModal}
-                    placeholder={
-                      modelId === "kling-3.0/video" && mentionElementOptions.length > 0
-                        ? "Describe the scene and use @element_name for each saved element (e.g. @product, @model)."
-                        : studioVideoIsSeedance2ProPickerId(modelId) && mentionElementOptions.length > 0
-                          ? "Describe the video. Reference extra images with @image2, @image3, … (start frame is @image1), or we prepend tags if you omit them."
-                          : studioVideoSupportsReferenceElements(modelId)
-                            ? "Describe your video, and type @ to reference a saved Element."
-                            : "Describe your video, like 'A woman walking through a neon-lit city'."
-                    }
-                    className="mt-4 h-[140px] max-h-[42vh] w-full resize-none overflow-y-scroll [field-sizing:fixed] border-white/10 bg-[#0a0a0d] px-3 py-3 text-sm text-white placeholder:text-white/35 focus-visible:ring-0"
-                    rows={4}
-                  />
+                  <div className="relative mt-4">
+                    <ElementMentionTextarea
+                      value={prompt}
+                      onChange={setPrompt}
+                      elements={mentionElementOptions}
+                      onCreateNew={openKlingElementsModal}
+                      placeholder={
+                        modelId === "kling-3.0/video" && mentionElementOptions.length > 0
+                          ? "Describe the scene and use @element_name for each saved element (e.g. @product, @model)."
+                          : studioVideoIsSeedance2ProPickerId(modelId) && mentionElementOptions.length > 0
+                            ? "Describe the video. Reference extra images with @image2, @image3, … (start frame is @image1), or we prepend tags if you omit them."
+                            : studioVideoSupportsReferenceElements(modelId)
+                              ? "Describe your video, and type @ to reference a saved Element."
+                              : "Describe your video, like 'A woman walking through a neon-lit city'."
+                      }
+                      className="h-[140px] max-h-[42vh] w-full resize-none overflow-y-scroll [field-sizing:fixed] border-white/10 bg-[#0a0a0d] px-3 py-3 text-sm text-white placeholder:text-white/35 focus-visible:ring-0 [&_textarea]:pb-10"
+                      rows={4}
+                    />
+                    <PromptEnhanceCornerButton value={prompt} onApply={setPrompt} surface="studio-video" />
+                  </div>
                   {elementsUnsupportedHint ? (
                     <p className="mt-2 text-[10px] leading-snug text-white/45">
                       elements can not be used inside this model, please use seedance 2 or kling 3.0
@@ -4637,23 +4647,36 @@ export default function StudioVideoPanel({
                             <div className="text-[11px] font-medium text-violet-300/85">
                               Shot {idx + 1}
                             </div>
-                            <ElementMentionTextarea
-                              value={row.prompt}
-                              onChange={(v) =>
-                                setKlingShots((prev) =>
-                                  prev.map((s) => (s.id === row.id ? { ...s, prompt: v.slice(0, 500) } : s)),
-                                )
-                              }
-                              elements={mentionElementOptions}
-                              onCreateNew={openKlingElementsModal}
-                              placeholder={
-                                idx === 0
-                                  ? "Describe the first scene, use @ to reference a saved Element."
-                                  : `Describe scene ${idx + 1}…`
-                              }
-                              rows={3}
-                              className="min-h-[72px] w-full resize-none border-white/10 bg-[#0a0a0d] px-2.5 py-2 text-xs text-white placeholder:text-white/35 focus-visible:ring-0"
-                            />
+                            <div className="relative">
+                              <ElementMentionTextarea
+                                value={row.prompt}
+                                onChange={(v) =>
+                                  setKlingShots((prev) =>
+                                    prev.map((s) => (s.id === row.id ? { ...s, prompt: v.slice(0, 500) } : s)),
+                                  )
+                                }
+                                elements={mentionElementOptions}
+                                onCreateNew={openKlingElementsModal}
+                                placeholder={
+                                  idx === 0
+                                    ? "Describe the first scene, use @ to reference a saved Element."
+                                    : `Describe scene ${idx + 1}…`
+                                }
+                                rows={3}
+                                className="min-h-[72px] w-full resize-none border-white/10 bg-[#0a0a0d] px-2.5 py-2 text-xs text-white placeholder:text-white/35 focus-visible:ring-0 [&_textarea]:pb-10"
+                              />
+                              <PromptEnhanceCornerButton
+                                value={row.prompt}
+                                onApply={(v) =>
+                                  setKlingShots((prev) =>
+                                    prev.map((s) =>
+                                      s.id === row.id ? { ...s, prompt: v.slice(0, 500) } : s,
+                                    ),
+                                  )
+                                }
+                                surface="studio-video"
+                              />
+                            </div>
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               <div className="flex items-center gap-1.5 text-white/45">
                                 <Clock className="h-3.5 w-3.5 shrink-0" aria-hidden />

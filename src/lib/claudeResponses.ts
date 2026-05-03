@@ -2,7 +2,11 @@ import Anthropic from "@anthropic-ai/sdk";
 import sharp from "sharp";
 import { requireEnv } from "@/lib/env";
 
-export type ClaudeModel = "claude-sonnet-4-5-20250929" | "claude-sonnet-4-6";
+export type ClaudeModel =
+  | "claude-sonnet-4-5-20250929"
+  | "claude-sonnet-4-6"
+  /** Claude Opus 4.7 (frontier). */
+  | "claude-opus-4-7";
 
 const DEFAULT_MODEL: ClaudeModel = "claude-sonnet-4-5-20250929";
 

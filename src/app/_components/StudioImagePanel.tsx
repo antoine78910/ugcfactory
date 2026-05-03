@@ -24,6 +24,7 @@ import {
 import { StudioEmptyExamples, StudioOutputPane } from "@/app/_components/StudioEmptyExamples";
 import { StudioGenerationsHistory } from "@/app/_components/StudioGenerationsHistory";
 import type { StudioHistoryItem, StudioImageLightboxEditModelOption } from "@/app/_components/StudioGenerationsHistory";
+import { PromptEnhanceCornerButton } from "@/app/_components/PromptEnhanceCornerButton";
 import { StudioBillingDialog } from "@/app/_components/StudioBillingDialog";
 import { formatDisplayCredits } from "@/lib/creditLedgerTicks";
 import {
@@ -678,13 +679,16 @@ export default function StudioImagePanel({ onChangeVoice }: StudioImagePanelProp
               </button>
             ))}
           </div>
-          <Textarea
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            placeholder="Describe the scene you imagine."
-            className="mt-4 min-h-[120px] w-full resize-none border-white/10 bg-[#0a0a0d] px-3 py-3 text-sm text-white placeholder:text-white/35 focus-visible:ring-0"
-            rows={4}
-          />
+          <div className="relative mt-4">
+            <Textarea
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              placeholder="Describe the scene you imagine."
+              className="min-h-[120px] w-full resize-none border-white/10 bg-[#0a0a0d] px-3 pb-10 pt-3 text-sm text-white placeholder:text-white/35 focus-visible:ring-0"
+              rows={4}
+            />
+            <PromptEnhanceCornerButton value={prompt} onApply={setPrompt} surface="studio-image" />
+          </div>
         </div>
 
         <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Parameters</p>

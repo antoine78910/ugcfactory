@@ -62,6 +62,9 @@ export const LINK_TO_AD_VIDEO_MARKET_MODEL = LINK_TO_AD_VIDEO_MODELS.seedance.ma
 
 export const CLAUDE_AI_CREDITS = 5;
 
+/** Claude Opus prompt polish (Studio / Ads / Workflow). Charged only for free-plan platform credit users on the server. */
+export const PROMPT_ENHANCE_CREDITS = 1;
+
 // ---------------------------------------------------------------------------
 // Images (fixed credits)
 // ---------------------------------------------------------------------------

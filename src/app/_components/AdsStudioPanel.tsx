@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import ElementMentionTextarea, {
   type MentionElementOption,
 } from "@/app/_components/ElementMentionTextarea";
+import { PromptEnhanceCornerButton } from "@/app/_components/PromptEnhanceCornerButton";
 import {
   Select,
   SelectContent,
@@ -933,7 +934,10 @@ export default function AdsStudioPanel() {
         <div
           className={cn(
             "box-border flex w-full min-w-0 flex-col items-center gap-10 pb-2 md:gap-12",
-            "px-3 sm:px-5 md:ml-[var(--ads-projects-w)] md:px-6 lg:px-10",
+            /* Padding (not margin) reserves the fixed Projects rail without breaking `w-full` centering. */
+            "px-3 sm:px-5",
+            "md:pl-[calc(var(--ads-projects-w)+1.5rem)] md:pr-6",
+            "lg:pl-[calc(var(--ads-projects-w)+2.5rem)] lg:pr-10",
           )}
         >
           <div className="mx-auto flex w-full max-w-[1080px] min-w-0 flex-col items-center gap-6 md:gap-8">
@@ -1005,10 +1009,11 @@ export default function AdsStudioPanel() {
                     showCreateElementButton={false}
                     className={cn(
                       "min-h-36 w-full rounded-xl border border-white/10 bg-white/[0.03] shadow-none",
-                      "[&_textarea]:min-h-36 [&_textarea]:text-sm [&_textarea]:leading-relaxed [&_textarea]:caret-violet-300 [&_textarea]:placeholder:text-white/35",
+                      "[&_textarea]:min-h-36 [&_textarea]:pb-10 [&_textarea]:text-sm [&_textarea]:leading-relaxed [&_textarea]:caret-violet-300 [&_textarea]:placeholder:text-white/35",
                       "focus-within:ring-0",
                     )}
                   />
+                  <PromptEnhanceCornerButton value={prompt} onApply={setPrompt} surface="ads" />
                 </div>
               </div>
 
@@ -1260,15 +1265,9 @@ export default function AdsStudioPanel() {
             </div>
           ) : null}
 
-      <section
-        className={cn(
-          "w-full min-w-0",
-          // Align with composer prompt column: p-4 + (sm: mode rail + gap) + plus btn + gap-2
-          "pl-[calc(1rem+1.75rem+0.5rem)] sm:pl-[calc(1rem+70px+0.75rem+1.75rem+0.5rem)]",
-        )}
-      >
-        <div className="mb-5 flex justify-start sm:mb-6">
-          <h2 className="flex items-center gap-2.5 text-xl font-semibold tracking-tight text-white sm:gap-3 sm:text-2xl md:text-[1.75rem] md:leading-snug">
+      <section className="w-full min-w-0">
+        <div className="mb-5 flex justify-center sm:mb-6">
+          <h2 className="flex items-center gap-2.5 text-center text-xl font-semibold tracking-tight text-white sm:gap-3 sm:text-2xl md:text-[1.75rem] md:leading-snug">
             <Zap
               className="size-7 shrink-0 text-fuchsia-400 drop-shadow-[0_0_14px_rgba(232,121,249,0.55)] sm:size-8 md:size-9"
               aria-hidden

@@ -4,6 +4,7 @@ import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import { FileText, Type } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { PromptEnhanceCornerButton } from "@/app/_components/PromptEnhanceCornerButton";
 import { cn } from "@/lib/utils";
 
 import { useWorkflowNodePatch } from "../workflowNodePatchContext";
@@ -135,18 +136,27 @@ export function TextPromptNode({ id, data: rawData, selected }: NodeProps<TextPr
           </div>
           <div className="relative p-2.5">
             <div className={cn(promptEditorOpen && "pointer-events-none opacity-35 blur-[1.5px]")}>
-              <textarea
-                value={data.prompt}
-                onChange={(e) => patch({ prompt: e.target.value })}
-                placeholder="Type the prompt to send into connected generators…"
-                rows={6}
-                onWheelCapture={keepWheelInsideScrollable}
-                onFocus={(e) => {
-                  openPromptEditor();
-                  requestAnimationFrame(() => e.currentTarget.blur());
-                }}
-                className="nodrag nopan nowheel w-full resize-y rounded-lg border border-white/12 bg-black/50 px-2.5 py-2 text-[13px] leading-snug text-white/90 placeholder:text-white/28 outline-none focus:border-violet-500/35"
-              />
+              <div className="relative">
+                <textarea
+                  value={data.prompt}
+                  onChange={(e) => patch({ prompt: e.target.value })}
+                  placeholder="Type the prompt to send into connected generators…"
+                  rows={6}
+                  onWheelCapture={keepWheelInsideScrollable}
+                  onFocus={(e) => {
+                    openPromptEditor();
+                    requestAnimationFrame(() => e.currentTarget.blur());
+                  }}
+                  className="nodrag nopan nowheel w-full resize-y rounded-lg border border-white/12 bg-black/50 px-2.5 pb-10 pt-2 text-[13px] leading-snug text-white/90 placeholder:text-white/28 outline-none focus:border-violet-500/35"
+                />
+                {!promptEditorOpen ? (
+                  <PromptEnhanceCornerButton
+                    value={data.prompt}
+                    onApply={(next) => patch({ prompt: next })}
+                    surface="workflow"
+                  />
+                ) : null}
+              </div>
             </div>
 
             {promptEditorOpen ? (
@@ -179,15 +189,23 @@ export function TextPromptNode({ id, data: rawData, selected }: NodeProps<TextPr
                       Done
                     </button>
                   </div>
-                  <textarea
-                    ref={promptEditorTextareaRef}
-                    value={promptEditorDraft}
-                    onChange={(e) => setPromptEditorDraft(e.target.value)}
-                    placeholder="Type the prompt to send into connected generators…"
-                    rows={10}
-                    onWheelCapture={keepWheelInsideScrollable}
-                    className="nodrag nopan nowheel min-h-[200px] max-h-[52vh] w-full resize-y overflow-y-scroll rounded-xl border border-white/15 bg-black/45 px-3 py-2 text-[13px] leading-relaxed text-white/92 placeholder:text-white/28 outline-none focus:border-violet-500/40 focus:ring-1 focus:ring-violet-500/25 studio-params-scroll"
-                  />
+                  <div className="relative">
+                    <textarea
+                      ref={promptEditorTextareaRef}
+                      value={promptEditorDraft}
+                      onChange={(e) => setPromptEditorDraft(e.target.value)}
+                      placeholder="Type the prompt to send into connected generators…"
+                      rows={10}
+                      onWheelCapture={keepWheelInsideScrollable}
+                      className="nodrag nopan nowheel min-h-[200px] max-h-[52vh] w-full resize-y overflow-y-scroll rounded-xl border border-white/15 bg-black/45 px-3 pb-10 pt-2 text-[13px] leading-relaxed text-white/92 placeholder:text-white/28 outline-none focus:border-violet-500/40 focus:ring-1 focus:ring-violet-500/25 studio-params-scroll"
+                    />
+                    <PromptEnhanceCornerButton
+                      value={promptEditorDraft}
+                      onApply={setPromptEditorDraft}
+                      surface="workflow"
+                      className="z-[60]"
+                    />
+                  </div>
                 </div>
               </div>
             ) : null}

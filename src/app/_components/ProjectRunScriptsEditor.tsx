@@ -23,6 +23,7 @@ import {
   splitScriptFactorsForUi,
 } from "@/lib/linkToAdScriptFactors";
 import { isPlatformCreditBypassActive, useCreditsPlan } from "@/app/_components/CreditsPlanContext";
+import { PromptEnhanceCornerButton } from "@/app/_components/PromptEnhanceCornerButton";
 
 const DISCOVER_ANGLE_CREDITS = 2;
 
@@ -349,15 +350,16 @@ export function ProjectRunScriptsEditor({
             </button>
           </div>
           {addMode === "guide" ? (
-            <div className="space-y-1">
+            <div className="relative space-y-1">
               <Label className="text-[10px] text-white/45">Describe the creative angle (hook, situation, audience…)</Label>
               <Textarea
                 value={addPrompt}
                 onChange={(e) => setAddPrompt(e.target.value)}
-                className="min-h-[88px] border-white/10 bg-black/40 text-xs text-white/85"
+                className="min-h-[88px] border-white/10 bg-black/40 pb-10 text-xs text-white/85"
                 placeholder='e.g. "Busy parent morning, product as the 30-second win, skeptical but curious tone."'
                 spellCheck
               />
+              <PromptEnhanceCornerButton value={addPrompt} onApply={setAddPrompt} surface="ads" />
             </div>
           ) : (
             <p className="text-[11px] leading-relaxed text-white/50">
