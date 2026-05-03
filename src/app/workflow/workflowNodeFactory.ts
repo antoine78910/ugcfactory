@@ -20,6 +20,8 @@ export type BuildAdAssetNodeOptions = {
   prompt?: string;
   /** Optional explicit model override for special entry points. */
   model?: string;
+  /** Optional resolution override (e.g. `1K` for Avatar 360° profile preset). */
+  resolution?: string;
   /** width/height, when set, card preview uses this exact shape. */
   intrinsicAspect?: number;
   referencePreviewUrl?: string;
@@ -124,6 +126,7 @@ export function buildAdAssetNode(
 
   if (options?.prompt !== undefined) data.prompt = options.prompt;
   if (options?.model !== undefined) data.model = options.model;
+  if (options?.resolution !== undefined) data.resolution = options.resolution;
   if (kind === "image" && options?.imageWorkflowPreset) {
     data.imageWorkflowPreset = options.imageWorkflowPreset;
   }

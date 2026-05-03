@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LayoutList, Loader2, Pencil, Plus, Smartphone, Package2, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -24,8 +24,6 @@ import { calculateVideoCreditsForModel } from "@/lib/pricing";
 import { AdsStudioRefSourceDialog } from "@/app/_components/AdsStudioRefSourceDialog";
 import type { AdsStudioMentionEntry } from "@/app/_components/AdsStudioMentionMenu";
 import { loadAvatarUrls } from "@/lib/avatarLibrary";
-import { getStudioTemplateVideosCached } from "@/lib/studioTemplateVideosClient";
-import type { StudioTemplateVideoItem } from "@/lib/studioTemplateVideosTypes";
 
 /** Ads Studio: PiAPI Seedance 2 (non–fast) only. */
 const ADS_STUDIO_SEEDANCE_MODEL = "bytedance/seedance-2" as const;
@@ -34,61 +32,13 @@ const ADS_STUDIO_SEEDANCE_MODEL = "bytedance/seedance-2" as const;
 const ADS_STUDIO_TUTORIAL_2_AVATAR_PATH = "/studio/ads-studio/tutorial-2-avatar.png";
 const ADS_STUDIO_TUTORIAL_2_PRODUCT_PATH = "/studio/ads-studio/tutorial-2-product.png";
 
-/** UGC (2) “Recreate”: @image1 product, @image2 avatar. */
-const ADS_STUDIO_UGC_2_AVATAR_PATH = "/studio/ads-studio/ugc-2-avatar.png";
-const ADS_STUDIO_UGC_2_PRODUCT_PATH = "/studio/ads-studio/ugc-2-product.png";
+/** Unboxing “Recreate” bundled refs: @image1 product/unboxing scene, @image2 avatar (public/studio/ads-studio/). */
+const ADS_STUDIO_UNBOXING_PRODUCT_PATH = "/studio/ads-studio/unboxing-recreate-product.png";
+const ADS_STUDIO_UNBOXING_AVATAR_PATH = "/studio/ads-studio/unboxing-recreate-avatar.png";
 
-/** Unboxing (4) “Recreate”: @image1 product, @image2 avatar. */
-const ADS_STUDIO_UNBOXING_4_AVATAR_PATH = "/studio/ads-studio/unboxing-4-avatar.png";
-const ADS_STUDIO_UNBOXING_4_PRODUCT_PATH = "/studio/ads-studio/unboxing-4-product.png";
-
-/** Unboxing (2) “Recreate”: @image1 product, @image2 avatar. */
-const ADS_STUDIO_UNBOXING_2_AVATAR_PATH = "/studio/ads-studio/unboxing-2-avatar.png";
-const ADS_STUDIO_UNBOXING_2_PRODUCT_PATH = "/studio/ads-studio/unboxing-2-product.png";
-
-/** Generic Unboxing (default gallery) — @image1 product only, no bundled avatar. */
-const ADS_STUDIO_UNBOXING_DEFAULT_PRODUCT_PATH = "/studio/ads-studio/unboxing-default-product.png";
-
-/** Pro Try On “Recreate”: @image1 product, @image2 avatar. */
-const ADS_STUDIO_PRO_TRY_ON_PRODUCT_PATH = "/studio/ads-studio/pro-try-on-product.png";
-const ADS_STUDIO_PRO_TRY_ON_AVATAR_PATH = "/studio/ads-studio/pro-try-on-avatar.png";
-
-/** UGC (tryon) 5 “Recreate”: @image1 product, @image2 avatar. */
-const ADS_STUDIO_UGC_TRYON_5_AVATAR_PATH = "/studio/ads-studio/ugc-tryon-5-avatar.png";
-const ADS_STUDIO_UGC_TRYON_5_PRODUCT_PATH = "/studio/ads-studio/ugc-tryon-5-product.png";
-
-/** UGC / Virtual Try On 2 “Recreate”: @image1 product, @image2 avatar. */
+/** UGC Virtual Try On 2 “Recreate”: @image1 product, @image2 avatar (public/studio/ads-studio/). */
 const ADS_STUDIO_VIRTUAL_TRY_ON_2_PRODUCT_PATH = "/studio/ads-studio/virtual-try-on-2-product.png";
 const ADS_STUDIO_VIRTUAL_TRY_ON_2_AVATAR_PATH = "/studio/ads-studio/virtual-try-on-2-avatar.png";
-
-/** UGC Woman (default gallery card) — @image1 product, @image2 avatar. */
-const ADS_STUDIO_UGC_WOMAN_PRODUCT_PATH = "/studio/ads-studio/ugc-woman-product.png";
-const ADS_STUDIO_UGC_WOMAN_AVATAR_PATH = "/studio/ads-studio/ugc-woman-avatar.png";
-
-/** UGC try on (street row) — @image1 product, @image2 avatar. */
-const ADS_STUDIO_UGC_TRY_ON_PRODUCT_PATH = "/studio/ads-studio/ugc-try-on-product.png";
-const ADS_STUDIO_UGC_TRY_ON_AVATAR_PATH = "/studio/ads-studio/ugc-try-on-avatar.png";
-
-/** UGC try on 3 / 4 — shared outfit product; distinct avatars. */
-const ADS_STUDIO_UGC_TRY_ON_3_4_PRODUCT_PATH = "/studio/ads-studio/ugc-try-on-3-4-product.png";
-const ADS_STUDIO_UGC_TRY_ON_3_AVATAR_PATH = "/studio/ads-studio/ugc-try-on-3-avatar.png";
-const ADS_STUDIO_UGC_TRY_ON_4_AVATAR_PATH = "/studio/ads-studio/ugc-try-on-4-avatar.png";
-
-/** UGC (3) — @image1 product, @image2 avatar. */
-const ADS_STUDIO_UGC_3_AVATAR_PATH = "/studio/ads-studio/ugc-3-avatar.png";
-const ADS_STUDIO_UGC_3_PRODUCT_PATH = "/studio/ads-studio/ugc-3-product.png";
-
-/** UGC (4) — @image1 product, @image2 avatar. */
-const ADS_STUDIO_UGC_4_AVATAR_PATH = "/studio/ads-studio/ugc-4-avatar.png";
-const ADS_STUDIO_UGC_4_PRODUCT_PATH = "/studio/ads-studio/ugc-4-product.png";
-
-/** Plain UGC (5) — @image1 product, @image2 avatar (not UGC (tryon) 5). */
-const ADS_STUDIO_UGC_5_AVATAR_PATH = "/studio/ads-studio/ugc-5-avatar.png";
-const ADS_STUDIO_UGC_5_PRODUCT_PATH = "/studio/ads-studio/ugc-5-product.png";
-
-/** UGC (6) tumbler row — @image1 product, @image2 avatar (not Try On 6). */
-const ADS_STUDIO_UGC_6_AVATAR_PATH = "/studio/ads-studio/ugc-6-avatar.png";
-const ADS_STUDIO_UGC_6_PRODUCT_PATH = "/studio/ads-studio/ugc-6-product.png";
 
 function resolveAdsStudioPublicImage(path: string): string {
   if (typeof window === "undefined") return path;
@@ -153,6 +103,8 @@ const LS_ADS_STUDIO_HISTORY = "ugc_ads_studio_history_v1";
 const LS_ADS_STUDIO_ACTIVE_JOBS = "ugc_ads_studio_active_jobs_v1";
 /** Drop persisted jobs older than this so stale rows do not poll forever */
 const ADS_STUDIO_MAX_ACTIVE_JOB_AGE_MS = 1000 * 60 * 60 * 24;
+
+type TemplateVideoItem = { filename: string; label: string; url: string };
 
 const TEMPLATE_PROMPT_HYPER_MOTION = `chocolate japanese style commercial, with chocolate crunching, pieces breaking, hands passing chocolate to each other, japanese happy people smiling while biting, and these little characters animated`;
 
@@ -318,162 +270,11 @@ function normalizeTemplateLabel(label: string): string {
     .trim();
 }
 
-/** Unboxing (4) only — avatar + product for Recreate. */
-function isUnboxing4BundledRecreateLabel(normalizedLabel: string): boolean {
+/** True for unboxing template cards (not Tutorial) so Recreate can fill product + avatar for @image1 / @image2. */
+function isUnboxingBundledRecreateLabel(normalizedLabel: string): boolean {
   const n = normalizedLabel;
   if (n.includes("tutorial")) return false;
-  return n.includes("unboxing 4") || n.includes("unboxing4") || (n.includes("unboxing") && n.includes("(4)"));
-}
-
-/** Unboxing (2) — gym bike row; not Unboxing 4. */
-function isUnboxing2BundledRecreateLabel(normalizedLabel: string): boolean {
-  const n = normalizedLabel;
-  if (n.includes("tutorial")) return false;
-  return (
-    n.includes("unboxing 2") ||
-    n.includes("unboxing2") ||
-    n.includes("unoboxing 2") ||
-    n.includes("unoboxing2") ||
-    (n.includes("unboxing") && n.includes("(2)"))
-  );
-}
-
-/** Default “Unboxing” card (not 2 / 3 / 4) — product ref only, clear avatar. */
-function isDefaultUnboxingProductOnlyRecreateLabel(normalizedLabel: string): boolean {
-  const n = normalizedLabel;
-  if (n.includes("tutorial")) return false;
-  if (isUnboxing2BundledRecreateLabel(n) || isUnboxing4BundledRecreateLabel(n)) return false;
-  if (n.includes("unboxing 3") || n.includes("unboxing3")) return false;
   return n.includes("unboxing") || n.includes("unoboxing");
-}
-
-/** Pro Try On — product + avatar for Recreate. */
-function isProTryOnBundledRecreateLabel(normalizedLabel: string): boolean {
-  const n = normalizedLabel;
-  if (n.includes("tutorial")) return false;
-  return n.includes("pro") && (n.includes("try on") || n.includes("try-on") || n.includes("tryon"));
-}
-
-/** UGC (tryon) 5 — same prompt family as UGC 5 with bundled refs (must run before generic try-on / ugc 5). */
-function isUgcTryon5BundledRecreateLabel(normalizedLabel: string): boolean {
-  const n = normalizedLabel;
-  return n.includes("ugc") && n.includes("5") && (n.includes("tryon") || n.includes("try-on"));
-}
-
-/** UGC (5) shopping-bag row — not UGC (tryon) 5 (`isUgcTryon5BundledRecreateLabel` runs first in Recreate). */
-function isUgc5BundledRecreateLabel(normalizedLabel: string): boolean {
-  const n = normalizedLabel;
-  if (n.includes("tutorial")) return false;
-  if (isUgcTryon5BundledRecreateLabel(n)) return false;
-  return n.includes("ugc 5") || n.includes("ugc5") || (n.includes("ugc") && n.includes("(5)"));
-}
-
-/** Plain UGC (2) template — excludes Virtual Try On 2 and other try-on rows. */
-function isUgc2BundledRecreateLabel(normalizedLabel: string): boolean {
-  const n = normalizedLabel;
-  if (n.includes("tutorial")) return false;
-  if (n.includes("unboxing") || n.includes("unoboxing")) return false;
-  if (isVirtualTryOn2BundledRecreateLabel(n)) return false;
-  if (n.includes("tryon") || n.includes("try on") || n.includes("try-on")) return false;
-  return (n.includes("ugc") && (n.includes("(2)") || /\bugc\s*2\b/.test(n))) || n.includes("ugc 2");
-}
-
-/** Default “UGC Woman” gallery label (`toLabel` maps base filename `ugc`). */
-function isUgcWomanBundledRecreateLabel(normalizedLabel: string): boolean {
-  return normalizedLabel.includes("ugc woman");
-}
-
-/** UGC try on 4 — numbered row (not street try-on). */
-function isUgcTryOn4BundledRecreateLabel(normalizedLabel: string): boolean {
-  const n = normalizedLabel;
-  if (n.includes("tutorial")) return false;
-  return (
-    n.includes("ugc") &&
-    (n.includes("try on 4") || n.includes("try-on 4") || n.includes("tryon 4") || n.includes("tryon4"))
-  );
-}
-
-/** UGC try on 3 — numbered row (not street try-on). */
-function isUgcTryOn3BundledRecreateLabel(normalizedLabel: string): boolean {
-  const n = normalizedLabel;
-  if (n.includes("tutorial")) return false;
-  return (
-    n.includes("ugc") &&
-    (n.includes("try on 3") || n.includes("try-on 3") || n.includes("tryon 3") || n.includes("tryon3"))
-  );
-}
-
-/**
- * UGC try-on street template — has “try on” but not Try On 2/3/4/6 or Pro / (tryon) 5 rows.
- * Must run after `isVirtualTryOn2BundledRecreateLabel` / `isProTryOnBundledRecreateLabel` / numbered try-on 3–4.
- */
-function isUgcTryOnBundledRecreateLabel(normalizedLabel: string): boolean {
-  const n = normalizedLabel;
-  if (n.includes("tutorial")) return false;
-  if (isVirtualTryOn2BundledRecreateLabel(n)) return false;
-  if (
-    n.includes("try on 6") ||
-    n.includes("try-on 6") ||
-    n.includes("tryon 6") ||
-    n.includes("tryon6")
-  ) {
-    return false;
-  }
-  if (n.includes("try on 4") || n.includes("try-on 4") || n.includes("tryon 4") || n.includes("tryon4")) {
-    return false;
-  }
-  if (n.includes("try on 3") || n.includes("try-on 3") || n.includes("tryon 3") || n.includes("tryon3")) {
-    return false;
-  }
-  if (isProTryOnBundledRecreateLabel(n)) return false;
-  if (isUgcTryon5BundledRecreateLabel(n)) return false;
-  return n.includes("ugc") && (n.includes("try on") || n.includes("try-on") || n.includes("tryon"));
-}
-
-/** UGC (3) sneaker template — not UGC Try On 3. */
-function isUgc3BundledRecreateLabel(normalizedLabel: string): boolean {
-  const n = normalizedLabel;
-  if (n.includes("tutorial")) return false;
-  if (n.includes("try on 3") || n.includes("try-on 3") || n.includes("tryon 3") || n.includes("tryon3")) {
-    return false;
-  }
-  return (
-    (n.includes("ugc") && (n.includes("(3)") || /\bugc\s*3\b/.test(n))) ||
-    n.includes("ugc 3") ||
-    n.includes("ugc3")
-  );
-}
-
-/** UGC (4) markers template — distinct from UGC (3). */
-function isUgc4BundledRecreateLabel(normalizedLabel: string): boolean {
-  const n = normalizedLabel;
-  if (n.includes("tutorial")) return false;
-  return (
-    (n.includes("ugc") && (n.includes("(4)") || /\bugc\s*4\b/.test(n))) ||
-    n.includes("ugc 4") ||
-    n.includes("ugc4")
-  );
-}
-
-/** UGC (6) — not UGC Try On 6. */
-function isUgc6BundledRecreateLabel(normalizedLabel: string): boolean {
-  const n = normalizedLabel;
-  if (n.includes("tutorial")) return false;
-  if (
-    n.includes("try on 6") ||
-    n.includes("try-on 6") ||
-    n.includes("tryon 6") ||
-    n.includes("tryon6") ||
-    n.includes("tr on 6") ||
-    n.includes("tron 6")
-  ) {
-    return false;
-  }
-  return (
-    (n.includes("ugc") && (n.includes("(6)") || /\bugc\s*6\b/.test(n))) ||
-    n.includes("ugc 6") ||
-    n.includes("ugc6")
-  );
 }
 
 /** Matches promptForTemplateLabel “try on 2” templates (e.g. UGC Virtual Try On 2). */
@@ -509,9 +310,6 @@ function promptForTemplateLabel(label: string): string {
   ) {
     return TEMPLATE_PROMPT_UGC_TRY_ON_6;
   }
-  if (n.includes("try on 4") || n.includes("try-on 4") || n.includes("tryon 4") || n.includes("tryon4")) {
-    return TEMPLATE_PROMPT_UGC_TRY_ON_3;
-  }
   if (n.includes("try on 3") || n.includes("try-on 3") || n.includes("tryon 3") || n.includes("tryon3")) {
     return TEMPLATE_PROMPT_UGC_TRY_ON_3;
   }
@@ -519,9 +317,6 @@ function promptForTemplateLabel(label: string): string {
     return TEMPLATE_PROMPT_UGC_TRY_ON_2;
   }
   if (n.includes("ugc 6") || n.includes("ugc6")) return TEMPLATE_PROMPT_UGC_6;
-  if (n.includes("ugc") && n.includes("5") && (n.includes("tryon") || n.includes("try-on"))) {
-    return TEMPLATE_PROMPT_UGC_5;
-  }
   if (n.includes("ugc 5") || n.includes("ugc5")) return TEMPLATE_PROMPT_UGC_5;
   if (n.includes("try on")) return TEMPLATE_PROMPT_UGC_TRY_ON_STREET;
   if ((n.includes("ugc") && (n.includes(" 4") || n.endsWith("4") || n.includes("(4)"))) || n.includes("ugc4")) {
@@ -579,7 +374,7 @@ export default function AdsStudioPanel() {
   const [activeJobs, setActiveJobs] = useState<AdsStudioActiveJob[]>([]);
   const [selectedSidebarKey, setSelectedSidebarKey] = useState<string | null>(null);
   const [history, setHistory] = useState<AdsStudioHistoryItem[]>([]);
-  const [templateVideos, setTemplateVideos] = useState<StudioTemplateVideoItem[]>([]);
+  const [templateVideos, setTemplateVideos] = useState<TemplateVideoItem[]>([]);
   const [uploadingRefSlot, setUploadingRefSlot] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [refSourceDialogOpen, setRefSourceDialogOpen] = useState(false);
@@ -648,11 +443,15 @@ export default function AdsStudioPanel() {
     }
   }, [activeJobs, activeJobsStorageReady]);
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     let cancelled = false;
-    void getStudioTemplateVideosCached().then((videos) => {
-      if (!cancelled) setTemplateVideos(videos);
-    });
+    (async () => {
+      const res = await fetch(`/api/studio/template-videos?t=${Date.now()}`, { cache: "no-store" });
+      const json = (await res.json().catch(() => null)) as { videos?: TemplateVideoItem[] } | null;
+      if (cancelled) return;
+      const videos = Array.isArray(json?.videos) ? json.videos : [];
+      setTemplateVideos(videos);
+    })();
     return () => {
       cancelled = true;
     };
@@ -1019,20 +818,6 @@ export default function AdsStudioPanel() {
       scrollComposerIntoView();
       return;
     }
-    if (isUgcTryon5BundledRecreateLabel(n)) {
-      setAssetType("product");
-      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_TRYON_5_PRODUCT_PATH));
-      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_TRYON_5_AVATAR_PATH));
-      scrollComposerIntoView();
-      return;
-    }
-    if (isUgc5BundledRecreateLabel(n)) {
-      setAssetType("product");
-      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_5_PRODUCT_PATH));
-      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_5_AVATAR_PATH));
-      scrollComposerIntoView();
-      return;
-    }
     if (isVirtualTryOn2BundledRecreateLabel(n)) {
       setAssetType("product");
       setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_VIRTUAL_TRY_ON_2_PRODUCT_PATH));
@@ -1040,87 +825,10 @@ export default function AdsStudioPanel() {
       scrollComposerIntoView();
       return;
     }
-    if (isProTryOnBundledRecreateLabel(n)) {
+    if (isUnboxingBundledRecreateLabel(n)) {
       setAssetType("product");
-      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_PRO_TRY_ON_PRODUCT_PATH));
-      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_PRO_TRY_ON_AVATAR_PATH));
-      scrollComposerIntoView();
-      return;
-    }
-    if (isUgcTryOn4BundledRecreateLabel(n)) {
-      setAssetType("product");
-      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_TRY_ON_3_4_PRODUCT_PATH));
-      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_TRY_ON_4_AVATAR_PATH));
-      scrollComposerIntoView();
-      return;
-    }
-    if (isUgcTryOn3BundledRecreateLabel(n)) {
-      setAssetType("product");
-      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_TRY_ON_3_4_PRODUCT_PATH));
-      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_TRY_ON_3_AVATAR_PATH));
-      scrollComposerIntoView();
-      return;
-    }
-    if (isUgcTryOnBundledRecreateLabel(n)) {
-      setAssetType("product");
-      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_TRY_ON_PRODUCT_PATH));
-      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_TRY_ON_AVATAR_PATH));
-      scrollComposerIntoView();
-      return;
-    }
-    if (isUnboxing2BundledRecreateLabel(n)) {
-      setAssetType("product");
-      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UNBOXING_2_PRODUCT_PATH));
-      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UNBOXING_2_AVATAR_PATH));
-      scrollComposerIntoView();
-      return;
-    }
-    if (isUnboxing4BundledRecreateLabel(n)) {
-      setAssetType("product");
-      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UNBOXING_4_PRODUCT_PATH));
-      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UNBOXING_4_AVATAR_PATH));
-      scrollComposerIntoView();
-      return;
-    }
-    if (isDefaultUnboxingProductOnlyRecreateLabel(n)) {
-      setAssetType("product");
-      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UNBOXING_DEFAULT_PRODUCT_PATH));
-      setAvatarUrl("");
-      scrollComposerIntoView();
-      return;
-    }
-    if (isUgc3BundledRecreateLabel(n)) {
-      setAssetType("product");
-      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_3_PRODUCT_PATH));
-      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_3_AVATAR_PATH));
-      scrollComposerIntoView();
-      return;
-    }
-    if (isUgc4BundledRecreateLabel(n)) {
-      setAssetType("product");
-      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_4_PRODUCT_PATH));
-      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_4_AVATAR_PATH));
-      scrollComposerIntoView();
-      return;
-    }
-    if (isUgc6BundledRecreateLabel(n)) {
-      setAssetType("product");
-      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_6_PRODUCT_PATH));
-      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_6_AVATAR_PATH));
-      scrollComposerIntoView();
-      return;
-    }
-    if (isUgc2BundledRecreateLabel(n)) {
-      setAssetType("product");
-      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_2_PRODUCT_PATH));
-      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_2_AVATAR_PATH));
-      scrollComposerIntoView();
-      return;
-    }
-    if (isUgcWomanBundledRecreateLabel(n)) {
-      setAssetType("product");
-      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_WOMAN_PRODUCT_PATH));
-      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_WOMAN_AVATAR_PATH));
+      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UNBOXING_PRODUCT_PATH));
+      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UNBOXING_AVATAR_PATH));
       scrollComposerIntoView();
       return;
     }
@@ -1128,12 +836,15 @@ export default function AdsStudioPanel() {
   }
 
   return (
-    <div className="space-y-10">
-      <section className="mx-auto grid w-full max-w-[1400px] grid-cols-1 gap-4 px-2 md:grid-cols-[280px_minmax(0,1fr)] md:items-start md:gap-5 lg:gap-6">
-        <aside
-          aria-label="Projects"
-          className="flex min-h-0 w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#09090b]/95 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)] backdrop-blur-md md:sticky md:top-6 md:z-10 md:w-[280px] md:max-w-[280px] md:max-h-[calc(100dvh-5.5rem)] md:justify-self-start"
-        >
+    <div className="relative min-w-0 pb-8 [--ads-projects-w:220px]">
+      <aside
+        aria-label="Projects"
+        className={cn(
+          "z-[22] flex min-h-0 w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#09090b]/95 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)] backdrop-blur-md",
+          "mb-3 sm:mb-4",
+          "md:fixed md:mb-0 md:left-[var(--studio-nav-w,248px)] md:top-0 md:h-dvh md:max-h-none md:w-[var(--ads-projects-w)] md:max-w-[var(--ads-projects-w)] md:rounded-none md:border-b-0 md:border-l-0 md:border-t-0 md:border-r md:border-white/10 md:shadow-none",
+        )}
+      >
           <div className="flex shrink-0 items-center gap-2 border-b border-white/[0.08] px-3 py-2.5">
             <LayoutList className="size-4 shrink-0 text-violet-300/90" aria-hidden />
             <span className="text-xs font-semibold uppercase tracking-wide text-white/65">Projects</span>
@@ -1217,10 +928,11 @@ export default function AdsStudioPanel() {
               );
             })}
           </div>
-        </aside>
+      </aside>
 
-        <div className="min-w-0 flex-1 space-y-4">
-          <div className="flex min-h-[64vh] items-center justify-center">
+        <div className="flex w-full flex-col items-center gap-8 px-2 sm:px-3 md:ml-[var(--ads-projects-w)]">
+          <div className="flex w-full max-w-[1200px] flex-col items-center gap-4">
+          <div className="flex min-h-[min(58vh,540px)] w-full justify-center">
         <div
           ref={composerPanelRef}
           className="relative w-full max-w-[980px] scroll-mt-6 rounded-[20px] md:scroll-mt-8"
@@ -1534,9 +1246,8 @@ export default function AdsStudioPanel() {
             </div>
           ) : null}
         </div>
-      </section>
 
-      <section className="mx-auto w-full max-w-[1140px] px-2">
+      <section className="w-full max-w-[1200px]">
         <p className="mb-2 text-sm font-semibold text-white/85">Generate across formats</p>
         <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-5">
           {templateVideos.map((tpl, idx) => {
@@ -1565,7 +1276,7 @@ export default function AdsStudioPanel() {
                     muted
                     loop
                     playsInline
-                    preload={idx < 3 ? "auto" : "metadata"}
+                    preload="metadata"
                     className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
                   />
                 ) : (
@@ -1585,8 +1296,14 @@ export default function AdsStudioPanel() {
               </div>
             );
           })}
+          {templateVideos.length === 0 ? (
+            <div className="col-span-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white/50">
+              No template videos found in <code>/public/studio/template</code>.
+            </div>
+          ) : null}
         </div>
       </section>
+        </div>
     </div>
   );
 }

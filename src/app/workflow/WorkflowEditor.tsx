@@ -161,6 +161,7 @@ import type { StickyNoteNodeData } from "./workflowStickyNoteTypes";
 import {
   estimateWorkflowAdAssetRunCredits,
   resolveWorkflowVideoModelId,
+  WORKFLOW_SEEDANCE_2_PRO_VIDEO_FILE_ACCEPT,
   workflowVideoGeneratorAcceptsUpstreamVideo,
   workflowVideoModelHasEndFrame,
   workflowVideoModelHasStartFrame,
@@ -559,8 +560,8 @@ function workflowCanvasSnapshotsEqual(a: WorkflowCanvasSnapshot, b: WorkflowCanv
 }
 
 /**
- * Avoid false cloud-conflict alerts when a delayed save races with another save from this same workspace.
- * If payload already matches cloud, we only advance `updatedAt` and skip the "another device" toast.
+ * Avoid treating a delayed save as a real conflict when another save from this tab already landed on the server.
+ * If payload already matches cloud, we only advance `updatedAt` and return.
  */
 function workflowCloudPayloadMatchesLocal(
   cloud: { name?: string | null; publishedCommunityTemplateId?: string | null; state: WorkflowProjectStateV1 },
@@ -1073,10 +1074,22 @@ function WorkflowReactFlowChrome({
     ) => {
       const detail = (ev as CustomEvent<{
         pendingConnect?: { targetNodeId: string; targetHandleId: string; flow: XYPosition };
+        fileAccept?: string;
       }>).detail;
       pendingImageRefConnectRef.current = detail?.pendingConnect ?? null;
       setPendingImageRefConnect(detail?.pendingConnect ?? null);
-      uploadInputRef.current?.click();
+      const inp = uploadInputRef.current;
+      if (inp) {
+        const acc = detail?.fileAccept?.trim();
+        if (acc) {
+          inp.accept = acc;
+          inp.multiple = false;
+        } else {
+          inp.accept = "image/*,video/*";
+          inp.multiple = true;
+        }
+        inp.click();
+      }
     };
     window.addEventListener("workflow:open-upload-picker", onOpen as EventListener);
     return () => window.removeEventListener("workflow:open-upload-picker", onOpen as EventListener);
@@ -1204,6 +1217,11 @@ function WorkflowReactFlowChrome({
     (e: ChangeEvent<HTMLInputElement>) => {
       const files = Array.from(e.target.files ?? []);
       e.target.value = "";
+      const inp = uploadInputRef.current;
+      if (inp) {
+        inp.accept = "image/*,video/*";
+        inp.multiple = true;
+      }
       if (!files.length) {
         updatePendingImageRefConnect(null);
         return;
@@ -2510,9 +2528,27 @@ function WorkflowFlowWorkspace({
           flow: placementPicker.flow,
         }
       : undefined;
+    let fileAccept: string | undefined;
+    if (pendingConnect) {
+      const target = (nodes as WorkflowCanvasNode[]).find((n) => n.id === pendingConnect.targetNodeId);
+      if (target?.type === "adAsset") {
+        const d = target.data as AdAssetNodeData;
+        if (d.kind === "video") {
+          const vm = resolveWorkflowVideoModelId(d.model ?? "");
+          if (vm === "bytedance/seedance-2" || vm === "bytedance/seedance-2-fast") {
+            const h = pendingConnect.targetHandleId;
+            if (h === "references" || h === "inImage" || h === "startImage") {
+              fileAccept = WORKFLOW_SEEDANCE_2_PRO_VIDEO_FILE_ACCEPT;
+            }
+          }
+        }
+      }
+    }
     setPlacementPicker(null);
-    window.dispatchEvent(new CustomEvent("workflow:open-upload-picker", { detail: { pendingConnect } }));
-  }, [placementPicker]);
+    window.dispatchEvent(
+      new CustomEvent("workflow:open-upload-picker", { detail: { pendingConnect, fileAccept } }),
+    );
+  }, [placementPicker, nodes]);
 
   const pickAvatarAtPlacement = useCallback(() => {
     const pendingConnect = placementPicker?.connectTo
@@ -4141,7 +4177,6 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
   const [runHistory, setRunHistory] = useState<WorkflowRunLogEntry[]>([]);
   const lastSavedPreviewRef = useRef<string | undefined>(undefined);
   const lastCloudUpdatedAtRef = useRef<string | null>(null);
-  const cloudConflictToastAtRef = useRef(0);
   const skipNextCloudSaveRef = useRef(false);
   const skipNextLocalSaveRef = useRef(false);
   const runHistoryStorageKey = useMemo(
@@ -4260,9 +4295,6 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
           // fire on the initial workflowProject assignment to avoid a timestamp bump.
           skipNextCloudSaveRef.current = true;
           skipNextLocalSaveRef.current = true;
-          toast.message("Loaded latest cloud changes", {
-            description: "A newer version from another device replaced the local draft.",
-          });
         } else {
           if (cloud?.updatedAt) lastCloudUpdatedAtRef.current = cloud.updatedAt;
           setSpaceSource("local");
@@ -4377,13 +4409,6 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
           ) {
             return;
           }
-          const now = Date.now();
-          if (now - cloudConflictToastAtRef.current > 5000) {
-            cloudConflictToastAtRef.current = now;
-            toast.error("Workspace changed on another device", {
-              description: "Reload this page to avoid overwriting newer edits.",
-            });
-          }
         }
       })();
     }, 1500);
@@ -4432,10 +4457,6 @@ export function WorkflowEditor({ spaceId }: { spaceId: string }) {
             publishedCommunityTemplateId: cloud.publishedCommunityTemplateId ?? undefined,
           });
         }
-
-        toast.message("Synced with another device", {
-          description: "A newer version was loaded from another device.",
-        });
       })();
     };
 

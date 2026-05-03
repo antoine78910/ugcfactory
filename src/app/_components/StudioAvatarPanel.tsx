@@ -25,6 +25,7 @@ import { loadAvatarUrls } from "@/lib/avatarLibrary";
 import { uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
 import { STUDIO_IMAGE_FILE_ACCEPT } from "@/lib/studioUploadValidation";
 import { cn } from "@/lib/utils";
+import { WORKFLOW_AVATAR_360_PROFILE_PROMPT } from "@/app/workflow/workflowProfile360Preset";
 
 const AVATAR_REFERENCE_MAX = 12;
 
@@ -87,9 +88,6 @@ function buildAvatarPrompt(p: AvatarParams, resolution: StudioImageOutputResolut
     .filter(Boolean)
     .join(" ");
 }
-
-const AVATAR_360_PROMPT =
-  "A professional character reference sheet of the exact same character from the reference image, plain white background. his name tag 'D. kieft' is clearly visible. Two rows: top row contains four equally sized close-up head shots side by side - front facing, left profile, right profile, and back of head. Bottom row contains three equally sized full body shots side by side - full body front, full body three-quarter side profile, and full body back. Replicate every detail exactly across all panels: facial structure, skin tone, natural blemishes, pore texture, hair color, hair texture and styling, eye color with realistic iris detail, natural moisture and catchlights. Exact same outfit and costume consistent across every single view. Soft neutral studio lighting, flat and even across all panels, no shadows, no color cast, no background elements. Every panel perfectly consistent in character, scale, and lighting. Shot on Hasselblad X2D 100C, photorealistic, ultra sharp micro detail, RAW photograph quality, character design sheet, turnaround sheet, model sheet, orthographic reference.";
 
 async function uploadAvatarReference(file: File): Promise<string> {
   return uploadFileToCdn(file, { kind: "image" });
@@ -489,7 +487,7 @@ export default function StudioAvatarPanel({
             kind: "avatar",
             label,
             accountPlan: planId,
-            prompt: AVATAR_360_PROMPT,
+            prompt: WORKFLOW_AVATAR_360_PROFILE_PROMPT,
             model: avatar360Model,
             imageUrls: avatar360RefUrls,
             aspectRatio: "16:9",

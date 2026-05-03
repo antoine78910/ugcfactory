@@ -11,7 +11,7 @@ import {
 } from "@/lib/linkToAdUniverse";
 
 import { WORKFLOW_IMAGE_TO_JSON_USER_PROMPT } from "./workflowImageToJsonPreset";
-import { PROFILE_360_IMAGE_PROMPT } from "./workflowProfile360Preset";
+import { WORKFLOW_AVATAR_360_PROFILE_PROMPT } from "./workflowProfile360Preset";
 
 const EDGE_STYLE = { stroke: "rgba(167, 139, 250, 0.5)", strokeWidth: 2 };
 
@@ -46,9 +46,11 @@ export function buildWorkflow360ProfileBranch(
 
   const sharedGenOptions = {
     label: "360° profile",
-    prompt: PROFILE_360_IMAGE_PROMPT,
+    prompt: WORKFLOW_AVATAR_360_PROFILE_PROMPT,
     imageWorkflowPreset: "profile_360" as const,
-    intrinsicAspect: 1,
+    model: "gpt_image_2",
+    resolution: "1K",
+    intrinsicAspect: 16 / 9,
   };
 
   const src = opts?.sourceImageUrl?.trim();

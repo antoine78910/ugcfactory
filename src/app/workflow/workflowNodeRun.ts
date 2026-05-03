@@ -29,9 +29,17 @@ import {
 import { normalizeKieVeoModel, type KieVeoAspectRatio } from "@/lib/kie";
 import { pollKlingVideo, pollVeoVideo } from "@/lib/studioKlingClientPoll";
 import { studioVideoDurationSecOptions, validateStudioVideoJobDuration } from "@/lib/studioVideoModelCapabilities";
+import { SEEDANCE_PRO_MAX_VIDEO_URLS } from "@/lib/piapiSeedance";
 import { uploadBlobUrlToCdn } from "@/lib/uploadBlobUrlToCdn";
 
 import { workflowVideoResolutionToPiapiSeedance } from "./workflowVideoExportDimensions";
+import {
+  WORKFLOW_AVATAR_360_PROFILE_ALLOWED_MODELS,
+  WORKFLOW_AVATAR_360_PROFILE_DEFAULT_MODEL,
+} from "./workflowProfile360Preset";
+
+/** File input accept for Seedance 2 / Fast omni motion reference uploads (aligned with Studio). */
+export const WORKFLOW_SEEDANCE_2_PRO_VIDEO_FILE_ACCEPT = "video/mp4,video/quicktime,.mp4,.mov";
 
 /** Max reference image wires / URLs merged into one workflow Image generator job (Kie / NanoBanana). */
 export const WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX = 12;
@@ -1047,6 +1055,11 @@ export type WorkflowRunVideoParams = {
   referenceImageUrl?: string;
   endImageUrl?: string;
   referenceImageUrls?: string[];
+  /**
+   * Seedance 2 / Fast only: motion reference URLs for `omni_reference` (not passed through image min-edge).
+   * Provider allows at most one video; extras are ignored after dedupe.
+   */
+  referenceVideoUrls?: string[];
   onTaskStarted?: (taskId: string) => void;
 };
 
@@ -1116,6 +1129,17 @@ function maxPromptImageMention(prompt: string): number {
   return max;
 }
 
+function maxPromptVideoMention(prompt: string): number {
+  let max = 0;
+  const re = /@video(\d+)\b/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(prompt)) !== null) {
+    const n = Number(m[1]);
+    if (Number.isFinite(n) && n > max) max = n;
+  }
+  return max;
+}
+
 function promptHasUnsupportedElementMentions(prompt: string): boolean {
   const p = (prompt ?? "").trim();
   if (!p.includes("@")) return false;
@@ -1142,6 +1166,7 @@ function workflowVideoDebugContext(args: {
   refUrls: string[];
   seedancePreviewImageUrls: string[];
   seedanceProImageUrls: string[];
+  seedanceProVideoUrlsCount: number;
   klingElementsCount: number;
 }): string {
   const promptTrim = args.prompt.trim();
@@ -1158,6 +1183,7 @@ function workflowVideoDebugContext(args: {
     `references=${args.refUrls.length}`,
     `seedancePreviewRefs=${args.seedancePreviewImageUrls.length}`,
     `seedanceOmniImageRefs=${args.seedanceProImageUrls.length}`,
+    `seedanceOmniVideoRefs=${args.seedanceProVideoUrlsCount}`,
     `klingElements=${args.klingElementsCount}`,
   ].join(", ");
 }
@@ -1278,6 +1304,10 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
   const resolvedRefUrls = await resolveLocalWorkflowMediaUrlsForServer(
     (params.referenceImageUrls ?? []).map((u) => u.trim()).filter(Boolean),
   );
+  const resolvedRefVideoRaw = (params.referenceVideoUrls ?? []).map((u) => u.trim()).filter(Boolean);
+  const resolvedRefVideos = resolvedRefVideoRaw.length
+    ? await resolveLocalWorkflowMediaUrlsForServer(resolvedRefVideoRaw)
+    : [];
   const startUrl = startResolvedUrl ? await ensureWorkflowImageMinEdge(startResolvedUrl) : undefined;
   const endUrl = endResolvedUrl ? await ensureWorkflowImageMinEdge(endResolvedUrl) : undefined;
   const refUrls: string[] = [];
@@ -1324,6 +1354,9 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
     ? dedupeKeepOrder(
         [startUrl, endUrl, ...refUrls].filter((u): u is string => Boolean(u && u.trim())),
       ).slice(0, SEEDANCE_PRO_REF_LIMIT)
+    : [];
+  const seedanceProVideoUrls = seedancePro
+    ? dedupeKeepOrder(resolvedRefVideos.filter((u) => Boolean(u?.trim()))).slice(0, SEEDANCE_PRO_MAX_VIDEO_URLS)
     : [];
 
   if (
@@ -1409,9 +1442,13 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
         }))
       : undefined;
 
-  const seedanceOmniMedia = seedancePro && seedanceProImageUrls.length > 0
-    ? seedanceProImageUrls.map((url) => ({ type: "image" as const, url }))
-    : undefined;
+  const seedanceOmniMedia =
+    seedancePro && (seedanceProImageUrls.length > 0 || seedanceProVideoUrls.length > 0)
+      ? [
+          ...seedanceProImageUrls.map((url) => ({ type: "image" as const, url })),
+          ...seedanceProVideoUrls.map((url) => ({ type: "video" as const, url })),
+        ]
+      : undefined;
 
   const promptTrimmed = params.prompt.trim();
   if (!supportsAutoElements && promptHasUnsupportedElementMentions(promptTrimmed)) {
@@ -1424,11 +1461,20 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
     if (isKling30) return elementsRefPool.length;
     return 0;
   })();
+  const availableVideoRefsForMentions = seedancePro ? seedanceProVideoUrls.length : 0;
   if (promptImageMentionMax > 0 && availableImageRefsForMentions < promptImageMentionMax) {
     throw new Error(
       `Prompt references @image${promptImageMentionMax}, but only ${availableImageRefsForMentions} image reference${
         availableImageRefsForMentions === 1 ? "" : "s"
       } are connected. Connect more reference images or reduce @imageN mentions.`,
+    );
+  }
+  const promptVideoMentionMax = maxPromptVideoMention(promptTrimmed);
+  if (promptVideoMentionMax > 0 && availableVideoRefsForMentions < promptVideoMentionMax) {
+    throw new Error(
+      `Prompt references @video${promptVideoMentionMax}, but only ${availableVideoRefsForMentions} video reference${
+        availableVideoRefsForMentions === 1 ? "" : "s"
+      } are connected. Add a reference video or reduce @videoN mentions.`,
     );
   }
 
@@ -1443,6 +1489,7 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
     refUrls,
     seedancePreviewImageUrls,
     seedanceProImageUrls,
+    seedanceProVideoUrlsCount: seedanceProVideoUrls.length,
     klingElementsCount: klingElements?.length ?? 0,
   });
 
@@ -1549,7 +1596,9 @@ export async function runWorkflowVideoJob(params: WorkflowRunVideoParams): Promi
 
   const registerInputUrls = (() => {
     if (seedancePreview && seedancePreviewImageUrls.length > 0) return seedancePreviewImageUrls;
-    if (seedancePro && seedanceProImageUrls.length > 0) return seedanceProImageUrls;
+    if (seedancePro && (seedanceProImageUrls.length > 0 || seedanceProVideoUrls.length > 0)) {
+      return [...seedanceProImageUrls, ...seedanceProVideoUrls];
+    }
     if (startUrl) return [startUrl];
     if (refUrls[0]) return [refUrls[0]];
     return undefined;
@@ -1626,12 +1675,23 @@ export function estimateWorkflowAdAssetRunCredits(
   const batchPromptCount = batch?.length ?? 0;
   const runCount = Math.max(1, batchPromptCount);
   const multiBatchFromList = batchPromptCount > 1;
-  const quantity = Math.min(10, Math.max(1, data.quantity ?? 1));
+  let quantity = Math.min(10, Math.max(1, data.quantity ?? 1));
 
   if (data.kind === "image") {
-    const model = (data.model ?? "nano").trim() || "nano";
+    const isAvatar360Preset = data.imageWorkflowPreset === "profile_360";
+    const rawModel = (data.model ?? "nano").trim() || "nano";
+    const avatar360Models = new Set<string>(WORKFLOW_AVATAR_360_PROFILE_ALLOWED_MODELS);
+    const model = isAvatar360Preset
+      ? avatar360Models.has(rawModel)
+        ? rawModel
+        : WORKFLOW_AVATAR_360_PROFILE_DEFAULT_MODEL
+      : rawModel;
     const rawRes = (data.resolution ?? "1024").trim();
-    const resolution = rawRes === "1024" ? "1K" : rawRes === "1536" ? "2K" : rawRes;
+    let resolution = rawRes === "1024" ? "1K" : rawRes === "1536" ? "2K" : rawRes;
+    if (isAvatar360Preset) {
+      quantity = 1;
+      if (!["1K", "2K", "4K"].includes(resolution)) resolution = "1K";
+    }
     if (quantity > 1 && !multiBatchFromList) {
       const oneNode = workflowImageChargeCredits({ model, resolution, quantity: 1 });
       return oneNode * quantity * runCount;

@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -35,7 +36,6 @@ import {
   isStudioShellPath,
   pathnameWithoutLegacyAppPrefix,
 } from "@/lib/studioPaths";
-import { warmStudioTemplateVideosFetch } from "@/lib/studioTemplateVideosClient";
 
 const SIDEBAR_COLLAPSED_LS = "youry-studio-sidebar-collapsed";
 /** Last studio section for deep links back; CREATE highlight is cleared on /credits and /subscription. */
@@ -315,13 +315,6 @@ function StudioShellInner({
     }
   }, [isStudioShell, pathname]);
 
-  useEffect(() => {
-    const p = pathnameWithoutLegacyAppPrefix(pathname);
-    if (p === "/ads-studio" || p.startsWith("/ads-studio/")) {
-      warmStudioTemplateVideosFetch();
-    }
-  }, [pathname]);
-
   const activeSection: StudioNavSection | null = useMemo(() => {
     if (controlled && studioSection) return studioSection;
     if (isStudioShell) return sectionFromPathname(pathname);
@@ -531,8 +524,6 @@ function StudioShellInner({
                             navCollapsed && "px-2.5 py-3.5",
                           )}
                           title={label}
-                          onMouseEnter={linkId === "ads_studio" ? warmStudioTemplateVideosFetch : undefined}
-                          onFocus={linkId === "ads_studio" ? warmStudioTemplateVideosFetch : undefined}
                           onClick={(event) => {
                             if (
                               event.defaultPrevented ||
@@ -715,6 +706,12 @@ function StudioShellInner({
             "relative z-0 min-h-0 min-w-0 transition-[padding] duration-200 ease-out",
             navCollapsed ? "md:pl-16" : "md:pl-[248px]",
           )}
+          style={
+            {
+              /** CREATE rail width — Ads Studio and other panels can dock UI flush to the right of it. */
+              ["--studio-nav-w" as string]: navCollapsed ? "4rem" : "248px",
+            } as CSSProperties
+          }
         >
           {children}
           {isTrial && isStudioShell && activeSection !== "link_to_ad" && activeSection !== null ? (

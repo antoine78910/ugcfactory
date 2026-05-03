@@ -49,6 +49,7 @@ import {
 } from "@/lib/generationUserMessage";
 import { refundPlatformCredits } from "@/lib/refundPlatformCredits";
 import { studioVideoDurationSecOptions } from "@/lib/studioVideoModelCapabilities";
+import { uploadFileToCdn } from "@/lib/uploadBlobUrlToCdn";
 
 import {
   Select,
@@ -61,7 +62,12 @@ import { cn } from "@/lib/utils";
 
 import { useWorkflowNodePatch } from "../workflowNodePatchContext";
 import { buildWorkflow360ProfileBranch, buildWorkflowProjectPipelineFromRun } from "../workflowProjectPipeline";
-import { PROFILE_360_IMAGE_PROMPT } from "../workflowProfile360Preset";
+import {
+  WORKFLOW_AVATAR_360_PROFILE_ALLOWED_MODELS,
+  WORKFLOW_AVATAR_360_PROFILE_ASPECT,
+  WORKFLOW_AVATAR_360_PROFILE_DEFAULT_MODEL,
+  WORKFLOW_AVATAR_360_PROFILE_PROMPT,
+} from "../workflowProfile360Preset";
 import { keepWheelInsideScrollable } from "../workflowWheelScroll";
 import type { WorkflowCanvasNode } from "../workflowFlowTypes";
 import {
@@ -85,6 +91,7 @@ import {
   workflowVideoModelHasEndFrame,
   workflowVideoModelHasReferences,
   workflowVideoModelSupportsElements,
+  WORKFLOW_SEEDANCE_2_PRO_VIDEO_FILE_ACCEPT,
   WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX,
   splitAssistantOutputToListLines,
   primeRemoteMediaForDisplay,
@@ -633,6 +640,8 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   const promptEditorResizeRef = useRef<{ pointerId: number; startX: number; startW: number } | null>(null);
   const previewVideoRef = useRef<HTMLVideoElement | null>(null);
   const previewImageRef = useRef<HTMLImageElement | null>(null);
+  const seedanceProVideoFileInputRef = useRef<HTMLInputElement>(null);
+  const [seedanceProVideoUploadBusy, setSeedanceProVideoUploadBusy] = useState(false);
   const [frameExtractBusy, setFrameExtractBusy] = useState<null | "first" | "last">(null);
   const [outputPreviewLightbox, setOutputPreviewLightbox] = useState(false);
   const [motionDetectedInputDurationSec, setMotionDetectedInputDurationSec] = useState<number | null>(
@@ -811,6 +820,28 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     const fallbackName = data.kind === "video" ? "workflow-video.mp4" : "workflow-image.jpg";
     triggerMediaDownload(outputUrl, fallbackName);
   }, [data.kind, data.outputPreviewUrl, data.referencePreviewUrl]);
+  const onSeedanceProReferenceVideoSelected = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      e.target.value = "";
+      if (!file) return;
+      setSeedanceProVideoUploadBusy(true);
+      try {
+        const hostedUrl = await uploadFileToCdn(file, { kind: "video" });
+        patch(id, {
+          referencePreviewUrl: hostedUrl,
+          referenceMediaKind: "video",
+          referenceSource: "upload",
+        });
+        toast.success("Reference video attached");
+      } catch {
+        toast.error("Could not upload video", { description: "Try MP4 or MOV under the size limit." });
+      } finally {
+        setSeedanceProVideoUploadBusy(false);
+      }
+    },
+    [id, patch],
+  );
   const normalizeCompletedMediaLines = useCallback((lines: string[]): string[] => {
     return lines
       .map((x) => x.trim())
@@ -1375,18 +1406,27 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     }
     if (data.kind === "motion") return MOTION_CONTROL_MODELS;
     if (data.kind === "variation" || data.kind === "assistant") return VARIATION_MODELS;
+    if (data.kind === "image" && data.imageWorkflowPreset === "profile_360") {
+      return IMAGE_MODELS.filter((m) =>
+        (WORKFLOW_AVATAR_360_PROFILE_ALLOWED_MODELS as readonly string[]).includes(m.value),
+      );
+    }
     return IMAGE_MODELS;
-  }, [data.kind, data.videoInputMode]);
+  }, [data.kind, data.imageWorkflowPreset, data.videoInputMode]);
 
-  const modelDefault = models[0]?.value ?? "nano";
+  const modelDefault =
+    data.kind === "image" && data.imageWorkflowPreset === "profile_360"
+      ? WORKFLOW_AVATAR_360_PROFILE_DEFAULT_MODEL
+      : models[0]?.value ?? "nano";
   const rawModel = data.model ?? modelDefault;
   const model = models.some((m) => m.value === rawModel) ? rawModel : modelDefault;
 
   const aspects = useMemo(() => {
     if (data.kind === "video" || data.kind === "motion") return VIDEO_ASPECTS;
     if (data.kind === "variation" || data.kind === "assistant") return VARIATION_ASPECTS;
+    if (data.kind === "image" && data.imageWorkflowPreset === "profile_360") return ["16:9"] as const;
     return IMAGE_ASPECTS;
-  }, [data.kind]);
+  }, [data.kind, data.imageWorkflowPreset]);
 
   const resolutions = useMemo(() => {
     if (data.kind === "video" || data.kind === "motion") return VIDEO_RESOLUTIONS;
@@ -1395,7 +1435,8 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
   }, [data.kind]);
 
   const showQuantity =
-    data.kind === "image" || data.kind === "variation" || data.kind === "assistant" || data.kind === "upscale";
+    (data.kind === "image" || data.kind === "variation" || data.kind === "assistant" || data.kind === "upscale") &&
+    !(data.kind === "image" && data.imageWorkflowPreset === "profile_360");
 
   const videoDurationOptions = useMemo(() => {
     if (data.kind !== "video") return [] as string[];
@@ -1745,6 +1786,14 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     }
   }, [data.kind, data.videoDurationSec, id, model, patch]);
 
+  useEffect(() => {
+    if (data.kind !== "image" || data.imageWorkflowPreset !== "profile_360") return;
+    const nextAspect = WORKFLOW_AVATAR_360_PROFILE_ASPECT;
+    const nextIntrinsic = 16 / 9;
+    if (data.aspectRatio === nextAspect && data.intrinsicAspect === nextIntrinsic) return;
+    patch(id, { aspectRatio: nextAspect, intrinsicAspect: nextIntrinsic });
+  }, [data.aspectRatio, data.imageWorkflowPreset, data.intrinsicAspect, data.kind, id, patch]);
+
   const onGenerate = useCallback(async () => {
     if (generating) return;
     setLastGenerationError(null);
@@ -1771,11 +1820,11 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               : ["references", "startImage", "inImage"],
           )
         : [];
-    const effectivePrompt = profile360Preset ? PROFILE_360_IMAGE_PROMPT : composeWorkflowPrompt(prompt, linkedPrompts);
+    const effectivePrompt = profile360Preset ? WORKFLOW_AVATAR_360_PROFILE_PROMPT : composeWorkflowPrompt(prompt, linkedPrompts);
     const batchContext =
       data.kind === "image" || data.kind === "video" || data.kind === "motion"
         ? profile360Preset
-          ? { batch: null, composedSingle: PROFILE_360_IMAGE_PROMPT, fromPromptList: false }
+          ? { batch: null, composedSingle: WORKFLOW_AVATAR_360_PROFILE_PROMPT, fromPromptList: false }
           : collectWorkflowBatchPrompts(nodes, edges, id, [...WORKFLOW_TEXT_INPUT_HANDLES], prompt)
         : { batch: null, composedSingle: effectivePrompt, fromPromptList: false };
     const batchPrompts = batchContext.batch?.map((x) => x.trim()).filter(Boolean) ?? null;
@@ -1928,8 +1977,8 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
           .map((u) => (typeof u === "string" ? u.trim() : ""))
           .find((u) => u && u !== "about:blank");
         if (!img) {
-          toast.error("Connect a source image", {
-            description: "Use the Images input and wire a product photo or image reference node.",
+          toast.error("Connect a reference image", {
+            description: "Use the Images input and wire an avatar or photo (same as Studio Avatar 360° profile).",
           });
           emitRunFinished(false);
           emitRunLog("error", "Website module (360° profile): no image connected.");
@@ -2086,7 +2135,8 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
     const shouldFanOutAsModules =
       (data.kind === "image" || data.kind === "video" || data.kind === "motion") &&
       quantity > 1 &&
-      !(batchPrompts?.length && batchPrompts.length > 1);
+      !(batchPrompts?.length && batchPrompts.length > 1) &&
+      !(data.kind === "image" && data.imageWorkflowPreset === "profile_360");
     const perNodeQuantity = shouldFanOutAsModules ? 1 : quantity;
 
     if (shouldFanOutAsModules) {
@@ -2163,17 +2213,30 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         refsForJob = refsForJob.slice(0, WORKFLOW_IMAGE_GENERATOR_REFERENCE_MAX);
       }
       if (profile360Preset && refsForJob.length === 0) {
-        toast.error("Connect a source image", {
-          description: "Wire your product photo into the Images port, or upload one in the preview slot.",
+        toast.error("Connect a reference image", {
+          description: "Wire an avatar or photo into References, or upload one in the preview slot (same as Studio Avatar 360° profile).",
         });
         emitRunFinished(false);
         emitRunLog("error", "360° profile preset blocked: no reference image.");
         return;
       }
+      const avatar360Models = new Set<string>(WORKFLOW_AVATAR_360_PROFILE_ALLOWED_MODELS);
+      const imageModelForJob = profile360Preset
+        ? avatar360Models.has(model)
+          ? model
+          : WORKFLOW_AVATAR_360_PROFILE_DEFAULT_MODEL
+        : model;
+      const imageAspectForJob = profile360Preset ? WORKFLOW_AVATAR_360_PROFILE_ASPECT : aspectRatio;
+      const imageResolutionForJob = profile360Preset
+        ? ["1K", "2K", "4K"].includes(resolution)
+          ? resolution
+          : "1K"
+        : resolution;
+      const imageQtyForJob = profile360Preset ? 1 : perNodeQuantity;
       const perRunCharge = workflowImageChargeCredits({
-        model,
-        resolution,
-        quantity: perNodeQuantity,
+        model: imageModelForJob,
+        resolution: imageResolutionForJob,
+        quantity: imageQtyForJob,
       });
       const runCount = Math.max(1, batchPrompts?.length ?? 1);
       const charge = perRunCharge * runCount;
@@ -2239,7 +2302,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         });
         emitRunLog(
           "info",
-          `Image run config: model=${model}, aspect=${aspectRatio}, resolution=${resolution}, prompts=${
+          `Image run config: model=${imageModelForJob}, aspect=${imageAspectForJob}, resolution=${imageResolutionForJob}, prompts=${
             promptsForRun.length
           }, promptChars=${promptsForRun.map((p) => p.trim().length).join("/")}, refs=${
             refsForJob.length
@@ -2251,10 +2314,10 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               planId,
               personalApiKey: personalKey,
               prompt: p,
-              model,
-              aspectRatio,
-              resolution,
-              quantity: perNodeQuantity,
+              model: imageModelForJob,
+              aspectRatio: imageAspectForJob,
+              resolution: imageResolutionForJob,
+              quantity: imageQtyForJob,
               referenceImageUrls: refsForJob.length ? refsForJob : undefined,
               onTaskStarted: (taskId) => {
                 pendingImageTaskIds[idx] = taskId;
@@ -2697,10 +2760,36 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         }, refs=${referenceOnly.length}, promptSample="${promptsForRun[0]?.trim().slice(0, 120) ?? ""}".`,
       );
       const isSeedanceModel = model.startsWith("bytedance/seedance");
+      const seedance2ProLike =
+        resolvedVideoModelId === "bytedance/seedance-2" || resolvedVideoModelId === "bytedance/seedance-2-fast";
+      const linkedVideoFromRefs = seedance2ProLike
+        ? collectLinkedVideoUrlsForHandles(nodesForVideoInputs, edges, id, ["references", "inImage"])
+        : [];
+      const linkedVideoFromStart = seedance2ProLike
+        ? collectLinkedVideoUrlsForHandles(nodesForVideoInputs, edges, id, ["startImage"])
+        : [];
+      const nodeLocalVideoUrl =
+        seedance2ProLike && data.referenceMediaKind === "video" && data.referencePreviewUrl?.trim()
+          ? data.referencePreviewUrl.trim()
+          : "";
+      const workflowSeedanceProVideoRefUrls: string[] = seedance2ProLike
+        ? (() => {
+            const seen = new Set<string>();
+            const out: string[] = [];
+            for (const u of [...linkedVideoFromStart, ...linkedVideoFromRefs, ...(nodeLocalVideoUrl ? [nodeLocalVideoUrl] : [])]) {
+              const t = u.trim();
+              if (!t || seen.has(t)) continue;
+              seen.add(t);
+              out.push(t);
+              if (out.length >= 1) break;
+            }
+            return out;
+          })()
+        : [];
       if (isSeedanceModel) {
         emitRunLog(
           "info",
-          `Seedance input debug: startPort=${linkedFromStartPort.length}, referencesPort=${linkedFromReferencesPort.length}, endPort=${linkedFromEndPort.length}, resolvedStart=${startFrame ? "yes" : "no"}, resolvedRefs=${referenceOnly.length}.`,
+          `Seedance input debug: startPort=${linkedFromStartPort.length}, referencesPort=${linkedFromReferencesPort.length}, endPort=${linkedFromEndPort.length}, resolvedStart=${startFrame ? "yes" : "no"}, resolvedRefs=${referenceOnly.length}, videoRefs=${workflowSeedanceProVideoRefUrls.length}.`,
         );
       }
       const shouldBuildProgressList = fromPromptList && promptsForRun.length > 1;
@@ -2748,9 +2837,16 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
         promptsForRun.map(async (p, idx) => {
           const indexedStartFrame = pickByIndex(indexedStartImages, idx, startFrame);
           const indexedReferenceOnly = referenceOnly.filter((u) => u !== indexedStartFrame && u !== endFrame);
-          if (isSeedanceModel && !indexedStartFrame && indexedReferenceOnly.length === 0) {
+          if (
+            isSeedanceModel &&
+            !indexedStartFrame &&
+            indexedReferenceOnly.length === 0 &&
+            !(seedance2ProLike && workflowSeedanceProVideoRefUrls.length > 0)
+          ) {
             throw new Error(
-              "Seedance could not resolve any reference image from this node inputs. Connect at least one image to Start image or References on the Video Generator (not Text), then run again.",
+              seedance2ProLike
+                ? "Seedance could not resolve any reference from this node. Connect reference images, wire a video module to References, or upload a reference video (Seedance 2 / Fast), then run again."
+                : "Seedance could not resolve any reference image from this node inputs. Connect at least one image to Start image or References on the Video Generator (not Text), then run again.",
             );
           }
           const { videoUrl } = await runWorkflowVideoJob({
@@ -2767,6 +2863,10 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
             referenceImageUrl: undefined,
             endImageUrl: endFrame,
             referenceImageUrls: indexedReferenceOnly.length ? indexedReferenceOnly : undefined,
+            referenceVideoUrls:
+              seedance2ProLike && workflowSeedanceProVideoRefUrls.length > 0
+                ? workflowSeedanceProVideoRefUrls
+                : undefined,
             onTaskStarted: (taskId) => {
               pendingVideoTaskIds[idx] = taskId;
               setPendingWorkflowRun({
@@ -4068,7 +4168,7 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
               ) : null}
               {profile360ImageUi ? (
                 <p className="nodrag nopan rounded-lg border border-white/10 bg-black/35 px-2 py-1.5 text-[10px] leading-snug text-white/52">
-                  360° profile preset uses your wired image only; the model applies a fixed packshot brief.
+                  Same preset as Studio → Avatar → 360° profile: fixed turnaround brief, 16:9 output, GPT Image 2 or NanoBanana Pro, 1K–4K resolution.
                 </p>
               ) : !hasPreviewMedia || !isGeneratorNode || !hasLinkedGeneratorTextInput ? (
                 <textarea
@@ -4164,6 +4264,37 @@ export function AdAssetNode({ id, data, selected }: NodeProps<AdAssetNodeType>) 
                 >
                   Seedance 2 / Fast only
                 </span>
+              ) : null}
+
+              {data.kind === "video" &&
+              (resolvedVideoModelId === "bytedance/seedance-2" ||
+                resolvedVideoModelId === "bytedance/seedance-2-fast") ? (
+                <>
+                  <input
+                    ref={seedanceProVideoFileInputRef}
+                    type="file"
+                    className="hidden"
+                    accept={WORKFLOW_SEEDANCE_2_PRO_VIDEO_FILE_ACCEPT}
+                    onChange={onSeedanceProReferenceVideoSelected}
+                  />
+                  <button
+                    type="button"
+                    title="Upload a motion reference video (MP4/MOV) for Seedance omni"
+                    disabled={seedanceProVideoUploadBusy}
+                    className={cn(
+                      "inline-flex h-6 shrink-0 items-center gap-0.5 rounded-full border px-1.5 text-[8px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-55",
+                      "border-cyan-400/35 bg-cyan-500/12 text-cyan-100/90 hover:border-cyan-400/55 hover:bg-cyan-500/18",
+                    )}
+                    onClick={() => seedanceProVideoFileInputRef.current?.click()}
+                  >
+                    {seedanceProVideoUploadBusy ? (
+                      <Loader2 className="h-3 w-3 shrink-0 animate-spin" strokeWidth={2} aria-hidden />
+                    ) : (
+                      <Clapperboard className="h-3 w-3 shrink-0" strokeWidth={2} aria-hidden />
+                    )}
+                    <span className="max-w-[5.5rem] truncate">Ref. video</span>
+                  </button>
+                </>
               ) : null}
 
               {data.kind !== "motion" ? (aspectLocked ? (
