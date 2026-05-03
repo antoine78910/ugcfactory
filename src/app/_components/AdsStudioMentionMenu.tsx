@@ -18,7 +18,12 @@ export function filterAdsStudioMentionEntries(
 ): AdsStudioMentionEntry[] {
   const q = filter.trim().toLowerCase();
   if (!q) return entries;
-  return entries.filter((e) => e.label.toLowerCase().includes(q));
+  return entries.filter((e) => {
+    const label = e.label.toLowerCase();
+    const token = e.token.toLowerCase();
+    const tokenBody = token.replace(/^@/, "");
+    return label.includes(q) || token.includes(q) || tokenBody.includes(q);
+  });
 }
 
 type Props = {
@@ -45,7 +50,7 @@ export function AdsStudioMentionMenu({
 
   if (entries.length === 0) {
     return (
-      <div className="absolute bottom-full left-0 right-0 z-[100] mb-1 rounded-xl border border-white/12 bg-[#121218] px-3 py-2.5 text-sm text-white/55 shadow-[0_16px_48px_rgba(0,0,0,0.65)]">
+      <div className="absolute bottom-full left-0 right-0 z-[200] mb-1 rounded-xl border border-white/12 bg-[#121218] px-3 py-2.5 text-sm text-white/55 shadow-[0_16px_48px_rgba(0,0,0,0.65)]">
         {loadingAvatarLibrary ? (
           <span className="inline-flex items-center gap-2">
             <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
@@ -70,7 +75,7 @@ export function AdsStudioMentionMenu({
     <div
       role="listbox"
       aria-label="Insert image reference"
-      className="absolute bottom-full left-0 right-0 z-[100] mb-1 max-h-[min(280px,42vh)] overflow-hidden rounded-xl border border-white/12 bg-[#121218] shadow-[0_16px_48px_rgba(0,0,0,0.65)]"
+      className="absolute bottom-full left-0 right-0 z-[200] mb-1 max-h-[min(280px,42vh)] overflow-hidden rounded-xl border border-white/12 bg-[#121218] shadow-[0_16px_48px_rgba(0,0,0,0.65)]"
     >
       <div className="max-h-[min(280px,42vh)] overflow-y-auto overscroll-contain studio-params-scroll px-1 py-2">
         {attached.length > 0 ? (

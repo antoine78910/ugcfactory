@@ -31,9 +31,17 @@ import { loadAvatarUrls } from "@/lib/avatarLibrary";
 /** Ads Studio: PiAPI Seedance 2 (non–fast) only. */
 const ADS_STUDIO_SEEDANCE_MODEL = "bytedance/seedance-2" as const;
 
-/** Tutorial (2) bundled references: image 1 → avatar, image 2 → product (public/studio/ads-studio/). */
+/** Tutorial (2) bundled refs: Seedance @image1 → product slot, @image2 → avatar slot (public/studio/ads-studio/). */
 const ADS_STUDIO_TUTORIAL_2_AVATAR_PATH = "/studio/ads-studio/tutorial-2-avatar.png";
 const ADS_STUDIO_TUTORIAL_2_PRODUCT_PATH = "/studio/ads-studio/tutorial-2-product.png";
+
+/** Unboxing “Recreate” bundled refs: @image1 product/unboxing scene, @image2 avatar (public/studio/ads-studio/). */
+const ADS_STUDIO_UNBOXING_PRODUCT_PATH = "/studio/ads-studio/unboxing-recreate-product.png";
+const ADS_STUDIO_UNBOXING_AVATAR_PATH = "/studio/ads-studio/unboxing-recreate-avatar.png";
+
+/** UGC Virtual Try On 2 “Recreate”: @image1 product, @image2 avatar (public/studio/ads-studio/). */
+const ADS_STUDIO_VIRTUAL_TRY_ON_2_PRODUCT_PATH = "/studio/ads-studio/virtual-try-on-2-product.png";
+const ADS_STUDIO_VIRTUAL_TRY_ON_2_AVATAR_PATH = "/studio/ads-studio/virtual-try-on-2-avatar.png";
 
 function resolveAdsStudioPublicImage(path: string): string {
   if (typeof window === "undefined") return path;
@@ -277,6 +285,25 @@ function normalizeTemplateLabel(label: string): string {
     .replace(/\p{Diacritic}/gu, "")
     .toLowerCase()
     .trim();
+}
+
+/** True for unboxing template cards (not Tutorial) so Recreate can fill product + avatar for @image1 / @image2. */
+function isUnboxingBundledRecreateLabel(normalizedLabel: string): boolean {
+  const n = normalizedLabel;
+  if (n.includes("tutorial")) return false;
+  return n.includes("unboxing") || n.includes("unoboxing");
+}
+
+/** Matches promptForTemplateLabel “try on 2” templates (e.g. UGC Virtual Try On 2). */
+function isVirtualTryOn2BundledRecreateLabel(normalizedLabel: string): boolean {
+  const n = normalizedLabel;
+  if (n.includes("tutorial")) return false;
+  return (
+    n.includes("try on 2") ||
+    n.includes("try-on 2") ||
+    n.includes("tryon 2") ||
+    n.includes("tryon2")
+  );
 }
 
 function promptForTemplateLabel(label: string): string {
@@ -769,14 +796,29 @@ export default function AdsStudioPanel() {
       setAssetType("product");
       setAppRefUrl(productResolved);
       setAvatarUrl(avatarResolved);
+      return;
+    }
+    if (isVirtualTryOn2BundledRecreateLabel(n)) {
+      setAssetType("product");
+      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_VIRTUAL_TRY_ON_2_PRODUCT_PATH));
+      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_VIRTUAL_TRY_ON_2_AVATAR_PATH));
+      return;
+    }
+    if (isUnboxingBundledRecreateLabel(n)) {
+      setAssetType("product");
+      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UNBOXING_PRODUCT_PATH));
+      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UNBOXING_AVATAR_PATH));
     }
   }
 
   return (
     <div className="space-y-10">
-      <section className="mx-auto flex w-full max-w-[1320px] flex-col gap-5 px-2 lg:flex-row lg:items-start">
-        <aside className="flex w-full shrink-0 flex-col gap-2 rounded-2xl border border-white/10 bg-[rgba(12,12,14,0.72)] p-3 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.05)] backdrop-blur-md lg:sticky lg:top-6 lg:max-h-[min(92vh,940px)] lg:w-[280px]">
-          <div className="flex items-center gap-2 px-1 pb-1">
+      <section className="mx-auto grid w-full max-w-[1400px] grid-cols-1 gap-4 px-2 md:grid-cols-[280px_minmax(0,1fr)] md:items-start md:gap-5 lg:gap-6">
+        <aside
+          aria-label="Projects"
+          className="flex min-h-0 w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#09090b]/95 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)] backdrop-blur-md md:sticky md:top-6 md:z-10 md:w-[280px] md:max-w-[280px] md:max-h-[calc(100dvh-5.5rem)] md:justify-self-start"
+        >
+          <div className="flex shrink-0 items-center gap-2 border-b border-white/[0.08] px-3 py-2.5">
             <LayoutList className="size-4 shrink-0 text-violet-300/90" aria-hidden />
             <span className="text-xs font-semibold uppercase tracking-wide text-white/65">Projects</span>
             {runningJobCount > 0 ? (
@@ -785,7 +827,7 @@ export default function AdsStudioPanel() {
               </span>
             ) : null}
           </div>
-          <div className="flex max-h-[220px] flex-col gap-2 overflow-y-auto overscroll-contain pr-1 lg:max-h-[calc(min(92vh,940px)-3rem)]">
+          <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overscroll-contain px-3 py-2 md:py-3 max-h-[min(280px,42vh)] md:max-h-none">
             {activeJobs.length === 0 && history.length === 0 ? (
               <p className="px-1 py-6 text-center text-[11px] leading-snug text-white/40">
                 Generations show up here. Start another anytime — jobs run in the background.
@@ -930,14 +972,14 @@ export default function AdsStudioPanel() {
             </div>
           <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-stretch gap-3">
             <div className="grid w-full min-w-0 grid-rows-[auto_auto] gap-2">
-              <div className="flex items-start gap-2 overflow-hidden">
+              <div className="flex items-start gap-2 overflow-visible">
                 <button
                   type="button"
                   className="mt-1 flex size-7 shrink-0 items-center justify-center rounded-lg bg-white/[0.04] text-white/85 shadow-[0_2px_1.5px_-0.5px_rgba(0,0,0,0.1)]"
                 >
                   <Plus className="size-3.5" />
                 </button>
-                <div className="relative flex min-w-0 flex-1 flex-col">
+                <div className="relative z-20 flex min-w-0 flex-1 flex-col">
                   <AdsStudioMentionMenu
                     open={mentionOpen}
                     entries={filteredMentionEntries}

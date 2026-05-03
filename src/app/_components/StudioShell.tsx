@@ -109,6 +109,8 @@ const CREATE_NAV: CreateNavEntry[] = [
     href: "/ads-studio",
     label: "Ads Studio",
     icon: Sparkles,
+    /** Muted “Soon” styling in the rail; link stays usable. */
+    soon: true,
   },
   {
     kind: "custom-link",
@@ -513,14 +515,28 @@ function StudioShellInner({
                     const { href, label, id: linkId, soon, beta } = entry;
                     if (soon) {
                       return (
-                        <div
+                        <Link
                           key={linkId}
+                          href={href}
                           className={cn(
-                            "pointer-events-none block w-full min-w-0 select-none rounded-lg border border-white/[0.07] bg-white/[0.02] px-4 py-3 text-left text-[15px] font-semibold leading-snug text-white/32 shadow-none",
+                            "block w-full min-w-0 rounded-lg border border-white/[0.07] bg-white/[0.02] px-4 py-3 text-left text-[15px] font-semibold leading-snug text-white/32 shadow-none transition-colors hover:bg-white/[0.035] hover:text-white/38 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/35",
                             navCollapsed && "px-2.5 py-3.5",
                           )}
-                          title={`${label}, coming soon`}
-                          aria-disabled="true"
+                          title={label}
+                          onClick={(event) => {
+                            if (
+                              event.defaultPrevented ||
+                              event.button !== 0 ||
+                              event.metaKey ||
+                              event.ctrlKey ||
+                              event.shiftKey ||
+                              event.altKey
+                            ) {
+                              return;
+                            }
+                            event.preventDefault();
+                            navigateCustomLink(href);
+                          }}
                         >
                           <span
                             className={cn(
@@ -538,7 +554,7 @@ function StudioShellInner({
                               </span>
                             ) : null}
                           </span>
-                        </div>
+                        </Link>
                       );
                     }
                     const pathNorm = pathnameWithoutLegacyAppPrefix(pathname);
