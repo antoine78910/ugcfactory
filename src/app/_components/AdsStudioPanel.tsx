@@ -42,6 +42,18 @@ const ADS_STUDIO_UNBOXING_AVATAR_PATH = "/studio/ads-studio/unboxing-recreate-av
 const ADS_STUDIO_VIRTUAL_TRY_ON_2_PRODUCT_PATH = "/studio/ads-studio/virtual-try-on-2-product.png";
 const ADS_STUDIO_VIRTUAL_TRY_ON_2_AVATAR_PATH = "/studio/ads-studio/virtual-try-on-2-avatar.png";
 
+/** Default Tutorial (blender) — not Tutorial (2). Bundled stills instead of template preview frames. */
+const ADS_STUDIO_TUTORIAL_STANDARD_AVATAR_PATH = "/studio/ads-studio/tutorial-standard-avatar.png";
+const ADS_STUDIO_TUTORIAL_STANDARD_PRODUCT_PATH = "/studio/ads-studio/tutorial-standard-product.png";
+
+/** Pro Try On — product still + avatar (not first frame of template preview). */
+const ADS_STUDIO_PRO_TRY_ON_AVATAR_PATH = "/studio/ads-studio/pro-try-on-avatar.png";
+const ADS_STUDIO_PRO_TRY_ON_PRODUCT_PATH = "/studio/ads-studio/pro-try-on-product.png";
+
+/** UGC 2 “Recreate”: @image1 product, @image2 avatar (public/studio/ads-studio/). */
+const ADS_STUDIO_UGC_2_PRODUCT_PATH = "/studio/ads-studio/ugc-2-product.png";
+const ADS_STUDIO_UGC_2_AVATAR_PATH = "/studio/ads-studio/ugc-2-avatar.png";
+
 function resolveAdsStudioPublicImage(path: string): string {
   if (typeof window === "undefined") return path;
   return new URL(path, window.location.origin).href;
@@ -359,6 +371,37 @@ function isVirtualTryOn2BundledRecreateLabel(normalizedLabel: string): boolean {
     n.includes("tryon 2") ||
     n.includes("tryon2")
   );
+}
+
+function isHyperMotionTemplateLabel(normalizedLabel: string): boolean {
+  const n = normalizedLabel;
+  return n.includes("hyper") && n.includes("motion");
+}
+
+/** “Tutorial” default template only — excludes Tutorial (2) / tutorial2. */
+function isTutorialStandardTemplateLabel(normalizedLabel: string): boolean {
+  const n = normalizedLabel;
+  if (n.includes("tutorial 2") || n.includes("tutorial2") || n.includes("tutorial (2)")) return false;
+  return n.includes("tutorial");
+}
+
+/** Pro Try On (bundled stills); excludes Virtual Try On and numbered try-ons. */
+function isProTryOnTemplateLabel(normalizedLabel: string): boolean {
+  const n = normalizedLabel;
+  if (n.includes("virtual")) return false;
+  if (/\btry\s*on\s*[23456789]\b/u.test(n) || /\btryon\s*[23456789]\b/u.test(n)) return false;
+  return n.includes("pro") && (n.includes("try on") || n.includes("try-on") || n.includes("tryon"));
+}
+
+/** UGC 2 only — not UGC 3/4/5/6 or UGC 12/20/22, etc.; not try-on templates that mention UGC + “(2)”. */
+function isUgc2BundledRecreateLabel(normalizedLabel: string): boolean {
+  const n = normalizedLabel;
+  if (!n.includes("ugc")) return false;
+  if (n.includes("try on") || n.includes("try-on") || n.includes("tryon")) return false;
+  if (/\bugc\s*[3456789]\b/u.test(n) || /\bugc[3456789]\b/u.test(n)) return false;
+  if (/\bugc\s*1\d\b/u.test(n) || /\bugc\s*2\d\b/u.test(n) || /\bugc\s*3\d\b/u.test(n)) return false;
+  if (/\bugc\s*2\b/u.test(n) || /\bugc2\b/u.test(n)) return true;
+  return n.includes("(2)") && n.includes("ugc");
 }
 
 function promptForTemplateLabel(label: string): string {
@@ -961,10 +1004,34 @@ export default function AdsStudioPanel() {
       setAvatarUrl(avatarResolved);
       return;
     }
+    if (isHyperMotionTemplateLabel(n)) {
+      setAssetType("product");
+      setAppRefUrl("");
+      setAvatarUrl("");
+      return;
+    }
+    if (isTutorialStandardTemplateLabel(n)) {
+      setAssetType("product");
+      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_TUTORIAL_STANDARD_PRODUCT_PATH));
+      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_TUTORIAL_STANDARD_AVATAR_PATH));
+      return;
+    }
+    if (isProTryOnTemplateLabel(n)) {
+      setAssetType("product");
+      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_PRO_TRY_ON_PRODUCT_PATH));
+      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_PRO_TRY_ON_AVATAR_PATH));
+      return;
+    }
     if (isVirtualTryOn2BundledRecreateLabel(n)) {
       setAssetType("product");
       setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_VIRTUAL_TRY_ON_2_PRODUCT_PATH));
       setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_VIRTUAL_TRY_ON_2_AVATAR_PATH));
+      return;
+    }
+    if (isUgc2BundledRecreateLabel(n)) {
+      setAssetType("product");
+      setAppRefUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_2_PRODUCT_PATH));
+      setAvatarUrl(resolveAdsStudioPublicImage(ADS_STUDIO_UGC_2_AVATAR_PATH));
       return;
     }
     if (isBundledFroggyUnboxingTemplateLabel(n)) {
