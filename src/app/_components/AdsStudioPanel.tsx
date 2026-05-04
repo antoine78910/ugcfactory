@@ -1249,7 +1249,10 @@ export default function AdsStudioPanel() {
   const [selectedSidebarKey, setSelectedSidebarKey] = useState<string | null>(null);
   const [projectDetail, setProjectDetail] = useState<AdsStudioProjectDetail | null>(null);
   const [history, setHistory] = useState<AdsStudioHistoryItem[]>([]);
-  const [templateVideos, setTemplateVideos] = useState<TemplateVideoItem[]>([]);
+  const [templateVideosByKind, setTemplateVideosByKind] = useState<Record<AdsStudioTemplateGalleryKind, TemplateVideoItem[]>>({
+    product: [],
+    app: [],
+  });
   const [adsTemplateGalleryKind, setAdsTemplateGalleryKind] = useState<AdsStudioTemplateGalleryKind>("product");
   const [uploadingRefSlot, setUploadingRefSlot] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
@@ -1377,20 +1380,20 @@ export default function AdsStudioPanel() {
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      const res = await fetch(
-        `/api/studio/template-videos?kind=${encodeURIComponent(adsTemplateGalleryKind)}&t=${Date.now()}`,
-        { cache: "no-store" },
-      );
+    const loadKind = async (kind: AdsStudioTemplateGalleryKind) => {
+      const res = await fetch(`/api/studio/template-videos?kind=${encodeURIComponent(kind)}`, { cache: "no-store" });
       const json = (await res.json().catch(() => null)) as { videos?: TemplateVideoItem[] } | null;
       if (cancelled) return;
       const videos = Array.isArray(json?.videos) ? json.videos : [];
-      setTemplateVideos(videos);
-    })();
+      setTemplateVideosByKind((prev) => ({ ...prev, [kind]: videos }));
+    };
+    // Preload both lists so switching tabs is instantaneous.
+    void loadKind("product");
+    void loadKind("app");
     return () => {
       cancelled = true;
     };
-  }, [adsTemplateGalleryKind]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -1525,6 +1528,7 @@ export default function AdsStudioPanel() {
     () => history.map((h) => h.videoUrl).filter((u): u is string => typeof u === "string" && u.length > 0),
     [history],
   );
+  const templateVideos = templateVideosByKind[adsTemplateGalleryKind] ?? [];
 
   async function uploadRef(file: File, kind: "app" | "avatar") {
     if (kind === "app") setUploadingRefSlot(true);

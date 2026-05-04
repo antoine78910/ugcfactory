@@ -32,6 +32,32 @@ function extFromMime(mime: string): string {
 }
 
 const UPLOAD_NEXT_API_TIMEOUT_MS = 120_000;
+const UPLOAD_SUPABASE_TIMEOUT_MS = 120_000;
+
+function withTimeout<T>(p: Promise<T>, ms: number, message: string): Promise<T> {
+  let done = false;
+  return new Promise<T>((resolve, reject) => {
+    const id = setTimeout(() => {
+      if (done) return;
+      done = true;
+      reject(new Error(message));
+    }, ms);
+    p.then(
+      (v) => {
+        if (done) return;
+        done = true;
+        clearTimeout(id);
+        resolve(v);
+      },
+      (err) => {
+        if (done) return;
+        done = true;
+        clearTimeout(id);
+        reject(err);
+      },
+    );
+  });
+}
 
 async function uploadViaNextApi(file: File): Promise<string> {
   const fd = new FormData();
@@ -91,10 +117,14 @@ async function uploadViaSupabaseDirectWithClient(supabase: SupabaseClient, file:
 
   const path = `${userData.user.id}/${crypto.randomUUID()}${ext || (mime.startsWith("image/") ? ".jpg" : ".bin")}`;
 
-  const { data, error } = await supabase.storage.from(BUCKET).upload(path, file, {
-    contentType: file.type || undefined,
-    upsert: false,
-  });
+  const { data, error } = await withTimeout(
+    supabase.storage.from(BUCKET).upload(path, file, {
+      contentType: file.type || undefined,
+      upsert: false,
+    }),
+    UPLOAD_SUPABASE_TIMEOUT_MS,
+    "Upload timed out. Try a smaller image or check your connection.",
+  );
   if (error) throw new Error(error.message);
 
   const {
